@@ -86,22 +86,20 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     const envExample = fs.readFileSync(path.join(outDir, '.env.example'), 'utf8');
     expect(envExample).not.toMatch(/^[A-Z][A-Z0-9_]*=\s*$/m);
 
-    // package.json: monorepo coupling removed; every Mastra dep pins `alpha`.
+    // package.json: monorepo coupling removed; every Mastra dep pins `latest`,
+    // matching every other create-mastra template.
     const pkg = JSON.parse(fs.readFileSync(path.join(outDir, 'package.json'), 'utf8'));
     const allDeps: Record<string, string> = { ...pkg.dependencies, ...pkg.devDependencies };
     for (const [name, spec] of Object.entries(allDeps)) {
       expect(spec, `${name} must not use a link:/workspace: spec`).not.toMatch(/^(link|workspace|catalog|file):/);
       if (name === 'mastra' || name.startsWith('@mastra/')) {
-        expect(spec, `${name} must be pinned to "alpha"`).toBe('alpha');
+        expect(spec, `${name} must be pinned to "latest"`).toBe('latest');
       }
     }
-    expect(pkg.dependencies['@mastra/memory']).toBe('alpha');
-    // While the Mastra deps float on `alpha`, `.npmrc` needs
-    // `legacy-peer-deps=true` so npm accepts the internally-consistent
-    // prerelease peer graph. Remove once the packages ship stable versions
-    // and the template pins `"latest"` again.
-    const npmrc = fs.readFileSync(path.join(outDir, '.npmrc'), 'utf8');
-    expect(npmrc).toMatch(/^legacy-peer-deps\s*=\s*true\s*$/m);
+    expect(pkg.dependencies['@mastra/memory']).toBe('latest');
+    // No `.npmrc` ships — the template installs cleanly on npm with the
+    // published `latest` set, same as every other create-mastra template.
+    expect(fs.existsSync(path.join(outDir, '.npmrc'))).toBe(false);
 
     // `typescript` is downgraded from tsgo (v7) to the classic compiler (v5)
     // because `mastra build` transitively loads TypeScript via
@@ -109,12 +107,15 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     // expose. Remove once the deployer supports tsgo.
     expect(pkg.devDependencies.typescript).toMatch(/^\^5\./);
 
-    // Package-manager coupling never ships: the web project's pnpm workspace
-    // marker and lockfiles stay behind (a stale npm lock would pin the
-    // floating `alpha` dist-tag at sync time).
-    expect(fs.existsSync(path.join(outDir, 'pnpm-workspace.yaml'))).toBe(false);
+    // Package-manager coupling never ships: the web project's pnpm lockfiles
+    // stay behind (a stale npm lock would pin the floating `latest` dist-tag
+    // at sync time). A template-specific `pnpm-workspace.yaml` with only
+    // `allowBuilds` is emitted so pnpm v10+ installs don't error on
+    // ERR_PNPM_IGNORED_BUILDS.
     expect(fs.existsSync(path.join(outDir, 'pnpm-lock.yaml'))).toBe(false);
     expect(fs.existsSync(path.join(outDir, 'package-lock.json'))).toBe(false);
+    const pnpmWorkspace = fs.readFileSync(path.join(outDir, 'pnpm-workspace.yaml'), 'utf8');
+    expect(pnpmWorkspace).toMatch(/^allowBuilds:/m);
 
     // Tests and their dependencies are stripped.
     expect(allDeps.vitest).toBeUndefined();

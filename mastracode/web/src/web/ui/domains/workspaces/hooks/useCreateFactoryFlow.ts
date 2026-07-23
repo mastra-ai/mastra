@@ -8,7 +8,7 @@ import type { FactoryProject, FactoryProjectPayload } from '../services/github';
 const STEP_KEY = 'mastracode.factory-create.step';
 const FACTORY_KEY = 'mastracode.factory-create.factory-id';
 
-export type CreateFactoryFlowStep = 'name' | 'vcs' | 'model' | 'project-management';
+export type CreateFactoryFlowStep = 'name' | 'vcs' | 'project-management' | 'model-provider';
 
 interface CreateFactoryFlowState {
   step: CreateFactoryFlowStep;
@@ -17,7 +17,7 @@ interface CreateFactoryFlowState {
 
 function readStep(): CreateFactoryFlowStep {
   const stored = sessionStorage.getItem(STEP_KEY);
-  if (stored === 'vcs' || stored === 'model' || stored === 'project-management') return stored;
+  if (stored === 'vcs' || stored === 'project-management' || stored === 'model-provider') return stored;
   return 'name';
 }
 
@@ -29,7 +29,7 @@ function readStep(): CreateFactoryFlowStep {
  */
 export function hasPendingCreateFlow(): boolean {
   const stored = sessionStorage.getItem(STEP_KEY);
-  return stored === 'vcs' || stored === 'model' || stored === 'project-management';
+  return stored === 'vcs' || stored === 'project-management' || stored === 'model-provider';
 }
 
 function persistState(step: CreateFactoryFlowStep, factoryId?: string): void {
@@ -39,8 +39,8 @@ function persistState(step: CreateFactoryFlowStep, factoryId?: string): void {
 }
 
 /**
- * State machine for the `/factories/create` wizard (Name → VCS → Model →
- * Project management). Mirrors the onboarding flow (`EmptyFactoryState`): the step and
+ * State machine for the `/factories/create` wizard (Name → VCS → Project
+ * management → Model provider). Mirrors the onboarding flow (`EmptyFactoryState`): the step and
  * pending factory id live in sessionStorage so a full-page OAuth redirect
  * (GitHub/Linear) can resume the flow where it left off. The pending factory
  * is resolved from the server-backed factories query —
@@ -83,10 +83,10 @@ export function useCreateFactoryFlow() {
     state: flowQuery.data,
     advanceToVcs: (pendingFactory: FactoryProject | FactoryProjectPayload) =>
       setState.mutateAsync({ step: 'vcs', factoryId: pendingFactory.id }),
-    advanceToModel: (pendingFactory: FactoryProject | FactoryProjectPayload) =>
-      setState.mutateAsync({ step: 'model', factoryId: pendingFactory.id }),
     advanceToProjectManagement: (pendingFactory: FactoryProject | FactoryProjectPayload) =>
       setState.mutateAsync({ step: 'project-management', factoryId: pendingFactory.id }),
+    advanceToModelProvider: (pendingFactory: FactoryProject | FactoryProjectPayload) =>
+      setState.mutateAsync({ step: 'model-provider', factoryId: pendingFactory.id }),
     /** Re-persist the current state right before a full-page OAuth redirect. */
     persistBeforeRedirect: () => {
       const current = flowQuery.data;

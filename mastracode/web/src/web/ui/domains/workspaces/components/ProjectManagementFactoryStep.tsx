@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useLinearStatusQuery } from '../../../../../shared/hooks/useLinearData';
@@ -8,18 +7,11 @@ import { LinearIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 export interface ProjectManagementFactoryStepProps {
-  completionError: string | null;
-  finishing: boolean;
   onConnect: () => void;
-  onFinish: () => void;
+  onContinue: () => void;
 }
 
-export function ProjectManagementFactoryStep({
-  completionError,
-  finishing,
-  onConnect,
-  onFinish,
-}: ProjectManagementFactoryStepProps) {
+export function ProjectManagementFactoryStep({ onConnect, onContinue }: ProjectManagementFactoryStepProps) {
   const linearStatus = useLinearStatusQuery();
 
   return (
@@ -31,9 +23,8 @@ export function ProjectManagementFactoryStep({
           <Txt as="p" variant="ui-md" className="m-0 text-icon5">
             Connected to {linearStatus.data.workspace?.name ?? 'Linear'}.
           </Txt>
-          <Button variant="primary" disabled={finishing} onClick={onFinish}>
-            {finishing && <Spinner size="sm" aria-label="Finishing setup" />}
-            Finish setup
+          <Button variant="primary" onClick={onContinue}>
+            Continue
           </Button>
         </div>
       ) : (
@@ -51,18 +42,12 @@ export function ProjectManagementFactoryStep({
                     {linearStatus.data?.reason === 'not_connected' ? 'Connect Linear' : 'Reconnect Linear'}
                   </Button>
                 )}
-              <Button variant="ghost" disabled={finishing} onClick={onFinish}>
-                {finishing && <Spinner size="sm" aria-label="Finishing setup" />}
+              <Button variant="ghost" onClick={onContinue}>
                 Skip for now
               </Button>
             </div>
           }
         />
-      )}
-      {completionError && (
-        <p role="alert" className="mt-4 text-ui-sm text-notice-destructive-fg">
-          {completionError}
-        </p>
       )}
     </section>
   );

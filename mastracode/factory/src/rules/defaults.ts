@@ -26,9 +26,9 @@ function trustedGithubActor(context: Pick<FactoryStageRuleContext, 'actor'>): bo
 function invokeIssueInvestigation(context: FactoryStageRuleContext) {
   return {
     type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:understand-issue`,
+    idempotencyKey: `${context.ingress.id}:factory-triage`,
     role: 'triage',
-    skillName: 'understand-issue',
+    skillName: 'factory-triage',
     arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
   } as const;
 }
@@ -43,19 +43,29 @@ function investigateTriagedLinearIssue(context: FactoryStageRuleContext) {
     : context.item.title;
   return {
     type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:understand-linear-issue`,
+    idempotencyKey: `${context.ingress.id}:factory-triage-linear`,
     role: 'triage',
-    skillName: 'understand-issue',
+    skillName: 'factory-triage',
     arguments: `Linear issue ${identifier}${context.item.url ? ` (${context.item.url})` : ''}`,
+  } as const;
+}
+
+function planWorkItem(context: FactoryStageRuleContext) {
+  return {
+    type: 'invokeSkill',
+    idempotencyKey: `${context.ingress.id}:factory-plan`,
+    role: 'plan',
+    skillName: 'factory-plan',
+    arguments: context.item.url ? `Work item (${context.item.url})` : context.item.title,
   } as const;
 }
 
 function reviewPullRequest(context: FactoryStageRuleContext) {
   return {
     type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:understand-pr`,
+    idempotencyKey: `${context.ingress.id}:factory-review`,
     role: 'review',
-    skillName: 'understand-pr',
+    skillName: 'factory-review',
     arguments: context.item.url ? `GitHub pull request (${context.item.url})` : context.item.title,
   } as const;
 }
@@ -67,6 +77,8 @@ function resultContent(value: unknown): string | undefined {
   return typeof content === 'string' ? content : undefined;
 }
 
+// Interactive-session path only: factory-plan never calls submit_plan — it
+// advances planning → execute via factory_transition_work_item directly.
 function advanceApprovedPlan(context: FactoryToolResultRuleContext) {
   if (
     context.result.status !== 'success' ||
@@ -133,6 +145,8 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,
       factoryAuthored: context.actor.type === 'github' && context.actor.factoryAuthored,
+      headBranch: context.pullRequest.headBranch,
+      baseBranch: context.pullRequest.baseBranch,
     },
   } as const;
 }
@@ -177,6 +191,11 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
     triage: {
       issue: { onEnter: investigateTriagedIssue },
       linearIssue: { onEnter: investigateTriagedLinearIssue },
+    },
+    planning: {
+      issue: { onEnter: planWorkItem },
+      linearIssue: { onEnter: planWorkItem },
+      manual: { onEnter: planWorkItem },
     },
   },
   review: { review: { pullRequest: { onEnter: reviewPullRequest } } },

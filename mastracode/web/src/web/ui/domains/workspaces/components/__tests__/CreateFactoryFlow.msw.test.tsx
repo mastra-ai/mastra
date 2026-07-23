@@ -1,10 +1,10 @@
 /**
  * BDD coverage for the `/factories/create` full-screen wizard: Name → VCS
- * (GitHub repo) → Model (provider + default model) → Project management
- * (Linear). The step and pending factory id live in sessionStorage so a
+ * (GitHub repo) → Project management (Linear) → Model provider (default
+ * model). The step and pending factory id live in sessionStorage so a
  * full-page OAuth redirect can resume the flow.
  */
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
@@ -111,11 +111,13 @@ describe('Create Factory wizard', () => {
     expect(sessionStorage.getItem(FACTORY_KEY)).toBe('fp-1');
   });
 
-  it('links the selected repository to the pending Factory (no second create), then shows the model step', async () => {
+  it('links the selected repository to the pending Factory (no second create), then shows the Linear step', async () => {
     const calls: string[] = [];
     seedPendingVcsFlow();
-    stubModelStepEndpoints();
     server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
+      ),
       http.post(`${TEST_BASE_URL}/web/factory/projects`, () => {
         calls.push('create');
         return HttpResponse.json({ project: { id: 'fp-other', name: 'unexpected' } });
@@ -146,42 +148,49 @@ describe('Create Factory wizard', () => {
 
     await user.click(await screen.findByRole('button', { name: /octo\/hello/ }));
 
-    expect(await screen.findByRole('heading', { name: 'Connect your LLM.' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Connect the work behind the code.' })).toBeInTheDocument();
     expect(calls).toEqual(['connect', 'link']);
-    expect(sessionStorage.getItem(STEP_KEY)).toBe('model');
+    expect(sessionStorage.getItem(STEP_KEY)).toBe('project-management');
     expect(sessionStorage.getItem(FACTORY_KEY)).toBe('fp-1');
   });
 
-  it('keeps Continue disabled on the model step until a default model is saved, then advances to Linear', async () => {
-    seedPendingVcsFlow('model');
+  it('advances from the Linear step to the model provider step, and finishing navigates to the Factory', async () => {
+    seedPendingVcsFlow('project-management');
     const { patchedBodies } = stubModelStepEndpoints();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
-        HttpResponse.json({
-          models: [{ id: 'anthropic/claude-sonnet-4-5', provider: 'anthropic', modelName: 'claude-sonnet-4-5' }],
-        }),
-      ),
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
         HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+        HttpResponse.json({
+          models: [
+            {
+              id: 'anthropic/claude-sonnet-4-5',
+              provider: 'anthropic',
+              modelName: 'claude-sonnet-4-5',
+              hasApiKey: true,
+            },
+          ],
+        }),
       ),
     );
     const user = userEvent.setup();
 
     renderFlow();
 
-    expect(await screen.findByRole('heading', { name: 'Connect your LLM.' })).toBeInTheDocument();
-    const continueButton = await screen.findByRole('button', { name: 'Continue' });
-    expect(continueButton).toBeDisabled();
+    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
 
-    // Save-on-pick: choosing a model PATCHes the factory project immediately.
-    await pickModel(user, /anthropic\/claude-sonnet-4-5/);
+    expect(await screen.findByRole('heading', { name: 'Choose your Factory model.' })).toBeInTheDocument();
+    expect(sessionStorage.getItem(STEP_KEY)).toBe('model-provider');
+
+    // Picking a connected provider suggests its model; Finish setup saves it
+    // and completes the wizard.
+    await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
+    await user.click(await screen.findByRole('button', { name: 'Finish setup' }));
+
     await waitFor(() => expect(patchedBodies).toEqual([{ defaultModelId: 'anthropic/claude-sonnet-4-5' }]));
-
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled());
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
-
-    expect(await screen.findByRole('heading', { name: 'Connect the work behind the code.' })).toBeInTheDocument();
-    expect(sessionStorage.getItem(STEP_KEY)).toBe('project-management');
+    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1'));
+    expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
   });
 
   it('resumes at the stored step after an OAuth round-trip', async () => {
@@ -258,10 +267,10 @@ describe('Create Factory wizard', () => {
 });
 
 /**
- * Stub the model step's data endpoints: the factory project (source of the
- * saved `defaultModelId`), the provider credential catalog, and the PATCH that
- * saves the pick. The PATCH echoes the new model back so Continue unlocks from
- * server-confirmed state. Returns the PATCH bodies for assertions.
+ * Stub the model provider step's data endpoints: the provider credential
+ * catalog, the PATCH that saves the default model pick, and the hidden OM
+ * provider-defaults save that runs alongside it. Returns the PATCH bodies for
+ * assertions.
  */
 function stubModelStepEndpoints() {
   const patchedBodies: unknown[] = [];
@@ -281,21 +290,13 @@ function stubModelStepEndpoints() {
         providers: [{ provider: 'anthropic', source: 'stored', oauth: { supported: true, modes: ['paste-code'] } }],
       }),
     ),
+    http.post(`${TEST_BASE_URL}/web/config/om/provider-defaults`, () => HttpResponse.json({ ok: true, config: {} })),
   );
   return { patchedBodies };
 }
 
-/** Open the model combobox and pick an option (Base UI selects on pointer events). */
-async function pickModel(user: ReturnType<typeof userEvent.setup>, name: RegExp) {
-  await user.click(screen.getByRole('combobox'));
-  const option = await screen.findByRole('option', { name });
-  fireEvent.pointerDown(option, { pointerType: 'mouse' });
-  fireEvent.click(option, { detail: 1 });
-  await waitFor(() => expect(screen.queryByRole('option', { name })).not.toBeInTheDocument());
-}
-
 /** Seed a mid-flow state: factory fp-1 exists server-side and the wizard is past the name step. */
-function seedPendingVcsFlow(step: 'vcs' | 'model' | 'project-management' = 'vcs') {
+function seedPendingVcsFlow(step: 'vcs' | 'project-management' | 'model-provider' = 'vcs') {
   sessionStorage.setItem(STEP_KEY, step);
   sessionStorage.setItem(FACTORY_KEY, 'fp-1');
   server.use(

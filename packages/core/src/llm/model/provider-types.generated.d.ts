@@ -1086,6 +1086,21 @@ export type ProviderModelsMap = {
     'databricks-gpt-oss-20b',
     'databricks-kimi-k2-7-code',
   ];
+  readonly ofox: readonly [
+    'anthropic/claude-fable-5',
+    'anthropic/claude-opus-4.8',
+    'anthropic/claude-sonnet-5',
+    'bailian/qwen3.7-max',
+    'deepseek/deepseek-v4-pro',
+    'google/gemini-3.1-pro-preview',
+    'moonshotai/kimi-k2.6',
+    'openai/gpt-5.5',
+    'openai/gpt-5.6-luna',
+    'openai/gpt-5.6-sol',
+    'openai/gpt-5.6-terra',
+    'x-ai/grok-4.3',
+    'z-ai/glm-5.2',
+  ];
   readonly meganova: readonly [
     'MiniMaxAI/MiniMax-M2.1',
     'MiniMaxAI/MiniMax-M2.5',
@@ -1822,6 +1837,7 @@ export type ProviderModelsMap = {
     'cline-pass/glm-5.2',
     'cline-pass/kimi-k2.6',
     'cline-pass/kimi-k2.7-code',
+    'cline-pass/kimi-k3',
     'cline-pass/mimo-v2.5',
     'cline-pass/mimo-v2.5-pro',
     'cline-pass/minimax-m3',

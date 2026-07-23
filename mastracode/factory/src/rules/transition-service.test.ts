@@ -69,7 +69,7 @@ describe('FactoryTransitionService', () => {
     });
 
     const result = await service.transition({
-      ...request(item, { stage: 'planning' }),
+      ...request(item, { stage: 'execute' }),
       cause: 'board_drag',
     });
 
@@ -78,8 +78,8 @@ describe('FactoryTransitionService', () => {
       decisions: [
         {
           type: 'sendMessage',
-          role: 'plan',
-          message: 'This work was moved from the triage stage to the planning stage.',
+          role: 'work',
+          message: 'This work was moved from the triage stage to the execute stage.',
           priority: 'urgent',
           idleBehavior: 'wake',
           prepareBinding: true,
@@ -107,7 +107,7 @@ describe('FactoryTransitionService', () => {
         {
           type: 'invokeSkill',
           role: 'triage',
-          skillName: 'understand-issue',
+          skillName: 'factory-triage',
           precedingMessage: 'This work was moved from the intake stage to the triage stage.',
         },
       ],
