@@ -9,6 +9,9 @@ export interface ConnectedChannelAccount {
   platform: string;
   externalTeamId: string;
   externalUserId: string;
+  /** Display names captured at link time (OIDC profile claims); ids fall back. */
+  externalTeamName?: string;
+  externalUserName?: string;
   linkedAt: string;
 }
 

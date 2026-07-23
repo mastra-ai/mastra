@@ -33,6 +33,15 @@ export interface ChannelAccountLinkKey {
   externalUserId: string;
 }
 
+/**
+ * Human-readable labels for a linked identity, captured at link time (e.g.
+ * from Slack OIDC id_token claims). Display-only — never part of the key.
+ */
+export interface ChannelAccountLinkNames {
+  externalTeamName?: string;
+  externalUserName?: string;
+}
+
 export const CHANNEL_ACCOUNT_LINKS_SCHEMA: CollectionSchema = {
   name: 'channel_account_links',
   columns: {
@@ -42,6 +51,8 @@ export const CHANNEL_ACCOUNT_LINKS_SCHEMA: CollectionSchema = {
     external_user_id: { type: 'text' },
     org_id: { type: 'text', nullable: true },
     user_id: { type: 'text' },
+    external_team_name: { type: 'text', nullable: true },
+    external_user_name: { type: 'text', nullable: true },
     linked_at: { type: 'timestamp' },
   },
   uniqueIndexes: [
@@ -59,6 +70,8 @@ interface ChannelAccountLinkDbRow extends Record<string, unknown> {
   external_user_id: string;
   org_id: string | null;
   user_id: string;
+  external_team_name: string | null;
+  external_user_name: string | null;
   linked_at: Date;
 }
 
@@ -71,7 +84,7 @@ function toLink(row: ChannelAccountLinkDbRow): ChannelAccountLink {
 }
 
 /** A link row with its platform sender key, as listed for a tenant user. */
-export interface ChannelAccountLinkEntry extends ChannelAccountLink, ChannelAccountLinkKey {}
+export interface ChannelAccountLinkEntry extends ChannelAccountLink, ChannelAccountLinkKey, ChannelAccountLinkNames {}
 
 function toEntry(row: ChannelAccountLinkDbRow): ChannelAccountLinkEntry {
   return {
@@ -79,6 +92,8 @@ function toEntry(row: ChannelAccountLinkDbRow): ChannelAccountLinkEntry {
     platform: row.platform,
     externalTeamId: row.external_team_id,
     externalUserId: row.external_user_id,
+    ...(row.external_team_name ? { externalTeamName: row.external_team_name } : {}),
+    ...(row.external_user_name ? { externalUserName: row.external_user_name } : {}),
   };
 }
 
@@ -110,7 +125,9 @@ export class ChannelIdentityStorage extends FactoryStorageDomain {
     externalUserId,
     orgId,
     userId,
-  }: ChannelAccountLinkKey & { orgId?: string; userId: string }): Promise<ChannelAccountLink> {
+    externalTeamName,
+    externalUserName,
+  }: ChannelAccountLinkKey & ChannelAccountLinkNames & { orgId?: string; userId: string }): Promise<ChannelAccountLink> {
     const row = await this.#db.upsertOne<ChannelAccountLinkDbRow>(
       'channel_account_links',
       ['platform', 'external_team_id', 'external_user_id'],
@@ -120,6 +137,8 @@ export class ChannelIdentityStorage extends FactoryStorageDomain {
         external_user_id: externalUserId,
         org_id: orgId ?? null,
         user_id: userId,
+        external_team_name: externalTeamName ?? null,
+        external_user_name: externalUserName ?? null,
         linked_at: new Date(),
       },
     );

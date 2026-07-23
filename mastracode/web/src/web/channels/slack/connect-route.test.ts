@@ -261,7 +261,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     const target = new URL(c.redirect.mock.calls[0][0]);
     expect(target.origin + target.pathname).toBe('https://slack.com/openid/connect/authorize');
     expect(target.searchParams.get('response_type')).toBe('code');
-    expect(target.searchParams.get('scope')).toBe('openid');
+    expect(target.searchParams.get('scope')).toBe('openid profile');
     expect(target.searchParams.get('client_id')).toBe('client-1');
     expect(target.searchParams.get('redirect_uri')).toBe('https://tunnel.example/connect/slack/oidc/callback');
     // The state round-trips the initiating tenant.
@@ -313,8 +313,29 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
       externalUserId: 'U-77',
       orgId: 'org-9',
       userId: 'user-9',
+      externalTeamName: undefined,
+      externalUserName: undefined,
     });
     expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=connected');
+  });
+
+  it('callback stores display names from the profile claims when present', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        id_token: makeIdToken({ ...validClaims, name: 'Caleb Barnes', 'https://slack.com/team_name': 'Kepler' }),
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { routes, saveAccountLink } = oidcRoutes();
+    const c = fakeCtx(tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'code-1' });
+
+    await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
+
+    expect(saveAccountLink).toHaveBeenCalledWith(
+      expect.objectContaining({ externalTeamName: 'Kepler', externalUserName: 'Caleb Barnes' }),
+    );
   });
 
   it('callback rejects a forged state without calling Slack or writing', async () => {

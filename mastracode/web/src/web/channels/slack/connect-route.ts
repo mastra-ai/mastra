@@ -10,6 +10,9 @@ export interface ConnectedChannelAccountPayload {
   platform: string;
   externalTeamId: string;
   externalUserId: string;
+  /** Display names captured at link time (OIDC profile claims); ids fall back. */
+  externalTeamName?: string;
+  externalUserName?: string;
   linkedAt: string;
 }
 
@@ -149,7 +152,9 @@ export function createSlackConnectRoutes(deps: {
 
         const params = new URLSearchParams({
           response_type: 'code',
-          scope: 'openid',
+          // `profile` adds display-name claims (user name, team name) to the
+          // id_token so the Connected accounts list can show names, not ids.
+          scope: 'openid profile',
           client_id: oidc!.clientId,
           // Personal accounts have no org; the signer requires a string, so an
           // empty org round-trips and is mapped back to undefined on save.
@@ -191,6 +196,10 @@ export function createSlackConnectRoutes(deps: {
         const claims = decodeJwtPayload(token.id_token);
         const teamId = claims?.['https://slack.com/team_id'];
         const slackUserId = claims?.['https://slack.com/user_id'];
+        // Display-only claims from the `profile` scope — absent claims just
+        // mean the settings list falls back to ids.
+        const teamName = claims?.['https://slack.com/team_name'];
+        const userName = claims?.name;
         if (
           !claims ||
           claims.iss !== 'https://slack.com' ||
@@ -207,6 +216,8 @@ export function createSlackConnectRoutes(deps: {
           externalUserId: slackUserId,
           orgId: tenant.orgId || undefined,
           userId: tenant.userId,
+          externalTeamName: typeof teamName === 'string' ? teamName : undefined,
+          externalUserName: typeof userName === 'string' ? userName : undefined,
         });
 
         return c.redirect(`${uiOrigin}/?slack=connected`);
@@ -227,6 +238,8 @@ export function createSlackConnectRoutes(deps: {
           platform: link.platform,
           externalTeamId: link.externalTeamId,
           externalUserId: link.externalUserId,
+          externalTeamName: link.externalTeamName,
+          externalUserName: link.externalUserName,
           linkedAt: link.linkedAt.toISOString(),
         }));
         // `canConnect` tells the settings UI whether the web-initiated OIDC

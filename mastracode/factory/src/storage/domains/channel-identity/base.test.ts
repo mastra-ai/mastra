@@ -130,6 +130,27 @@ describe('ChannelIdentityStorage', () => {
     });
   });
 
+  it('stores display names at link time and lists them back', async () => {
+    const seed = await createFactoryStorageForTests();
+
+    await seed.channelIdentity.saveAccountLink({
+      ...slackKey,
+      orgId: 'org-1',
+      userId: 'user-1',
+      externalTeamName: 'Kepler',
+      externalUserName: 'Caleb Barnes',
+    });
+
+    const [link] = await seed.channelIdentity.listAccountLinksForUser('user-1');
+    expect(link).toMatchObject({ externalTeamName: 'Kepler', externalUserName: 'Caleb Barnes' });
+
+    // Names are optional — a nameless save (legacy card path) omits them.
+    await seed.channelIdentity.saveAccountLink({ ...slackKey, orgId: 'org-1', userId: 'user-1' });
+    const [relinked] = await seed.channelIdentity.listAccountLinksForUser('user-1');
+    expect(relinked?.externalTeamName).toBeUndefined();
+    expect(relinked?.externalUserName).toBeUndefined();
+  });
+
   it('self-service delete cannot sever another tenant link', async () => {
     const seed = await createFactoryStorageForTests();
 

@@ -5,6 +5,7 @@ export type {
   ChannelAccountLink,
   ChannelAccountLinkEntry,
   ChannelAccountLinkKey,
+  ChannelAccountLinkNames,
 } from './storage/domains/channel-identity/base.js';
 export { createChannelLinkStateSigner, createStateSigner } from './state-signing.js';
 export type { ChannelLinkState, ChannelLinkStateSigner, StateSigner, StateTenant } from './state-signing.js';

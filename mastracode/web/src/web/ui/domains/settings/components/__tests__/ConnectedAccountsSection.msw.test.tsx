@@ -54,6 +54,15 @@ describe('ConnectedAccountsSection', () => {
     expect(screen.getByRole('button', { name: 'Connect another Slack account' })).toBeInTheDocument();
   });
 
+  it('given a link with display names, when rendered, then it shows names instead of ids', async () => {
+    mockAccounts([{ ...slackLink, externalTeamName: 'Kepler', externalUserName: 'Caleb Barnes' }]);
+
+    renderWithProviders(<ConnectedAccountsSection />);
+
+    expect(await screen.findByText('Slack · Caleb Barnes in Kepler')).toBeInTheDocument();
+    expect(screen.queryByText(/U095PUH0FKL/)).not.toBeInTheDocument();
+  });
+
   it('given a linked Slack account, when rendered, then it shows the identity with a disconnect action', async () => {
     mockAccounts([slackLink]);
 

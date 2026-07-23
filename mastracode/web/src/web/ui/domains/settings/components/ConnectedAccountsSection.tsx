@@ -19,7 +19,11 @@ const PLATFORM_LABEL: Record<string, string> = {
 
 function accountLabel(account: ConnectedChannelAccount): string {
   const platform = PLATFORM_LABEL[account.platform] ?? account.platform;
-  return `${platform} · ${account.externalUserId} in ${account.externalTeamId}`;
+  // Prefer the display names captured at link time; ids are the fallback for
+  // links written before names existed (or via the nameless legacy card path).
+  const user = account.externalUserName ?? account.externalUserId;
+  const team = account.externalTeamName ?? account.externalTeamId;
+  return `${platform} · ${user} in ${team}`;
 }
 
 /**
