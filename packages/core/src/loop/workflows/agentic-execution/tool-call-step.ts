@@ -1293,6 +1293,24 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         if (error instanceof Error && error.name === 'FGADeniedError') {
           throw error;
         }
+        // A throw while the request is aborted is a mid-flight cancellation, not a genuine
+        // failure. Recording it as an error result would fake-complete the call (its
+        // `result` becomes the abort message) and read as success on resume, so flag it
+        // aborted instead and let the mapping step leave the call incomplete. Key off the
+        // abort signal, not the error type: CoreToolBuilder wraps the AbortError in a
+        // TOOL_EXECUTION_FAILED MastraError, so isAbortError(error) wouldn't match here.
+        if (options?.abortSignal?.aborted) {
+          // Log the discarded error for observability (control flow unchanged).
+          logger?.debug?.('Tool execution interrupted by request abort; leaving the tool call incomplete', {
+            toolName: inputData.toolName,
+            toolCallId: inputData.toolCallId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return {
+            aborted: true,
+            ...inputData,
+          };
+        }
         return {
           error: serializeToolError(error),
           ...inputData,

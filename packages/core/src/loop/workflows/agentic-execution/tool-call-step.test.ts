@@ -246,6 +246,92 @@ describe('createToolCallStep tool execution error handling', () => {
       message: expect.stringContaining('External API error: 503 Service Unavailable'),
     });
   });
+
+  it('should return aborted (not error/result) when the request was aborted while the tool threw', async () => {
+    // A throw caused by request cancellation must NOT become a tool result, or the call is
+    // persisted as completed (result = abort message) and reads as success on resume. The
+    // step flags it `aborted` instead. CoreToolBuilder wraps the throw in a MastraError, so
+    // the abort signal — not the error type — is the evidence.
+    const abortedTool = createTool({
+      id: 'failing-tool',
+      description: 'A tool that throws when the request is cancelled',
+      inputSchema: z.object({ param: z.string() }),
+      execute: async () => {
+        const err = new Error('The operation was aborted.');
+        err.name = 'AbortError';
+        throw err;
+      },
+    });
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: abortedTool,
+      options: {
+        name: 'failing-tool',
+        logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any,
+        description: 'A tool that throws when the request is cancelled',
+        requestContext: new RequestContext(),
+      },
+    }).build();
+
+    const abortController = new AbortController();
+    abortController.abort();
+
+    const toolCallStep = createToolCallStep({
+      tools: { 'failing-tool': builtTool },
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+      // The agent-run abort signal (req.signal in production) is wired in via `options`.
+      options: { abortSignal: abortController.signal },
+    } as any);
+
+    const result = await toolCallStep.execute(makeExecuteParams({ inputData: makeInputData() }));
+
+    expect(result).toHaveProperty('aborted', true);
+    expect(result).not.toHaveProperty('error');
+    expect(result).not.toHaveProperty('result');
+  });
+
+  it('should still return error (not aborted) when a tool throws and the request was NOT aborted', async () => {
+    // Guard against over-reach: a genuine tool failure on a live request must keep surfacing
+    // as an error result so the model can see it and self-correct.
+    const failingTool = createTool({
+      id: 'failing-tool',
+      description: 'A tool that throws',
+      inputSchema: z.object({ param: z.string() }),
+      execute: async () => {
+        throw new Error('External API error: 503 Service Unavailable');
+      },
+    });
+
+    const builtTool = new CoreToolBuilder({
+      originalTool: failingTool,
+      options: {
+        name: 'failing-tool',
+        logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any,
+        description: 'A tool that throws',
+        requestContext: new RequestContext(),
+      },
+    }).build();
+
+    const toolCallStep = createToolCallStep({
+      tools: { 'failing-tool': builtTool },
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+    } as any);
+
+    // Fresh (non-aborted) signal
+    const result = await toolCallStep.execute(
+      makeExecuteParams({ inputData: makeInputData(), abortSignal: new AbortController().signal }),
+    );
+
+    expect(result).toHaveProperty('error');
+    expect(result).not.toHaveProperty('aborted');
+    expect(result).not.toHaveProperty('result');
+  });
 });
 
 describe('createToolCallStep tool-level FGA delegation', () => {
