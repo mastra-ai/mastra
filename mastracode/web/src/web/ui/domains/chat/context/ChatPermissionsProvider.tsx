@@ -14,11 +14,12 @@ interface ChatPermissionsProviderProps {
 }
 
 export function ChatPermissionsProvider({ children }: ChatPermissionsProviderProps) {
-  const { resourceId, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
   const [pendingPermissionCategory, setPendingPermissionCategory] = useState<ToolCategory | null>(null);
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };

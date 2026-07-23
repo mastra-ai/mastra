@@ -360,6 +360,27 @@ describe('IntakeSection', () => {
     });
   });
 
+  describe('given the server omits unregistered integrations', () => {
+    // The server returns a dynamic map keyed by integration id and drops keys
+    // for integrations that aren't registered, so the config can arrive as `{}`.
+    // The fixed-shape reads must not crash on the missing `github`/`linear` keys.
+    it('renders both sources with default toggles instead of crashing', async () => {
+      seedGithubProject();
+      server.use(
+        http.get(CONFIG_URL, () => HttpResponse.json({ config: {} })),
+        http.get(LINEAR_STATUS_URL, () => HttpResponse.json(connectedStatus)),
+        http.get(LINEAR_PROJECTS_URL, () => HttpResponse.json({ projects: linearProjects })),
+      );
+
+      renderIntakeSection();
+
+      expect(await screen.findByText('Intake sources')).toBeInTheDocument();
+      // GitHub defaults to enabled; Linear stays off until it's connected here.
+      expect(await screen.findByRole('switch', { name: 'Sync GitHub repositories' })).toBeChecked();
+      expect(screen.getByRole('switch', { name: 'Sync Linear projects' })).not.toBeChecked();
+    });
+  });
+
   describe('given the config endpoint fails', () => {
     it('shows the unavailable notice', async () => {
       server.use(

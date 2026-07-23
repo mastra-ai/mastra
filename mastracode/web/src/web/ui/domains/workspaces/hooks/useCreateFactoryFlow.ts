@@ -40,11 +40,12 @@ function persistState(step: CreateFactoryFlowStep, factoryId?: string): void {
 
 /**
  * State machine for the `/factories/create` wizard (Name → VCS → Project
- * management). Mirrors `useFactoryOnboarding`: the step and pending factory id
- * live in sessionStorage so a full-page OAuth redirect (GitHub/Linear) can
- * resume the flow where it left off. The pending factory is resolved from the
- * server-backed factories query — `useCreateFactoryMutation` refetches it
- * before resolving, so the lookup is never stale when the flow advances.
+ * management). Mirrors the onboarding flow (`EmptyFactoryState`): the step and
+ * pending factory id live in sessionStorage so a full-page OAuth redirect
+ * (GitHub/Linear) can resume the flow where it left off. The pending factory
+ * is resolved from the server-backed factories query —
+ * `useCreateFactoryMutation` refetches it before resolving, so the lookup is
+ * never stale when the flow advances.
  */
 export function useCreateFactoryFlow() {
   const queryClient = useQueryClient();

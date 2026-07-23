@@ -18,7 +18,7 @@ import { RuntimeActivity } from './RuntimeActivity';
  */
 export function StatusLine() {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId: string }>();
-  const { baseUrl, resourceId, factorySessionState } = useChatSessionContext();
+  const { baseUrl, resourceId, projectPath, factorySessionState } = useChatSessionContext();
   const { data: factory } = useFactoryQuery(factoryId);
   const { transcript, busy } = useChatTranscript();
   const repository = factory?.repositories.find(
@@ -42,6 +42,7 @@ export function StatusLine() {
       <PullRequestLinks
         baseUrl={baseUrl}
         resourceId={resourceId}
+        projectPath={projectPath}
         projectRepositoryId={projectRepositoryId}
         factoryProjectId={factoryProjectId}
         repositorySlug={repository?.slug}

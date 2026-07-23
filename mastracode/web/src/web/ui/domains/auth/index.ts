@@ -8,5 +8,6 @@ export {
   redirectToLogout,
   signInWithPassword,
   signUpWithPassword,
+  userSessionResourceId,
 } from './services/auth';
 export type { FactoryAuthState } from './services/auth';
