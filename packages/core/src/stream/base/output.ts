@@ -1831,6 +1831,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
   #createEventedStream() {
     const self = this;
+    let chunkHandler: ((chunk: ChunkType<OUTPUT>) => void) | undefined;
+    let finishHandler: (() => void) | undefined;
 
     return new ReadableStream<ChunkType<OUTPUT>>({
       start(controller) {
@@ -1846,13 +1848,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         }
 
         // Listen for new chunks and stream finish
-        const chunkHandler = (chunk: ChunkType<OUTPUT>) => {
+        chunkHandler = (chunk: ChunkType<OUTPUT>) => {
           safeEnqueue(controller, chunk);
         };
 
-        const finishHandler = () => {
-          self.#emitter.off('chunk', chunkHandler);
-          self.#emitter.off('finish', finishHandler);
+        finishHandler = () => {
+          self.#emitter.off('chunk', chunkHandler!);
+          self.#emitter.off('finish', finishHandler!);
           safeClose(controller);
         };
 
@@ -1868,8 +1870,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       },
 
       cancel() {
-        // Stream was cancelled, clean up
-        self.#emitter.removeAllListeners();
+        if (chunkHandler) {
+          self.#emitter.off('chunk', chunkHandler);
+        }
+        if (finishHandler) {
+          self.#emitter.off('finish', finishHandler);
+        }
       },
     });
   }
