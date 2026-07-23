@@ -573,6 +573,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/ofox',
+          label: 'Ofox',
+        },
+        {
+          type: 'doc',
           id: 'providers/ollama',
           label: 'Ollama',
         },
