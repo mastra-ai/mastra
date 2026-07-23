@@ -5,7 +5,7 @@ import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../../shared/hooks/useFactories';
 import { Sidebar } from '../../../Sidebar';
-import { DocumentPageLayout, ViewportPageLayout } from '../../../ui/PageLayout';
+import { PageLayout, ViewportLayout } from '../../../layouts/PageLayout';
 import { ChatHeader } from '../../chat/components/ChatHeader';
 import type { FactoryProject } from '../../workspaces/services/github';
 
@@ -26,7 +26,7 @@ function FactoryPageShellFrame({
   children,
   Layout,
 }: FactoryPageShellProps & {
-  Layout: typeof DocumentPageLayout;
+  Layout: typeof PageLayout;
 }) {
   const { factoryId } = useParams<{ factoryId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
@@ -50,13 +50,13 @@ function FactoryPageShellFrame({
 
 /** Factory page whose content participates in native document scrolling. */
 export function DocumentFactoryPageShell(props: FactoryPageShellProps) {
-  return <FactoryPageShellFrame {...props} Layout={DocumentPageLayout} />;
+  return <FactoryPageShellFrame {...props} Layout={PageLayout} />;
 }
 
 /** Factory page with nested scroll regions constrained to the viewport. */
 export function FactoryPageShell({ children }: FactoryPageShellProps) {
   return (
-    <FactoryPageShellFrame Layout={ViewportPageLayout}>
+    <FactoryPageShellFrame Layout={ViewportLayout}>
       {factory => <div className="flex min-h-0 flex-1 flex-col p-5">{children(factory)}</div>}
     </FactoryPageShellFrame>
   );

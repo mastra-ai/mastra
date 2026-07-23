@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 import { Panel, usePanelRef } from 'react-resizable-panels';
 import { PanelRightIcon } from 'lucide-react';
 
-import { ViewportPageLayout } from './PageLayout';
+import { ViewportLayout } from './PageLayout';
 
 type ChatLayoutProps = {
   sidebar: ReactNode;
@@ -48,7 +48,7 @@ export function ChatLayout({
   const isMobile = useIsMobile();
 
   return (
-    <ViewportPageLayout sidebar={sidebar} header={header}>
+    <ViewportLayout sidebar={sidebar} header={header}>
       <div className="relative flex h-full min-w-0 flex-1 overflow-visible">
         <DesktopRightPanelFrame
           initialWidth={rightPanelExpanded ? EXPANDED_RIGHT_PANEL_WIDTH : COMPACT_RIGHT_PANEL_WIDTH}
@@ -83,7 +83,7 @@ export function ChatLayout({
           </Button>
         ) : null}
       </div>
-    </ViewportPageLayout>
+    </ViewportLayout>
   );
 }
 

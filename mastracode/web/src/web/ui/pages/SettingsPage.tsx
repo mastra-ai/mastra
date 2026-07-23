@@ -2,7 +2,7 @@ import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Navigate, useLocation, useParams } from 'react-router';
 
 import { Sidebar } from '../Sidebar';
-import { DocumentPageLayout } from '../ui/PageLayout';
+import { PageLayout } from '../layouts/PageLayout';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
 import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
@@ -41,11 +41,11 @@ function SettingsPageContent() {
     );
   }
   return (
-    <DocumentPageLayout
+    <PageLayout
       sidebar={<Sidebar />}
       header={<ChatHeader mobileContent={isMobile ? <SettingsHeader autoFocus placement="mobile" /> : undefined} />}
     >
       <SettingsPanel />
-    </DocumentPageLayout>
+    </PageLayout>
   );
 }

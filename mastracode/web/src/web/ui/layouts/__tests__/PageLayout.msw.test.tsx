@@ -1,11 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { DocumentPageLayout, ViewportPageLayout } from '../PageLayout';
+import { PageLayout, ViewportLayout } from '../PageLayout';
 
 describe.each([
-  { mode: 'document', Layout: DocumentPageLayout },
-  { mode: 'viewport', Layout: ViewportPageLayout },
+  { mode: 'document', Layout: PageLayout },
+  { mode: 'viewport', Layout: ViewportLayout },
 ])('$mode page layout', ({ Layout }) => {
   describe('given page slots are provided', () => {
     it('renders the sidebar, mobile header, and content inside the main surface', () => {
