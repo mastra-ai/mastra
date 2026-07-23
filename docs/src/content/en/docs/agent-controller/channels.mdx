@@ -130,6 +130,22 @@ Populate the reverse lookup from your own connect flow: when a signed-in user li
 
 Channels with no resolver set dispatch as before, with no tenant stamped.
 
+## Custom Chat SDK handlers
+
+The Chat SDK instance is constructed lazily during channel initialization, after the server boots. To register extra Chat SDK handlers — for example a custom slash command — use `onSdkReady`. The callback runs with the SDK instance as soon as it exists, or immediately when it already does.
+
+```typescript {3-7} filename="channels.ts"
+const channels = new AgentControllerChannels({ adapters, handlers })
+
+channels.onSdkReady(chat => {
+  chat.onSlashCommand('/mycommand', async event => {
+    await event.channel.postEphemeral(event.user, 'Only you can see this.', { fallbackToDM: false })
+  })
+})
+```
+
+Slash commands also need to be registered in the platform's app configuration (for Slack, the app's slash-command settings must point at your events endpoint) or the platform never delivers them.
+
 ## Limits
 
 - Adapters can be constructed manually as shown above. The managed connect flow (`mastra.channels.slack.connect(...)`) also supports controller-owned installations — call it with an options object (`connect({ id, name })`) to connect a controller that has no registered agent. Adapters without controller support must still be constructed manually.

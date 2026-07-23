@@ -66,13 +66,13 @@ interface SlackChannelDeps {
 }
 
 /**
- * The Slack team id survives onto a normalized chat Message only on
- * `message.raw` (the Slack Events API envelope). Read it duck-typed to build
- * the workspace-scoped account-link key.
+ * Read the Slack team id off a raw platform payload (Events API envelope or
+ * slash-command body — both carry `team_id`), duck-typed to build the
+ * workspace-scoped account-link key.
  */
-function slackTeamId(message: HandlerMessage): string | undefined {
-  const raw = message.raw as { team_id?: unknown; team?: unknown } | undefined;
-  if (!raw || typeof raw !== 'object') return undefined;
+function rawTeamId(rawPayload: unknown): string | undefined {
+  if (!rawPayload || typeof rawPayload !== 'object') return undefined;
+  const raw = rawPayload as { team_id?: unknown; team?: unknown };
   if (typeof raw.team_id === 'string' && raw.team_id) return raw.team_id;
   if (typeof raw.team === 'string' && raw.team) return raw.team;
   if (raw.team && typeof raw.team === 'object') {
@@ -80,6 +80,14 @@ function slackTeamId(message: HandlerMessage): string | undefined {
     if (typeof id === 'string' && id) return id;
   }
   return undefined;
+}
+
+/**
+ * The Slack team id survives onto a normalized chat Message only on
+ * `message.raw` (the Slack Events API envelope).
+ */
+function slackTeamId(message: HandlerMessage): string | undefined {
+  return rawTeamId(message.raw);
 }
 
 /** Resolve the public origin Slack's servers call back on (events/webhooks). */
@@ -136,30 +144,51 @@ export async function resolveLinkedSender({
   // Need both a signer (anti-spoofing) and a public origin to build a usable
   // Connect link. Missing either → still block the run, just no card.
   if (channelLinkStateSigner && publicUrl && externalTeamId) {
-    const state = channelLinkStateSigner.sign({
-      platform,
-      externalTeamId,
-      externalUserId,
-      channelId: thread.channelId,
-    });
     await thread.postEphemeral(
       message.author,
-      Card({
-        title: 'Connect your account',
-        children: [
-          CardText('Connect your account to use this agent.'),
-          Actions([
-            LinkButton({
-              url: `${publicUrl}/connect/slack?state=${encodeURIComponent(state)}`,
-              label: 'Connect account',
-            }),
-          ]),
-        ],
+      buildConnectCard({
+        signer: channelLinkStateSigner,
+        publicUrl,
+        platform,
+        externalTeamId,
+        externalUserId,
+        channelId: thread.channelId,
       }),
       { fallbackToDM: true },
     );
   }
   return { status: 'blocked' };
+}
+
+/** The "connect your account" card with its signed deep link into the web UI. */
+function buildConnectCard({
+  signer,
+  publicUrl,
+  platform,
+  externalTeamId,
+  externalUserId,
+  channelId,
+}: {
+  signer: ChannelLinkStateSigner;
+  publicUrl: string;
+  platform: string;
+  externalTeamId: string;
+  externalUserId: string;
+  channelId: string;
+}) {
+  const state = signer.sign({ platform, externalTeamId, externalUserId, channelId });
+  return Card({
+    title: 'Connect your account',
+    children: [
+      CardText('Connect your account to use this agent.'),
+      Actions([
+        LinkButton({
+          url: `${publicUrl}/connect/slack?state=${encodeURIComponent(state)}`,
+          label: 'Connect account',
+        }),
+      ]),
+    ],
+  });
 }
 
 /**
@@ -269,6 +298,103 @@ function createAccountLinkResolver(accountLinks: ChannelIdentityStorage): Channe
     });
     return link ? { orgId: link.orgId, userId: link.userId } : null;
   };
+}
+
+/**
+ * Structural view of the chat SDK surface the `/factory` command needs.
+ * Local rather than imported from `chat` for the same version-clash reason as
+ * `HandlerThread` — and the command only touches this sliver.
+ */
+export interface SlashCommandChat {
+  onSlashCommand(
+    command: string,
+    handler: (event: {
+      adapter: { name: string };
+      channel: {
+        id: string;
+        postEphemeral(user: unknown, message: unknown, options: { fallbackToDM: boolean }): Promise<unknown>;
+      };
+      text: string;
+      user: { userId: string };
+      raw: unknown;
+    }) => Promise<void> | void,
+  ): void;
+}
+
+/**
+ * Register the `/factory` slash command: `/factory` lists the sender's
+ * factories with the current default marked; `/factory <name>` repoints the
+ * link's default (the same column the settings dropdown edits). Unlinked
+ * senders get the Connect card. All replies are ephemeral.
+ *
+ * NOTE: the command must also be added to the Slack app's slash-command
+ * config (manual, like the OIDC redirect URI) or Slack never posts it.
+ */
+export function registerFactoryCommand(chat: SlashCommandChat, deps: SlackChannelDeps): void {
+  const { accountLinks, channelLinkStateSigner, projects } = deps;
+  // Without the link store + projects domain there is nothing to list or set.
+  if (!accountLinks || !projects) return;
+
+  chat.onSlashCommand('/factory', async event => {
+    const platform = event.adapter.name;
+    const externalUserId = event.user.userId;
+    const externalTeamId = rawTeamId(event.raw);
+    const ephemeral = (message: unknown) => event.channel.postEphemeral(event.user, message, { fallbackToDM: false });
+
+    const key = externalTeamId ? { platform, externalTeamId, externalUserId } : undefined;
+    const link = key ? await accountLinks.getAccountLink(key) : null;
+    if (!link || !key) {
+      const publicUrl = webPublicUrl();
+      if (channelLinkStateSigner && publicUrl && externalTeamId) {
+        await ephemeral(
+          buildConnectCard({
+            signer: channelLinkStateSigner,
+            publicUrl,
+            platform,
+            externalTeamId,
+            externalUserId,
+            channelId: event.channel.id,
+          }),
+        );
+      } else {
+        await ephemeral('Connect your account first — message the bot and follow its Connect link.');
+      }
+      return;
+    }
+
+    const factories = link.orgId ? await projects.list({ orgId: link.orgId }) : [];
+    if (factories.length === 0) {
+      await ephemeral('Your account has no factory yet. Create one in the web app first.');
+      return;
+    }
+
+    const text = event.text.trim();
+    if (!text) {
+      const lines = factories.map(factory =>
+        factory.id === link.defaultFactoryProjectId ? `• ${factory.name} (default)` : `• ${factory.name}`,
+      );
+      await ephemeral(['Your factories:', ...lines, 'Set the default with `/factory <name>`.'].join('\n'));
+      return;
+    }
+
+    // Exact name match wins; otherwise a unique substring match is accepted.
+    const lower = text.toLowerCase();
+    const exact = factories.filter(factory => factory.name.toLowerCase() === lower);
+    const matches = exact.length > 0 ? exact : factories.filter(factory => factory.name.toLowerCase().includes(lower));
+    if (matches.length !== 1) {
+      const options = factories.map(factory => factory.name).join(', ');
+      await ephemeral(
+        matches.length === 0
+          ? `No factory matches "${text}". Options: ${options}`
+          : `"${text}" is ambiguous. Options: ${options}`,
+      );
+      return;
+    }
+
+    const picked = matches[0]!;
+    await accountLinks.setDefaultFactory({ ...key, userId: link.userId, factoryProjectId: picked.id });
+    await ephemeral(`Slack sessions will go to ${picked.name}.`);
+  });
 }
 
 /**
@@ -510,6 +636,10 @@ export function createAgentControllerSlackChannels(deps: SlackChannelDeps): Agen
   if (accountLinks) {
     channels.setAccountLinkResolver(createAccountLinkResolver(accountLinks));
   }
+
+  // `/factory` lists/sets the sender's default factory. The Chat SDK is built
+  // lazily inside `initialize()`, so registration waits for it.
+  channels.onSdkReady(chat => registerFactoryCommand(chat as unknown as SlashCommandChat, deps));
 
   return channels;
 }
