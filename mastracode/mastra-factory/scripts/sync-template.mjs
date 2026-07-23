@@ -95,8 +95,9 @@ const EXCLUDE_TOP_LEVEL = new Set([
   '.mastra',
   'e2e',
   // The web project is its own pnpm workspace root wired to the monorepo via
-  // `link:` deps — none of that applies to the standalone template, and npm
-  // scaffolds must not ship pnpm workspace/lock files (or a stale npm lock).
+  // `link:` deps — none of that applies to the standalone template. A clean
+  // template-specific pnpm-workspace.yaml (allowBuilds only) is written by
+  // writePnpmWorkspace() below.
   'pnpm-lock.yaml',
   'pnpm-workspace.yaml',
   'package-lock.json',
@@ -321,6 +322,38 @@ src/mastra/public/factory/
   );
 }
 
+/**
+ * Emit `pnpm-workspace.yaml` with `allowBuilds`.
+ *
+ * pnpm v10+ blocks install scripts by default and exits with
+ * ERR_PNPM_IGNORED_BUILDS if any dependency has a build script that isn't
+ * explicitly approved. The deployer also copies this file to `.mastra/output`,
+ * so without it `mastra build` / `mastra start` fail under pnpm.
+ *
+ * Mirrors the mastracode/web allowBuilds policy, minus test-only deps (msw)
+ * stripped by the template. Packages marked `false` don't need their build
+ * script at runtime — listing them prevents the ignored-builds error without
+ * actually running the script.
+ */
+function writePnpmWorkspace() {
+  const content = `# pnpm configuration for the Mastra Factory template.
+# Prevents ERR_PNPM_IGNORED_BUILDS on pnpm v10+ by explicitly approving
+# (or declining) build scripts for dependencies that have them.
+# npm ignores this file entirely; it only affects pnpm installs.
+allowBuilds:
+  '@google/genai': true
+  agent-browser: true
+  bufferutil: true
+  edgedriver: false
+  esbuild: true
+  geckodriver: false
+  onnxruntime-node: true
+  protobufjs: true
+  utf-8-validate: true
+`;
+  fs.writeFileSync(path.join(outDir, 'pnpm-workspace.yaml'), content);
+}
+
 /** Copy the checked-in user-facing README verbatim. */
 function writeReadme() {
   const source = path.join(pkgRoot, 'template', 'README.md');
@@ -353,6 +386,7 @@ writeTsconfig();
 stripTestingTypesFromUiTsconfig();
 writeEnvExample();
 writeGitignore();
+writePnpmWorkspace();
 writeReadme();
 
 console.log(`sync-template: done. Template written to ${outDir}`);

@@ -12,11 +12,12 @@ interface ChatModelsProviderProps {
 }
 
 export function ChatModelsProvider({ children }: ChatModelsProviderProps) {
-  const { resourceId, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
   const { state } = useChatConnection();
   const switchModelMutation = useSwitchAgentControllerModelMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });

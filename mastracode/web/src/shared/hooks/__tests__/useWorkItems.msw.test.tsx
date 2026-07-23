@@ -70,4 +70,39 @@ describe('useTransitionWorkItemMutation', () => {
 
     expect(client.getQueryData<WorkItem[]>(queryKeys.workItems(PROJECT_ID))).toEqual([canonical]);
   });
+
+  it('exposes the destination stage of in-flight transitions and clears it on settle', async () => {
+    let releaseResponse!: () => void;
+    const responseGate = new Promise<void>(resolve => {
+      releaseResponse = resolve;
+    });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items/${ITEM_ID}/transition`, async () => {
+        await responseGate;
+        return HttpResponse.json({
+          result: {
+            status: 'accepted',
+            transitionId: 'transition-1',
+            itemId: ITEM_ID,
+            revision: 2,
+            stage: 'planning',
+            decisions: [],
+          },
+        });
+      }),
+    );
+
+    const original = item(1, 'triage');
+    const { result, client } = renderHookWithProviders(() => useTransitionWorkItemMutation(PROJECT_ID));
+    client.setQueryData(queryKeys.workItems(PROJECT_ID), [original]);
+
+    act(() => {
+      result.current.mutate({ item: original, board: 'work', stage: 'planning' });
+    });
+    await waitFor(() => expect(result.current.pendingTransitions).toEqual([{ itemId: ITEM_ID, stage: 'planning' }]));
+
+    releaseResponse();
+    await waitForMutationsIdle(client);
+    expect(result.current.pendingTransitions).toEqual([]);
+  });
 });

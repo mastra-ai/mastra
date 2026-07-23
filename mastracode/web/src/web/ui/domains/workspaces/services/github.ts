@@ -133,6 +133,52 @@ export function connectUserGithub(baseUrl: string): void {
   window.location.assign(`${baseUrl}/auth/github/connect-user?redirectTo=${currentPageRedirectTo()}`);
 }
 
+/** `default` = the worker token every sandbox gets; `reviewer` = optional
+ * token review-board sessions use so PR reviews come from another account. */
+export type GithubPatKind = 'default' | 'reviewer';
+
+export interface GithubPatStatus {
+  configured: boolean;
+  reviewerConfigured: boolean;
+}
+
+/**
+ * Which GitHub Personal Access Tokens the org has configured for `gh` CLI
+ * use in sandboxes. The tokens themselves never reach the browser.
+ */
+export async function fetchGithubPatStatus(baseUrl: string): Promise<GithubPatStatus> {
+  const res = await fetch(`${baseUrl}/web/github/pat`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`Failed to load GitHub token status (${res.status})`);
+  return (await res.json()) as GithubPatStatus;
+}
+
+/** Save an org GitHub PAT (used only for `gh` CLI auth in sandboxes). */
+export async function saveGithubPat(baseUrl: string, token: string, kind: GithubPatKind = 'default'): Promise<void> {
+  const res = await fetch(`${baseUrl}/web/github/pat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ token, kind }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => undefined)) as { error?: string } | undefined;
+    throw new Error(body?.error ?? `Failed to save GitHub token (${res.status})`);
+  }
+}
+
+/** Remove an org GitHub PAT. */
+export async function deleteGithubPat(baseUrl: string, kind: GithubPatKind = 'default'): Promise<void> {
+  const res = await fetch(`${baseUrl}/web/github/pat?kind=${kind}`, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`Failed to remove GitHub token (${res.status})`);
+}
+
 /** List repos across the user's installations, optionally filtered by query. */
 export async function listGithubRepos(baseUrl: string, query?: string): Promise<GithubRepo[]> {
   const url = query ? `${baseUrl}/web/github/repos?q=${encodeURIComponent(query)}` : `${baseUrl}/web/github/repos`;

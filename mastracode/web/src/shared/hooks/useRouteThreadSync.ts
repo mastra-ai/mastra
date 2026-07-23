@@ -12,18 +12,20 @@ import { useSwitchAgentControllerThreadMutation } from './useAgentControllerThre
 import { useAgentControllerThreads } from './useAgentControllerThreads';
 
 export function useRouteThreadSync() {
-  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { status, threadId } = useChatConnection();
   const { pushNotice } = useChatTranscript();
   const threadsQuery = useAgentControllerThreads({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
   const switchThreadMutation = useSwitchAgentControllerThreadMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
@@ -32,13 +34,14 @@ export function useRouteThreadSync() {
   const { session } = createAgentControllerClient({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
   const { factoryId, threadId: routeThreadId } = useParams<{ factoryId: string; threadId: string }>();
   const latestRouteThreadId = useRef<string | undefined>(undefined);
   const previousSessionKey = useRef<string | undefined>(undefined);
-  const sessionKey = resourceId;
+  const sessionKey = `${resourceId}:${projectPath ?? ''}`;
 
   const switchToRouteThread = useEffectEvent((targetThreadId: string, fallbackForScopeChange: boolean) => {
     latestRouteThreadId.current = targetThreadId;

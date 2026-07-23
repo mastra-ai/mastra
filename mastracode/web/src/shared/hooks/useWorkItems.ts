@@ -126,18 +126,21 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
       void queryClient.invalidateQueries({ queryKey: listKey });
     },
   });
-  const pendingItemIds = useMutationState({
+  const pendingTransitions = useMutationState({
     filters: { mutationKey, status: 'pending' },
     select: pending => {
       const variables = pending.state.variables;
-      return isTransitionWorkItemVariables(variables) ? variables.item.id : undefined;
+      return isTransitionWorkItemVariables(variables)
+        ? { itemId: variables.item.id, stage: variables.stage }
+        : undefined;
     },
-  }).filter(id => id !== undefined);
-  return { ...mutation, pendingItemIds };
+  }).filter(transition => transition !== undefined);
+  return { ...mutation, pendingTransitions };
 }
 
 function isTransitionWorkItemVariables(value: unknown): value is TransitionWorkItemVariables {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  if (!('stage' in value) || typeof value.stage !== 'string') return false;
   return 'item' in value && typeof value.item === 'object' && value.item !== null && 'id' in value.item;
 }
 
