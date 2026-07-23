@@ -556,6 +556,13 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
       return;
     }
 
+    // When the sender routed to a factory we know exactly which board the
+    // session belongs to — deep-link straight into it. Otherwise fall back to
+    // the factory-agnostic /threads/ redirect (which picks the first factory).
+    const threadPath = gate.intake
+      ? `/factories/${encodeURIComponent(gate.intake.factoryProjectId)}/workspaces/channel/threads/${encodeURIComponent(internalThread.id)}`
+      : `/threads/${internalThread.id}`;
+
     await thread.post(
       Card({
         title: 'New Mastra Code session started.',
@@ -563,7 +570,7 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
           CardText('A new session has been created.'),
           Actions([
             LinkButton({
-              url: `${process.env.MASTRACODE_PUBLIC_URL}/threads/${internalThread.id}?resourceId=${encodeURIComponent(
+              url: `${process.env.MASTRACODE_PUBLIC_URL}${threadPath}?resourceId=${encodeURIComponent(
                 internalThread.resourceId,
               )}`,
               label: 'View Session',

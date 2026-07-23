@@ -477,6 +477,42 @@ describe('work-item intake on dispatch', () => {
     expect(warn).toHaveBeenCalled();
   });
 
+  it('the View Session link deep-links into the resolved factory', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const { accountLinks, projects, workItems, getMastra } = makeIntakeDeps();
+    const handlers = createHandlers({ getMastra, accountLinks, projects, workItems });
+    const thread = makeIntakeThread();
+    thread.isSubscribed = vi.fn().mockResolvedValue(false);
+
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn());
+
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    const card = thread.post.mock.calls[0][0];
+    const actions = card.children.find((c: any) => c.type === 'actions');
+    expect(actions.children[0].url).toBe(
+      'https://mc.example.com/factories/fp-1/workspaces/channel/threads/uuid-thread-1' +
+        `?resourceId=${encodeURIComponent('channel:slack:C-1:1700.42')}`,
+    );
+  });
+
+  it('the View Session link falls back to the factory-agnostic redirect when no factory routed', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    // No projects domain → gate passes without intake (pre-routing behavior).
+    const { accountLinks, workItems, getMastra } = makeIntakeDeps();
+    const handlers = createHandlers({ getMastra, accountLinks, workItems });
+    const thread = makeIntakeThread();
+    thread.isSubscribed = vi.fn().mockResolvedValue(false);
+
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn());
+
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    const card = thread.post.mock.calls[0][0];
+    const actions = card.children.find((c: any) => c.type === 'actions');
+    expect(actions.children[0].url).toBe(
+      `https://mc.example.com/threads/uuid-thread-1?resourceId=${encodeURIComponent('channel:slack:C-1:1700.42')}`,
+    );
+  });
+
   it('long titles truncate to ~80 chars', async () => {
     const { accountLinks, projects, workItems, getMastra } = makeIntakeDeps();
     const handlers = createHandlers({ getMastra, accountLinks, projects, workItems });
