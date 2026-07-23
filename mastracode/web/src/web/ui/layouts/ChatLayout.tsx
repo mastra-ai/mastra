@@ -1,10 +1,8 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { ResizeHandleIndicator } from '@mastra/playground-ui/primitives/resize-handle-indicator';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { PanelRightIcon } from 'lucide-react';
 
 import { ViewportLayout } from './PageLayout';
 
@@ -20,9 +18,7 @@ type ChatLayoutProps = {
   /** Optional workspace panel rendered inline on desktop and in a drawer on mobile. */
   rightPanel?: ReactNode;
   rightPanelExpanded?: boolean;
-  rightPanelAvailable?: boolean;
-  onRightPanelOpen?: () => void;
-  onRightPanelClose?: () => void;
+  rightPanelOpen?: boolean;
 };
 
 const COMPACT_RIGHT_PANEL_WIDTH = 320;
@@ -38,9 +34,7 @@ export function ChatLayout({
   footer,
   rightPanel,
   rightPanelExpanded = false,
-  rightPanelAvailable = false,
-  onRightPanelOpen,
-  onRightPanelClose,
+  rightPanelOpen = false,
 }: ChatLayoutProps) {
   const isMobile = useIsMobile();
 
@@ -49,8 +43,8 @@ export function ChatLayout({
       <div className="relative flex h-full min-w-0 flex-1 overflow-visible">
         <DesktopRightPanelFrame
           initialWidth={rightPanelExpanded ? EXPANDED_RIGHT_PANEL_WIDTH : COMPACT_RIGHT_PANEL_WIDTH}
+          open={rightPanelOpen}
           rightPanel={isMobile ? undefined : rightPanel}
-          onRightPanelClose={onRightPanelClose}
         >
           <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
             {main ?? (
@@ -66,19 +60,6 @@ export function ChatLayout({
             {rightPanel}
           </PanelDrawer>
         ) : null}
-        {!rightPanel && rightPanelAvailable ? (
-          <Button
-            size="icon-md"
-            variant="ghost"
-            tooltip="Open workspace files"
-            className="absolute right-2 top-2 z-10 hidden rounded-md lg:inline-flex"
-            onClick={onRightPanelOpen}
-            aria-label="Open workspace files"
-            aria-expanded="false"
-          >
-            <PanelRightIcon className="rotate-180" />
-          </Button>
-        ) : null}
       </div>
     </ViewportLayout>
   );
@@ -86,14 +67,14 @@ export function ChatLayout({
 
 function DesktopRightPanelFrame({
   initialWidth,
+  open,
   rightPanel,
   children,
-  onRightPanelClose,
 }: {
   initialWidth: number;
+  open: boolean;
   rightPanel?: ReactNode;
   children: ReactNode;
-  onRightPanelClose?: () => void;
 }) {
   const frameRef = useRef<HTMLDivElement>(null);
   const rightPanelSlotRef = useRef<HTMLDivElement>(null);
@@ -158,7 +139,7 @@ function DesktopRightPanelFrame({
     <div
       ref={frameRef}
       data-expanded={initialWidth === EXPANDED_RIGHT_PANEL_WIDTH}
-      className="relative h-full min-h-0 w-full min-w-0 flex-1 [--chat-right-panel-width:320px] data-[expanded=true]:[--chat-right-panel-width:720px]"
+      className="relative h-full min-h-0 w-full min-w-0 flex-1 [--chat-right-panel-width:320px] [--chat-session-header-height:3.25rem] data-[expanded=true]:[--chat-right-panel-width:720px]"
     >
       <div id="chat-main-slot" className="h-full min-h-0 min-w-0">
         {children}
@@ -167,7 +148,10 @@ function DesktopRightPanelFrame({
         <div
           ref={rightPanelSlotRef}
           id="chat-right-slot"
-          className="absolute right-0 top-0 z-20 flex max-h-[70dvh] w-(--chat-right-panel-width) max-w-[calc(100%-1rem)] min-w-0 p-2"
+          data-open={open}
+          aria-hidden={!open}
+          inert={!open}
+          className="absolute right-0 top-[calc(var(--chat-session-header-height)+0.5rem)] z-20 flex max-h-[70dvh] w-(--chat-right-panel-width) max-w-[calc(100%-1rem)] min-w-0 p-2 opacity-100 transition-[width,opacity,translate] duration-220 ease-[cubic-bezier(0.32,0.72,0,1)] data-[open=false]:pointer-events-none data-[open=false]:translate-x-2 data-[open=false]:opacity-0 motion-reduce:transition-none in-data-[panel-gesture=active]:transition-none"
         >
           <button
             type="button"
@@ -180,19 +164,6 @@ function DesktopRightPanelFrame({
           </button>
           <div className="relative flex max-h-[calc(70dvh-1rem)] min-h-0 w-full overflow-hidden rounded-xl border border-border1/40 bg-surface3 shadow-main-frame">
             {rightPanel}
-            {onRightPanelClose ? (
-              <Button
-                size="icon-md"
-                variant="ghost"
-                tooltip="Close workspace files"
-                className="absolute right-2 top-2 z-10 rounded-md"
-                onClick={onRightPanelClose}
-                aria-label="Close workspace files"
-                aria-expanded="true"
-              >
-                <PanelRightIcon />
-              </Button>
-            ) : null}
           </div>
         </div>
       ) : null}

@@ -1,5 +1,9 @@
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import type { ReactNode } from 'react';
 import { useState } from 'react';
+import { PanelRightIcon } from 'lucide-react';
 import { useMatch, useParams } from 'react-router';
 
 import { Sidebar } from '../Sidebar';
@@ -18,15 +22,14 @@ import { useThreadPageKickoffs } from '../domains/chat/hooks/useThreadPageKickof
 import { useFactoryQuery } from '../../../shared/hooks/useFactories';
 import { useUserSessionQuery } from '../../../shared/hooks/useWorkspaces';
 import { useWorkspaceRenderedListing } from '../../../shared/hooks/use-fs';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 const threadComposerContainerClass = 'w-full p-3 md:p-5';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
 
 export function ThreadPage() {
   const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId?: string; threadId?: string }>();
-  const userThreadMatch = useMatch('/factories/:factoryId/user/threads/:threadId');
   const isMobile = useIsMobile();
+  const userThreadMatch = useMatch('/factories/:factoryId/user/threads/:threadId');
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
   const [workspaceViewerOverride, setWorkspaceViewerOverride] = useState<{
     workspacePath: string;
@@ -48,6 +51,7 @@ export function ThreadPage() {
     if (!workspacePath) return;
     setWorkspaceViewerOverride({ workspacePath, visible });
   };
+  const workspacePanelToggleLabel = workspaceViewerVisible ? 'Close workspace files' : 'Open workspace files';
 
   const resolvingSession = factoryQuery.isPending || (isUserThreadRoute && userSessionQuery.isPending);
   return (
@@ -55,11 +59,9 @@ export function ThreadPage() {
       sidebar={<Sidebar />}
       header={<ChatHeader />}
       rightPanelExpanded={workspaceViewerExpanded}
-      rightPanelAvailable={Boolean(workspacePath)}
-      onRightPanelOpen={() => setWorkspaceViewerVisible(true)}
-      onRightPanelClose={() => setWorkspaceViewerVisible(false)}
+      rightPanelOpen={workspaceViewerVisible}
       rightPanel={
-        workspacePath && (workspaceViewerVisible || isMobile) ? (
+        workspacePath ? (
           <WorkspaceViewerPanel
             workspacePath={workspacePath}
             renderedPaths={renderedPaths}
@@ -76,7 +78,29 @@ export function ThreadPage() {
           </div>
         ) : (
           <ChatSessionBoundary threadId={threadId}>
-            <ThreadPageMain />
+            <ThreadPageMain
+              workspacePanelOpen={workspaceViewerVisible}
+              workspacePanelAction={
+                workspacePath && !isMobile ? (
+                  <Button
+                    type="button"
+                    size="icon-md"
+                    variant="ghost"
+                    tooltip={workspacePanelToggleLabel}
+                    className="hidden rounded-md lg:inline-flex"
+                    onClick={() => setWorkspaceViewerVisible(!workspaceViewerVisible)}
+                    aria-label={workspacePanelToggleLabel}
+                    aria-controls="chat-right-slot"
+                    aria-expanded={workspaceViewerVisible}
+                  >
+                    <PanelRightIcon
+                      data-open={workspaceViewerVisible}
+                      className="transition-transform duration-220 data-[open=false]:rotate-180 motion-reduce:transition-none"
+                    />
+                  </Button>
+                ) : undefined
+              }
+            />
           </ChatSessionBoundary>
         )
       }
@@ -84,16 +108,28 @@ export function ThreadPage() {
   );
 }
 
-function ThreadPageMain() {
+function ThreadPageMain({
+  workspacePanelOpen,
+  workspacePanelAction,
+}: {
+  workspacePanelOpen: boolean;
+  workspacePanelAction?: ReactNode;
+}) {
   useGlobalShortcuts();
 
   return (
-    <div className="grid h-full min-h-0 min-w-0 grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden">
-      <ChatMessageBoundary>
-        <ThreadPageContent />
-      </ChatMessageBoundary>
-      <TaskPanel />
-      <ThreadComposer />
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+      <FactorySessionHeader actions={workspacePanelAction} />
+      <div
+        data-panel-open={workspacePanelOpen}
+        className="grid min-h-0 min-w-0 flex-1 grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden transition-[padding-right] duration-220 ease-[cubic-bezier(0.32,0.72,0,1)] lg:data-[panel-open=true]:pr-[calc(var(--chat-right-panel-width)+0.5rem)] motion-reduce:transition-none in-data-[panel-gesture=active]:transition-none"
+      >
+        <ChatMessageBoundary>
+          <ThreadPageContent />
+        </ChatMessageBoundary>
+        <TaskPanel />
+        <ThreadComposer />
+      </div>
     </div>
   );
 }
@@ -114,7 +150,6 @@ function ThreadPageContent() {
 
   return (
     <div className="flex min-h-0 min-w-0 flex-col">
-      <FactorySessionHeader />
       <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
         <ChatMessageList />
       </div>

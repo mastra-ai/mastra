@@ -76,6 +76,7 @@ describe('ChatLayout', () => {
           content={<div />}
           rightPanel={<StatefulRightPanel />}
           rightPanelExpanded={false}
+          rightPanelOpen
         />,
       );
 
@@ -83,27 +84,31 @@ describe('ChatLayout', () => {
       expect(screen.getByRole('button', { name: 'right-panel-opened' })).toBeInTheDocument();
 
       rerender(
-        <ChatLayout sidebar={<div />} content={<div />} rightPanel={<StatefulRightPanel />} rightPanelExpanded />,
+        <ChatLayout
+          sidebar={<div />}
+          content={<div />}
+          rightPanel={<StatefulRightPanel />}
+          rightPanelExpanded
+          rightPanelOpen
+        />,
       );
 
       expect(screen.getByRole('button', { name: 'right-panel-opened' })).toBeInTheDocument();
     });
 
-    it('closes the panel from its top-right toggle', async () => {
-      const onRightPanelClose = vi.fn();
-      const user = userEvent.setup();
-      render(
-        <ChatLayout
-          sidebar={<div />}
-          content={<div />}
-          rightPanel={<div>workspace-panel</div>}
-          onRightPanelClose={onRightPanelClose}
-        />,
+    it('keeps a closed panel mounted but outside the accessibility tree', () => {
+      const { rerender } = render(
+        <ChatLayout sidebar={<div />} content={<div />} rightPanel={<div>workspace-panel</div>} />,
       );
 
-      await user.click(screen.getByRole('button', { name: 'Close workspace files' }));
+      expect(screen.getByText('workspace-panel')).toBeInTheDocument();
+      expect(screen.queryByText('workspace-panel', { selector: '[aria-hidden="false"] *' })).not.toBeInTheDocument();
 
-      expect(onRightPanelClose).toHaveBeenCalledOnce();
+      rerender(
+        <ChatLayout sidebar={<div />} content={<div />} rightPanel={<div>workspace-panel</div>} rightPanelOpen />,
+      );
+
+      expect(screen.getByText('workspace-panel')).toBeVisible();
     });
 
     it('can remove and restore the right panel repeatedly', () => {

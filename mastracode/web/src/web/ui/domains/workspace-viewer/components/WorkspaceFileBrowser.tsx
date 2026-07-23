@@ -184,16 +184,20 @@ export function WorkspaceFileBrowser({
 
   return (
     <aside
-      className="flex max-h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl bg-surface3"
+      className="relative flex max-h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl bg-surface3"
       aria-label="Workspace files"
     >
-      <div className="flex items-center justify-end gap-2 px-3 py-2 lg:pr-12">
-        <Button size="sm" variant="ghost" onClick={onRefresh} aria-label="Refresh workspace files">
-          <RefreshCw size={14} />
-        </Button>
-      </div>
+      <Button
+        size="icon-md"
+        variant="ghost"
+        onClick={onRefresh}
+        aria-label="Refresh workspace files"
+        className="absolute right-2 top-2 z-10 rounded-md"
+      >
+        <RefreshCw size={14} />
+      </Button>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div className="min-h-0 flex-1 overflow-y-auto p-2 pt-12">
         <Tree
           selectedId={selectedFilePath ? `${selectedPath.root}/${selectedFilePath}` : undefined}
           onSelect={id => {

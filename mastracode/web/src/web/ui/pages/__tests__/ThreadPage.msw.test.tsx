@@ -12,21 +12,33 @@ import { ThreadPage } from '../ThreadPage';
 
 vi.mock('../../layouts/ChatLayout', () => ({
   ChatLayout: ({
+    main,
     rightPanel,
-    rightPanelAvailable,
-    onRightPanelOpen,
+    rightPanelOpen,
   }: {
+    main?: ReactNode;
     rightPanel?: ReactNode;
-    rightPanelAvailable?: boolean;
-    onRightPanelOpen?: () => void;
+    rightPanelOpen?: boolean;
   }) => (
     <div>
-      <span>{rightPanel ? 'workspace-panel-visible' : 'workspace-panel-hidden'}</span>
-      <span>{rightPanelAvailable ? 'workspace-panel-available' : 'workspace-panel-unavailable'}</span>
-      {rightPanelAvailable && !rightPanel ? <button onClick={onRightPanelOpen}>Open workspace files</button> : null}
+      <span>{rightPanel ? 'workspace-panel-mounted' : 'workspace-panel-missing'}</span>
+      <span>{rightPanelOpen ? 'workspace-panel-open' : 'workspace-panel-closed'}</span>
+      {main}
     </div>
   ),
 }));
+
+vi.mock('../../domains/chat/context/ChatSessionProvider', () => ({
+  ChatSessionBoundary: ({ children }: { children: ReactNode }) => children,
+  ChatMessageBoundary: ({ children }: { children: ReactNode }) => children,
+}));
+
+vi.mock('../../domains/chat/components/ChatMessageList', () => ({ ChatMessageList: () => null }));
+vi.mock('../../domains/chat/components/ComposerPanel', () => ({ ComposerPanel: () => null }));
+vi.mock('../../domains/chat/components/TaskPanel', () => ({ TaskPanel: () => null }));
+vi.mock('../../domains/chat/hooks/useGlobalShortcuts', () => ({ useGlobalShortcuts: vi.fn() }));
+vi.mock('../../domains/chat/hooks/useThreadPageKickoffs', () => ({ useThreadPageKickoffs: vi.fn() }));
+vi.mock('../../../../shared/hooks/useRouteThreadSync', () => ({ useRouteThreadSync: vi.fn() }));
 
 const FACTORY_ID = 'factory-1';
 const SESSION_ID = 'session-1';
@@ -78,30 +90,31 @@ function renderThreadPage() {
   const router = createMemoryRouter(
     [
       {
-        path: '/factories/:factoryId/workspaces/:sessionId/threads/:threadId',
+        path: '/factories/:factoryId/user/threads/:threadId',
         element: <ThreadPage />,
       },
     ],
-    { initialEntries: [`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/thread-1`] },
+    { initialEntries: [`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`] },
   );
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
 describe('ThreadPage workspace panel', () => {
   describe('when the workspace has no rendered artifacts', () => {
-    it('keeps the workspace panel available behind its open button', async () => {
+    it('opens the mounted workspace panel from the session header', async () => {
       const user = userEvent.setup();
       const { onListing } = installHandlers([]);
 
       renderThreadPage();
 
       await waitFor(() => expect(onListing).toHaveBeenCalledOnce());
-      expect(screen.getByText('workspace-panel-hidden')).toBeInTheDocument();
-      expect(screen.getByText('workspace-panel-available')).toBeInTheDocument();
+      expect(screen.getByText('workspace-panel-mounted')).toBeInTheDocument();
+      expect(screen.getByText('workspace-panel-closed')).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Open workspace files' }));
 
-      expect(screen.getByText('workspace-panel-visible')).toBeInTheDocument();
+      expect(screen.getByText('workspace-panel-open')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Close workspace files' })).toBeInTheDocument();
     });
   });
 
@@ -119,8 +132,9 @@ describe('ThreadPage workspace panel', () => {
 
       renderThreadPage();
 
-      expect(await screen.findByText('workspace-panel-visible')).toBeInTheDocument();
-      expect(screen.getByText('workspace-panel-available')).toBeInTheDocument();
+      expect(await screen.findByText('workspace-panel-open')).toBeInTheDocument();
+      expect(screen.getByText('workspace-panel-mounted')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Close workspace files' })).toBeInTheDocument();
       expect(listingWorkspacePaths).toEqual([SANDBOX_WORKDIR]);
     });
   });
