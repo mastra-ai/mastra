@@ -25,6 +25,9 @@ export function useWorkItemsQuery(factoryProjectId: string | undefined) {
     // Relationships can be created by GitHub ingestion or another open tab.
     // Keep thread-page counterpart links current without requiring a reload.
     refetchInterval: 5_000,
+    // Cards move autonomously (rule transitions, agent runs); polling pauses
+    // while the tab is hidden, so refresh immediately on return.
+    refetchOnWindowFocus: true,
   });
 }
 
