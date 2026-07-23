@@ -31,10 +31,12 @@ export function ChatSessionConfigProvider({
   children,
   threadId,
   userScoped = false,
+  disabled = false,
 }: {
   children: ReactNode;
   threadId?: string;
   userScoped?: boolean;
+  disabled?: boolean;
 }) {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const { baseUrl } = useApiConfig();
@@ -64,8 +66,8 @@ export function ChatSessionConfigProvider({
     : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
   const value = {
     resourceId: resourceId ?? '',
-    sessionEnabled,
-    resourceEnabled: userScoped ? Boolean(resourceId) : ensureQuery.isSuccess,
+    sessionEnabled: disabled ? false : sessionEnabled,
+    resourceEnabled: disabled ? false : userScoped ? Boolean(resourceId) : ensureQuery.isSuccess,
     projectPath,
     factorySessionState:
       factory && repository

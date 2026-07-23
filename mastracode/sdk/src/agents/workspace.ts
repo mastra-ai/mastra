@@ -254,6 +254,25 @@ export async function getDynamicWorkspace({
   const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = ctx?.getState();
 
+  if (state?.factorySupervisor === true || state?.factorySupervisor === 'true') {
+    const workspaceId = 'mastracode-factory-supervisor';
+    try {
+      const existing = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
+      if (existing) return existing;
+    } catch {
+      // Not registered yet.
+    }
+
+    const basePath = path.join(os.tmpdir(), `mastracode-factory-supervisor-${process.pid}`);
+    fs.mkdirSync(basePath, { recursive: true });
+    return new Workspace({
+      id: workspaceId,
+      name: 'Factory Supervisor Workspace',
+      filesystem: new LocalFilesystem({ basePath, readOnly: true }),
+      tools: {},
+    });
+  }
+
   // Repository-backed project: the repo lives inside a remote sandbox, not on
   // the server host. Reattach to the already-provisioned + materialized sandbox
   // and build a sandbox-backed Workspace. Optional embedders may add read-only

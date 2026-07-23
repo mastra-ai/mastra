@@ -1,0 +1,296 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import { FACTORY_SUPERVISOR_INSTRUCTIONS } from './instructions.js';
+import { FactorySupervisorService, factorySupervisorThreadId } from './service.js';
+
+const PROJECT_ID = '11111111-1111-4111-8111-111111111111';
+const OTHER_PROJECT_ID = '22222222-2222-4222-8222-222222222222';
+const ORG_ID = 'org-1';
+
+function fixture(
+  options: {
+    projectExists?: boolean;
+    liveState?: Record<string, unknown>;
+    storedWorkerSession?: {
+      orgId: string;
+      projectRepositoryId: string;
+      sandboxId: string | null;
+      sandboxWorkdir: string | null;
+    };
+  } = {},
+) {
+  const threadId = factorySupervisorThreadId(PROJECT_ID);
+  let state = {
+    pluginInstructions: ['Existing instruction.'],
+    factoryProjectId: PROJECT_ID,
+    factoryOrgId: ORG_ID,
+    factorySupervisor: true,
+    ...options.liveState,
+  };
+  const session = {
+    identity: { getResourceId: () => `${PROJECT_ID}-supervisor` },
+    thread: {
+      getId: vi.fn(() => threadId),
+      getById: vi.fn(async () => ({
+        id: threadId,
+        resourceId: `${PROJECT_ID}-supervisor`,
+        metadata: { factoryProjectId: PROJECT_ID, factoryOrgId: ORG_ID, factorySupervisor: 'true' },
+      })),
+      rename: vi.fn(async () => undefined),
+      switch: vi.fn(async () => undefined),
+    },
+    state: {
+      get: vi.fn(() => state),
+      set: vi.fn(async (updates: Record<string, unknown>) => {
+        state = { ...state, ...updates };
+      }),
+    },
+  };
+  let live = options.liveState ? session : undefined;
+  // A factory-level (non-supervisor) session always occupies the bare factory
+  // id in practice — the supervisor must never resolve or collide with it.
+  const factoryLevelSession = { state: { get: vi.fn(() => ({})) } };
+  const controller = {
+    getSessionByResource: vi.fn(async (resourceId: string) =>
+      resourceId === `${PROJECT_ID}-supervisor`
+        ? live
+        : resourceId === PROJECT_ID
+          ? factoryLevelSession
+          : resourceId === 'worker-running'
+            ? runningWorkerSession
+            : resourceId === 'worker-idle'
+              ? idleWorkerSession
+              : undefined,
+    ),
+    createSession: vi.fn(async (_input: Record<string, unknown>) => {
+      live = session;
+      return session;
+    }),
+  };
+  const projects = {
+    ensureReady: vi.fn(async () => undefined),
+    get: vi.fn(async ({ orgId, id }: { orgId: string; id: string }) =>
+      options.projectExists === false || orgId !== ORG_ID || id !== PROJECT_ID
+        ? null
+        : { id, defaultModelId: 'openai/gpt-4.1' },
+    ),
+  };
+  const runningWorkerSession = {
+    run: { isRunning: () => true },
+    thread: { getId: vi.fn(() => 'worker-thread'), switch: vi.fn(async () => undefined) },
+  };
+  const idleWorkerSession = {
+    run: { isRunning: () => false },
+    thread: { getId: vi.fn(() => 'worker-thread'), switch: vi.fn(async () => undefined) },
+  };
+  const workItems = {
+    ensureReady: vi.fn(async () => undefined),
+    list: vi.fn(async () => []),
+    listRunBindings: vi.fn(async () => [
+      { id: 'binding-1', workItemId: 'item-1', role: 'work', resourceId: 'worker-running', status: 'active' },
+      { id: 'binding-2', workItemId: 'item-2', role: 'work', resourceId: 'worker-idle', status: 'active' },
+      { id: 'binding-3', workItemId: 'item-3', role: 'review', resourceId: 'worker-gone', status: 'active' },
+      { id: 'binding-4', workItemId: 'item-4', role: 'work', resourceId: 'worker-revoked', status: 'revoked' },
+    ]),
+  };
+  const approvals = { list: vi.fn(async () => []), get: vi.fn(), resolve: vi.fn() };
+  const primeCredentials = vi.fn(async () => undefined);
+  const storedSessions = {
+    getBySessionId: vi.fn(async (_sessionId: string) => options.storedWorkerSession ?? null),
+  };
+  const service = new FactorySupervisorService({
+    controller: controller as never,
+    projects: projects as never,
+    workItems: workItems as never,
+    approvals,
+    primeCredentials,
+    storedSessions,
+  });
+  return {
+    service,
+    controller,
+    projects,
+    session,
+    primeCredentials,
+    storedSessions,
+    runningWorkerSession,
+    getState: () => state,
+  };
+}
+
+describe('FactorySupervisorService', () => {
+  it('creates the deterministic repo-less singleton and installs supervisor instructions', async () => {
+    const { service, controller, session, primeCredentials, getState } = fixture();
+    const address = await service.ensureSession({ orgId: ORG_ID, userId: 'user-1', factoryProjectId: PROJECT_ID });
+
+    expect(address).toEqual({
+      factoryProjectId: PROJECT_ID,
+      resourceId: `${PROJECT_ID}-supervisor`,
+      sessionId: `${PROJECT_ID}-supervisor`,
+      threadId: `${PROJECT_ID}-supervisor`,
+    });
+    expect(controller.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: `${PROJECT_ID}-supervisor`,
+        ownerId: `factory:${ORG_ID}`,
+        resourceId: `${PROJECT_ID}-supervisor`,
+        threadId: `${PROJECT_ID}-supervisor`,
+        tags: {
+          factoryProjectId: PROJECT_ID,
+          factoryOrgId: ORG_ID,
+          factorySupervisor: 'true',
+          currentModelId: 'openai/gpt-4.1',
+        },
+      }),
+    );
+    expect(controller.createSession.mock.calls[0]?.[0]).not.toHaveProperty('scope');
+    expect(controller.createSession.mock.calls[0]?.[0]).not.toHaveProperty('workspace');
+    // Regression: the bare factory id belongs to the factory-level session
+    // provisioned by /ensure; the supervisor must address its own resource.
+    expect(controller.getSessionByResource).toHaveBeenCalledWith(`${PROJECT_ID}-supervisor`);
+    expect(controller.getSessionByResource).not.toHaveBeenCalledWith(PROJECT_ID);
+    expect(primeCredentials).toHaveBeenCalledWith({ orgId: ORG_ID, userId: 'user-1' });
+    expect(session.thread.rename).toHaveBeenCalledWith({ title: 'Factory Supervisor' });
+    expect(getState()).toMatchObject({
+      factoryProjectId: PROJECT_ID,
+      factoryOrgId: ORG_ID,
+      factorySupervisor: true,
+      projectPath: undefined,
+      projectRepositoryId: undefined,
+      worktreePath: undefined,
+    });
+    expect(getState().pluginInstructions).toContain(FACTORY_SUPERVISOR_INSTRUCTIONS);
+  });
+
+  it('coalesces concurrent creation and reuses the transcript across users', async () => {
+    const { service, controller, primeCredentials } = fixture();
+    const [first, second] = await Promise.all([
+      service.ensureSession({ orgId: ORG_ID, userId: 'user-1', factoryProjectId: PROJECT_ID }),
+      service.ensureSession({ orgId: ORG_ID, userId: 'user-2', factoryProjectId: PROJECT_ID }),
+    ]);
+    const third = await service.ensureSession({ orgId: ORG_ID, userId: 'user-2', factoryProjectId: PROJECT_ID });
+
+    expect(first).toEqual(second);
+    expect(third.threadId).toBe(first.threadId);
+    expect(controller.createSession).toHaveBeenCalledOnce();
+    expect(primeCredentials).toHaveBeenCalledWith({ orgId: ORG_ID, userId: 'user-1' });
+    expect(primeCredentials).toHaveBeenCalledWith({ orgId: ORG_ID, userId: 'user-2' });
+  });
+
+  it('fails closed for another tenant or a mismatched live resource', async () => {
+    const missing = fixture({ projectExists: false });
+    await expect(
+      missing.service.ensureSession({ orgId: ORG_ID, userId: 'user-1', factoryProjectId: OTHER_PROJECT_ID }),
+    ).rejects.toThrow('Factory project not found');
+
+    const mismatched = fixture({ liveState: { factoryOrgId: 'org-other' } });
+    await expect(
+      mismatched.service.ensureSession({ orgId: ORG_ID, userId: 'user-1', factoryProjectId: PROJECT_ID }),
+    ).rejects.toThrow('non-canonical session');
+    expect(mismatched.controller.createSession).not.toHaveBeenCalled();
+  });
+
+  it('returns bounded Factory state scoped through tenant-aware storage calls', async () => {
+    const { service } = fixture();
+    const state = await service.getState({ orgId: ORG_ID, factoryProjectId: PROJECT_ID });
+    expect(state).toEqual({
+      factoryProjectId: PROJECT_ID,
+      totalItems: 0,
+      counts: { byBoard: {}, byStage: {} },
+      pendingApprovalCount: 0,
+      pendingApprovals: [],
+      workers: {
+        running: 1,
+        idle: 2,
+        bindings: [
+          {
+            workItemId: 'item-1',
+            role: 'work',
+            bindingId: 'binding-1',
+            activity: 'running',
+            workItemTitle: null,
+            stage: null,
+          },
+          {
+            workItemId: 'item-2',
+            role: 'work',
+            bindingId: 'binding-2',
+            activity: 'idle',
+            workItemTitle: null,
+            stage: null,
+          },
+          {
+            workItemId: 'item-3',
+            role: 'review',
+            bindingId: 'binding-3',
+            activity: 'idle',
+            workItemTitle: null,
+            stage: null,
+          },
+        ],
+      },
+      snapshotAt: expect.any(String),
+    });
+  });
+
+  it('reuses a live worker session and rebinds it to the binding thread', async () => {
+    const { service, controller, runningWorkerSession } = fixture();
+    const resolved = await service.resolveWorkerSession({
+      orgId: ORG_ID,
+      factoryProjectId: PROJECT_ID,
+      binding: { resourceId: 'worker-running', threadId: 'other-thread' },
+    });
+    expect(resolved).toBe(runningWorkerSession);
+    expect(runningWorkerSession.thread.switch).toHaveBeenCalledWith({ threadId: 'other-thread', emitEvent: false });
+    expect(controller.createSession).not.toHaveBeenCalled();
+  });
+
+  it('reopens a worker session from its stored workspace coordinates when none is live', async () => {
+    const { service, controller, session, storedSessions } = fixture({
+      storedWorkerSession: {
+        orgId: ORG_ID,
+        projectRepositoryId: 'repo-1',
+        sandboxId: 'sandbox-1',
+        sandboxWorkdir: '/workspaces/app',
+      },
+    });
+    const resolved = await service.resolveWorkerSession({
+      orgId: ORG_ID,
+      factoryProjectId: PROJECT_ID,
+      binding: { resourceId: 'worker-gone', threadId: 'worker-gone-thread' },
+    });
+    expect(resolved).toBe(session);
+    expect(storedSessions.getBySessionId).toHaveBeenCalledWith('worker-gone');
+    expect(controller.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ resourceId: 'worker-gone', threadId: 'worker-gone-thread' }),
+    );
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryProjectId: PROJECT_ID,
+      projectRepositoryId: 'repo-1',
+      sandboxId: 'sandbox-1',
+      sandboxWorkdir: '/workspaces/app',
+    });
+  });
+
+  it('reopens without workspace state when no stored record exists and fails closed across tenants', async () => {
+    const bare = fixture();
+    await bare.service.resolveWorkerSession({
+      orgId: ORG_ID,
+      factoryProjectId: PROJECT_ID,
+      binding: { resourceId: 'worker-gone', threadId: 'worker-gone-thread' },
+    });
+    expect(bare.session.state.set).toHaveBeenCalledWith({ factoryProjectId: PROJECT_ID });
+
+    const foreign = fixture({
+      storedWorkerSession: { orgId: 'org-other', projectRepositoryId: 'repo-1', sandboxId: null, sandboxWorkdir: null },
+    });
+    await expect(
+      foreign.service.resolveWorkerSession({
+        orgId: ORG_ID,
+        factoryProjectId: PROJECT_ID,
+        binding: { resourceId: 'worker-gone', threadId: 'worker-gone-thread' },
+      }),
+    ).rejects.toThrow('not available to this tenant');
+    expect(foreign.controller.createSession).not.toHaveBeenCalled();
+  });
+});

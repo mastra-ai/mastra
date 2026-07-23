@@ -304,6 +304,16 @@ describe('WorkItemsStorage', () => {
       }),
     ]);
     expect(await storage.listApprovals('other-org', 'p1')).toEqual([]);
+    expect(await storage.listSupervisorNotifications('org1', 'p1')).toEqual([
+      expect.objectContaining({
+        approvalId: (committed.result as { approvalId: string }).approvalId,
+        event: 'approval_requested',
+        requestingBindingId: 'binding-1',
+        requestingRole: 'work',
+        status: 'pending',
+      }),
+    ]);
+    expect(await storage.listSupervisorNotifications('other-org', 'p1')).toEqual([]);
   });
 
   it('serializes relationship writes and deletion on the project lock', async () => {

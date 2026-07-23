@@ -18,7 +18,9 @@ async function createPendingApproval(storage: WorkItemsStorage) {
         externalSource: { integrationId: 'github', type: 'issue', externalId: '1' },
         title: 'Fix the bug',
         stages: ['intake'],
-        sessions: {},
+        sessions: {
+          work: { sessionId: 'session-1', branch: 'factory/fix-bug', threadId: 'thread-1' },
+        },
         metadata: {},
       },
     })
@@ -102,6 +104,9 @@ describe('FactoryTransitionApprovalService', () => {
     expect(
       (await seed.audit.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).events.map(event => event.action),
     ).toEqual(['factory.approval.approved', 'factory.approval.requested']);
+    const supervisorNotifications = await seed.workItems.listSupervisorNotifications('org-1', PROJECT_ID);
+    expect(supervisorNotifications.map(record => record.event)).toEqual(['approval_requested', 'approval_approved']);
+    expect(supervisorNotifications.every(record => record.supervisorUserId === 'user-1')).toBe(true);
   });
 
   it('rejects without moving the item and persists one worker notification', async () => {
@@ -124,6 +129,9 @@ describe('FactoryTransitionApprovalService', () => {
     expect(
       (await seed.workItems.listDeferredDecisions('org-1', PROJECT_ID)).map(record => record.idempotencyKey),
     ).toEqual([`${approvalId}:resolution:rejected`]);
+    expect(
+      (await seed.workItems.listSupervisorNotifications('org-1', PROJECT_ID)).map(record => record.event).sort(),
+    ).toEqual(['approval_rejected', 'approval_requested']);
   });
 
   it('marks an approval stale without moving or dispatching captured effects when the revision changes', async () => {
@@ -146,6 +154,9 @@ describe('FactoryTransitionApprovalService', () => {
     expect(
       (await seed.workItems.listDeferredDecisions('org-1', PROJECT_ID)).map(record => record.idempotencyKey),
     ).toEqual([`${approvalId}:resolution:stale`]);
+    expect(
+      (await seed.workItems.listSupervisorNotifications('org-1', PROJECT_ID)).map(record => record.event).sort(),
+    ).toEqual(['approval_requested', 'approval_stale']);
   });
 
   it('marks an approval stale when the captured item was deleted', async () => {
@@ -163,6 +174,9 @@ describe('FactoryTransitionApprovalService', () => {
     });
 
     expect(result).toMatchObject({ status: 'stale', replayed: false, item: null });
+    expect(await seed.workItems.listSupervisorNotifications('org-1', PROJECT_ID)).toEqual(
+      expect.arrayContaining([expect.objectContaining({ event: 'approval_stale', supervisorUserId: 'user-1' })]),
+    );
   });
 
   it('does not expose or resolve approvals across tenants or projects', async () => {
