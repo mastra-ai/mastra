@@ -1,11 +1,14 @@
 import { DateRangeTimeline, getDateRangeBounds } from '@mastra/playground-ui/components/DateRangeTimeline';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import type { DateRangeValue } from '@mastra/playground-ui/components/DateRangeTimeline';
-import { MetricsLineChart } from '@mastra/playground-ui/components/MetricsLineChart';
+import {
+  MetricsBarChart,
+  type MetricsBarChartSeries,
+} from '@mastra/playground-ui/components/MetricsBarChart';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Bot, CircleCheck, Clock3, Layers3, Workflow } from 'lucide-react';
+import { Bot, Clock3, Layers3, Workflow } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { useParams } from 'react-router';
 
@@ -44,7 +47,30 @@ function defaultRange(today: string): DateRangeValue {
   return { from: shiftUtcDay(today, -29), to: today };
 }
 
-const THROUGHPUT_SERIES = [{ dataKey: 'done', label: 'Completed work', color: 'var(--chart-2)' }];
+const THROUGHPUT_COLOR = 'oklch(from var(--accent1) l calc(c * 0.72) h)';
+const THROUGHPUT_LEGEND_STYLE = { backgroundColor: THROUGHPUT_COLOR };
+const THROUGHPUT_SERIES: Array<MetricsBarChartSeries> = [
+  { dataKey: 'done', label: 'Completed work', color: THROUGHPUT_COLOR, appearance: 'dotted' },
+];
+const THROUGHPUT_AXIS_DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  day: 'numeric',
+  month: 'short',
+  timeZone: 'UTC',
+});
+const THROUGHPUT_TOOLTIP_DATE_FORMATTER = new Intl.DateTimeFormat(undefined, {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+
+function formatThroughputDate(value: unknown, formatter: Intl.DateTimeFormat): string {
+  if (typeof value !== 'string') return String(value ?? '');
+
+  const timestamp = Date.parse(`${value}T00:00:00.000Z`);
+  return Number.isNaN(timestamp) ? value : formatter.format(timestamp);
+}
+
 
 const SOURCE_LABELS: Record<string, string> = {
   'github:issue': 'GitHub issues',
@@ -94,15 +120,6 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 pb-8">
-      <header className="flex flex-col gap-1 pt-1">
-        <Txt as="h1" variant="header-sm" className="m-0 text-icon6">
-          Metrics
-        </Txt>
-        <Txt as="p" variant="ui-sm" className="m-0 max-w-2xl text-icon3">
-          See how work moves through the Factory and where it needs attention.
-        </Txt>
-      </header>
-
       <MetricsSection
         title="Reporting period"
         description="Drag the range or use the date controls to compare a different window."
@@ -217,33 +234,6 @@ function FlowOverview({
         <Badge size="sm">{windowDays}-day view</Badge>
       </div>
 
-      <div className="min-w-0">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
-          <div>
-            <Txt as="span" variant="ui-sm" className="text-icon3">
-              Completed
-            </Txt>
-            <div className="mt-0.5 flex items-baseline gap-2">
-              <span className="text-header-xl font-medium tabular-nums text-icon6">{completed}</span>
-              <Txt as="span" variant="ui-xs" className="text-icon3">
-                {averagePerDay.toLocaleString(undefined, { maximumFractionDigits: 1 })} per day
-              </Txt>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 text-ui-xs text-icon3">
-            <CircleCheck aria-hidden="true" className="size-3.5 text-positive1" />
-            Daily completions
-          </div>
-        </div>
-        <MetricsLineChart
-          data={metrics.throughput.map(point => ({ time: point.date, done: point.count }))}
-          series={THROUGHPUT_SERIES}
-          height={220}
-          xAxisInterval="preserveStartEnd"
-          xAxisMinTickGap={40}
-        />
-      </div>
-
       <dl className="m-0 grid grid-cols-2 gap-x-5 gap-y-4 border-t border-border1 pt-4 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-border1">
         <OverviewReadout
           icon={<Clock3 aria-hidden="true" />}
@@ -278,6 +268,36 @@ function FlowOverview({
           }
         />
       </dl>
+
+      <div className="min-w-0">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+          <div>
+            <Txt as="span" variant="ui-sm" className="text-icon3">
+              Completed
+            </Txt>
+            <div className="mt-0.5 flex items-baseline gap-2">
+              <span className="text-header-xl font-medium tabular-nums text-icon6">{completed}</span>
+              <Txt as="span" variant="ui-xs" className="text-icon3">
+                {averagePerDay.toLocaleString(undefined, { maximumFractionDigits: 1 })} per day
+              </Txt>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 text-ui-xs text-icon3">
+            <span aria-hidden="true" className="size-2 rounded-sm" style={THROUGHPUT_LEGEND_STYLE} />
+            Daily completions
+          </div>
+        </div>
+        <MetricsBarChart
+          data={metrics.throughput.map(point => ({ time: point.date, done: point.count }))}
+          series={THROUGHPUT_SERIES}
+          description="Daily completed work for the selected reporting period."
+          height={220}
+          xAxisInterval="preserveStartEnd"
+          xAxisMinTickGap={40}
+          xAxisTickFormatter={value => formatThroughputDate(value, THROUGHPUT_AXIS_DATE_FORMATTER)}
+          tooltipLabelFormatter={value => formatThroughputDate(value, THROUGHPUT_TOOLTIP_DATE_FORMATTER)}
+        />
+      </div>
     </section>
   );
 }
