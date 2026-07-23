@@ -23,6 +23,14 @@ function toScorerTargetEntityType(targetType?: TargetType): EntityType | undefin
   }
 }
 
+function getRegisteredScorerById(mastra: Mastra, scorerId: string): MastraScorer<any, any, any, any> | null {
+  try {
+    return mastra.getScorerById(scorerId) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Resolve scorers from mixed array of instances and string IDs.
  * String IDs are looked up from Mastra's scorer registry.
@@ -36,7 +44,7 @@ export function resolveScorers(
   return scorers
     .map(scorer => {
       if (typeof scorer === 'string') {
-        const resolved = mastra.getScorerById(scorer);
+        const resolved = getRegisteredScorerById(mastra, scorer);
         if (!resolved) {
           console.warn(`Scorer not found: ${scorer}`);
           return null;
@@ -69,7 +77,7 @@ export function createItemScorerResolver(mastra: Mastra): (scorerIds: string[]) 
     if (cached) return cached;
 
     const resolution = (async () => {
-      let scorer = mastra.getScorerById(scorerId);
+      let scorer = getRegisteredScorerById(mastra, scorerId);
       if (scorer) return scorer;
 
       const editor = mastra.getEditor?.();
@@ -79,10 +87,10 @@ export function createItemScorerResolver(mastra: Mastra): (scorerIds: string[]) 
         } catch {
           // A missing or unavailable stored scorer is handled as an unresolved item reference below.
         }
-        scorer = mastra.getScorerById(scorerId);
+        scorer = getRegisteredScorerById(mastra, scorerId);
       }
 
-      return scorer ?? null;
+      return scorer;
     })();
 
     resolutionCache.set(scorerId, resolution);

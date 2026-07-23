@@ -506,7 +506,13 @@ describe('runExperiment', () => {
 
     it('fails only an item with stale scorer IDs before target execution and without retries', async () => {
       const task = vi.fn().mockResolvedValue('output');
-      const result = await runExperiment(mastra, {
+      const localMastra = {
+        ...mastra,
+        getScorerById: vi.fn().mockImplementation(() => {
+          throw new Error('Scorer not found');
+        }),
+      } as unknown as Mastra;
+      const result = await runExperiment(localMastra, {
         data: [
           { id: 'stale-item', input: { prompt: 'stale' }, scorerIds: ['missing'] },
           { id: 'valid-item', input: { prompt: 'valid' }, scorerIds: [] },
@@ -541,14 +547,20 @@ describe('runExperiment', () => {
     it('retains compatibility behavior for missing run and dataset scorer IDs', async () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const task = vi.fn().mockResolvedValue('output');
+      const localMastra = {
+        ...mastra,
+        getScorerById: vi.fn().mockImplementation(() => {
+          throw new Error('Scorer not found');
+        }),
+      } as unknown as Mastra;
       const dataset = await datasetsStorage.createDataset({
         name: 'Missing dataset scorer',
         scorerIds: ['missing-dataset'],
       });
       await datasetsStorage.addItem({ datasetId: dataset.id, input: { prompt: 'dataset' } });
 
-      const datasetResult = await runExperiment(mastra, { datasetId: dataset.id, task });
-      const runResult = await runExperiment(mastra, {
+      const datasetResult = await runExperiment(localMastra, { datasetId: dataset.id, task });
+      const runResult = await runExperiment(localMastra, {
         data: [{ input: { prompt: 'run' } }],
         task,
         scorers: ['missing-run'],
