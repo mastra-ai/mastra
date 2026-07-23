@@ -30,8 +30,12 @@ function SettingsPageContent() {
 
   if (!factoryId) {
     return (
-      <main className="flex h-screen min-h-0 flex-col overflow-hidden bg-surface2">
-        {isMobile && <SettingsHeader autoFocus placement="mobile" />}
+      <main className="flex min-h-dvh flex-col bg-surface2">
+        {isMobile && (
+          <div className="sticky top-0 z-2 shrink-0 bg-surface2 px-3 py-2">
+            <SettingsHeader autoFocus placement="mobile" />
+          </div>
+        )}
         <SettingsPanel />
       </main>
     );
@@ -40,6 +44,7 @@ function SettingsPageContent() {
     <PageLayout
       sidebar={<Sidebar />}
       header={<ChatHeader mobileContent={isMobile ? <SettingsHeader autoFocus placement="mobile" /> : undefined} />}
+      scrollMode="document"
     >
       <SettingsPanel />
     </PageLayout>
