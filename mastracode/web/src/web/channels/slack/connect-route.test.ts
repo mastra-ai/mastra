@@ -365,4 +365,14 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     const result = await getHandler(routes, 'GET', '/web/channel-accounts')(fakeCtx());
     expect(result.payload).toEqual({ accounts: [], canConnect: true });
   });
+
+  it('routes the Connect card deep link to the settings surface instead of the legacy state write', async () => {
+    const { routes, saveAccountLink } = oidcRoutes();
+    const c = fakeCtx(linkSigner.sign({ platform: 'slack', externalTeamId: 'T-1', externalUserId: 'U-1' }));
+
+    await getHandler(routes, 'GET', '/connect/slack')(c);
+
+    expect(saveAccountLink).not.toHaveBeenCalled();
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/settings/connected-accounts');
+  });
 });

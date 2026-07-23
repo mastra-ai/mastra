@@ -96,6 +96,15 @@ export function createSlackConnectRoutes(deps: {
       // handled explicitly below so we can return a friendly redirect on 401.
       requiresAuth: false,
       handler: async c => {
+        // With OIDC configured, the Connect card lands on the Connected
+        // accounts settings surface: the SPA guarantees the visitor is
+        // authenticated, and its Connect Slack button starts the proven OIDC
+        // flow — Slack itself asserts the (team, user) pair, superseding the
+        // card-carried identity (which then only serves as the prompt).
+        if (oidcEnabled) {
+          return c.redirect(`${uiOrigin}/settings/connected-accounts`);
+        }
+
         await auth.ensureUser(loose(c));
         const tenant = auth.tenant(loose(c));
         if (!tenant) {

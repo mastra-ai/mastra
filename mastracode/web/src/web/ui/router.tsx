@@ -86,6 +86,25 @@ function ChannelThreadRedirect() {
   );
 }
 
+/**
+ * Factory-agnostic deep link to the Connected accounts settings surface, used
+ * by server-built links that don't know a factory id (e.g. the Slack Connect
+ * card). Lands on the first factory's general settings, where the Connect
+ * Slack button lives — routing through the SPA guarantees the visitor is
+ * authenticated before they start the OIDC flow.
+ */
+function ConnectedAccountsRedirect() {
+  const { data: factories, isPending } = useFactoriesQuery();
+
+  if (isPending) return null;
+
+  const firstFactory = factories?.[0];
+  // Empty list is bounced to /onboarding by OnboardingGuard before we render.
+  if (!firstFactory) return null;
+
+  return <Navigate to={`/factories/${firstFactory.id}/settings/general`} replace />;
+}
+
 export function createAppRoutes(): RouteObject[] {
   // NOTE: route paths must not (case-insensitively) match a file at the Vite
   // root (src/web/ui), or dev deep-links serve the module source instead of
@@ -143,6 +162,7 @@ export function createAppRoutes(): RouteObject[] {
         },
         // Server-built thread deep links without a factory id (Slack cards).
         { path: 'threads/:threadId', element: <ChannelThreadRedirect /> },
+        { path: 'settings/connected-accounts', element: <ConnectedAccountsRedirect /> },
         // Legacy deep links (the app used to serve everything at any path).
         { path: '*', element: <Navigate to="/" replace /> },
       ],
