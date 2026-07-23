@@ -43,6 +43,7 @@
     "gpt-4.1",
     "gpt-oss-120b",
     "hermes-4-70b",
+    "hy3",
     "intellect-3",
     "kimi-k2-instruct",
     "kimi-k2-thinking",
@@ -70,5 +71,5 @@
     "qwen3.5-122b-a10b",
     "qwen3.5-397b-a17b"
   ],
-  "structuredOutput": ["glm-5-turbo", "glm-5.1", "glm-5.2", "gpt-5.4", "kimi-k2.7-code", "minimax-m2.7"]
+  "structuredOutput": ["glm-5-turbo", "glm-5.1", "glm-5.2", "gpt-5.4", "hy3", "kimi-k2.7-code", "minimax-m2.7"]
 }

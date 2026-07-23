@@ -10,7 +10,7 @@ export { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
 
 const inputSchema = z.object({ taskId: z.string() });
 
-const attemptOutcomeSchema = z.enum(['success', 'retry', 'cancelled', 'timed_out']);
+const attemptOutcomeSchema = z.enum(['success', 'retry', 'failed', 'cancelled', 'timed_out']);
 
 const attemptOutputSchema = z.object({
   taskId: z.string(),
@@ -183,6 +183,16 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
           return { taskId, outcome: 'timed_out' as const };
         }
 
+        // Authorization denials are non-retryable — retrying cannot succeed
+        // and would just burn attempts before surfacing the denial.
+        if (error?.name === 'FGADeniedError') {
+          return {
+            taskId,
+            outcome: 'failed' as const,
+            error: { name: error.name, message: error?.message ?? 'Authorization denied', stack: error?.stack },
+          };
+        }
+
         return {
           taskId,
           outcome: 'retry' as const,
@@ -239,8 +249,8 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         return { taskId, done: true, result };
       }
 
-      // outcome === 'retry'
-      if (task.retryCount < task.maxRetries) {
+      // outcome === 'retry' | 'failed'
+      if (outcome === 'retry' && task.retryCount < task.maxRetries) {
         await storage.updateTask(taskId, {
           retryCount: task.retryCount + 1,
           error: undefined,
@@ -249,7 +259,8 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         return { taskId, done: false };
       }
 
-      // Retries exhausted: persist failure and throw so the workflow run ends
+      // Retries exhausted (or non-retryable failure): persist failure and
+      // throw so the workflow run ends
       // in `failed` rather than completing cleanly. Throw matches the prior
       // single-step behavior — workflow-run history stays accurate.
       const errorInfo = error ?? { message: 'Unknown error' };
@@ -260,6 +271,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
         await manager.publishLifecycleEvent('task.failed', failedTask);
       }
       const thrown = new Error(errorInfo.message);
+      if (errorInfo.name) thrown.name = errorInfo.name;
       if (errorInfo.stack) thrown.stack = errorInfo.stack;
       throw thrown;
     },

@@ -13,11 +13,12 @@ interface DevArgs {
   https?: boolean;
   requestContextPresets?: string;
   debug: boolean;
+  factory?: boolean;
 }
 
 export const startDevServer = async (args: DevArgs) => {
   analytics.trackCommand({
-    command: 'dev',
+    command: args.factory ? 'factory dev' : 'dev',
     origin,
   });
 
@@ -32,6 +33,7 @@ export const startDevServer = async (args: DevArgs) => {
     https: args?.https,
     requestContextPresets: args?.requestContextPresets,
     debug: args.debug,
+    factory: args.factory,
   }).catch(err => {
     logger.error(err.message);
   });

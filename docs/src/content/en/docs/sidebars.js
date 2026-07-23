@@ -1071,6 +1071,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'mastra-platform/workspace',
+          label: 'Workspace',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'mastra-platform/configuration',
           label: 'Configuration',
         },

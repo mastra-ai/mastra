@@ -15,6 +15,7 @@ import type { MastraScorer } from '../../../evals';
 import { resolveModelConfig } from '../../../llm';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import { createProcessorSendSignal } from '../../../processors/send-signal';
+import { RequestContext } from '../../../request-context';
 import type { GoalObjectiveRecord } from '../../../storage/domains/thread-state/base';
 import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType, GoalEvaluationActivity } from '../../../stream/types';
@@ -287,12 +288,13 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
               ? ((await (goal.tools as (args: any) => unknown)({ requestContext, mastra })) as ToolsInput | undefined)
               : goal.tools;
           const goalId = record.id ?? `${threadId}:${record.startedAt}`;
+          const judgeRequestContext = requestContext ? new RequestContext(requestContext.entries()) : undefined;
           scorer = createGoalScorer({
             mastra,
             judgeModel,
             prompt: effective.prompt,
             tools: goalTools,
-            requestContext,
+            requestContext: judgeRequestContext,
             onStream: observeJudgeStream,
             ...(effective.maxSteps ? { maxSteps: effective.maxSteps } : {}),
             ...(_internal?.memory

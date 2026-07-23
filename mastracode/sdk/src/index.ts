@@ -25,6 +25,7 @@ import {
   ProviderHistoryCompat,
   StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
+import type { InputProcessor } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
@@ -186,6 +187,11 @@ export interface MastraCodeConfig {
       }) => Record<string, ToolLike | undefined> | Promise<Record<string, ToolLike | undefined>>);
   /** Observe completed tool calls without replacing or modifying the built-in tool implementation. */
   postToolObserver?: PostToolObserver;
+  /**
+   * Stateless input processor instances prepended before Mastra Code's mandatory processors.
+   * Embedders may extend processing but cannot replace built-in safety and compatibility policy.
+   */
+  inputProcessors?: InputProcessor[];
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
   /**
@@ -222,6 +228,14 @@ export interface MastraCodeConfig {
   disablePlugins?: boolean;
   /** Disable the polling-based GitHub signal provider even when enabled in global settings. Default: false */
   disableGithubSignals?: boolean;
+  /**
+   * Skip seeding observational-memory knobs (observer/reflector models,
+   * thresholds, caveman mode, attachment observation) from settings.json.
+   * Server deployments that persist memory settings in their own database
+   * (the factory's `memory-settings` domain) set this so the host machine's
+   * TUI settings file never leaks into server sessions. Default: false.
+   */
+  disableSettingsOmSeed?: boolean;
   /** Override the plugin manager. Primarily useful for tests or embedding. */
   pluginManager?: PluginManager;
   /**
@@ -283,13 +297,40 @@ function resolveCloudObservabilityConfig(
  *
  * See {@link bootLocalAgentController} (Case 3) and `mountAgentControllerOnMastra` (Cases 1 & 2).
  */
+/**
+ * `instanceof` checks against Mastra classes are unreliable here: published
+ * packages pin exact `@mastra/core` versions, so a user's dependency graph can
+ * contain multiple copies of core (and peer-keyed copies of `@mastra/libsql` /
+ * `@mastra/pg`). A store built against one copy fails `instanceof` against
+ * another — the injected instance then silently fell through to the
+ * StorageConfig path and crashed on `config.url`. These structural checks work
+ * across duplicated copies.
+ */
+function isInjectedStorageInstance(storage: MastraCodeConfig['storage']): storage is MastraCompositeStore {
+  if (!storage) return false;
+  if (storage instanceof MastraCompositeStore) return true;
+  // A StorageConfig is a plain data object with a string `backend`
+  // discriminant; a store instance carries the MastraCompositeStore method
+  // surface.
+  const candidate = storage as Partial<MastraCompositeStore>;
+  return typeof candidate.init === 'function' && typeof candidate.__registerMastra === 'function';
+}
+
+/** Cross-copy-safe class check: walks the prototype chain by constructor name. */
+function hasAncestorClassNamed(value: object, className: string): boolean {
+  for (let proto = Object.getPrototypeOf(value); proto; proto = Object.getPrototypeOf(proto)) {
+    if (proto.constructor?.name === className) return true;
+  }
+  return false;
+}
+
 function resolveInjectedStorageBackend(
   storage: MastraCompositeStore,
   configuredBackend?: 'libsql' | 'pg',
 ): 'libsql' | 'pg' {
   if (configuredBackend) return configuredBackend;
-  if (storage instanceof LibSQLStore) return 'libsql';
-  if (storage instanceof PostgresStore) return 'pg';
+  if (storage instanceof LibSQLStore || hasAncestorClassNamed(storage, 'LibSQLStore')) return 'libsql';
+  if (storage instanceof PostgresStore || hasAncestorClassNamed(storage, 'PostgresStore')) return 'pg';
   throw new Error('storageBackend is required when injecting a custom storage instance.');
 }
 
@@ -396,7 +437,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   // Storage. An injected instance is used as-is — no connection test, no
   // LibSQL fallback: if the injected store fails, that's a hard error.
-  const injectedStorage = config?.storage instanceof MastraCompositeStore ? config.storage : undefined;
+  const injectedStorage = isInjectedStorageInstance(config?.storage) ? config.storage : undefined;
   const storageConfig = injectedStorage
     ? undefined
     : ((config?.storage as StorageConfig | undefined) ??
@@ -652,6 +693,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       tools: getGoalJudgeTools,
     },
     inputProcessors: [
+      ...(config?.inputProcessors ?? []),
       new PlanRejectionAbortProcessor(),
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
@@ -664,6 +706,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       new ProviderHistoryCompat(),
     ],
     errorProcessors: [
+      // ProviderHistoryCompat must run before StreamErrorRetryProcessor: both react to
+      // HTTP 400s, but ProviderHistoryCompat repairs the incompatible history (e.g.
+      // sanitizing tool-call IDs) before retrying, while StreamErrorRetryProcessor's
+      // isBadRequestError matcher retries the identical request. Error processors
+      // short-circuit on the first `retry: true`, so a blind retry first would resend
+      // the broken history and fail again.
+      new ProviderHistoryCompat(),
       new StreamErrorRetryProcessor({
         matchers: [
           { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },
@@ -679,7 +728,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         ],
       }),
       new PrefillErrorHandler(),
-      new ProviderHistoryCompat(),
     ],
   });
 
@@ -792,25 +840,29 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Apply disabledTools filter to both default and custom subagents.
   // const subagents = [];
 
-  // Build initial state with global preferences
+  // Build initial state with global preferences. OM knobs are skipped when the
+  // host persists memory settings elsewhere (`disableSettingsOmSeed`) so the
+  // machine-local settings.json never leaks into server sessions.
   const globalInitialState: Partial<MastraCodeState> = {};
-  if (effectiveObserverModel) {
-    globalInitialState.observerModelId = effectiveObserverModel;
-  }
-  if (effectiveReflectorModel) {
-    globalInitialState.reflectorModelId = effectiveReflectorModel;
-  }
-  if (effectiveObservationThreshold !== undefined) {
-    globalInitialState.observationThreshold = effectiveObservationThreshold;
-  }
-  if (effectiveReflectionThreshold !== undefined) {
-    globalInitialState.reflectionThreshold = effectiveReflectionThreshold;
-  }
-  if (effectiveCavemanObservations !== undefined) {
-    globalInitialState.cavemanObservations = effectiveCavemanObservations;
-  }
-  if (effectiveObserveAttachments !== undefined) {
-    globalInitialState.observeAttachments = effectiveObserveAttachments;
+  if (!config?.disableSettingsOmSeed) {
+    if (effectiveObserverModel) {
+      globalInitialState.observerModelId = effectiveObserverModel;
+    }
+    if (effectiveReflectorModel) {
+      globalInitialState.reflectorModelId = effectiveReflectorModel;
+    }
+    if (effectiveObservationThreshold !== undefined) {
+      globalInitialState.observationThreshold = effectiveObservationThreshold;
+    }
+    if (effectiveReflectionThreshold !== undefined) {
+      globalInitialState.reflectionThreshold = effectiveReflectionThreshold;
+    }
+    if (effectiveCavemanObservations !== undefined) {
+      globalInitialState.cavemanObservations = effectiveCavemanObservations;
+    }
+    if (effectiveObserveAttachments !== undefined) {
+      globalInitialState.observeAttachments = effectiveObserveAttachments;
+    }
   }
   if (globalSettings.preferences.yolo !== null) {
     globalInitialState.yolo = globalSettings.preferences.yolo;

@@ -19,14 +19,14 @@ export function ChatModesProvider({ children }: ChatModesProviderProps) {
   const modesQuery = useAgentControllerModes({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
   const switchModeMutation = useSwitchAgentControllerModeMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
@@ -42,8 +42,14 @@ export function ChatModesProvider({ children }: ChatModesProviderProps) {
     activeModeId,
     activeMode: modes.find(mode => mode.id === activeModeId),
     setMode: async modeId => {
-      await switchModeMutation.mutateAsync(modeId);
+      const previousModeId = activeModeId;
       setActiveModeId(modeId);
+      try {
+        await switchModeMutation.mutateAsync(modeId);
+      } catch (error) {
+        setActiveModeId(currentModeId => (currentModeId === modeId ? previousModeId : currentModeId));
+        throw error;
+      }
     },
   };
 
