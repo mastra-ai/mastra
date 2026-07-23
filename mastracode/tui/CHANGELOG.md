@@ -1,5 +1,15 @@
 # mastracode
 
+## 0.32.0-alpha.16
+
+### Patch Changes
+
+- Merged the API Keys, Model, and Memory settings into a single Model page in the web UI, with provider sign-in and API key tabs. Adding or removing provider credentials now immediately updates the available models and model packs without a reload. ([#20047](https://github.com/mastra-ai/mastra/pull/20047))
+
+- Updated dependencies [[`8314e6d`](https://github.com/mastra-ai/mastra/commit/8314e6df597a8379b1f934ddf1120f51f8530ab3)]:
+  - @mastra/mcp@1.15.0-alpha.1
+  - @mastra/code-sdk@1.0.0-alpha.18
+
 ## 0.32.0-alpha.15
 
 ### Patch Changes

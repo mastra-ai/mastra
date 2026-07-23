@@ -1,5 +1,12 @@
 # @mastra/code-sdk
 
+## 1.0.0-alpha.18
+
+### Patch Changes
+
+- Updated dependencies [[`8314e6d`](https://github.com/mastra-ai/mastra/commit/8314e6df597a8379b1f934ddf1120f51f8530ab3)]:
+  - @mastra/mcp@1.15.0-alpha.1
+
 ## 1.0.0-alpha.17
 
 ### Patch Changes

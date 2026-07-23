@@ -1,5 +1,14 @@
 # create-factory
 
+## 0.1.0-alpha.8
+
+### Patch Changes
+
+- The factory template now ships a pnpm-workspace.yaml with allowBuilds, preventing pnpm v10+ from exiting with ERR_PNPM_IGNORED_BUILDS during install or build. The file mirrors the mastracode/web build-approval policy minus test-only deps stripped by the template. ([#20056](https://github.com/mastra-ai/mastra/pull/20056))
+
+- Updated dependencies [[`0182be3`](https://github.com/mastra-ai/mastra/commit/0182be35cd402209182097098e7ebc07a5a54a2a)]:
+  - mastra@1.20.0-alpha.15
+
 ## 0.1.0-alpha.7
 
 ### Minor Changes
