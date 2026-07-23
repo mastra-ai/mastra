@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { LockClient, LockPool } from './project-lock.js';
+import type { LockClient, LockLogger, LockPool } from './project-lock.js';
 import {
   __resetProjectLocksForTests,
+  DEFAULT_PROJECT_LOCK_SLOW_WARN_MS,
   hashKey,
   ProjectLockTimeoutError,
   withDbAdvisoryLock,
@@ -350,5 +351,138 @@ describe('critical section timeout', () => {
 
     // Lock released even though fn never returned.
     expect(pg.isHeld(key)).toBe(false);
+  });
+});
+
+// When a critical section runs long or times out, we need to know which
+// named platform-call boundary was in flight — otherwise the timeout error
+// only tells us "60s elapsed" and we have to guess. The step recorder
+// records those boundaries; on timeout they're attached to
+// `ProjectLockTimeoutError.steps` / `.currentStep`; on non-timeout slow
+// completions they're emitted as a `warn`.
+describe('lock step recorder', () => {
+  function collectingLogger(): LockLogger & { warnings: Array<{ message: string; meta?: Record<string, unknown> }> } {
+    const warnings: Array<{ message: string; meta?: Record<string, unknown> }> = [];
+    return {
+      warnings,
+      warn(message, meta) {
+        warnings.push({ message, meta });
+      },
+    };
+  }
+
+  it('records completed steps in order with durations and ok outcomes', async () => {
+    const pg = new FakePg();
+    const captured: { steps: readonly unknown[] } = { steps: [] };
+    await withProjectLock({
+      key: 'proj1:user1',
+      fn: async (_signal, recorder) => {
+        await recorder.step('fleet.resolveSandbox', () => new Promise(r => setTimeout(r, 5)));
+        await recorder.step('sandbox.commitAll', () => Promise.resolve('ok'));
+        captured.steps = recorder.entries;
+      },
+      pool: pg,
+    });
+    expect(captured.steps).toHaveLength(2);
+    expect(captured.steps[0]).toMatchObject({ name: 'fleet.resolveSandbox', outcome: 'ok' });
+    expect(captured.steps[1]).toMatchObject({ name: 'sandbox.commitAll', outcome: 'ok' });
+  });
+
+  it('records an error outcome for a failing step and rethrows', async () => {
+    const pg = new FakePg();
+    let capturedEntries: readonly { name: string; outcome: string }[] = [];
+    await expect(
+      withProjectLock({
+        key: 'proj1:user1',
+        fn: async (_signal, recorder) => {
+          await recorder.step('ok.step', () => Promise.resolve());
+          try {
+            await recorder.step('bad.step', () => Promise.reject(new Error('boom')));
+          } finally {
+            capturedEntries = recorder.entries.map(e => ({ name: e.name, outcome: e.outcome }));
+          }
+        },
+        pool: pg,
+      }),
+    ).rejects.toThrow('boom');
+    expect(capturedEntries).toEqual([
+      { name: 'ok.step', outcome: 'ok' },
+      { name: 'bad.step', outcome: 'error' },
+    ]);
+  });
+
+  it('attaches step history and currentStep to ProjectLockTimeoutError', async () => {
+    const pg = new FakePg();
+    let caught: ProjectLockTimeoutError | undefined;
+    try {
+      await withProjectLock({
+        key: 'proj1:user1',
+        timeoutMs: 30,
+        fn: async (_signal, recorder) => {
+          await recorder.step('step.fast', () => Promise.resolve());
+          await recorder.step('step.hanging', () => new Promise<void>(() => {}));
+        },
+        pool: pg,
+      });
+    } catch (err) {
+      caught = err as ProjectLockTimeoutError;
+    }
+    expect(caught).toBeInstanceOf(ProjectLockTimeoutError);
+    expect(caught?.currentStep).toBe('step.hanging');
+    expect(caught?.steps.map(s => s.name)).toEqual(['step.fast', 'step.hanging']);
+    const hanging = caught?.steps.find(s => s.name === 'step.hanging');
+    expect(hanging?.outcome).toBe('running');
+    expect(hanging?.durationMs).toBeGreaterThan(0);
+    // Error message surfaces the currentStep for quick log-scanning.
+    expect(caught?.message).toContain('step.hanging');
+  });
+
+  it('emits a slow-lock warn when total exceeds the threshold', async () => {
+    const pg = new FakePg();
+    process.env.MASTRACODE_PROJECT_LOCK_SLOW_WARN_MS = '10';
+    const logger = collectingLogger();
+    try {
+      await withProjectLock({
+        key: 'proj1:user1',
+        logger,
+        fn: async (_signal, recorder) => {
+          await recorder.step('slow.thing', () => new Promise(r => setTimeout(r, 25)));
+        },
+        pool: pg,
+      });
+    } finally {
+      delete process.env.MASTRACODE_PROJECT_LOCK_SLOW_WARN_MS;
+    }
+    expect(logger.warnings).toHaveLength(1);
+    const warning = logger.warnings[0]!;
+    expect(warning.message).toContain('slow critical section');
+    expect(warning.meta).toMatchObject({
+      key: 'proj1:user1',
+      thresholdMs: 10,
+    });
+    const steps = warning.meta?.steps as Array<{ name: string; outcome: string }>;
+    expect(steps.map(s => s.name)).toEqual(['slow.thing']);
+    expect(steps[0]?.outcome).toBe('ok');
+  });
+
+  it('does not warn when the critical section stays under the threshold', async () => {
+    const pg = new FakePg();
+    // Explicitly raise the threshold so the test is deterministic
+    // regardless of the default.
+    process.env.MASTRACODE_PROJECT_LOCK_SLOW_WARN_MS = String(DEFAULT_PROJECT_LOCK_SLOW_WARN_MS);
+    const logger = collectingLogger();
+    try {
+      await withProjectLock({
+        key: 'proj1:user1',
+        logger,
+        fn: async (_signal, recorder) => {
+          await recorder.step('quick.thing', () => Promise.resolve());
+        },
+        pool: pg,
+      });
+    } finally {
+      delete process.env.MASTRACODE_PROJECT_LOCK_SLOW_WARN_MS;
+    }
+    expect(logger.warnings).toHaveLength(0);
   });
 });

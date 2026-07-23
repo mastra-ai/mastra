@@ -43,42 +43,216 @@ const inProcessLocks = new Map<string, Promise<unknown>>();
  */
 export const DEFAULT_PROJECT_LOCK_TIMEOUT_MS = 60_000;
 
+/**
+ * Emit a `warn` log when a critical section completes but took longer than
+ * this many ms. Catches platform-call regressions (Fleet, sandbox HTTP,
+ * GitHub App API, our own storage) before they cascade into the timeout.
+ * Tunable via `MASTRACODE_PROJECT_LOCK_SLOW_WARN_MS`.
+ */
+export const DEFAULT_PROJECT_LOCK_SLOW_WARN_MS = 5_000;
+
+/** Cap on how many named steps we retain per invocation. Cheap ring buffer. */
+export const MAX_LOCK_STEPS = 32;
+
+function slowWarnThresholdMs(): number {
+  const raw = process.env.MASTRACODE_PROJECT_LOCK_SLOW_WARN_MS;
+  if (!raw) return DEFAULT_PROJECT_LOCK_SLOW_WARN_MS;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_PROJECT_LOCK_SLOW_WARN_MS;
+}
+
+/** One recorded boundary from inside `fn()`. */
+export interface LockStepEntry {
+  readonly name: string;
+  /** ms since the recorder started (i.e. since `fn()` entered). */
+  readonly startedAtMs: number;
+  /** ms elapsed inside `fn`; `null` if the step never finished (still running when we captured). */
+  readonly durationMs: number | null;
+  /** `'ok'` if it resolved, `'error'` if it rejected, `'running'` if it never settled. */
+  readonly outcome: 'ok' | 'error' | 'running';
+}
+
+/**
+ * Passed to `fn()` under the lock. Wrap named boundaries with
+ * `recorder.step('sandbox.commitAll', () => commitAll(...))` so timeouts and
+ * slow-lock warnings can pinpoint which platform call was in flight when the
+ * critical section ran long. Cheap: no I/O, just Date.now() bookkeeping.
+ */
+export interface LockStepRecorder {
+  step<T>(name: string, fn: () => Promise<T>): Promise<T>;
+  /** Currently-executing step, if any. Useful in tests and diagnostics. */
+  readonly currentStep: string | null;
+  /** Immutable snapshot of the recorded step history. */
+  readonly entries: ReadonlyArray<LockStepEntry>;
+}
+
+/**
+ * The mutable recorder implementation. Not exported directly — callers only
+ * see the `LockStepRecorder` interface (via `fn(signal, recorder)`) or the
+ * frozen snapshot on `ProjectLockTimeoutError.steps`.
+ */
+class MutableLockStepRecorder implements LockStepRecorder {
+  private readonly _entries: LockStepEntry[] = [];
+  private readonly startedAt = Date.now();
+  private _currentStep: string | null = null;
+
+  get currentStep(): string | null {
+    return this._currentStep;
+  }
+
+  get entries(): ReadonlyArray<LockStepEntry> {
+    return this._entries;
+  }
+
+  totalMs(): number {
+    return Date.now() - this.startedAt;
+  }
+
+  async step<T>(name: string, fn: () => Promise<T>): Promise<T> {
+    const startedAtMs = Date.now() - this.startedAt;
+    const prevStep = this._currentStep;
+    this._currentStep = name;
+    // Reserve slot up front so a hanging step still shows up in diagnostics.
+    // We track the reserved entry by identity, not by index, so the ring
+    // buffer's `shift()` cannot silently corrupt our target slot.
+    const reserved: LockStepEntry = { name, startedAtMs, durationMs: null, outcome: 'running' };
+    this.pushEntry(reserved);
+    try {
+      const result = await fn();
+      this.replaceEntry(reserved, {
+        name,
+        startedAtMs,
+        durationMs: Date.now() - this.startedAt - startedAtMs,
+        outcome: 'ok',
+      });
+      return result;
+    } catch (err) {
+      this.replaceEntry(reserved, {
+        name,
+        startedAtMs,
+        durationMs: Date.now() - this.startedAt - startedAtMs,
+        outcome: 'error',
+      });
+      throw err;
+    } finally {
+      this._currentStep = prevStep;
+    }
+  }
+
+  private pushEntry(entry: LockStepEntry) {
+    if (this._entries.length >= MAX_LOCK_STEPS) {
+      // Drop oldest entry so the tail (which is what actually caused the
+      // slowdown or timeout) is preserved.
+      this._entries.shift();
+    }
+    this._entries.push(entry);
+  }
+
+  private replaceEntry(reserved: LockStepEntry, entry: LockStepEntry) {
+    const idx = this._entries.indexOf(reserved);
+    if (idx >= 0) {
+      this._entries[idx] = entry;
+    } else {
+      // The reserved slot was evicted by the ring buffer. Append the
+      // completed version to the tail so the outcome is not lost.
+      this.pushEntry(entry);
+    }
+  }
+
+  /**
+   * Snapshot of the current recorder state, safe to attach to an error.
+   * Any still-running step is captured as `outcome: 'running'` with a
+   * duration reflecting how long it had been running when we snapshotted.
+   */
+  snapshot(): { steps: ReadonlyArray<LockStepEntry>; currentStep: string | null; totalMs: number } {
+    const now = Date.now();
+    const steps = this._entries.map(entry =>
+      entry.outcome === 'running' ? { ...entry, durationMs: now - this.startedAt - entry.startedAtMs } : entry,
+    );
+    return { steps: Object.freeze(steps), currentStep: this._currentStep, totalMs: now - this.startedAt };
+  }
+}
+
 /** Thrown when the critical section under `withProjectLock` exceeds the timeout. */
 export class ProjectLockTimeoutError extends Error {
   readonly key: string;
   readonly timeoutMs: number;
-  constructor(key: string, timeoutMs: number) {
-    super(`Project lock critical section for "${key}" exceeded ${timeoutMs}ms`);
+  readonly steps: ReadonlyArray<LockStepEntry>;
+  readonly currentStep: string | null;
+  constructor(
+    key: string,
+    timeoutMs: number,
+    snapshot: { steps: ReadonlyArray<LockStepEntry>; currentStep: string | null } = { steps: [], currentStep: null },
+  ) {
+    const suffix = snapshot.currentStep
+      ? ` (currentStep=${snapshot.currentStep})`
+      : snapshot.steps.length > 0
+        ? ` (lastStep=${snapshot.steps[snapshot.steps.length - 1]?.name ?? 'unknown'})`
+        : '';
+    super(`Project lock critical section for "${key}" exceeded ${timeoutMs}ms${suffix}`);
     this.name = 'ProjectLockTimeoutError';
     this.key = key;
     this.timeoutMs = timeoutMs;
+    this.steps = snapshot.steps;
+    this.currentStep = snapshot.currentStep;
   }
 }
+
+/** Optional logger surface — matches the `console.warn` shape by default. */
+export interface LockLogger {
+  warn(message: string, meta?: Record<string, unknown>): void;
+}
+
+const defaultLogger: LockLogger = {
+  warn(message, meta) {
+    console.warn(message, meta ?? {});
+  },
+};
 
 /**
  * Race `fn()` against a timeout, throwing `ProjectLockTimeoutError` if the
  * timeout fires first. `fn()` receives an `AbortSignal` so it can (optionally)
- * abort in-flight outbound I/O when the timeout trips. If `fn()` ignores the
- * signal it will still resolve/reject eventually — but the caller sees the
- * timeout error immediately, which is what lets the outer lock wrapper roll
- * back and release the connection.
+ * abort in-flight outbound I/O when the timeout trips. It also receives a
+ * `LockStepRecorder` so callers can name their platform-call boundaries; on
+ * timeout the recorded steps are attached to the error and on non-timeout
+ * completion a slow-lock warn log is emitted when the total exceeds
+ * {@link DEFAULT_PROJECT_LOCK_SLOW_WARN_MS}.
  */
-async function runWithTimeout<T>(key: string, timeoutMs: number, fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
+async function runWithTimeout<T>(
+  key: string,
+  timeoutMs: number,
+  fn: (signal: AbortSignal, recorder: LockStepRecorder) => Promise<T>,
+  logger: LockLogger = defaultLogger,
+): Promise<T> {
   const controller = new AbortController();
+  const recorder = new MutableLockStepRecorder();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const abortError = new Promise<never>((_, reject) => {
-    controller.signal.addEventListener('abort', () => reject(new ProjectLockTimeoutError(key, timeoutMs)), {
-      once: true,
-    });
+    controller.signal.addEventListener(
+      'abort',
+      () => reject(new ProjectLockTimeoutError(key, timeoutMs, recorder.snapshot())),
+      { once: true },
+    );
   });
-  const work = fn(controller.signal);
+  const work = fn(controller.signal, recorder);
   // If `fn` eventually rejects (e.g. its own fetch observes the abort signal
   // after we already rejected via timeout), swallow it — the outer caller
   // has already been rejected with our timeout error and we don't want an
   // unhandled rejection.
   work.catch(() => {});
   try {
-    return await Promise.race([work, abortError]);
+    const result = await Promise.race([work, abortError]);
+    const { totalMs, steps } = recorder.snapshot();
+    const slowWarn = slowWarnThresholdMs();
+    if (slowWarn > 0 && totalMs >= slowWarn) {
+      logger.warn(`[project-lock] slow critical section for "${key}" took ${totalMs}ms`, {
+        key,
+        totalMs,
+        thresholdMs: slowWarn,
+        steps: steps.map(s => ({ name: s.name, durationMs: s.durationMs, outcome: s.outcome })),
+      });
+    }
+    return result;
   } finally {
     clearTimeout(timer);
   }
@@ -120,7 +294,7 @@ export function withProjectLock<T>(options: {
   key: string;
   /** Factory storage backend supplying the `withDistributedLock` capability, when available. */
   storage?: FactoryStorage;
-  fn: (signal: AbortSignal) => Promise<T>;
+  fn: (signal: AbortSignal, recorder: LockStepRecorder) => Promise<T>;
   /** Test seam: fake pg pool standing in for the distributed layer. */
   pool?: LockPool;
   /**
@@ -130,10 +304,12 @@ export function withProjectLock<T>(options: {
    * advisory lock + pool connection.
    */
   timeoutMs?: number;
+  /** Optional logger override; falls back to `console.warn` for slow-lock warnings. */
+  logger?: LockLogger;
 }): Promise<T> {
-  const { key, storage, fn, pool, timeoutMs = DEFAULT_PROJECT_LOCK_TIMEOUT_MS } = options;
+  const { key, storage, fn, pool, timeoutMs = DEFAULT_PROJECT_LOCK_TIMEOUT_MS, logger } = options;
   const prev = inProcessLocks.get(key) ?? Promise.resolve();
-  const run = () => withDbAdvisoryLock({ key, storage, fn, pool, timeoutMs });
+  const run = () => withDbAdvisoryLock({ key, storage, fn, pool, timeoutMs, logger });
   const next = prev.then(run, run);
   const tail = next.then(
     () => undefined,
@@ -165,25 +341,26 @@ export function withProjectLock<T>(options: {
 export async function withDbAdvisoryLock<T>(options: {
   key: string;
   storage?: FactoryStorage;
-  fn: (signal: AbortSignal) => Promise<T>;
+  fn: (signal: AbortSignal, recorder: LockStepRecorder) => Promise<T>;
   pool?: LockPool;
   timeoutMs?: number;
+  logger?: LockLogger;
 }): Promise<T> {
-  const { key, storage, fn, pool, timeoutMs = DEFAULT_PROJECT_LOCK_TIMEOUT_MS } = options;
+  const { key, storage, fn, pool, timeoutMs = DEFAULT_PROJECT_LOCK_TIMEOUT_MS, logger } = options;
   if (process.env.MASTRACODE_DISTRIBUTED_LOCK === '0') {
-    return runWithTimeout(key, timeoutMs, fn);
+    return runWithTimeout(key, timeoutMs, fn, logger);
   }
 
-  if (pool) return advisoryLockOver(pool, key, timeoutMs, fn);
+  if (pool) return advisoryLockOver(pool, key, timeoutMs, fn, logger);
 
   if (typeof storage?.withDistributedLock !== 'function') {
-    return runWithTimeout(key, timeoutMs, fn);
+    return runWithTimeout(key, timeoutMs, fn, logger);
   }
   // Wrap the backend-provided lock so the critical section is bounded
   // regardless of whether the backend implements its own timeout. The
   // backend still owns lock acquisition/release; we own the timeout on
   // `fn`.
-  return storage.withDistributedLock(key, () => runWithTimeout(key, timeoutMs, fn));
+  return storage.withDistributedLock(key, () => runWithTimeout(key, timeoutMs, fn, logger));
 }
 
 /** The pg advisory-lock body, kept for the `poolOverride` test seam. */
@@ -191,7 +368,8 @@ async function advisoryLockOver<T>(
   pool: LockPool,
   key: string,
   timeoutMs: number,
-  fn: (signal: AbortSignal) => Promise<T>,
+  fn: (signal: AbortSignal, recorder: LockStepRecorder) => Promise<T>,
+  logger?: LockLogger,
 ): Promise<T> {
   const [k1, k2] = hashKey(key);
   const client = await pool.connect();
@@ -201,7 +379,7 @@ async function advisoryLockOver<T>(
     // when the transaction ends below.
     await client.query('SELECT pg_advisory_xact_lock($1, $2)', [k1, k2]);
     try {
-      const result = await runWithTimeout(key, timeoutMs, fn);
+      const result = await runWithTimeout(key, timeoutMs, fn, logger);
       await client.query('COMMIT');
       return result;
     } catch (err) {
