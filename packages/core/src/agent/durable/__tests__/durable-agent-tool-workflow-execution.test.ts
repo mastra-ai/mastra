@@ -8,7 +8,7 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -445,6 +445,56 @@ describe('DurableAgent in-execution tool suspension', () => {
     expect(suspendedData.suspendPayload).toEqual({ reason: 'Waiting for user input' });
 
     cleanup();
+  });
+
+  it('stops goal activity when a tool requests approval during execution', async () => {
+    const mockModel = createToolCallModel('interactiveApprovalTool', { input: 'test' });
+    const interactiveApprovalTool = createTool({
+      id: 'interactiveApprovalTool',
+      description: 'An interactive tool that requests approval while executing',
+      inputSchema: z.object({ input: z.string() }),
+      execute: async (_inputData: { input: string }, context?: any) => {
+        const suspend = context?.agent?.suspend || context?.suspend;
+        await delay(20);
+        await suspend({}, { requireToolApproval: true, runId: 'inner-tool-run' });
+        return { result: 'completed' };
+      },
+    });
+    const baseAgent = new Agent({
+      id: 'in-execution-approval-goal-agent',
+      name: 'In-Execution Approval Goal Agent',
+      instructions: 'Use the interactive approval tool',
+      model: mockModel as LanguageModelV2,
+      tools: { interactiveApprovalTool },
+      memory: new MockMemory(),
+      goal: {},
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const storage = new MockStore();
+    new Mastra({ logger: false, storage, agents: { durableAgent } });
+    const memory = { thread: 'in-execution-approval-thread', resource: 'in-execution-approval-resource' };
+    await durableAgent.setObjective('Finish after approval', {
+      threadId: memory.thread,
+      resourceId: memory.resource,
+    });
+
+    const result = await durableAgent.stream('Use the interactive approval tool', { memory });
+    let sawApproval = false;
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        sawApproval = true;
+        break;
+      }
+    }
+    expect(sawApproval).toBe(true);
+
+    let durationAtApproval = 0;
+    await vi.waitFor(async () => {
+      durationAtApproval = (await durableAgent.getObjective({ threadId: memory.thread }))?.activeDurationMs ?? 0;
+      expect(durationAtApproval).toBeGreaterThan(0);
+    });
+    await delay(20);
+    expect((await durableAgent.getObjective({ threadId: memory.thread }))?.activeDurationMs).toBe(durationAtApproval);
   });
 
   it('should resume tool execution after suspension with resume data', async () => {

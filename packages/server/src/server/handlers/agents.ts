@@ -26,7 +26,13 @@ import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
 
 import { z } from 'zod/v4';
-import { MASTRA_IS_STUDIO_KEY, WORKSPACE_TOOLS, isReservedRequestContextKey, resolveToolConfig } from '../constants';
+import {
+  MASTRA_IS_STUDIO_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  WORKSPACE_TOOLS,
+  isReservedRequestContextKey,
+  resolveToolConfig,
+} from '../constants';
 import type { WorkspaceToolName } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
 
@@ -142,6 +148,105 @@ function mergeBodyRequestContext(serverRequestContext: RequestContext, bodyReque
     if (serverRequestContext.get(key) === undefined) {
       serverRequestContext.set(key, value);
     }
+  }
+}
+
+function normalizePublicExecutionOptions(
+  options: Record<string, unknown> | undefined,
+  serverRequestContext: RequestContext,
+): Record<string, unknown> | undefined {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) return undefined;
+
+  const { actor: _actor, requestContext, ...normalized } = options;
+  mergeBodyRequestContext(serverRequestContext, requestContext);
+  return { ...normalized, requestContext: serverRequestContext };
+}
+
+function hasSuspendedToolCall(snapshot: Record<string, any>, toolCallId: string): boolean {
+  const resumeTarget = snapshot.resumeLabels?.[toolCallId];
+  const resumeStep = resumeTarget?.stepId ? snapshot.context?.[resumeTarget.stepId] : undefined;
+  if (
+    resumeStep?.status === 'suspended' &&
+    (resumeStep.suspendPayload?.requireToolApproval ||
+      resumeStep.suspendPayload?.toolCallSuspended ||
+      resumeStep.suspendPayload?.toolCallId)
+  ) {
+    return true;
+  }
+
+  const visit = (value: unknown): boolean => {
+    if (!value || typeof value !== 'object') return false;
+    if (Array.isArray(value)) return value.some(visit);
+
+    const record = value as Record<string, any>;
+    const payload = record.suspendPayload;
+    if (
+      record.status === 'suspended' &&
+      (payload?.requireToolApproval?.toolCallId === toolCallId || payload?.toolCallId === toolCallId)
+    ) {
+      return true;
+    }
+    return Object.values(record).some(visit);
+  };
+
+  return visit(snapshot.context);
+}
+
+async function validateDurableToolCallAccess({
+  mastra,
+  agent,
+  runId,
+  toolCallId,
+  requestContext,
+}: {
+  mastra: any;
+  agent: Agent;
+  runId: string;
+  toolCallId: string;
+  requestContext: RequestContext;
+}): Promise<void> {
+  if (!isDurableAgentLike(agent)) return;
+
+  const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+  const workflowRun = await workflowsStore?.getWorkflowRunById({
+    workflowName: DurableStepIds.AGENTIC_LOOP,
+    runId,
+  });
+  if (!workflowRun) {
+    throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+  }
+
+  let snapshot = workflowRun.snapshot as Record<string, any> | string | undefined;
+  if (typeof snapshot === 'string') {
+    try {
+      snapshot = JSON.parse(snapshot) as Record<string, any>;
+    } catch {
+      snapshot = undefined;
+    }
+  }
+
+  const input = snapshot?.context?.input;
+  const persistedResourceIds = new Set(
+    [
+      workflowRun.resourceId,
+      input?.state?.resourceId,
+      input?.messageListState?.memoryInfo?.resourceId,
+      input?.requestContextEntries?.[MASTRA_RESOURCE_ID_KEY],
+    ].filter((resourceId): resourceId is string => typeof resourceId === 'string' && resourceId.length > 0),
+  );
+  const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
+  const [persistedResourceId] = persistedResourceIds;
+  if (persistedResourceIds.size > 1 || (persistedResourceId && persistedResourceId !== effectiveResourceId)) {
+    throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+  }
+
+  if (
+    !snapshot ||
+    snapshot.status !== 'suspended' ||
+    input?.agentId !== agent.id ||
+    !hasSuspendedToolCall(snapshot, toolCallId)
+  ) {
+    throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
   }
 }
 
@@ -1274,7 +1379,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
 
@@ -1382,7 +1487,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const { messages, resourceId, resourceid, threadId, ...rest } = params;
       // Use resourceId if provided, fall back to resourceid (deprecated)
@@ -1452,7 +1557,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const { messages, resourceId, resourceid, threadId, ...rest } = params;
       // Use resourceId if provided, fall back to resourceid (deprecated)
@@ -1658,7 +1763,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
       validateBody({ messages });
@@ -1816,7 +1921,7 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         | (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides })
         | undefined;
       const bodyRequestContext = idleStreamOptions?.requestContext;
-      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+      const normalizedIdleStreamOptions = normalizePublicExecutionOptions(idleStreamOptions, serverRequestContext);
       const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
 
       const agent = await getAgentFromSystem({
@@ -1825,14 +1930,17 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
         versionOptions,
         requestContext: serverRequestContext,
       });
-      stashVersionOverrides(serverRequestContext, idleStreamOptions?.versions);
+      stashVersionOverrides(
+        serverRequestContext,
+        normalizedIdleStreamOptions?.versions as VersionOverrides | undefined,
+      );
       ensureDefaultVersionStatus(serverRequestContext, versionOptions);
       const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
       const ifIdleWithContext = {
         ifIdle: {
           ...(ifIdle ?? {}),
-          streamOptions: { ...(idleStreamOptions ?? {}), requestContext: serverRequestContext } as any,
+          streamOptions: { ...(normalizedIdleStreamOptions ?? {}), requestContext: serverRequestContext } as any,
         },
       };
 
@@ -1919,7 +2027,7 @@ async function handleAgentMessageRoute({
   const idleStreamOptions = ifIdle?.streamOptions as
     (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides }) | undefined;
   const bodyRequestContext = idleStreamOptions?.requestContext;
-  mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+  const normalizedIdleStreamOptions = normalizePublicExecutionOptions(idleStreamOptions, serverRequestContext);
   const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
 
   const agent = await getAgentFromSystem({
@@ -1928,14 +2036,14 @@ async function handleAgentMessageRoute({
     versionOptions,
     requestContext: serverRequestContext,
   });
-  stashVersionOverrides(serverRequestContext, idleStreamOptions?.versions);
+  stashVersionOverrides(serverRequestContext, normalizedIdleStreamOptions?.versions as VersionOverrides | undefined);
   ensureDefaultVersionStatus(serverRequestContext, versionOptions);
   const effectiveResourceId = getEffectiveResourceId(serverRequestContext, resourceId);
   const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
   const ifIdleWithContext = {
     ifIdle: {
       ...(ifIdle ?? {}),
-      streamOptions: { ...(idleStreamOptions ?? {}), requestContext: serverRequestContext } as any,
+      streamOptions: { ...(normalizedIdleStreamOptions ?? {}), requestContext: serverRequestContext } as any,
     },
   };
 
@@ -2195,7 +2303,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
       validateBody({ messages });
@@ -2421,7 +2529,15 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
+
+      await validateDurableToolCallAccess({
+        mastra,
+        agent,
+        runId: params.runId,
+        toolCallId: params.toolCallId,
+        requestContext,
+      });
 
       const streamResult = await agent.approveToolCall({
         ...params,
@@ -2494,7 +2610,11 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
       }
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
+      const normalizedStreamOptions = normalizePublicExecutionOptions(
+        params.streamOptions as Record<string, unknown> | undefined,
+        serverRequestContext,
+      );
       const { effectiveResourceId, effectiveThreadId } = await validateSubscriptionToolCallThreadAccess({
         agent,
         requestContext: serverRequestContext,
@@ -2504,6 +2624,7 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
 
       return await agent.sendToolApproval({
         ...params,
+        ...(normalizedStreamOptions ? { streamOptions: normalizedStreamOptions } : {}),
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
         requestContext: serverRequestContext,
@@ -2609,7 +2730,15 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
+
+      await validateDurableToolCallAccess({
+        mastra,
+        agent,
+        runId: params.runId,
+        toolCallId: params.toolCallId,
+        requestContext,
+      });
 
       const streamResult = await agent.declineToolCall({
         ...params,
@@ -2643,7 +2772,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Run id is required' });
       }
 
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const {
         resumeData,
@@ -2830,7 +2959,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Run id is required' });
       }
 
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const {
         resumeData,
@@ -2856,13 +2985,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         versionOptions,
       });
 
-      if (bodyRequestContext && typeof bodyRequestContext === 'object') {
-        for (const [key, value] of Object.entries(bodyRequestContext)) {
-          if (serverRequestContext.get(key) === undefined) {
-            serverRequestContext.set(key, value);
-          }
-        }
-      }
+      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
 
       stashVersionOverrides(serverRequestContext, versions);
       ensureDefaultVersionStatus(serverRequestContext, versionOptions);
@@ -2960,7 +3083,15 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
+
+      await validateDurableToolCallAccess({
+        mastra,
+        agent,
+        runId: params.runId,
+        toolCallId: params.toolCallId,
+        requestContext,
+      });
 
       const result = await agent.approveToolCallGenerate({
         ...params,
@@ -3004,7 +3135,15 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
+
+      await validateDurableToolCallAccess({
+        mastra,
+        agent,
+        runId: params.runId,
+        toolCallId: params.toolCallId,
+        requestContext,
+      });
 
       const result = await agent.declineToolCallGenerate({
         ...params,
@@ -3041,7 +3180,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       validateBody({ messages });
 
@@ -3091,7 +3230,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const streamResult = await agent.approveNetworkToolCall({
         ...params,
@@ -3130,7 +3269,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools']);
+      sanitizeBody(params, ['tools', 'actor']);
 
       const streamResult = await agent.declineNetworkToolCall({
         ...params,

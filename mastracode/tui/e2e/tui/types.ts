@@ -49,6 +49,7 @@ export type ScenarioName =
   | 'github-signals-polling-inbox'
   | 'github-signals-unsubscribe-reload'
   | 'goal-api-error-stops-loop'
+  | 'goal-duration-tool-approval'
   | 'goal-judge-om-model-isolation'
   | 'goal-judge-single-render'
   | 'controller-api-config'
@@ -87,6 +88,8 @@ export type ScenarioName =
   | 'mcp-http-tool-call'
   | 'mcp-long-running-tool'
   | 'mcp-reload-config'
+  | 'mcp-oauth-authenticate'
+  | 'mcp-oauth-cancel'
   | 'mcp-selector-reconnect'
   | 'mcp-server-config'
   | 'mcp-skipped-validation'
@@ -174,6 +177,12 @@ export type McE2eScenarioRuntime = {
   waitForOutputText: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
   waitForScreenText: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
   waitForScreenTextAbsent: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
+  /**
+   * Stop the in-process Mastra Code app (TUI + storage close). Idempotent —
+   * safe to call before the runner's own finally-block stop. Scenarios that
+   * need to inspect on-disk database state after shutdown call this first.
+   */
+  stopApp?: () => Promise<void>;
 };
 
 export type McE2ePrepareContext = {
@@ -217,11 +226,11 @@ export type McE2eScenario = {
   useOpenAIModel?: boolean;
   disableMemory?: boolean;
   aimockFixture?: string;
-  env?: (context: McE2ePrepareContext) => Record<string, string>;
+  env?: (context: McE2ePrepareContext) => Record<string, string | null>;
   entrypoint?: (context: McE2ePrepareContext) => string;
   inProcessApp?: (context: McE2eInProcessAppContext) => Promise<McE2eInProcessApp> | McE2eInProcessApp;
   terminalBackend?: 'subprocess';
   prepare?: (context: McE2ePrepareContext) => Promise<void> | void;
-  run: (context: { terminal: McE2eTerminal; runtime: McE2eScenarioRuntime }) => Promise<void>;
+  run: (context: { terminal: McE2eTerminal; runtime: McE2eScenarioRuntime; dbPath: string }) => Promise<void>;
   verifyAimockRequests?: (requests: unknown[]) => void;
 };

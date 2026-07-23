@@ -1,6 +1,6 @@
 {
   "name": "@internal/voice",
-  "version": "0.0.14",
+  "version": "0.0.16",
   "description": "Internal Mastra voice primitives and utilities",
   "private": true,
   "type": "module",
@@ -66,7 +66,7 @@
     "@internal/core": "workspace:*"
   },
   "devDependencies": {
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.111",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.114",
     "@internal/lint": "workspace:*",
     "@internal/llm-recorder": "workspace:*",
     "@internal/test-utils": "workspace:*",

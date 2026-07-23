@@ -57,7 +57,7 @@ export class FavoritesPG extends FavoritesStorage {
     // Lookup index for entity-scoped queries — must mirror init().
     const fullFavoritesTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(schemaName) });
     statements.push(
-      `CREATE INDEX IF NOT EXISTS idx_favorites_entity ON ${fullFavoritesTable} ("entityType", "entityId")`,
+      `CREATE INDEX IF NOT EXISTS idx_favorites_entity ON ${fullFavoritesTable} ("entityType", "entityId");`,
     );
     return statements;
   }

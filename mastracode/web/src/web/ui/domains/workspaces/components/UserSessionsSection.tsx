@@ -1,103 +1,57 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
-import type { FormEvent, KeyboardEvent } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import type { FormEvent } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { queryKeys } from '../../../../../shared/api/keys';
-import { useToast } from '../../../ui/toast';
-import { useWebAuth } from '../../../../../shared/hooks/useWebAuth';
-import { userSessionResourceId } from '../../auth/services/auth';
+import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../../shared/api/keys';
+import { useFactoryQuery } from '../../../../../shared/hooks/useFactories';
+import { useWorkspacesQuery } from '../../../../../shared/hooks/useWorkspaces';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
-import { useWorkspaceActivity } from '../../../../../shared/hooks/useWorkspaceActivity';
-import { useWorkspaceAttention } from '../../../../../shared/hooks/useWorkspaceAttention';
-import { createWorktree, deleteWorktree } from '../services/github';
-import type { Factory, Worktree } from '../services/factories';
-import {
-  isGithubFactory,
-  loadFactories,
-  removeWorktree,
-  upsertWorktree,
-  USER_SESSION_BRANCH_PREFIX,
-  userSessionWorktrees,
-} from '../services/factories';
-import { WorkspaceRow } from './WorkspacesSection';
+import { USER_SESSION_BRANCH_PREFIX } from '../services/github';
+import type { FactoryUserSession } from '../services/github';
+import { createUserSession, deleteUserSession } from '../services/github';
+import { SessionNavRow } from './SessionNavRow';
 
-function latestFactory(factory: Factory): Factory {
-  return loadFactories().find(stored => stored.id === factory.id) ?? factory;
+function sessionLabel(session: FactoryUserSession): string {
+  return session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)
+    ? session.branch.slice(USER_SESSION_BRANCH_PREFIX.length)
+    : session.branch;
 }
 
-function sessionLabel(worktree: Worktree): string {
-  return worktree.branch.startsWith(USER_SESSION_BRANCH_PREFIX)
-    ? worktree.branch.slice(USER_SESSION_BRANCH_PREFIX.length)
-    : worktree.branch;
-}
-
-/**
- * Personal (non-factory) sessions for the current user on a GitHub project.
- *
- * Each session is its own worktree branched from the repo's HEAD (branch
- * `user/<name>`), holding exactly one conversation under the user's own
- * resourceId — so a user can run several personal sessions in parallel
- * without touching the org-level factory sessions. Opening a session
- * navigates to `/user/threads/<threadId>`, where the chat binds to the
- * user-scoped session (and modes stay available).
- */
+/** Personal sessions whose isolated repository workspace is prepared lazily by AgentController. */
 export function UserSessionsSection() {
   const { baseUrl } = useApiConfig();
-  const { activeFactory } = useActiveFactoryContext();
-  const auth = useWebAuth();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factoryQuery = useFactoryQuery(factoryId);
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState<Worktree | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
 
-  const isGithub = activeFactory ? isGithubFactory(activeFactory) : false;
-  const userResourceId = userSessionResourceId(auth.data);
-
-  const sessionsQuery = useQuery({
-    queryKey: queryKeys.userSessions(activeFactory?.id),
-    queryFn: async (): Promise<Worktree[]> => {
-      if (!activeFactory) throw new Error('User sessions require an active factory');
-      return userSessionWorktrees(latestFactory(activeFactory));
-    },
-    enabled: isGithub,
-    initialData: isGithub && activeFactory ? () => userSessionWorktrees(latestFactory(activeFactory)) : undefined,
-  });
-  const worktrees = sessionsQuery.data ?? [];
-
-  const runningByPath = useWorkspaceActivity({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId: userResourceId,
-    projectPath: worktrees[0]?.worktreePath,
-    worktreePaths: worktrees.map(worktree => worktree.worktreePath),
-    baseUrl,
-    enabled: isGithub && !auth.isPending && worktrees.length > 0,
-  });
-  const { attentionByPath, clearAttention } = useWorkspaceAttention(runningByPath);
+  const repository = factoryQuery.data?.repositories[0];
+  const sessionsEnabled = Boolean(repository);
+  const sessionsQuery = useWorkspacesQuery(repository?.projectRepositoryId);
+  const sessions = sessionsQuery.data?.userSessions ?? [];
 
   const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.userSessions(activeFactory?.id) });
-    void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
   };
 
-  // Seed (or address) the user's own session for a worktree: sessions are
-  // scoped per worktree, under the user's resourceId rather than the org's.
-  const userSessionFor = (worktreePath: string) => {
+  const controllerSession = (sessionId: string) => {
     const { session } = createAgentControllerClient({
       agentControllerId: AGENT_CONTROLLER_ID,
-      resourceId: userResourceId,
-      scope: worktreePath,
+      resourceId: sessionId,
       baseUrl,
     });
     return requireAgentControllerSession(session);
@@ -105,109 +59,79 @@ export function UserSessionsSection() {
 
   const createSession = useMutation({
     mutationFn: async (rawName: string) => {
-      if (!activeFactory || !isGithubFactory(activeFactory)) throw new Error('No GitHub factory selected');
+      if (!repository) throw new Error('Link a repository to this factory first');
       const slug = rawName.trim().toLowerCase().replace(/\s+/g, '-');
       if (!slug) throw new Error('Session name is required');
-      // A fresh worktree branched from the repo's HEAD (server defaults the
-      // base branch), owned by this user.
-      const result = await createWorktree(
+      const userSession = await createUserSession(
         baseUrl,
-        activeFactory.binding.githubProjectId,
+        repository.projectRepositoryId,
         `${USER_SESSION_BRANCH_PREFIX}${slug}`,
       );
-      const chatSession = userSessionFor(result.worktreePath);
-      await chatSession.create({ tags: { projectPath: result.worktreePath } });
-      const thread = await chatSession.createThread();
-      upsertWorktree(latestFactory(activeFactory), {
-        branch: result.branch,
-        worktreePath: result.worktreePath,
-        baseBranch: result.baseBranch,
-        threadId: thread.id,
-      });
-      // A fresh thread has no messages; seed the cache to skip the skeleton.
+      const chatSession = controllerSession(userSession.sessionId);
+      await chatSession.create({ threadId: userSession.sessionId });
+      await chatSession.renameThread(userSession.sessionId, rawName.trim());
       queryClient.setQueryData(
-        queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, userResourceId, thread.id),
+        queryKeys.agentControllerThreadMessages(
+          AGENT_CONTROLLER_ID,
+          userSession.sessionId,
+          userSession.sessionId,
+          INITIAL_THREAD_MESSAGE_LIMIT,
+        ),
         [],
       );
-      return thread.id;
+      return userSession;
     },
-    onSuccess: threadId => {
+    onSuccess: session => {
       setCreating(false);
       setName('');
       invalidate();
-      void navigate(`/user/threads/${threadId}`);
+      void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`);
     },
   });
 
   const deleteSession = useMutation({
-    mutationFn: async (worktree: Worktree) => {
-      if (!activeFactory || !isGithubFactory(activeFactory)) throw new Error('No GitHub factory selected');
-      await deleteWorktree(baseUrl, activeFactory.binding.githubProjectId, worktree.branch);
-      // Cascade: delete the user's threads scoped to this worktree. Re-list
-      // between rounds (page-size cap); bail after a sane number of rounds.
-      const chatSession = userSessionFor(worktree.worktreePath);
-      for (let round = 0; round < 20; round++) {
-        const threads = await chatSession.listThreads({ limit: 50, tags: { projectPath: worktree.worktreePath } });
-        if (threads.length === 0) break;
-        for (const thread of threads) await chatSession.deleteThread(thread.id);
+    mutationFn: async (session: FactoryUserSession) => {
+      const chatSession = controllerSession(session.sessionId);
+      try {
+        await chatSession.deleteThread(session.sessionId);
+      } finally {
+        await deleteUserSession(baseUrl, session.sessionId);
       }
-      removeWorktree(latestFactory(activeFactory), worktree.worktreePath);
-      return worktree;
+      return session;
     },
-    onSuccess: worktree => {
+    onSuccess: session => {
       setConfirmDelete(null);
       invalidate();
       toast('Session deleted');
-      if (worktree.threadId && location.pathname === `/user/threads/${worktree.threadId}`) {
-        void navigate('/new', { replace: true });
+      if (location.pathname === `/factories/${factoryId}/user/threads/${session.sessionId}`) {
+        void navigate(`/factories/${factoryId}`, { replace: true });
       }
     },
     onError: error => {
       setConfirmDelete(null);
-      toast(error instanceof Error ? error.message : 'Failed to delete session', 'error');
+      toast.error(error instanceof Error ? error.message : 'Failed to delete session');
     },
   });
 
-  if (!isGithub) return null;
-
+  if (!sessionsEnabled) return null;
   const pending = createSession.isPending || deleteSession.isPending;
 
-  const openSession = async (worktree: Worktree) => {
-    clearAttention(worktree.worktreePath);
-    if (worktree.threadId) {
-      void navigate(`/user/threads/${worktree.threadId}`);
-      return;
-    }
-    // Legacy user worktree without a recorded thread: create one now so the
-    // route can resolve back to this worktree.
-    try {
-      const chatSession = userSessionFor(worktree.worktreePath);
-      await chatSession.create({ tags: { projectPath: worktree.worktreePath } });
-      const thread = await chatSession.createThread();
-      if (activeFactory) upsertWorktree(latestFactory(activeFactory), { ...worktree, threadId: thread.id });
-      invalidate();
-      void navigate(`/user/threads/${thread.id}`);
-    } catch (error) {
-      toast(error instanceof Error ? error.message : 'Failed to open session', 'error');
-    }
+  const openSession = (session: FactoryUserSession) => {
+    // A user session's thread id is its own id (created with that binding in
+    // `createSession`), so navigate straight to it instead of blocking on a
+    // session create round-trip first — the thread page brings the session
+    // online on mount and shows a skeleton while its messages load.
+    void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`);
   };
 
-  const resetCreate = () => {
+  const closeCreateDialog = () => {
     setCreating(false);
     setName('');
+    createSession.reset();
   };
-
   const submitCreate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (name.trim()) createSession.mutate(name);
-  };
-
-  const onCreateKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Escape') resetCreate();
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      if (name.trim()) createSession.mutate(name);
-    }
   };
 
   return (
@@ -221,56 +145,72 @@ export function UserSessionsSection() {
           size="icon-sm"
           aria-label="New user session"
           onClick={() => setCreating(true)}
-          disabled={creating || pending}
+          disabled={pending}
         >
           <Plus size={15} />
         </Button>
       </div>
 
       <div className="flex flex-col gap-1">
-        {worktrees.map(worktree => {
-          const active = Boolean(worktree.threadId) && location.pathname === `/user/threads/${worktree.threadId}`;
-          return (
-            <WorkspaceRow
-              key={worktree.worktreePath}
-              worktree={worktree}
-              label={sessionLabel(worktree)}
-              active={active}
-              running={runningByPath[worktree.worktreePath] === true}
-              attention={attentionByPath[worktree.worktreePath] === true}
-              disabled={pending}
-              onSelect={() => void openSession(worktree)}
-              onDelete={() => setConfirmDelete(worktree)}
-            />
-          );
-        })}
+        <MainSidebar.NavList>
+          {sessions.map(session => {
+            const name = sessionLabel(session);
+            const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
+            const active = location.pathname === url;
 
-        {worktrees.length === 0 && !creating && (
+            return (
+              <SessionNavRow
+                key={session.sessionId}
+                name={name}
+                title={session.branch}
+                url={url}
+                active={active}
+                disabled={pending}
+                onSelect={() => openSession(session)}
+                onDelete={() => setConfirmDelete(session)}
+              />
+            );
+          })}
+        </MainSidebar.NavList>
+        {sessions.length === 0 && (
           <Txt as="p" variant="ui-xs" className="m-0 px-2 py-1 text-icon3">
             No sessions yet
           </Txt>
         )}
-
-        {creating && (
-          <form aria-label="Create user session" className="flex flex-col gap-1" onSubmit={submitCreate}>
-            <Input
-              aria-label="Session name"
-              autoFocus
-              value={name}
-              onChange={event => setName(event.target.value)}
-              onKeyDown={onCreateKeyDown}
-              placeholder="session-name"
-              disabled={createSession.isPending}
-              className="h-8 text-xs"
-            />
-            {createSession.error && (
-              <Txt as="p" variant="ui-xs" className="m-0 text-red-400">
-                {createSession.error instanceof Error ? createSession.error.message : 'Failed to create session'}
-              </Txt>
-            )}
-          </form>
-        )}
       </div>
+
+      {creating && (
+        <Dialog open onOpenChange={open => !open && closeCreateDialog()}>
+          <DialogContent className="w-full max-w-sm" aria-label="New user session">
+            <DialogHeader className="px-5 pt-4 pb-2">
+              <DialogTitle>New user session</DialogTitle>
+            </DialogHeader>
+            <form aria-label="Create user session" className="flex flex-col gap-4 px-5 pb-4" onSubmit={submitCreate}>
+              <Input
+                aria-label="Session name"
+                autoFocus
+                value={name}
+                onChange={event => setName(event.target.value)}
+                placeholder="session-name"
+                disabled={createSession.isPending}
+              />
+              {createSession.error && (
+                <Txt as="p" variant="ui-xs" className="m-0 text-red-400">
+                  {createSession.error instanceof Error ? createSession.error.message : 'Failed to create session'}
+                </Txt>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="ghost" onClick={closeCreateDialog} disabled={createSession.isPending}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" disabled={createSession.isPending || !name.trim()}>
+                  {createSession.isPending ? 'Creating…' : 'Create'}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {confirmDelete && (
         <Dialog open onOpenChange={open => !open && setConfirmDelete(null)}>

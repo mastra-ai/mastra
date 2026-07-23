@@ -1,5 +1,7 @@
 /**
- * Browser-side helpers for the GitHub App project flow.
+ * Browser-side helpers for Factory projects and the GitHub source-control flow:
+ * creating named Factory projects, connecting GitHub installations, linking
+ * repositories, and per-repository sandbox/git operations.
  *
  * All requests go to the server's `/web/github/*` and `/auth/github/*`
  * routes, which are behind the WorkOS auth gate and scoped to the logged-in
@@ -11,7 +13,7 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
-import type { GithubConnectedRepositoryPayload } from './factories';
+export const USER_SESSION_BRANCH_PREFIX = 'user/';
 
 export interface GithubInstallation {
   installationId: number;
@@ -26,7 +28,7 @@ export type GithubStatusReason =
 /** Non-secret diagnostic snapshot of every GitHub feature gate. */
 export interface GithubFeatureDiagnostics {
   githubAppConfigured: boolean;
-  webAuthEnabled: boolean;
+  factoryAuthEnabled: boolean;
   appDbConfigured: boolean;
   stateSecretConfigured: boolean;
   sandboxEnabled: boolean;
@@ -50,6 +52,14 @@ export interface GithubStatus {
   organizationRequired?: boolean;
   /** Machine-readable reason for the current state; see {@link GithubStatusReason}. */
   reason?: GithubStatusReason;
+  /**
+   * Whether the signed-in user has personally authorized the GitHub App, so
+   * issues/PRs they originate are authored as them instead of the App bot.
+   * Absent on older servers that predate per-user connections.
+   */
+  userConnected?: boolean;
+  /** GitHub username backing the personal connection, when connected. */
+  userGithubUsername?: string | null;
   /** Non-secret feature-gate diagnostics from the server. */
   diagnostics?: GithubFeatureDiagnostics;
 }
@@ -62,6 +72,12 @@ export interface GithubRepo {
   defaultBranch: string;
   private: boolean;
   installationId: number;
+  /** Storage UUID of the installation row backing this repo. */
+  installationStorageId: string;
+  /** Storage UUID of the repository row backing this repo. */
+  repositoryStorageId: string;
+  sandboxProvider: string;
+  sandboxWorkdir: string;
 }
 
 /**
@@ -86,9 +102,13 @@ export async function fetchGithubStatus(baseUrl: string): Promise<GithubStatus> 
   }
 }
 
+function currentPageRedirectTo(): string {
+  return encodeURIComponent(window.location.pathname);
+}
+
 /** Begin the GitHub App install/connect flow (full-page redirect). */
 export function connectGithub(baseUrl: string): void {
-  window.location.assign(`${baseUrl}/auth/github/connect`);
+  window.location.assign(`${baseUrl}/auth/github/connect?redirectTo=${currentPageRedirectTo()}`);
 }
 
 /**
@@ -98,7 +118,65 @@ export function connectGithub(baseUrl: string): void {
  * instantly and invisibly, which would make the manage button a silent no-op.
  */
 export function manageGithubConnection(baseUrl: string): void {
-  window.location.assign(`${baseUrl}/auth/github/connect?manage=1`);
+  window.location.assign(`${baseUrl}/auth/github/connect?manage=1&redirectTo=${currentPageRedirectTo()}`);
+}
+
+/**
+ * Begin the GitHub App *user authorization* flow for the signed-in user
+ * (full-page redirect). Unlike {@link connectGithub} this never installs the
+ * App into an account — it links the user's own GitHub identity so
+ * factory-originated issues and PRs are authored as them. The flow returns to
+ * the current path with `github_app_user_authorized=true`, and the fresh page
+ * load refetches `/web/github/status`.
+ */
+export function connectUserGithub(baseUrl: string): void {
+  window.location.assign(`${baseUrl}/auth/github/connect-user?redirectTo=${currentPageRedirectTo()}`);
+}
+
+/** `default` = the worker token every sandbox gets; `reviewer` = optional
+ * token review-board sessions use so PR reviews come from another account. */
+export type GithubPatKind = 'default' | 'reviewer';
+
+export interface GithubPatStatus {
+  configured: boolean;
+  reviewerConfigured: boolean;
+}
+
+/**
+ * Which GitHub Personal Access Tokens the org has configured for `gh` CLI
+ * use in sandboxes. The tokens themselves never reach the browser.
+ */
+export async function fetchGithubPatStatus(baseUrl: string): Promise<GithubPatStatus> {
+  const res = await fetch(`${baseUrl}/web/github/pat`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`Failed to load GitHub token status (${res.status})`);
+  return (await res.json()) as GithubPatStatus;
+}
+
+/** Save an org GitHub PAT (used only for `gh` CLI auth in sandboxes). */
+export async function saveGithubPat(baseUrl: string, token: string, kind: GithubPatKind = 'default'): Promise<void> {
+  const res = await fetch(`${baseUrl}/web/github/pat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ token, kind }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => undefined)) as { error?: string } | undefined;
+    throw new Error(body?.error ?? `Failed to save GitHub token (${res.status})`);
+  }
+}
+
+/** Remove an org GitHub PAT. */
+export async function deleteGithubPat(baseUrl: string, kind: GithubPatKind = 'default'): Promise<void> {
+  const res = await fetch(`${baseUrl}/web/github/pat?kind=${kind}`, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`Failed to remove GitHub token (${res.status})`);
 }
 
 /** List repos across the user's installations, optionally filtered by query. */
@@ -110,53 +188,242 @@ export async function listGithubRepos(baseUrl: string, query?: string): Promise<
   return body.repos;
 }
 
+/** The GitHub source-control integration id registered on the server. */
+const GITHUB_INTEGRATION_ID = 'github';
+
+/** A Factory project row from `/web/factory/projects`. */
+export interface FactoryProjectPayload {
+  id: string;
+  name: string;
+  /** Org-wide default model for factory runs; null when unset. */
+  defaultModelId?: string | null;
+}
+
+/** `{...projectRepository, repository}` payload from the Factory project routes. */
+interface ProjectRepositoryPayload {
+  id: string;
+  branch: string | null;
+  sandboxWorkdir: string;
+  repository: { slug: string; defaultBranch: string } | null;
+}
+
+/** A source-control connection (with linked repos) from the Factory project routes. */
+interface ProjectConnectionPayload {
+  id: string;
+  installationId: string;
+  repositories: ProjectRepositoryPayload[];
+}
+
+/** Browser-shaped view of a repository linked to a Factory project. */
+export interface LinkedRepositoryPayload {
+  projectRepositoryId: string;
+  slug: string;
+  gitBranch?: string;
+  sandboxWorkdir?: string;
+}
+
+/** A Factory project with its linked repositories flattened across connections. */
+export interface FactoryProjectSnapshot extends FactoryProjectPayload {
+  repositories: LinkedRepositoryPayload[];
+}
+
+export type FactoryProject = FactoryProjectSnapshot;
+
+async function readJsonOrThrow<T>(res: Response, failure: string): Promise<T> {
+  if (!res.ok) throw new Error(`${failure} (${res.status})`);
+  return (await res.json()) as T;
+}
+
+function toLinkedRepositoryPayload(
+  project: FactoryProjectPayload,
+  link: ProjectRepositoryPayload,
+): LinkedRepositoryPayload {
+  return {
+    projectRepositoryId: link.id,
+    slug: link.repository?.slug ?? project.name,
+    gitBranch: link.branch ?? link.repository?.defaultBranch,
+    sandboxWorkdir: link.sandboxWorkdir,
+  };
+}
+
+async function listProjectConnections(baseUrl: string, factoryProjectId: string): Promise<ProjectConnectionPayload[]> {
+  const res = await fetch(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/source-control-connections`,
+    { credentials: 'include', headers: { Accept: 'application/json' } },
+  );
+  const { connections } = await readJsonOrThrow<{ connections: ProjectConnectionPayload[] }>(
+    res,
+    'Failed to list Factory repositories',
+  );
+  return connections;
+}
+
 /**
- * Create a connected GitHub repository binding. The server persists a
- * `source_control_projects` row (no sandbox, no clone yet) and returns a temporary
- * repository DTO. The browser wraps it into a Factory with its own UUID.
+ * List the org's Factory projects with their linked repositories (flattened
+ * across source-control connections). Resolves to `null` when the caller is
+ * unauthenticated, org-less, or the feature is off, so hydration can keep the
+ * local cache instead of wiping it.
  */
-export async function listConnectedRepositories(baseUrl: string): Promise<GithubConnectedRepositoryPayload[]> {
-  const res = await fetch(`${baseUrl}/web/github/repositories`, {
+export async function listFactoryProjects(baseUrl: string): Promise<FactoryProjectSnapshot[] | null> {
+  const res = await fetch(`${baseUrl}/web/factory/projects`, {
     credentials: 'include',
     headers: { Accept: 'application/json' },
   });
-  if (res.status === 404) return [];
-  if (!res.ok) throw new Error(`Failed to list connected repositories (${res.status})`);
-  return (await res.json()) as GithubConnectedRepositoryPayload[];
+  if (res.status === 401 || res.status === 403 || res.status === 404) return null;
+  const { projects } = await readJsonOrThrow<{ projects: FactoryProjectPayload[] }>(res, 'Failed to list Factories');
+  return Promise.all(
+    projects.map(async project => {
+      const connections = await listProjectConnections(baseUrl, project.id);
+      return {
+        ...project,
+        repositories: connections.flatMap(connection =>
+          connection.repositories.map(link => toLinkedRepositoryPayload(project, link)),
+        ),
+      };
+    }),
+  );
 }
 
-export async function deleteConnectedRepository(baseUrl: string, projectId: string): Promise<void> {
-  const res = await fetch(`${baseUrl}/web/github/repositories/${encodeURIComponent(projectId)}`, {
+/** Create a named Factory project. The name is user-chosen, not derived from a repo. */
+export async function createFactoryProject(
+  baseUrl: string,
+  name: string,
+  description?: string,
+): Promise<FactoryProjectPayload> {
+  const res = await fetch(`${baseUrl}/web/factory/projects`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(description ? { name, description } : { name }),
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to create Factory');
+  return project;
+}
+
+/** Fetch a single Factory project (includes its `defaultModelId`). */
+export async function fetchFactoryProject(baseUrl: string, factoryProjectId: string): Promise<FactoryProjectPayload> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to load Factory');
+  return project;
+}
+
+/** Set (or clear, with null) the Factory's default model for factory runs. */
+export async function updateFactoryDefaultModel(
+  baseUrl: string,
+  factoryProjectId: string,
+  defaultModelId: string | null,
+): Promise<FactoryProjectPayload> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ defaultModelId }),
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
+    res,
+    'Failed to update Factory default model',
+  );
+  return project;
+}
+
+/**
+ * Ensure the Factory project has a source-control connection for the given
+ * GitHub installation, reusing an existing one when present. Returns the
+ * connection id repositories are linked under.
+ */
+export async function connectInstallation(
+  baseUrl: string,
+  factoryProjectId: string,
+  installationId: string,
+): Promise<string> {
+  const connections = await listProjectConnections(baseUrl, factoryProjectId);
+  const existing = connections.find(connection => connection.installationId === installationId);
+  if (existing) return existing.id;
+
+  const res = await fetch(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/source-control-connections`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ integrationId: GITHUB_INTEGRATION_ID, installationId }),
+    },
+  );
+  const { connection } = await readJsonOrThrow<{ connection: { id: string } }>(
+    res,
+    'Failed to connect GitHub installation',
+  );
+  return connection.id;
+}
+
+/**
+ * Link a GitHub repository to a Factory project under the given connection.
+ * Returns the browser-shaped linked-repository payload.
+ */
+export async function linkRepository(
+  baseUrl: string,
+  factoryProjectId: string,
+  connectionId: string,
+  repo: GithubRepo,
+): Promise<LinkedRepositoryPayload> {
+  const res = await fetch(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/source-control-connections/${encodeURIComponent(connectionId)}/repositories`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'content-type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        repositoryId: repo.repositoryStorageId,
+        branch: repo.defaultBranch,
+        sandboxProvider: repo.sandboxProvider,
+        sandboxWorkdir: repo.sandboxWorkdir,
+      }),
+    },
+  );
+  const { projectRepository } = await readJsonOrThrow<{ projectRepository: ProjectRepositoryPayload }>(
+    res,
+    'Failed to link GitHub repository',
+  );
+  return toLinkedRepositoryPayload({ id: factoryProjectId, name: repo.fullName }, projectRepository);
+}
+
+/**
+ * Unlink a repository from its Factory project. Missing links are treated as
+ * already removed so unlink stays idempotent.
+ */
+export async function unlinkRepository(
+  baseUrl: string,
+  factoryProjectId: string,
+  projectRepositoryId: string,
+): Promise<void> {
+  const res = await fetch(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/repositories/${encodeURIComponent(projectRepositoryId)}`,
+    { method: 'DELETE', credentials: 'include', headers: { Accept: 'application/json' } },
+  );
+  if (!res.ok && res.status !== 404) throw new Error(`Failed to unlink repository (${res.status})`);
+}
+
+/**
+ * Delete a Factory project. The server cascades over its source-control
+ * connections (and their repository links). Missing projects are treated as
+ * already deleted so removal stays idempotent.
+ */
+export async function deleteFactoryProject(baseUrl: string, factoryProjectId: string): Promise<void> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
     method: 'DELETE',
     credentials: 'include',
     headers: { Accept: 'application/json' },
   });
-  if (!res.ok) throw new Error(`Failed to delete connected repository (${res.status})`);
-}
-
-export async function createConnectedRepository(
-  baseUrl: string,
-  repo: GithubRepo,
-): Promise<GithubConnectedRepositoryPayload> {
-  const res = await fetch(`${baseUrl}/web/github/repositories`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      repoFullName: repo.fullName,
-      repoId: repo.id,
-      installationId: repo.installationId,
-      defaultBranch: repo.defaultBranch,
-    }),
-  });
-  if (!res.ok) throw new Error(`Failed to create connected repository (${res.status})`);
-  const body = (await res.json()) as { repository: GithubConnectedRepositoryPayload };
-  return body.repository;
+  if (!res.ok && res.status !== 404) throw new Error(`Failed to delete Factory (${res.status})`);
 }
 
 export interface MaterializeResult {
   resourceId: string;
-  githubProjectId: string;
+  factoryProjectId: string;
+  projectRepositoryId: string;
   sandboxId: string;
   sandboxWorkdir: string;
 }
@@ -177,10 +444,10 @@ export interface PrepareProgress {
  */
 export async function ensureRepoMaterialized(
   baseUrl: string,
-  githubProjectId: string,
+  projectRepositoryId: string,
   onProgress?: (event: PrepareProgress) => void,
 ): Promise<MaterializeResult> {
-  const res = await fetch(`${baseUrl}/web/github/repositories/${encodeURIComponent(githubProjectId)}/ensure`, {
+  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/ensure`, {
     method: 'POST',
     credentials: 'include',
     headers: { Accept: 'text/event-stream' },
@@ -285,11 +552,11 @@ export interface GitOpError extends Error {
  */
 async function postRepositoryGitOp<T>(
   baseUrl: string,
-  githubProjectId: string,
+  projectRepositoryId: string,
   action: string,
   payload: unknown,
 ): Promise<T> {
-  const res = await fetch(`${baseUrl}/web/github/repositories/${encodeURIComponent(githubProjectId)}/${action}`, {
+  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/${action}`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
@@ -315,62 +582,72 @@ async function postRepositoryGitOp<T>(
   return (await res.json()) as T;
 }
 
-export interface WorktreeResult {
-  worktreePath: string;
+export interface FactoryUserSession {
+  id: string;
+  sessionId: string;
+  projectRepositoryId: string;
+  orgId: string;
+  userId: string;
   branch: string;
   baseBranch: string;
-  resourceId: string;
+  sandboxId: string | null;
+  sandboxWorkdir: string | null;
+  materializedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
-/**
- * Create (or reuse) a git worktree + feature branch for a unit of work inside
- * the project's cloud sandbox. `baseBranch` defaults to the project's default
- * branch server-side when omitted.
- */
-export async function createWorktree(
+export async function listUserSessions(baseUrl: string, projectRepositoryId: string): Promise<FactoryUserSession[]> {
+  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/sessions`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`Failed to list sessions (${res.status})`);
+  return ((await res.json()) as { sessions: FactoryUserSession[] }).sessions;
+}
+
+export async function createUserSession(
   baseUrl: string,
-  githubProjectId: string,
+  projectRepositoryId: string,
   branch: string,
   baseBranch?: string,
-): Promise<WorktreeResult> {
-  return postRepositoryGitOp<WorktreeResult>(baseUrl, githubProjectId, 'worktree', { branch, baseBranch });
+): Promise<FactoryUserSession> {
+  const result = await postRepositoryGitOp<{ session: FactoryUserSession }>(baseUrl, projectRepositoryId, 'sessions', {
+    branch,
+    baseBranch,
+  });
+  return result.session;
 }
 
-export interface DeleteWorktreeResult {
-  removed: boolean;
-  branch: string;
-  worktreePath: string;
+export async function getUserSession(baseUrl: string, sessionId: string): Promise<FactoryUserSession> {
+  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`Failed to load session (${res.status})`);
+  return ((await res.json()) as { session: FactoryUserSession }).session;
 }
 
-/**
- * Delete a worktree's checkout (and local feature branch) from the project's
- * sandbox and drop its persisted row. Destructive: any uncommitted work in the
- * checkout is discarded, so callers must confirm with the user first.
- */
-export async function deleteWorktree(
-  baseUrl: string,
-  githubProjectId: string,
-  branch: string,
-): Promise<DeleteWorktreeResult> {
-  return postRepositoryGitOp<DeleteWorktreeResult>(baseUrl, githubProjectId, 'worktree/delete', { branch });
+export async function deleteUserSession(baseUrl: string, sessionId: string): Promise<void> {
+  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`Failed to delete session (${res.status})`);
 }
 
 export interface CommitResult {
   committed: boolean;
 }
 
-/**
- * Stage all changes and commit them inside the given worktree. `worktreePath`
- * is validated server-side against persisted worktrees; omit it to commit on the
- * base checkout. Resolves with `committed: false` when there was nothing to commit.
- */
+/** Stage and commit all changes in a Factory session workspace. */
 export async function commitChanges(
   baseUrl: string,
-  githubProjectId: string,
+  projectRepositoryId: string,
   message: string,
-  worktreePath?: string,
+  sessionId: string,
 ): Promise<CommitResult> {
-  return postRepositoryGitOp<CommitResult>(baseUrl, githubProjectId, 'commit', { message, worktreePath });
+  return postRepositoryGitOp<CommitResult>(baseUrl, projectRepositoryId, 'commit', { message, sessionId });
 }
 
 export interface PushResult {
@@ -378,14 +655,14 @@ export interface PushResult {
   branch: string;
 }
 
-/** Push a branch back to GitHub from inside the sandbox (token minted server-side). */
+/** Push a Factory session branch back to GitHub (token minted server-side). */
 export async function pushBranch(
   baseUrl: string,
-  githubProjectId: string,
+  projectRepositoryId: string,
   branch: string,
-  worktreePath?: string,
+  sessionId: string,
 ): Promise<PushResult> {
-  return postRepositoryGitOp<PushResult>(baseUrl, githubProjectId, 'push', { branch, worktreePath });
+  return postRepositoryGitOp<PushResult>(baseUrl, projectRepositoryId, 'push', { branch, sessionId });
 }
 
 export interface PullRequestResult {
@@ -395,18 +672,16 @@ export interface PullRequestResult {
 /** Open a pull request via the sandbox `gh` CLI. `base` defaults to the project default branch. */
 export async function openPullRequest(
   baseUrl: string,
-  githubProjectId: string,
+  projectRepositoryId: string,
   args: {
     branch: string;
     title: string;
     body?: string;
     base?: string;
-    worktreePath?: string;
-    sessionId?: string;
-    threadId?: string;
+    sessionId: string;
   },
 ): Promise<PullRequestResult> {
-  return postRepositoryGitOp<PullRequestResult>(baseUrl, githubProjectId, 'pr', args);
+  return postRepositoryGitOp<PullRequestResult>(baseUrl, projectRepositoryId, 'pr', args);
 }
 
 /** Per-repository settings persisted on the server. */
@@ -420,8 +695,11 @@ export interface RepositorySettings {
 }
 
 /** Read a repository's settings (currently just the worktree setup command). */
-export async function fetchRepositorySettings(baseUrl: string, githubProjectId: string): Promise<RepositorySettings> {
-  const res = await fetch(`${baseUrl}/web/github/repositories/${encodeURIComponent(githubProjectId)}/settings`, {
+export async function fetchRepositorySettings(
+  baseUrl: string,
+  projectRepositoryId: string,
+): Promise<RepositorySettings> {
+  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/settings`, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });
@@ -432,8 +710,8 @@ export async function fetchRepositorySettings(baseUrl: string, githubProjectId: 
 /** Persist a repository's setup command. Pass `null` (or blank) to clear it. */
 export async function saveRepositorySettings(
   baseUrl: string,
-  githubProjectId: string,
+  projectRepositoryId: string,
   settings: RepositorySettings,
 ): Promise<RepositorySettings> {
-  return postRepositoryGitOp<RepositorySettings>(baseUrl, githubProjectId, 'settings', settings);
+  return postRepositoryGitOp<RepositorySettings>(baseUrl, projectRepositoryId, 'settings', settings);
 }

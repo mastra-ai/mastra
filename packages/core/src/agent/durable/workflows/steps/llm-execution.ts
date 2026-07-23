@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
 import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
+import { ConsoleLogger } from '../../../../logger';
 import { applyAutoResumeSystemMessage } from '../../../../loop/shared/auto-resume-system-message';
 import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-args';
 import { composeStepInput } from '../../../../loop/shared/compose-step-input';
@@ -26,10 +27,13 @@ import { PrepareStepProcessor } from '../../../../processors/processors/prepare-
 import { ProcessorRunner } from '../../../../processors/runner';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
-import type { TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
+import type { ChunkType, TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
 import { findProviderToolByName, inferProviderExecuted } from '../../../../tools/provider-tool-utils';
+import type { ToolToConvert } from '../../../../tools/tool-builder/builder';
+import { isMastraTool } from '../../../../tools/toolchecks';
 import type { CoreTool } from '../../../../tools/types';
+import { createMastraProxy, makeCoreTool } from '../../../../utils';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
@@ -420,6 +424,66 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 currentProviderOptions = merged.providerOptions;
                 currentModelSettings = merged.modelSettings ?? {};
                 structuredOutput = merged.structuredOutput;
+
+                // Processors (e.g. ToolSearchProcessor) can inject per-step meta-tools
+                // like `search_tools` / `load_tool`. In the non-durable Agent the same
+                // step that shows these tools to the model also executes them, so a
+                // per-step tool map is enough. The DurableAgent instead runs tool calls
+                // in a SEPARATE workflow step that resolves tools from the run registry
+                // (see tool-call.ts). Without a write-back, those processor-injected
+                // tools are missing there and the call fails with ToolNotFoundError
+                // (issue #19571).
+                //
+                // Convert any raw Mastra tools the processor returned into CoreTool form
+                // (mirroring the non-durable llm-execution-step) and merge them into the
+                // run registry so the durable tool-call step can resolve and execute them.
+                if (processInputStepResult.tools) {
+                  const boundLogger = logger || new ConsoleLogger({ level: 'error' });
+                  const convertedTools: Record<string, CoreTool> = {};
+                  for (const [name, tool] of Object.entries(currentTools as Record<string, unknown>)) {
+                    if (isMastraTool(tool)) {
+                      convertedTools[name] = makeCoreTool(
+                        tool as unknown as ToolToConvert,
+                        {
+                          name,
+                          runId,
+                          threadId: typedInput.state?.threadId,
+                          resourceId: typedInput.state?.resourceId,
+                          logger: boundLogger,
+                          mastra: mastra ? createMastraProxy({ mastra, logger: boundLogger }) : undefined,
+                          memory: registryEntry?.memory,
+                          agentName: typedInput.agentName ?? agentId,
+                          requestContext,
+                          workspace: registryEntry?.workspace,
+                          requireApproval: (tool as any).requireApproval,
+                          backgroundConfig: (tool as any).background,
+                          // Emit context.writer.write() / .custom() output through pubsub,
+                          // matching how the durable tool-call step builds its writer.
+                          outputWriter: pubsub
+                            ? async (chunk: any) => {
+                                await emitChunkEvent(pubsub, runId, chunk as ChunkType);
+                              }
+                            : undefined,
+                        },
+                        undefined,
+                        execOptions.autoResumeSuspendedTools,
+                      );
+                    } else {
+                      convertedTools[name] = tool as CoreTool;
+                    }
+                  }
+                  currentTools = convertedTools as unknown as ToolSet;
+                  if (registryEntry) {
+                    // Store the exact per-step snapshot rather than merging onto the
+                    // previous step's set. `currentTools` already starts from the full
+                    // toolset resolved at the top of this step, so a snapshot keeps the
+                    // static tools while dropping processor-injected tools the current
+                    // step no longer exposes (e.g. a ToolSearchProcessor entry that hit
+                    // its TTL). Merging would leave those stale tools executable by the
+                    // tool-call step even though the model was never shown them.
+                    registryEntry.tools = convertedTools;
+                  }
+                }
               } catch (error) {
                 // Handle TripWire from processInputStep — emit tripwire chunk and
                 // bail the step, mirroring the regular agent's buildTripWireBailResponse.

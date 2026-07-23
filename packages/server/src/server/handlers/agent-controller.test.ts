@@ -94,6 +94,18 @@ describe('agent-controller routes', () => {
       expect(second.threadId).toBe(first.threadId);
     });
 
+    it('binds the session to an exact thread id when requested', async () => {
+      const res = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+        threadId: 'factory-session-1',
+      } as any)) as { resourceId: string; threadId?: string };
+
+      expect(res.resourceId).toBe('user-1');
+      expect(res.threadId).toBe('factory-session-1');
+    });
+
     it('404s for an unknown agent controller id', async () => {
       await expect(
         CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({ mastra, controllerId: 'nope', resourceId: 'user-1' } as any),

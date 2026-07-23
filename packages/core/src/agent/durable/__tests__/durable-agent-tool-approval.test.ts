@@ -10,6 +10,9 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
+import { InMemoryStore } from '../../../storage/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
@@ -335,6 +338,104 @@ describe('DurableAgent tool approval', () => {
   });
 
   describe('streaming with tool approval', () => {
+    it('checkpoints active goal duration before publishing a durable approval wait', async () => {
+      const storage = new InMemoryStore();
+      let modelCall = 0;
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => {
+          modelCall++;
+          await new Promise(resolve => setTimeout(resolve, 20));
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream<any>(
+              modelCall === 1
+                ? [
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    {
+                      type: 'tool-call',
+                      toolCallType: 'function',
+                      toolCallId: 'call-1',
+                      toolName: 'searchTool',
+                      input: '{"query":"test"}',
+                      providerExecuted: false,
+                    },
+                    {
+                      type: 'finish',
+                      finishReason: 'tool-calls',
+                      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    },
+                  ]
+                : [
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Finished' },
+                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    },
+                  ],
+            ),
+          };
+        },
+      });
+      const searchTool = createTool({
+        id: 'searchTool',
+        description: 'Search for information',
+        inputSchema: z.object({ query: z.string() }),
+        requireApproval: true,
+        execute: async () => ({ results: ['result1'] }),
+      });
+      const baseAgent = new Agent({
+        id: 'goal-duration-durable-agent',
+        name: 'Goal Duration Durable Agent',
+        instructions: 'You can search for information',
+        model: mockModel as LanguageModelV2,
+        tools: { searchTool },
+        memory: new MockMemory(),
+        goal: {},
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      new Mastra({ agents: { durableAgent }, storage, logger: false });
+      const memory = { thread: 'durable-goal-thread', resource: 'durable-goal-resource' };
+      await durableAgent.setObjective('Finish after approval', {
+        threadId: memory.thread,
+        resourceId: memory.resource,
+      });
+
+      const result = await durableAgent.stream('Search for test', { memory });
+      let sawApproval = false;
+      const chunkTypes: string[] = [];
+      for await (const chunk of result.fullStream) {
+        chunkTypes.push(chunk.type === 'error' ? `${chunk.type}:${JSON.stringify(chunk.payload)}` : chunk.type);
+        if (chunk.type === 'tool-call-approval') {
+          sawApproval = true;
+          break;
+        }
+      }
+      expect(sawApproval, `Observed chunks: ${chunkTypes.join(', ')}`).toBe(true);
+      let durationAtApproval = 0;
+      await vi.waitFor(async () => {
+        durationAtApproval = (await durableAgent.getObjective({ threadId: memory.thread }))?.activeDurationMs ?? 0;
+        expect(durationAtApproval).toBeGreaterThan(0);
+      });
+
+      const resumed = await durableAgent.approveToolCall({ runId: result.runId, memory });
+      for await (const _chunk of resumed.fullStream) {
+        // Drain the resumed segment.
+      }
+
+      await vi.waitFor(async () => {
+        expect((await durableAgent.getObjective({ threadId: memory.thread }))?.activeDurationMs).toBeGreaterThanOrEqual(
+          durationAtApproval,
+        );
+      });
+    });
+
     it('should stream with requireToolApproval option', async () => {
       const mockModel = createToolCallModel('searchTool', { query: 'test' });
 

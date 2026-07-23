@@ -1,6 +1,6 @@
 {
   "name": "@internal/external-types",
-  "version": "0.0.64",
+  "version": "0.0.66",
   "description": "",
   "type": "module",
   "private": true,
@@ -32,13 +32,13 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@ai-sdk/provider-utils": "^3.0.28",
+    "@ai-sdk/provider-utils": "^3.0.30",
     "@ai-sdk/ui-utils": "^1.2.11",
     "@opentelemetry/api": "^1.9.1",
     "@standard-schema/spec": "^1.1.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@microsoft/api-extractor": "^7.58.9",
+    "@microsoft/api-extractor": "^7.58.11",
     "@types/json-schema": "^7.0.15",
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",

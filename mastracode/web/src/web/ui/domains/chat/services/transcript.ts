@@ -4,11 +4,7 @@ import type {
   AgentControllerTaskSnapshot,
   AgentControllerOMProgress,
 } from '@mastra/client-js';
-import type {
-  AgentControllerEvent as CoreAgentControllerEvent,
-  MastraDBMessage,
-  MastraMessagePart,
-} from '@mastra/core/agent-controller';
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 
 import { stripAnsi } from './ansi';
 
@@ -196,20 +192,13 @@ export interface OutgoingFile {
   filename?: string;
 }
 
-type CanonicalMessageEvent = Extract<
-  CoreAgentControllerEvent,
-  { type: 'message_start' | 'message_update' | 'message_end' }
->;
-type TranscriptEvent =
-  | Exclude<KnownAgentControllerEvent, { type: 'message_start' | 'message_update' | 'message_end' }>
-  | CanonicalMessageEvent;
-
 type Action =
-  | { type: 'event'; event: AgentControllerEvent | CoreAgentControllerEvent }
+  | { type: 'event'; event: AgentControllerEvent }
   | { type: 'localUser'; text: string; steer?: boolean; files?: OutgoingFile[] }
   | { type: 'clearPending' }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
   | { type: 'resolvePrompt'; id: string }
+  | { type: 'prependOlder'; messages: MastraDBMessage[] }
   | {
       type: 'reset';
       threadId?: string;
@@ -263,6 +252,8 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
           ),
         ],
       };
+    case 'prependOlder':
+      return prependOlderMessages(state, action.messages);
     case 'clearPending':
       return { ...state, pending: false };
     case 'localNotice':
@@ -276,8 +267,8 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
   }
 }
 
-function applyEvent(state: TranscriptState, raw: AgentControllerEvent | CoreAgentControllerEvent): TranscriptState {
-  const event = raw as TranscriptEvent;
+function applyEvent(state: TranscriptState, raw: AgentControllerEvent): TranscriptState {
+  const event = raw as KnownAgentControllerEvent;
   switch (event.type) {
     case 'agent_start':
       // Reset the rate at the start of a new turn (not at the end) so the last
@@ -291,7 +282,7 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent | CoreAgen
 
     case 'message_start':
     case 'message_update': {
-      const message = event.message;
+      const message = event.message as MastraDBMessage;
       const next = upsertMessage(state, message, true);
       if (message.role !== 'assistant') return next;
       // Only streamed assistant content opens the decode window — empty or
@@ -308,9 +299,8 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent | CoreAgen
       return { ...decoded, pending: false };
     }
     case 'message_end': {
-      const message = event.message;
-      const next = upsertMessage(state, message, false);
-      return message.role === 'assistant' ? { ...next, pending: false } : next;
+      const next = upsertMessage(state, event.message, false);
+      return event.message.role === 'assistant' ? { ...next, pending: false } : next;
     }
 
     case 'tool_input_start':
@@ -574,24 +564,71 @@ export function createInitialTranscript({
 }
 
 function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
-  return messages
-    .map(message => toMessageEntry(message, { streaming: false }))
-    .filter(entry => entry.message.content.parts.length > 0 || hasHarnessContent(entry.message));
+  return messages.flatMap(message => [
+    toMessageEntry(message, { streaming: false }),
+    ...persistedSuspensionPrompts(message),
+  ]);
 }
 
-/** Harness status/notification parts render from metadata, so a message with no visible parts can still produce output. */
-function hasHarnessContent(message: MastraDBMessage): boolean {
-  const harnessContent = message.content.metadata?.harnessContent;
-  return Array.isArray(harnessContent) && harnessContent.length > 0;
+function persistedSuspensionPrompts(message: MastraDBMessage): SuspensionPrompt[] {
+  const suspendedTools = message.content.metadata?.suspendedTools;
+  if (!suspendedTools || typeof suspendedTools !== 'object' || Array.isArray(suspendedTools)) return [];
+
+  return Object.values(suspendedTools).flatMap(suspension => {
+    if (
+      !suspension ||
+      typeof suspension !== 'object' ||
+      Array.isArray(suspension) ||
+      !('toolCallId' in suspension) ||
+      !('toolName' in suspension) ||
+      typeof suspension.toolCallId !== 'string' ||
+      typeof suspension.toolName !== 'string'
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        kind: 'suspension' as const,
+        id: `suspension-${suspension.toolCallId}`,
+        toolCallId: suspension.toolCallId,
+        toolName: suspension.toolName,
+        args: 'args' in suspension ? suspension.args : undefined,
+        suspendPayload: 'suspendPayload' in suspension ? suspension.suspendPayload : undefined,
+      },
+    ];
+  });
+}
+
+/**
+ * Prepend older history messages to the front of the timeline. `messages` is the
+ * newest-N window from a grown history fetch (oldest-first). We keep only the
+ * portion strictly older than the oldest message already on screen — anchored on
+ * the first existing message entry's id — and prepend those. The overlapping tail
+ * of the fetch (messages we already have, including any that streamed in live and
+ * later persisted) is discarded, so nothing double-renders. If no anchor is found
+ * (e.g. the transcript has no message entries yet) the full window is seeded.
+ */
+function prependOlderMessages(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
+  if (messages.length === 0) return state;
+
+  const firstMessageEntry = state.entries.find(e => e.kind === 'message');
+  const anchorId = firstMessageEntry?.kind === 'message' ? firstMessageEntry.id : undefined;
+
+  const anchorIndex = anchorId != null ? messages.findIndex(m => m.id === anchorId) : -1;
+  // Older messages are everything before the anchor; if the anchor isn't in this
+  // window (transcript had no message entries, or the window didn't reach it),
+  // treat the whole window as older history to seed.
+  const olderMessages = anchorIndex === -1 ? messages : messages.slice(0, anchorIndex);
+  if (olderMessages.length === 0) return state;
+
+  return { ...state, entries: [...messagesToEntries(olderMessages), ...state.entries] };
 }
 
 function toMessageEntry(
   message: MastraDBMessage,
   options: { streaming?: boolean; steer?: boolean; runtimeTools?: Record<string, ToolCall> } = {},
 ): MessageEntry {
-  const parts = message.content.parts.filter(part => part.type !== 'text' || part.text.trim().length > 0);
-  const visibleMessage =
-    parts.length === message.content.parts.length ? message : { ...message, content: { ...message.content, parts } };
   const signalMetadata = message.role === 'signal' ? message.content.metadata?.signal : undefined;
   const signal =
     signalMetadata && typeof signalMetadata === 'object' && !Array.isArray(signalMetadata)
@@ -602,7 +639,7 @@ function toMessageEntry(
     signal?.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
       ? (signal.attributes as Record<string, unknown>)
       : undefined;
-  const displayMessage = isUserSignal ? { ...visibleMessage, role: 'user' as const } : visibleMessage;
+  const displayMessage = isUserSignal ? { ...message, role: 'user' as const } : message;
 
   return {
     kind: 'message',
@@ -630,9 +667,30 @@ function upsertMessage(state: TranscriptState, message: MastraDBMessage, streami
   const nextMessage = message.role === 'assistant' ? preserveRuntimeToolParts(message, prevEntry?.message) : message;
   const entry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools });
 
-  if (entry.message.content.parts.length === 0 && !hasHarnessContent(entry.message)) {
-    if (idx !== -1) entries.splice(idx, 1);
-  } else if (idx === -1) entries.push(entry);
+  if (message.role === 'assistant') {
+    const ownedToolCallIds = new Set(
+      nextMessage.content.parts.map(toolCallIdForPart).filter((id): id is string => Boolean(id)),
+    );
+    if (ownedToolCallIds.size > 0) {
+      for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
+        if (entryIndex === idx) continue;
+        const candidate = entries[entryIndex];
+        if (candidate.kind !== 'message' || candidate.message.role !== 'assistant') continue;
+        const parts = candidate.message.content.parts.filter(part => {
+          const toolCallId = toolCallIdForPart(part);
+          return !toolCallId || !ownedToolCallIds.has(toolCallId);
+        });
+        if (parts.length !== candidate.message.content.parts.length) {
+          entries[entryIndex] = {
+            ...candidate,
+            message: { ...candidate.message, content: { ...candidate.message.content, parts } },
+          };
+        }
+      }
+    }
+  }
+
+  if (idx === -1) entries.push(entry);
   else entries[idx] = entry;
   return { ...state, entries };
 }

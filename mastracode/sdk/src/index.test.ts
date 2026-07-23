@@ -4,6 +4,10 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 // id/ownerId). Hoisted so the vi.mock factory can reference it.
 const createSessionCalls = vi.hoisted<Array<{ id?: string; ownerId?: string; resourceId?: string }>>(() => []);
 
+// Captures the AgentController constructor initialState so tests can assert on
+// which settings.json values were seeded into session state.
+const controllerInitialStates = vi.hoisted<Array<Record<string, unknown>>>(() => []);
+
 vi.mock('@mastra/core/llm', () => ({
   MastraModelGateway: class {},
   GatewayRegistry: {
@@ -24,8 +28,10 @@ vi.mock('@mastra/core/agent-controller', () => ({
   AgentController: class {
     constructor(config: {
       resourceId?: string;
+      initialState?: Record<string, unknown>;
       intervalHandlers?: Array<{ immediate?: boolean; handler: () => unknown }>;
     }) {
+      controllerInitialStates.push(config.initialState ?? {});
       for (const interval of config.intervalHandlers ?? []) {
         if (interval.immediate !== false) void interval.handler();
       }
@@ -235,6 +241,59 @@ describe('createAuthStorage', () => {
     expect(openaiCodex.setAuthStorage).toHaveBeenCalledWith(authStorage);
     expect(githubCopilot.setAuthStorage).toHaveBeenCalledWith(authStorage);
     expect(xai.setAuthStorage).toHaveBeenCalledWith(authStorage);
+  });
+});
+
+describe('settings.json OM seeding', () => {
+  beforeEach(() => {
+    controllerInitialStates.length = 0;
+  });
+
+  it('seeds OM knobs from settings.json by default', async () => {
+    const { resolveOmRoleModel, loadSettings } = await import('./onboarding/settings.js');
+    vi.mocked(resolveOmRoleModel).mockReturnValue('openai/gpt-5-mini');
+    const baseSettings = vi.mocked(loadSettings)();
+    vi.mocked(loadSettings).mockReturnValue({
+      ...baseSettings,
+      models: { ...baseSettings.models, omObservationThreshold: 30000 },
+    });
+    const { createMastraCode } = await import('./index.js');
+
+    try {
+      await createMastraCode({ cwd: '/tmp/project-om-seed' });
+
+      expect(controllerInitialStates).toHaveLength(1);
+      expect(controllerInitialStates[0]!.observerModelId).toBe('openai/gpt-5-mini');
+      expect(controllerInitialStates[0]!.reflectorModelId).toBe('openai/gpt-5-mini');
+      expect(controllerInitialStates[0]!.observationThreshold).toBe(30000);
+    } finally {
+      vi.mocked(resolveOmRoleModel).mockReturnValue('');
+      vi.mocked(loadSettings).mockReturnValue(baseSettings);
+    }
+  });
+
+  it('does not seed OM knobs when disableSettingsOmSeed is set', async () => {
+    const { resolveOmRoleModel, loadSettings } = await import('./onboarding/settings.js');
+    vi.mocked(resolveOmRoleModel).mockReturnValue('openai/gpt-5-mini');
+    const baseSettings = vi.mocked(loadSettings)();
+    vi.mocked(loadSettings).mockReturnValue({
+      ...baseSettings,
+      models: { ...baseSettings.models, omObservationThreshold: 30000 },
+    });
+    const { createMastraCode } = await import('./index.js');
+
+    try {
+      await createMastraCode({ cwd: '/tmp/project-om-no-seed', disableSettingsOmSeed: true });
+
+      expect(controllerInitialStates).toHaveLength(1);
+      expect(controllerInitialStates[0]!).not.toHaveProperty('observerModelId');
+      expect(controllerInitialStates[0]!).not.toHaveProperty('reflectorModelId');
+      expect(controllerInitialStates[0]!).not.toHaveProperty('observationThreshold');
+      expect(controllerInitialStates[0]!).not.toHaveProperty('observeAttachments');
+    } finally {
+      vi.mocked(resolveOmRoleModel).mockReturnValue('');
+      vi.mocked(loadSettings).mockReturnValue(baseSettings);
+    }
   });
 });
 
