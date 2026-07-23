@@ -79,22 +79,19 @@ function stubBoardEndpoints() {
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
       HttpResponse.json({ decisions: [] }),
     ),
-    http.post(
-      `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/${ITEM_ID}/transition`,
-      async () => {
-        await transitionGate.promise;
-        return HttpResponse.json({
-          result: {
-            status: 'accepted',
-            transitionId: 'transition-1',
-            itemId: ITEM_ID,
-            revision: 2,
-            stage: 'planning',
-            decisions: [],
-          },
-        });
-      },
-    ),
+    http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/${ITEM_ID}/transition`, async () => {
+      await transitionGate.promise;
+      return HttpResponse.json({
+        result: {
+          status: 'accepted',
+          transitionId: 'transition-1',
+          itemId: ITEM_ID,
+          revision: 2,
+          stage: 'planning',
+          decisions: [],
+        },
+      });
+    }),
     http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
       HttpResponse.json({
         config: {

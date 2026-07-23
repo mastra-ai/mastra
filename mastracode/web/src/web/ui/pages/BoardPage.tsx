@@ -18,6 +18,7 @@ import {
   Link2,
   Plus,
   Stethoscope,
+  Trash2,
 } from 'lucide-react';
 import type { ComponentType, DragEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -29,7 +30,7 @@ import { useWorkspacesQuery } from '../../../shared/hooks/useWorkspaces';
 import { SkeletonRows } from '../ui/SkeletonRows';
 import { GithubIcon } from '../ui/icons';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
-import { FactoryItemActions } from '../domains/factory/components/FactoryItemActions';
+import { FactoryItemActions, actionIcon } from '../domains/factory/components/FactoryItemActions';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import {
@@ -1474,7 +1475,8 @@ function WorkItemCard({
                       disabled={runDisabled || starting}
                       onClick={() => onStartRun(runSpec, action)}
                     >
-                      {starting ? 'Starting…' : action.label}
+                      {actionIcon(action.label)}
+                      <span>{starting ? 'Starting…' : action.label}</span>
                     </DropdownMenu.Item>
                   );
                 })}
@@ -1482,10 +1484,14 @@ function WorkItemCard({
                 .filter(stage => stage.id !== columnStage)
                 .map(stage => (
                   <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
-                    {stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}
+                    <BoardStageIcon stage={stage.id} />
+                    <span>{stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}</span>
                   </DropdownMenu.Item>
                 ))}
-              <DropdownMenu.Item onClick={onRemove}>Remove</DropdownMenu.Item>
+              <DropdownMenu.Item onClick={onRemove}>
+                <Trash2 aria-hidden />
+                <span>Remove</span>
+              </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu>
         </div>

@@ -16,7 +16,8 @@ const ACTION_ICONS: Record<string, ComponentType> = {
   Review: Eye,
 };
 
-function actionIcon(label: string) {
+/** Icon element for a run-action label, shared with board card menus. */
+export function actionIcon(label: string) {
   const Icon = ACTION_ICONS[label] ?? Play;
   return <Icon aria-hidden />;
 }

@@ -99,9 +99,7 @@ describe('useTransitionWorkItemMutation', () => {
     act(() => {
       result.current.mutate({ item: original, board: 'work', stage: 'planning' });
     });
-    await waitFor(() =>
-      expect(result.current.pendingTransitions).toEqual([{ itemId: ITEM_ID, stage: 'planning' }]),
-    );
+    await waitFor(() => expect(result.current.pendingTransitions).toEqual([{ itemId: ITEM_ID, stage: 'planning' }]));
 
     releaseResponse();
     await waitForMutationsIdle(client);
