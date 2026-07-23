@@ -1,0 +1,153 @@
+---
+title: "Workers | Deployment"
+description: "Separate background processing from the API layer by running workflow execution, cron schedules, and background tasks in dedicated worker processes."
+packages:
+  - "@mastra/core"
+  - "@mastra/redis-streams"
+---
+
+# Workers
+
+Workers handle background processing outside the request-response cycle. Workflow step execution, cron-based scheduling, and long-running tool calls all run in workers, keeping the API responsive.
+
+By default, workers run in the same process as the API. For production workloads, you can split them into separate processes or containers and scale each one independently.
+
+:::note
+
+Workers are a beta feature. The API is stable enough for production use, but some details may change. See [known limitations](#known-limitations) for current gaps.
+
+:::
+
+## When to use workers
+
+Workers matter when any of these apply:
+
+- Workflow steps take more than a few seconds and shouldn't block API responses
+- You need event durability so in-flight work survives process restarts
+- Different parts of the system need to scale independently (e.g., more orchestration capacity without more API instances)
+- Background tool calls should run on dedicated compute
+
+If your application handles light traffic and workflows complete quickly, the default in-process setup works fine. Skip the worker infrastructure until you need it.
+
+## Worker types
+
+Mastra has three built-in worker types. Each handles a specific kind of background processing.
+
+### Orchestration worker
+
+Subscribes to workflow events on the [PubSub](/docs/server/pubsub) bus and executes workflow steps. Every `workflow.start`, step transition, and lifecycle event flows through this worker.
+
+In a split deployment, the orchestration worker pulls events from Redis Streams and delegates step execution back to the API over HTTP. In-process, it runs steps directly.
+
+The orchestration worker requires a PubSub backend that supports pull mode (e.g., [`RedisStreamsPubSub`](/reference/pubsub/redis-streams)).
+
+### Scheduler worker
+
+Polls storage for due cron schedules and publishes `workflow.start` events. It is a producer only, meaning it creates work for the orchestration worker to pick up.
+
+The scheduler reads declarative `schedule` fields from your workflow definitions automatically. See [Scheduled workflows](/docs/workflows/scheduled-workflows) for how to declare schedules.
+
+**Do not run more than one scheduler instance.** Multiple schedulers polling the same storage would fire duplicate events for the same schedule.
+
+### Background task worker
+
+Executes agent tool calls marked with `background: { enabled: true }`. When an agent invokes a background tool, the API dispatches the task to this worker instead of blocking the response stream.
+
+The background task worker manages concurrency limits, task lifecycle, and result delivery through the PubSub bus.
+
+## How workers run
+
+### In-process (default)
+
+With no configuration, Mastra creates and starts workers inside the API process. Events flow through an in-memory PubSub, and everything shares a single Node.js runtime.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+
+export const mastra = new Mastra({
+  // Workers run in-process by default.
+  // No pubsub or worker config needed.
+})
+```
+
+This setup needs no external infrastructure beyond your storage adapter. It doesn't survive process crashes, and you can't scale individual components.
+
+### Split processes
+
+To run workers separately, configure a distributed [PubSub](/docs/server/pubsub) backend and use the `MASTRA_WORKERS` environment variable to control which workers start in each process.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+import { PostgresStore } from '@mastra/pg'
+
+export const mastra = new Mastra({
+  storage: new PostgresStore({
+    connectionString: process.env.DATABASE_URL!,
+  }),
+  pubsub: new RedisStreamsPubSub({
+    url: process.env.REDIS_URL!,
+  }),
+})
+```
+
+Run the same build artifact in multiple containers, each with a different `MASTRA_WORKERS` value:
+
+| Process | `MASTRA_WORKERS` | Role |
+| - | - | - |
+| API | `false` | Serves HTTP requests, publishes events, no workers |
+| Orchestration | `orchestration` | Pulls workflow events, executes steps |
+| Scheduler | `scheduler` | Polls for due schedules, publishes start events |
+| Background tasks | `backgroundTasks` | Executes background tool calls |
+
+The [worker deployment guide](/docs/deployment/worker-deployment) walks through this setup with a Docker Compose example.
+
+## Prerequisites for split deployments
+
+Split worker deployments require:
+
+- **Distributed PubSub**: [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) is the recommended backend. The default in-memory PubSub can't deliver events across processes.
+- **Shared storage**: All processes must connect to the same database. [`PostgresStore`](/reference/storage/postgresql) is recommended.
+- **Network connectivity**: The orchestration worker must be able to reach the API over HTTP for step execution in fully split setups.
+
+## Network architecture
+
+Workers are internal infrastructure. They are not exposed to end users and do not need their own subdomain, public URL, or inbound HTTP route.
+
+In a split deployment:
+
+- **The API server is the only public-facing process.** It serves all client HTTP requests — REST endpoints, agent interactions, workflow triggers, and any custom routes.
+- **Workers connect outbound only.** They pull events from Redis Streams and read/write to PostgreSQL. They do not accept inbound traffic from clients.
+- **The orchestration worker calls the API internally.** It sends step execution requests to the API over the container network using `MASTRA_STEP_EXECUTION_URL`. This is internal service-to-service communication, not a public endpoint.
+
+```
+                    ┌─────────────┐
+    Clients ──────► │  API Server │ ◄─── only public endpoint
+                    └──────┬──────┘
+                           │ internal network
+              ┌────────────┼────────────────┐
+              │            │                │
+        ┌─────▼─────┐ ┌───▼────┐ ┌─────────▼──────────┐
+        │Orchestrator│ │Scheduler│ │Background Task Worker│
+        └─────┬─────┘ └───┬────┘ └─────────┬──────────┘
+              │            │                │
+         ┌────▼────────────▼────────────────▼────┐
+         │         Redis + PostgreSQL            │
+         └───────────────────────────────────────┘
+```
+
+If a worker-related feature needs an HTTP route (for example, token minting for a voice integration), that route runs on the API server, not on the worker process. The worker handles the background processing; the API handles the client-facing interface.
+
+## Known limitations
+
+- **No dead-letter queue**: Failed events are nacked and retried, but there is no DLQ for events that repeatedly fail.
+- **No built-in health endpoint**: Workers don't expose an HTTP health check. Use container-level liveness probes or process monitoring.
+- **Scheduler is single-instance**: Running multiple scheduler processes causes duplicate schedule fires.
+
+## Related
+
+- [Worker deployment guide](/docs/deployment/worker-deployment): Docker Compose example and topology options
+- [Worker authentication](/docs/deployment/worker-auth): Secure worker-to-API communication
+- [Worker configuration reference](/docs/deployment/worker-reference): Environment variables, CLI commands, and config options
+- [PubSub](/docs/server/pubsub): Event delivery backends
+- [Scheduled workflows](/docs/workflows/scheduled-workflows): Declare cron schedules on workflows

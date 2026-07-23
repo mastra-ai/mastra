@@ -1,0 +1,143 @@
+---
+title: "Worker authentication | Deployment"
+description: "Secure communication between standalone workers and the Mastra API server."
+packages:
+  - "@mastra/core"
+---
+
+# Worker authentication
+
+When workers run in separate processes from the API, they communicate over HTTP. The orchestration worker calls the API's step execution endpoint, and push-mode brokers (like Google Cloud Pub/Sub) deliver events to the API's event endpoint. Both endpoints require authentication when an auth provider is configured.
+
+## How it works
+
+Worker authentication uses the same auth pipeline as the rest of your Mastra server. There is no separate "worker auth" system. The orchestration worker sends credentials with each HTTP request, and the server's configured `authenticateToken` provider validates them.
+
+Two internal endpoints are involved:
+
+| Endpoint | Used by | Purpose |
+| - | - | - |
+| `POST /api/workflows/:id/runs/:runId/steps/execute` | Orchestration worker via `HttpRemoteStrategy` | Execute a workflow step on the API |
+| `POST /api/workflows/events` | Push-mode brokers (GCP Pub/Sub, SNS) | Deliver workflow events to the API |
+
+Both routes have `requiresAuth: true`. When no auth provider is configured, they are publicly accessible.
+
+:::warning
+
+When deploying workers as separate processes, always configure an auth provider on the server. Without one, the step execution and event endpoints are open to any caller.
+
+:::
+
+## Setting up worker auth
+
+### 1. Configure an auth provider on the server
+
+Use any Mastra auth provider. `SimpleAuth` works well for worker tokens:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { SimpleAuth } from '@mastra/core/server'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new SimpleAuth({
+      tokens: {
+        [process.env.WORKER_TOKEN!]: {
+          id: 'worker',
+          name: 'Orchestration Worker',
+          role: 'worker',
+        },
+      },
+    }),
+  },
+  // ... storage, pubsub, etc.
+})
+```
+
+### 2. Set the worker token
+
+On each worker container, set `MASTRA_WORKER_AUTH_TOKEN` to a token that the server's auth provider recognizes:
+
+```yaml title="docker-compose.yml"
+services:
+  api:
+    environment:
+      WORKER_TOKEN: ${WORKER_TOKEN}
+      # ... other env vars
+
+  orchestration-worker:
+    environment:
+      MASTRA_WORKER_AUTH_TOKEN: ${WORKER_TOKEN}
+      MASTRA_STEP_EXECUTION_URL: http://api:4111/api
+      # ... other env vars
+```
+
+```bash title=".env"
+WORKER_TOKEN=sk-worker-secret-token
+```
+
+The orchestration worker reads `MASTRA_WORKER_AUTH_TOKEN` and sends it as a `Bearer` token in the `Authorization` header on every step execution request.
+
+## Auth credential types
+
+The `HttpRemoteStrategy` supports three credential formats. The default (`bearer`) covers most setups.
+
+### Bearer token (default)
+
+Set `MASTRA_WORKER_AUTH_TOKEN` and the strategy sends `Authorization: Bearer <token>`:
+
+```bash
+MASTRA_WORKER_AUTH_TOKEN=sk-worker-secret-token
+```
+
+### API key header
+
+Send the credential as `x-worker-api-key` instead of `Authorization`:
+
+```typescript
+import { HttpRemoteStrategy } from '@mastra/core/worker'
+
+const strategy = new HttpRemoteStrategy({
+  serverUrl: 'http://api:4111/api',
+  auth: { type: 'api-key', key: process.env.WORKER_API_KEY! },
+})
+```
+
+Your server's auth provider must read the `x-worker-api-key` header to validate this credential.
+
+### Custom header
+
+Use any header name and value:
+
+```typescript
+import { HttpRemoteStrategy } from '@mastra/core/worker'
+
+const strategy = new HttpRemoteStrategy({
+  serverUrl: 'http://api:4111/api',
+  auth: {
+    type: 'header',
+    name: 'X-Internal-Service-Key',
+    value: process.env.INTERNAL_KEY!,
+  },
+})
+```
+
+## Push-mode broker auth
+
+When using a push-mode PubSub (like Google Cloud Pub/Sub), the broker POSTs events directly to the `/api/workflows/events` endpoint. The broker attaches its own credentials — for example, Google Cloud Pub/Sub sends a Google-signed OIDC token.
+
+Your auth provider's `authenticateToken` callback must recognize whatever credential the broker sends. See your broker's documentation for the authentication scheme it uses.
+
+## Security recommendations
+
+- **Use different tokens for different worker types.** This lets you revoke access to one worker without affecting others.
+- **Rotate tokens regularly.** Update the `WORKER_TOKEN` environment variable and restart the affected containers.
+- **Use TLS in production.** Worker-to-API communication should go over HTTPS to protect tokens in transit. Within a private network (Docker bridge, Kubernetes cluster), plain HTTP is acceptable.
+- **Restrict network access.** The step execution and event endpoints are internal. If possible, keep them off the public internet using network policies or firewall rules.
+
+## Related
+
+- [Auth overview](/docs/server/auth): Available auth providers and how they work
+- [Simple Auth](/docs/server/auth/simple-auth): Token-to-user mapping authentication
+- [Worker deployment](/docs/deployment/worker-deployment): Set up split worker processes
+- [Worker configuration reference](/docs/deployment/worker-reference): Environment variables and CLI commands
