@@ -1,0 +1,14 @@
+# SAP-proprietary test scripts using Amnesia/HANA Cloud credentials
+# These files must NEVER be committed to the repository
+*.amnesia.ts
+*.amnesia.js
+*.amnesia.mts
+amnesia-*.ts
+amnesia-*.js
+hana-scratch.*
+hana-test-local.*
+.env.hana
+.env.hana.*
+
+# Build output
+dist/
