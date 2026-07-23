@@ -289,6 +289,7 @@ describe('createScorer', () => {
         durationMs: expect.any(Number),
       });
       expect(preprocessExecution?.durationMs).toBeGreaterThanOrEqual(0);
+      expect(Number.isInteger(preprocessExecution?.durationMs)).toBe(true);
       expect(preprocessExecution).not.toHaveProperty('cost');
       expect(JSON.parse(JSON.stringify(result.judge))).toEqual(result.judge);
       expect(withoutJudge(result)).toMatchSnapshot();

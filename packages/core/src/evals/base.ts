@@ -348,7 +348,7 @@ const scorerJudgeExecutionSchema = z.object({
   usage: scorerJudgeUsageSchema,
   attemptCount: z.number().int().positive(),
   modelCallCount: z.number().int().positive(),
-  durationMs: z.number().nonnegative(),
+  durationMs: z.number().int().nonnegative(),
   cost: z
     .object({
       amount: z.number(),
@@ -1180,7 +1180,7 @@ class MastraScorer<
       usage: telemetry.usage,
       attemptCount: Math.max(telemetry.attemptCount, 1),
       modelCallCount: Math.max(telemetry.modelCallCount, 1),
-      durationMs: performance.now() - startedAt,
+      durationMs: Math.round(performance.now() - startedAt),
     });
 
     const judge = new Agent({
