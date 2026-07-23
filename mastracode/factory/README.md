@@ -41,7 +41,7 @@ Resolver and tenant identity always come from server authentication, not request
 
 ## Supervisor state and lifecycle signals
 
-Opening the canonical supervisor session emits a full `factory-state` snapshot. The snapshot is bounded to board and stage counts plus at most 50 pending approvals with work-item title, role, requested stage, revision, reason, summary, and age. It never includes credentials, storage handles, repository paths, or raw integration payloads. A stable cache key suppresses unchanged snapshots.
+Opening the canonical supervisor session emits a full `factory-state` snapshot. The snapshot is bounded to board and stage counts, at most 50 pending approvals with work-item title, role, requested stage, revision, reason, summary, and age, and live worker activity per active run binding — `running` (a run is in flight), `idle` (the bound session is live between runs), or `offline` (no in-process session owns the binding). It never includes credentials, storage handles, repository paths, or raw integration payloads. A stable cache key suppresses unchanged snapshots.
 
 Approval requests and terminal approval results (`approved`, `rejected`, or `stale`) are written to a tenant-scoped durable outbox in the same transaction as the approval state change. The Factory dispatcher retries delivery to the singleton supervisor conversation and refreshes its state snapshot. Idle-without-transition notifications use the live observer described below and refresh the same state snapshot, but remain advisory rather than durable.
 

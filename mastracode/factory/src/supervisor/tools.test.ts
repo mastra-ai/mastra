@@ -71,11 +71,15 @@ async function fixture() {
     counts: { byBoard: { work: 1 }, byStage: { intake: 1 } },
     pendingApprovals: [],
   }));
+  const describeWorkerBindings = vi.fn(async () => [
+    { workItemId: prepared.item.id, role: 'work', bindingId: prepared.binding.id, activity: 'idle' as const },
+  ]);
   const service = {
     requireProject: vi.fn(async ({ orgId }: { orgId: string }) => {
       if (orgId !== ORG_ID) throw new Error('Factory project not found.');
     }),
     getState,
+    describeWorkerBindings,
     workItems: storage,
     approvals,
     controller,
@@ -124,6 +128,9 @@ describe('Factory supervisor tools', () => {
       id: built.prepared.item.id,
       title: 'Investigate flaky build',
       sessionRoles: ['work'],
+      workers: [
+        { workItemId: built.prepared.item.id, role: 'work', bindingId: built.prepared.binding.id, activity: 'idle' },
+      ],
     });
     await expect(
       execute(tools.factory_get_work_item as ExecutableTool, context, {

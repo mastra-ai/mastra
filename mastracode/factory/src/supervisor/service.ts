@@ -7,7 +7,7 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_SUPERVISOR_INSTRUCTIONS } from './instructions.js';
 import { buildFactorySupervisorState } from './state.js';
-import type { FactorySupervisorState } from './state.js';
+import type { FactorySupervisorState, FactorySupervisorWorkerBinding } from './state.js';
 
 export const FACTORY_SUPERVISOR_SESSION_SUFFIX = '-supervisor';
 
@@ -190,10 +190,34 @@ export class FactorySupervisorService {
   async getState(input: { orgId: string; factoryProjectId: string }): Promise<FactorySupervisorState> {
     await this.requireProject(input);
     await this.#workItems.ensureReady();
-    const [items, approvals] = await Promise.all([
+    const [items, approvals, workers] = await Promise.all([
       this.#workItems.list(input),
       this.#approvals.list({ ...input, statuses: ['pending'] }),
+      this.describeWorkerBindings(input),
     ]);
-    return buildFactorySupervisorState(input.factoryProjectId, items, approvals);
+    return buildFactorySupervisorState(input.factoryProjectId, items, approvals, workers);
+  }
+
+  /**
+   * Live activity for each active run binding. A binding whose bound session
+   * has a run in flight is `running`; a live session between runs is `idle`;
+   * a binding with no in-process session (e.g. right after a server restart)
+   * is `offline`. Pure in-memory registry lookups — never creates sessions.
+   */
+  async describeWorkerBindings(input: {
+    orgId: string;
+    factoryProjectId: string;
+    workItemId?: string;
+  }): Promise<FactorySupervisorWorkerBinding[]> {
+    const bindings = await this.#workItems.listRunBindings(input.orgId, input.factoryProjectId, input.workItemId);
+    return Promise.all(
+      bindings
+        .filter(binding => binding.status === 'active')
+        .map(async binding => {
+          const session = await this.#controller.getSessionByResource(binding.resourceId);
+          const activity = !session ? 'offline' : session.run.isRunning() ? 'running' : 'idle';
+          return { workItemId: binding.workItemId, role: binding.role, bindingId: binding.id, activity } as const;
+        }),
+    );
   }
 }

@@ -62,6 +62,29 @@ const initialState: FactorySupervisorState = {
     },
   ],
   pendingApprovalCount: 1,
+  workers: {
+    running: 1,
+    idle: 1,
+    offline: 0,
+    bindings: [
+      {
+        workItemId: 'work-item-1',
+        workItemTitle: 'Approved plan',
+        stage: 'plan',
+        role: 'plan',
+        bindingId: 'binding-1',
+        activity: 'running',
+      },
+      {
+        workItemId: 'work-item-2',
+        workItemTitle: 'Idle item',
+        stage: 'execute',
+        role: 'work',
+        bindingId: 'binding-2',
+        activity: 'idle',
+      },
+    ],
+  },
   snapshotAt: '2026-07-22T18:00:30.000Z',
 };
 
@@ -213,6 +236,7 @@ describe('Factory supervisor page', () => {
       );
       expect(screen.getByText('3 work items')).toBeInTheDocument();
       expect(screen.getByText('1 pending approval')).toBeInTheDocument();
+      expect(screen.getByText('workers: 1 running · 1 idle')).toBeInTheDocument();
       expect(screen.getByRole('heading', { name: 'Pending approvals' })).toBeInTheDocument();
       expect(screen.getByText('Move approved plan to execution')).toBeInTheDocument();
       expect(screen.getByRole('textbox')).toBeInTheDocument();
@@ -284,7 +308,7 @@ describe('Factory supervisor page', () => {
       await user.click(await screen.findByRole('button', { name: 'Approve Move approved plan to execution' }));
 
       await waitFor(() => expect(decisions).toEqual(['approve']));
-      expect(await screen.findByText('No pending approvals')).toBeInTheDocument();
+      expect(await screen.findByText(/No pending approvals/)).toBeInTheDocument();
       expect(screen.queryByText('Move approved plan to execution')).not.toBeInTheDocument();
     });
   });

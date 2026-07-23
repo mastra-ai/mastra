@@ -1,6 +1,27 @@
 import type { FactoryApprovalRecord, WorkItemRow } from '../storage/domains/work-items/base.js';
 
 const MAX_PENDING_APPROVALS = 50;
+const MAX_WORKERS = 100;
+
+/**
+ * Live activity of one active run binding: `running` means the bound session
+ * has a run in flight right now, `idle` means the session is live but between
+ * runs, and `offline` means no in-process session currently owns the binding
+ * (e.g. after a server restart, before reconciliation).
+ */
+export type FactorySupervisorWorkerActivity = 'running' | 'idle' | 'offline';
+
+export interface FactorySupervisorWorkerBinding {
+  workItemId: string;
+  role: string;
+  bindingId: string;
+  activity: FactorySupervisorWorkerActivity;
+}
+
+export interface FactorySupervisorWorkerSummary extends FactorySupervisorWorkerBinding {
+  workItemTitle: string | null;
+  stage: string | null;
+}
 
 export interface FactorySupervisorApprovalSummary {
   id: string;
@@ -25,6 +46,12 @@ export interface FactorySupervisorState {
   };
   pendingApprovalCount: number;
   pendingApprovals: FactorySupervisorApprovalSummary[];
+  workers: {
+    running: number;
+    idle: number;
+    offline: number;
+    bindings: FactorySupervisorWorkerSummary[];
+  };
   snapshotAt: string;
 }
 
@@ -53,10 +80,12 @@ export function buildFactorySupervisorState(
   factoryProjectId: string,
   items: WorkItemRow[],
   pendingApprovals: FactoryApprovalRecord[],
+  workerBindings: FactorySupervisorWorkerBinding[] = [],
   now: Date = new Date(),
 ): FactorySupervisorState {
   const byBoard: Record<string, number> = {};
   const byStage: Record<string, number> = {};
+  const itemsById = new Map(items.map(item => [item.id, item]));
   const itemTitles = new Map(items.map(item => [item.id, item.title]));
   for (const item of items) {
     const board = item.externalSource?.type === 'pull-request' ? 'review' : 'work';
@@ -64,6 +93,16 @@ export function buildFactorySupervisorState(
     const stage = item.stages.at(-1);
     if (stage) byStage[stage] = (byStage[stage] ?? 0) + 1;
   }
+  const workers = {
+    running: workerBindings.filter(worker => worker.activity === 'running').length,
+    idle: workerBindings.filter(worker => worker.activity === 'idle').length,
+    offline: workerBindings.filter(worker => worker.activity === 'offline').length,
+    bindings: workerBindings.slice(0, MAX_WORKERS).map(worker => ({
+      ...worker,
+      workItemTitle: itemsById.get(worker.workItemId)?.title ?? null,
+      stage: itemsById.get(worker.workItemId)?.stages.at(-1) ?? null,
+    })),
+  };
   return {
     factoryProjectId,
     totalItems: items.length,
@@ -72,6 +111,7 @@ export function buildFactorySupervisorState(
     pendingApprovals: pendingApprovals
       .slice(0, MAX_PENDING_APPROVALS)
       .map(approval => supervisorApprovalSummary(approval, itemTitles.get(approval.workItemId) ?? null, now)),
+    workers,
     snapshotAt: now.toISOString(),
   };
 }
