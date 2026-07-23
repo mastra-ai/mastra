@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { AgentScorerConfig, WorkflowScorerConfig } from './run';
 import { checkThresholdPassed, isScorerWithThreshold, validateThresholdConfig } from './thresholds';
 import type { ScorerEntry } from './thresholds';
 
@@ -38,6 +39,20 @@ describe('thresholds', () => {
         /min \(0.8\) greater than max \(0.2\)/,
       );
     });
+  });
+
+  it('supports generic scorer references in categorized configs', () => {
+    const agentConfig: AgentScorerConfig<ScorerEntry<string>> = {
+      agent: [{ scorer: 'quality', threshold: 0.7 }],
+      trajectory: ['trajectory-quality'],
+    };
+    const workflowConfig: WorkflowScorerConfig<ScorerEntry<string>> = {
+      workflow: ['workflow-quality'],
+      steps: { summarize: [{ scorer: 'step-quality', threshold: { min: 0.8 } }] },
+    };
+
+    expect(agentConfig.agent).toEqual([{ scorer: 'quality', threshold: 0.7 }]);
+    expect(workflowConfig.steps?.summarize).toEqual([{ scorer: 'step-quality', threshold: { min: 0.8 } }]);
   });
 
   it('detects threshold wrappers for generic scorer references', () => {

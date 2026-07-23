@@ -82,23 +82,23 @@ type RunEvalsDataItem<TTarget = unknown> = TTarget extends Agent
     ? RunEvalsDataItemBase & { input: any; inputs?: never; turns?: never }
     : RunEvalsDataItemBase & { input: unknown; inputs?: never; turns?: never };
 
-export type WorkflowScorerConfig = {
-  /** Scorers that evaluate the overall workflow input/output */
-  workflow?: MastraScorer<any, any, any, any>[];
-  /** Scorers that evaluate individual workflow steps by step ID */
-  steps?: Record<string, MastraScorer<any, any, any, any>[]>;
-  /** Scorers that evaluate the workflow's step execution trajectory */
-  trajectory?: MastraScorer<any, any, any, any>[];
-};
-
-export type AgentScorerConfig = {
-  /** Scorers that evaluate the full agent input/output */
-  agent?: MastraScorer<any, any, any, any>[];
-  /** Scorers that evaluate the agent's tool call trajectory */
-  trajectory?: MastraScorer<any, any, any, any>[];
-};
-
 type RunEvalsScorer = MastraScorer<any, any, any, any>;
+
+export type WorkflowScorerConfig<TScorer = RunEvalsScorer> = {
+  /** Scorers that evaluate the overall workflow input/output */
+  workflow?: TScorer[];
+  /** Scorers that evaluate individual workflow steps by step ID */
+  steps?: Record<string, TScorer[]>;
+  /** Scorers that evaluate the workflow's step execution trajectory */
+  trajectory?: TScorer[];
+};
+
+export type AgentScorerConfig<TScorer = RunEvalsScorer> = {
+  /** Scorers that evaluate the full agent input/output */
+  agent?: TScorer[];
+  /** Scorers that evaluate the agent's tool call trajectory */
+  trajectory?: TScorer[];
+};
 
 /** A scorer with an associated pass/fail threshold. */
 export type ScorerWithThreshold = GenericScorerWithThreshold<RunEvalsScorer>;
