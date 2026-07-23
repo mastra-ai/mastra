@@ -18,7 +18,7 @@ import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
-import type { IntegrationHooks } from '../base.js';
+import type { LinearIssueIngress } from '../base.js';
 import type { LinearIntegration } from './integration.js';
 import { LinearReauthRequiredError } from './integration.js';
 
@@ -67,7 +67,12 @@ export interface MountLinearRoutesOptions {
    * project filter; when absent, only the disabled `status` route is served.
    */
   intake?: IntakeStorage;
-  hooks?: IntegrationHooks;
+  ingestLinearIssues?: (input: {
+    orgId: string;
+    userId: string;
+    factoryProjectId: string;
+    issues: LinearIssueIngress[];
+  }) => Promise<unknown>;
 }
 
 /**
@@ -327,8 +332,8 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
             createdAt: issue.createdAt,
             updatedAt: issue.updatedAt,
           }));
-          if (factoryProjectId && options.hooks?.ingestLinearIssues) {
-            await options.hooks.ingestLinearIssues({
+          if (factoryProjectId && options.ingestLinearIssues) {
+            await options.ingestLinearIssues({
               orgId: resolved.tenant.orgId,
               userId: resolved.tenant.userId,
               factoryProjectId,

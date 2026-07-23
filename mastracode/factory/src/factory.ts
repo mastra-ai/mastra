@@ -52,8 +52,6 @@ import {
 } from './routes/tenant-credentials.js';
 import { builtInFactoryRules } from './rules/defaults.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
-import { FactoryGithubEventService } from './rules/github-service.js';
-import { FactoryLinearIssueService } from './rules/linear-service.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
@@ -497,27 +495,6 @@ export class MastraFactory {
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       GithubIntegration | undefined;
     const workItemsReady = storage.isDomainReady('work-items');
-    const githubEventService =
-      githubIntegration && factoryReady
-        ? new FactoryGithubEventService({
-            github: githubIntegration,
-            sourceControl: sourceControlStorage.forIntegration('github'),
-            integrationStorage: integrationStorage.forIntegration('github'),
-            projects: factoryProjectsStorage,
-            storage: workItemsStorage,
-            rules,
-          })
-        : undefined;
-    const ingestGithubEvent = githubEventService ? githubEventService.ingest.bind(githubEventService) : undefined;
-    const linearIssueService =
-      integrations.some(integration => integration.id === 'linear') && intakeReady && factoryReady
-        ? new FactoryLinearIssueService({
-            projects: factoryProjectsStorage,
-            storage: workItemsStorage,
-            rules,
-          })
-        : undefined;
-    const ingestLinearIssues = linearIssueService ? linearIssueService.ingest.bind(linearIssueService) : undefined;
     const transitionService = workItemsReady
       ? new FactoryTransitionService({ rules, storage: workItemsStorage })
       : undefined;
@@ -685,8 +662,6 @@ export class MastraFactory {
           factoryReady,
           rules,
           factoryTransitionService: transitionService,
-          ingestGithubEvent,
-          ingestLinearIssues,
           onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
             this.#dispatcher ??= new FactoryDecisionDispatcher({
               controller,
@@ -778,8 +753,8 @@ export class MastraFactory {
               integrationStorage,
               sourceControlStorage,
               domains,
-              ...(integration.id === 'github' && ingestGithubEvent ? { ingestGithubEvent } : {}),
-              ...(integration.id === 'linear' && ingestLinearIssues ? { ingestLinearIssues } : {}),
+              factoryReady,
+              rules,
             },
             integration.id,
           ),

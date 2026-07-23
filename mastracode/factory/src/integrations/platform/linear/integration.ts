@@ -6,6 +6,7 @@ import type { Context } from 'hono';
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
 import type { Intake, IntakeIssue, IntakeIssueDetail } from '../../../capabilities/intake.js';
 import type { RouteAuth } from '../../../routes/route.js';
+import { FactoryLinearIssueService } from '../../../rules/linear-service.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools, LinearIssueIngress } from '../../base.js';
 import { buildLinearAgentTools } from '../../linear/agent-tools.js';
@@ -258,7 +259,17 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     };
   }
 
+  #createFactoryIssueService(ctx: IntegrationContext): FactoryLinearIssueService | undefined {
+    if (!ctx.factory) return undefined;
+    return new FactoryLinearIssueService({
+      projects: ctx.storage.projects,
+      storage: ctx.factory.workItems,
+      rules: ctx.factory.rules,
+    });
+  }
+
   routes(ctx: IntegrationContext): ApiRoute[] {
+    const factoryIssues = this.#createFactoryIssueService(ctx);
     return [
       this.#connectRoute(ctx),
       ...buildLinearRoutes({
@@ -267,6 +278,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         stateSigner: ctx.stateSigner,
         baseUrl: ctx.baseUrl,
         intake: ctx.storage.intake,
+        ingestLinearIssues: factoryIssues?.ingest.bind(factoryIssues),
       }).filter(route => !route.path.startsWith('/auth/linear/')),
     ];
   }
@@ -295,7 +307,9 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   }
 
   workers(ctx: IntegrationContext): PlatformLinearEventWorker[] {
-    if (!this.#pollingEnabled || !ctx.hooks?.ingestLinearIssues) return [];
+    if (!this.#pollingEnabled) return [];
+    const factoryIssues = this.#createFactoryIssueService(ctx);
+    if (!factoryIssues) return [];
     return [
       new PlatformLinearEventWorker({
         client: this.#client,
@@ -303,7 +317,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         projects: ctx.storage.projects,
         storage: ctx.storage.generic as unknown as PlatformLinearEventStorage,
         loadIssue: (workspaceId, issueId) => this.#loadIssueForEvent(workspaceId, issueId),
-        ingestLinearIssues: ctx.hooks.ingestLinearIssues,
+        ingestLinearIssues: factoryIssues.ingest.bind(factoryIssues),
         intervalMs: this.#pollingIntervalMs,
       }),
     ];

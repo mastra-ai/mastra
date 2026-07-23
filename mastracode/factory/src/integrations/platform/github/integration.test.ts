@@ -2,6 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { FactoryGithubEventService } from '../../../rules/github-service.js';
 import type { IntegrationContext } from '../../base.js';
 
 import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
@@ -616,7 +617,9 @@ describe('PlatformGithubIntegration', () => {
       sandboxProvider: 'local',
       sandboxWorkdir: '/tmp/app',
     });
-    const ingestGithubEvent = vi.fn(async () => ({ status: 'committed' as const }));
+    const ingestGithubEvent = vi.spyOn(FactoryGithubEventService.prototype, 'ingest').mockResolvedValue({
+      status: 'committed',
+    });
     const context = {
       auth: fakeAuth(),
       fleet: { enabled: false },
@@ -628,7 +631,7 @@ describe('PlatformGithubIntegration', () => {
       },
       controller: {},
       stateSigner: {},
-      hooks: { ingestGithubEvent },
+      factory: { rules: {}, workItems: {} },
     } as unknown as IntegrationContext;
     integration.initialize?.({ storage: context.storage.generic });
     integration.versionControl.initialize({ storage: sourceControl });

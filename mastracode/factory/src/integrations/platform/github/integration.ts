@@ -30,6 +30,8 @@ import type {
   UpdateReviewersInput,
   VersionControl,
 } from '../../../capabilities/version-control.js';
+import { FactoryGithubEventService } from '../../../rules/github-service.js';
+import type { FactoryGithubEventServiceOptions } from '../../../rules/github-service.js';
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type {
   SourceControlInstallation,
@@ -376,7 +378,20 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     });
   }
 
+  #createFactoryEventService(ctx: IntegrationContext): FactoryGithubEventService | undefined {
+    if (!ctx.factory) return undefined;
+    return new FactoryGithubEventService({
+      github: this as unknown as GithubIntegration,
+      sourceControl: ctx.storage.sourceControl,
+      integrationStorage: ctx.storage.generic as unknown as FactoryGithubEventServiceOptions['integrationStorage'],
+      projects: ctx.storage.projects,
+      storage: ctx.factory.workItems,
+      rules: ctx.factory.rules,
+    });
+  }
+
   routes(ctx: IntegrationContext): ApiRoute[] {
+    const factoryEvents = this.#createFactoryEventService(ctx);
     return [
       this.#statusRoute(ctx),
       this.#connectRoute(ctx),
@@ -391,7 +406,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         controller: ctx.controller,
         projects: ctx.storage.projects,
         emitAudit: ctx.hooks?.emitAudit,
-        ingestFactoryEvent: ctx.hooks?.ingestGithubEvent,
+        ingestFactoryEvent: factoryEvents?.ingest.bind(factoryEvents),
       }).filter(
         route =>
           route.path !== '/web/github/status' &&
@@ -555,13 +570,14 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     if (!ctx.controller) {
       throw new Error('Platform GitHub event polling requires the mounted Mastra Code controller.');
     }
+    const factoryEvents = this.#createFactoryEventService(ctx);
     return [
       new PlatformGithubEventWorker({
         client: this.#client,
         controller: ctx.controller,
         github: this,
         storage: ctx.storage.generic as unknown as PlatformGithubEventStorage,
-        ingestFactoryEvent: ctx.hooks?.ingestGithubEvent,
+        ingestFactoryEvent: factoryEvents?.ingest.bind(factoryEvents),
         intervalMs: this.#pollingIntervalMs,
       }),
     ];

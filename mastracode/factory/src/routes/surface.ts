@@ -10,8 +10,6 @@ import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import { ensureFactoryRuleSession } from '../integrations/github/factory-session.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
-import type { FactoryGithubEventService } from '../rules/github-service.js';
-import type { FactoryLinearIssueService } from '../rules/linear-service.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
@@ -77,8 +75,6 @@ export interface FactoryApiRoutesDeps {
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   rules: FactoryRules;
   factoryTransitionService?: FactoryTransitionService;
-  ingestGithubEvent?: FactoryGithubEventService['ingest'];
-  ingestLinearIssues?: FactoryLinearIssueService['ingest'];
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
@@ -203,13 +199,19 @@ async function prepareFactoryRuleBinding(
 export function buildIntegrationContext(
   deps: Pick<
     FactoryApiRoutesDeps,
-    'controller' | 'publicOrigin' | 'auth' | 'fleet' | 'factoryStorage' | 'integrationStorage' | 'sourceControlStorage'
+    | 'controller'
+    | 'publicOrigin'
+    | 'auth'
+    | 'fleet'
+    | 'factoryStorage'
+    | 'integrationStorage'
+    | 'sourceControlStorage'
+    | 'factoryReady'
+    | 'rules'
   > & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
-    ingestGithubEvent?: FactoryGithubEventService['ingest'];
-    ingestLinearIssues?: FactoryLinearIssueService['ingest'];
-    domains: Pick<FactoryApiRoutesDeps['domains'], 'projects' | 'intake'>;
+    domains: Pick<FactoryApiRoutesDeps['domains'], 'projects' | 'intake' | 'workItems'>;
   },
   integrationId: string,
 ): IntegrationContext {
@@ -226,15 +228,8 @@ export function buildIntegrationContext(
       projects: deps.domains.projects,
       intake: deps.domains.intake,
     },
-    ...(deps.emitAudit || deps.ingestGithubEvent || deps.ingestLinearIssues
-      ? {
-          hooks: {
-            ...(deps.emitAudit ? { emitAudit: deps.emitAudit } : {}),
-            ...(deps.ingestGithubEvent ? { ingestGithubEvent: deps.ingestGithubEvent } : {}),
-            ...(deps.ingestLinearIssues ? { ingestLinearIssues: deps.ingestLinearIssues } : {}),
-          },
-        }
-      : {}),
+    ...(deps.factoryReady ? { factory: { rules: deps.rules, workItems: deps.domains.workItems } } : {}),
+    ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),
   };
 }
 
@@ -312,10 +307,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         ...deps,
         stateSigner: deps.stateSigner,
         emitAudit,
-        ...(integration.id === 'github' && deps.ingestGithubEvent ? { ingestGithubEvent: deps.ingestGithubEvent } : {}),
-        ...(integration.id === 'linear' && deps.ingestLinearIssues
-          ? { ingestLinearIssues: deps.ingestLinearIssues }
-          : {}),
       },
       integration.id,
     );
