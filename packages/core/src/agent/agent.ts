@@ -3378,10 +3378,14 @@ export class Agent<
     const lines: string[] = [];
     for (const msg of messages) {
       const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
-      // AIV4 UI messages carry the same text in both `content` and a text part.
-      // Skip `content` when a text part exists so each message is emitted once.
-      const hasTextPart = msg.parts?.some(part => part.type === 'text' && part.text?.trim());
-      if (!hasTextPart && typeof msg.content === 'string' && msg.content) {
+      // AIV4 UI messages can carry the same text in both `content` and a text part.
+      // Skip `content` only when a text part carries the exact same text, so each
+      // message's text is emitted once without ever dropping distinct content.
+      const contentDuplicatedByPart =
+        typeof msg.content === 'string' &&
+        msg.content !== '' &&
+        msg.parts?.some(part => part.type === 'text' && part.text === msg.content);
+      if (typeof msg.content === 'string' && msg.content && !contentDuplicatedByPart) {
         lines.push(`${role}: ${msg.content}`);
       }
       if (msg.parts && Array.isArray(msg.parts) && msg.parts.length > 0) {

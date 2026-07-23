@@ -2990,6 +2990,77 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       expect(lines.filter(l => l.startsWith('Tool Result getWeather:'))).toHaveLength(1);
     });
 
+    it('should keep string content when no text part carries the same text', async () => {
+      // Pins the equality rule in formatMessagesForTitle: `content` may only be
+      // skipped when a text part carries the exact same text. A stored message can
+      // legitimately have a content string that differs from its text parts
+      // (AIV4Adapter uses m.content.content verbatim when set), and that text must
+      // not be dropped.
+      let capturedUserContent: any[] = [];
+
+      let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        titleModel = new MockLanguageModelV1({
+          doGenerate: async options => {
+            const userMsg = options.prompt.find((msg: any) => msg.role === 'user');
+            if (userMsg) {
+              capturedUserContent = userMsg.content;
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 5, completionTokens: 10 },
+              text: 'Weather Check',
+            };
+          },
+        });
+      } else {
+        titleModel = new MockLanguageModelV2({
+          doGenerate: async options => {
+            const userMsg = options.prompt.find((msg: any) => msg.role === 'user');
+            if (userMsg) {
+              capturedUserContent = userMsg.content;
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: 'Weather Check',
+              content: [{ type: 'text', text: 'Weather Check' }],
+              warnings: [],
+            };
+          },
+        });
+      }
+
+      const agent = new Agent({
+        id: 'content-mismatch-agent',
+        name: 'Content Mismatch Agent',
+        instructions: 'You are a helpful assistant.',
+        model: titleModel,
+      });
+
+      await agent.generateTitleFromUserMessage({
+        messages: [
+          {
+            id: '1',
+            role: 'user' as const,
+            content: 'Please check the weather',
+            parts: [{ type: 'text' as const, text: 'Paris' }],
+          },
+        ],
+      });
+
+      const textParts = capturedUserContent.filter((p: any) => p.type === 'text');
+      const allText = textParts.map((p: any) => p.text).join('\n');
+      const lines = allText.split('\n');
+
+      // Both the distinct content and the text part are emitted — exactly once each
+      expect(lines.filter(l => l === 'User: Please check the weather')).toHaveLength(1);
+      expect(lines.filter(l => l === 'User: Paris')).toHaveLength(1);
+    });
+
     it('should handle file parts after .ui() conversion uses url/mediaType (regression)', async () => {
       // Verify that MessageList.aiV5.ui() converts core-format file parts (data/mimeType)
       // into UI-format (url/mediaType), which is what generateTitleFromUserMessage
