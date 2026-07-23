@@ -1,5 +1,8 @@
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+
 import { useAvailableModelsQuery } from '../../../../../../shared/hooks/useAvailableModels';
 
+import { useChatConnection } from '../../context/useChatConnection';
 import { useChatModels } from '../../context/useChatModels';
 
 function titleCase(value: string): string {
@@ -33,7 +36,15 @@ function formatModelName(id: string): string {
 /** Current model id and whether its provider has usable credentials. */
 export function ActiveModel() {
   const { activeModelId } = useChatModels();
+  const { status } = useChatConnection();
   const modelsQuery = useAvailableModelsQuery();
+
+  // While the connection is still resolving there is no model id yet — show a
+  // placeholder instead of a misleading "No model" label.
+  if (!activeModelId && status === 'connecting') {
+    return <Skeleton aria-label="Loading model" className="h-3.5 w-24" />;
+  }
+
   const label = activeModelId ? formatModelName(activeModelId) : 'No model';
   const notConfigured =
     Boolean(activeModelId) && modelsQuery.isSuccess && !modelsQuery.data.some(model => model.id === activeModelId);

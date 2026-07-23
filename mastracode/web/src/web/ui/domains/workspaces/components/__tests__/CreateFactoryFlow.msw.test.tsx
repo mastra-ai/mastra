@@ -1,7 +1,8 @@
 /**
  * BDD coverage for the `/factories/create` full-screen wizard: Name → VCS
- * (GitHub repo) → Project management (Linear). The step and pending factory id
- * live in sessionStorage so a full-page OAuth redirect can resume the flow.
+ * (GitHub repo) → Project management (Linear) → Model provider (default
+ * model). The step and pending factory id live in sessionStorage so a
+ * full-page OAuth redirect can resume the flow.
  */
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -110,10 +111,13 @@ describe('Create Factory wizard', () => {
     expect(sessionStorage.getItem(FACTORY_KEY)).toBe('fp-1');
   });
 
-  it('links the selected repository to the pending Factory (no second create), then shows Linear', async () => {
+  it('links the selected repository to the pending Factory (no second create), then shows the Linear step', async () => {
     const calls: string[] = [];
     seedPendingVcsFlow();
     server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
+      ),
       http.post(`${TEST_BASE_URL}/web/factory/projects`, () => {
         calls.push('create');
         return HttpResponse.json({ project: { id: 'fp-other', name: 'unexpected' } });
@@ -137,9 +141,6 @@ describe('Create Factory wizard', () => {
           });
         },
       ),
-      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
-      ),
     );
     const user = userEvent.setup();
 
@@ -151,6 +152,45 @@ describe('Create Factory wizard', () => {
     expect(calls).toEqual(['connect', 'link']);
     expect(sessionStorage.getItem(STEP_KEY)).toBe('project-management');
     expect(sessionStorage.getItem(FACTORY_KEY)).toBe('fp-1');
+  });
+
+  it('advances from the Linear step to the model provider step, and finishing navigates to the Factory', async () => {
+    seedPendingVcsFlow('project-management');
+    const { patchedBodies } = stubModelStepEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+        HttpResponse.json({
+          models: [
+            {
+              id: 'anthropic/claude-sonnet-4-5',
+              provider: 'anthropic',
+              modelName: 'claude-sonnet-4-5',
+              hasApiKey: true,
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderFlow();
+
+    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
+
+    expect(await screen.findByRole('heading', { name: 'Choose your Factory model.' })).toBeInTheDocument();
+    expect(sessionStorage.getItem(STEP_KEY)).toBe('model-provider');
+
+    // Picking a connected provider suggests its model; Finish setup saves it
+    // and completes the wizard.
+    await user.click(await screen.findByRole('button', { name: 'Anthropic connected' }));
+    await user.click(await screen.findByRole('button', { name: 'Finish setup' }));
+
+    await waitFor(() => expect(patchedBodies).toEqual([{ defaultModelId: 'anthropic/claude-sonnet-4-5' }]));
+    await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1'));
+    expect(sessionStorage.getItem(STEP_KEY)).toBeNull();
   });
 
   it('resumes at the stored step after an OAuth round-trip', async () => {
@@ -226,8 +266,37 @@ describe('Create Factory wizard', () => {
   });
 });
 
+/**
+ * Stub the model provider step's data endpoints: the provider credential
+ * catalog, the PATCH that saves the default model pick, and the hidden OM
+ * provider-defaults save that runs alongside it. Returns the PATCH bodies for
+ * assertions.
+ */
+function stubModelStepEndpoints() {
+  const patchedBodies: unknown[] = [];
+  let savedModelId: string | null = null;
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
+      HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultModelId: savedModelId } }),
+    ),
+    http.patch(`${TEST_BASE_URL}/web/factory/projects/fp-1`, async ({ request }) => {
+      const body = (await request.json()) as { defaultModelId: string | null };
+      patchedBodies.push(body);
+      savedModelId = body.defaultModelId;
+      return HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultModelId: savedModelId } });
+    }),
+    http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+      HttpResponse.json({
+        providers: [{ provider: 'anthropic', source: 'stored', oauth: { supported: true, modes: ['paste-code'] } }],
+      }),
+    ),
+    http.post(`${TEST_BASE_URL}/web/config/om/provider-defaults`, () => HttpResponse.json({ ok: true, config: {} })),
+  );
+  return { patchedBodies };
+}
+
 /** Seed a mid-flow state: factory fp-1 exists server-side and the wizard is past the name step. */
-function seedPendingVcsFlow(step: 'vcs' | 'project-management' = 'vcs') {
+function seedPendingVcsFlow(step: 'vcs' | 'project-management' | 'model-provider' = 'vcs') {
   sessionStorage.setItem(STEP_KEY, step);
   sessionStorage.setItem(FACTORY_KEY, 'fp-1');
   server.use(

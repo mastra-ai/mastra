@@ -159,6 +159,7 @@ const localDevelopmentMode = process.env.NODE_ENV === 'development' || process.e
 if (!databaseUrl && !localDevelopmentMode) {
   throw new Error('DATABASE_URL is required outside local development and tests.');
 }
+
 const storage = databaseUrl
   ? new PgFactoryStorage({
       id: 'mastra-code-storage',
