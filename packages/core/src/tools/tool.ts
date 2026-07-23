@@ -28,10 +28,16 @@ export const MASTRA_TOOL_MARKER = Symbol.for('mastra.core.tool.Tool');
  * A per-tool view of the request context that serves values transformed by the
  * tool's `requestContextSchema` (codecs, coercions, defaults) while writing all
  * mutations through to the shared context. This keeps two behaviors intact:
- * - transformed values never leak into the shared context, so other tools
- *   re-validate against the original raw values
+ * - automatically transformed values never leak into the shared context, so
+ *   other tools re-validate against the original raw values
  * - mutations made inside `execute` stay visible to subsequent tool calls,
  *   which share the same underlying RequestContext reference
+ *
+ * Explicit mutations are written through unmodified (matching the behavior
+ * before this view existed): setting a decoded value (e.g. a Date) into a
+ * schema key stores it as-is in the shared context, and a later validation
+ * expecting the wire format will reject it. Standard Schema has no encode
+ * direction, so values cannot be generically re-encoded on write.
  */
 class TransformedRequestContext extends RequestContext<Record<string, any>> {
   #source: RequestContext<any>;
