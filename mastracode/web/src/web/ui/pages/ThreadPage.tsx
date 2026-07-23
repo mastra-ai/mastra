@@ -71,6 +71,7 @@ export function ThreadPage() {
 
 function ThreadPageMain() {
   useGlobalShortcuts();
+  useRouteThreadSync();
 
   return (
     <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden">
@@ -94,7 +95,6 @@ function ThreadComposer() {
 }
 
 function ThreadPageContent() {
-  useRouteThreadSync();
   useThreadPageKickoffs();
 
   return (

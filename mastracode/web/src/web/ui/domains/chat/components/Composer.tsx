@@ -27,6 +27,7 @@ import {
   useSteerAgentControllerMutation,
 } from '../../../../../shared/hooks/useAgentControllerRunMutations';
 import { useCreateAgentControllerThreadMutation } from '../../../../../shared/hooks/useAgentControllerThreadMutations';
+import { useIsRouteThreadSwitching } from '../hooks/useIsRouteThreadSwitching';
 import { matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { getModeColorClass } from './mode-colors';
@@ -84,7 +85,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
   const { busy, localUser, reset } = useChatTranscript();
-  const { modes, activeModeId, setMode } = useChatModes();
+  const { modes, activeModeId, isSwitchingMode, setMode } = useChatModes();
+  const isSwitchingThread = useIsRouteThreadSwitching();
   const { composerDraft: draft, composerInputRef: inputRef, setComposerDraft, runComposerCommand } = useChatCommands();
   const modeColorClass = getModeColorClass(activeModeId ?? modes[0]?.id);
 
@@ -103,7 +105,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const [images, setImages] = useState<PendingImage[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const spotlightRef = useComposerSpotlight();
-  const modeSwitchPendingRef = useRef(false);
   const suggestions = matchCommands(draft);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
@@ -223,22 +224,14 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const onComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Tab' && e.shiftKey && kind !== 'factory' && modes.length > 1) {
       e.preventDefault();
-      if (modeSwitchPendingRef.current) return;
+      if (isSwitchingMode) return;
 
       const selectedModeId = activeModeId ?? modes[0]?.id;
       const currentModeIndex = modes.findIndex(mode => mode.id === selectedModeId);
       const nextMode = modes[(currentModeIndex + 1) % modes.length];
       if (!nextMode) return;
 
-      modeSwitchPendingRef.current = true;
-      void setMode(nextMode.id).then(
-        () => {
-          modeSwitchPendingRef.current = false;
-        },
-        () => {
-          modeSwitchPendingRef.current = false;
-        },
-      );
+      void setMode(nextMode.id).catch(() => {});
       return;
     }
     if (showSuggestions) {
@@ -296,7 +289,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
   }
 
-  const disabled = status !== 'ready';
+  const disabled = status !== 'ready' || isSwitchingThread;
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>

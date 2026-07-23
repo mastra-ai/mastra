@@ -1,4 +1,4 @@
-import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerSessionState, KnownAgentControllerEvent } from '@mastra/client-js';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { queryKeys } from '../../../../../shared/api/keys';
@@ -66,6 +66,27 @@ export function useAgentControllerConnection({
   };
 
   const handleEvent = (event: AgentControllerEvent) => {
+    const knownEvent = event as KnownAgentControllerEvent;
+    const stateQueryKey = queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope);
+    const patchConnectionState = (updates: Partial<AgentControllerSessionState>) => {
+      const updatedAt = queryClient.getQueryState(stateQueryKey)?.dataUpdatedAt;
+      queryClient.setQueryData<AgentControllerSessionState>(
+        stateQueryKey,
+        current => (current ? { ...current, ...updates } : current),
+        { updatedAt },
+      );
+    };
+
+    if (knownEvent.type === 'mode_changed') {
+      patchConnectionState({ modeId: knownEvent.modeId });
+    } else if (knownEvent.type === 'model_changed') {
+      patchConnectionState({ modelId: knownEvent.modelId });
+    } else if (knownEvent.type === 'thread_changed') {
+      // A thread switch also hydrates that thread's persisted mode and model.
+      // The event only carries the id, so fetch the complete canonical state.
+      void queryClient.invalidateQueries({ queryKey: stateQueryKey, exact: true });
+    }
+
     const displayStateRunning =
       event.type === 'display_state_changed' &&
       typeof event.displayState === 'object' &&
@@ -75,13 +96,7 @@ export function useAgentControllerConnection({
         : undefined;
     const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;
     if (typeof running === 'boolean') {
-      const stateQueryKey = queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope);
-      const updatedAt = queryClient.getQueryState(stateQueryKey)?.dataUpdatedAt;
-      queryClient.setQueryData<AgentControllerSessionState>(
-        stateQueryKey,
-        current => (current ? { ...current, running } : current),
-        { updatedAt },
-      );
+      patchConnectionState({ running });
     }
     onEvent(event);
   };

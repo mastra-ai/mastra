@@ -22,7 +22,7 @@ export function ChatModelsProvider({ children }: ChatModelsProviderProps) {
     enabled: sessionEnabled,
   });
   const value: ChatModelsApi = {
-    activeModelId: state?.modelId,
+    activeModelId: switchModelMutation.isPending ? switchModelMutation.variables : state?.modelId,
     setModel: modelId => switchModelMutation.mutateAsync(modelId),
   };
 
