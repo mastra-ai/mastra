@@ -23,6 +23,7 @@ import type {
   ToolProviderConnectionsStorage,
   NotificationsStorage,
   ThreadStateStorage,
+  KnowledgeStorage,
 } from './domains';
 import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
 import type { PruneOptions, PruneResult, RetentionConfig, TableRetentionPolicy } from './retention';
@@ -51,6 +52,7 @@ export type StorageDomains = {
   harness?: HarnessStorage;
   toolProviderConnections?: ToolProviderConnectionsStorage;
   threadState?: ThreadStateStorage;
+  knowledge?: KnowledgeStorage;
 };
 
 /**
