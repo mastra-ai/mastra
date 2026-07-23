@@ -4891,6 +4891,7 @@ export const API_ROUTE_METADATA = {
       "input",
       "metadata",
       "requestContext",
+      "scorerIds",
       "source",
       "toolMocks"
     ],
@@ -4962,6 +4963,7 @@ export const API_ROUTE_METADATA = {
       "input",
       "metadata",
       "requestContext",
+      "scorerIds",
       "source",
       "toolMocks"
     ],
