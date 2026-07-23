@@ -1,5 +1,17 @@
 # create-factory
 
+## 0.1.0-alpha.7
+
+### Minor Changes
+
+- Added EU and US region selection when creating Factory platform projects, with a --region flag for non-interactive setup. ([#20040](https://github.com/mastra-ai/mastra/pull/20040))
+
+### Patch Changes
+
+- Updated the generated project README for the single-server setup: the Factory UI and API are both served from `http://localhost:4111`, OAuth callback instructions use the server origin, and the removed `dev:prod` / `build:ui` scripts are no longer documented. ([#20036](https://github.com/mastra-ai/mastra/pull/20036))
+
+- Stop shipping `pnpm-workspace.yaml` and `package-lock.json` in projects scaffolded by `npm create factory`. The template generator now excludes the web project's pnpm workspace marker and lockfiles, and the sync workflow validates the template in a throwaway copy so `npm install` artifacts can no longer leak into the published template repository. ([#20041](https://github.com/mastra-ai/mastra/pull/20041))
+
 ## 0.1.0-alpha.6
 
 ### Patch Changes
