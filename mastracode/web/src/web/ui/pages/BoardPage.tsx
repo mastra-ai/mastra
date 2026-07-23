@@ -12,7 +12,6 @@ import {
   CircleDot,
   CircleX,
   EllipsisVertical,
-  ExternalLink,
   GitCompareArrows,
   GitPullRequest,
   Link2,
@@ -908,7 +907,6 @@ function BoardContent({
                     retryingDecisionId={retryDecision.isPending ? retryDecision.variables : undefined}
                     onRetryDecision={decisionId => retryDecision.mutate(decisionId)}
                     pendingRunRoles={pendingRunRolesByItem.get(item.id) ?? EMPTY_PENDING_RUN_ROLES}
-                    onOpenThread={session => void openThread(session)}
                     onCreateSession={() => void openOrCreateSession(item, stage.id)}
                     onStartRun={(_spec, action) => void openOrStartRun(item, action.role)}
                     onMove={toStage => moveItem(item.id, stage.id, toStage)}
@@ -1352,7 +1350,6 @@ function WorkItemCard({
   retryingDecisionId,
   onRetryDecision,
   pendingRunRoles,
-  onOpenThread,
   onCreateSession,
   onStartRun,
   onMove,
@@ -1371,7 +1368,6 @@ function WorkItemCard({
   retryingDecisionId?: string;
   onRetryDecision: (decisionId: string) => void;
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
-  onOpenThread: (session: WorkItemSessionRef) => void;
   /** Title click when the card has no live session: open an empty session (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
@@ -1419,23 +1415,19 @@ function WorkItemCard({
         <div className="flex min-w-0 items-center gap-1.5">
           <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
           {threadSession !== null ? (
-            <a
-              href={`/factories/${factoryId}/threads/${threadSession.threadId}`}
-              onClick={event => {
-                event.preventDefault();
-                onOpenThread(threadSession);
-              }}
-              className="min-w-0 flex-1 truncate text-ui-smd font-semibold text-icon6 no-underline hover:underline"
+            <Link
+              to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
+              className="min-w-0 flex-1 cursor-pointer truncate text-ui-smd font-semibold text-icon6 no-underline hover:underline"
             >
               <SourceTitle source={item.source} title={item.title} />
-            </a>
+            </Link>
           ) : (
             <button
               type="button"
               disabled={runDisabled}
               aria-busy={pendingRunRoles.size > 0 || undefined}
               onClick={() => onCreateSession(itemSessionSpec(item))}
-              className="min-w-0 flex-1 truncate text-left text-ui-smd font-semibold text-icon6 hover:underline disabled:opacity-60"
+              className="min-w-0 flex-1 cursor-pointer truncate text-left text-ui-smd font-semibold text-icon6 hover:underline disabled:cursor-not-allowed disabled:opacity-60"
             >
               <SourceTitle source={item.source} title={item.title} />
             </button>
@@ -1446,9 +1438,9 @@ function WorkItemCard({
               target="_blank"
               rel="noreferrer"
               aria-label={externalLinkLabel(item.source)}
-              className="shrink-0 text-icon3 hover:text-icon5"
+              className="shrink-0 text-icon3 transition-[opacity,translate] hover:text-icon5 focus-visible:translate-x-0 focus-visible:translate-y-0 focus-visible:opacity-100 pointer-fine:-translate-x-1 pointer-fine:translate-y-1 pointer-fine:opacity-0 pointer-fine:group-hover:translate-x-0 pointer-fine:group-hover:translate-y-0 pointer-fine:group-hover:opacity-100 motion-reduce:transition-none"
             >
-              <ExternalLink size={12} aria-hidden />
+              <ArrowUpRight size={12} aria-hidden />
             </a>
           )}
           <DropdownMenu>
@@ -1504,24 +1496,19 @@ function WorkItemCard({
         );
         const relatedSession = itemThreadSession(relatedLiveSessions);
         return (
-          <a
+          <Link
             key={related.id}
-            href={
+            to={
               relatedSession
-                ? `/factories/${factoryId}/threads/${relatedSession.threadId}`
+                ? `/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`
                 : relationshipPath(related, factoryId)
             }
-            onClick={event => {
-              if (!relatedSession) return;
-              event.preventDefault();
-              onOpenThread(relatedSession);
-            }}
             className="flex items-center gap-1 text-ui-xs text-icon4 hover:text-icon6 hover:underline"
             aria-label={`Open ${relationText}`}
           >
             <Link2 size={11} aria-hidden />
             <span className="truncate">{relationText}</span>
-          </a>
+          </Link>
         );
       })}
       {otherStages.length > 0 && (
