@@ -15,7 +15,6 @@ import {
   GitCompareArrows,
   GitPullRequest,
   Link2,
-  MessageSquareText,
   Plus,
   Stethoscope,
   Trash2,
@@ -1411,34 +1410,25 @@ function WorkItemCard({
         runPending && 'opacity-70',
       )}
     >
-      <div className="absolute top-2 right-2 flex items-center gap-0.5">
-        {threadSession !== null ? (
-          <Button
-            as={Link}
-            to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
-            variant="ghost"
-            size="xs"
-            aria-label={`Open thread for ${item.title}`}
-            className="transition-opacity pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:pointer-events-auto pointer-fine:focus-visible:opacity-100 motion-reduce:transition-none"
-          >
-            <MessageSquareText aria-hidden />
-            Open thread
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            disabled={runDisabled}
-            aria-busy={pendingRunRoles.size > 0 || undefined}
-            aria-label={`Create thread for ${item.title}`}
-            className="transition-opacity pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:pointer-events-auto pointer-fine:focus-visible:opacity-100 motion-reduce:transition-none"
-            onClick={() => onCreateSession(itemSessionSpec(item))}
-          >
-            <MessageSquareText aria-hidden />
-            New thread
-          </Button>
-        )}
+      {threadSession !== null ? (
+        <Link
+          to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
+          draggable={false}
+          aria-label={`Open thread for ${item.title}`}
+          className="absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent1"
+        />
+      ) : (
+        <button
+          type="button"
+          draggable={false}
+          disabled={runDisabled}
+          aria-busy={pendingRunRoles.size > 0 || undefined}
+          aria-label={`Create thread for ${item.title}`}
+          className="absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent1 disabled:cursor-not-allowed"
+          onClick={() => onCreateSession(itemSessionSpec(item))}
+        />
+      )}
+      <div className="absolute top-2 right-2 z-20">
         <DropdownMenu>
           <DropdownMenu.Trigger
             render={
@@ -1484,7 +1474,7 @@ function WorkItemCard({
         </DropdownMenu>
       </div>
       <div className="flex min-w-0 flex-col gap-1.5">
-        <span className="truncate pr-30 text-ui-xs text-icon2">{workItemMeta(item)}</span>
+        <span className="truncate pr-8 text-ui-xs text-icon2">{workItemMeta(item)}</span>
         <div className="flex min-w-0 items-center gap-1.5">
           <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
           <span className="min-w-0 flex-1 truncate text-ui-smd font-semibold text-icon6">
@@ -1507,7 +1497,7 @@ function WorkItemCard({
                 ? `/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`
                 : relationshipPath(related, factoryId)
             }
-            className="flex items-center gap-1 text-ui-xs text-icon4 hover:text-icon6 hover:underline"
+            className="relative z-20 flex items-center gap-1 text-ui-xs text-icon4 hover:text-icon6 hover:underline"
             aria-label={`Open ${relationText}`}
           >
             <Link2 size={11} aria-hidden />
@@ -1550,6 +1540,7 @@ function WorkItemCard({
               type="button"
               variant="outline"
               size="sm"
+              className="relative z-20"
               disabled={retryingDecisionId === decision.id}
               onClick={() => onRetryDecision(decision.id)}
             >
