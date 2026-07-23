@@ -100,4 +100,47 @@ describe('ChannelIdentityStorage', () => {
     // Deleting an already-absent link is a no-op that reports false.
     expect(await seed.channelIdentity.deleteAccountLink(slackKey)).toBe(false);
   });
+
+  it('lists only the tenant user own links with their sender keys', async () => {
+    const seed = await createFactoryStorageForTests();
+
+    await seed.channelIdentity.saveAccountLink({ ...slackKey, orgId: 'org-1', userId: 'user-1' });
+    await seed.channelIdentity.saveAccountLink({
+      platform: 'slack',
+      externalTeamId: 'T-two',
+      externalUserId: 'U-two',
+      userId: 'user-1',
+    });
+    await seed.channelIdentity.saveAccountLink({
+      platform: 'slack',
+      externalTeamId: 'T-other',
+      externalUserId: 'U-other',
+      userId: 'someone-else',
+    });
+
+    const links = await seed.channelIdentity.listAccountLinksForUser('user-1');
+
+    expect(links).toHaveLength(2);
+    expect(links.map(link => link.externalTeamId).sort()).toEqual(['T-123', 'T-two']);
+    expect(links.every(link => link.userId === 'user-1')).toBe(true);
+    expect(links.find(link => link.externalTeamId === 'T-123')).toMatchObject({
+      platform: 'slack',
+      externalUserId: 'U-abc',
+      orgId: 'org-1',
+    });
+  });
+
+  it('self-service delete cannot sever another tenant link', async () => {
+    const seed = await createFactoryStorageForTests();
+
+    await seed.channelIdentity.saveAccountLink({ ...slackKey, orgId: 'org-1', userId: 'user-1' });
+
+    // Another user addressing the same sender key deletes nothing.
+    expect(await seed.channelIdentity.deleteAccountLinkForUser({ ...slackKey, userId: 'intruder' })).toBe(false);
+    expect(await seed.channelIdentity.getAccountLink(slackKey)).not.toBeNull();
+
+    // The owner can sever it.
+    expect(await seed.channelIdentity.deleteAccountLinkForUser({ ...slackKey, userId: 'user-1' })).toBe(true);
+    expect(await seed.channelIdentity.getAccountLink(slackKey)).toBeNull();
+  });
 });

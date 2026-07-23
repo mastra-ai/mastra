@@ -3,6 +3,17 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { ChannelIdentityStorage, ChannelLinkStateSigner, RouteAuth } from '@mastra/factory';
 
 /**
+ * Payload shape for the connected-accounts list: the platform sender key +
+ * link time, without the tenant ids (the caller IS the tenant).
+ */
+export interface ConnectedChannelAccountPayload {
+  platform: string;
+  externalTeamId: string;
+  externalUserId: string;
+  linkedAt: string;
+}
+
+/**
  * The authed `/connect/slack` route: binds the Slack identity carried by a
  * signed deep-link `state` to the currently signed-in Mastra tenant.
  *
@@ -63,6 +74,55 @@ export function createSlackConnectRoutes(deps: {
         });
 
         return c.redirect('/?slack=connected');
+      },
+    }),
+    // The caller's own linked channel accounts, for the Connected accounts
+    // settings surface. Tenant-scoped: you only ever see your own links.
+    registerApiRoute('/web/channel-accounts', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        await auth.ensureUser(loose(c));
+        const tenant = auth.tenant(loose(c));
+        if (!tenant) return c.json({ error: 'unauthorized' }, 401);
+
+        const links = await accountLinks.listAccountLinksForUser(tenant.userId);
+        const accounts: ConnectedChannelAccountPayload[] = links.map(link => ({
+          platform: link.platform,
+          externalTeamId: link.externalTeamId,
+          externalUserId: link.externalUserId,
+          linkedAt: link.linkedAt.toISOString(),
+        }));
+        return c.json({ accounts });
+      },
+    }),
+    // Self-service disconnect. The storage delete is guarded by the caller's
+    // tenant userId, so a known sender key alone can never sever someone
+    // else's link.
+    registerApiRoute('/web/channel-accounts', {
+      method: 'DELETE',
+      requiresAuth: false,
+      handler: async c => {
+        await auth.ensureUser(loose(c));
+        const tenant = auth.tenant(loose(c));
+        if (!tenant) return c.json({ error: 'unauthorized' }, 401);
+
+        const body = (await c.req.json().catch(() => null)) as {
+          platform?: string;
+          externalTeamId?: string;
+          externalUserId?: string;
+        } | null;
+        if (!body?.platform || !body.externalTeamId || !body.externalUserId) {
+          return c.json({ error: 'platform, externalTeamId and externalUserId are required' }, 400);
+        }
+
+        const deleted = await accountLinks.deleteAccountLinkForUser({
+          userId: tenant.userId,
+          platform: body.platform,
+          externalTeamId: body.externalTeamId,
+          externalUserId: body.externalUserId,
+        });
+        return c.json({ deleted });
       },
     }),
   ];

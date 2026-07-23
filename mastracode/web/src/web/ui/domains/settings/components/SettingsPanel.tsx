@@ -14,6 +14,7 @@ import {
   useUpdateAgentControllerSettingsMutation,
 } from '../../../../../shared/hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { ConnectedAccountsSection } from './ConnectedAccountsSection';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { SettingsHeader } from './SettingsHeader';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
@@ -109,6 +110,12 @@ export function SettingsPanel() {
               <GeneralSettings theme={theme} onThemeChange={setTheme} />
               <FactorySetupSection />
               <IntakeSection />
+              <div className="mt-6 flex flex-col gap-3 pt-4">
+                <Txt variant="ui-lg" className="text-icon6 font-medium">
+                  Connected accounts
+                </Txt>
+                <ConnectedAccountsSection />
+              </div>
             </>
           )}
           {section === 'source-control' && <SourceControlSection />}

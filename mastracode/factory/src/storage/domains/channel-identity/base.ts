@@ -70,6 +70,18 @@ function toLink(row: ChannelAccountLinkDbRow): ChannelAccountLink {
   };
 }
 
+/** A link row with its platform sender key, as listed for a tenant user. */
+export interface ChannelAccountLinkEntry extends ChannelAccountLink, ChannelAccountLinkKey {}
+
+function toEntry(row: ChannelAccountLinkDbRow): ChannelAccountLinkEntry {
+  return {
+    ...toLink(row),
+    platform: row.platform,
+    externalTeamId: row.external_team_id,
+    externalUserId: row.external_user_id,
+  };
+}
+
 export class ChannelIdentityStorage extends FactoryStorageDomain {
   constructor() {
     super('channel-identity');
@@ -131,6 +143,37 @@ export class ChannelIdentityStorage extends FactoryStorageDomain {
   /** Remove a platform sender's link. Returns whether a row was deleted. */
   async deleteAccountLink({ platform, externalTeamId, externalUserId }: ChannelAccountLinkKey): Promise<boolean> {
     const deleted = await this.#db.deleteMany('channel_account_links', {
+      platform,
+      external_team_id: externalTeamId,
+      external_user_id: externalUserId,
+    });
+    return deleted > 0;
+  }
+
+  /**
+   * All platform identities linked to a tenant user, for the "Connected
+   * accounts" settings surface. Keyed by the tenant `userId` alone — a link
+   * belongs to the person, and their personal/org context at link time does
+   * not change who may see or sever it.
+   */
+  async listAccountLinksForUser(userId: string): Promise<ChannelAccountLinkEntry[]> {
+    const rows = await this.#db.findMany<ChannelAccountLinkDbRow>('channel_account_links', { user_id: userId });
+    return rows.map(toEntry);
+  }
+
+  /**
+   * Remove one of the tenant user's own links, addressed by its sender key.
+   * The `userId` guard makes the delete self-service only: a caller can never
+   * sever another tenant's link even with a known sender key.
+   */
+  async deleteAccountLinkForUser({
+    userId,
+    platform,
+    externalTeamId,
+    externalUserId,
+  }: ChannelAccountLinkKey & { userId: string }): Promise<boolean> {
+    const deleted = await this.#db.deleteMany('channel_account_links', {
+      user_id: userId,
       platform,
       external_team_id: externalTeamId,
       external_user_id: externalUserId,

@@ -97,9 +97,7 @@ export async function promptIfUnlinked({
   const externalTeamId = slackTeamId(message);
   // Without a team id we can't identify the workspace-scoped link; treat as
   // unlinked so a run never proceeds tenant-less.
-  const link = externalTeamId
-    ? await accountLinks.getAccountLink({ platform, externalTeamId, externalUserId })
-    : null;
+  const link = externalTeamId ? await accountLinks.getAccountLink({ platform, externalTeamId, externalUserId }) : null;
   if (link) return false;
 
   const publicUrl = webPublicUrl();
@@ -252,6 +250,7 @@ export function createSlackChannelProvider(deps: SlackChannelDeps): SlackProvide
     refreshToken: process.env.SLACK_APP_REFRESH_TOKEN,
     baseUrl: channelsPublicUrl(),
     handlers: createHandlers(deps),
+    toolDisplay: 'hidden',
   });
 }
 
@@ -266,6 +265,7 @@ export function createAgentControllerSlackChannels(deps: SlackChannelDeps): Agen
           signingSecret: process.env.SLACK_APP_SIGNING_SECRET,
           botToken: process.env.SLACK_APP_BOT_TOKEN,
         }),
+        toolDisplay: 'hidden',
       },
     },
     handlers: createHandlers(deps),
