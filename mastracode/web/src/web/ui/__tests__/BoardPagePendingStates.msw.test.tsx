@@ -186,19 +186,76 @@ describe('Board card pending states', () => {
     await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
   });
 
-  it('shows a dedicated thread link while keeping the work item title static', async () => {
+  it('uses the whole card as the thread link without rendering a separate thread action', async () => {
     stubBoardEndpoints();
     renderWorkBoard();
 
     const titleText = await screen.findByText('Fix login bug');
+    const card = titleText.closest<HTMLElement>('[data-testid="work-item-card"]');
+    if (!card) throw new Error('Expected the title inside its work item card');
     expect(titleText.closest('a, button')).toBeNull();
-    const threadLink = screen.getByRole('link', { name: 'Open thread for Fix login bug' });
+
+    const threadLink = within(card).getByRole('link', { name: 'Open thread for Fix login bug' });
+    expect(within(card).queryByText('Open thread')).not.toBeInTheDocument();
     expect(threadLink).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
     );
     const matches = matchRoutes(createAppRoutes(), threadLink.getAttribute('href') ?? '');
     expect(matches?.at(-1)?.route.path).toBe('threads/:threadId');
+  });
+
+  it('opens GitHub and Linear intake issues in their external provider', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            {
+              ...workItem,
+              id: 'github-item',
+              factoryProjectId: FACTORY_ID,
+              title: 'GitHub intake issue',
+              stages: ['intake'],
+              sessions: {},
+              externalSource: {
+                integrationId: 'github',
+                type: 'issue',
+                externalId: '42',
+                url: 'https://github.com/acme/app/issues/42',
+              },
+            },
+            {
+              ...workItem,
+              id: 'linear-item',
+              factoryProjectId: FACTORY_ID,
+              title: 'Linear intake issue',
+              stages: ['intake'],
+              sessions: {},
+              externalSource: {
+                integrationId: 'linear',
+                type: 'issue',
+                externalId: 'ENG-42',
+                url: 'https://linear.app/acme/issue/ENG-42/linear-intake-issue',
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for GitHub intake issue' }));
+    const githubLink = await screen.findByRole('menuitem', { name: 'Open in GitHub' });
+    expect(githubLink).toHaveAttribute('href', 'https://github.com/acme/app/issues/42');
+    expect(githubLink).toHaveAttribute('target', '_blank');
+    await user.keyboard('{Escape}');
+
+    await user.click(screen.getByRole('button', { name: 'Actions for Linear intake issue' }));
+    const linearLink = await screen.findByRole('menuitem', { name: 'Open in Linear' });
+    expect(linearLink).toHaveAttribute('href', 'https://linear.app/acme/issue/ENG-42/linear-intake-issue');
+    expect(linearLink).toHaveAttribute('target', '_blank');
   });
 
   it('ignores a card dropped back into its current column', async () => {
