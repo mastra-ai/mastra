@@ -4,7 +4,13 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
-import type { CreateIntakeCommentInput, Intake, IntakeIssue, IntakeIssueDetail } from '../../../capabilities/intake.js';
+import type {
+  CreateIntakeCommentInput,
+  Intake,
+  IntakeIssue,
+  IntakeIssueDetail,
+  UpdateIntakeIssueInput,
+} from '../../../capabilities/intake.js';
 import type {
   CreatePullRequestCommentInput,
   CreatePullRequestInput,
@@ -153,6 +159,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   #integrationStorage: GithubSubscriptionStorage | undefined;
 
   readonly intake: Intake = {
+    resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId, userId }) => {
       const installations = await this.#client.request<{
         installations: Array<{
@@ -268,6 +275,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     },
     getIssue: input => this.#getIssue(input.connection, input.sourceId, input.issueId),
     createComment: input => this.#createIssueComment(input),
+    updateIssue: input => this.#updateIntakeIssue(input),
   };
 
   readonly versionControl: VersionControl = {
@@ -365,6 +373,27 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       throw new Error('PlatformGithubIntegration generic storage has not been initialized.');
     }
     return this.#integrationStorage;
+  }
+
+  /** Resolve a stored GitHub locator without scanning installations or repositories. */
+  async #resolveIntakeDispatch({
+    orgId,
+    externalSource,
+  }: {
+    orgId: string;
+    externalSource: { type: string; externalId: string };
+  }): Promise<{ connection: IntegrationConnection; sourceId: string; issueId: string } | null> {
+    const target = parseGithubExternalTarget(externalSource.externalId);
+    if (!target) return null;
+    const repository = target.repository.includes('/')
+      ? target.repository
+      : (await this.storage.repositories.findByExternalId({ orgId, externalId: target.repository }))?.slug;
+    if (!repository) return null;
+    return {
+      connection: { type: 'app-installation', installationId: 1 },
+      sourceId: repository,
+      issueId: target.issueId,
+    };
   }
 
   initialize({ storage }: { storage: IntegrationStorageHandle }): void {
@@ -702,6 +731,46 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         ),
       ]);
       return parseIntakeIssueDetail(repository, issue, comments.comments);
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw error;
+    }
+  }
+
+  async #updateIntakeIssue(input: UpdateIntakeIssueInput): Promise<IntakeIssue | null> {
+    requireGithubConnection(input.connection);
+    const repository = requireSource(input.sourceId, 'GitHub Intake requires a repository source.');
+    const issueNumber = requirePositiveId(input.issueId, 'issue');
+    if (input.state.kind === 'byName') {
+      logPlatformWarn(`Platform GitHub: updateIssue byName is not supported (name=${input.state.name}); ignoring.`);
+      return null;
+    }
+    const targetState: 'open' | 'closed' =
+      input.state.stateType === 'unstarted' || input.state.stateType === 'started' ? 'open' : 'closed';
+    const stateReason: 'completed' | 'not_planned' | null =
+      targetState === 'closed' ? (input.state.stateType === 'canceled' ? 'not_planned' : 'completed') : null;
+    // Reject PR targets: probe the pulls endpoint. A 200 means the number is a
+    // pull request, not an issue. Factory does not close PRs via updateIssue —
+    // PR merges/closes go through the version-control pipeline.
+    try {
+      await this.#client.request<GithubPullRequest>('GET', repositoryPath(repository, `pulls/${issueNumber}`));
+      logPlatformWarn(`Platform GitHub: updateIssue rejected — target ${repository}#${issueNumber} is a pull request.`);
+      return null;
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+      // 404 on pulls means it's an issue (or nothing) — fall through to PATCH.
+    }
+    try {
+      const issue = await this.#client.request<GithubIssue>(
+        'PATCH',
+        repositoryPath(repository, `issues/${issueNumber}`),
+        {
+          state: targetState,
+          ...(stateReason ? { state_reason: stateReason } : {}),
+        },
+        { actingUserId: input.actingUserId },
+      );
+      return parseIntakeIssue(repository, issue);
     } catch (error) {
       if (isNotFound(error)) return null;
       throw error;
@@ -1132,6 +1201,15 @@ function parsePositiveInteger(value: string): number | null {
   if (!/^\d+$/.test(value)) return null;
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseGithubExternalTarget(externalId: string): { repository: string; issueId: string } | null {
+  const match =
+    externalId.match(/^(.+\/.+):(\d+)$/) ??
+    externalId.match(/^github:(\d+):(?:issue|pull-request):(\d+)$/) ??
+    externalId.match(/^(\d+):(\d+)$/);
+  if (!match?.[1] || !match[2] || parsePositiveInteger(match[2]) === null) return null;
+  return { repository: match[1], issueId: match[2] };
 }
 
 function optionalPositiveIntegerEnv(name: 'MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS'): number | undefined {

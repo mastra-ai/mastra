@@ -1,4 +1,5 @@
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -102,6 +103,37 @@ describe('Factory root route', () => {
     try {
       await screen.findByRole('heading', { name: 'Connect the work behind the code.' });
       expect(router.state.location.pathname).toBe('/onboarding');
+    } finally {
+      clearOnboarding();
+    }
+  });
+
+  it('continues from project management to Factory model setup', async () => {
+    seedOnboarding('project-management', 'fp-1');
+
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Pending Factory' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+        HttpResponse.json({ connections: [] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers: [] })),
+      http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [] })),
+    );
+
+    const user = userEvent.setup();
+    renderFactoryRoute('/onboarding');
+
+    try {
+      await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
+      await screen.findByRole('heading', { name: 'Choose your Factory model.' });
     } finally {
       clearOnboarding();
     }

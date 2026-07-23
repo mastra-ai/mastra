@@ -16,7 +16,7 @@ export function FactoryNameStep({ pending, error, onSubmit }: FactoryNameStepPro
 
   return (
     <form
-      className="mx-auto flex w-full max-w-md flex-col gap-3 text-left"
+      className="flex w-full max-w-md flex-col gap-3 text-left"
       onSubmit={event => {
         event.preventDefault();
         const trimmed = name.trim();
