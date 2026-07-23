@@ -140,7 +140,7 @@ describe('createSpaStaticMiddleware – path traversal', () => {
 
   it('passes through server-owned prefixes', async () => {
     const middleware = createSpaStaticMiddleware('/app/ui');
-    for (const prefix of ['/api/foo', '/web/bar', '/auth/callback']) {
+    for (const prefix of ['/api/foo', '/web/bar', '/auth/callback', '/connect/slack']) {
       const c = mockContext('GET', prefix);
       let calledNext = false;
       await middleware(c, async () => {

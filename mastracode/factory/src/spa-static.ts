@@ -40,7 +40,7 @@ const MIME: Record<string, string> = {
 };
 
 /** Server-owned path prefixes the SPA middleware must never answer for. */
-const SERVER_PREFIXES = ['/api', '/web', '/auth'];
+const SERVER_PREFIXES = ['/api', '/web', '/auth', '/connect'];
 
 /**
  * Locate the built SPA (a dir containing `index.html`). Checked in order:
