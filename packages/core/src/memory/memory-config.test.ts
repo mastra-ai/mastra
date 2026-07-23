@@ -97,13 +97,16 @@ describe('MastraMemory config serialization', () => {
     });
   });
 
-  it('should serialize retrieval config with vector: true', () => {
+  it('should serialize retrieval config with additional instructions', () => {
     const memory = new MockMemory({
       storage: new InMemoryStore(),
       options: {
         observationalMemory: {
           scope: 'thread',
-          retrieval: { vector: true },
+          retrieval: {
+            vector: true,
+            additionalInstructions: 'Use message browsing before semantic search.',
+          },
           model: 'test-model',
         },
       },
@@ -112,7 +115,10 @@ describe('MastraMemory config serialization', () => {
     const omConfig = memory.getConfig().observationalMemory;
     expect(typeof omConfig).not.toBe('boolean');
     if (typeof omConfig !== 'boolean' && omConfig) {
-      expect(omConfig.retrieval).toEqual({ vector: true });
+      expect(omConfig.retrieval).toEqual({
+        vector: true,
+        additionalInstructions: 'Use message browsing before semantic search.',
+      });
     }
   });
 

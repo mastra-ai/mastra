@@ -2753,6 +2753,30 @@ describe('om-tools', () => {
     });
   });
 
+  describe('recallTool description', () => {
+    it('should append configured additional instructions after the native description', () => {
+      const nativeDescription = recallTool(undefined, { retrievalScope: 'thread' }).description;
+      const tool = recallTool(undefined, {
+        retrievalScope: 'thread',
+        additionalInstructions: 'Use message browsing before semantic search.',
+      });
+
+      expect(tool.description).toBe(
+        `${nativeDescription}\n\nAdditional instructions:\nUse message browsing before semantic search.`,
+      );
+    });
+
+    it('should leave the native description unchanged for whitespace-only instructions', () => {
+      const nativeDescription = recallTool(undefined, { retrievalScope: 'resource' }).description;
+      const tool = recallTool(undefined, {
+        retrievalScope: 'resource',
+        additionalInstructions: '   \n  ',
+      });
+
+      expect(tool.description).toBe(nativeDescription);
+    });
+  });
+
   describe('Memory.listTools with retrieval config shapes', () => {
     it('should register recall with retrieval: true (boolean)', () => {
       const memory = new Memory({
@@ -2785,6 +2809,25 @@ describe('om-tools', () => {
 
       // recall tool should still be registered
       expect(memory.listTools()).toHaveProperty('recall');
+    });
+
+    it('should pass retrieval additional instructions to the recall tool', () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: {
+            model: 'test-model',
+            scope: 'thread',
+            retrieval: {
+              additionalInstructions: 'Use message browsing before semantic search.',
+            },
+          },
+        } as any,
+      });
+
+      expect(memory.listTools().recall?.description).toContain(
+        'Additional instructions:\nUse message browsing before semantic search.',
+      );
     });
   });
 });

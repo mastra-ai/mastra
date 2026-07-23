@@ -116,6 +116,5 @@ Low-detail results may include truncation hints like:
 ### When recall is NOT needed
 - The user is asking for a high-level summary and your observations already cover it
 - The question is about general preferences or facts that don't require source text
-- There is no relevant range in your observations for the topic
 
 Observation groups with range IDs and your recall tool allows you to think back and remember details you're fuzzy on.`;

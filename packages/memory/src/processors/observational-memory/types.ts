@@ -902,10 +902,18 @@ export interface ObservationalMemoryConfig {
    * Use `{ vector: true }` to also index emitted observation groups into the
    * configured vector store for semantic recall, and `scope` to limit recall
    * browsing to the current thread instead of the whole resource.
+   * Use `additionalInstructions` to append application-specific guidance to
+   * the recall tool's native description.
    *
    * @default false
    */
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
+  retrieval?:
+    | boolean
+    | {
+        vector?: boolean;
+        scope?: 'thread' | 'resource';
+        additionalInstructions?: string;
+      };
 
   /**
    * Optional callback used to index emitted observation groups for semantic retrieval.

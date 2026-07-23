@@ -1146,14 +1146,18 @@ export async function recallThreadFromStart({
 
 export const recallTool = (
   _memoryConfig?: MemoryConfigInternal,
-  options?: { retrievalScope?: 'thread' | 'resource' },
+  options?: { retrievalScope?: 'thread' | 'resource'; additionalInstructions?: string },
 ) => {
   const retrievalScope = options?.retrievalScope ?? 'thread';
   const isResourceScope = retrievalScope === 'resource';
 
-  const description = isResourceScope
+  const nativeDescription = isResourceScope
     ? 'Browse conversation history. Use mode="threads" to list all threads for the current user. Use mode="messages" (default) to browse messages in the current thread or pass threadId to browse another thread in the active resource. When mode="messages" has no cursor or threadId, it defaults to the current thread and says so at the top of the result. If you pass only a cursor, it must belong to the current thread. Use mode="search" to find messages by content across all threads.'
     : 'Browse conversation history in the current thread. Use mode="messages" (default) to page through messages near a cursor. Use mode="search" to find messages by content in this thread. Use mode="threads" to get the current thread\'s ID and title.';
+  const additionalInstructions = options?.additionalInstructions?.trim();
+  const description = additionalInstructions
+    ? `${nativeDescription}\n\nAdditional instructions:\n${additionalInstructions}`
+    : nativeDescription;
 
   return createTool({
     id: 'recall',

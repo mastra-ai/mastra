@@ -881,13 +881,20 @@ export interface ObservationalMemoryOptions {
    * - `{ vector: true }` — also enables semantic search using Memory-level vector/embedder
    * - `{ scope: 'thread' }` — restricts the recall tool to the current thread only
    * - `{ vector: true, scope: 'thread' }` — current-thread browsing + semantic search
+   * - `{ additionalInstructions: '...' }` — appends application-specific guidance to the recall tool description
    *
    * `scope` defaults to `'resource'` (cross-thread browsing, thread listing, and search).
    * Set to `'thread'` to restrict to the current thread only.
    *
    * @default false
    */
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
+  retrieval?:
+    | boolean
+    | {
+        vector?: boolean;
+        scope?: 'thread' | 'resource';
+        additionalInstructions?: string;
+      };
 }
 
 /**
@@ -1325,7 +1332,13 @@ export type SerializedObservationalMemoryConfig = {
   /**
    * Enable retrieval-mode observation groups as durable pointers to raw message history.
    */
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
+  retrieval?:
+    | boolean
+    | {
+        vector?: boolean;
+        scope?: 'thread' | 'resource';
+        additionalInstructions?: string;
+      };
 
   /** Observation step configuration */
   observation?: SerializedObservationalMemoryObservationConfig;

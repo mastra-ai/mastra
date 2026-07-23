@@ -102,7 +102,13 @@ type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
 };
 
 type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
+  retrieval?:
+    | boolean
+    | {
+        vector?: boolean;
+        scope?: 'thread' | 'resource';
+        additionalInstructions?: string;
+      };
 };
 
 /*
@@ -2341,9 +2347,11 @@ Notes:
 
     const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
     if (omConfig?.retrieval) {
-      const retrievalScope =
-        typeof omConfig.retrieval === 'object' ? (omConfig.retrieval.scope ?? 'resource') : 'resource';
-      tools.recall = recallTool(mergedConfig, { retrievalScope });
+      const retrievalConfig = typeof omConfig.retrieval === 'object' ? omConfig.retrieval : undefined;
+      tools.recall = recallTool(mergedConfig, {
+        retrievalScope: retrievalConfig?.scope ?? 'resource',
+        additionalInstructions: retrievalConfig?.additionalInstructions,
+      });
     }
 
     return tools;

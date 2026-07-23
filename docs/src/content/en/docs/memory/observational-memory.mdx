@@ -475,6 +475,22 @@ const memory = new Memory({
 })
 ```
 
+#### Add recall instructions
+
+Set `additionalInstructions` to append application-specific guidance to the recall tool description. This keeps the built-in description, modes, input schema, and behavior unchanged.
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      retrieval: {
+        additionalInstructions: 'Check the current thread before browsing other threads.',
+      },
+    },
+  },
+})
+```
+
 #### What retrieval enables
 
 With retrieval mode enabled, OM:
