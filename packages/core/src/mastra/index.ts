@@ -4510,7 +4510,16 @@ export class Mastra<
     });
     validateStoredWorkflowSchemas(def);
 
-    const preflight = preflightWorkflowDefinition(normalizeWorkflowBuilderDefinition(def));
+    const preflightDefinition = normalizeWorkflowBuilderDefinition({
+      id: def.id,
+      description: def.description,
+      inputSchema: def.inputSchema,
+      outputSchema: def.outputSchema,
+      stateSchema: def.stateSchema,
+      requestContextSchema: def.requestContextSchema,
+      graph: def.graph,
+    });
+    const preflight = preflightWorkflowDefinition(preflightDefinition);
     if (!preflight.ok) {
       throw new Error(
         `addStoredWorkflow refused workflow "${def.id}" because it is not executable:\n${preflight.issues

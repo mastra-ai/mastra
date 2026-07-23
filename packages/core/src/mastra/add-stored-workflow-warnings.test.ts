@@ -62,6 +62,30 @@ describe('Mastra.addStoredWorkflow — save path is strict on unsupported schema
     expect(mastra.getWorkflow('clean-wf')).toBeDefined();
   });
 
+  it('ignores runtime request context values outside the persisted workflow definition', async () => {
+    const storage = new InMemoryStore({ id: 'runtime-request-context' });
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'passthrough-tool': passthroughTool } as any,
+      storage,
+    });
+    const definitionWithRuntimeContext = {
+      id: 'request-context-wf',
+      inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      requestContextSchema: {
+        type: 'object',
+        properties: { tenantId: { type: 'string' } },
+        required: ['tenantId'],
+      },
+      graph: [{ type: 'tool' as const, id: 'passthrough-tool', toolId: 'passthrough-tool' }],
+      requestContext: new Map([['tenantId', 'tenant-1']]),
+    };
+
+    await expect(mastra.addStoredWorkflow(definitionWithRuntimeContext)).resolves.toBeUndefined();
+    expect(mastra.getWorkflow('request-context-wf')).toBeDefined();
+  });
+
   it('throws when top-level outputSchema uses oneOf, before touching storage', async () => {
     const storage = new InMemoryStore({ id: 'top-oneof' });
     const mastra = new Mastra({
