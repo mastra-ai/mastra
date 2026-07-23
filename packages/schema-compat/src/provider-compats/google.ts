@@ -60,9 +60,21 @@ function fixAISDKNullableUnionTypes(schema: Record<string, any>): Record<string,
     }
   }
 
+  // Recursively fix properties and remove optional ones with no Gemini-compatible type.
+  // Gemini (OpenAPI 3.0) requires every property to have a `type`, `anyOf`, `oneOf`,
+  // `allOf`, or `$ref`. z.any() serialises to `{}` which Gemini rejects even when optional
+  // — causing a misleading "required[N]: property is not defined" error on valid required
+  // properties. Strip such properties to avoid the INVALID_ARGUMENT 400 from Gemini.
   if (result.properties && typeof result.properties === 'object') {
+    const required = new Set(Array.isArray(result.required) ? result.required : []);
     result.properties = Object.fromEntries(
-      Object.entries(result.properties).map(([key, value]) => [key, fixAISDKNullableUnionTypes(value as any)]),
+      Object.entries(result.properties)
+        .filter(([key, value]) => {
+          if (typeof value !== 'object' || value === null || required.has(key)) return true;
+          const v = value as Record<string, unknown>;
+          return !!(v['type'] || v['anyOf'] || v['oneOf'] || v['allOf'] || v['$ref'] || v['enum']);
+        })
+        .map(([key, value]) => [key, fixAISDKNullableUnionTypes(value as any)]),
     );
   }
 
@@ -283,6 +295,35 @@ export class GoogleSchemaCompatLayer extends SchemaCompatLayer {
   preProcessJSONNode(schema: JSONSchema7): void {
     if (isAllOfSchema(schema)) {
       this.defaultAllOfHandler(schema);
+    }
+
+    // Remove optional properties that have no Gemini-compatible type.
+    // Gemini (OpenAPI 3.0) requires every property to have a `type`, `anyOf`, `oneOf`,
+    // `allOf`, or `$ref`. Schemas from z.any() (and similar "catch-all" types) serialize
+    // to `{}`, which Gemini rejects and reports as a misleading "required[N]: property is
+    // not defined" error even for valid required properties like `prompt`. Done here in
+    // pre-processing (before type arrays are collapsed) so a property that legitimately
+    // starts with a type — e.g. `type: ['string', 'null']` — is kept rather than stripped
+    // once that type is later normalized away.
+    if (schema.properties && typeof schema.properties === 'object') {
+      const required = new Set(Array.isArray(schema.required) ? (schema.required as string[]) : []);
+      const props = schema.properties as Record<string, unknown>;
+      for (const key of Object.keys(props)) {
+        const prop = props[key];
+        if (
+          typeof prop === 'object' &&
+          prop !== null &&
+          !required.has(key) &&
+          !(prop as Record<string, unknown>)['type'] &&
+          !(prop as Record<string, unknown>)['anyOf'] &&
+          !(prop as Record<string, unknown>)['oneOf'] &&
+          !(prop as Record<string, unknown>)['allOf'] &&
+          !(prop as Record<string, unknown>)['$ref'] &&
+          !(prop as Record<string, unknown>)['enum']
+        ) {
+          delete props[key];
+        }
+      }
     }
 
     if (isObjectSchema(schema)) {

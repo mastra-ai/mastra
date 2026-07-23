@@ -158,6 +158,29 @@ describe('GoogleSchemaCompatLayer', () => {
   });
 
   describe('processToJSONSchema — OpenAPI 3.0 compat (issue #17057)', () => {
+    it('drops z.any() optional properties with no Gemini-compatible type (issue #17325)', () => {
+      // z.any() serialises to `{}` (no type), which Gemini rejects via OpenRouter even when
+      // the property is optional, producing a misleading "required[0]: property is not defined"
+      // error for valid required properties like `prompt`.
+      const schema = z.object({
+        prompt: z.string().describe('Prompt for the sub-agent'),
+        threadId: z.string().nullish().describe('Thread ID'),
+        suspendedToolRunId: z.string().nullable().optional().describe('Suspended run ID'),
+        resumeData: z.any().optional().describe('Resume data'),
+      });
+
+      const result = layer.processToJSONSchema(schema) as Record<string, any>;
+
+      // Valid required + optional typed properties survive.
+      expect(result.properties.prompt.type).toBe('string');
+      expect(result.required).toContain('prompt');
+      expect(result.properties.threadId).toBeDefined();
+      expect(result.properties.suspendedToolRunId).toBeDefined();
+
+      // The typeless optional property is stripped so Gemini accepts the schema.
+      expect(result.properties.resumeData).toBeUndefined();
+    });
+
     it('rewrites oneOf to anyOf for discriminated unions', () => {
       const schema = z.object({
         event: z.discriminatedUnion('kind', [
