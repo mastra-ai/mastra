@@ -2,22 +2,19 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
-import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../../shared/api/keys';
-import { AGENT_CONTROLLER_THREAD_PAGE_SIZE } from '../../../../../shared/hooks/useAgentControllerThreads';
 import {
-  conversationThread,
   useWorkspaceActivity,
+  useWorkspaceConversationThreadIds,
   useWorkspaceThreadTitles,
 } from '../../../../../shared/hooks/useWorkspaceActivity';
 import { useWorkspaceAttention } from '../../../../../shared/hooks/useWorkspaceAttention';
 import { useWorkItemsQuery } from '../../../../../shared/hooks/useWorkItems';
 import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../../shared/hooks/useWorkspaces';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
-import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
+import { createAgentControllerClient } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import type { FactoryUserSession } from '../services/github';
 import { SessionNavRow } from './SessionNavRow';
@@ -29,7 +26,6 @@ export function WorkspacesSection() {
   const workspaces = useWorkspacesQuery(projectRepositoryId);
   const navigate = useNavigate();
   const location = useLocation();
-  const queryClient = useQueryClient();
   const scope = { agentControllerId: AGENT_CONTROLLER_ID, resourceId };
   const { session } = createAgentControllerClient({
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -40,7 +36,6 @@ export function WorkspacesSection() {
   });
   const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, projectRepositoryId, session, scope);
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
-  const [openingId, setOpeningId] = useState<string | null>(null);
   const workItems = useWorkItemsQuery(factoryId);
   const workspaceRows = workspaces.data?.workspaces ?? [];
   const activityOptions = {
@@ -53,6 +48,7 @@ export function WorkspacesSection() {
   };
   const runningByPath = useWorkspaceActivity(activityOptions);
   const titleByPath = useWorkspaceThreadTitles(activityOptions);
+  const threadIdByPath = useWorkspaceConversationThreadIds(activityOptions);
   const { attentionByPath, clearAttention } = useWorkspaceAttention(runningByPath);
 
   const allWorkItems = workItems.data ?? [];
@@ -101,49 +97,20 @@ export function WorkspacesSection() {
   const reviewRows = latestRows(true);
   const pending = deleteWorkspace.isPending;
 
-  const openWorkspaceThread = async (workspace: FactoryUserSession) => {
-    if (openingId) return;
-    setOpeningId(workspace.sessionId);
+  const openWorkspaceThread = (workspace: FactoryUserSession) => {
     clearAttention(workspace.sessionId);
-    try {
-      // Workspace sessions (and their threads) live under the session's own id
-      // as the memory resourceId with no scope — see FactoryStartCoordinator.
-      const { session: targetSession } = createAgentControllerClient({
-        agentControllerId: AGENT_CONTROLLER_ID,
-        resourceId: workspace.sessionId,
-        baseUrl,
-        enabled: sessionEnabled,
-      });
-      const chatSession = requireAgentControllerSession(targetSession);
-      await chatSession.create({});
-      const threadsKey = queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, workspace.sessionId, undefined);
-      const threads = await queryClient.fetchQuery({
-        queryKey: threadsKey,
-        queryFn: () => chatSession.listThreads({ limit: AGENT_CONTROLLER_THREAD_PAGE_SIZE }),
-      });
-      const thread = conversationThread(threads)?.id;
-      if (thread) {
-        const messagesKey = queryKeys.agentControllerThreadMessages(
-          AGENT_CONTROLLER_ID,
-          workspace.sessionId,
-          thread,
-          INITIAL_THREAD_MESSAGE_LIMIT,
-        );
-        void queryClient.prefetchQuery({
-          queryKey: messagesKey,
-          queryFn: () => chatSession.listMessages(thread, INITIAL_THREAD_MESSAGE_LIMIT),
-        });
-        void navigate(`/factories/${factoryId}/workspaces/${workspace.sessionId}/threads/${thread}`, {
-          state: { from: location },
-        });
-      } else {
-        void navigate(`/factories/${factoryId}/workspaces/${workspace.sessionId}`, { state: { from: location } });
-      }
-    } catch {
-      void navigate(`/factories/${factoryId}/workspaces/${workspace.sessionId}`, { state: { from: location } });
-    } finally {
-      setOpeningId(null);
-    }
+    // Navigate straight to the thread without first awaiting a session create +
+    // thread listing — that round-trip is what made opening a workspace feel
+    // slow. The target thread id is already known: the sidebar poll resolves
+    // the conversation thread per worktree, and workspace sessions (and their
+    // threads) live under the session's own id as the memory resourceId with no
+    // scope, so the seeded thread shares the worktree id (see
+    // FactoryStartCoordinator.prepare). The thread page brings the session
+    // online on mount and shows a skeleton while its messages load.
+    const thread = threadIdByPath[workspace.sessionId] ?? workspace.sessionId;
+    void navigate(`/factories/${factoryId}/workspaces/${workspace.sessionId}/threads/${thread}`, {
+      state: { from: location },
+    });
   };
 
   const confirmDeleteWorkspace = () => {
@@ -160,7 +127,6 @@ export function WorkspacesSection() {
           title="Work Sessions"
           rows={workRows}
           pending={pending}
-          openingId={openingId}
           onSelect={openWorkspaceThread}
           onDelete={setConfirmDelete}
         />
@@ -170,7 +136,6 @@ export function WorkspacesSection() {
           title="Review Sessions"
           rows={reviewRows}
           pending={pending}
-          openingId={openingId}
           onSelect={openWorkspaceThread}
           onDelete={setConfirmDelete}
         />
@@ -223,14 +188,12 @@ function WorkspaceGroup({
   title,
   rows,
   pending,
-  openingId,
   onSelect,
   onDelete,
 }: {
   title: 'Work Sessions' | 'Review Sessions';
   rows: FactoryWorkspaceRow[];
   pending: boolean;
-  openingId: string | null;
   onSelect: (workspace: FactoryUserSession) => void;
   onDelete: (workspace: FactoryUserSession) => void;
 }) {
@@ -250,7 +213,6 @@ function WorkspaceGroup({
             url={row.url}
             active={row.active}
             disabled={pending}
-            loading={openingId === row.workspace.sessionId}
             status={row.running ? 'running' : row.attention ? 'attention' : undefined}
             onSelect={() => onSelect(row.workspace)}
             onDelete={() => onDelete(row.workspace)}

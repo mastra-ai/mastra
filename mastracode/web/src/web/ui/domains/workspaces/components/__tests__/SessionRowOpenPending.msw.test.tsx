@@ -1,8 +1,10 @@
 /**
- * BDD coverage for the sidebar session-row pending state: clicking a row kicks
- * off an async open (agent-controller session create + navigation), so while
- * that is in flight the row shows an "Opening <name>" spinner, is disabled,
- * and further clicks do not fire duplicate session-create requests.
+ * BDD coverage for opening a sidebar session row: clicking a row navigates
+ * straight to the session's thread without first blocking on an
+ * agent-controller session create. The session id doubles as its thread id, so
+ * the row needs no round-trip to resolve a navigation target — the thread page
+ * brings the session online on mount. No "Opening <name>" spinner is shown and
+ * no session-create request is fired from the row.
  */
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -78,19 +80,14 @@ function renderSection() {
   );
 }
 
-describe('Session row open pending state', () => {
-  it('shows a spinner on the clicked row, blocks duplicate opens, then navigates once resolved', async () => {
+describe('Session row open', () => {
+  it('navigates straight to the session thread without a blocking session create or spinner', async () => {
     stubFactoryWithRepository([existingSession]);
 
     let createCalls = 0;
-    let releaseCreate!: () => void;
-    const createGate = new Promise<void>(resolve => {
-      releaseCreate = resolve;
-    });
     server.use(
-      http.post(`${TEST_BASE_URL}/api/agent-controller/code/sessions`, async () => {
+      http.post(`${TEST_BASE_URL}/api/agent-controller/code/sessions`, () => {
         createCalls += 1;
-        await createGate;
         return HttpResponse.json({ controllerId: 'code', resourceId: 'sess-1', threadId: 'sess-1' });
       }),
     );
@@ -101,22 +98,14 @@ describe('Session row open pending state', () => {
     const row = await screen.findByRole('button', { name: 'my-feature' });
     await user.click(row);
 
-    // The clicked row shows a spinner and is disabled while the open is in flight.
-    const spinner = await screen.findByRole('status', { name: 'Opening my-feature' });
-    expect(spinner).toBeInTheDocument();
-    expect(row).toBeDisabled();
-
-    // A second click while pending does not fire another session create.
-    await user.click(row);
-    expect(createCalls).toBe(1);
-
-    releaseCreate();
-
+    // Navigation happens immediately, driven purely by the known session id.
     await waitFor(() =>
       expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1/user/threads/sess-1'),
     );
+    // The row neither blocks with a spinner nor fires a session create itself —
+    // the thread page owns bringing the session online.
     expect(screen.queryByRole('status', { name: 'Opening my-feature' })).not.toBeInTheDocument();
     expect(row).toBeEnabled();
-    expect(createCalls).toBe(1);
+    expect(createCalls).toBe(0);
   });
 });

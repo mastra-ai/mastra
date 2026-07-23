@@ -98,3 +98,20 @@ export function useWorkspaceThreadTitles(options: WorkspaceActivityOptions): Rec
   }
   return titles;
 }
+
+/**
+ * Maps each worktree to its conversation thread's id, resolved from the same
+ * poll that feeds the sidebar. Lets a row navigate straight to its thread
+ * without blocking on a session create + thread listing first; paths with no
+ * thread yet are omitted so callers can fall back to the worktree's own id
+ * (the seeded thread shares that id — see FactoryStartCoordinator.prepare).
+ */
+export function useWorkspaceConversationThreadIds(options: WorkspaceActivityOptions): Record<string, string> {
+  const threads = useWorkspaceThreadsQuery(options);
+  const ids: Record<string, string> = {};
+  for (const path of options.worktreePaths) {
+    const thread = conversationThread(threads.filter(t => t.tags?.projectPath === path));
+    if (thread?.id) ids[path] = thread.id;
+  }
+  return ids;
+}
