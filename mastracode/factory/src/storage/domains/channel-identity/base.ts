@@ -127,7 +127,8 @@ export class ChannelIdentityStorage extends FactoryStorageDomain {
     userId,
     externalTeamName,
     externalUserName,
-  }: ChannelAccountLinkKey & ChannelAccountLinkNames & { orgId?: string; userId: string }): Promise<ChannelAccountLink> {
+  }: ChannelAccountLinkKey &
+    ChannelAccountLinkNames & { orgId?: string; userId: string }): Promise<ChannelAccountLink> {
     const row = await this.#db.upsertOne<ChannelAccountLinkDbRow>(
       'channel_account_links',
       ['platform', 'external_team_id', 'external_user_id'],
