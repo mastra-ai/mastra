@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.20.0-alpha.16",
+  "version": "1.20.0-alpha.17",
   "type": "module",
   "main": "./src/exports.ts",
   "types": "./src/exports.ts",

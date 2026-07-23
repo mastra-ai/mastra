@@ -1,5 +1,13 @@
 # mastra
 
+## 1.20.0-alpha.17
+
+### Patch Changes
+
+- Fixed GitHub PATs saved in Settings not taking effect for the gh CLI in already-running Factory sessions until the server was restarted ([#20069](https://github.com/mastra-ai/mastra/pull/20069))
+
+- Fixed web chat sessions getting stuck in a "Connection lost — reconnecting…" loop while the session workspace was still starting up ([#20067](https://github.com/mastra-ai/mastra/pull/20067))
+
 ## 1.20.0-alpha.16
 
 ### Patch Changes
