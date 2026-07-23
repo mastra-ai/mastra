@@ -46,7 +46,7 @@ export function createSlackConnectRoutes(deps: {
           // they land back here after authenticating.
           const state = c.req.query('state') ?? '';
           const returnTo = `/connect/slack?state=${encodeURIComponent(state)}`;
-          return c.redirect(`/auth/login?redirect_uri=${encodeURIComponent(returnTo)}`);
+          return c.redirect(`/auth/login?returnTo=${encodeURIComponent(returnTo)}`);
         }
 
         const identity = channelLinkStateSigner.verify(c.req.query('state'));
