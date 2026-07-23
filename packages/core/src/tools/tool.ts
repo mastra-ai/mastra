@@ -373,11 +373,11 @@ export class Tool<
         // Hand execute a view of the request context with schema transformations
         // (codecs, coercions, defaults) applied, writing mutations through to the
         // shared context so they remain visible to subsequent tool calls.
-        if (this.requestContextSchema && context?.requestContext) {
+        if (this.requestContextSchema) {
           context = {
             ...context,
             requestContext: new TransformedRequestContext(
-              context.requestContext,
+              context?.requestContext ?? new RequestContext(),
               validatedRequestContext as Record<string, unknown>,
             ),
           };

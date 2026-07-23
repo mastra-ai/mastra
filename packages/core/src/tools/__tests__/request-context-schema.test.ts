@@ -258,6 +258,40 @@ describe('Tool requestContextSchema', () => {
       // But the transformed value does not leak back
       expect(requestContext.get('date')).toBe('2026-07-23T00:00:00.000Z');
     });
+
+    it('should apply schema defaults when execute is called without context', async () => {
+      let capturedMode: unknown;
+      const tool = createTool({
+        id: 'default-tool',
+        description: 'A test tool',
+        requestContextSchema: z.object({ mode: z.string().default('fast') }),
+        execute: async (_, context) => {
+          capturedMode = context.requestContext.get('mode');
+          return { success: true };
+        },
+      });
+
+      await tool.execute!({}, undefined as any);
+
+      expect(capturedMode).toBe('fast');
+    });
+
+    it('should apply schema defaults when context has no requestContext', async () => {
+      let capturedMode: unknown;
+      const tool = createTool({
+        id: 'default-tool',
+        description: 'A test tool',
+        requestContextSchema: z.object({ mode: z.string().default('fast') }),
+        execute: async (_, context) => {
+          capturedMode = context.requestContext.get('mode');
+          return { success: true };
+        },
+      });
+
+      await tool.execute!({}, {});
+
+      expect(capturedMode).toBe('fast');
+    });
   });
 
   describe('combined with inputSchema validation', () => {
