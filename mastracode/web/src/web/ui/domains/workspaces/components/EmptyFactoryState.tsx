@@ -23,6 +23,7 @@ import {
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { FactoryHalftoneField } from '../../auth/components/FactoryHalftoneField';
 import { InitialFactoryStep } from './InitialFactoryStep';
+import { ModelFactoryStep } from './ModelFactoryStep';
 import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
 import { useNavigate } from 'react-router';
@@ -37,6 +38,10 @@ const STEP_META: Record<Step, { title: string; description?: string }> = {
   vcs: {
     title: 'Choose your codebase.',
     description: 'Connect GitHub, then select the repository that will become your first factory.',
+  },
+  model: {
+    title: 'Connect your LLM.',
+    description: 'Connect a model provider and choose the default model your Factory will run on.',
   },
   'project-management': {
     title: 'Connect the work behind the code.',
@@ -66,7 +71,7 @@ export function EmptyFactoryState() {
     if (persistedFactories.isPending || pendingFactory) return;
     const pendingId = sessionStorage.getItem(FACTORY_KEY);
     if (!pendingId) {
-      if (step === 'project-management') setStep('vcs');
+      if (step === 'model' || step === 'project-management') setStep('vcs');
       return;
     }
     const restored = persistedFactories.data?.find(factory => factory.id === pendingId);
@@ -107,7 +112,7 @@ export function EmptyFactoryState() {
       };
       setPendingFactory(linkedFactory);
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
-      goTo('project-management');
+      goTo('model');
     } catch (error) {
       setMutationError(errorMessage(error));
     } finally {
@@ -132,7 +137,7 @@ export function EmptyFactoryState() {
     }
   };
 
-  const stepIndex = ['initial', 'vcs', 'project-management'].indexOf(step);
+  const stepIndex = ['initial', 'vcs', 'model', 'project-management'].indexOf(step);
 
   return (
     <main className="factory-signin-theme min-h-dvh bg-surface1 font-mona-sans text-neutral6">
@@ -140,7 +145,7 @@ export function EmptyFactoryState() {
         <section className="relative z-3 flex flex-col justify-center px-6 py-12 sm:px-10 lg:px-16 lg:py-17 xl:px-20">
           <div className="w-full max-w-2xl">
             <ol className="mb-9 flex gap-2" aria-label="Factory setup progress">
-              {(['initial', 'vcs', 'project-management'] as const).map((item, index) => (
+              {(['initial', 'vcs', 'model', 'project-management'] as const).map((item, index) => (
                 <li
                   key={item}
                   aria-current={step === item ? 'step' : undefined}
@@ -186,6 +191,9 @@ export function EmptyFactoryState() {
                   }}
                   onSelectRepository={repo => void chooseRepository(repo)}
                 />
+              )}
+              {step === 'model' && pendingFactory && (
+                <ModelFactoryStep factoryId={pendingFactory.id} onContinue={() => goTo('project-management')} />
               )}
               {step === 'project-management' && (
                 <ProjectManagementFactoryStep

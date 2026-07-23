@@ -20,7 +20,7 @@ export const ONBOARDING_UPDATED_AT_KEY = 'mastracode.factory-onboarding.updated-
  */
 export const ONBOARDING_RESUME_WINDOW_MS = 30 * 60 * 1000;
 
-export type OnboardingStep = 'initial' | 'vcs' | 'project-management';
+export type OnboardingStep = 'initial' | 'vcs' | 'model' | 'project-management';
 
 /** Persist the current step and refresh the resume window. */
 export function persistOnboardingStep(step: OnboardingStep): void {
@@ -37,7 +37,7 @@ export function persistOnboardingFactory(factoryId: string): void {
 /** Read the persisted step, defaulting to the beginning of the flow. */
 export function readOnboardingStep(): OnboardingStep {
   const value = sessionStorage.getItem(ONBOARDING_STEP_KEY);
-  return value === 'vcs' || value === 'project-management' ? value : 'initial';
+  return value === 'vcs' || value === 'model' || value === 'project-management' ? value : 'initial';
 }
 
 /** Drop every onboarding marker (flow finished or abandoned). */
@@ -55,7 +55,7 @@ export function clearOnboardingFlow(): void {
  * without this check the wizard would be abandoned at the factory home.
  *
  * Three gates, all required:
- * - a mid-flow step is stored (`vcs` / `project-management`),
+ * - a mid-flow step is stored (`vcs` / `model` / `project-management`),
  * - the stored factory id exists in the server-backed list (a deleted
  *   factory never traps the user),
  * - the flow progressed within {@link ONBOARDING_RESUME_WINDOW_MS} (markers
@@ -64,7 +64,7 @@ export function clearOnboardingFlow(): void {
  */
 export function hasResumableFactoryOnboarding(factories: readonly { id: string }[]): boolean {
   const step = sessionStorage.getItem(ONBOARDING_STEP_KEY);
-  if (step !== 'vcs' && step !== 'project-management') return false;
+  if (step !== 'vcs' && step !== 'model' && step !== 'project-management') return false;
 
   const updatedAt = Number(sessionStorage.getItem(ONBOARDING_UPDATED_AT_KEY));
   if (!Number.isFinite(updatedAt) || Date.now() - updatedAt > ONBOARDING_RESUME_WINDOW_MS) return false;

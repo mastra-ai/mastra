@@ -10,6 +10,7 @@ import { useCreateFactoryMutation } from '../../../shared/hooks/useFactories';
 import { connectLinear } from '../domains/factory/services/linear';
 import { FactoryNameStep } from '../domains/workspaces/components/FactoryNameStep';
 import { FactorySetupShell } from '../domains/workspaces/components/FactorySetupShell';
+import { ModelFactoryStep } from '../domains/workspaces/components/ModelFactoryStep';
 import { ProjectManagementFactoryStep } from '../domains/workspaces/components/ProjectManagementFactoryStep';
 import { VcsFactoryStep } from '../domains/workspaces/components/VcsFactoryStep';
 import { useConnectFactoryRepository } from '../domains/workspaces/hooks/useConnectFactoryRepository';
@@ -26,12 +27,13 @@ function errorMessage(error: unknown): string {
 const STEP_TITLES = {
   name: 'Name your new Factory.',
   vcs: 'Choose your codebase.',
+  model: 'Connect your LLM.',
   'project-management': 'Connect the work behind the code.',
 } as const;
 
 /**
  * Full-screen Create Factory wizard (`/factories/create`): Name → VCS →
- * Project management, mirroring onboarding. The factory is created up-front on
+ * Model → Project management, mirroring onboarding. The factory is created up-front on
  * the name step so the GitHub OAuth redirect can resume mid-flow (see
  * `useCreateFactoryFlow`) and repo linking has a target. Back/Escape return to
  * the previous page via history; deep links fall back to `/`.
@@ -52,7 +54,7 @@ export function CreateFactoryPage() {
   const pendingFactory = flow.state?.pendingFactory;
   const linkRepository = useConnectFactoryRepository({
     pendingFactory,
-    onLinked: linkedFactory => flow.advanceToProjectManagement(linkedFactory),
+    onLinked: linkedFactory => flow.advanceToModel(linkedFactory),
   });
 
   // A stored step past `name` without a restorable pending factory (cleared
@@ -113,7 +115,9 @@ export function CreateFactoryPage() {
       ? 'A Factory owns its board, metrics, and audit trail. You can connect repositories in the next step.'
       : step === 'vcs'
         ? `Connect GitHub, then select the repository to link to ${pendingFactory?.name ?? 'your Factory'}.`
-        : undefined;
+        : step === 'model'
+          ? 'Connect a model provider and choose the default model your Factory will run on.'
+          : undefined;
 
   return (
     <FactorySetupShell
@@ -127,7 +131,7 @@ export function CreateFactoryPage() {
       {step && (
         <>
           <FactorySetupShell.Header title={STEP_TITLES[step]} description={stepDescription}>
-            <FactorySetupShell.Progress steps={['name', 'vcs', 'project-management']} current={step} />
+            <FactorySetupShell.Progress steps={['name', 'vcs', 'model', 'project-management']} current={step} />
           </FactorySetupShell.Header>
           <FactorySetupShell.Step stepKey={step}>
             {step === 'name' && (
@@ -153,6 +157,12 @@ export function CreateFactoryPage() {
                   manageGithubConnection(baseUrl);
                 }}
                 onSelectRepository={repo => void chooseRepository(repo)}
+              />
+            )}
+            {step === 'model' && pendingFactory && (
+              <ModelFactoryStep
+                factoryId={pendingFactory.id}
+                onContinue={() => void flow.advanceToProjectManagement(pendingFactory)}
               />
             )}
             {step === 'project-management' && (
