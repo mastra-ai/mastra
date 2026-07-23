@@ -7,12 +7,15 @@ import type { IntegrationConnection } from '../../../capabilities/connection.js'
 import type { Intake, IntakeIssue, IntakeIssueDetail } from '../../../capabilities/intake.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
-import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
+import type { FactoryIntegration, IntegrationContext, IntegrationTools, LinearIssueIngress } from '../../base.js';
 import { buildLinearAgentTools } from '../../linear/agent-tools.js';
 import type { LinearConnectionCheck, LinearIntegration } from '../../linear/integration.js';
 import { buildLinearRoutes } from '../../linear/routes.js';
 import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.js';
 import { logPlatformInfo, PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from '../api-client.js';
+import { PlatformLinearEventWorker } from './event-worker.js';
+import type { PlatformLinearEventStorage } from './event-worker.js';
+import { decodeSourceId, encodeSourceId } from './source-id.js';
 
 type PageInfo = { hasNextPage: boolean; endCursor: string | null };
 type LinearUser = {
@@ -82,6 +85,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   readonly id = 'linear';
   readonly #client: PlatformApiClient;
   readonly #endpointHost: string;
+  readonly #pollingEnabled: boolean;
+  readonly #pollingIntervalMs: number | undefined;
   #projects: FactoryProjectsStorage | undefined;
   #auth: RouteAuth | undefined;
 
@@ -163,6 +168,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     const config = platformApiClientConfigFromEnv();
     this.#client = new PlatformApiClient(config);
     this.#endpointHost = new URL(config.baseUrl).host;
+    this.#pollingEnabled = process.env.MASTRA_PLATFORM_LINEAR_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
+    this.#pollingIntervalMs = optionalPositiveIntegerEnv('MASTRA_PLATFORM_LINEAR_POLLING_INTERVAL_MS');
   }
 
   get storage(): LinearStorageHandle {
@@ -287,6 +294,21 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     });
   }
 
+  workers(ctx: IntegrationContext): PlatformLinearEventWorker[] {
+    if (!this.#pollingEnabled || !ctx.hooks?.ingestLinearIssues) return [];
+    return [
+      new PlatformLinearEventWorker({
+        client: this.#client,
+        intake: ctx.storage.intake,
+        projects: ctx.storage.projects,
+        storage: ctx.storage.generic as unknown as PlatformLinearEventStorage,
+        loadIssue: (workspaceId, issueId) => this.#loadIssueForEvent(workspaceId, issueId),
+        ingestLinearIssues: ctx.hooks.ingestLinearIssues,
+        intervalMs: this.#pollingIntervalMs,
+      }),
+    ];
+  }
+
   async agentTools({ requestContext }: { requestContext: RequestContext }): Promise<IntegrationTools> {
     return buildLinearAgentTools({ requestContext, linear: this as unknown as LinearIntegration });
   }
@@ -301,6 +323,19 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       id: encodeSourceId(workspace.linearWorkspaceId, project.id),
       workspaceId: workspace.linearWorkspaceId,
     }));
+  }
+
+  async #loadIssueForEvent(workspaceId: string, issueId: string): Promise<LinearIssueIngress | null> {
+    try {
+      const issue = await this.#client.request<LinearIssue>(
+        'GET',
+        `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/issues/${encodeURIComponent(issueId)}`,
+      );
+      return parseIssueIngress(issue);
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw error;
+    }
   }
 
   async #listProjectSources(): Promise<ProjectSource[]> {
@@ -466,6 +501,23 @@ function parseIssue(issue: LinearIssue): IntakeIssue {
   };
 }
 
+function parseIssueIngress(issue: LinearIssue): LinearIssueIngress {
+  return {
+    id: issue.id,
+    identifier: issue.identifier,
+    title: issue.title,
+    url: issue.url,
+    state: issue.state.name,
+    stateType: issue.state.type,
+    priorityLabel: issue.priorityLabel,
+    assignee: issue.assignee?.displayName ?? issue.assignee?.name ?? null,
+    team: issue.team.key,
+    labels: issue.labels.map(label => label.name),
+    createdAt: issue.createdAt,
+    updatedAt: issue.updatedAt,
+  };
+}
+
 function parseIssueDetail(issue: LinearIssue, comments: LinearComment[]): IntakeIssueDetail {
   return {
     ...parseIssue(issue),
@@ -477,25 +529,6 @@ function parseIssueDetail(issue: LinearIssue, comments: LinearComment[]): Intake
       createdAt: comment.createdAt,
     })),
   };
-}
-
-function encodeSourceId(workspaceId: string, projectId: string): string {
-  return `linear-project:${Buffer.from(JSON.stringify({ workspaceId, projectId })).toString('base64url')}`;
-}
-
-function decodeSourceId(sourceId: string): { workspaceId: string; projectId: string } {
-  if (!sourceId.startsWith('linear-project:')) throw new Error('Linear project source id is invalid.');
-  try {
-    const parsed = JSON.parse(Buffer.from(sourceId.slice('linear-project:'.length), 'base64url').toString('utf8')) as {
-      workspaceId?: unknown;
-      projectId?: unknown;
-    };
-    if (typeof parsed.workspaceId !== 'string' || !parsed.workspaceId) throw new Error();
-    if (typeof parsed.projectId !== 'string' || !parsed.projectId) throw new Error();
-    return { workspaceId: parsed.workspaceId, projectId: parsed.projectId };
-  } catch {
-    throw new Error('Linear project source id is invalid.');
-  }
 }
 
 function normalizeLabels(labels: string[] | undefined): string[] {
@@ -527,4 +560,13 @@ function requireLinearConnection(connection: IntegrationConnection): void {
 
 function isNotFound(error: unknown): boolean {
   return error instanceof PlatformApiError && error.status === 404;
+}
+
+function optionalPositiveIntegerEnv(name: 'MASTRA_PLATFORM_LINEAR_POLLING_INTERVAL_MS'): number | undefined {
+  const value = process.env[name]?.trim();
+  if (!value) return undefined;
+  if (!/^\d+$/.test(value)) throw new Error(`${name} must be a positive integer.`);
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) throw new Error(`${name} must be a positive integer.`);
+  return parsed;
 }
