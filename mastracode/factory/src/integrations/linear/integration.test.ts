@@ -217,7 +217,7 @@ describe('LinearIntegration capability surface', () => {
     vi.spyOn(linear, 'getFreshAccessToken').mockResolvedValue('fresh-token');
 
     await expect(
-      linear.resolveIntakeDispatch({
+      linear.intake.resolveIntakeDispatch!({
         orgId: 'org-1',
         externalSource: { type: 'issue', externalId: 'issue-uuid-1' },
       }),
@@ -232,7 +232,7 @@ describe('LinearIntegration capability surface', () => {
     const loadConnection = vi.spyOn(linear, 'loadConnection').mockResolvedValue(null);
 
     await expect(
-      linear.resolveIntakeDispatch({
+      linear.intake.resolveIntakeDispatch!({
         orgId: 'org-1',
         externalSource: { type: 'pull-request', externalId: 'x' },
       }),
@@ -240,7 +240,7 @@ describe('LinearIntegration capability surface', () => {
     expect(loadConnection).not.toHaveBeenCalled();
 
     await expect(
-      linear.resolveIntakeDispatch({
+      linear.intake.resolveIntakeDispatch!({
         orgId: 'org-1',
         externalSource: { type: 'issue', externalId: 'issue-uuid-1' },
       }),

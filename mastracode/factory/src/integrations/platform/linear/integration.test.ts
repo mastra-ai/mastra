@@ -100,7 +100,7 @@ describe('PlatformLinearIntegration', () => {
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(json({ workspaces: [workspace] }));
     const integration = createIntegration(fetchImpl);
 
-    const resolved = await integration.resolveIntakeDispatch({
+    const resolved = await integration.intake.resolveIntakeDispatch!({
       orgId: 'org-1',
       externalSource: { type: 'issue', externalId: 'issue-1' },
     });
@@ -113,13 +113,13 @@ describe('PlatformLinearIntegration', () => {
     const integration = createIntegration(fetchImpl);
 
     await expect(
-      integration.resolveIntakeDispatch({
+      integration.intake.resolveIntakeDispatch!({
         orgId: 'org-1',
         externalSource: { type: 'issue', externalId: 'issue-1' },
       }),
     ).resolves.toBeNull();
     await expect(
-      integration.resolveIntakeDispatch({
+      integration.intake.resolveIntakeDispatch!({
         orgId: 'org-1',
         externalSource: { type: 'pull-request', externalId: 'x' },
       }),

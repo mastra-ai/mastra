@@ -939,7 +939,7 @@ describe('PlatformGithubIntegration', () => {
     it('derives repository + issue number from the intake externalId format', async () => {
       const integration = createIntegration();
       await expect(
-        integration.resolveIntakeDispatch({
+        integration.intake.resolveIntakeDispatch!({
           orgId: 'org-1',
           externalSource: { type: 'issue', externalId: 'acme/app:34' },
         }),
@@ -953,7 +953,7 @@ describe('PlatformGithubIntegration', () => {
     it('prefers metadata repository and issue number over externalId parsing', async () => {
       const integration = createIntegration();
       await expect(
-        integration.resolveIntakeDispatch({
+        integration.intake.resolveIntakeDispatch!({
           orgId: 'org-1',
           externalSource: { type: 'issue', externalId: 'github-issue:7' },
           metadata: { repository: 'acme/app', githubIssueNumber: 7 },
@@ -982,7 +982,7 @@ describe('PlatformGithubIntegration', () => {
       });
 
       await expect(
-        integration.resolveIntakeDispatch({
+        integration.intake.resolveIntakeDispatch!({
           orgId: 'org-1',
           externalSource: { type: 'issue', externalId: 'github:101:issue:12' },
         }),
@@ -992,7 +992,7 @@ describe('PlatformGithubIntegration', () => {
     it('returns null when the target cannot be derived', async () => {
       const integration = createIntegration();
       await expect(
-        integration.resolveIntakeDispatch({
+        integration.intake.resolveIntakeDispatch!({
           orgId: 'org-1',
           externalSource: { type: 'issue', externalId: 'github-issue:7' },
         }),

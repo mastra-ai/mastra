@@ -495,6 +495,7 @@ export class LinearIntegration implements FactoryIntegration {
   }
 
   readonly intake: Intake = {
+    resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId }) => {
       const connection = await this.loadConnection(orgId);
       if (!connection) return [];
@@ -542,7 +543,7 @@ export class LinearIntegration implements FactoryIntegration {
    * Background-dispatch context: the org's OAuth connection with a fresh
    * token. Linear work items store the issue UUID directly as `externalId`.
    */
-  async resolveIntakeDispatch({
+  async #resolveIntakeDispatch({
     orgId,
     externalSource,
   }: {

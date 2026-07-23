@@ -105,6 +105,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   readonly #workflowStatesByTeam = new Map<string, LinearWorkflowState[]>();
 
   readonly intake: Intake = {
+    resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async () => {
       const sources = await this.#listProjectSources();
       return sources.map(({ workspace, project }) => ({
@@ -324,7 +325,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
    * org has a connected workspace. Linear work items store the issue UUID
    * directly as `externalId`.
    */
-  async resolveIntakeDispatch({
+  async #resolveIntakeDispatch({
     orgId,
     externalSource,
   }: {

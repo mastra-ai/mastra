@@ -147,6 +147,7 @@ export class GithubIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../factory-integration.ts`). */
   readonly id = 'github';
   readonly intake: Intake = {
+    resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId }) => {
       const installations = await this.sourceControlStorage.installations.list({ orgId });
       const repositories = await Promise.all(
@@ -356,7 +357,7 @@ export class GithubIntegration implements FactoryIntegration {
    * repository slug + issue/PR number from the item's metadata/externalId and
    * resolve the installation connection that reaches the repository.
    */
-  async resolveIntakeDispatch({
+  async #resolveIntakeDispatch({
     orgId,
     externalSource,
     metadata = {},

@@ -23,7 +23,6 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
 
-import type { IntegrationConnection } from '../capabilities/connection.js';
 import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
@@ -131,22 +130,6 @@ export interface FactoryIntegration {
   readonly intake?: Intake;
   /** Repository, installation, and pull-request capability. */
   readonly versionControl?: VersionControl;
-  /**
-   * Resolve everything the `intake` capability needs to reach the external
-   * source of a work item from a background context (no HTTP request): the
-   * org-scoped `IntegrationConnection` (OAuth token for Linear, app
-   * installation for GitHub) plus the provider-specific `sourceId`/`issueId`
-   * derived from the work item's `externalSource` and metadata. Returns
-   * `null` when the org has no usable connection or the target can't be
-   * derived — callers treat that as a policy skip, not an error. Optional
-   * capability: integrations without it cannot service background
-   * external-source dispatch (e.g. rule-driven state/comment sync).
-   */
-  resolveIntakeDispatch?(input: {
-    orgId: string;
-    externalSource: { type: string; externalId: string };
-    metadata?: Record<string, unknown>;
-  }): Promise<{ connection: IntegrationConnection; sourceId?: string; issueId: string } | null>;
   /**
    * Bind the integration's generic persistence handle. Called once by the
    * factory during `prepare()` (before routes/tools/workers are collected),

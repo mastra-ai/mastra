@@ -517,7 +517,7 @@ describe('GithubIntegration FactoryIntegration surface', () => {
     it('derives the target from canonical externalIds plus the repository-id metadata', async () => {
       const github = await createGithubWithRepo();
       await expect(
-        github.resolveIntakeDispatch({
+        github.intake.resolveIntakeDispatch!({
           orgId: 'org-1',
           externalSource: { type: 'issue', externalId: 'github-issue:7' },
           metadata: { githubRepositoryId: 101 },
@@ -532,7 +532,7 @@ describe('GithubIntegration FactoryIntegration surface', () => {
     it('prefers repository slug and issue number from metadata', async () => {
       const github = await createGithubWithRepo();
       await expect(
-        github.resolveIntakeDispatch({
+        github.intake.resolveIntakeDispatch!({
           orgId: 'org-1',
           externalSource: { type: 'pull-request', externalId: 'github-pr:3' },
           metadata: { repository: 'octo/widgets', githubPullRequestNumber: 9 },
@@ -547,13 +547,13 @@ describe('GithubIntegration FactoryIntegration surface', () => {
     it('derives the target from legacy and intake externalId formats', async () => {
       const github = await createGithubWithRepo();
       await expect(
-        github.resolveIntakeDispatch({
+        github.intake.resolveIntakeDispatch!({
           orgId: 'org-1',
           externalSource: { type: 'issue', externalId: 'github:101:issue:11' },
         }),
       ).resolves.toMatchObject({ sourceId: 'octo/widgets', issueId: '11' });
       await expect(
-        github.resolveIntakeDispatch({
+        github.intake.resolveIntakeDispatch!({
           orgId: 'org-1',
           externalSource: { type: 'issue', externalId: '101:13' },
         }),
@@ -563,14 +563,14 @@ describe('GithubIntegration FactoryIntegration surface', () => {
     it('returns null when the repository or issue number cannot be derived', async () => {
       const github = await createGithubWithRepo();
       await expect(
-        github.resolveIntakeDispatch({
+        github.intake.resolveIntakeDispatch!({
           orgId: 'org-1',
           externalSource: { type: 'issue', externalId: 'github-issue:7' },
           metadata: { githubRepositoryId: 999 },
         }),
       ).resolves.toBeNull();
       await expect(
-        github.resolveIntakeDispatch({
+        github.intake.resolveIntakeDispatch!({
           orgId: 'org-1',
           externalSource: { type: 'issue', externalId: 'not-a-known-format' },
           metadata: { repository: 'octo/widgets' },

@@ -159,6 +159,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   #integrationStorage: GithubSubscriptionStorage | undefined;
 
   readonly intake: Intake = {
+    resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId, userId }) => {
       const installations = await this.#client.request<{
         installations: Array<{
@@ -380,7 +381,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
    * `externalId`. The platform client authenticates via the platform API, so
    * the connection carries a nominal installation id (mirrors `listItems`).
    */
-  async resolveIntakeDispatch({
+  async #resolveIntakeDispatch({
     orgId,
     externalSource,
     metadata = {},

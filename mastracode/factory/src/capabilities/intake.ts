@@ -115,8 +115,25 @@ export interface UpdateIntakeIssueInput extends GetIntakeIssueInput {
   actingUserId?: string;
 }
 
+export interface ResolveIntakeDispatchInput {
+  orgId: string;
+  externalSource: { type: string; externalId: string };
+  metadata?: Record<string, unknown>;
+}
+
+export interface ResolvedIntakeDispatch {
+  connection: IntegrationConnection;
+  sourceId?: string;
+  issueId: string;
+}
+
 /** Fixed issue-oriented contract implemented by GitHub, Linear, and future sources. */
 export interface Intake {
+  /**
+   * Resolve the connection and provider-specific identifiers needed to call
+   * this capability from a background dispatch context.
+   */
+  resolveIntakeDispatch?(input: ResolveIntakeDispatchInput): Promise<ResolvedIntakeDispatch | null>;
   listSources(input: ListIntakeSourcesInput): Promise<IntakeSource[]>;
   listItems(input: ListIntakeItemsInput): Promise<IntakeItemPage>;
   listIssues(input: ListIntakeIssuesInput): Promise<IntakeIssuePage>;
