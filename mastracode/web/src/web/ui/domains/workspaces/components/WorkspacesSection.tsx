@@ -314,7 +314,7 @@ export function WorkspaceRow({
               </Button>
             }
           />
-          <DropdownMenu.Content align="end" className="min-w-28">
+          <DropdownMenu.Content align="end">
             <DropdownMenu.Item variant="destructive" onClick={onDelete}>
               <Trash2 />
               Delete
