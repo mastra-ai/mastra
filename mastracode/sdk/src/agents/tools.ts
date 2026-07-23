@@ -22,6 +22,13 @@ export type ToolLike = {
   execute?: (...args: any[]) => Promise<unknown> | unknown;
 } & Record<string, any>;
 
+const BACKGROUND_ELIGIBLE_PLUGIN_TOOLS = new Set(['mastra_expert']);
+
+function configurePluginTool(name: string, tool: ToolLike): ToolLike {
+  if (!BACKGROUND_ELIGIBLE_PLUGIN_TOOLS.has(name)) return tool;
+  return { ...tool, background: { enabled: true } };
+}
+
 class LazyNotificationsStorage extends NotificationsStorage {
   constructor(private readonly storage: MastraCompositeStore) {
     super();
@@ -166,7 +173,7 @@ export function createDynamicTools(
       if (pluginTools) {
         for (const [name, tool] of Object.entries(pluginTools)) {
           if (!(name in tools)) {
-            tools[name] = tool;
+            tools[name] = configurePluginTool(name, tool);
           }
         }
       }

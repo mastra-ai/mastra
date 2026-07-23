@@ -188,6 +188,7 @@ type StreamState = {
   textContentById: Map<string, { index: number; text: string }>;
   thinkingContentById: Map<string, { index: number; text: string }>;
   toolPartById: Map<string, number>;
+  activeBackgroundTaskIds: Set<string>;
   /**
    * Set when a stream ends on a non-success finish reason (e.g. `content-filter`,
    * `error`, `length`). Carries the user-facing message so the run finalizes
@@ -299,6 +300,7 @@ export class SessionRunEngine {
       textContentById: new Map<string, { index: number; text: string }>(),
       thinkingContentById: new Map<string, { index: number; text: string }>(),
       toolPartById: new Map<string, number>(),
+      activeBackgroundTaskIds: new Set<string>(),
     };
   }
 
@@ -336,7 +338,7 @@ export class SessionRunEngine {
       }
       if (
         result ||
-        chunk.type === 'finish' ||
+        (chunk.type === 'finish' && (state.activeBackgroundTaskIds.size === 0 || Boolean(state.terminalError))) ||
         chunk.type === 'error' ||
         chunk.type === 'abort' ||
         chunk.type === 'tool-call-suspended' ||
@@ -668,6 +670,27 @@ export class SessionRunEngine {
 
           this.#machinery.persistTokenUsage().catch(() => {});
           this.#session.emit({ type: 'usage_update', usage: stepUsage });
+        }
+        break;
+      }
+
+      case 'background-task-started':
+      case 'background-task-running':
+      case 'background-task-resumed': {
+        const taskId = getString(getPayload(chunk).taskId);
+        if (taskId) {
+          state.activeBackgroundTaskIds.add(taskId);
+        }
+        break;
+      }
+
+      case 'background-task-completed':
+      case 'background-task-failed':
+      case 'background-task-cancelled':
+      case 'background-task-suspended': {
+        const taskId = getString(getPayload(chunk).taskId);
+        if (taskId) {
+          state.activeBackgroundTaskIds.delete(taskId);
         }
         break;
       }
@@ -1061,7 +1084,7 @@ export class SessionRunEngine {
           const streamResult = await this.processStreamChunk(currentRun, chunk, requestContext);
           if (
             streamResult ||
-            chunk.type === 'finish' ||
+            (chunk.type === 'finish' && currentRun.activeBackgroundTaskIds.size === 0) ||
             chunk.type === 'error' ||
             chunk.type === 'abort' ||
             chunk.type === 'tool-call-suspended'

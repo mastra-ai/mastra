@@ -215,11 +215,13 @@ export interface AgentBackgroundConfig {
    */
   disabled?: boolean;
   /**
-   * Which tools should run in the background.
-   * - `true`: use the tool's own background config
-   * - `false`: always foreground, even if tool says background
+   * Which tools are eligible for per-call background execution.
+   * Eligibility never changes the default: calls remain foreground unless
+   * `_background` explicitly requests deferred or awaited execution.
+   * - `true`: allow the tool's own background config
+   * - `false`: always foreground, even if the tool is eligible
    * - `{ enabled, timeoutMs }`: override specific settings
-   * - `'all'`: run all background-eligible tools in background
+   * - `'all'`: make all tools eligible for explicit background execution
    */
   tools?: Record<string, AgentBackgroundToolConfig> | 'all';
   /** Per-agent concurrency override */
@@ -237,7 +239,7 @@ export interface AgentBackgroundConfig {
  * to override background behavior per-call.
  */
 export interface LLMBackgroundOverride {
-  /** Force background (true) or foreground (false). Undefined = use default config. */
+  /** Force deferred (true) or foreground (false). Undefined = foreground. */
   enabled?: boolean;
   /** Choose foreground, deferred, or awaited execution for this call. */
   disposition?: BackgroundExecutionDisposition;

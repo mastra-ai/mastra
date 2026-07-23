@@ -59,7 +59,7 @@ describe('Agent.streamUntilIdle', () => {
     const options = buildContinuationOpts({}, undefined, [
       {
         type: 'background-task-completed',
-        payload: { toolCallId: 'call-1', toolName: 'view' },
+        payload: { taskId: 'task-1', toolCallId: 'call-1', toolName: 'view' },
       },
     ]);
 
@@ -67,7 +67,7 @@ describe('Agent.streamUntilIdle', () => {
       {
         role: 'system',
         content:
-          'IMPORTANT: The following tool-call IDs completed successfully: call-1 (view). Their results are now in the conversation. Do not call the same tool again — the result is already available.',
+          'IMPORTANT: These tool calls ran as background tasks. Their authoritative results may now look like ordinary tool results after reconciliation; do not reinterpret them as foreground calls. IMPORTANT: The following tool-call IDs completed successfully: call-1 (view), background task task-1. Their results are now in the conversation. Do not call the same tool again — the result is already available.',
       },
     ]);
   });

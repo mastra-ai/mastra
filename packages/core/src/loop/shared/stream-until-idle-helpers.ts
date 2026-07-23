@@ -87,6 +87,7 @@ export function buildContinuationDirective(batch: Array<Record<string, unknown>>
       const payload = (chunk as { payload?: Record<string, unknown> }).payload ?? {};
       return {
         type: (chunk as { type?: string }).type,
+        taskId: payload.taskId as string | undefined,
         toolCallId: payload.toolCallId as string | undefined,
         toolName: payload.toolName as string | undefined,
         isSuspended: !!payload.suspendedAt,
@@ -97,7 +98,11 @@ export function buildContinuationDirective(batch: Array<Record<string, unknown>>
   // Suspend payloads are tool-controlled and may carry secrets, PII, or
   // large opaque blobs — never serialize them into the continuation
   // prompt. Just name the suspended tool-call IDs.
-  const formatEntry = (e: (typeof entries)[number]) => (e.toolName ? `${e.toolCallId} (${e.toolName})` : e.toolCallId!);
+  const formatEntry = (e: (typeof entries)[number]) => {
+    const tool = e.toolName ? ` (${e.toolName})` : '';
+    const task = e.taskId ? `, background task ${e.taskId}` : ', background task';
+    return `${e.toolCallId}${tool}${task}`;
+  };
 
   const completedIdList = entries
     .filter(e => e.type === 'background-task-completed' && !e.isSuspended)
@@ -120,6 +125,11 @@ export function buildContinuationDirective(batch: Array<Record<string, unknown>>
     .join(', ');
 
   let directive = '';
+
+  if (entries.length > 0) {
+    directive +=
+      ' IMPORTANT: These tool calls ran as background tasks. Their authoritative results may now look like ordinary tool results after reconciliation; do not reinterpret them as foreground calls.';
+  }
 
   if (completedIdList) {
     directive +=
