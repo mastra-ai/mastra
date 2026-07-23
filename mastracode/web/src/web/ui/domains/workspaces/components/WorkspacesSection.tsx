@@ -5,11 +5,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
-import {
-  useWorkspaceActivity,
-  useWorkspaceConversationThreadIds,
-  useWorkspaceThreadTitles,
-} from '../../../../../shared/hooks/useWorkspaceActivity';
+import { useWorkspaceActivity, useWorkspaceThreadTitles } from '../../../../../shared/hooks/useWorkspaceActivity';
 import { useWorkspaceAttention } from '../../../../../shared/hooks/useWorkspaceAttention';
 import { useWorkItemsQuery } from '../../../../../shared/hooks/useWorkItems';
 import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../../shared/hooks/useWorkspaces';
@@ -48,7 +44,6 @@ export function WorkspacesSection() {
   };
   const runningByPath = useWorkspaceActivity(activityOptions);
   const titleByPath = useWorkspaceThreadTitles(activityOptions);
-  const threadIdByPath = useWorkspaceConversationThreadIds(activityOptions);
   const { attentionByPath, clearAttention } = useWorkspaceAttention(runningByPath);
 
   const allWorkItems = workItems.data ?? [];
@@ -99,16 +94,12 @@ export function WorkspacesSection() {
 
   const openWorkspaceThread = (workspace: FactoryUserSession) => {
     clearAttention(workspace.sessionId);
-    // Navigate straight to the thread without first awaiting a session create +
-    // thread listing — that round-trip is what made opening a workspace feel
-    // slow. The target thread id is already known: the sidebar poll resolves
-    // the conversation thread per worktree, and workspace sessions (and their
-    // threads) live under the session's own id as the memory resourceId with no
-    // scope, so the seeded thread shares the worktree id (see
-    // FactoryStartCoordinator.prepare). The thread page brings the session
-    // online on mount and shows a skeleton while its messages load.
-    const thread = threadIdByPath[workspace.sessionId] ?? workspace.sessionId;
-    void navigate(`/factories/${factoryId}/workspaces/${workspace.sessionId}/threads/${thread}`, {
+    // A workspace's thread id is its own session id (FactoryStartCoordinator
+    // seeds the session with threadId = sessionId), so navigate straight there
+    // instead of blocking on a session create + thread listing round-trip. The
+    // thread page brings the session online on mount and shows a skeleton while
+    // its messages load.
+    void navigate(`/factories/${factoryId}/workspaces/${workspace.sessionId}/threads/${workspace.sessionId}`, {
       state: { from: location },
     });
   };
