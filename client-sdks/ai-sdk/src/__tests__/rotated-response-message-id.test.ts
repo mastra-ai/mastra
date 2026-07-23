@@ -162,6 +162,8 @@ describe('rotated response message id announcement', () => {
     // Step 0 did not rotate, step 1 did — the announced id must stay the id
     // the first assistant message persists under.
     expect(stepIds).toHaveLength(2);
+    expect(stepIds[1]).toBeDefined();
+    expect(stepIds[1]).not.toBe(stepIds[0]);
     expect(startChunks).toHaveLength(1);
     expect(startChunks[0].messageId).toBe(stepIds[0]);
   });
