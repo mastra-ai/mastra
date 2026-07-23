@@ -12,10 +12,10 @@ import {
   CircleDot,
   CircleX,
   EllipsisVertical,
-  ExternalLink,
   GitCompareArrows,
   GitPullRequest,
   Link2,
+  MessageSquareText,
   Plus,
   Stethoscope,
   Trash2,
@@ -908,7 +908,6 @@ function BoardContent({
                     retryingDecisionId={retryDecision.isPending ? retryDecision.variables : undefined}
                     onRetryDecision={decisionId => retryDecision.mutate(decisionId)}
                     pendingRunRoles={pendingRunRolesByItem.get(item.id) ?? EMPTY_PENDING_RUN_ROLES}
-                    onOpenThread={session => void openThread(session)}
                     onCreateSession={() => void openOrCreateSession(item, stage.id)}
                     onStartRun={(_spec, action) => void openOrStartRun(item, action.role)}
                     onMove={toStage => moveItem(item.id, stage.id, toStage)}
@@ -1352,7 +1351,6 @@ function WorkItemCard({
   retryingDecisionId,
   onRetryDecision,
   pendingRunRoles,
-  onOpenThread,
   onCreateSession,
   onStartRun,
   onMove,
@@ -1371,7 +1369,6 @@ function WorkItemCard({
   retryingDecisionId?: string;
   onRetryDecision: (decisionId: string) => void;
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
-  onOpenThread: (session: WorkItemSessionRef) => void;
   /** Title click when the card has no live session: open an empty session (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
@@ -1409,91 +1406,90 @@ function WorkItemCard({
         if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
       }}
       className={cn(
-        'group flex flex-col gap-3 rounded-xl border border-border1 bg-surface1 p-3 outline-none transition-colors hover:bg-surface3',
+        'group relative flex flex-col gap-3 rounded-xl border border-border1/50 bg-neutral6/5 p-3 outline-none transition-colors hover:bg-surface3',
         evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
         runPending && 'opacity-70',
       )}
     >
+      <div className="absolute top-2 right-2 flex items-center gap-0.5">
+        {threadSession !== null ? (
+          <Button
+            as={Link}
+            to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
+            variant="ghost"
+            size="xs"
+            aria-label={`Open thread for ${item.title}`}
+            className="transition-opacity pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:pointer-events-auto pointer-fine:focus-visible:opacity-100 motion-reduce:transition-none"
+          >
+            <MessageSquareText aria-hidden />
+            Open thread
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            disabled={runDisabled}
+            aria-busy={pendingRunRoles.size > 0 || undefined}
+            aria-label={`Create thread for ${item.title}`}
+            className="transition-opacity pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:pointer-events-auto pointer-fine:focus-visible:opacity-100 motion-reduce:transition-none"
+            onClick={() => onCreateSession(itemSessionSpec(item))}
+          >
+            <MessageSquareText aria-hidden />
+            New thread
+          </Button>
+        )}
+        <DropdownMenu>
+          <DropdownMenu.Trigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                disabled={evaluating}
+                aria-label={`Actions for ${item.title}`}
+              >
+                <EllipsisVertical size={13} aria-hidden />
+              </Button>
+            }
+          />
+          <DropdownMenu.Content align="end" className="min-w-44">
+            {runSpec !== null &&
+              runActions.map(action => {
+                const starting = pendingRunRoles.has(action.role);
+                return (
+                  <DropdownMenu.Item
+                    key={action.label}
+                    disabled={runDisabled || starting}
+                    onClick={() => onStartRun(runSpec, action)}
+                  >
+                    {actionIcon(action.label)}
+                    <span>{starting ? 'Starting…' : action.label}</span>
+                  </DropdownMenu.Item>
+                );
+              })}
+            {itemStageOptions(item)
+              .filter(stage => stage.id !== columnStage)
+              .map(stage => (
+                <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
+                  <BoardStageIcon stage={stage.id} />
+                  <span>{stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}</span>
+                </DropdownMenu.Item>
+              ))}
+            <DropdownMenu.Item onClick={onRemove}>
+              <Trash2 aria-hidden />
+              <span>Remove</span>
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu>
+      </div>
       <div className="flex min-w-0 flex-col gap-1.5">
-        <span className="truncate text-ui-xs text-icon2">{workItemMeta(item)}</span>
+        <span className="truncate pr-30 text-ui-xs text-icon2">{workItemMeta(item)}</span>
         <div className="flex min-w-0 items-center gap-1.5">
           <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
-          {threadSession !== null ? (
-            <a
-              href={`/factories/${factoryId}/threads/${threadSession.threadId}`}
-              onClick={event => {
-                event.preventDefault();
-                onOpenThread(threadSession);
-              }}
-              className="min-w-0 flex-1 truncate text-ui-smd font-semibold text-icon6 no-underline hover:underline"
-            >
-              <SourceTitle source={item.source} title={item.title} />
-            </a>
-          ) : (
-            <button
-              type="button"
-              disabled={runDisabled}
-              aria-busy={pendingRunRoles.size > 0 || undefined}
-              onClick={() => onCreateSession(itemSessionSpec(item))}
-              className="min-w-0 flex-1 truncate text-left text-ui-smd font-semibold text-icon6 hover:underline disabled:opacity-60"
-            >
-              <SourceTitle source={item.source} title={item.title} />
-            </button>
-          )}
-          {item.url !== null && (
-            <a
-              href={item.url}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={externalLinkLabel(item.source)}
-              className="shrink-0 text-icon3 hover:text-icon5"
-            >
-              <ExternalLink size={12} aria-hidden />
-            </a>
-          )}
-          <DropdownMenu>
-            <DropdownMenu.Trigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-xs"
-                  disabled={evaluating}
-                  aria-label={`Actions for ${item.title}`}
-                >
-                  <EllipsisVertical size={13} aria-hidden />
-                </Button>
-              }
-            />
-            <DropdownMenu.Content align="end" className="min-w-44">
-              {runSpec !== null &&
-                runActions.map(action => {
-                  const starting = pendingRunRoles.has(action.role);
-                  return (
-                    <DropdownMenu.Item
-                      key={action.label}
-                      disabled={runDisabled || starting}
-                      onClick={() => onStartRun(runSpec, action)}
-                    >
-                      {actionIcon(action.label)}
-                      <span>{starting ? 'Starting…' : action.label}</span>
-                    </DropdownMenu.Item>
-                  );
-                })}
-              {itemStageOptions(item)
-                .filter(stage => stage.id !== columnStage)
-                .map(stage => (
-                  <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
-                    <BoardStageIcon stage={stage.id} />
-                    <span>{stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}</span>
-                  </DropdownMenu.Item>
-                ))}
-              <DropdownMenu.Item onClick={onRemove}>
-                <Trash2 aria-hidden />
-                <span>Remove</span>
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu>
+          <span className="min-w-0 flex-1 truncate text-ui-smd font-semibold text-icon6">
+            <SourceTitle source={item.source} title={item.title} />
+          </span>
         </div>
       </div>
       <CardLabels labels={labels} />
@@ -1504,24 +1500,19 @@ function WorkItemCard({
         );
         const relatedSession = itemThreadSession(relatedLiveSessions);
         return (
-          <a
+          <Link
             key={related.id}
-            href={
+            to={
               relatedSession
-                ? `/factories/${factoryId}/threads/${relatedSession.threadId}`
+                ? `/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`
                 : relationshipPath(related, factoryId)
             }
-            onClick={event => {
-              if (!relatedSession) return;
-              event.preventDefault();
-              onOpenThread(relatedSession);
-            }}
             className="flex items-center gap-1 text-ui-xs text-icon4 hover:text-icon6 hover:underline"
             aria-label={`Open ${relationText}`}
           >
             <Link2 size={11} aria-hidden />
             <span className="truncate">{relationText}</span>
-          </a>
+          </Link>
         );
       })}
       {otherStages.length > 0 && (
@@ -1620,7 +1611,7 @@ function CandidateCard({
           },
         })
       }
-      className="group flex cursor-grab flex-col gap-3 rounded-xl border border-border1 bg-surface1 p-3 outline-none transition-colors hover:bg-surface3 active:cursor-grabbing"
+      className="group flex cursor-grab flex-col gap-3 rounded-xl border border-border1/50 bg-neutral6/5 p-3 outline-none transition-colors hover:bg-surface3 active:cursor-grabbing"
     >
       <div className="flex min-w-0 flex-col gap-1.5">
         <span className="block truncate text-ui-xs text-icon2">{candidate.meta}</span>
