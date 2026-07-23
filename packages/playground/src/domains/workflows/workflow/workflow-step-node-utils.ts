@@ -106,13 +106,16 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
         id: flow.serializedConditions[0]?.id ?? 'conditional',
         flow,
       };
-    case 'loop':
+    case 'loop': {
+      const inner = flow.step;
+      const innerStep = inner.type === 'step' ? inner.step : ({ id: inner.id } as never);
       return {
         kind: 'loop-step',
-        id: flow.step.id,
-        step: flow.step,
+        id: innerStep.id,
+        step: innerStep,
         flow,
       };
+    }
     case 'sleep':
       return {
         kind: 'sleep-step',

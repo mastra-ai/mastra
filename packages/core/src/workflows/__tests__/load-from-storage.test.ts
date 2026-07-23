@@ -293,12 +293,12 @@ describe('rehydrate static subset — parallel / foreach / sleep / sleepUntil', 
       opts: { concurrency: 3 },
     });
 
-    // sleep / sleepUntil re-serialize with an engine-assigned id (the builder's
-    // .sleep() / .sleepUntil() APIs don't accept a custom id); the important
-    // invariants are the discriminant and the literal duration / date.
-    expect(sleep).toMatchObject({ type: 'sleep', duration: 1234 });
+    // sleep / sleepUntil keep the stored id through rehydration (they are
+    // pushed directly, not re-created via .sleep()/.sleepUntil() which would
+    // mint a fresh random id).
+    expect(sleep).toMatchObject({ type: 'sleep', id: 'wait-a-bit', duration: 1234 });
 
-    expect((sleepUntil as any).type).toBe('sleepUntil');
+    expect(sleepUntil).toMatchObject({ type: 'sleepUntil', id: 'wait-until-y2100' });
     const sleepUntilDate = (sleepUntil as any).date;
     const asDate = sleepUntilDate instanceof Date ? sleepUntilDate : new Date(sleepUntilDate);
     expect(asDate.toISOString()).toBe(future.toISOString());
@@ -1172,5 +1172,211 @@ describe('nested-workflow round-trip', () => {
     if (result.status === 'success') {
       expect((result.result as any).value).toBe(8);
     }
+  });
+});
+
+describe('inner-entry options + re-serialize idempotency', () => {
+  const summarySchema = {
+    type: 'object',
+    properties: { summary: { type: 'string' } },
+    required: ['summary'],
+  } as const;
+
+  it('parallel inner agent/tool entries preserve outputSchema, retries and metadata through the round-trip', async () => {
+    const agent = fixedResponseAgent('par-agent', '{"summary":"ok"}');
+    const mastra = new Mastra({
+      logger: false,
+      agents: { 'par-agent': agent } as any,
+      tools: { 'echo-tool': echoTool } as any,
+      storage: new InMemoryStore({ id: 'parallel-inner-options' }),
+    });
+
+    const storedGraph: SerializedStepFlowEntry[] = [
+      {
+        type: 'parallel',
+        steps: [
+          {
+            type: 'agent',
+            id: 'summarize',
+            agentId: 'par-agent',
+            outputSchema: summarySchema,
+            options: { retries: 2, metadata: { owner: 'billing' } },
+          },
+          {
+            type: 'tool',
+            id: 'echo-step',
+            toolId: 'echo-tool',
+            options: { retries: 4, metadata: { flaky: true } },
+          },
+        ],
+      } as any,
+    ];
+
+    const { workflow } = await rehydrateWorkflow(
+      {
+        id: 'parallel-options-wf',
+        inputSchema: { type: 'object' },
+        outputSchema: { type: 'object' },
+        graph: JSON.parse(JSON.stringify(storedGraph)),
+      },
+      mastra,
+    );
+
+    // The live entries stay declarative — options live on the entry itself,
+    // not on a hand-cloned fake Step.
+    const [parallel] = workflow.stepGraph as any[];
+    expect(parallel.type).toBe('parallel');
+    expect(parallel.steps[0]).toMatchObject({
+      type: 'agent',
+      id: 'summarize',
+      agentId: 'par-agent',
+      options: { retries: 2, metadata: { owner: 'billing' } },
+    });
+    expect(parallel.steps[1]).toMatchObject({
+      type: 'tool',
+      id: 'echo-step',
+      toolId: 'echo-tool',
+      options: { retries: 4, metadata: { flaky: true } },
+    });
+
+    // Re-serialize: nothing was dropped (resolveSingle used to lose all of this).
+    const [reserialized] = JSON.parse(JSON.stringify(toStorableGraph(workflow.stepGraph)));
+    expect(reserialized.steps[0]).toMatchObject({
+      type: 'agent',
+      id: 'summarize',
+      agentId: 'par-agent',
+      outputSchema: summarySchema,
+      options: { retries: 2, metadata: { owner: 'billing' } },
+    });
+    expect(reserialized.steps[1]).toMatchObject({
+      type: 'tool',
+      id: 'echo-step',
+      toolId: 'echo-tool',
+      options: { retries: 4, metadata: { flaky: true } },
+    });
+  });
+
+  it('branch inner agent/tool entries preserve options through the round-trip (with predicates intact)', async () => {
+    const agent = fixedResponseAgent('branch-agent', '{"summary":"ok"}');
+    const mastra = new Mastra({
+      logger: false,
+      agents: { 'branch-agent': agent } as any,
+      tools: { 'echo-tool': echoTool } as any,
+      storage: new InMemoryStore({ id: 'branch-inner-options' }),
+    });
+
+    const predicates = [
+      { op: 'gt', left: { path: 'inputData.value' }, right: { literal: 10 } },
+      { op: 'lte', left: { path: 'inputData.value' }, right: { literal: 10 } },
+    ];
+    const serializedConditions = [
+      { id: 'hot-path-condition', fn: 'inputData.value > 10' },
+      { id: 'cold-path-condition', fn: 'inputData.value <= 10' },
+    ];
+    const storedGraph: SerializedStepFlowEntry[] = [
+      {
+        type: 'conditional',
+        steps: [
+          {
+            type: 'agent',
+            id: 'hot-path',
+            agentId: 'branch-agent',
+            outputSchema: summarySchema,
+            options: { retries: 3, metadata: { tier: 'hot' } },
+          },
+          { type: 'tool', id: 'cold-path', toolId: 'echo-tool', options: { retries: 1 } },
+        ],
+        predicates,
+        serializedConditions,
+      } as any,
+    ];
+
+    const { workflow } = await rehydrateWorkflow(
+      {
+        id: 'branch-options-wf',
+        inputSchema: { type: 'object' },
+        outputSchema: { type: 'object' },
+        graph: JSON.parse(JSON.stringify(storedGraph)),
+      },
+      mastra,
+    );
+
+    const [reserialized] = JSON.parse(JSON.stringify(toStorableGraph(workflow.stepGraph)));
+    expect(reserialized).toMatchObject({ type: 'conditional', predicates, serializedConditions });
+    expect(reserialized.steps[0]).toMatchObject({
+      type: 'agent',
+      id: 'hot-path',
+      agentId: 'branch-agent',
+      outputSchema: summarySchema,
+      options: { retries: 3, metadata: { tier: 'hot' } },
+    });
+    expect(reserialized.steps[1]).toMatchObject({
+      type: 'tool',
+      id: 'cold-path',
+      toolId: 'echo-tool',
+      options: { retries: 1 },
+    });
+  });
+
+  it('store → rehydrate → re-store is deep-equal for a graph covering every storable entry kind', async () => {
+    const inner = makeInnerWorkflow('idem-inner');
+    const agent = fixedResponseAgent('idem-agent', 'ok');
+
+    // The chained step outputs deliberately don't type-flow into each other —
+    // this test only exercises the serialize/rehydrate pipeline, not execution.
+    const wf = (
+      createWorkflow({
+        id: 'idem-wf',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      }) as any
+    )
+      .tool(timesTwoTool as any, { retries: 2, metadata: { team: 'infra' } })
+      .agent(agent, { retries: 1, metadata: { owner: 'ops' } })
+      .map({ note: { template: 'v=${inputData.value}' } } as any)
+      .parallel([shoutStep, whisperStep])
+      .branch([
+        [{ predicate: { op: 'gt', left: { path: 'inputData.value' }, right: { literal: 10 } } }, shoutStep],
+        [{ predicate: { op: 'lte', left: { path: 'inputData.value' }, right: { literal: 10 } } }, whisperStep],
+      ])
+      .dountil(plusOneStep, {
+        predicate: { op: 'gte', left: { path: 'inputData.value' }, right: { literal: 5 } },
+      })
+      .foreach(plusOneStep, { concurrency: 2 })
+      .sleep(500)
+      .sleepUntil(new Date(Date.UTC(2099, 0, 1)))
+      .then(inner)
+      .commit();
+
+    const stored = JSON.parse(JSON.stringify(toStorableGraph(wf.stepGraph)));
+
+    const mastra = new Mastra({
+      logger: false,
+      agents: { 'idem-agent': agent } as any,
+      tools: {
+        'double-tool': timesTwoTool,
+        'shout-tool': shoutTool,
+        'whisper-tool': whisperTool,
+        'plus-one': plusOneTool,
+      } as any,
+      workflows: { 'idem-inner': inner },
+      storage: new InMemoryStore({ id: 'idem' }),
+    });
+
+    const { workflow } = await rehydrateWorkflow(
+      {
+        id: 'idem-wf',
+        inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+        outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+        graph: stored,
+      },
+      mastra,
+    );
+
+    // This is the invariant Studio depends on (save → load → save must not
+    // drift), and the property the old `__agentRef` laundering existed to
+    // preserve. The direct-entry path must preserve it too — exactly.
+    const restored = JSON.parse(JSON.stringify(toStorableGraph(workflow.stepGraph)));
+    expect(restored).toEqual(stored);
   });
 });

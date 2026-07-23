@@ -100,8 +100,6 @@ export const UPSERT_STORED_WORKFLOW_ROUTE = createRoute({
     try {
       // The Zod schema output is structurally compatible with
       // StoredWorkflowGraph but TS can't prove every arm:
-      //   - loop.step is a SingleStepEntry on the wire, SerializedStep on
-      //     the runtime type; the rehydrator handles both.
       //   - sleepUntil.date is an ISO string on the wire, Date on the
       //     runtime type; the rehydrator parses it via `new Date(...)`.
       //   - conditional/loop's `serializedConditions`/`serializedCondition`

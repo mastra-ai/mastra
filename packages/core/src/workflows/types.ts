@@ -748,7 +748,7 @@ export type SerializedStepFlowEntry =
     }
   | {
       type: 'loop';
-      step: SerializedStep;
+      step: SerializedSingleStepEntry;
       serializedCondition: { id: string; fn: string };
       loopType: 'dowhile' | 'dountil';
       /**

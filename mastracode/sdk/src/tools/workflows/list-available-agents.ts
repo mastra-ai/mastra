@@ -18,9 +18,9 @@ export const listAvailableAgentsTool = createTool({
       z.object({
         id: z.string(),
         description: z.string().optional(),
-        // Literal string in v1 because the rehydrator drops agent-step options
-        // (packages/core/src/workflows/load-from-storage.ts:198-202). When
-        // structuredOutput round-trips, this becomes a JSON Schema.
+        // Human-readable string in v1. Could become a JSON Schema now that
+        // structuredOutput round-trips through the rehydrator
+        // (packages/core/src/workflows/rehydrate-workflow.ts).
         outputShape: z.string(),
       }),
     ),
