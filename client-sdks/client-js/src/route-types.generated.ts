@@ -12887,6 +12887,8 @@ export type PatchStoredAgentsStoredAgentId_Body = {
     | undefined;
   /** Optional message describing the changes for the auto-created version */
   changeMessage?: string | undefined;
+  /** Immediately activate the auto-created version. Defaults to false when omitted. */
+  autoPublish?: boolean | undefined;
 };
 
 export type PatchStoredAgentsStoredAgentId_Response =

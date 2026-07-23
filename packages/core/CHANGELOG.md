@@ -1,5 +1,23 @@
 # @mastra/core
 
+## 1.52.2-alpha.0
+
+### Patch Changes
+
+- Fixed sub-agent tool approvals resuming the wrong run. When a sub-agent suspends for approval and the bot restarts, the approval handler now correctly resumes the parent agent's run instead of the sub-agent's. ([#19769](https://github.com/mastra-ai/mastra/pull/19769))
+
+## 1.52.1
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`55adddf`](https://github.com/mastra-ai/mastra/commit/55adddfda2a170b00c112bf37d677e8ce5b65d5a))
+
+## 1.52.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`55adddf`](https://github.com/mastra-ai/mastra/commit/55adddfda2a170b00c112bf37d677e8ce5b65d5a))
+
 ## 1.52.0
 
 ### Minor Changes

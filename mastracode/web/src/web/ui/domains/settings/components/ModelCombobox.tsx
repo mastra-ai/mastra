@@ -17,7 +17,6 @@ export function ModelCombobox({
   value,
   onValueChange,
   placeholder,
-  leadingOptions,
   disabled,
   className,
 }: {
@@ -25,18 +24,15 @@ export function ModelCombobox({
   value: string;
   onValueChange: (value: string) => void;
   placeholder?: string;
-  /** Fixed options rendered ahead of the catalog (e.g. "Session default"). */
-  leadingOptions?: ComboboxOption[];
   disabled?: boolean;
   className?: string;
 }) {
   const options = useMemo(() => {
     const catalog: ComboboxOption[] = models.map(m => ({ label: m.id, value: m.id, description: m.provider }));
-    const fixed = leadingOptions ?? [];
-    const known = new Set([...fixed.map(o => o.value), ...catalog.map(o => o.value)]);
+    const known = new Set(catalog.map(o => o.value));
     const orphan: ComboboxOption[] = value && !known.has(value) ? [{ label: value, value }] : [];
-    return [...fixed, ...orphan, ...catalog];
-  }, [models, leadingOptions, value]);
+    return [...orphan, ...catalog];
+  }, [models, value]);
 
   return (
     <Combobox

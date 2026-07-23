@@ -1,5 +1,37 @@
 # @mastra/client-js
 
+## 1.34.0-alpha.0
+
+### Minor Changes
+
+- Added `autoPublish` to stored agent updates so callers can activate a newly created version immediately. ([#19794](https://github.com/mastra-ai/mastra/pull/19794))
+
+  ```ts
+  await client.getStoredAgent('agent-id').update({
+    instructions: 'Updated instructions',
+    autoPublish: true,
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`df6a9ce`](https://github.com/mastra-ai/mastra/commit/df6a9ce87214f7aadb2edfe62f67605fe998a0a4)]:
+  - @mastra/core@1.52.2-alpha.0
+
+## 1.33.1
+
+### Patch Changes
+
+- Updated dependencies [[`55adddf`](https://github.com/mastra-ai/mastra/commit/55adddfda2a170b00c112bf37d677e8ce5b65d5a)]:
+  - @mastra/core@1.52.1
+
+## 1.33.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`55adddf`](https://github.com/mastra-ai/mastra/commit/55adddfda2a170b00c112bf37d677e8ce5b65d5a)]:
+  - @mastra/core@1.52.1-alpha.0
+
 ## 1.33.0
 
 ### Minor Changes

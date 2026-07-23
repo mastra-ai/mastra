@@ -451,6 +451,48 @@ describe('FactoryGithubEventService', () => {
     );
   });
 
+  it('links an opened Review card to the work item whose session branch matches the PR head branch', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: { work: { sessionId: 'session-issue-42', branch: 'feature', threadId: 'session-issue-42' } },
+        metadata: {},
+      },
+    });
+    const service = new FactoryGithubEventService({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await service.ingest(pullRequest('opened', 'delivery-branch-link'));
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        workItemId: work.item.id,
+        decision: expect.objectContaining({
+          type: 'upsertLinkedWorkItem',
+          source: 'github-pr',
+          metadata: expect.objectContaining({ headBranch: 'feature' }),
+        }),
+      }),
+    ]);
+  });
+
   it('evaluates the same delivery independently for every tenant project mapped to the repository', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const second = await projects.create({

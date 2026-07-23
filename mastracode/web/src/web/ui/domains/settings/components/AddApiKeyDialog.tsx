@@ -8,8 +8,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
@@ -73,25 +73,30 @@ export function AddApiKeyDialog({ provider, authEnabled, onClose }: AddApiKeyDia
             }}
           />
           {authEnabled && (
-            <RadioGroup
-              aria-label="API key access"
-              value={scope}
-              onValueChange={value => setScope(value === 'org' ? 'org' : 'user')}
-              className="grid-cols-2"
-            >
-              <label className="flex cursor-pointer items-center gap-2">
-                <RadioGroupItem value="user" />
-                <Txt as="span" variant="ui-sm">
-                  Just me
-                </Txt>
-              </label>
-              <label className="flex cursor-pointer items-center gap-2">
-                <RadioGroupItem value="org" />
-                <Txt as="span" variant="ui-sm">
-                  Everyone in org
-                </Txt>
-              </label>
-            </RadioGroup>
+            <div className="flex items-center justify-between gap-4">
+              <Txt as="span" variant="ui-sm" className="text-icon4">
+                Who can use this key
+              </Txt>
+              <ButtonsGroup spacing="close" role="group" aria-label="API key access">
+                {(
+                  [
+                    { value: 'user', label: 'Just me' },
+                    { value: 'org', label: 'Everyone in org' },
+                  ] as const
+                ).map(option => (
+                  <Button
+                    key={option.value}
+                    variant={scope === option.value ? 'primary' : 'outline'}
+                    size="sm"
+                    aria-pressed={scope === option.value}
+                    disabled={saveKeyMutation.isPending}
+                    onClick={() => setScope(option.value)}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </ButtonsGroup>
+            </div>
           )}
           {error && (
             <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">

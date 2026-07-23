@@ -1,5 +1,29 @@
 # @mastra/deployer-sandbox
 
+## 0.1.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`df6a9ce`](https://github.com/mastra-ai/mastra/commit/df6a9ce87214f7aadb2edfe62f67605fe998a0a4)]:
+  - @mastra/core@1.52.2-alpha.0
+  - @mastra/deployer@1.52.2-alpha.0
+
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [[`55adddf`](https://github.com/mastra-ai/mastra/commit/55adddfda2a170b00c112bf37d677e8ce5b65d5a)]:
+  - @mastra/core@1.52.1
+  - @mastra/deployer@1.52.1
+
+## 0.1.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`55adddf`](https://github.com/mastra-ai/mastra/commit/55adddfda2a170b00c112bf37d677e8ce5b65d5a)]:
+  - @mastra/core@1.52.1-alpha.0
+  - @mastra/deployer@1.52.1-alpha.0
+
 ## 0.1.0
 
 ### Minor Changes
