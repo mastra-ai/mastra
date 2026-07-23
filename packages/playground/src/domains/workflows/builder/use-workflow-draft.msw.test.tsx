@@ -52,6 +52,24 @@ describe('workflow draft save orchestration', () => {
     });
   });
 
+  describe('when the stored-workflow API rejects the save', () => {
+    it('exposes the server failure after releasing the save reservation', async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/stored/workflows`, () =>
+          HttpResponse.json({ error: 'Workflow publication failed' }, { status: 500 }),
+        ),
+      );
+      const draft = renderHook(() => useWorkflowDraft(definition, definition.id), { wrapper: createWrapper() });
+
+      await act(async () => {
+        await expect(draft.result.current.save()).rejects.toThrow('Workflow publication failed');
+      });
+
+      expect(draft.result.current.saveError?.message).toContain('Workflow publication failed');
+      expect(draft.result.current.isReady).toBe(true);
+    });
+  });
+
   describe('when the authoritative draft is invalid', () => {
     it('rejects before making a persistence request', async () => {
       const requests = vi.fn();

@@ -256,6 +256,9 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
               </Badge>
               <span className="text-ui-xs text-neutral3">{workflowDraft.draft.graph.length} top-level entries</span>
             </div>
+            {workflowDraft.saveError ? (
+              <ErrorState title="Workflow save failed" message={workflowDraft.saveError.message} />
+            ) : null}
             {workflowDraft.lifecycle !== 'untouched' && !workflowDraft.validation.ok ? (
               <ul className="list-disc space-y-1 pl-5 text-ui-xs text-red-400">
                 {workflowDraft.validation.issues.map(issue => (

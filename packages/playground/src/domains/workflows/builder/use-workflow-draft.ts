@@ -226,6 +226,7 @@ export function useWorkflowDraft(
     mutate,
     reset,
     save,
+    saveError: saveMutation.error instanceof Error ? saveMutation.error : undefined,
     isSaving: saveMutation.isPending || authoringState.savingRevision !== undefined,
   };
 }
