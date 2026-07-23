@@ -165,8 +165,11 @@ function isDeclarativePredicateArg(value: unknown): value is { predicate: Predic
  * Wrap a declarative `Predicate` as a runtime condition callback so the
  * existing execution engine (which only knows how to call `condition(params)`)
  * can execute stored / declarative predicates unchanged.
+ *
+ * Exported for the rehydration path (load-from-storage), which rebuilds
+ * conditional/loop entries from stored predicates.
  */
-function predicateToCondition(predicate: Predicate): (params: any) => Promise<boolean> {
+export function predicateToCondition(predicate: Predicate): (params: any) => Promise<boolean> {
   return async (params: any) => {
     return evaluatePredicate(predicate, {
       initData: params?.getInitData ? params.getInitData() : undefined,
@@ -250,7 +253,9 @@ function areProcessorMessageArraysEqual(before: unknown[] | undefined, after: un
 function findStepInGraph(graph: SerializedStepFlowEntry[], stepId: string): SerializedStepFlowEntry | undefined {
   for (const entry of graph) {
     if (entry.type === 'loop') {
-      if (entry.step.id === stepId) return entry;
+      const inner = entry.step;
+      const innerId = inner.type === 'step' ? inner.step.id : inner.id;
+      if (innerId === stepId) return entry;
     }
     if (entry.type === 'foreach') {
       const inner = entry.step;
@@ -1740,6 +1745,66 @@ export class Workflow<
   }
 
   /**
+   * @internal Rehydration-only (load-from-storage). Appends a fully-built
+   * graph entry without laundering it through the live-`Step` builder
+   * overloads: rehydration already holds the declarative entry it parsed from
+   * storage, so wrapping it in a fake `Step` just so the builder can sniff it
+   * back into the same entry would lose data (options, ids) and lie to the
+   * type system. Mirrors the bookkeeping the public builder methods do:
+   * pushes the live + serialized entries and registers inner steps in
+   * `this.steps`.
+   */
+  __pushStepFlowEntry(live: StepFlowEntry<TEngineType>, serialized: SerializedStepFlowEntry): void {
+    this.stepFlow.push(live);
+    this.serializedStepFlow.push(serialized);
+    const register = (entry: SingleStepEntry<TEngineType>) => {
+      switch (entry.type) {
+        case 'step':
+          this.steps[entry.step.id] = entry.step as any;
+          return;
+        case 'agent':
+          // Same lightweight handle the by-id `.agent()` builder registers.
+          this.steps[entry.id] = { id: entry.id, component: 'AGENT' } as any;
+          return;
+        case 'tool':
+          this.steps[entry.id] = { id: entry.id, component: 'TOOL' } as any;
+          return;
+        case 'mapping':
+          this.steps[entry.id] = createMappingStep(entry.id, entry.mapConfig as MappingConfig) as any;
+          return;
+      }
+    };
+    switch (live.type) {
+      case 'parallel':
+      case 'conditional':
+        live.steps.forEach(register);
+        return;
+      case 'loop':
+      case 'foreach':
+        register(live.step);
+        return;
+      case 'step':
+      case 'agent':
+      case 'tool':
+      case 'mapping':
+        register(live);
+        return;
+      case 'sleep':
+      case 'sleepUntil':
+        // Same no-op placeholder the sleep/sleepUntil builder methods register.
+        this.steps[live.id] = createStep({
+          id: live.id,
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          execute: async () => ({}),
+        });
+        return;
+      default:
+        return;
+    }
+  }
+
+  /**
    * Adds a step to the workflow
    * @param step The step to add to the workflow
    * @returns The workflow instance for chaining
@@ -2271,18 +2336,11 @@ export class Workflow<
     } as StepFlowEntry<TEngineType>);
     this.serializedStepFlow.push({
       type: 'loop',
-      step: {
-        id: step.id,
-        description: step.description,
-        metadata: step.metadata,
-        component: (step as SerializedStep).component,
-        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
-        canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
-      },
+      step: toSerializedSingleStepEntry(step as StepWithRefMetadata),
       serializedCondition: { id: `${step.id}-condition`, fn: label },
       loopType: 'dowhile',
       ...(predicate ? { predicate } : {}),
-    } as SerializedStepFlowEntry);
+    });
     this.steps[step.id] = step as any;
     return this as unknown as Workflow<
       TEngineType,
@@ -2327,18 +2385,11 @@ export class Workflow<
     } as StepFlowEntry<TEngineType>);
     this.serializedStepFlow.push({
       type: 'loop',
-      step: {
-        id: step.id,
-        description: step.description,
-        metadata: step.metadata,
-        component: (step as SerializedStep).component,
-        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
-        canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
-      },
+      step: toSerializedSingleStepEntry(step as StepWithRefMetadata),
       serializedCondition: { id: `${step.id}-condition`, fn: label },
       loopType: 'dountil',
       ...(predicate ? { predicate } : {}),
-    } as SerializedStepFlowEntry);
+    });
     this.steps[step.id] = step as any;
     return this as unknown as Workflow<
       TEngineType,

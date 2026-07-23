@@ -5,9 +5,9 @@ import { z } from 'zod/v4';
 // Duplicated locally rather than imported from @mastra/core/workflows because
 // this file's peer-dependency floor predates that export. Structurally
 // compatible with `Mastra.addStoredWorkflow`'s input; the handler casts once
-// to bridge the remaining wire-vs-runtime divergences (loop.step shape,
-// sleepUntil.date as ISO string, fluent-builder-only debug labels) that the
-// core rehydrator handles at runtime.
+// to bridge the remaining wire-vs-runtime divergences (sleepUntil.date as
+// ISO string, fluent-builder-only debug labels) that the core rehydrator
+// handles at runtime.
 // ============================================================================
 
 const stepOptionsSchema = z

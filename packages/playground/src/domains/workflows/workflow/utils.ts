@@ -194,14 +194,13 @@ type SerializedStepLike = Pick<SerializedStepInner, 'id' | 'description' | 'comp
   Partial<Pick<SerializedStepInner, 'serializedStepFlow' | 'mapConfig' | 'canSuspend' | 'metadata'>>;
 
 /**
- * `foreach.step` widened to `SerializedSingleStepEntry` (agent | tool | step | mapping).
- * For the `type: 'step'` variant, forward the wrapped step directly; for
- * agent/tool/mapping variants, synthesize an id-only shim so downstream reads
- * (`.id`, `.description`, `.component`, ...) don't blow up.
+ * `foreach.step` / `loop.step` widened to `SerializedSingleStepEntry`
+ * (agent | tool | step | mapping | workflow). For the `type: 'step'` variant,
+ * forward the wrapped step directly; for agent/tool/mapping variants,
+ * synthesize an id-only shim so downstream reads (`.id`, `.description`,
+ * `.component`, ...) don't blow up.
  */
-const unwrapForeachInner = (
-  inner: Extract<SerializedStepFlowEntry, { type: 'foreach' }>['step'],
-): SerializedStepLike => {
+const unwrapInnerEntry = (inner: Extract<SerializedStepFlowEntry, { type: 'foreach' }>['step']): SerializedStepLike => {
   if (inner.type === 'step') return inner.step;
   if (inner.type === 'workflow') {
     return {
@@ -236,7 +235,7 @@ const getStepNodeAndEdge = ({
   let nextNodeIds: string[] = [];
   let nextStepIds: string[] = [];
   if (nextStepFlow?.type === 'step' || nextStepFlow?.type === 'foreach' || nextStepFlow?.type === 'loop') {
-    const nextInner = nextStepFlow.type === 'foreach' ? unwrapForeachInner(nextStepFlow.step) : nextStepFlow.step;
+    const nextInner = nextStepFlow.type === 'step' ? nextStepFlow.step : unwrapInnerEntry(nextStepFlow.step);
     const nextStepId = allPrevNodeIds.has(getWorkflowNodeId(nextInner.id))
       ? `${nextInner.id}-${yIndex + 1}`
       : nextInner.id;
@@ -272,7 +271,7 @@ const getStepNodeAndEdge = ({
   }
 
   if (stepFlow.type === 'step' || stepFlow.type === 'foreach') {
-    const innerStep = stepFlow.type === 'foreach' ? unwrapForeachInner(stepFlow.step) : stepFlow.step;
+    const innerStep = stepFlow.type === 'foreach' ? unwrapInnerEntry(stepFlow.step) : stepFlow.step;
     const hasGraph = innerStep.component === 'WORKFLOW';
     const rawNodeId = allPrevNodeIds.has(getWorkflowNodeId(innerStep.id)) ? `${innerStep.id}-${yIndex}` : innerStep.id;
     const nodeId = getWorkflowNodeId(rawNodeId);
@@ -530,7 +529,8 @@ const getStepNodeAndEdge = ({
   }
 
   if (stepFlow.type === 'loop') {
-    const { step: _step, serializedCondition, loopType } = stepFlow;
+    const { serializedCondition, loopType } = stepFlow;
+    const _step = unwrapInnerEntry(stepFlow.step);
     const nodeId = getWorkflowNodeId(_step.id);
     const conditionNodeId = getWorkflowConditionNodeId(serializedCondition.id);
     const nodes: WorkflowStepNode[] = [
@@ -837,7 +837,7 @@ export const collectGraphStepFlags = (
       return;
     }
     if (entry.type === 'step' || entry.type === 'foreach' || entry.type === 'loop') {
-      const inner = entry.type === 'foreach' ? unwrapForeachInner(entry.step) : entry.step;
+      const inner = entry.type === 'step' ? entry.step : unwrapInnerEntry(entry.step);
       if (inner?.component === 'WORKFLOW' && inner?.id) {
         nestedWorkflowStepIds.add(inner.id);
       }
