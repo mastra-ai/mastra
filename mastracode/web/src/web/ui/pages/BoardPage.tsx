@@ -1159,13 +1159,18 @@ function BoardColumn({
   const [dragOver, setDragOver] = useState(false);
   const [dropLineTop, setDropLineTop] = useState(0);
   const cardListRef = useRef<HTMLDivElement>(null);
+  const collapsed = stage !== 'intake' && !loading && taskCount === 0;
 
   return (
     <section
       ref={laneRef}
-      aria-label={label}
+      aria-label={collapsed ? `${label}, empty` : label}
       data-testid={`board-column-${stage}`}
-      className="flex min-h-0 w-80 shrink-0 flex-col gap-4"
+      className={cn(
+        'flex min-h-0 shrink-0 flex-col transition-[width,background-color] motion-reduce:transition-none',
+        collapsed ? 'w-14 rounded-lg' : 'w-80 gap-4',
+        collapsed && dragOver && 'bg-surface2 ring-1 ring-border1',
+      )}
       onDragOver={event => {
         if (!event.dataTransfer.types.includes(CARD_MIME)) return;
         event.preventDefault();
@@ -1185,37 +1190,50 @@ function BoardColumn({
         if (payload) onDrop(payload, stage);
       }}
     >
-      <div className="flex min-h-8 items-start justify-between gap-2">
-        <div className="flex h-8 min-w-0 items-center gap-2">
-          <BoardStageIcon stage={stage} />
-          <Txt as="h2" variant="ui-smd" className="m-0 truncate font-semibold text-icon3">
+      {collapsed ? (
+        <div className="flex min-h-0 flex-1 flex-col items-center gap-3 py-1">
+          <span aria-hidden className="flex h-8 items-center text-ui-xs font-medium tabular-nums text-icon3">
+            {taskCount}
+          </span>
+          <Txt as="h2" variant="ui-smd" className="m-0 font-semibold text-icon3 [writing-mode:vertical-rl]">
             {label}
           </Txt>
-          {loading ? (
-            <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
-          ) : (
-            <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
-          )}
         </div>
-        {headerAction && <div className="flex h-8 shrink-0 items-center">{headerAction}</div>}
-      </div>
-      {headerExtras}
-      {/* Cards scroll inside the swimlane; the page stays fixed. */}
-      <div className="min-h-16 flex-1">
-        <ScrollArea className="h-full">
-          <div ref={cardListRef} className="relative flex flex-col gap-2.5 pb-2">
-            {children}
-            <div
-              aria-hidden
-              style={{ top: dropLineTop }}
-              className={cn(
-                'pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-neutral1 transition-opacity motion-reduce:transition-none',
-                dragOver ? 'opacity-100' : 'opacity-0',
+      ) : (
+        <>
+          <div className="flex min-h-8 items-start justify-between gap-2">
+            <div className="flex h-8 min-w-0 items-center gap-2">
+              <BoardStageIcon stage={stage} />
+              <Txt as="h2" variant="ui-smd" className="m-0 truncate font-semibold text-icon3">
+                {label}
+              </Txt>
+              {loading ? (
+                <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
+              ) : (
+                <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
               )}
-            />
+            </div>
+            {headerAction && <div className="flex h-8 shrink-0 items-center">{headerAction}</div>}
           </div>
-        </ScrollArea>
-      </div>
+          {headerExtras}
+          {/* Cards scroll inside the swimlane; the page stays fixed. */}
+          <div className="min-h-16 flex-1">
+            <ScrollArea className="h-full">
+              <div ref={cardListRef} className="relative flex flex-col gap-2.5 pb-2">
+                {children}
+                <div
+                  aria-hidden
+                  style={{ top: dropLineTop }}
+                  className={cn(
+                    'pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-neutral1 transition-opacity motion-reduce:transition-none',
+                    dragOver ? 'opacity-100' : 'opacity-0',
+                  )}
+                />
+              </div>
+            </ScrollArea>
+          </div>
+        </>
+      )}
     </section>
   );
 }

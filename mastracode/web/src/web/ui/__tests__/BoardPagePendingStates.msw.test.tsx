@@ -223,4 +223,25 @@ describe('Board card pending states', () => {
     expect(transitionRequests).toEqual([]);
     expect(currentColumn).toContainElement(card);
   });
+
+  it('moves a card when it is dropped into a collapsed empty column', async () => {
+    const { transitionGate, transitionRequests } = stubBoardEndpoints();
+    renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    const planningColumn = screen.getByTestId('board-column-planning');
+    expect(planningColumn).toHaveAccessibleName('Planning, empty');
+    const dataTransfer = createDataTransfer();
+
+    fireEvent.dragStart(card, { dataTransfer });
+    fireEvent.dragOver(planningColumn, { dataTransfer });
+    expect(dataTransfer.dropEffect).toBe('move');
+    fireEvent.drop(planningColumn, { dataTransfer });
+
+    await waitFor(() => expect(transitionRequests).toEqual([ITEM_ID]));
+    expect(within(planningColumn).getByTestId('work-item-card')).toHaveTextContent('Fix login bug');
+
+    transitionGate.resolve();
+    await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
+  });
 });

@@ -116,13 +116,13 @@ describe('Board loading states', () => {
     expect(screen.queryByLabelText(/visible board tasks in Planning/)).not.toBeInTheDocument();
 
     // Phase 2: work items resolved, intake/triage feeds still resolving —
-    // non-intake columns settle into their content while intake keeps its
-    // column skeleton.
+    // settled empty workflow columns collapse while intake keeps its column
+    // skeleton.
     workItemsGate.resolve();
     const planning = screen.getByTestId('board-column-planning');
-    await waitFor(() => expect(within(planning).getByText('Nothing in planning')).toBeInTheDocument());
+    await waitFor(() => expect(planning).toHaveAccessibleName('Planning, empty'));
     expect(within(planning).queryByRole('status')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('0 of 0 visible board tasks in Planning')).toBeInTheDocument();
+    expect(within(planning).queryByText('Nothing in planning')).not.toBeInTheDocument();
     const intake = screen.getByTestId('board-column-intake');
     within(intake).getByRole('status', { name: 'Loading Intake column' });
     const triage = screen.getByTestId('board-column-triage');
