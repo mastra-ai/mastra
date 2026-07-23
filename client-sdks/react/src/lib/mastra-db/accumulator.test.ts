@@ -22,8 +22,13 @@ const startChunk = (messageId = 'asst-1'): ChunkType =>
     payload: { messageId },
   }) as unknown as ChunkType;
 
-const stepStartChunk = (): ChunkType =>
-  ({ type: 'step-start', runId: RUN_ID, from: 'AGENT', payload: {} }) as unknown as ChunkType;
+const stepStartChunk = (messageId?: string): ChunkType =>
+  ({
+    type: 'step-start',
+    runId: RUN_ID,
+    from: 'AGENT',
+    payload: { ...(messageId ? { messageId } : {}) },
+  }) as unknown as ChunkType;
 
 const stepFinishChunk = (): ChunkType =>
   ({ type: 'step-finish', runId: RUN_ID, from: 'AGENT', payload: {} }) as unknown as ChunkType;
@@ -443,10 +448,52 @@ describe('accumulateChunk - lifecycle', () => {
     expect(out).toHaveLength(1);
   });
 
-  it('step-start is a no-op', () => {
+  it('step-start without a message id is a no-op', () => {
     const initial = reduce([startChunk()]);
     const out = reduce([stepStartChunk()], streamMeta(), initial);
     expect(out).toEqual(initial);
+  });
+
+  it('step-start with the current message id is a no-op', () => {
+    const initial = reduce([startChunk('asst-1')]);
+    const out = reduce([stepStartChunk('asst-1')], streamMeta(), initial);
+    expect(out).toEqual(initial);
+  });
+
+  it('step-start with a rotated message id re-keys the empty pending assistant message', () => {
+    const out = reduce([startChunk('asst-1'), stepStartChunk('rotated-1')]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ id: 'rotated-1', role: 'assistant', content: { parts: [] } });
+  });
+
+  it('step-start with a rotated message id re-keys a pending message that only holds data-* parts', () => {
+    const out = reduce([
+      startChunk('asst-1'),
+      dataPartChunk('om-status', { status: 'buffering' }),
+      stepStartChunk('rotated-1'),
+    ]);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe('rotated-1');
+    expect(out[0].content.parts).toMatchObject([{ type: 'data-om-status', data: { status: 'buffering' } }]);
+  });
+
+  it('step-start with a rotated message id splits after content has streamed', () => {
+    const out = reduce([
+      startChunk('asst-1'),
+      stepStartChunk('asst-1'),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'hello'),
+      textEndChunk('t1'),
+      stepStartChunk('rotated-1'),
+      textStartChunk('t2'),
+      textDeltaChunk('t2', 'world'),
+      textEndChunk('t2'),
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out[0].id).toBe('asst-1');
+    expect(out[0].content.parts).toMatchObject([{ type: 'text', text: 'hello', state: 'done' }]);
+    expect(out[1].id).toBe('rotated-1');
+    expect(out[1].content.parts).toMatchObject([{ type: 'text', text: 'world' }]);
   });
 
   it('step-finish is a no-op', () => {
