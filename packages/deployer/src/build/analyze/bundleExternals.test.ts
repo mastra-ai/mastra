@@ -1026,4 +1026,48 @@ describe('bundleExternals', () => {
       expect(dependencyValues).toContain('react');
     });
   });
+
+  describe('subpath-only workspace exports (regression: Missing "." specifier)', () => {
+    async function createSubpathOnlyWorkspacePackage(packagePath: string, packageName: string) {
+      await ensureDir(packagePath);
+      await writeFile(
+        join(packagePath, 'package.json'),
+        JSON.stringify({
+          name: packageName,
+          version: '1.0.0',
+          // Only subpath exports: no "." and no "main". resolve.exports(pkgJson, '.') throws here.
+          exports: { './sub/*': './src/*.js' },
+        }),
+      );
+    }
+
+    it('should not crash when a workspace package declares only subpath exports under externals: true', async () => {
+      const pkgPath = join(testDir, 'packages', 'leaf');
+      await createSubpathOnlyWorkspacePackage(pkgPath, '@workspace/leaf');
+
+      const workspaceMap = new Map<string, WorkspacePackageInfo>([
+        ['@workspace/leaf', { location: pkgPath, dependencies: {}, version: '1.0.0' }],
+      ]);
+
+      // `externals: true` -> externalsPreset -> noBundling, which activates the
+      // alias-optimized-deps plugin whose `resolve.exports(pkgJson, '.')` throws
+      // `Missing "." specifier` for subpath-only packages without the try/catch guard.
+      const depsToOptimize = new Map<string, DependencyMetadata>([
+        ['@workspace/leaf', { exports: ['*'], rootPath: pkgPath, isWorkspace: true }],
+      ]);
+
+      const result = await bundleExternals(depsToOptimize, testDir, {
+        workspaceRoot: testDir,
+        projectRoot: join(testDir, 'app'),
+        workspaceMap,
+        bundlerOptions: {
+          externals: true,
+        },
+      });
+
+      expect(result).toBeDefined();
+      // The package is still tracked (falls through to being externalized), not crashed on.
+      expect(Array.from(result.fileNameToDependencyMap.values())).toContain('@workspace/leaf');
+    });
+  });
 });
