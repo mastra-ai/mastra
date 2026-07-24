@@ -1137,7 +1137,7 @@ export interface DefaultOptions {
   };
   requireToolApproval?: boolean;
   autoResumeSuspendedTools?: boolean;
-  toolCallConcurrency?: number;
+  toolCallConcurrency?: number | { limit?: number; strategy?: 'available' | 'called' };
   includeRawChunks?: boolean;
   [key: string]: unknown; // Allow additional provider-specific options
 }
