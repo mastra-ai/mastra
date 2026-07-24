@@ -1,7 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import type { RequestContext } from '@mastra/core/di';
 import type { Event } from '@mastra/core/events';
-import { createCachingTransformStream, createReplayStream } from '@mastra/core/stream';
+import { createReplayStream } from '@mastra/core/stream';
 import type { WorkflowInfo, ChunkType, StreamEvent, WorkflowStateField } from '@mastra/core/workflows';
 import { z } from 'zod/v4';
 import { MastraFGAPermissions } from '../fga-permissions';
@@ -33,6 +33,53 @@ import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import { handleError } from './error';
 import { getEffectiveResourceId, validateRunOwnership } from './utils';
+
+/**
+ * Stream chunks are cached per RUN, not per subscriber.
+ *
+ * Every `/stream`-family route used to attach its own caching transform keyed by
+ * `runId`, so the cache was a side effect of one client's response stream. That had
+ * two consequences: two concurrent consumers wrote every chunk twice, and caching
+ * stopped the moment that consumer disconnected — truncating the very history
+ * `/observe` replays on reconnect.
+ *
+ * The pump below subscribes once per run stream output and is not tied to any client
+ * connection, so the cached history stays complete and duplicate-free. It is keyed by
+ * the stream output object because `run.stream()` returns the same output for repeat
+ * calls on a live run, which makes object identity mean "this run, this execution".
+ */
+const runsWithCachePump = new WeakSet<object>();
+
+function attachRunCachePump({
+  output,
+  serverCache,
+  runId,
+  mastra,
+}: {
+  output: { fullStream: ReadableStream<ChunkType> };
+  serverCache: ReturnType<Mastra['getServerCache']>;
+  runId: string;
+  mastra: Mastra;
+}): void {
+  if (!serverCache || runsWithCachePump.has(output)) {
+    return;
+  }
+
+  runsWithCachePump.add(output);
+
+  void output.fullStream
+    .pipeTo(
+      new WritableStream<ChunkType>({
+        write(chunk) {
+          // Fire and forget: a cache write must never stall or break the run.
+          void serverCache.listPush(runId, chunk).catch(() => {});
+        },
+      }),
+    )
+    .catch(error => {
+      mastra.getLogger()?.warn('Workflow stream cache pump stopped', { runId, error });
+    });
+}
 
 export interface WorkflowContext extends Context {
   workflowId?: string;
@@ -408,13 +455,7 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
       const run = await workflow.createRun({ runId, resourceId: effectiveResourceId });
       const result = run.stream({ ...params, requestContext });
 
-      if (serverCache) {
-        const { transform } = createCachingTransformStream<ChunkType>({
-          cache: serverCache,
-          cacheKey: runId,
-        });
-        return result.fullStream.pipeThrough(transform);
-      }
+      attachRunCachePump({ output: result, serverCache, runId, mastra });
 
       return result.fullStream;
     } catch (error) {
@@ -466,13 +507,7 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
 
       const resumeResult = _run.resumeStream({ ...params, requestContext });
 
-      if (serverCache) {
-        const { transform } = createCachingTransformStream<ChunkType>({
-          cache: serverCache,
-          cacheKey: runId,
-        });
-        return resumeResult.fullStream.pipeThrough(transform);
-      }
+      attachRunCachePump({ output: resumeResult, serverCache, runId, mastra });
 
       return resumeResult.fullStream;
     } catch (error) {
@@ -1080,13 +1115,7 @@ export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
       const run = await workflow.createRun({ runId, resourceId: existingRun.resourceId });
       const result = run.timeTravelStream({ ...params, requestContext });
 
-      if (serverCache) {
-        const { transform } = createCachingTransformStream<ChunkType>({
-          cache: serverCache,
-          cacheKey: runId,
-        });
-        return result.fullStream.pipeThrough(transform);
-      }
+      attachRunCachePump({ output: result, serverCache, runId, mastra });
 
       return result.fullStream;
     } catch (error) {

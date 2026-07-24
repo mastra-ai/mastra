@@ -1058,4 +1058,94 @@ describe('vNext Workflow Handlers', () => {
       expect(capturedOptions.forEachIndex).toBe(2);
     });
   });
+
+  describe('stream cache pump', () => {
+    const drain = async (stream: ReadableStream<any>) => {
+      const reader = stream.getReader();
+      const chunks: any[] = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+      return chunks;
+    };
+
+    it('caches each chunk once when two clients stream the same run', async () => {
+      const serverCache = mockMastra.getServerCache();
+      const pushed: any[] = [];
+      vi.spyOn(serverCache!, 'listPush').mockImplementation(async (_key, value) => {
+        pushed.push(value);
+      });
+
+      const first = await STREAM_WORKFLOW_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-cache-pump',
+        inputData: {},
+      } as any);
+
+      const second = await STREAM_WORKFLOW_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-cache-pump',
+        inputData: {},
+      } as any);
+
+      const [firstChunks] = await Promise.all([drain(first as ReadableStream), drain(second as ReadableStream)]);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // One cached copy per chunk the client saw — not one per subscriber.
+      expect(pushed.length).toBe(firstChunks.length);
+    });
+
+    // Skipped: today, a disconnecting client wipes every listener on the run's shared
+    // emitter (packages/core/src/stream/RunOutput.ts:386 — `cancel()` calls
+    // `self.#emitter.removeAllListeners()` with no scoping), which also kills this pump's
+    // own subscription. Upstream PR #19745 fixes that `cancel()` to only remove its own
+    // listener instead of every listener on the run. Unskip this test once #19745 lands.
+    it.skip('keeps caching after the only client disconnects', async () => {
+      const serverCache = mockMastra.getServerCache();
+      const pushed: any[] = [];
+      vi.spyOn(serverCache!, 'listPush').mockImplementation(async (_key, value) => {
+        pushed.push(value);
+      });
+
+      const stream = (await STREAM_WORKFLOW_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-cache-pump-drop',
+        inputData: {},
+      } as any)) as ReadableStream;
+
+      const reader = stream.getReader();
+      await reader.read();
+      await reader.cancel(); // client goes away mid-run
+
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // The pump is not tied to that connection, so the history is still complete.
+      expect(pushed.some(chunk => chunk?.type === 'workflow-finish')).toBe(true);
+    });
+
+    it('does not attach a pump when there is no server cache', async () => {
+      const mastraWithoutCache = new Mastra({
+        logger: false,
+        workflows: { 'test-workflow': createMockWorkflow('test-workflow') },
+        storage: new MockStore(),
+      });
+      vi.spyOn(mastraWithoutCache, 'getServerCache').mockReturnValue(undefined as any);
+
+      const stream = await STREAM_WORKFLOW_ROUTE.handler({
+        mastra: mastraWithoutCache,
+        workflowId: 'test-workflow',
+        runId: 'test-run-no-cache',
+        inputData: {},
+      } as any);
+
+      expect(stream).toBeDefined();
+      const chunks = await drain(stream as ReadableStream);
+      expect(chunks.length).toBeGreaterThan(0);
+    });
+  });
 });
