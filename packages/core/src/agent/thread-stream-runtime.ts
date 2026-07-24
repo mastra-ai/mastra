@@ -887,12 +887,34 @@ export class AgentThreadStreamRuntime {
     state.threadKeysByRunId.set(output.runId, key);
     state.activeThreadRunIds.set(key, output.runId);
     state.activeThreadStreamIds.set(key, streamId);
-    const registered = this.#publishAndWait(pubsub, key, {
-      type: 'run-registered',
-      runId: output.runId,
-      streamId,
-      streamSeq,
-    });
+    const resolvedPubSub = this.#getPubSub(pubsub);
+    const registered = (async () => {
+      // Every thread-bound run must hold the cross-process lease while it is
+      // live: the liveness checks (markActiveIfLive / #waitForRemoteRunToFinish)
+      // treat a lease-less run as a ghost, so a plain `agent.stream()` run that
+      // never acquired would let contending instances start competing runs
+      // instead of serializing behind it. Acquire BEFORE publishing
+      // `run-registered` so an observer that checks liveness on receipt finds
+      // the lease held. Same-owner acquire is an idempotent TTL refresh, so
+      // signal-woken runs that already hold the lease under this runId just
+      // renew. Fail-open on loss or error (simultaneous-start race): proceed
+      // and never roll back the local registration — matches pre-lease
+      // semantics and sendSignal's documented fail-open rationale. A thrown
+      // acquire (transient provider error) is treated as acquired so renewal
+      // starts: if the acquire landed server-side but the response failed,
+      // skipping renewal would let the lease expire mid-run; renewal
+      // self-stops when we don't own the key.
+      const lease = await this.#getLeaseProvider(resolvedPubSub)
+        .acquireLease(key, output.runId, AGENT_THREAD_LEASE_TTL_MS)
+        .catch(() => ({ acquired: true as boolean }));
+      if (lease.acquired) this.#startLeaseRenewal(resolvedPubSub, key, output.runId);
+      await this.#publishAndWait(pubsub, key, {
+        type: 'run-registered',
+        runId: output.runId,
+        streamId,
+        streamSeq,
+      });
+    })();
     // Always drive the run's stream to completion, even when no caller consumes
     // the returned output (e.g. a fire-and-forget schedule wake). The broadcast
     // tee buffers every part, so a later/external subscriber still replays the
@@ -1577,7 +1599,7 @@ export class AgentThreadStreamRuntime {
           seenStreamIds.delete(eventStreamId);
         }
         if (errorRun) enqueueRun(errorRun);
-        await this.#drainPendingIdleSignals(state, resolvedPubSub, key);
+        await this.#drainPendingIdleSignals(state, resolvedPubSub, key, data.runId);
         wake();
         return;
       }
@@ -1610,7 +1632,7 @@ export class AgentThreadStreamRuntime {
           } catch {}
         }
         if (data.type !== 'run-suspended') {
-          await this.#drainPendingIdleSignals(state, resolvedPubSub, key);
+          await this.#drainPendingIdleSignals(state, resolvedPubSub, key, data.runId);
         }
         wake();
       }
