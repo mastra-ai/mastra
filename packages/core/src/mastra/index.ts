@@ -10,12 +10,8 @@ import type { BackgroundTaskManagerConfig } from '../background-tasks/types';
 import type { BundlerConfig } from '../bundler/types';
 import { InMemoryServerCache } from '../cache';
 import type { MastraServerCache } from '../cache';
-// Deep imports (not the ./channels barrel): the barrel evaluates
-// AgentControllerChannels, whose `extends AgentChannels` needs the base class
-// value at module-eval time — importing the barrel from here creates a cycle
-// where that value is still undefined.
-import { AgentChannels } from '../channels/agent-channels';
-import type { ChannelProvider } from '../channels/types';
+import { AgentChannels } from '../channels';
+import type { ChannelProvider } from '../channels';
 import { DatasetsManager } from '../datasets/manager.js';
 import type { MastraDeployer } from '../deployer';
 import type { IMastraEditor } from '../editor';
