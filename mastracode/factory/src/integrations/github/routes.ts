@@ -35,7 +35,6 @@ import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js
 import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
 import type { GithubPatKind } from './pat.js';
-import { withProjectLock } from './project-lock.js';
 
 import {
   commitAll,
@@ -49,6 +48,28 @@ import {
   WorktreeError,
 } from './sandbox.js';
 import type { GitIdentity } from './sandbox.js';
+
+const sessionOperationLocks = new Map<string, Promise<unknown>>();
+
+/**
+ * Serialize same-session mutations within one Factory process. Factory sessions
+ * normally issue these operations sequentially, so this lock is probably not
+ * necessary; keep the cheap local guard until that invariant is enforced by
+ * the request protocol. It intentionally does not consume a database connection.
+ */
+function withSessionOperationLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
+  const previous = sessionOperationLocks.get(sessionId) ?? Promise.resolve();
+  const next = previous.then(fn, fn);
+  const tail = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  sessionOperationLocks.set(sessionId, tail);
+  void tail.then(() => {
+    if (sessionOperationLocks.get(sessionId) === tail) sessionOperationLocks.delete(sessionId);
+  });
+  return next;
+}
 import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions.js';
 import { handleGithubWebhook } from './webhook.js';
 import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult, ParsedGithubWebhook } from './webhook.js';
@@ -76,10 +97,7 @@ export interface MountGithubRoutesOptions {
    * respond 503.
    */
   fleet: SandboxFleet;
-  /**
-   * Factory storage backend. Supplies the cross-replica `withDistributedLock`
-   * capability for git write routes and the `appDbConfigured` diagnostic.
-   */
+  /** Factory storage backend used for the `appDbConfigured` diagnostic. */
   storage?: FactoryStorage;
   /**
    * The GitHub App integration the handlers operate on (Octokit access, token
@@ -1010,7 +1028,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   );
 
   // ── Sessions / commit / push / PR ────────────────────────────────────────
-  routes.push(...buildProjectGitRoutes({ github, auth, fleet, storage, emitAudit }));
+  routes.push(...buildProjectGitRoutes({ github, auth, fleet, emitAudit }));
 
   return routes;
 }
@@ -1212,13 +1230,11 @@ function buildProjectGitRoutes({
   github,
   auth,
   fleet,
-  storage,
   emitAudit,
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
   fleet: SandboxFleet;
-  storage?: FactoryStorage;
   emitAudit?: AuditEmitter['emit'];
 }): ApiRoute[] {
   return [
@@ -1346,31 +1362,27 @@ function buildProjectGitRoutes({
         const { workdir, sandboxBinding } = sessionWorkspace;
 
         try {
-          return await withProjectLock({
-            key: `${project.id}:${userId}`,
-            storage,
-            fn: async () => {
-              const sandbox = await resolveProjectSandbox({ fleet, sandboxRow: sandboxBinding });
-              const result = await commitAll(
-                sandbox,
-                workdir,
-                body.message as string,
-                identityFromUser(await auth.ensureUser(loose(c))),
-              );
-              if (result.committed) {
-                await emitAudit?.({
-                  context: loose(c),
-                  input: {
-                    action: 'factory.git.commit',
-                    factoryProjectId: project.factoryProjectId,
-                    projectRepositoryId: project.id,
-                    targets: [{ type: 'session', id: sessionWorkspace.session.sessionId }],
-                    metadata: { sessionId: sessionWorkspace.session.sessionId },
-                  },
-                });
-              }
-              return c.json({ committed: result.committed });
-            },
+          return await withSessionOperationLock(sessionWorkspace.session.sessionId, async () => {
+            const sandbox = await resolveProjectSandbox({ fleet, sandboxRow: sandboxBinding });
+            const result = await commitAll(
+              sandbox,
+              workdir,
+              body.message as string,
+              identityFromUser(await auth.ensureUser(loose(c))),
+            );
+            if (result.committed) {
+              await emitAudit?.({
+                context: loose(c),
+                input: {
+                  action: 'factory.git.commit',
+                  factoryProjectId: project.factoryProjectId,
+                  projectRepositoryId: project.id,
+                  targets: [{ type: 'session', id: sessionWorkspace.session.sessionId }],
+                  metadata: { sessionId: sessionWorkspace.session.sessionId },
+                },
+              });
+            }
+            return c.json({ committed: result.committed });
           });
         } catch (err) {
           return gitErrorResponse(loose(c), err);
@@ -1404,29 +1416,25 @@ function buildProjectGitRoutes({
         const { workdir, sandboxBinding } = sessionWorkspace;
 
         try {
-          return await withProjectLock({
-            key: `${project.id}:${userId}`,
-            storage,
-            fn: async () => {
-              const sandbox = await resolveProjectSandbox({ fleet, sandboxRow: sandboxBinding });
-              const access = await github.versionControl.getRepositoryAccess({
-                orgId,
-                repositoryId: project.repository.id,
-              });
-              if (!access.authorization) throw new Error('Repository access did not include a bearer token.');
-              await pushBranch(sandbox, workdir, branch, access.authorization.token, project.repository.slug);
-              await emitAudit?.({
-                context: loose(c),
-                input: {
-                  action: 'factory.git.push',
-                  factoryProjectId: project.factoryProjectId,
-                  projectRepositoryId: project.id,
-                  targets: [{ type: 'branch', id: branch }],
-                  metadata: { branch, sessionId: sessionWorkspace.session.sessionId },
-                },
-              });
-              return c.json({ pushed: true, branch });
-            },
+          return await withSessionOperationLock(sessionWorkspace.session.sessionId, async () => {
+            const sandbox = await resolveProjectSandbox({ fleet, sandboxRow: sandboxBinding });
+            const access = await github.versionControl.getRepositoryAccess({
+              orgId,
+              repositoryId: project.repository.id,
+            });
+            if (!access.authorization) throw new Error('Repository access did not include a bearer token.');
+            await pushBranch(sandbox, workdir, branch, access.authorization.token, project.repository.slug);
+            await emitAudit?.({
+              context: loose(c),
+              input: {
+                action: 'factory.git.push',
+                factoryProjectId: project.factoryProjectId,
+                projectRepositoryId: project.id,
+                targets: [{ type: 'branch', id: branch }],
+                metadata: { branch, sessionId: sessionWorkspace.session.sessionId },
+              },
+            });
+            return c.json({ pushed: true, branch });
           });
         } catch (err) {
           return gitErrorResponse(loose(c), err);
@@ -1477,60 +1485,56 @@ function buildProjectGitRoutes({
         }
 
         try {
-          return await withProjectLock({
-            key: `${project.id}:${userId}`,
-            storage,
-            fn: async () => {
-              const result = await github.versionControl.createPullRequest({
-                connection: {
-                  type: 'app-installation',
-                  installationId: Number(project.installation.externalId),
-                },
-                sourceId: project.repository.slug,
-                baseBranch: base,
-                headBranch: head,
-                title,
-                body: prBody,
-                actingUserId: userId,
-              });
-              await emitAudit?.({
-                context: loose(c),
-                input: {
-                  action: 'factory.git.pr_opened',
-                  factoryProjectId: project.factoryProjectId,
+          return await withSessionOperationLock(sessionWorkspace.session.sessionId, async () => {
+            const result = await github.versionControl.createPullRequest({
+              connection: {
+                type: 'app-installation',
+                installationId: Number(project.installation.externalId),
+              },
+              sourceId: project.repository.slug,
+              baseBranch: base,
+              headBranch: head,
+              title,
+              body: prBody,
+              actingUserId: userId,
+            });
+            await emitAudit?.({
+              context: loose(c),
+              input: {
+                action: 'factory.git.pr_opened',
+                factoryProjectId: project.factoryProjectId,
+                projectRepositoryId: project.id,
+                targets: [{ type: 'pull_request', id: result.url, name: title }],
+                metadata: { branch: head, base, url: result.url },
+              },
+            });
+            const pullRequestNumber = pullRequestNumberFromUrl(result.url, project.repository.slug);
+            if (pullRequestNumber) {
+              const sessionId = sessionWorkspace.session.sessionId;
+              await subscribeToPullRequest(
+                {
+                  orgId,
+                  installationExternalId: project.installation.externalId,
                   projectRepositoryId: project.id,
-                  targets: [{ type: 'pull_request', id: result.url, name: title }],
-                  metadata: { branch: head, base, url: result.url },
+                  repositoryExternalId: project.repository.externalId,
+                  repositorySlug: project.repository.slug,
+                  changeRequestId: pullRequestNumber.toString(),
+                  sessionId,
+                  ownerId: userId,
+                  resourceId: sessionId,
+                  threadId: sessionId,
+                  source: 'factory-pr-create',
+                  subscribedByUserId: userId,
                 },
+                github.integrationStorage,
+              ).catch((error: unknown) => {
+                console.warn(
+                  `[GitHub] Pull request ${result.url} was created but automatic subscription failed.`,
+                  error,
+                );
               });
-              const pullRequestNumber = pullRequestNumberFromUrl(result.url, project.repository.slug);
-              if (pullRequestNumber) {
-                const sessionId = sessionWorkspace.session.sessionId;
-                await subscribeToPullRequest(
-                  {
-                    orgId,
-                    installationExternalId: project.installation.externalId,
-                    projectRepositoryId: project.id,
-                    repositoryExternalId: project.repository.externalId,
-                    repositorySlug: project.repository.slug,
-                    changeRequestId: pullRequestNumber.toString(),
-                    sessionId,
-                    ownerId: userId,
-                    resourceId: sessionId,
-                    threadId: sessionId,
-                    source: 'factory-pr-create',
-                    subscribedByUserId: userId,
-                  },
-                  github.integrationStorage,
-                ).catch((error: unknown) => {
-                  console.warn(
-                    `[GitHub] Pull request ${result.url} was created but automatic subscription failed.`,
-                    error,
-                  );
-                });
-              }
-              return c.json({ url: result.url });
-            },
+            }
+            return c.json({ url: result.url });
           });
         } catch (err) {
           return c.json(
@@ -1551,7 +1555,7 @@ function buildProjectGitRoutes({
       handler: async c => {
         const owned = await loadOwnedProject({ github, auth, fleet, c: loose(c) });
         if ('response' in owned) return owned.response;
-        const { userId, project, sandboxRow } = owned;
+        const { sandboxRow } = owned;
 
         if (!sandboxRow.sandboxId) {
           // Nothing provisioned for this user — idempotent success.
@@ -1559,19 +1563,15 @@ function buildProjectGitRoutes({
         }
 
         try {
-          return await withProjectLock({
-            key: `${project.id}:${userId}`,
-            storage,
-            fn: async () => {
-              const sandbox = await fleet.reattachSandbox(sandboxRow.sandboxId!);
-              await teardownProjectSandbox({
-                fleet,
-                row: sandboxRow,
-                storage: github.sourceControlStorage.sandboxes,
-                sandbox,
-              });
-              return c.json({ tornDown: true });
-            },
+          return await withSessionOperationLock(`sandbox:${sandboxRow.id}`, async () => {
+            const sandbox = await fleet.reattachSandbox(sandboxRow.sandboxId!);
+            await teardownProjectSandbox({
+              fleet,
+              row: sandboxRow,
+              storage: github.sourceControlStorage.sandboxes,
+              sandbox,
+            });
+            return c.json({ tornDown: true });
           });
         } catch (err) {
           return gitErrorResponse(loose(c), err);

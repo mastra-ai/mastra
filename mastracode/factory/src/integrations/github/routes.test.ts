@@ -657,8 +657,6 @@ beforeEach(() => {
   process.env.GITHUB_APP_WEBHOOK_SECRET = 'test-webhook-secret';
   // The webhook route verifies deliveries against the injected instance's secret.
   githubStub.webhookSecret = 'test-webhook-secret';
-  // No Postgres in these unit tests: keep the project lock purely in-process.
-  process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
   reattachSandbox.mockClear();
@@ -676,7 +674,6 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env.GITHUB_APP_WEBHOOK_SECRET;
-  delete process.env.MASTRACODE_DISTRIBUTED_LOCK;
   vi.clearAllMocks();
 });
 

@@ -92,9 +92,8 @@ export interface IntegrationContext {
    */
   fleet: SandboxFleet;
   /**
-   * Root factory storage backend. Supplies the cross-replica
-   * `withDistributedLock` capability and the `appDbConfigured` diagnostic.
-   * Absent when the host runs without an application database.
+   * Root factory storage backend and source of the `appDbConfigured`
+   * diagnostic. Absent when the host runs without an application database.
    */
   factoryStorage?: FactoryStorage;
   /** Browser-facing origin (OAuth redirect base), no trailing slash. */
