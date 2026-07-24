@@ -1,5 +1,14 @@
 # create-factory
 
+## 0.1.2-alpha.1
+
+### Patch Changes
+
+- Fixed generated Factory projects to allow newly published Mastra packages when pnpm minimum release age policies are configured. ([#20104](https://github.com/mastra-ai/mastra/pull/20104))
+
+- Updated dependencies:
+  - mastra@1.20.2-alpha.1
+
 ## 0.1.2-alpha.0
 
 ### Patch Changes

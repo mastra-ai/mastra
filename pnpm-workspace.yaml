@@ -140,6 +140,10 @@ minimumReleaseAgeExclude:
   - svgo@3.3.4
   # Renovate security update: @hono/node-server@2.0.10
   - "@hono/node-server@2.0.10"
+  # Renovate security update: brace-expansion@2.1.2
+  - brace-expansion@2.1.2
+  # Renovate security update: react-router@7.18.0
+  - react-router@7.18.0
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
@@ -200,7 +204,7 @@ overrides:
   form-data@<2.5.6: 2.5.6
   form-data@>=4.0.0 <4.0.6: 4.0.6
   brace-expansion@<1.1.13: 1.1.13
-  brace-expansion@>=2.0.0 <2.0.3: 2.0.3
+  brace-expansion@>=2.0.0 <2.0.3: 2.1.2
   '@clerk/shared@>=3.0.0 <3.47.5': 3.47.7
   js-cookie@>=3.0.0 <3.0.7: 3.0.7
   path-to-regexp@<0.1.13: 0.1.13
