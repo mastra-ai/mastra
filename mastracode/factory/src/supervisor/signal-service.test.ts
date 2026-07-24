@@ -126,7 +126,7 @@ describe('FactorySupervisorSignalService', () => {
   it('refreshes state and wakes the shared supervisor for approval lifecycle events', async () => {
     const { service, sendStateSignal, sendNotificationSignal, getForProject } = fixture();
     getForProject.mockResolvedValueOnce(null);
-    await new FactorySupervisorSignalService(service).notifyApproval(approvalNotification());
+    await new FactorySupervisorSignalService(service).notify(approvalNotification());
 
     expect(sendStateSignal).toHaveBeenCalledOnce();
     expect(sendNotificationSignal).toHaveBeenCalledWith(
@@ -137,6 +137,51 @@ describe('FactorySupervisorSignalService', () => {
         payload: expect.objectContaining({ approvalId: 'approval-1', workItemId: 'item-1' }),
       }),
       { ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'wake' } },
+    );
+  });
+
+  it('wakes the supervisor for a boot check-in without touching approval fields', async () => {
+    const { service, sendStateSignal, sendNotificationSignal, getForProject } = fixture();
+    const record: FactorySupervisorNotificationRecord = {
+      ...approvalNotification(),
+      event: 'boot_check_in',
+      approvalId: null,
+      workItemId: null,
+      approvalStatus: null,
+      requestedStage: null,
+      expectedRevision: null,
+      requestingBindingId: null,
+      requestingRole: null,
+      reason: 'The Factory server restarted while work was open.',
+      summary: 'The Factory server restarted. 3 work item(s) are still open.',
+      idempotencyKey: 'boot_check_in:1',
+    };
+
+    await new FactorySupervisorSignalService(service).notify(record);
+
+    // The boot path must never look up a work item — there isn't one.
+    expect(getForProject).not.toHaveBeenCalled();
+    expect(sendStateSignal).toHaveBeenCalledOnce();
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'boot-check-in',
+        summary: 'The Factory server restarted. 3 work item(s) are still open.',
+        dedupeKey: 'boot_check_in:1',
+      }),
+      { ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'wake' } },
+    );
+  });
+
+  it('refuses to deliver a boot check-in with no resolvable session owner', async () => {
+    const { service } = fixture();
+    const record: FactorySupervisorNotificationRecord = {
+      ...approvalNotification(),
+      event: 'boot_check_in',
+      supervisorUserId: null,
+    };
+
+    await expect(new FactorySupervisorSignalService(service).notify(record)).rejects.toThrow(
+      /no authenticated session owner/,
     );
   });
 

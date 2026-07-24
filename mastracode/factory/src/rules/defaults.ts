@@ -313,6 +313,7 @@ export function mergeFactoryRuleOverrides(
     supervisor: {
       observeIdleWithoutTransition:
         overrides.supervisor?.observeIdleWithoutTransition ?? base.supervisor?.observeIdleWithoutTransition ?? true,
+      checkInOnBoot: overrides.supervisor?.checkInOnBoot ?? base.supervisor?.checkInOnBoot ?? true,
     },
   };
 }

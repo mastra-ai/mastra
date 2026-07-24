@@ -11,11 +11,17 @@ const ORG_ID = 'org-1';
 
 type ExecutableTool = { execute: (input: unknown, context: unknown) => Promise<unknown> };
 
-function supervisorContext(overrides: Partial<{ orgId: string; projectId: string; threadId: string }> = {}) {
+function supervisorContext(
+  overrides: Partial<{ orgId: string; projectId: string; threadId: string; user: unknown }> = {},
+) {
   const orgId = overrides.orgId ?? ORG_ID;
   const factoryProjectId = overrides.projectId ?? PROJECT_ID;
   const context = new RequestContext();
-  context.set('user', { workosId: 'user-1', organizationId: orgId, name: 'Ada Lovelace' });
+  // `user` is absent on server-initiated runs — the controller builds a fresh
+  // request context per run that carries only `controller`.
+  const user =
+    'user' in overrides ? overrides.user : { workosId: 'user-1', organizationId: orgId, name: 'Ada Lovelace' };
+  if (user) context.set('user', user);
   context.set('controller', {
     resourceId: factorySupervisorResourceId(factoryProjectId),
     threadId: overrides.threadId ?? factorySupervisorThreadId(factoryProjectId),
@@ -23,6 +29,7 @@ function supervisorContext(overrides: Partial<{ orgId: string; projectId: string
       factoryProjectId,
       factoryOrgId: orgId,
       factorySupervisor: true,
+      factorySupervisorUserId: 'user-1',
     }),
   });
   return context;
@@ -123,6 +130,26 @@ describe('Factory supervisor tools', () => {
     await expect(toolsFor(supervisorContext({ orgId: 'org-other' }), built)).rejects.toThrow(
       'Factory project not found',
     );
+  });
+
+  it('exposes tools on server-initiated runs that carry no authenticated request user', async () => {
+    const built = await fixture();
+    // Boot check-ins, idle observations, and approval notifications start a run
+    // from the server: the controller builds a fresh request context holding
+    // only `controller`, so identity has to come off the session's own state.
+    const context = supervisorContext({ user: null });
+    const tools = await toolsFor(context, built);
+    expect(Object.keys(tools)).toContain('factory_get_state');
+
+    await expect(execute(tools.factory_get_state as ExecutableTool, context, {})).resolves.toMatchObject({
+      totalItems: 1,
+    });
+  });
+
+  it('withholds tools from a request user outside the session tenant', async () => {
+    const built = await fixture();
+    const context = supervisorContext({ user: { workosId: 'intruder', organizationId: 'org-other' } });
+    await expect(toolsFor(context, built)).resolves.toEqual({});
   });
 
   it('queries bounded state and tenant-scoped work-item details', async () => {

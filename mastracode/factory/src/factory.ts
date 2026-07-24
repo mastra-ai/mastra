@@ -77,6 +77,7 @@ import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
+import { FactoryBootCheckIn } from './supervisor/boot-check-in.js';
 import { FactorySupervisorService } from './supervisor/service.js';
 import { FactorySupervisorSignalService } from './supervisor/signal-service.js';
 import { createFactorySupervisorTools } from './supervisor/tools.js';
@@ -278,6 +279,7 @@ export class MastraFactory {
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
+  #bootCheckIn: FactoryBootCheckIn | undefined;
   #preparing = false;
 
   constructor(config: MastraFactoryConfig) {
@@ -699,6 +701,12 @@ export class MastraFactory {
             const signals = new FactorySupervisorSignalService(supervisorService);
             supervisorSignals = signals;
             runLifecycleObserver?.subscribeIdle(event => signals.notifyIdle(event));
+            this.#bootCheckIn ??= new FactoryBootCheckIn({
+              storage: workItemsStorage,
+              audit: auditStorage,
+              rules,
+              onError: error => console.warn('[factory] Supervisor boot check-in failed:', error),
+            });
           }
         }
         return [
@@ -739,7 +747,7 @@ export class MastraFactory {
                 primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
                 dispatchSupervisorNotification: record => {
                   if (!supervisorSignals) throw new Error('Factory supervisor signals are unavailable.');
-                  return supervisorSignals.notifyApproval(record);
+                  return supervisorSignals.notify(record);
                 },
               });
             },
@@ -852,6 +860,8 @@ export class MastraFactory {
     }
     await this.#prepared.finalize();
     await this.#factoryProcessor?.reconcileAllBoundThreads();
+    // Enqueue before the dispatcher starts so the first tick delivers it.
+    await this.#bootCheckIn?.run();
     this.#dispatcher?.start();
   }
 

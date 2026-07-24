@@ -231,18 +231,23 @@ export interface FactoryDeferredDecisionRecord {
 }
 
 export type FactorySupervisorNotificationEvent =
-  'approval_requested' | 'approval_approved' | 'approval_rejected' | 'approval_stale';
+  'approval_requested' | 'approval_approved' | 'approval_rejected' | 'approval_stale' | 'boot_check_in';
 
+/**
+ * A durable supervisor wake event. Approval events carry the approval columns;
+ * project-scoped events (`boot_check_in`) leave them null — the row exists to
+ * get exactly-one delivery per tenant out of the dispatcher's lease loop.
+ */
 export interface FactorySupervisorNotificationRecord {
   id: string;
   orgId: string;
   factoryProjectId: string;
-  approvalId: string;
-  workItemId: string;
+  approvalId: string | null;
+  workItemId: string | null;
   event: FactorySupervisorNotificationEvent;
-  approvalStatus: FactoryApprovalStatus;
-  requestedStage: string;
-  expectedRevision: number;
+  approvalStatus: FactoryApprovalStatus | null;
+  requestedStage: string | null;
+  expectedRevision: number | null;
   requestingBindingId: string | null;
   requestingRole: string | null;
   supervisorUserId: string | null;
@@ -719,12 +724,12 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       id: { type: 'uuid-pk' },
       org_id: { type: 'text' },
       factory_project_id: { type: 'text' },
-      approval_id: { type: 'text' },
-      work_item_id: { type: 'text' },
+      approval_id: { type: 'text', nullable: true },
+      work_item_id: { type: 'text', nullable: true },
       event_type: { type: 'text' },
-      approval_status: { type: 'text' },
-      requested_stage: { type: 'text' },
-      expected_revision: { type: 'integer' },
+      approval_status: { type: 'text', nullable: true },
+      requested_stage: { type: 'text', nullable: true },
+      expected_revision: { type: 'integer', nullable: true },
       requesting_binding_id: { type: 'text', nullable: true },
       requesting_role: { type: 'text', nullable: true },
       supervisor_user_id: { type: 'text', nullable: true },
@@ -916,12 +921,12 @@ function toSupervisorNotification(row: GovernanceDbRow): FactorySupervisorNotifi
     id: row.id,
     orgId: row.org_id,
     factoryProjectId: String(row.factory_project_id),
-    approvalId: String(row.approval_id),
-    workItemId: String(row.work_item_id),
+    approvalId: row.approval_id == null ? null : String(row.approval_id),
+    workItemId: row.work_item_id == null ? null : String(row.work_item_id),
     event: row.event_type as FactorySupervisorNotificationEvent,
-    approvalStatus: row.approval_status as FactoryApprovalStatus,
-    requestedStage: String(row.requested_stage),
-    expectedRevision: Number(row.expected_revision),
+    approvalStatus: (row.approval_status as FactoryApprovalStatus | null) ?? null,
+    requestedStage: row.requested_stage == null ? null : String(row.requested_stage),
+    expectedRevision: row.expected_revision == null ? null : Number(row.expected_revision),
     requestingBindingId: (row.requesting_binding_id as string | null) ?? null,
     requestingRole: (row.requesting_role as string | null) ?? null,
     supervisorUserId: (row.supervisor_user_id as string | null) ?? null,
@@ -1951,6 +1956,89 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async claimSupervisorNotifications(input: FactoryLeaseClaimInput): Promise<FactorySupervisorNotificationRecord[]> {
     return this.#claimLeases('factory_supervisor_notifications', input, toSupervisorNotification);
+  }
+
+  /**
+   * Every tenant that still has non-terminal work, for the boot check-in. Reads
+   * across tenants because it runs before any request establishes one, and the
+   * `done`/`canceled` filter is applied in memory — the storage seam only
+   * supports equality filters and an item's stage list is a JSON column.
+   */
+  async listTenantsWithOpenWorkItems(): Promise<
+    Array<{ orgId: string; factoryProjectId: string; openItemCount: number; supervisorUserId: string | null }>
+  > {
+    const rows = await this.#db.findMany<WorkItemDbRow>('work_items', {});
+    const tenants = new Map<
+      string,
+      { orgId: string; factoryProjectId: string; openItemCount: number; supervisorUserId: string | null }
+    >();
+    for (const row of rows) {
+      const item = toWorkItem(row);
+      if (!item.stages.some(stage => stage !== 'done' && stage !== 'canceled')) continue;
+      const key = `${item.orgId}\u0000${item.factoryProjectId}`;
+      const tenant = tenants.get(key) ?? {
+        orgId: item.orgId,
+        factoryProjectId: item.factoryProjectId,
+        openItemCount: 0,
+        supervisorUserId: null,
+      };
+      tenant.openItemCount += 1;
+      // Notification delivery needs a user to resolve tenant credentials with;
+      // prefer whoever started a run, falling back to the item's creator.
+      tenant.supervisorUserId ??=
+        Object.values(item.sessions).find(session => session.startedBy)?.startedBy ?? item.createdBy ?? null;
+      tenants.set(key, tenant);
+    }
+    return [...tenants.values()];
+  }
+
+  /**
+   * Enqueue one boot check-in per tenant, deduped by `bucketKey` so a restart
+   * storm (or several replicas booting together) produces a single wake — the
+   * tenant-unique index on `idempotency_key` is what makes that safe.
+   */
+  async createBootCheckInNotification(input: {
+    orgId: string;
+    factoryProjectId: string;
+    supervisorUserId: string | null;
+    bucketKey: string;
+    reason: string;
+    summary: string;
+    now: Date;
+  }): Promise<FactorySupervisorNotificationRecord | null> {
+    const idempotencyKey = `boot_check_in:${input.bucketKey}`;
+    const existing = await this.#db.findOne<GovernanceDbRow>('factory_supervisor_notifications', {
+      org_id: input.orgId,
+      factory_project_id: input.factoryProjectId,
+      idempotency_key: idempotencyKey,
+    });
+    if (existing) return null;
+    const row = await this.ops.insertOne<GovernanceDbRow>('factory_supervisor_notifications', {
+      org_id: input.orgId,
+      factory_project_id: input.factoryProjectId,
+      approval_id: null,
+      work_item_id: null,
+      event_type: 'boot_check_in',
+      approval_status: null,
+      requested_stage: null,
+      expected_revision: null,
+      requesting_binding_id: null,
+      requesting_role: null,
+      supervisor_user_id: input.supervisorUserId,
+      reason: input.reason.slice(0, 1_000),
+      summary: input.summary.slice(0, 1_000),
+      idempotency_key: idempotencyKey,
+      status: 'pending',
+      attempts: 0,
+      available_at: input.now,
+      lease_owner: null,
+      lease_expires_at: null,
+      last_error: null,
+      completed_at: null,
+      created_at: input.now,
+      updated_at: input.now,
+    });
+    return toSupervisorNotification(row);
   }
 
   async renewSupervisorNotificationLease(identity: FactoryLeaseIdentity, leaseExpiresAt: Date): Promise<boolean> {

@@ -47,24 +47,35 @@ function resolveSupervisorContext(requestContext: RequestContext | undefined): S
   const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const user = requestContext.get('user') as FactoryAuthUser | undefined;
   const state = controller?.getState();
-  const orgId = getFactoryAuthOrgId(user);
-  const userId = getFactoryAuthUserId(user);
   const factoryProjectId = state?.factoryProjectId;
+  // Tenant identity comes from the supervisor session's own state, not the
+  // request context: server-initiated runs (boot check-ins, idle observations,
+  // approval notifications) build a fresh context that carries no `user`, and
+  // those runs still need the Factory tools. The session is only reachable at
+  // its canonical resource/thread pair, which is verified below.
+  const orgId = state?.factoryOrgId;
+  const userId = state?.factorySupervisorUserId;
   if (
     !controller?.threadId ||
     !orgId ||
     !userId ||
     !factoryProjectId ||
-    state.factoryOrgId !== orgId ||
     (state.factorySupervisor !== true && state.factorySupervisor !== 'true') ||
     controller.resourceId !== factorySupervisorResourceId(factoryProjectId) ||
     controller.threadId !== factorySupervisorThreadId(factoryProjectId)
   ) {
     return null;
   }
+  // When a request user is present (UI-driven turn) it must belong to the same
+  // tenant as the session — a cross-tenant caller never gets these tools.
+  const requestOrgId = getFactoryAuthOrgId(user);
+  if (requestOrgId && requestOrgId !== orgId) return null;
+  const requestUserId = requestOrgId ? getFactoryAuthUserId(user) : undefined;
   return {
     orgId,
-    userId,
+    // Attribute actions to the human driving the turn when there is one, so
+    // audit trails name the actual operator rather than the session owner.
+    userId: requestUserId ?? userId,
     ...(typeof user?.name === 'string' && user.name.trim() ? { userName: user.name.trim().slice(0, 128) } : {}),
     factoryProjectId,
     threadId: controller.threadId,

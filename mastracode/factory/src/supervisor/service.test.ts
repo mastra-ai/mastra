@@ -139,6 +139,8 @@ describe('FactorySupervisorService', () => {
           factoryProjectId: PROJECT_ID,
           factoryOrgId: ORG_ID,
           factorySupervisor: 'true',
+          // Server-initiated runs resolve tenant identity from session state.
+          factorySupervisorUserId: 'user-1',
           currentModelId: 'openai/gpt-4.1',
         },
       }),

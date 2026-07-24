@@ -62,6 +62,25 @@ const rules = defaultFactoryRules({
 
 This is an advisory live lifecycle signal, not durable Factory state. Each qualifying `agent_end` triggers it directly; there is no persisted completion cursor or polling deduplication, so a process crash at the completion boundary may lose the notification. Aborted, errored, suspended, transitioned, approval-pending, unbound, and opted-out runs do not emit it.
 
+## Boot check-in
+
+A server restart kills in-flight runs without an `agent_end`, so idle worker observation cannot see them and the affected work stalls silently. On boot, Factory enqueues one supervisor wake per tenant that still has a work item outside the `done` and `canceled` stages, asking the supervisor to find stalled work and resolve it one item at a time.
+
+The wake is a durable row in the same supervisor notification outbox approvals use, so the dispatcher delivers it exactly once even when several replicas boot together. Enqueue happens before the dispatcher starts and never fails the boot: a tenant that cannot be enqueued is logged and skipped.
+
+Repeated restarts inside a 15-minute window collapse into a single wake, which keeps a file-watching dev server from spending a supervisor turn on every save. Tenants whose work is entirely `done` or `canceled` are skipped.
+
+Boot check-in is enabled by default. A Factory can opt out through its rules configuration:
+
+```ts
+const rules = defaultFactoryRules({
+  version: 'factory-rules-v1',
+  overrides: {
+    supervisor: { checkInOnBoot: false },
+  },
+});
+```
+
 ## Development (monorepo)
 
 This package lives in the `mastra-ai/mastra` monorepo at `mastracode/factory`.

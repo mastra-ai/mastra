@@ -146,6 +146,10 @@ export class FactorySupervisorService {
       ) {
         throw new Error('Factory supervisor resource is already bound to a non-canonical session.');
       }
+      // Sessions created before this field existed (or by a caller acting as a
+      // different member of the same org) still need an owning user on state so
+      // server-initiated runs can resolve tenant identity without a request user.
+      if (!state.factorySupervisorUserId) live.state.set({ factorySupervisorUserId: input.userId });
       if (live.thread.getId() !== threadId) await live.thread.switch({ threadId, emitEvent: false });
       await this.#configureSession(live, input.orgId, input.factoryProjectId, threadId);
       return {
@@ -165,6 +169,7 @@ export class FactorySupervisorService {
         factoryProjectId: input.factoryProjectId,
         factoryOrgId: input.orgId,
         factorySupervisor: 'true',
+        factorySupervisorUserId: input.userId,
         ...(defaultModelId ? { currentModelId: defaultModelId } : {}),
       },
       requestContext: input.requestContext,
