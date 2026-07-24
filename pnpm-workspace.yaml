@@ -160,6 +160,8 @@ trustPolicyExclude:
   # without the trusted-publisher evidence that older @mesadev/sdk versions had.
   - '@mesadev/sdk@0.38.0'
 overrides:
+  # Temporarily pinning to 7.2.0; will unpin shortly.
+  bson: 7.2.0
   typescript: ^6.0.3
   '@types/node': 22.19.15
   # Capped below 2: cookie@2 renamed parse/serialize to parseCookie/stringifyCookie,

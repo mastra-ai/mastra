@@ -38,6 +38,7 @@ catalogs:
       version: 4.4.3
 
 overrides:
+  bson: 7.2.0
   typescript: ^6.0.3
   '@types/node': 22.19.15
   cookie: '>=1.1.1 <2'
@@ -21260,8 +21261,8 @@ packages:
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
     hasBin: true
 
-  bson@7.3.1:
-    resolution: {integrity: sha512-h/C0qe6857pQhcSJHLfsR1uYGj98Ge3wKAD3Ed9KqH3wcVh+BM4Jq4xISD7vs9OPuT07n+q3QQVjslJ286j6ag==}
+  bson@7.2.0:
+    resolution: {integrity: sha512-YCEo7KjMlbNlyHhz7zAZNDpIpQbd+wOEHJYezv0nMYTn4x31eIUM2yomNNubclAt63dObUzKHWsBLJ9QcZNSnQ==}
     engines: {node: '>=20.19.0'}
 
   buffer-crc32@0.2.13:
@@ -44694,7 +44695,7 @@ snapshots:
       node-releases: 2.0.50
       update-browserslist-db: 1.2.3(browserslist@4.28.5)
 
-  bson@7.3.1: {}
+  bson@7.2.0: {}
 
   buffer-crc32@0.2.13: {}
 
@@ -50409,7 +50410,7 @@ snapshots:
   mongodb@7.2.0(@aws-sdk/credential-providers@3.1006.0)(@mongodb-js/zstd@7.0.0)(socks@2.8.9):
     dependencies:
       '@mongodb-js/saslprep': 1.4.12
-      bson: 7.3.1
+      bson: 7.2.0
       mongodb-connection-string-url: 7.0.1
     optionalDependencies:
       '@aws-sdk/credential-providers': 3.1006.0
