@@ -85,8 +85,23 @@ function matchesRule(error: unknown, rule: CompatRule): boolean {
 
 const VALID_TOOL_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
+/** Anthropic's validation for server_tool_use.id — no hyphens allowed. */
+const VALID_SRVTOOL_ID_PATTERN = /^srvtoolu_[a-zA-Z0-9_]+$/;
+
 function sanitizeToolId(id: string): string {
   return id.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+/**
+ * Deterministically produce a valid server_tool_use.id from an arbitrary ID.
+ * The result always matches `^srvtoolu_[a-zA-Z0-9_]+$`.
+ */
+function sanitizeServerToolId(id: string): string {
+  // Strip existing srvtoolu_ prefix to avoid double-prefixing
+  const base = id.startsWith('srvtoolu_') ? id.slice('srvtoolu_'.length) : id;
+  // Replace all chars not in [a-zA-Z0-9_] (hyphens included) with underscores
+  const sanitized = base.replace(/[^a-zA-Z0-9_]/g, '_');
+  return `srvtoolu_${sanitized}`;
 }
 
 function buildToolIdMap(messages: MastraDBMessage[]): Map<string, string> {
@@ -146,9 +161,21 @@ function rewriteToolIds(messages: MastraDBMessage[], idMap: Map<string, string>)
 }
 
 /**
- * Anthropic enforces `^[a-zA-Z0-9_-]+$` on tool_use.id values.
- * Tool-call IDs from other providers (e.g. containing `.`, `:`) will be
- * rejected. This rule rewrites offending characters to `_`.
+ * Anthropic enforces `^[a-zA-Z0-9_-]+$` on tool_use.id values and
+ * `^srvtoolu_[a-zA-Z0-9_]+$` on server_tool_use.id values.
+ *
+ * The preemptive `applyToPrompt` hook rewrites tool-call IDs in the outbound
+ * prompt without mutating persisted messages. This handles:
+ * - Client tool IDs with invalid characters (e.g. `.`, `:`)
+ * - Provider-executed (server) tool IDs that don't have the `srvtoolu_` prefix
+ *   (e.g. after switching from a non-Anthropic model)
+ * - Provider-executed tool IDs with hyphens (disallowed by server_tool_use pattern)
+ *
+ * All rewrites are deterministic (based solely on the input ID) so that prompt
+ * caching remains stable across requests.
+ *
+ * The reactive `fix` is kept as a safety-net fallback for unexpected error
+ * formats or edge cases the preemptive path doesn't anticipate.
  */
 export const anthropicToolIdFormat: CompatRule = {
   name: 'anthropic-tool-id-format',
@@ -159,7 +186,71 @@ export const anthropicToolIdFormat: CompatRule = {
     rewriteToolIds(messages, idMap);
     return true;
   },
+  applyToPrompt({ prompt, model }) {
+    if (!isMaybeAnthropic(model)) return undefined;
+    return rewriteToolIdsInPrompt(prompt);
+  },
 };
+
+/**
+ * Build an ID-rewrite map for tool-call parts in a LanguageModelV2Prompt,
+ * then apply it to both tool-call and tool-result parts.
+ * Returns a new prompt if any IDs were rewritten, or undefined if nothing changed.
+ */
+function rewriteToolIdsInPrompt(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt | undefined {
+  // Pass 1: scan all tool-call parts, build a deterministic ID map
+  const idMap = new Map<string, string>();
+  for (const msg of prompt) {
+    if (msg.role !== 'assistant' || typeof msg.content === 'string') continue;
+    for (const part of msg.content) {
+      if (part.type !== 'tool-call') continue;
+      const id = part.toolCallId;
+      if (idMap.has(id)) continue;
+
+      const providerExecuted = (part as { providerExecuted?: boolean }).providerExecuted;
+      if (providerExecuted) {
+        if (!VALID_SRVTOOL_ID_PATTERN.test(id)) {
+          idMap.set(id, sanitizeServerToolId(id));
+        }
+      } else {
+        if (!VALID_TOOL_ID_PATTERN.test(id)) {
+          idMap.set(id, sanitizeToolId(id));
+        }
+      }
+    }
+  }
+
+  if (idMap.size === 0) return undefined;
+
+  // Pass 2: deep-copy only messages that need changes, rewrite IDs
+  return prompt.map(msg => {
+    if (msg.role === 'assistant' && typeof msg.content !== 'string') {
+      const newContent = msg.content.map(part => {
+        if (part.type === 'tool-call') {
+          const newId = idMap.get(part.toolCallId);
+          if (newId) return { ...part, toolCallId: newId };
+        }
+        if (part.type === 'tool-result') {
+          const newId = idMap.get(part.toolCallId);
+          if (newId) return { ...part, toolCallId: newId };
+        }
+        return part;
+      });
+      return { ...msg, content: newContent };
+    }
+    if (msg.role === 'tool') {
+      const newContent = msg.content.map(part => {
+        if (part.type === 'tool-result') {
+          const newId = idMap.get(part.toolCallId);
+          if (newId) return { ...part, toolCallId: newId };
+        }
+        return part;
+      });
+      return { ...msg, content: newContent };
+    }
+    return msg;
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Built-in rule: Cerebras `reasoning_content` strip
