@@ -4,6 +4,7 @@
   "type": "module",
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
+    "@internal/lint": "workspace:*",
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",

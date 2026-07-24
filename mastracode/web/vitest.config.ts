@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from '@internal/lint/vitest';
 
 /**
  * Unit tests colocated under `src/**`. The two e2e suites live under `e2e/`

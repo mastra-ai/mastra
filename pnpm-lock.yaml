@@ -205,6 +205,9 @@ importers:
       '@changesets/cli':
         specifier: ^2.31.0
         version: 2.31.0(@types/node@22.19.15)
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:packages/_config
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -3314,6 +3317,12 @@ importers:
       typescript-eslint:
         specifier: ^8.57.0
         version: 8.59.2(eslint@10.7.0(jiti@2.7.0))(typescript@6.0.3)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
     devDependencies:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
