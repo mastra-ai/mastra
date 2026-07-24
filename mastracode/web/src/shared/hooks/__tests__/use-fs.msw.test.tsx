@@ -4,7 +4,13 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderHookWithProviders } from '../../../../e2e/web-ui/render';
-import { useArtifactListing, useDirectoryListing, useWorkspaceFile, useWorkspaceRenderedListing } from '../use-fs';
+import {
+  useArtifactListing,
+  useDirectoryListing,
+  useWorkspaceFile,
+  useWorkspacePlan,
+  useWorkspaceRenderedListing,
+} from '../use-fs';
 import { listing } from './fixtures/fs';
 
 const URL = `${TEST_BASE_URL}/web/fs/list`;
@@ -114,6 +120,7 @@ describe('useArtifactListing', () => {
 
 const WORKSPACE_RENDERED_URL = `${TEST_BASE_URL}/web/workspace/rendered/list`;
 const WORKSPACE_FILE_URL = `${TEST_BASE_URL}/web/workspace/file`;
+const WORKSPACE_PLAN_URL = `${TEST_BASE_URL}/web/workspace/plan`;
 
 describe('useWorkspaceRenderedListing', () => {
   it('does not fetch until workspace path and root are available', () => {
@@ -219,5 +226,60 @@ describe('useWorkspaceFile', () => {
     expect(seenWorkspacePath).toBe('/home/user/project');
     expect(seenPath).toBe('.artifacts/understand-pr/HISTORY.md');
     expect(result.current.data?.content).toBe('notes');
+  });
+});
+
+describe('useWorkspacePlan', () => {
+  it('does not fetch until a workspace path and plan path are available', () => {
+    let called = false;
+    server.use(
+      http.get(WORKSPACE_PLAN_URL, () => {
+        called = true;
+        return HttpResponse.json({
+          workspacePath: '',
+          path: '',
+          name: '',
+          size: 0,
+          updatedAt: '',
+          contentType: 'text',
+          content: '',
+        });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useWorkspacePlan(undefined, '.mastracode/plans/add-readme.md'));
+
+    expect(result.current.fetchStatus).toBe('idle');
+    expect(called).toBe(false);
+  });
+
+  it('fetches the plan markdown content for the session workspace', async () => {
+    let seenWorkspacePath: string | null = null;
+    let seenPath: string | null = null;
+    server.use(
+      http.get(WORKSPACE_PLAN_URL, ({ request }) => {
+        const url = new global.URL(request.url);
+        seenWorkspacePath = url.searchParams.get('workspacePath');
+        seenPath = url.searchParams.get('path');
+        return HttpResponse.json({
+          workspacePath: 'session-123',
+          path: '.mastracode/plans/add-readme.md',
+          name: 'add-readme.md',
+          size: 6,
+          updatedAt: '2026-07-15T00:00:00.000Z',
+          contentType: 'text',
+          content: '# Plan',
+        });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() =>
+      useWorkspacePlan('session-123', '.mastracode/plans/add-readme.md'),
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(seenWorkspacePath).toBe('session-123');
+    expect(seenPath).toBe('.mastracode/plans/add-readme.md');
+    expect(result.current.data?.content).toBe('# Plan');
   });
 });
