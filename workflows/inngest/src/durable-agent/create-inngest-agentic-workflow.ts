@@ -11,6 +11,7 @@ import {
   baseIterationStateSchema,
   createBaseIterationStateUpdate,
   resolveDurableToolCallConcurrency,
+  runDurableFinishSideEffects,
 } from '@mastra/core/agent/durable';
 import type {
   DurableAgenticExecutionOutput,
@@ -373,8 +374,9 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       // Map final state to output format, close agent span, and emit finish event
       .map(
         async params => {
-          const { inputData, mastra } = params;
+          const { inputData, mastra, requestContext, tracingContext } = params;
           const state = inputData as IterationState;
+          const initData = params.getInitData() as DurableAgenticWorkflowInput;
 
           // Access pubsub via symbol to emit finish event
           const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
@@ -399,6 +401,41 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             state: state.state,
           };
 
+          // Finish-time side effects — output processors, memory persistence, thread
+          // title — shared with core's createDurableAgenticWorkflow. Without this the
+          // Inngest engine finished runs without ever persisting the conversation to
+          // memory: this terminal step runs on the connect() worker, whose process-local
+          // run registry is empty, and this workflow variant historically had no
+          // persistence block at all. The helper rebuilds the runtime dependencies
+          // (memory + SaveQueueManager + processors) from the Mastra instance when the
+          // registry entry is missing or incomplete, then runs the same finish-time
+          // blocks as the in-process engine. The finish event is emitted via the
+          // helper's `emitFinish` hook: after persistence (so a client reacting to
+          // `finish` observes the persisted messages) but before title generation
+          // (an LLM roundtrip that shouldn't hold the client stream open).
+          await runDurableFinishSideEffects({
+            runId: state.runId,
+            initData,
+            messageListState: state.messageListState,
+            mastra,
+            requestContext,
+            tracingContext,
+            // Parent finish-time spans (processor_run, memory_operation) under the
+            // run's AGENT_RUN. The step's own tracingContext is a workflow span
+            // that is internal (never exported), so children parented to it are
+            // orphans in storage.
+            agentSpanData: state.agentSpanData ?? (initData.agentSpanData as IterationState['agentSpanData']),
+            emitFinish: pubsub
+              ? async () => {
+                  await emitFinishEvent(pubsub, state.runId, {
+                    output: finalOutput.output,
+                    stepResult: finalOutput.stepResult,
+                  });
+                }
+              : undefined,
+            logger: mastra?.getLogger?.(),
+          });
+
           // End MODEL_GENERATION span with final output (children before parent)
           // This span was created BEFORE the workflow started and stayed open for all iterations
           const observability = mastra?.observability?.getSelectedInstance({});
@@ -420,14 +457,6 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             const agentSpan = observability?.rebuildSpan(state.agentSpanData);
             agentSpan?.end({
               output: finalOutput.output,
-            });
-          }
-
-          // Emit finish event via pubsub
-          if (pubsub) {
-            await emitFinishEvent(pubsub, state.runId, {
-              output: finalOutput.output,
-              stepResult: finalOutput.stepResult,
             });
           }
 
