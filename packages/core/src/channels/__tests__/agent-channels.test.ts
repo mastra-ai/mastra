@@ -780,6 +780,47 @@ describe('AgentChannels', () => {
       expect(stored).toMatchObject({ id: defaultThreadId, resourceId: 'discord:user-1' });
     });
 
+    it('falls back to the generated id when the resolver id already belongs to another thread', async () => {
+      const resolveThreadId = vi.fn(async () => 'taken-id');
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveThreadId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+
+      // An unrelated thread already owns the id the resolver returns.
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      const original = {
+        id: 'taken-id',
+        title: 'someone elses thread',
+        resourceId: 'other-owner',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: { unrelated: true },
+      };
+      await memoryStore.saveThread({ thread: original });
+
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await (channels as any).processChatMessage(chatThread, message, mockMastra);
+
+      // The original thread is untouched (saveThread upserts by id, so a
+      // collision would have overwritten its owner and metadata).
+      const kept = await memoryStore.getThreadById({ threadId: 'taken-id' });
+      expect(kept).toMatchObject({ resourceId: 'other-owner', title: 'someone elses thread' });
+      expect(kept?.metadata).toMatchObject({ unrelated: true });
+
+      // The channel conversation got its own thread under a generated id.
+      const { threads } = await memoryStore.listThreads({
+        filter: { metadata: { channel_externalThreadId: 'channel-1:thread-1' } },
+        perPage: 10,
+      });
+      expect(threads).toHaveLength(1);
+      expect(threads[0]!.id).not.toBe('taken-id');
+    });
+
     it('does not run the resolver when reusing an existing thread (keeps stored id)', async () => {
       const resolveThreadId = vi.fn(async () => 'should-not-be-used');
       const channels = new AgentChannels({

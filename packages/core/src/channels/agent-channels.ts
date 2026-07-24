@@ -1368,7 +1368,20 @@ export class AgentChannels {
 
     const resolvedResourceId = typeof resourceId === 'function' ? await resourceId() : resourceId;
     const defaultThreadId = crypto.randomUUID();
-    const resolvedThreadId = threadId ? await threadId(resolvedResourceId, defaultThreadId) : defaultThreadId;
+    let resolvedThreadId = threadId ? await threadId(resolvedResourceId, defaultThreadId) : defaultThreadId;
+
+    // saveThread upserts by id, so a resolver id that already belongs to another
+    // thread would overwrite it. Fall back to the generated id instead.
+    if (resolvedThreadId && resolvedThreadId !== defaultThreadId) {
+      const existing = await memoryStore.getThreadById({ threadId: resolvedThreadId }).catch(() => null);
+      if (existing) {
+        this.log(
+          'warn',
+          `resolveThreadId returned "${resolvedThreadId}" which already belongs to an existing thread; using a generated id instead`,
+        );
+        resolvedThreadId = defaultThreadId;
+      }
+    }
 
     return memoryStore.saveThread({
       thread: {

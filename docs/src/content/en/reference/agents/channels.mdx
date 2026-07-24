@@ -451,7 +451,7 @@ The `ResolveResourceIdContext` passed to the function:
 
 By default a new channel thread gets a random UUID as its internal Mastra thread id. Pass `resolveThreadId` to pick the id yourself — for example, give the thread the same id as the session it belongs to, matching how your app names threads it creates itself.
 
-The hook runs after `resolveResourceId`, so the resolved owner is available on the context. Like `resolveResourceId` it runs only when a new thread is created: reused threads keep their stored id and never call the hook. The returned id must be unique across the memory store — reusing an existing thread's id would write the conversation into that thread. Return `ctx.defaultThreadId` to keep the built-in behavior.
+The hook runs after `resolveResourceId`, so the resolved owner is available on the context. Like `resolveResourceId` it runs only when a new thread is created: reused threads keep their stored id and never call the hook. The returned id must be unique across the memory store — if it already belongs to an existing thread, Mastra logs a warning and uses a generated id instead so the existing thread is never overwritten. Return `ctx.defaultThreadId` to keep the built-in behavior.
 
 ```typescript title="src/mastra/agents/session-agent.ts"
 import { Agent } from '@mastra/core/agent'
