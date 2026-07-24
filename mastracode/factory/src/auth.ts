@@ -688,9 +688,6 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     if (c.req.method === 'POST' && path === '/web/github/webhook') {
       return next();
     }
-    if (c.req.method === 'POST' && path === '/api/agent-controllers/mastra-code/channels/slack/webhook') {
-      return next();
-    }
     // The Slack account-linking deep link and the Sign-in-with-Slack OIDC
     // start/callback do their own auth (friendly login-redirect for signed-out
     // visitors; the OIDC callback authenticates via its signed `state`) — see
