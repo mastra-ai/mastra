@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createStateSigner } from './state-signing.js';
+import { createChannelLinkStateSigner, createStateSigner } from './state-signing.js';
 
 // ── State-secret deploy scenario (ported from github/state-secret-scenario) ──
 // The OAuth/install `state` is HMAC-signed. Each `createStateSigner(secret)`
@@ -106,5 +106,52 @@ describe('stability flag', () => {
     expect(createStateSigner('s').stable).toBe(true);
     expect(createStateSigner('').stable).toBe(false);
     expect(createStateSigner().stable).toBe(false);
+  });
+});
+
+describe('channel-link state signer', () => {
+  const slackIdentity = { platform: 'slack', externalTeamId: 'T-123', externalUserId: 'U-abc', channelId: 'C-1' };
+
+  it('round-trips the bound Slack identity', () => {
+    const signer = createChannelLinkStateSigner('secret');
+    const state = signer.sign(slackIdentity);
+    expect(signer.verify(state)).toEqual(slackIdentity);
+  });
+
+  it('omits channelId when it was not provided', () => {
+    const signer = createChannelLinkStateSigner('secret');
+    const state = signer.sign({ platform: 'slack', externalTeamId: 'T-1', externalUserId: 'U-1' });
+    expect(signer.verify(state)).toEqual({ platform: 'slack', externalTeamId: 'T-1', externalUserId: 'U-1' });
+  });
+
+  it('rejects a forged identity (tampered payload)', () => {
+    const signer = createChannelLinkStateSigner('secret');
+    const state = signer.sign(slackIdentity);
+    const [body, sig] = state.split('.') as [string, string];
+    const forged = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    forged.externalUserId = 'U-attacker';
+    const forgedBody = Buffer.from(JSON.stringify(forged), 'utf8').toString('base64url');
+    expect(signer.verify(`${forgedBody}.${sig}`)).toBeNull();
+  });
+
+  it('rejects state signed under a different secret', () => {
+    const state = createChannelLinkStateSigner('secret-1').sign(slackIdentity);
+    expect(createChannelLinkStateSigner('secret-2').verify(state)).toBeNull();
+  });
+
+  it('rejects missing/malformed state', () => {
+    const signer = createChannelLinkStateSigner('secret');
+    expect(signer.verify(undefined)).toBeNull();
+    expect(signer.verify('no-dot')).toBeNull();
+  });
+
+  it('rejects an expired state', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-07-17T12:00:00Z'));
+    const signer = createChannelLinkStateSigner('secret');
+    const state = signer.sign(slackIdentity);
+    vi.advanceTimersByTime(10 * 60 * 1000 + 1);
+    expect(signer.verify(state)).toBeNull();
+    vi.useRealTimers();
   });
 });

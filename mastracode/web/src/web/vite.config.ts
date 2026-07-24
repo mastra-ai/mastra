@@ -107,6 +107,13 @@ export default defineConfig(({ mode }) => {
           target: apiTarget,
           changeOrigin: true,
         },
+        // Slack account-linking deep link (`/connect/slack?state=...`) is an
+        // API-server route, not an SPA page — without this entry Vite serves
+        // the SPA shell (a white page) for it in dev.
+        '/connect/slack': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
         '/api': {
           target: apiTarget,
           changeOrigin: true,

@@ -21,6 +21,7 @@ import {
   GitMerge,
   Info,
   Layers,
+  Slack,
   Wrench,
   X,
 } from 'lucide-react';
@@ -820,6 +821,46 @@ export function TranscriptEntries({
   );
 }
 
+const CHANNEL_PLATFORM_LABEL: Record<string, string> = {
+  slack: 'Slack',
+};
+
+/**
+ * Channel provenance for a message that arrived via a channel adapter.
+ * `agent-channels` stamps `content.providerMetadata.mastra.channels.<platform>`
+ * with author facts on inbound messages exactly so UIs can show origin
+ * without unpacking the signal envelope.
+ */
+export function channelOrigin(entry: MessageEntry): { platform: string; authorName?: string } | undefined {
+  const mastra = entry.message.content.providerMetadata?.mastra;
+  const channels = isRecord(mastra) ? mastra.channels : undefined;
+  if (!isRecord(channels)) return undefined;
+  const platform = Object.keys(channels)[0];
+  if (!platform) return undefined;
+  const info = channels[platform];
+  const author = isRecord(info) && isRecord(info.author) ? info.author : undefined;
+  const authorName =
+    typeof author?.fullName === 'string'
+      ? author.fullName
+      : typeof author?.userName === 'string'
+        ? author.userName
+        : undefined;
+  return { platform, authorName };
+}
+
+export function ChannelOriginBadge({ origin }: { origin: { platform: string; authorName?: string } }) {
+  const label = CHANNEL_PLATFORM_LABEL[origin.platform] ?? origin.platform;
+  return (
+    <div className="mt-1 flex items-center gap-1 text-ui-xs text-icon3" aria-label={`Sent from ${label}`}>
+      {origin.platform === 'slack' && <Slack className="size-3" aria-hidden="true" />}
+      <span>
+        via {label}
+        {origin.authorName ? ` · ${origin.authorName}` : ''}
+      </span>
+    </div>
+  );
+}
+
 function MessageBubble({
   entry,
   suspensions,
@@ -854,6 +895,7 @@ function MessageBubble({
     return undefined;
   })();
 
+  const origin = channelOrigin(entry);
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
       <div className="my-3 flex w-full flex-col items-end">
@@ -864,6 +906,7 @@ function MessageBubble({
         >
           {children}
         </div>
+        {origin && <ChannelOriginBadge origin={origin} />}
       </div>
     ),
     Assistant: ({ children }) => <div className="max-w-full">{children}</div>,

@@ -1,4 +1,4 @@
-import type { Adapter } from 'chat';
+import type { Adapter, Message } from 'chat';
 
 /**
  * Duck-typed shape of the Slack adapter's thread-id codec. We avoid importing
@@ -50,4 +50,28 @@ export function resolveSlackTopLevelThreadId(params: {
   const decoded = adapter.decodeThreadId(chatThreadId);
   if (decoded.threadTs !== messageId) return null;
   return adapter.encodeThreadId({ channel: decoded.channel, threadTs: '' });
+}
+
+/**
+ * Extract the Slack team/workspace id (e.g. `T0123`) from an inbound message.
+ *
+ * The normalized `chat` `Thread`/`Message`/`Author` do not carry the team id —
+ * it only survives on `message.raw`, the untyped Slack Events API envelope
+ * (`team_id` at the top level; `team`/`team.id` on some event bodies). We read
+ * it here duck-typed rather than importing `@mastra/slack` types into core.
+ *
+ * Returns `null` for non-Slack platforms or when the raw payload lacks a team id.
+ */
+export function resolveSlackTeamId(params: { platform: string; message: Message }): string | null {
+  const { platform, message } = params;
+  if (platform !== 'slack') return null;
+  const raw = message.raw as { team_id?: unknown; team?: unknown } | undefined;
+  if (!raw || typeof raw !== 'object') return null;
+  if (typeof raw.team_id === 'string' && raw.team_id) return raw.team_id;
+  if (typeof raw.team === 'string' && raw.team) return raw.team;
+  if (raw.team && typeof raw.team === 'object') {
+    const teamId = (raw.team as { id?: unknown }).id;
+    if (typeof teamId === 'string' && teamId) return teamId;
+  }
+  return null;
 }

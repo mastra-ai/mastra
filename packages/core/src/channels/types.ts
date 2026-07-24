@@ -792,6 +792,8 @@ export type ChannelContext = {
   threadId?: string;
   /** The platform channel ID. */
   channelId?: string;
+  /** Platform team/workspace ID — Slack team id, Discord guild id, etc. */
+  teamId?: string;
   /** Platform message ID of the message that triggered this turn. */
   messageId?: string;
   /** Platform user ID of the sender. */
@@ -805,3 +807,29 @@ export type ChannelContext = {
   /** The bot's mention string (e.g. '<@U123>' on Slack/Discord). */
   botMention?: string;
 };
+
+/**
+ * The Mastra tenant a platform sender is linked to. Returned by a
+ * {@link ChannelAccountLinkResolver}. `orgId` is optional (single-org / no-org
+ * deployments); `userId` is the tenant user whose stored credentials the run
+ * should resolve.
+ */
+export type ChannelAccountLink = {
+  orgId?: string;
+  userId: string;
+};
+
+/**
+ * Resolve a platform sender identity to a Mastra tenant, or `null` when the
+ * sender has not linked their account. Injected into
+ * {@link AgentControllerChannels} by the host (which owns the tenant/credential
+ * layer) — core stays tenant-agnostic. On a hit the dispatcher stamps the
+ * tenant onto the run's `requestContext` (`user`) so per-tenant credential
+ * resolution finds the sender's stored model credentials; on a miss the run is
+ * skipped so the host can prompt the sender to link first.
+ */
+export type ChannelAccountLinkResolver = (sender: {
+  platform: string;
+  teamId?: string;
+  userId: string;
+}) => Promise<ChannelAccountLink | null>;

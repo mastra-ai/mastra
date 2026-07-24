@@ -28,11 +28,19 @@ import { PlatformSandbox } from '@mastra/platform-workspace';
 import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { getDatabasePath } from '@mastra/code-sdk/utils/project';
 import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
-import { MastraFactory } from '@mastra/factory';
+import {
+  MastraFactory,
+  ChannelIdentityStorage,
+  FactoryProjectsStorage,
+  createChannelLinkStateSigner,
+  createFactoryRouteAuth,
+  createStateSigner,
+} from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
-import { createAgentControllerSlackChannels } from '../web/channels/slack/slack.js';
+import { createAgentControllerSlackChannels, createGithubSourceControl } from '../web/channels/slack/slack.js';
+import { createSlackConnectRoutes } from '../web/channels/slack/connect-route.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -189,6 +197,12 @@ const storage = databaseUrl
     });
 const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectionString: databaseUrl }) : undefined;
 
+// Deployment-stable secret for OAuth/link `state` signing. Shared by the
+// factory's integration signer and the channel-account-link deep link so both
+// sign/verify with the same key: webhook secret first, then the WorkOS cookie
+// password. Unset → per-process random secret (single-process local dev only).
+const stateSecret = process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined;
+
 const integrations = [...(github ? [github] : []), ...(linear ? [linear] : [])];
 
 export const factory = new MastraFactory({
@@ -219,18 +233,78 @@ export const factory = new MastraFactory({
     .map(o => o.trim())
     .filter(Boolean),
   // Deployment-stable secret for OAuth `state` signing (GitHub/Linear connect
-  // flows). Same resolution the state signer used before it moved into the
-  // factory: webhook secret first, then the WorkOS cookie password. Unset →
-  // per-process random secret (single-process local dev only).
-  stateSecret: process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined,
+  // flows). See `stateSecret` above.
+  stateSecret,
 });
 
 const preparedArgs = await factory.prepare();
 
+// Signs the account-linking deep link so a forged sender identity can't hijack
+// a link. Same secret as the factory's integration signer.
+export const channelLinkStateSigner = createChannelLinkStateSigner(stateSecret);
+
+// The channel-identity + projects domains are registered during
+// `factory.prepare()`, so they're resolvable off the shared FactoryStorage by
+// the time we get here.
+const accountLinks = storage.getDomain<ChannelIdentityStorage>('channel-identity');
+const factoryProjects = storage.getDomain<FactoryProjectsStorage>('projects');
+
 const mcAgentController = preparedArgs.agentControllers?.['code'];
 if (mcAgentController) {
-  mcAgentController.setChannels(createAgentControllerSlackChannels({ getMastra: () => mcAgentController.getMastra() }));
+  mcAgentController.setChannels(
+    createAgentControllerSlackChannels({
+      getMastra: () => mcAgentController.getMastra(),
+      accountLinks,
+      channelLinkStateSigner,
+      projects: factoryProjects,
+      // Repo-backed Slack threads: linked senders with a repo-connected
+      // factory get a Factory user-session (repo sandbox) per thread. Only
+      // available with the direct GitHub App wiring.
+      sourceControl: github ? createGithubSourceControl(github) : undefined,
+    }),
+  );
 }
+
+// The authed `/connect/slack` route (per-user link write). Appended to the
+// factory-assembled apiRoutes so it rides the same server + auth gate.
+//
+// IMPORTANT: use the provider the factory RESOLVED (`preparedArgs.server.auth`),
+// not this entry's `auth` variable — that local is only the explicit
+// enable/disable override and stays `undefined` when the factory falls back to
+// its default MastraAuthStudio provider. Wiring the local here handed the
+// route a no-op RouteAuth whose `ensureUser` never resolves anyone, sending
+// every visitor into a login loop.
+const resolvedAuth = (preparedArgs.server as { auth?: IMastraAuthProvider } | undefined)?.auth;
+
+// Web-initiated "Sign in with Slack" (OIDC) connect flow — enabled when the
+// env Slack app's OAuth client credentials are present. The redirect_uri must
+// be HTTPS (Slack requirement), so it's built from the channels public URL
+// (the tunnel locally); the post-connect redirect returns to the SPA origin.
+const slackClientId = process.env.SLACK_APP_CLIENT_ID?.trim();
+const slackClientSecret = process.env.SLACK_APP_CLIENT_SECRET?.trim();
+const oidcRedirectBase = process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL;
+const slackOidc =
+  slackClientId && slackClientSecret && oidcRedirectBase
+    ? {
+        clientId: slackClientId,
+        clientSecret: slackClientSecret,
+        redirectBaseUrl: oidcRedirectBase,
+        uiOrigin: process.env.MASTRACODE_PUBLIC_URL,
+      }
+    : undefined;
+
+const slackConnectRoutes = createSlackConnectRoutes({
+  auth: createFactoryRouteAuth(resolvedAuth),
+  accountLinks,
+  channelLinkStateSigner,
+  tenantStateSigner: createStateSigner(stateSecret),
+  oidc: slackOidc,
+  projects: factoryProjects,
+});
+preparedArgs.server = {
+  ...preparedArgs.server,
+  apiRoutes: [...(preparedArgs.server?.apiRoutes ?? []), ...slackConnectRoutes],
+};
 
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
 // in the entry file (see module docs). `prepare()` returns the constructor args

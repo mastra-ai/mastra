@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { resolveSlackTopLevelThreadId } from './slack';
+import { resolveSlackTeamId, resolveSlackTopLevelThreadId } from './slack';
 
 function makeSlackAdapter() {
   return {
@@ -67,5 +67,31 @@ describe('resolveSlackTopLevelThreadId', () => {
       messageId: '1700000000.000100',
     });
     expect(result).toBeNull();
+  });
+});
+
+describe('resolveSlackTeamId', () => {
+  const msg = (raw: unknown) => ({ raw }) as any;
+
+  it('reads team_id from the top-level Slack event envelope', () => {
+    expect(resolveSlackTeamId({ platform: 'slack', message: msg({ team_id: 'T123' }) })).toBe('T123');
+  });
+
+  it('falls back to a string `team` field', () => {
+    expect(resolveSlackTeamId({ platform: 'slack', message: msg({ team: 'T456' }) })).toBe('T456');
+  });
+
+  it('falls back to `team.id` on interactive payloads', () => {
+    expect(resolveSlackTeamId({ platform: 'slack', message: msg({ team: { id: 'T789' } }) })).toBe('T789');
+  });
+
+  it('returns null for non-slack platforms', () => {
+    expect(resolveSlackTeamId({ platform: 'discord', message: msg({ team_id: 'T123' }) })).toBeNull();
+  });
+
+  it('returns null when the raw payload carries no team id', () => {
+    expect(resolveSlackTeamId({ platform: 'slack', message: msg({ channel: 'C1' }) })).toBeNull();
+    expect(resolveSlackTeamId({ platform: 'slack', message: msg(undefined) })).toBeNull();
+    expect(resolveSlackTeamId({ platform: 'slack', message: msg('not-an-object') })).toBeNull();
   });
 });

@@ -186,6 +186,31 @@ describe('Mastra Channel Integration', () => {
     });
   });
 
+  describe('onSdkReady', () => {
+    it('fires callbacks registered before init once the Chat SDK exists, and immediately after', async () => {
+      const agent = createTestAgent('bot-1', {
+        channels: { adapters: { discord: createMockAdapter('discord') } },
+      });
+      const channels = agent.getChannels()!;
+
+      const beforeInit = vi.fn();
+      channels.onSdkReady(beforeInit);
+      expect(beforeInit).not.toHaveBeenCalled();
+
+      new Mastra({ logger: false, agents: { 'bot-1': agent }, storage: new InMemoryStore() });
+      await vi.waitFor(() => expect(channels.sdk).not.toBeNull());
+
+      expect(beforeInit).toHaveBeenCalledTimes(1);
+      expect(beforeInit).toHaveBeenCalledWith(channels.sdk);
+
+      // Post-init registration runs synchronously with the live instance.
+      const afterInit = vi.fn();
+      channels.onSdkReady(afterInit);
+      expect(afterInit).toHaveBeenCalledTimes(1);
+      expect(afterInit).toHaveBeenCalledWith(channels.sdk);
+    });
+  });
+
   describe('channel initialization error handling', () => {
     it('logs an error instead of swallowing the rejection when channel initialization fails', async () => {
       const logger = new ConsoleLogger({ level: 'error' });

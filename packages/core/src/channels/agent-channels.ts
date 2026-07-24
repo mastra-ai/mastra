@@ -20,7 +20,7 @@ import type { AgentChunkType } from '../stream/types';
 import { createTool } from '../tools/tool';
 
 import { chatModule, getChatModule } from './chat-lazy';
-import { resolveSlackTopLevelThreadId } from './compat/slack';
+import { resolveSlackTeamId, resolveSlackTopLevelThreadId } from './compat/slack';
 
 import { formatArgsSummary, formatToolApproved, formatToolDenied, stripToolPrefix } from './formatting';
 import {
@@ -371,6 +371,26 @@ export class AgentChannels {
     return this.chat;
   }
 
+  /** Callbacks waiting for the Chat SDK instance (see {@link onSdkReady}). */
+  private sdkReadyHandlers: Array<(chat: Chat) => void> = [];
+
+  /**
+   * Run a callback with the Chat SDK instance once it exists — immediately
+   * when already initialized, else right after {@link initialize} constructs
+   * it. The SDK is created lazily inside `initialize()`, so hosts that build
+   * their channels before the server boots (e.g. registering extra
+   * `chat.onSlashCommand(...)` handlers) can't use {@link sdk} directly.
+   *
+   * @experimental
+   */
+  onSdkReady(handler: (chat: Chat) => void): void {
+    if (this.chat) {
+      handler(this.chat);
+      return;
+    }
+    this.sdkReadyHandlers.push(handler);
+  }
+
   /**
    * Initialize the Chat SDK, register handlers, and start gateway listeners.
    * Called by Mastra.addAgent after the server is ready.
@@ -664,6 +684,11 @@ export class AgentChannels {
       await chat.initialize();
       this.chat = chat;
 
+      // Flush host callbacks registered before the SDK existed.
+      const sdkReadyHandlers = this.sdkReadyHandlers;
+      this.sdkReadyHandlers = [];
+      for (const handler of sdkReadyHandlers) handler(chat);
+
       // Start gateway listeners for adapters that support it (e.g. Discord)
       for (const [name, adapter] of Object.entries(this.adapters)) {
         if (!(this.adapterConfigs[name]?.gateway ?? true)) continue;
@@ -914,12 +939,14 @@ export class AgentChannels {
     eventType: string;
     messageId: string | undefined;
     actor: { userId: string; userName?: string; fullName?: string; isBot?: boolean | 'unknown' };
+    /** Platform team/workspace ID (Slack team id, ...), when known for this event. */
+    teamId?: string;
   }): {
     channelContext: ChannelContext;
     attributes: Record<string, string | undefined>;
     providerOptions: MastraProviderMetadata;
   } {
-    const { chatThread, platform, eventType, messageId, actor } = params;
+    const { chatThread, platform, eventType, messageId, actor, teamId } = params;
     const adapter = this.adapters[platform]!;
     const botUserId = adapter.botUserId;
     const botMention = botUserId ? chatThread.mentionUser(botUserId) : undefined;
@@ -932,6 +959,7 @@ export class AgentChannels {
       isDM: chatThread.isDM,
       threadId: chatThread.id,
       channelId: chatThread.channelId,
+      teamId,
       messageId,
       userId: actor.userId,
       userName: actorName,
@@ -1182,6 +1210,7 @@ export class AgentChannels {
       eventType: chatThread.isDM ? 'message' : 'mention',
       messageId: message.id,
       actor: message.author,
+      teamId: resolveSlackTeamId({ platform, message }) ?? undefined,
     });
 
     const requestContext = new RequestContext();

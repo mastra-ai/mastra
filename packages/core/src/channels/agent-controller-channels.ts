@@ -10,7 +10,20 @@ import type { StorageThreadType } from '../memory/types';
 import type { RequestContext } from '../request-context';
 
 import { AgentChannels } from './agent-channels';
-import type { ChannelConfig } from './types';
+import type { ChannelAccountLinkResolver, ChannelContext, ChannelConfig } from './types';
+
+/**
+ * Called when an inbound sender has not linked their platform account to a
+ * Mastra tenant. The host renders a "connect your account" prompt back to the
+ * platform (see the Slack channel handler). The run is skipped either way.
+ */
+export type UnlinkedSenderHandler = (sender: {
+  platform: string;
+  teamId?: string;
+  userId: string;
+  channelId?: string;
+  threadId?: string;
+}) => void | Promise<void>;
 
 /** Configuration for {@link AgentControllerChannels}. Same shape as agent channels. */
 export type AgentControllerChannelsConfig = ChannelConfig;
@@ -31,6 +44,31 @@ export type AgentControllerChannelsConfig = ChannelConfig;
  */
 export class AgentControllerChannels extends AgentChannels {
   private controller: AgentController<any> | null = null;
+
+  /**
+   * Resolves an inbound platform sender to a Mastra tenant. Injected by the
+   * host (which owns the tenant/credential layer) so core stays
+   * tenant-agnostic. Unset → no account-link gating: runs dispatch with no
+   * tenant stamped (the pre-account-linking behavior).
+   */
+  private accountLinkResolver: ChannelAccountLinkResolver | null = null;
+
+  /** Invoked when a sender is unlinked so the host can prompt them to connect. */
+  private unlinkedSenderHandler: UnlinkedSenderHandler | null = null;
+
+  /**
+   * @internal Inject the sender→tenant resolver. When set, inbound messages
+   * from an unlinked sender are not dispatched to the agent; instead
+   * {@link setUnlinkedSenderHandler}'s callback (if any) fires.
+   */
+  setAccountLinkResolver(resolver: ChannelAccountLinkResolver | null): void {
+    this.accountLinkResolver = resolver;
+  }
+
+  /** @internal Register the unlinked-sender prompt callback (see Phase 3). */
+  setUnlinkedSenderHandler(handler: UnlinkedSenderHandler | null): void {
+    this.unlinkedSenderHandler = handler;
+  }
 
   /**
    * Session resourceIds whose adapter can't render approval buttons, so their
@@ -117,7 +155,35 @@ export class AgentControllerChannels extends AgentChannels {
   }): Promise<void> {
     const { signalContents, attributes, providerOptions, requestContext, thread, autoResumeSuspendedTools } = args;
 
-    const session = await this.getSessionForThread(thread);
+    // Resolve the platform sender to a Mastra tenant so the run loads that
+    // user's per-tenant model credentials. Unset resolver → keep the
+    // pre-account-linking behavior (no tenant stamped). On a hit, stamp the
+    // tenant onto `requestContext.user` — the single seam
+    // `resolveCredentialStore` reads. On a miss, don't run: hand off to the
+    // unlinked-sender handler (the host prompts the sender to connect first).
+    if (this.accountLinkResolver) {
+      const channel = requestContext.get('channel') as ChannelContext | undefined;
+      if (channel) {
+        const link = await this.accountLinkResolver({
+          platform: channel.platform,
+          teamId: channel.teamId,
+          userId: channel.userId,
+        });
+        if (!link) {
+          await this.unlinkedSenderHandler?.({
+            platform: channel.platform,
+            teamId: channel.teamId,
+            userId: channel.userId,
+            channelId: channel.channelId,
+            threadId: channel.threadId,
+          });
+          return;
+        }
+        requestContext.set('user', { id: link.userId, organizationId: link.orgId });
+      }
+    }
+
+    const session = await this.getSessionForThread(thread, requestContext);
 
     // The session equivalent of the base path's `autoResumeSuspendedTools`:
     // controller runs set `requireToolApproval` from this marker, so on
@@ -209,15 +275,22 @@ export class AgentControllerChannels extends AgentChannels {
    * pre-existing threads (custom resolveResourceId, or created before this
    * feature) always pass the session's thread-ownership check.
    */
-  protected async getSessionForThread(thread: Pick<StorageThreadType, 'id' | 'resourceId'>): Promise<Session<any>> {
+  protected async getSessionForThread(
+    thread: Pick<StorageThreadType, 'id' | 'resourceId'>,
+    requestContext?: RequestContext,
+  ): Promise<Session<any>> {
     const controller = this.requireController();
     const channelResourceId = thread.resourceId;
     // `createSession` is get-or-create keyed by resourceId, so follow-up messages
-    // on the same thread reuse the cached session bound to this thread.
+    // on the same thread reuse the cached session bound to this thread. The
+    // dispatch requestContext must flow in: a dynamic workspace factory is
+    // resolved once at session creation with THIS context, and it may need the
+    // stamped tenant (`user`) to authorize a repo-backed session workspace.
     const session = await controller.createSession({
       resourceId: channelResourceId,
       id: channelResourceId,
       ownerId: controller.id,
+      requestContext,
     });
     // Bind the mapped thread. Guard is mandatory: `switch` aborts any active
     // run, so never re-switch when the session is already on this thread.

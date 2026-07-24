@@ -35,6 +35,7 @@ export const queryKeys = {
   linearIssues: (githubProjectId: string | undefined) =>
     [...queryKeys.linearIssuesAll(), githubProjectId ?? null] as const,
   intakeConfig: () => ['intake', 'config'] as const,
+  channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   factoryMetrics: (githubProjectId: string | undefined, from: string, to: string) =>
     ['factory', 'metrics', githubProjectId ?? null, from, to] as const,
