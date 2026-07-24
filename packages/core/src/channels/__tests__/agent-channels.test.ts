@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { Agent } from '../../agent';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
 import { AgentChannels } from '../agent-channels';
@@ -102,46 +101,6 @@ describe('AgentChannels', () => {
         tools: false,
       });
       expect(Object.keys(disabled.getTools())).toHaveLength(0);
-    });
-  });
-
-  describe('channel tools are not auto-injected into an agent toolset', () => {
-    it('resolves a channel-bearing agent toolset without the channel tools', async () => {
-      // getTools() still returns the channel tools (the explicit opt-in)...
-      const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
-      expect(Object.keys(channels.getTools())).toContain('add_reaction');
-
-      // ...but attaching channels to an agent does not inject them into the
-      // agent's resolved toolset.
-      const agent = new Agent({
-        id: 'no-auto-tools',
-        name: 'no-auto-tools',
-        instructions: 'test',
-        model: 'openai/gpt-4o',
-      });
-      agent.setChannels(channels);
-
-      const resolved = await agent.getToolsForExecution({});
-      const toolNames = Object.keys(resolved);
-      expect(toolNames).not.toContain('add_reaction');
-      expect(toolNames).not.toContain('remove_reaction');
-    });
-
-    it('resolves the channel tools when passed explicitly via tools: { ...channels.getTools() }', async () => {
-      const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
-      const agent = new Agent({
-        id: 'explicit-tools',
-        name: 'explicit-tools',
-        instructions: 'test',
-        model: 'openai/gpt-4o',
-        tools: { ...(channels.getTools() as Record<string, any>) },
-      });
-      agent.setChannels(channels);
-
-      const resolved = await agent.getToolsForExecution({});
-      const toolNames = Object.keys(resolved);
-      expect(toolNames).toContain('add_reaction');
-      expect(toolNames).toContain('remove_reaction');
     });
   });
 

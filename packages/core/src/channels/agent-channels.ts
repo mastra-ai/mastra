@@ -832,21 +832,8 @@ export class AgentChannels {
   }
 
   /**
-   * Returns generic channel tools (add_reaction, remove_reaction) that resolve
-   * the target adapter from the current request context.
-   *
-   * These are not injected into the agent automatically — pass them explicitly
-   * if the agent should react to channel messages:
-   *
-   * ```ts
-   * const agent = new Agent({
-   *   channels,
-   *   tools: { ...channels.getTools() },
-   * });
-   * ```
-   *
-   * Replies don't need a tool: the agent's response streams back to the
-   * channel through the output processor.
+   * Returns generic channel tools (send_message, add_reaction, etc.)
+   * that resolve the target adapter from the current request context.
    */
   getTools(): Record<string, unknown> {
     if (!this.toolsEnabled) return {};

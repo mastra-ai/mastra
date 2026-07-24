@@ -3716,6 +3716,67 @@ export class Agent<
   }
 
   /**
+   * Returns tools provided by the agent's channels (e.g. discord_send_message).
+   * @internal
+   */
+  private async listChannelTools({
+    runId,
+    resourceId,
+    threadId,
+    requestContext,
+    mastraProxy,
+    autoResumeSuspendedTools,
+    backgroundTaskEnabled,
+    ...rest
+  }: {
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+    requestContext: RequestContext;
+    mastraProxy?: MastraUnion;
+    autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
+  } & Partial<ObservabilityContext>) {
+    const observabilityContext = resolveObservabilityContext(rest);
+    const convertedChannelTools: Record<string, CoreTool> = {};
+
+    if (!this.#agentChannels) {
+      return convertedChannelTools;
+    }
+
+    const channelTools = this.#agentChannels.getTools();
+
+    if (Object.keys(channelTools).length > 0) {
+      const memory = await this.getMemory({ requestContext });
+
+      for (const [toolName, tool] of Object.entries(channelTools)) {
+        const options: ToolOptions = {
+          name: toolName,
+          runId,
+          threadId,
+          resourceId,
+          logger: this.logger,
+          mastra: mastraProxy as MastraUnion | undefined,
+          memory,
+          agentName: this.name,
+          requestContext,
+          ...observabilityContext,
+          tracingPolicy: this.#options?.tracingPolicy,
+        };
+        convertedChannelTools[toolName] = makeCoreTool(
+          tool as ToolToConvert,
+          options,
+          undefined,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+        );
+      }
+    }
+
+    return convertedChannelTools;
+  }
+
+  /**
    * Returns skill tools (skill, skill_search, skill_read) when the workspace
    * has skills configured. These are added at the Agent level (like workspace
    * tools) rather than inside a processor, so they persist across turns and
@@ -5981,6 +6042,17 @@ export class Agent<
       suppressEagerSkillTools: hasOnDemandProcessor && !hasSkillsProcessor,
     });
 
+    const channelTools = await this.listChannelTools({
+      runId,
+      resourceId,
+      threadId,
+      requestContext,
+      ...observabilityContext,
+      mastraProxy,
+      autoResumeSuspendedTools,
+      backgroundTaskEnabled,
+    });
+
     const browserTools = await this.listBrowserTools({
       runId,
       resourceId,
@@ -6013,6 +6085,7 @@ export class Agent<
       ...workflowTools,
       ...workspaceTools,
       ...skillTools,
+      ...channelTools,
       ...browserTools,
       ...inputProcessorLoadedTools,
     };

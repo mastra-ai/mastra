@@ -159,8 +159,7 @@ await slack.configure({
     name: 'tools',
     type: "ChannelConfig['tools']",
     isOptional: true,
-    description:
-      'Whether the channel exposes channel tools (`add_reaction`, `remove_reaction`) via `AgentChannels.getTools()`. These tools are never added to the agent automatically — pass them explicitly via `tools: { ...channels.getTools() }` to use them.',
+    description: 'Whether to include channel tools (`add_reaction`, `remove_reaction`).',
   },
   {
     name: 'state',

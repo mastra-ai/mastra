@@ -72,7 +72,7 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
     isOptional: true,
     defaultValue: 'true',
     description:
-      'Whether `getTools()` returns the channel-specific tools (`add_reaction`, `remove_reaction`). Set to `false` for models that do not support function calling. Channel tools are never added to the agent automatically — pass them explicitly via `tools: { ...channels.getTools() }`.',
+      'Include channel-specific tools (`add_reaction`, `remove_reaction`). Set to `false` for models that do not support function calling.',
   },
   {
     name: 'state',
