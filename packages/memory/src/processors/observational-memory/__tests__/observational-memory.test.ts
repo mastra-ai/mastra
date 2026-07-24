@@ -4171,6 +4171,25 @@ describe('ObservationalMemory Integration', () => {
       expect(instructions).toContain('raw history may exist for threads that have no observations yet');
     });
 
+    it('omits search routing for browsing-only resource retrieval', () => {
+      const instructions = getRetrievalInstructions('resource', undefined, false);
+
+      expect(instructions).not.toContain('mode: "search"');
+      expect(instructions).toContain('mode: "threads"');
+      expect(instructions).toContain('mode: "messages"');
+      expect(instructions).toContain("ALL of this user's conversation threads");
+      // Thread discovery is still the fallback for finding past conversations
+      expect(instructions).toContain('Raw history may exist for threads that have no observations yet');
+    });
+
+    it('omits search routing for browsing-only thread retrieval', () => {
+      const instructions = getRetrievalInstructions('thread', undefined, false);
+
+      expect(instructions).not.toContain('mode: "search"');
+      expect(instructions).toContain('mode: "messages"');
+      expect(instructions).toContain('mode: "threads"');
+    });
+
     it('describes current-thread usage for thread scope', () => {
       const instructions = getRetrievalInstructions('thread');
 
@@ -4198,10 +4217,17 @@ describe('ObservationalMemory Integration', () => {
     it('injects scope-aware instructions into actor context', () => {
       const observations = '<observation-group id="group-1" range="msg-1:msg-2">\n- 🔴 Fact\n</observation-group>';
 
-      const resourceText = (makeRetrievalOm({ scope: 'resource' }) as any)
+      const resourceText = (makeRetrievalOm({ vector: true, scope: 'resource' }) as any)
         .formatObservationsForContext(observations, undefined, undefined, undefined, undefined, undefined, true)
         .join('\n\n');
       expect(resourceText).toContain('If search results look irrelevant, do not give up');
+
+      // Browsing-only retrieval (no vector) must not steer the agent toward search
+      const browsingText = (makeRetrievalOm({ scope: 'resource' }) as any)
+        .formatObservationsForContext(observations, undefined, undefined, undefined, undefined, undefined, true)
+        .join('\n\n');
+      expect(browsingText).not.toContain('mode: "search"');
+      expect(browsingText).toContain('mode: "threads"');
 
       const threadText = (makeRetrievalOm({ scope: 'thread' }) as any)
         .formatObservationsForContext(observations, undefined, undefined, undefined, undefined, undefined, true)

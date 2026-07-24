@@ -86,14 +86,18 @@ SYSTEM REMINDERS: Messages wrapped in <system-reminder>...</system-reminder> con
  * @param scope - The retrieval scope the recall tool was registered with.
  * @param customInstructions - Optional application-provided guidance appended after
  *   the native instructions. Never replaces them.
+ * @param searchEnabled - Whether semantic search (`retrieval: { vector: true }`) is
+ *   available. When false, the guidance only covers \`threads\`/\`messages\` browsing so
+ *   the agent is not steered toward a mode that cannot work.
  */
 export function getRetrievalInstructions(
   scope: 'thread' | 'resource' = 'resource',
   customInstructions?: string,
+  searchEnabled = true,
 ): string {
   const isResource = scope === 'resource';
 
-  const modeSection = isResource
+  const resourceModeSection = searchEnabled
     ? `### Choosing a mode
 The recall tool works across ALL of this user's conversation threads, not just the current one.
 
@@ -103,14 +107,28 @@ The recall tool works across ALL of this user's conversation threads, not just t
 
 **If search results look irrelevant, do not give up.** Search only covers content that has been indexed — a short or recent conversation may exist in raw message history before any observation of it was created. When search returns nothing suitable but the user is clearly referring to a past conversation, call \`mode: "threads"\` to find candidate threads (titles and dates are strong clues), then read them with \`mode: "messages"\`. If a search result already gives you a thread ID, go straight to \`mode: "messages"\`.`
     : `### Choosing a mode
+The recall tool works across ALL of this user's conversation threads, not just the current one.
+
+- Use \`mode: "threads"\` to list the user's threads (IDs, titles, dates) when you need to discover where something was discussed. Use \`before\`/\`after\` to narrow by date.
+- Use \`mode: "messages"\` when you know the thread — pass \`threadId\` to read another thread, or a \`cursor\` from an observation-group range.
+
+When the user refers to a past conversation you don't have a cursor for, call \`mode: "threads"\` to find candidate threads (titles and dates are strong clues), then read them with \`mode: "messages"\`. Raw history may exist for threads that have no observations yet.`;
+
+  const threadModeSection = `### Choosing a mode
 The recall tool is limited to the current conversation thread.
 
-- Use \`mode: "messages"\` (default) to page through this thread's message history near a cursor.
-- Use \`mode: "search"\` with a \`query\` to find messages by content within this thread.
+- Use \`mode: "messages"\` (default) to page through this thread's message history near a cursor.${
+    searchEnabled
+      ? `
+- Use \`mode: "search"\` with a \`query\` to find messages by content within this thread.`
+      : ''
+  }
 - Use \`mode: "threads"\` to get the current thread's ID, title, and dates.`;
 
+  const modeSection = isResource ? resourceModeSection : threadModeSection;
+
   const notNeededScopeBullet = isResource
-    ? `- No relevant observation range exists AND \`search\`/\`threads\` turned up nothing — but remember that raw history may exist for threads that have no observations yet, so check before concluding the information is unavailable`
+    ? `- No relevant observation range exists AND ${searchEnabled ? '`search`/`threads`' : '`threads`'} turned up nothing — but remember that raw history may exist for threads that have no observations yet, so check before concluding the information is unavailable`
     : `- There is no relevant range in your observations for the topic`;
 
   const base = `## Recall — looking up source messages
