@@ -1,3 +1,4 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import {
   Dialog,
   DialogContent,
@@ -78,26 +79,44 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
               </div>
             ) : (
               <div className="flex flex-col gap-1 max-h-dropdown-max-height overflow-y-auto">
-                {filtered.map(block => (
-                  <button
-                    key={block.id}
-                    type="button"
-                    onClick={() => handleSelect(block.id)}
-                    className={cn(
-                      'flex flex-col gap-0.5 rounded-md px-3 py-2 text-left',
-                      'hover:bg-surface4 active:bg-surface5 transition-colors',
-                    )}
-                  >
-                    <Txt variant="ui-sm" className="text-neutral6 font-medium">
-                      {block.name}
-                    </Txt>
-                    {block.description && (
-                      <Txt variant="ui-xs" className="text-neutral3 line-clamp-1">
-                        {block.description}
-                      </Txt>
-                    )}
-                  </button>
-                ))}
+                {filtered.map(block => {
+                  // Runtime instruction resolution only includes PUBLISHED prompt blocks.
+                  // A block with no active version is a draft and would be skipped at
+                  // runtime, so flag it before the user references it.
+                  const isDraft = !block.activeVersionId;
+                  return (
+                    <button
+                      key={block.id}
+                      type="button"
+                      onClick={() => handleSelect(block.id)}
+                      className={cn(
+                        'flex flex-col gap-0.5 rounded-md px-3 py-2 text-left',
+                        'hover:bg-surface4 active:bg-surface5 transition-colors',
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Txt variant="ui-sm" className="text-neutral6 font-medium truncate">
+                          {block.name}
+                        </Txt>
+                        {isDraft && (
+                          <Badge variant="warning" className="shrink-0">
+                            Draft
+                          </Badge>
+                        )}
+                      </div>
+                      {block.description && (
+                        <Txt variant="ui-xs" className="text-neutral3 line-clamp-1">
+                          {block.description}
+                        </Txt>
+                      )}
+                      {isDraft && (
+                        <Txt variant="ui-xs" className="text-neutral3">
+                          Unpublished — skipped at runtime until published
+                        </Txt>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

@@ -1,4 +1,5 @@
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { ContentBlock } from '@mastra/playground-ui/components/ContentBlocks';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
@@ -8,7 +9,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
-import { GripVertical, X, ExternalLink, ChevronDown } from 'lucide-react';
+import { GripVertical, X, ExternalLink, ChevronDown, AlertTriangle } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 
@@ -46,6 +47,15 @@ const RefBlockContent = ({
 }: RefBlockContentProps) => {
   const { data: promptBlock, isLoading } = useStoredPromptBlock(block.promptBlockId);
   const { updateStoredPromptBlock } = useStoredPromptBlockMutations(block.promptBlockId);
+
+  // Runtime instruction resolution only includes PUBLISHED prompt blocks. A block
+  // with no active version is a draft that the agent skips at runtime (resolving to
+  // an empty section), even though it renders here in the draft-inclusive preview.
+  // A published block with newer unpublished edits runs with the last published
+  // version, not what's shown below. Surface both so the editor matches runtime.
+  const isPublished = Boolean(promptBlock?.activeVersionId);
+  const isDraft = Boolean(promptBlock) && !isPublished;
+  const hasUnpublishedEdits = isPublished && Boolean(promptBlock?.hasDraft);
   const { navigate, paths } = useLinkComponent();
   // Local state for the editor so edits aren't lost on query refetch
   const [localContent, setLocalContent] = useState('');
@@ -126,6 +136,16 @@ const RefBlockContent = ({
               <Txt variant="ui-xs" className="text-neutral3 truncate">
                 {promptBlock.name}
               </Txt>
+              {isDraft && (
+                <Badge variant="warning" className="shrink-0">
+                  Draft
+                </Badge>
+              )}
+              {hasUnpublishedEdits && (
+                <Badge variant="warning" className="shrink-0">
+                  Unpublished edits
+                </Badge>
+              )}
               {!readOnly && (
                 <Popover>
                   <PopoverTrigger asChild>
@@ -207,6 +227,30 @@ const RefBlockContent = ({
                 </Popover>
               )}
             </div>
+
+            {/* Runtime mismatch warning — draft refs resolve empty at runtime */}
+            {isDraft && (
+              <div className="flex items-start gap-1.5 py-1 px-1 -ml-1 text-warning">
+                <Icon className="h-3.5! w-3.5! mt-0.5 shrink-0">
+                  <AlertTriangle />
+                </Icon>
+                <Txt variant="ui-xs">
+                  This prompt block is an unpublished draft. The agent skips it at runtime until the block is published,
+                  so this content will not be part of the agent's instructions yet.
+                </Txt>
+              </div>
+            )}
+            {hasUnpublishedEdits && (
+              <div className="flex items-start gap-1.5 py-1 px-1 -ml-1 text-neutral3">
+                <Icon className="h-3.5! w-3.5! mt-0.5 shrink-0">
+                  <AlertTriangle />
+                </Icon>
+                <Txt variant="ui-xs">
+                  This block has unpublished edits. The agent runs the last published version at runtime, not the
+                  changes shown here, until the block is published.
+                </Txt>
+              </div>
+            )}
 
             {/* Editable content */}
             <CodeEditor
