@@ -38,6 +38,8 @@
     "moonshotai/Kimi-K2.7-Code",
     "pioneer/auto",
     "qwen3.6-flash",
+    "qwen3.6-plus",
+    "qwen3.7-plus",
     "sakana/fugu-ultra"
   ],
   "temperature": [

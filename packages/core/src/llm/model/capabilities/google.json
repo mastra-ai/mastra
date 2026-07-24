@@ -34,6 +34,8 @@
     "veo-3.1-lite-generate-preview"
   ],
   "temperature": [
+    "deep-research-max-preview-04-2026",
+    "deep-research-preview-04-2026",
     "gemini-2.5-computer-use-preview-10-2025",
     "gemini-2.5-flash",
     "gemini-2.5-flash-image",
@@ -54,6 +56,7 @@
     "gemini-3.1-pro-preview-customtools",
     "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
+    "gemini-3.5-live-translate-preview",
     "gemini-3.6-flash",
     "gemini-flash-latest",
     "gemini-flash-lite-latest",
