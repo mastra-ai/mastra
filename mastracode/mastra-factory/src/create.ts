@@ -4,11 +4,11 @@ import * as p from '@clack/prompts';
 // `mastra/internal/auth` is the CLI's internal barrel — drives the browser-auth
 // flow and reuses persisted credentials + org resolution rather than duplicating
 // them here.
+import type { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
 import { fetchOrgs, getToken, loadCredentials, resolveCurrentOrg } from 'mastra/internal/auth';
 import color from 'picocolors';
 import { x } from 'tinyexec';
 
-import type { Analytics } from './analytics.js';
 import { upsertEnvFile } from './env.js';
 import type { PlatformProject, ProjectRegion } from './platform.js';
 import {
@@ -39,7 +39,7 @@ export interface CreateArgs {
    * equals the value. If no match, provisioning fails with a clear message.
    */
   org?: string;
-  analytics: Analytics;
+  analytics: PosthogAnalytics;
 }
 
 interface PlatformProvisionResult {
