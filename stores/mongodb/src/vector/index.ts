@@ -238,9 +238,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * Async because the registry read is a MongoDB round-trip; all 13 call sites are inside
    * async methods so awaiting is free.
    */
-  private async resolveIndexTarget(indexName: string): Promise<IndexTarget> {
+  private async resolveIndexTarget(indexName: string): Promise<IndexTarget & { registered: boolean }> {
     const cached = this.indexTargets.get(indexName);
-    if (cached) return cached;
+    if (cached) return { ...cached, registered: true };
 
     const persisted = await this.readRegistryEntry(indexName);
     if (persisted) {
@@ -259,15 +259,39 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         textSearchIndexName: persisted.textSearchIndexName,
       };
       this.indexTargets.set(indexName, target);
-      return target;
+      return { ...target, registered: true };
     }
 
+    // Unregistered fallback (pre-registry legacy managed index, or an unknown name).
+    // `registered: false` tells destructive paths (deleteIndex) to verify the target
+    // actually is a legacy managed index before dropping anything.
     return {
       collectionName: indexName,
       searchIndexName: `${indexName}_vector_index`,
       isByo: false,
       allowWrites: true,
+      registered: false,
     };
+  }
+
+  /**
+   * True when another logical index (a different registry `_id`) on the same collection
+   * references `physicalIndexName` as its vector or text search index. Used by deleteIndex
+   * to preserve a shared Atlas index that a sibling logical index still depends on
+   * (e.g. two BYO logical indexes on one collection sharing the default dynamic text index).
+   */
+  private async isIndexNameReferencedElsewhere(
+    indexName: string,
+    collectionName: string,
+    physicalIndexName: string,
+  ): Promise<boolean> {
+    const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
+    const other = await registry.findOne({
+      _id: { $ne: indexName } as any,
+      collectionName,
+      $or: [{ searchIndexName: physicalIndexName }, { textSearchIndexName: physicalIndexName }],
+    });
+    return other !== null;
   }
 
   /**
@@ -531,7 +555,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     // Write policy: managed collections are always writable (the store owns them).
     // BYO collections are read-only unless the caller explicitly opts in — Mastra
     // must not mutate or delete caller-owned operational documents by default.
-    const writable = isByo ? (allowWrites ?? false) : true;
+    // (The effective values are finalized after reading any existing registry entry:
+    // classification is sticky and the write policy is preserved on refresh.)
 
     let collection;
     try {
@@ -568,6 +593,30 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         });
       }
 
+      // BYO classification is STICKY: once a logical index is registered, an idempotent
+      // re-createIndex must never reclassify it. Without this, a BYO index whose
+      // collectionName equals its indexName could be re-created WITHOUT `collectionName`
+      // (the retarget guard passes, since the resolved collection is the same) and be
+      // silently flipped to managed — after which deleteIndex would drop the caller's
+      // operational collection. Reclassifying requires an explicit deleteIndex first.
+      // The write policy is likewise preserved on refresh unless explicitly re-specified.
+      const effectiveIsByo = existingEntry ? (existingEntry.isByo ?? false) : isByo;
+      const effectiveWritable = effectiveIsByo ? (allowWrites ?? existingEntry?.allowWrites ?? false) : true;
+
+      // Vector/text index names must not collide: if the vector index were created under
+      // the companion text-index name, the later text-index creation would hit
+      // IndexAlreadyExists and be silently swallowed, leaving textQuery/hybridQuery
+      // pointed at a vectorSearch-type index.
+      if (targetSearchIndex === defaultTextSearchIndex || targetSearchIndex === existingEntry?.textSearchIndexName) {
+        throw new MastraError({
+          id: createVectorErrorId('MONGODB', 'CREATE_INDEX', 'CONFLICT'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+          text: `searchIndexName "${targetSearchIndex}" collides with the full-text search index name for collection "${targetCollection}". Choose a different vector searchIndexName.`,
+        });
+      }
+
       // Persist the logical-index → target mapping BEFORE provisioning any search
       // index. The registry entry is the durable record that classifies this index
       // as bring-your-own; if provisioning fails after this point, a later
@@ -577,20 +626,20 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // deleteIndex would misclassify a BYO index as managed and drop the collection.
       //
       // Text-search-index name policy:
-      //   - Managed (!isByo): auto-provision the companion dynamic full-text index, so default
+      //   - Managed: auto-provision the companion dynamic full-text index, so default
       //     its name here (preserving any prior custom name from createSearchIndex).
-      //   - BYO (isByo): do NOT auto-create a (billable) full-text index. Leave
+      //   - BYO: do NOT auto-create a (billable) full-text index. Leave
       //     textSearchIndexName UNSET until the caller opts in via createSearchIndex, so
       //     textQuery/hybridQuery fail clearly instead of querying a non-existent index. A
       //     custom name from a prior createSearchIndex is still preserved.
-      const textSearchIndexName = isByo
+      const textSearchIndexName = effectiveIsByo
         ? existingEntry?.textSearchIndexName
         : (existingEntry?.textSearchIndexName ?? defaultTextSearchIndex);
       await this.writeRegistryEntry(indexName, {
         collectionName: targetCollection,
         searchIndexName: targetSearchIndex,
-        isByo,
-        allowWrites: writable,
+        isByo: effectiveIsByo,
+        allowWrites: effectiveWritable,
         textSearchIndexName,
         dimension,
         metric,
@@ -598,8 +647,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       this.indexTargets.set(indexName, {
         collectionName: targetCollection,
         searchIndexName: targetSearchIndex,
-        isByo,
-        allowWrites: writable,
+        isByo: effectiveIsByo,
+        allowWrites: effectiveWritable,
         textSearchIndexName,
       });
 
@@ -659,14 +708,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // provision a billable full-text index implicitly — the caller opts in explicitly via
       // createSearchIndex. The registry entry above records its name (managed only), so BYO
       // safety does not depend on this succeeding.
-      if (!isByo) {
+      if (!effectiveIsByo) {
         await this.createSearchIndexIgnoringExisting(collection, {
           definition: {
             mappings: {
               dynamic: true,
             },
           },
-          name: defaultTextSearchIndex,
+          // Provision under the PERSISTED name (a prior custom createSearchIndex name is
+          // preserved above); for a fresh managed index this is the default.
+          name: textSearchIndexName ?? defaultTextSearchIndex,
           type: 'search',
         });
       }
@@ -716,7 +767,17 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       await collection.dropSearchIndex(name);
     } catch (err: any) {
       const code = err?.codeName ?? err?.code;
-      if (code !== 'IndexNotFound' && code !== 'SearchIndexNotFound' && code !== 27) throw err;
+      // NamespaceNotFound: the caller's BYO collection was dropped externally — its search
+      // indexes are gone with it. getCollection(..., false) still returns a handle for a
+      // missing collection, so this is reachable; treating it as success lets deleteIndex
+      // proceed to clear the (now stale) registry entry instead of stranding it forever.
+      const missing =
+        code === 'IndexNotFound' ||
+        code === 'SearchIndexNotFound' ||
+        code === 27 ||
+        code === 'NamespaceNotFound' ||
+        code === 26;
+      if (!missing) throw err;
     }
   }
 
@@ -759,6 +820,18 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     const name =
       searchIndexName ??
       (fields?.length ? `${collectionName}_${indexName}_search_fields_index` : `${collectionName}_search_index`);
+    // A text index must not squat the vector index's name: the creation below would hit
+    // IndexAlreadyExists, and the subsequent updateSearchIndex would overwrite the
+    // vectorSearch definition with a text mapping, breaking query().
+    if (name === target.searchIndexName) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: `searchIndexName "${name}" collides with the vectorSearch index name for index "${indexName}". Choose a different full-text searchIndexName.`,
+      });
+    }
     try {
       const collection = await this.getCollection(collectionName);
       const definition = fields?.length
@@ -769,16 +842,13 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
             },
           }
         : { mappings: { dynamic: true } };
-      const created = await this.createSearchIndexIgnoringExisting(collection, { definition, name, type: 'search' });
-      // If the index already existed, its definition is NOT updated by createSearchIndex
-      // (IndexAlreadyExists is a no-op). Recreating the same logical index with a different
-      // `fields` mapping must actually change the mapping, so update it in place. (Idempotent:
-      // updating to the identical definition is a cheap no-op server-side.)
-      if (!created) {
-        await collection.updateSearchIndex(name, definition);
-      }
-      // Persist a COMPLETE target (FIX 1): merge the resolved collectionName/searchIndexName/isByo
-      // with the new textSearchIndexName so the registry entry is never left partial.
+      // Persist a COMPLETE target (FIX 1) BEFORE provisioning, mirroring createIndex's
+      // persist-before-provision ordering: if the process crashes between provisioning and
+      // persisting, the created text index would be unregistered — deleteIndex would then
+      // drop only the vector index and leak the text index onto a caller-owned collection.
+      // If instead provisioning fails after the write, the registry references a not-yet-
+      // existing text index; textQuery surfaces the server's index-not-found, deleteIndex's
+      // drop is ignore-missing, and a successful retry of createSearchIndex converges.
       await this.writeRegistryEntry(indexName, {
         collectionName: target.collectionName,
         searchIndexName: target.searchIndexName,
@@ -787,6 +857,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         textSearchIndexName: name,
       });
       this.indexTargets.set(indexName, { ...target, textSearchIndexName: name });
+      const created = await this.createSearchIndexIgnoringExisting(collection, { definition, name, type: 'search' });
+      // If the index already existed, its definition is NOT updated by createSearchIndex
+      // (IndexAlreadyExists is a no-op). Recreating the same logical index with a different
+      // `fields` mapping must actually change the mapping, so update it in place. (Idempotent:
+      // updating to the identical definition is a cheap no-op server-side.)
+      if (!created) {
+        await collection.updateSearchIndex(name, definition);
+      }
       if (waitUntilReady) {
         await this.waitForSearchIndexReady({ indexName });
       }
@@ -1103,10 +1181,20 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           updateDoc[this.documentFieldName] = doc;
         }
 
+        // Match both the raw string and (when the id is 24-hex) the ObjectId form, so an
+        // opted-in BYO upsert UPDATES an existing ObjectId-keyed document instead of
+        // inserting a duplicate with a string _id. With an operator ($in) filter the server
+        // cannot infer the _id to insert, so $setOnInsert pins the requested string id —
+        // preserving the managed contract when no document matches. Plain string ids
+        // (e.g. UUIDs) keep the equality filter, whose _id is inferred on insert as before.
+        const idMatch = this.buildIdMatch(id!);
         return {
           updateOne: {
-            filter: { _id: id }, // '_id' is a string as per MongoDBDocument interface
-            update: { $set: updateDoc },
+            filter: { _id: idMatch } as any,
+            update:
+              typeof idMatch === 'string'
+                ? { $set: updateDoc }
+                : ({ $set: updateDoc, $setOnInsert: { _id: id } } as any),
             upsert: true,
           },
         };
@@ -1387,7 +1475,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     // names: a BYO index may reuse its indexName as the collectionName, so name equality
     // cannot distinguish managed from BYO. Managed indexes drop the collection; BYO indexes
     // drop only the search index so the caller's operational collection/data is preserved.
-    const { collectionName, searchIndexName, isByo, textSearchIndexName } = await this.resolveIndexTarget(indexName);
+    const { collectionName, searchIndexName, isByo, textSearchIndexName, registered } =
+      await this.resolveIndexTarget(indexName);
     const collection = await this.getCollection(collectionName, false);
     try {
       if (collection) {
@@ -1398,11 +1487,39 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           // collection with no record of it. Retry-safe (FIX 4): treat "index not found" on
           // EITHER drop as success — if a prior deleteIndex already removed the physical index
           // and then failed before clearing the registry, a retry must still clear the entry.
-          await this.dropSearchIndexIgnoringMissing(collection, searchIndexName);
-          if (textSearchIndexName) {
+          // A physical index still referenced by ANOTHER logical index on this collection
+          // (e.g. a shared default dynamic text index) is preserved for the sibling.
+          if (!(await this.isIndexNameReferencedElsewhere(indexName, collectionName, searchIndexName))) {
+            await this.dropSearchIndexIgnoringMissing(collection, searchIndexName);
+          }
+          if (
+            textSearchIndexName &&
+            !(await this.isIndexNameReferencedElsewhere(indexName, collectionName, textSearchIndexName))
+          ) {
             await this.dropSearchIndexIgnoringMissing(collection, textSearchIndexName);
           }
         } else {
+          // FAIL CLOSED for unregistered names: with no registry entry, `collectionName` is
+          // just `indexName` by fallback. Only drop the collection if it verifiably is a
+          // legacy (pre-registry) managed index — i.e. it carries the managed
+          // `${indexName}_vector_index` search index. Without this check, deleteIndex on an
+          // arbitrary name (or a second delete racing a completed BYO delete, whose registry
+          // entry is already gone) would drop a collection the store never created.
+          if (!registered) {
+            let hasManagedVectorIndex = false;
+            try {
+              const searchIndexes: any[] = await (collection as any).listSearchIndexes().toArray();
+              hasManagedVectorIndex = searchIndexes.some((idx: any) => idx.name === `${indexName}_vector_index`);
+            } catch {
+              // listSearchIndexes fails for a missing collection — treat as not managed.
+            }
+            if (!hasManagedVectorIndex) {
+              throw new Error(
+                `Index "${indexName}" is not registered and collection "${collectionName}" carries no ` +
+                  `"${indexName}_vector_index" search index — refusing to drop a collection this store cannot verify it manages.`,
+              );
+            }
+          }
           // Retry-safe (FIX 4): a managed collection already dropped by a prior (partially
           // failed) deleteIndex must not block the retry from clearing the registry entry.
           try {
