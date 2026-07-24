@@ -3,6 +3,7 @@ export type {
   chatRouteOptions,
   ChatStreamHandlerParams,
   ChatStreamHandlerOptions,
+  ChatStreamDefaultOptions,
   AgentVersionOptions,
 } from './chat-route';
 export { workflowRoute, handleWorkflowStream } from './workflow-route';
@@ -15,6 +16,8 @@ export type { AgentDataPart } from './transformers';
 
 export { toAISdkStream, toAISdkV5Stream } from './convert-streams';
 export { workflowSnapshotToStream } from './convert-snapshot';
+export { smoothStream } from './smooth-stream';
+export type { MastraStreamTransform, MastraStreamTransformOptions } from './smooth-stream';
 
 // Middleware for wrapping models with Mastra processors
 export { withMastra } from './middleware';

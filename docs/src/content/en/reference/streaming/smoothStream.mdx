@@ -1,0 +1,167 @@
+---
+title: "Reference: smoothStream() | Streaming"
+description: "API reference for smoothStream(), which buffers text and reasoning deltas and emits them in consistent chunks."
+packages:
+  - "@mastra/core"
+  - "@mastra/ai-sdk"
+---
+
+# `smoothStream()`
+
+`smoothStream()` creates an experimental transform stream that buffers text and reasoning deltas before emitting them in consistent chunks. Use it to make streamed responses appear at a steadier pace when a model emits uneven deltas.
+
+Non-text chunks pass through unchanged. Any buffered content is emitted before a tool, control, or completion chunk.
+
+## Usage example
+
+Pipe an agent's `fullStream` through the transform:
+
+```typescript title="src/stream-agent.ts"
+import { smoothStream } from '@mastra/core/stream'
+
+const result = await agent.stream('Explain how rainbows form')
+
+const stream = result.fullStream.pipeThrough(
+  smoothStream({
+    delayInMs: 20,
+    chunking: 'word',
+  }),
+)
+
+for await (const chunk of stream) {
+  if (chunk.type === 'text-delta') {
+    process.stdout.write(chunk.payload.text)
+  }
+}
+```
+
+The transform changes only the piped stream. Promise properties and callbacks on the original `MastraModelOutput`, such as `result.text` and `onChunk`, keep the model's original chunk timing.
+
+## AI SDK routes
+
+Import `smoothStream()` from `@mastra/ai-sdk` to smooth an agent before `handleChatStream()` converts its output to AI SDK UI chunks:
+
+```typescript title="app/api/chat/route.ts"
+import { handleChatStream, smoothStream } from '@mastra/ai-sdk'
+import { createUIMessageStreamResponse } from 'ai'
+import { mastra } from '@/src/mastra'
+
+export async function POST(req: Request) {
+  const params = await req.json()
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weatherAgent',
+    params,
+    experimentalTransform: smoothStream({
+      delayInMs: 20,
+      chunking: 'word',
+    }),
+  })
+
+  return createUIMessageStreamResponse({ stream })
+}
+```
+
+The `@mastra/ai-sdk` export returns a reusable transform factory so route configuration creates a fresh `TransformStream` for every request. The `@mastra/core/stream` export returns a `TransformStream` for direct use with `pipeThrough()`.
+
+The reusable factory can also be passed to `Agent.stream()`:
+
+```typescript
+import { smoothStream } from '@mastra/ai-sdk'
+
+const result = await agent.stream('Explain how rainbows form', {
+  experimentalTransform: smoothStream({ delayInMs: 20 }),
+})
+
+for await (const chunk of result.fullStream) {
+  // Consume the transformed Mastra chunks.
+}
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'SmoothStreamOptions',
+    description: 'Controls the delay and chunk boundaries for the transformed stream.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'SmoothStreamOptions',
+        parameters: [
+          {
+            name: 'delayInMs',
+            type: 'number | null',
+            description: 'Delay in milliseconds after each emitted chunk. Set this value to null to disable the delay.',
+            isOptional: true,
+            defaultValue: '10',
+          },
+          {
+            name: 'chunking',
+            type: "'word' | 'line' | RegExp | SmoothStreamChunkDetector | Intl.Segmenter",
+            description: 'Controls how buffered text and reasoning are divided into chunks.',
+            isOptional: true,
+            defaultValue: "'word'",
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+The `chunking` option accepts:
+
+- `'word'`: Emits complete words, including trailing whitespace.
+- `'line'`: Emits content through each newline.
+- `RegExp`: Emits content through the first match.
+- `Intl.Segmenter`: Uses locale-aware segmentation, which is useful for languages without spaces between words.
+- `SmoothStreamChunkDetector`: Calls a function with the current buffer. The function returns a non-empty prefix to emit, or `null` or `undefined` to wait for more content.
+
+## Custom chunking
+
+Use a regular expression to define a chunk boundary:
+
+```typescript
+const stream = result.fullStream.pipeThrough(
+  smoothStream({
+    chunking: /[^,]*,\s*/,
+  }),
+)
+```
+
+Use `Intl.Segmenter` for locale-aware segmentation:
+
+```typescript
+const stream = result.fullStream.pipeThrough(
+  smoothStream({
+    chunking: new Intl.Segmenter('ja', { granularity: 'word' }),
+  }),
+)
+```
+
+Use a detector function when chunk boundaries depend on custom logic. The returned value must be a prefix of the buffer:
+
+```typescript
+const stream = result.fullStream.pipeThrough(
+  smoothStream({
+    chunking: buffer => {
+      const boundary = buffer.indexOf('. ')
+      return boundary === -1 ? null : buffer.slice(0, boundary + 2)
+    },
+  }),
+)
+```
+
+## Returns
+
+`TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>`
+
+The transform emits smoothed `text-delta` and `reasoning-delta` chunks. It preserves chunk identifiers, run identifiers, sources, and metadata.
+
+## Related
+
+- [`MastraModelOutput`](/reference/streaming/agents/MastraModelOutput)
+- [`ChunkType`](/reference/streaming/ChunkType)
