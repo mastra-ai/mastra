@@ -143,6 +143,24 @@ export interface CleanupConfig {
 export interface BackgroundTaskManagerConfig {
   /** Whether background tasks are enabled. Default: false */
   enabled: boolean;
+  /**
+   * Controls which PubSub subscriptions the manager creates during `init()`.
+   *
+   * - `'full'` (default): Subscribes to both the dispatch topic (worker group,
+   *   exactly-once) and the result topic (fan-out). The manager can enqueue,
+   *   execute, **and** receive completion notifications. Suitable for monolithic
+   *   deployments where the producer and worker live in the same process.
+   *
+   * - `'producer'`: Subscribes **only** to the result topic (fan-out) so it
+   *   receives completion/failure notifications. Does **not** join the worker
+   *   consumer group and does **not** register the `__background-task` internal
+   *   workflow. Use this on the API tier in Option E (fully split) so the API
+   *   can dispatch tasks without competing with the dedicated worker process.
+   *
+   * - `'worker'`: Subscribes to both topics, identical to `'full'`. Exists for
+   *   symmetry and documentation clarity on dedicated worker processes.
+   */
+  mode?: 'full' | 'producer' | 'worker';
   /** Global concurrency limit across all agents. Default: 10 */
   globalConcurrency?: number;
   /** Per-agent concurrency limit. Default: 5 */

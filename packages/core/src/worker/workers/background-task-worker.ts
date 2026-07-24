@@ -58,6 +58,7 @@ export class BackgroundTaskWorker extends MastraWorker {
 
     this.#manager = new BackgroundTaskManager({
       enabled: true,
+      mode: 'worker',
       globalConcurrency: this.#config.globalConcurrency,
       perAgentConcurrency: this.#config.perAgentConcurrency,
       backpressure: this.#config.backpressure,

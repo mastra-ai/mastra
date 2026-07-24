@@ -1482,16 +1482,15 @@ export class Mastra<
     }
 
     this.#backgroundTaskConfig = config?.backgroundTasks;
-    // Auto-create the background-task manager only when this Mastra is
-    // running workers. When `workers: false`, the consumer of the
-    // background-tasks topic must live elsewhere — the producer can still
-    // construct its own `BackgroundTaskManager` and call `init()` directly
-    // (see redis-streams cross-process tests for that pattern). Initializing
-    // a worker here would compete with the dedicated worker process for
-    // dispatch events.
-    if (workersOption !== false) {
-      this.#ensureBackgroundTaskManager();
-    }
+    // Always create the background-task manager when background tasks are
+    // enabled. When workers are disabled (`workers: false`) or when a
+    // MASTRA_WORKERS filter is set that excludes 'backgroundTasks', the
+    // manager runs in 'producer' mode: it can enqueue/dispatch tasks and
+    // receive completion notifications via the fan-out result topic, but
+    // does NOT join the worker consumer group — so it won't compete with
+    // a dedicated BackgroundTaskWorker process for dispatch events.
+    const bgWorkerFiltered = this.#workerFilter && !this.#workerFilter.has('backgroundTasks');
+    this.#ensureBackgroundTaskManager(workersOption === false || bgWorkerFiltered ? 'producer' : undefined);
 
     this.#schedulerConfig = config?.scheduler;
     this.#notificationDispatchConfig = config?.notifications?.dispatch;
@@ -1710,12 +1709,26 @@ export class Mastra<
     }
   }
 
-  #ensureBackgroundTaskManager(): void {
+  #ensureBackgroundTaskManager(modeOverride?: 'producer' | 'worker' | 'full'): void {
     if (!this.#backgroundTaskConfig?.enabled || !this.#storage || this.#backgroundTaskManager) {
       return;
     }
 
-    const bgManager = new BackgroundTaskManager(this.#backgroundTaskConfig);
+    // Derive the effective mode from the worker configuration when no
+    // explicit override is given. Late call-sites (#maybeEnableBackgroundTasksForAgent,
+    // setStorage) don't know the worker topology, so we derive it here to
+    // ensure producer mode is consistently applied when workers are disabled
+    // or the backgroundTasks worker is excluded by the MASTRA_WORKERS filter.
+    const effectiveMode =
+      modeOverride ??
+      (this.#workersDisabled || (this.#workerFilter && !this.#workerFilter.has('backgroundTasks'))
+        ? 'producer'
+        : undefined);
+
+    const managerConfig = effectiveMode
+      ? { ...this.#backgroundTaskConfig, mode: effectiveMode }
+      : this.#backgroundTaskConfig;
+    const bgManager = new BackgroundTaskManager(managerConfig);
     bgManager.__registerMastra(this);
     this.#backgroundTaskManager = bgManager;
 
@@ -2322,6 +2335,39 @@ export class Mastra<
         this.addWorkflow(workflow, workflow.id);
       }
 
+      // Register configured processor workflows from the agent
+      // Use .then() to handle async resolution without blocking the constructor
+      // This excludes memory-derived processors to avoid triggering memory factory functions
+      underlyingAgent
+        .getConfiguredProcessorWorkflows()
+        .then(processorWorkflows => {
+          for (const workflow of processorWorkflows) {
+            this.addWorkflow(workflow, workflow.id);
+          }
+        })
+        .catch(err => {
+          this.#logger?.debug(`Failed to register processor workflows for durable agent ${agentKey}:`, err);
+        });
+
+      // Register agent workspace in the workspaces registry for direct lookup.
+      // Dynamic workspace functions may return undefined without request context — that's fine,
+      // the if (workspace) guard below will skip registration and they'll register lazily later.
+      if (underlyingAgent.hasOwnWorkspace?.()) {
+        Promise.resolve(underlyingAgent.getWorkspace?.())
+          .then(workspace => {
+            if (workspace) {
+              this.addWorkspace(workspace, undefined, {
+                source: 'agent',
+                agentId: durableAgent.id ?? agentKey,
+                agentName: durableAgent.name,
+              });
+            }
+          })
+          .catch(err => {
+            this.#logger?.debug(`Failed to register workspace for durable agent ${agentKey}:`, err);
+          });
+      }
+
       // Register scorers from the underlying agent so durable runs can resolve
       // them via mastra.getScorer()/getScorerById() at workflow time.
       underlyingAgent
@@ -2334,6 +2380,47 @@ export class Mastra<
         .catch(err => {
           this.#logger?.debug(`Failed to register scorers from durable agent ${agentKey}:`, err);
         });
+
+      // Register durable-agent-owned tools with the background task manager.
+      // Namespaced as `agentId:toolName` to avoid cross-agent collisions.
+      // Use agentKey (derived from durableAgent.id) rather than underlyingAgent.id
+      // because the dispatch side uses the durable wrapper's identity.
+      if (this.#backgroundTaskManager) {
+        const durableAgentId = durableAgent.id ?? agentKey;
+        Promise.resolve(underlyingAgent.listTools())
+          .then(agentTools => {
+            for (const [toolKey, tool] of Object.entries(agentTools || {})) {
+              if (tool && typeof (tool as any).execute === 'function') {
+                this.#registerToolWithBackgroundManager(
+                  `${durableAgentId}:${toolKey}`,
+                  tool as ToolAction<any, any, any, any>,
+                );
+              }
+            }
+          })
+          .catch(err => {
+            this.#logger?.debug(
+              `Failed to register durable agent tools for background tasks (agent ${agentKey}):`,
+              err,
+            );
+          });
+      }
+
+      // Set up AgentChannels for manual adapter configurations
+      const agentChannelsInstance = underlyingAgent.getChannels();
+      if (agentChannelsInstance) {
+        agentChannelsInstance.__setLogger(this.#logger);
+        const channelRoutes = agentChannelsInstance.getWebhookRoutes();
+        if (channelRoutes.length > 0) {
+          this.#server = {
+            ...this.#server,
+            apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
+          };
+        }
+        agentChannelsInstance.initialize(this).catch(err => {
+          this.#logger?.error(`Failed to initialize channels for durable agent ${agentKey}:`, err);
+        });
+      }
 
       return;
     }
@@ -2414,6 +2501,28 @@ export class Mastra<
       .catch(err => {
         this.#logger?.debug(`Failed to register scorers from agent ${agentKey}:`, err);
       });
+
+    // Register agent-owned tools with the background task manager's static
+    // executor registry so cross-process workers can resolve dispatched tasks
+    // for tools that are only attached to an agent (not top-level on Mastra).
+    // Keys are namespaced as `agentId:toolName` to avoid cross-agent collisions
+    // when multiple agents define tools with the same config key.
+    // Dynamic (function-based) tools are resolved lazily and cannot be
+    // eagerly registered — only static tool records are wired here.
+    if (this.#backgroundTaskManager) {
+      const agentId = mastraAgent.id ?? agentKey;
+      Promise.resolve(mastraAgent.listTools())
+        .then(agentTools => {
+          for (const [toolKey, tool] of Object.entries(agentTools || {})) {
+            if (tool && typeof (tool as any).execute === 'function') {
+              this.#registerToolWithBackgroundManager(`${agentId}:${toolKey}`, tool as ToolAction<any, any, any, any>);
+            }
+          }
+        })
+        .catch(err => {
+          this.#logger?.debug(`Failed to register agent tools for background tasks (agent ${agentKey}):`, err);
+        });
+    }
 
     // Set up AgentChannels for manual adapter configurations
     const agentChannelsInstance = mastraAgent.getChannels();
@@ -5294,6 +5403,22 @@ export class Mastra<
       }
     } else {
       targets = this.#workers;
+    }
+
+    // When explicitly starting the backgroundTasks worker (e.g.
+    // `startWorkers('backgroundTasks')`), upgrade a producer-mode manager to
+    // full mode so the worker can subscribe to dispatch events. Without this,
+    // a manager created at construction time as 'producer' (because
+    // MASTRA_WORKERS excluded backgroundTasks) would be reused by the worker
+    // but never subscribe to the dispatch topic.
+    if (
+      name === 'backgroundTasks' &&
+      this.#backgroundTaskManager &&
+      this.#backgroundTaskManager.config.mode === 'producer'
+    ) {
+      await this.#backgroundTaskManager.shutdown();
+      this.#backgroundTaskManager = undefined;
+      this.#ensureBackgroundTaskManager('full');
     }
 
     for (const worker of targets) {
