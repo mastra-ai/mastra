@@ -108,7 +108,7 @@
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "^3.0.98",
-    "@ai-sdk/google": "^3.0.95",
+    "@ai-sdk/google": "^3.0.96",
     "@ai-sdk/openai": "^3.0.86",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
