@@ -700,9 +700,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           if (!shouldGenerate || thread?.title) return;
 
           const titleMessageList = new MessageList().deserialize(messageListState);
-          const uiMessages = titleMessageList.get.all.ui();
-          const coreMessages = titleMessageList.get.all.core();
-          if (coreMessages.length < (minMessages ?? 1)) return;
+          // Only messages of the thread being titled — resource-scoped memory can
+          // load messages from other threads into the deserialized list.
+          const uiMessages = agent.filterUiMessagesByThread(titleMessageList, threadId, titleMessageList.get.all.ui());
+          if (uiMessages.length < (minMessages ?? 1)) return;
 
           const userMessage = agent.getMostRecentUserMessage(uiMessages);
           if (!userMessage) return;

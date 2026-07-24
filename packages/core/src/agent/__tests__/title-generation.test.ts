@@ -5,6 +5,7 @@ import { noopLogger } from '../../logger';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
+import type { MastraDBMessage } from '../types';
 
 function titleGenerationTests(version: 'v1' | 'v2') {
   let dummyModel: MockLanguageModelV1 | MockLanguageModelV2;
@@ -3347,5 +3348,125 @@ describe('onTitleGenerated callback', () => {
 
     // Should not throw — error is caught in the .catch() handler
     await new Promise(resolve => setTimeout(resolve, 200));
+  });
+});
+
+describe('title generation with resource-scoped memory recall', () => {
+  it('derives the title only from the thread being titled, not from recalled messages of other threads', async () => {
+    const capturedTitlePrompts: any[] = [];
+
+    const titleModel = new MockLanguageModelV2({
+      doGenerate: async options => {
+        capturedTitlePrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          content: [{ type: 'text' as const, text: 'Biryani Recipe' }],
+          warnings: [],
+        };
+      },
+      doStream: async options => {
+        capturedTitlePrompts.push(options.prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start' as const, warnings: [] },
+            { type: 'response-metadata' as const, id: 'id-t', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start' as const, id: 'text-1' },
+            { type: 'text-delta' as const, id: 'text-1', delta: 'Biryani Recipe' },
+            { type: 'text-end' as const, id: 'text-1' },
+            {
+              type: 'finish' as const,
+              finishReason: 'stop' as const,
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+            },
+          ]),
+        };
+      },
+    });
+
+    const agentModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text' as const, text: 'Agent response' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start' as const, warnings: [] },
+          { type: 'response-metadata' as const, id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start' as const, id: 'text-1' },
+          { type: 'text-delta' as const, id: 'text-1', delta: 'Agent response' },
+          { type: 'text-end' as const, id: 'text-1' },
+          {
+            type: 'finish' as const,
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const mockMemory = new MockMemory();
+    mockMemory.getMergedThreadConfig = () => ({
+      generateTitle: { model: titleModel },
+      lastMessages: 10,
+    });
+
+    // Simulate resource-scoped recall: a memory loader adds a message that
+    // belongs to a different thread of the same resource to the message list.
+    const foreignMessage: MastraDBMessage = {
+      id: 'foreign-thread-message',
+      threadId: 'old-thread',
+      resourceId: 'user-1',
+      role: 'user',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'Help me write a Python stock scraper' }],
+        content: 'Help me write a Python stock scraper',
+      },
+      createdAt: new Date(Date.now() - 60_000),
+    };
+
+    const agent = new Agent({
+      id: 'resource-scope-title-agent',
+      name: 'Resource Scope Title Agent',
+      instructions: 'test agent',
+      model: agentModel,
+      memory: mockMemory,
+      inputProcessors: [
+        {
+          id: 'fake-resource-scoped-recall',
+          processInput: async ({ messageList }) => {
+            messageList.add(foreignMessage, 'memory');
+            return messageList;
+          },
+        },
+      ],
+    });
+
+    await agent.generate('What is a good recipe for biryani?', {
+      memory: {
+        resource: 'user-1',
+        thread: { id: 'new-thread', title: '' },
+      },
+    });
+
+    // Title generation is fire-and-forget, wait for it
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    expect(capturedTitlePrompts.length).toBeGreaterThan(0);
+    const titleInput = JSON.stringify(capturedTitlePrompts);
+    expect(titleInput).toContain('biryani');
+    expect(titleInput).not.toContain('stock scraper');
+
+    const thread = await mockMemory.getThreadById({ threadId: 'new-thread' });
+    expect(thread?.title).toBe('Biryani Recipe');
   });
 });
