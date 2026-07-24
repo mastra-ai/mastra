@@ -473,6 +473,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     startedAt: number;
     perStep?: boolean;
     stepSpan?: any;
+    operationId?: string;
     actor?: ActorSignal;
     requestContext?: RequestContext;
   }): Promise<StepResult<any, any, any, any> | null> {
@@ -493,6 +494,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       startedAt,
       perStep,
       stepSpan,
+      operationId,
       actor,
       requestContext: parentRequestContext,
     } = params;
@@ -509,6 +511,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       : undefined;
 
     const isResume = !!resume?.steps?.length;
+    const nestedWorkflowOperationId = operationId ?? `workflow.${executionContext.workflowId}.step.${step.id}`;
     let result: WorkflowResult<any, any, any, any>;
     let runId: string;
 
@@ -540,7 +543,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         }
         const nestedResumeStepId = nestedResumeSteps[0];
 
-        const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
+        const invokeResp = (await this.inngestStep.invoke(nestedWorkflowOperationId, {
           function: step.getFunction(),
           data: {
             inputData,
@@ -578,7 +581,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           snapshot,
           graph: step.buildExecutionGraph(),
         });
-        const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
+        const invokeResp = (await this.inngestStep.invoke(nestedWorkflowOperationId, {
           function: step.getFunction(),
           data: {
             timeTravel: timeTravelParams,
@@ -595,7 +598,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         runId = invokeResp.runId;
         executionContext.state = invokeResp.result.state;
       } else {
-        const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
+        const invokeResp = (await this.inngestStep.invoke(nestedWorkflowOperationId, {
           function: step.getFunction(),
           data: {
             inputData,
@@ -634,7 +637,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     }
 
     const res = await this.inngestStep.run(
-      `workflow.${executionContext.workflowId}.step.${step.id}.nestedwf-results`,
+      // Result persistence is part of the same loop iteration or resume phase.
+      `${nestedWorkflowOperationId}.nestedwf-results`,
       async () => {
         if (result.status === 'failed') {
           await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
