@@ -171,10 +171,7 @@ export interface ToolDisplayContext {
 
 /** Return value from a {@link ToolDisplayFn}. */
 export type ToolDisplayResult =
-  | { kind: 'post'; message: PostableMessage }
-  | { kind: 'stream'; chunk: StreamChunk }
-  | undefined
-  | void;
+  { kind: 'post'; message: PostableMessage } | { kind: 'stream'; chunk: StreamChunk } | undefined | void;
 
 /**
  * Stream agent text deltas to this adapter as the agent generates them, instead of
@@ -238,9 +235,7 @@ export interface ChannelAdapterStreamingConfig extends ChannelAdapterBaseConfig 
  * exclusive with `toolDisplay` and kept for backwards compatibility.
  */
 export type ChannelAdapterConfig =
-  | ChannelAdapterStaticConfig
-  | ChannelAdapterStreamingConfig
-  | ChannelAdapterLegacyConfig;
+  ChannelAdapterStaticConfig | ChannelAdapterStreamingConfig | ChannelAdapterLegacyConfig;
 
 /**
  * @deprecated Legacy shape: the old `cards` boolean and `formatToolCall`
@@ -326,6 +321,31 @@ export interface ResolveResourceIdContext {
  * thread before it's created.
  */
 export type ResolveResourceId = (ctx: ResolveResourceIdContext) => string | Promise<string>;
+
+/**
+ * Context passed to {@link ChannelConfig.resolveThreadId}.
+ * Runs after {@link ChannelConfig.resolveResourceId}, so the resolved owner is
+ * available when picking the thread id.
+ */
+export interface ResolveThreadIdContext {
+  /** Platform name (e.g. 'slack', 'discord'). */
+  platform: string;
+  /** The channel thread the message arrived on. Use `thread.isDM` to tell DMs from group/channel threads. */
+  thread: Thread;
+  /** The incoming message. */
+  message: Message;
+  /** The resolved memory resourceId the new thread will belong to (after `resolveResourceId`). */
+  resourceId: string;
+  /** The built-in default: a random UUID. Return this to keep current behavior. */
+  defaultThreadId: string;
+}
+
+/**
+ * Resolve the internal Mastra thread id for a channel thread before it's created.
+ * The returned id must be unique across the memory store — if it already belongs
+ * to an existing thread, a warning is logged and a generated id is used instead.
+ */
+export type ResolveThreadId = (ctx: ResolveThreadIdContext) => string | Promise<string>;
 
 /** Handler overrides for built-in channel event handlers. */
 export interface ChannelHandlers {
@@ -512,6 +532,29 @@ export interface ChannelConfig {
    * ```
    */
   resolveResourceId?: ResolveResourceId;
+
+  /**
+   * Resolve the internal Mastra thread id before a channel thread is created.
+   * Runs after {@link resolveResourceId}, with the resolved owner on the context,
+   * so a host can align the thread id with an id it controls — e.g. give the
+   * thread the same id as the session it belongs to, matching how that host
+   * names threads it creates itself.
+   *
+   * Only affects **newly-created** threads; existing threads keep their stored id.
+   * The returned id must be unique across the memory store — on collision with an
+   * existing thread, a warning is logged and a generated id is used instead.
+   *
+   * Return `defaultThreadId` (a random UUID) to keep the built-in behavior.
+   * Not set: behavior is unchanged.
+   *
+   * @example
+   * ```ts
+   * resolveThreadId: ({ resourceId, defaultThreadId }) => {
+   *   return isSessionId(resourceId) ? resourceId : defaultThreadId;
+   * }
+   * ```
+   */
+  resolveThreadId?: ResolveThreadId;
 
   /**
    * Keep the serverless invocation alive while background work (agent stream → platform)

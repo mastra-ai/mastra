@@ -1,0 +1,99 @@
+---
+extends: existence
+message: "AI numbered lead-in: '%s'. Present the items or the measured figures directly instead of leading with a count."
+level: error
+nonword: true
+tokens:
+  # ==========================================================================
+  # Cataphoric forecasting: a sentence that announces a count of items and
+  # then enumerates them (as a list, or as prose that follows). The tell is a
+  # lead-in — it sits at the top of a paragraph, or as its own short paragraph
+  # above a list, pointing forward to content that has not arrived yet.
+  #
+  # Contextualizing signal: the count is the grammatical subject at the START
+  # of the sentence, so the cardinal is capitalized and sentence-initial. That
+  # excludes the ordinary mid-sentence number ("all three files," "about five
+  # minutes," "the four corners of the map"), which is lowercase and preceded
+  # by other words. Vale cannot see that a list block actually follows (no
+  # cross-block lookahead in existence rules), so sentence-initial position is
+  # the proxy for the adjacency.
+  # ==========================================================================
+
+  # --- Shape A: capitalized cardinal + optional emphasis adjective + a curated
+  # framework noun ("Three pillars ...," "Four core principles ..."). The
+  # scaffold noun with a small count is the tell on its own. Literal senses of
+  # a few nouns can fire ("Three levers control the press."); disable the rule
+  # for hardware or mechanical writing.
+  - "\\b(?:Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten) (?:(?:key|main|core|central|critical|essential|guiding|foundational|distinct|broad|common|primary|fundamental|overarching|major|underlying|driving|crucial|basic) )?(?:pillars|principles|tenets|cornerstones|throughlines|through-lines|personas|archetypes|imperatives|superpowers|levers|horizons|motifs|paradigms)\\b"
+
+  # --- Shape B: capitalized cardinal + a one- or two-word noun phrase + a verb
+  # that forecasts the items ("Four user journeys define the experience.").
+  # The forward-pointing verb is the tell, so the noun need not be curated. A
+  # literal count subject can fire ("Four wheels drive the axle."); the verb
+  # list stays to cataphoric senses to hold that down.
+  - "\\b(?:Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten) (?:(?:key|main|core|central|critical|essential|guiding|foundational|distinct|broad|common|primary|fundamental|overarching|major|underlying|driving|crucial|basic) )?(?:\\w+ ){1,2}(?:define|shape|drive|guide|underpin|govern|anchor|frame|characterize|distinguish|separate|comprise|structure|determine|dominate|inform|explain|power|fuel|motivate|unite)\\b"
+
+  # --- Shape C: the listicle pivot — announcing the enumeration by count.
+  # "Here are the four ...," "Below are the three ...," "The following five ...."
+  - "\\b(?:[Hh]ere are|[Bb]elow are|[Tt]hese are|[Tt]he following are) (?:the )?(?:two|three|four|five|six|seven|eight|nine|ten|\\d+)\\b"
+  - "\\b[Tt]he following (?:two|three|four|five|six|seven|eight|nine|ten|\\d+)\\b"
+
+  # --- Shape C: existential announcement gated by an enumeration noun, so
+  # "There are three reasons ..." fires but "There are three files ..." does
+  # not.
+  - "\\b(?:[Tt]here are|[Ww]e have|[Yy]ou have) (?:two|three|four|five|six|seven|eight|nine|ten) (?:(?:key|main|core|central|critical|essential|guiding|foundational|distinct|broad|common|primary|fundamental|overarching|major|underlying|driving|crucial|basic) )?(?:reasons|ways|things|factors|points|steps|categories|types|kinds|benefits|advantages|aspects|elements|components|considerations|questions|lessons|takeaways|pillars|principles|tenets|cornerstones|personas|archetypes|dimensions|themes|drivers|forces)\\b"
+
+  # --- Shape C: a short capitalized cardinal-led clause that ends in a colon,
+  # the colon itself introducing the list ("Three reasons stand out:"). Kept
+  # short and sentence-punctuation-free so it does not span past the lead-in.
+  - "\\b(?:Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten) [^.!?:\\n]{0,60}:"
+
+  # --- Demonstrative + cardinal + framework noun ("These three pillars," "the
+  # four personas"), the count-led reference the capitalized shapes miss.
+  - "\\b(?:[Tt]hese|[Tt]hose|[Tt]he) (?:two|three|four|five|six|seven|eight|nine|ten) (?:(?:key|main|core|central|critical|essential|guiding|foundational|distinct|broad|common|primary|fundamental|overarching|major|underlying|driving|crucial|basic) )?(?:pillars|principles|tenets|cornerstones|throughlines|through-lines|personas|archetypes|imperatives|superpowers|levers|horizons|motifs|paradigms)\\b"
+
+  # --- Shape D: process decomposition — a progression or split verb, then a
+  # preposition, then a mid-sentence cardinal and a sequential-structure noun
+  # ("expands in three phases," "breaks down into four stages," "is split into
+  # three phases"). The count sits mid-sentence and lowercase, the shape the
+  # capitalized rules above exclude on purpose; the verb and the sequential
+  # noun together are the gate that keeps the ordinary count out ("all three
+  # files," a "three-tier" architecture). The sequential noun set stays to
+  # phase-like scaffolding, so a literal split into physical "parts" or "pieces"
+  # does not fire.
+  - "\\b(?:expands?|unfolds?|proceeds?|progresses?|evolves?|rolls? out|breaks?(?: down)?|splits?|happens?|occurs?|plays? out|(?:is|are|gets?) (?:split|divided|broken|separated|partitioned)) (?:in|into|across|over|through) (?:two|three|four|five|six|seven|eight|nine|ten) (?:(?:distinct|broad|main|key|core|central|critical|essential|major|separate|discrete|successive|sequential|iterative|overlapping|logical|clear|simple|easy|manageable|high-level|rough|initial|final) )?(?:phases|stages|steps|waves|rounds|movements|acts|chapters|iterations|sprints|passes|tranches|installments)\\b"
+
+  # --- Shape E: the categorization companion to Shape D. Same grammar — a
+  # grouping or split verb, a preposition, a mid-sentence cardinal — but a
+  # non-sequential grouping noun ("falls into three categories," "breaks down
+  # into four groups," "is sorted into two buckets"). The verb and the grouping
+  # noun are the same double gate, so the ordinary count stays out. The noun
+  # set is disjoint from Shape D, so the two shapes never fire on one clause.
+  - "\\b(?:falls?|divides?|splits?|breaks?(?: down)?|sorts?|groups?|classifies?|categori[sz]es?|(?:is|are|gets?) (?:grouped|divided|split|sorted|classified|categori[sz]ed|separated|broken)) (?:into|in) (?:two|three|four|five|six|seven|eight|nine|ten) (?:(?:distinct|broad|main|key|core|central|critical|essential|major|separate|discrete|logical|clear|simple|basic|rough|high-level|general|overarching) )?(?:categories|groups|buckets|types|kinds|camps|classes|classifications|clusters|families|cohorts)\\b"
+
+  # --- Shape F: sentence- or heading-initial "The <cardinal> <noun>" ("The
+  # three axes," "The four dials that matter"). The capitalized "The" is the
+  # sentence-initial anchor, so the ordinary lowercase mid-sentence reference
+  # ("changed the three files") stays clean. A temporal or partitive
+  # follow-word is a different construction ("The two weeks of onboarding,"
+  # "The three of us"), excluded by the lookahead. A legitimate
+  # back-reference fires too ("The two functions return different types.");
+  # drop the count or add a project exception.
+  - "\\bThe (?:[Tt]wo|[Tt]hree|[Ff]our|[Ff]ive|[Ss]ix|[Ss]even|[Ee]ight|[Nn]ine|[Tt]en) (?!(?:of|or|to|and|in|out|percent|dozen|hundred|thousand|million|billion|seconds?|minutes?|hours?|days?|weeks?|months?|quarters?|years?|decades?|times)\\b)[A-Za-z][a-z]+"
+
+  # --- Shape G: sentence-initial bare cardinal subject ("Eight repos seed
+  # the list," "Two options exist"). The broad companion to Shapes A and B:
+  # the capitalized cardinal is still the anchor, but the noun and verb are
+  # not curated, so the plain count subject fires too ("Five people attended").
+  # The following words allow capitals so a title-case heading fires too
+  # ("Three Layers Guard an EDA"); a proper noun that opens with a cardinal
+  # fires as well ("Three Mile Island"), so add a project exception for
+  # those. A temporal opener is a different construction ("Three years
+  # ago ..."), excluded by the case-insensitive lookahead.
+  - "\\b(?:Two|Three|Four|Five|Six|Seven|Eight|Nine|Ten|Eleven|Twelve) (?!(?i:of|or|to|and|in|out|more|percent|dozen|hundred|thousand|million|billion|seconds?|minutes?|hours?|days?|weeks?|months?|quarters?|years?|decades?|times)\\b)[A-Za-z][a-z]+ [A-Za-z][a-z]+"
+
+  # --- Shape H: the folksy proportion ("Three of every four skills," "nine
+  # out of every ten runs"). The spelled-out ratio dresses an estimate up as
+  # data; give the measured figure instead.
+  - "\\b(?:[Oo]ne|[Tt]wo|[Tt]hree|[Ff]our|[Ff]ive|[Ss]ix|[Ss]even|[Ee]ight|[Nn]ine) (?:of|out of|in) every (?:two|three|four|five|six|seven|eight|nine|ten|dozen|hundred|thousand|million)\\b"
+  - "\\b[Nn]ine times out of ten\\b"

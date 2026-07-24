@@ -820,6 +820,8 @@ export const pluginsGithubPollUpdateScenario: McE2eScenario = {
     const changed = await githubPollManager.pollGithubSourcesForUpdates();
     if (!changed) throw new Error('Expected GitHub plugin poll to detect an update');
 
+    await runtime.waitForScreenText(/Plugin updated to the latest version: E2E Local Plugin/i, terminal, 10_000);
+
     terminal.submit('Call the GitHub plugin after update.');
     await runtime.waitForScreenText(/version-two/i, terminal, 10_000);
 

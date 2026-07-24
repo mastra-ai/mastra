@@ -1,6 +1,6 @@
 {
   "name": "@mastra/tanstack-start",
-  "version": "0.2.6-alpha.11",
+  "version": "0.2.9-alpha.1",
   "description": "Mastra TanStack Start server adapter — drop your Mastra instance into a TanStack Start app",
   "type": "module",
   "main": "dist/index.js",
@@ -33,8 +33,8 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.21",
-    "eslint": "^10.4.1",
+    "@types/node": "22.20.1",
+    "eslint": "^10.7.0",
     "hono": "^4.12.8",
     "tsup": "^8.5.1",
     "typescript": "catalog:",

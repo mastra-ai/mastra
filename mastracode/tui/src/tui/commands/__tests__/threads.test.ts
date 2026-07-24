@@ -1,4 +1,4 @@
-import type { AgentControllerMessage, AgentControllerThread } from '@mastra/core/agent-controller';
+import type { AgentControllerThread, MastraDBMessage } from '@mastra/core/agent-controller';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { askModalQuestion } from '../../modal-question.js';
 import { handleThreadsCommand, showThreadLockPrompt } from '../threads.js';
@@ -46,12 +46,12 @@ function createThread(id: string, updatedAtIso: string): AgentControllerThread {
   };
 }
 
-function createMessage(id: string, text: string): AgentControllerMessage {
+function createMessage(id: string, text: string): MastraDBMessage {
   return {
     id,
     role: 'user',
     createdAt: new Date('2026-03-17T15:00:00.000Z'),
-    content: [{ type: 'text', text }],
+    content: { format: 2, parts: [{ type: 'text', text }] },
   };
 }
 

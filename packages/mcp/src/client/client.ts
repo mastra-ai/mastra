@@ -44,6 +44,7 @@ import {
 
 import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
+import { UnauthorizedError } from '../shared/oauth-types';
 import { ElicitationClientActions } from './actions/elicitation';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
@@ -78,6 +79,17 @@ export type {
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
 const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
+
+/**
+ * OAuth authorization state of an MCP server connection.
+ *
+ * - `needs-auth`: the server rejected the connection with a 401 and interactive
+ *   authorization is required (see MCPClient.authenticate)
+ * - `authorized`: the server accepted the configured authProvider's credentials
+ *
+ * Servers without an authProvider never carry an auth state.
+ */
+export type MCPServerAuthState = 'needs-auth' | 'authorized';
 
 // Per MCP spec, only fallback to SSE for these status codes
 const SSE_FALLBACK_STATUS_CODES = [400, 404, 405];
@@ -118,8 +130,7 @@ function extractToolErrorText(content: unknown): string {
 
 function getDatadogScope(): DatadogScopeLike | null {
   const testTracer = (globalThis as Record<PropertyKey, unknown>)[DATADOG_TRACER_TEST_SYMBOL] as
-    | DatadogTracerLike
-    | undefined;
+    DatadogTracerLike | undefined;
   const tracer = testTracer ?? loadDatadogTracer();
 
   if (typeof tracer?.scope === 'function') {
@@ -217,6 +228,10 @@ export class InternalMastraMCPClient extends MastraBase {
   private enableProgressTracking?: boolean;
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
+  private pendingAuthTransport?: StreamableHTTPClientTransport | SSEClientTransport;
+  private clientBaseOnClose?: () => void;
+  private clientConnectionOnClose?: () => void;
+  private _authState?: MCPServerAuthState;
   private operationContextStore = new AsyncLocalStorage<RequestContext | null>();
   private exitHookUnsubscribe?: () => void;
   private sigTermHandler?: () => void;
@@ -436,15 +451,17 @@ export class InternalMastraMCPClient extends MastraBase {
     let shouldTrySSE = url.pathname.endsWith(`/sse`);
 
     if (!shouldTrySSE) {
+      // Constructed outside the try so an UnauthorizedError can keep a handle on the
+      // transport that started the authorization flow (finishAuth must run on it).
+      const streamableTransport = new StreamableHTTPClientTransport(url, {
+        requestInit,
+        reconnectionOptions: this.serverConfig.reconnectionOptions,
+        authProvider: authProvider,
+        fetch,
+      });
       try {
         // Try Streamable HTTP transport first
         this.log('debug', 'Trying Streamable HTTP transport...');
-        const streamableTransport = new StreamableHTTPClientTransport(url, {
-          requestInit,
-          reconnectionOptions: this.serverConfig.reconnectionOptions,
-          authProvider: authProvider,
-          fetch,
-        });
         await this.client.connect(streamableTransport, {
           timeout: connectTimeout ?? DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC,
         });
@@ -452,6 +469,14 @@ export class InternalMastraMCPClient extends MastraBase {
         this.log('debug', 'Successfully connected using Streamable HTTP transport.');
       } catch (error: any) {
         this.log('debug', `Streamable HTTP transport failed: ${error}`);
+
+        // A 401 means the flow continues on this transport via finishAuth, not on a
+        // fallback: the SDK has already run discovery and redirected to authorization.
+        // Guarded on authProvider so servers without one never carry an auth state.
+        if (authProvider && error instanceof UnauthorizedError) {
+          this.markNeedsAuth(streamableTransport);
+          throw error;
+        }
 
         // @modelcontextprotocol/sdk 1.24.0+ throws StreamableHTTPError with 'code' property
         // Older @modelcontextprotocol/sdk: fallback to SSE (legacy behavior)
@@ -464,29 +489,160 @@ export class InternalMastraMCPClient extends MastraBase {
     }
 
     if (shouldTrySSE) {
-      this.log('debug', 'Falling back to deprecated HTTP+SSE transport...');
-      try {
-        // Fallback to SSE transport
-        // If fetch is provided, ensure it's also in eventSourceInit for the EventSource connection
-        // The top-level fetch is used for POST requests, but eventSourceInit.fetch is needed for the SSE stream
-        const sseEventSourceInit = { ...eventSourceInit, fetch };
+      // The SDK's cleanup after a failed streamable initialize is fire-and-forget,
+      // so the streamable transport may still be attached; detach it or the SSE
+      // attempt is rejected with "Already connected to a transport".
+      await this.detachStaleClientTransport();
 
-        const sseTransport = new SSEClientTransport(url, {
-          requestInit,
-          eventSourceInit: sseEventSourceInit,
-          authProvider,
-          fetch,
-        });
+      this.log('debug', 'Falling back to deprecated HTTP+SSE transport...');
+      // Fallback to SSE transport
+      // The top-level fetch is used for POST requests, but eventSourceInit.fetch is needed for the SSE stream.
+      // Only supply our span-detaching fetch when the caller hasn't provided one, so an explicit
+      // eventSourceInit.fetch is preserved rather than overwritten.
+      const sseEventSourceInit = { ...eventSourceInit, fetch: eventSourceInit?.fetch ?? fetch };
+
+      const sseTransport = new SSEClientTransport(url, {
+        requestInit,
+        eventSourceInit: sseEventSourceInit,
+        authProvider,
+        fetch,
+      });
+      try {
         await this.client.connect(sseTransport, { timeout: this.serverConfig.timeout ?? this.timeout });
         this.transport = sseTransport;
         this.log('debug', 'Successfully connected using deprecated HTTP+SSE transport.');
       } catch (sseError) {
+        if (authProvider && sseError instanceof UnauthorizedError) {
+          this.markNeedsAuth(sseTransport);
+          throw sseError;
+        }
         this.log(
           'error',
           `Failed to connect with SSE transport after failing to connect to Streamable HTTP transport first. SSE error: ${sseError}`,
         );
         throw new Error('Could not connect to server with any available HTTP transport');
       }
+    }
+
+    // Reaching here means a transport connected; any earlier authorization requirement is satisfied.
+    // Close, don't just drop, any transport left pending from an earlier 401 so its event stream
+    // and session resources are released rather than abandoned.
+    this.closePendingAuthTransport();
+    if (authProvider) {
+      this._authState = 'authorized';
+    }
+  }
+
+  /**
+   * Detaches whatever transport is still attached to the underlying SDK Client.
+   *
+   * The SDK assigns its internal `_transport` before `transport.start()` and never
+   * clears it when `start()` throws, and its cleanup after a failed initialize is a
+   * fire-and-forget `void this.close()`. Either way a stale transport can remain
+   * attached, making every subsequent `client.connect()` throw "Already connected
+   * to a transport" and permanently wedging this client (issue #19862). Mastra's
+   * own `this.transport` is only assigned after a successful connect, so
+   * disconnect/forceReconnect never see the stale one. Calling this before every
+   * connect attempt restores the invariant that a connect starts from a detached
+   * SDK client.
+   */
+  private async detachStaleClientTransport(): Promise<void> {
+    const stale = this.client.transport;
+    if (!stale) {
+      return;
+    }
+    if (stale === this.pendingAuthTransport) {
+      // Keep the transport alive: finishAuth must complete the OAuth flow on it.
+      // Just sever its link to the SDK client so the next connect isn't rejected.
+      this.severClientTransportLink(stale);
+      return;
+    }
+    this.log('debug', 'Closing stale SDK client transport before connect attempt');
+    try {
+      // Close fires the SDK's onclose chain, which rejects in-flight requests and
+      // clears the SDK client's transport reference.
+      await stale.close();
+    } catch (e) {
+      this.log('debug', 'Error closing stale SDK client transport (ignored)', {
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+    // Safety net in case close() did not fire the onclose chain.
+    this.severClientTransportLink(stale);
+  }
+
+  /**
+   * Severs the mutual references between the SDK client and a stale transport
+   * without closing it. Clearing the transport's callbacks ensures a later
+   * close() of the stale transport cannot reach into the SDK client and clear
+   * the state of a newer live connection.
+   */
+  private severClientTransportLink(stale: Transport): void {
+    stale.onclose = undefined;
+    stale.onerror = undefined;
+    stale.onmessage = undefined;
+    if (this.client.transport === stale) {
+      (this.client as unknown as { _transport?: Transport })._transport = undefined;
+    }
+  }
+
+  /**
+   * Closes and clears any transport retained from an unfinished authorization
+   * flow. Safe to call when nothing is pending. Centralizes the cleanup so
+   * success, disconnect, and forceReconnect all release the same resource.
+   */
+  private closePendingAuthTransport(replacement?: StreamableHTTPClientTransport | SSEClientTransport): void {
+    const pending = this.pendingAuthTransport;
+    this.pendingAuthTransport = replacement;
+    if (pending && pending !== replacement) {
+      void pending.close().catch(() => {});
+    }
+  }
+
+  /**
+   * Records that the server rejected the connection with a 401 and keeps the
+   * transport that started the authorization flow so finishAuth can complete it.
+   */
+  private markNeedsAuth(transport: StreamableHTTPClientTransport | SSEClientTransport): void {
+    // A prior connect() may have left a pending transport that never completed
+    // finishAuth. Close the superseded one before replacing it so its event
+    // stream and session resources are released rather than abandoned.
+    this.closePendingAuthTransport(transport);
+    this._authState = 'needs-auth';
+    this.log('debug', 'Server requires OAuth authorization before connecting.');
+  }
+
+  /**
+   * OAuth authorization state of this server connection, when it has an authProvider.
+   *
+   * @internal
+   */
+  get authState(): MCPServerAuthState | undefined {
+    return this._authState;
+  }
+
+  /**
+   * Completes a pending OAuth authorization-code flow.
+   *
+   * Exchanges the authorization code captured at the redirect URI on the same
+   * transport that started the flow, then leaves the client ready to connect().
+   *
+   * @param authorizationCode - The authorization code captured at the redirect URI
+   * @throws {Error} If no authorization flow is pending for this server
+   *
+   * @internal
+   */
+  async finishAuth(authorizationCode: string): Promise<void> {
+    const pending = this.pendingAuthTransport;
+    if (!pending) {
+      throw new Error('No OAuth authorization is pending for this server. Call connect() first.');
+    }
+    this.pendingAuthTransport = undefined;
+    try {
+      await pending.finishAuth(authorizationCode);
+    } finally {
+      // The pending transport only ran the token exchange; the next connect() builds a fresh one.
+      void pending.close().catch(() => {});
     }
   }
 
@@ -510,6 +666,10 @@ export class InternalMastraMCPClient extends MastraBase {
 
     this.isConnected = new Promise<boolean>(async (resolve, reject) => {
       try {
+        // A previous failed connect attempt can leave a stale transport attached
+        // to the SDK client; release it or every reconnect fails (issue #19862).
+        await this.detachStaleClientTransport();
+
         const { command, url } = this.serverConfig;
 
         if (command) {
@@ -524,24 +684,36 @@ export class InternalMastraMCPClient extends MastraBase {
 
         resolve(true);
 
-        // Set up disconnect handler to reset state.
-        const originalOnClose = this.client.onclose;
-        this.client.onclose = () => {
-          this.log('debug', `MCP server connection closed`);
-          // Close the stale transport before any reconnect so its EventSource/session
-          // can't keep retrying and leak server-side sessions (issue #16693). Clear
-          // synchronously first so a concurrent connect() sees a clean slate.
-          const staleTransport = this.transport;
-          this.transport = undefined;
-          this.isConnected = null;
-          this.serverInstructions = undefined;
-          if (staleTransport) {
-            void staleTransport.close().catch(() => {});
+        // Scope the reset to this connection so an older handler retained across
+        // reconnects cannot clear the state of a replacement connection.
+        const connectedTransport = this.transport;
+        const connectionPromise = this.isConnected;
+        if (this.client.onclose !== this.clientConnectionOnClose) {
+          this.clientBaseOnClose = this.client.onclose;
+        }
+        const connectionOnClose = () => {
+          if (this.transport === connectedTransport) {
+            this.log('debug', `MCP server connection closed`);
+            // Close the stale transport before any reconnect so its EventSource/session
+            // can't keep retrying and leak server-side sessions (issue #16693). Clear
+            // synchronously first so a concurrent connect() sees a clean slate.
+            const staleTransport = this.transport;
+            this.transport = undefined;
+            if (this.isConnected === connectionPromise) {
+              this.isConnected = null;
+            }
+            this.serverInstructions = undefined;
+            if (staleTransport) {
+              // Prevent a duplicate late close signal from this transport from
+              // reaching the SDK client after a replacement connection is attached.
+              this.severClientTransportLink(staleTransport);
+              void staleTransport.close().catch(() => {});
+            }
           }
-          if (typeof originalOnClose === 'function') {
-            originalOnClose();
-          }
+          this.clientBaseOnClose?.();
         };
+        this.clientConnectionOnClose = connectionOnClose;
+        this.client.onclose = connectionOnClose;
       } catch (e) {
         this.isConnected = null;
         reject(e);
@@ -620,13 +792,21 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   async disconnect() {
+    // Release any transport left pending from an unfinished authorization flow,
+    // even when there is no live transport to tear down.
+    this.closePendingAuthTransport();
     if (!this.transport) {
+      // Even without a live transport, a failed connect attempt may have left a
+      // stale transport attached to the SDK client; release it so a future
+      // connect starts clean (issue #19862).
+      await this.detachStaleClientTransport();
       this.log('debug', 'Disconnect called but no transport was connected.');
       return;
     }
     this.log('debug', `Disconnecting from MCP server`);
+    const disconnectedTransport = this.transport;
     try {
-      await this.transport.close();
+      await disconnectedTransport.close();
       this.log('debug', 'Successfully disconnected from MCP server');
     } catch (e) {
       this.log('error', 'Error during MCP server disconnect', {
@@ -634,6 +814,7 @@ export class InternalMastraMCPClient extends MastraBase {
       });
       throw e;
     } finally {
+      this.severClientTransportLink(disconnectedTransport);
       this.transport = undefined;
       this.isConnected = null;
       this.serverInstructions = undefined;
@@ -668,15 +849,24 @@ export class InternalMastraMCPClient extends MastraBase {
   async forceReconnect(): Promise<void> {
     this.log('debug', 'Forcing reconnection to MCP server...');
 
+    // Release any transport left pending from an unfinished authorization flow
+    // before rebuilding the connection.
+    this.closePendingAuthTransport();
+
     // Disconnect current connection (ignore errors as connection may already be broken)
+    const disconnectedTransport = this.transport;
     try {
-      if (this.transport) {
-        await this.transport.close();
+      if (disconnectedTransport) {
+        await disconnectedTransport.close();
       }
     } catch (e) {
       this.log('debug', 'Error during force disconnect (ignored)', {
         error: e instanceof Error ? e.message : String(e),
       });
+    } finally {
+      if (disconnectedTransport) {
+        this.severClientTransportLink(disconnectedTransport);
+      }
     }
 
     // Reset connection state

@@ -400,8 +400,7 @@ export class SourceAgentsSourceControl extends AgentsStorage {
   private getCodeDefinedAgent(agentId: string): { source?: string; __getEditorConfig?: () => unknown } | undefined {
     try {
       const agent = this.storageMastra?.getAgentById?.(agentId) as
-        | { source?: string; __getEditorConfig?: () => unknown }
-        | undefined;
+        { source?: string; __getEditorConfig?: () => unknown } | undefined;
       return agent?.source === 'code' ? agent : undefined;
     } catch {
       return undefined;

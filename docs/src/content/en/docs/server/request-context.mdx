@@ -256,6 +256,8 @@ auth: {
 }
 ```
 
+When the resource ID is derived this way, clients can omit `memory.resource` from agent generate and stream request bodies — the server-derived value is used instead (and always takes precedence over any client-provided value). If a request uses memory and neither the body nor the request context provides a resource ID, the server responds with a 400 error.
+
 You can also set these keys manually in middleware:
 
 ```typescript

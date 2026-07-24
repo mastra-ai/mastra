@@ -3,14 +3,13 @@
     "name": "test-b843af0f",
     "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should handle messages with only assistant role",
-    "createdAt": "2026-05-18T10:50:53.466Z",
-    "updatedAt": "2026-05-28T17:33:44.094Z"
+    "createdAt": "2026-07-14T17:15:02.869Z"
   },
   "recordings": [
     {
-      "hash": "c6b966d34047c976",
+      "hash": "ee111bfe01165955",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
         "body": {
           "generationConfig": {},
@@ -40,7 +39,7 @@
             ]
           }
         },
-        "timestamp": 1779989622883
+        "timestamp": 1784049302338
       },
       "response": {
         "status": 200,
@@ -48,9 +47,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 28 May 2026 17:33:44 GMT",
+          "date": "Tue, 14 Jul 2026 17:15:02 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1103",
+          "server-timing": "gfet4t7; dur=434",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -63,35 +62,29 @@
               "content": {
                 "parts": [
                   {
-                    "text": " What is your query? I'm ready to assist you with information, creative content, problem-solving, and more. Just let me know what you need!\n"
+                    "text": " Please tell me what you'd like me to do."
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.23845274308148554
+              "index": 0
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 15,
-            "candidatesTokenCount": 34,
-            "totalTokenCount": 49,
+            "promptTokenCount": 17,
+            "candidatesTokenCount": 12,
+            "totalTokenCount": 29,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 15
-              }
-            ],
-            "candidatesTokensDetails": [
-              {
-                "modality": "TEXT",
-                "tokenCount": 34
+                "tokenCount": 17
               }
             ],
             "serviceTier": "standard"
           },
-          "modelVersion": "gemini-2.0-flash",
-          "responseId": "d3wYavDHCque_uMP8N6uwQI"
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "lm5WaqH5GNzwnsEP4szP2A0"
         },
         "isStreaming": false
       }

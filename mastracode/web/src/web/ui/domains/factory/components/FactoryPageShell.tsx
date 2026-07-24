@@ -1,77 +1,63 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import type { ReactNode } from 'react';
+import { useParams } from 'react-router';
 
-import { useOverlays } from '../../../lib/overlays';
+import { useFactoryQuery } from '../../../../../shared/hooks/useFactories';
 import { Sidebar } from '../../../Sidebar';
-import { ChatLayout } from '../../../ui';
+import { PageLayout, ViewportLayout } from '../../../layouts/PageLayout';
 import { ChatHeader } from '../../chat/components/ChatHeader';
-import { EmptyProjectState, useActiveProjectContext, useGithubStatusQuery } from '../../workspaces';
-import type { Project } from '../../workspaces';
+import type { FactoryProject } from '../../workspaces/services/github';
 
 interface FactoryPageShellProps {
-  title: string;
-  description: string;
-  /** Max-width utility for the content column (defaults to `max-w-3xl`). */
-  maxWidthClassName?: string;
-  /** Renders the page body once a GitHub-backed project is active. */
-  children: (project: Project & { githubProjectId: string }) => ReactNode;
+  /** Renders the page body once a server-backed factory is active. */
+  children: (factory: FactoryProject) => ReactNode;
 }
 
 /**
- * Shared frame for the Factory pages (the Board): the standard app
- * layout (sidebar + mobile header) around a titled content column. Factory data
- * comes from GitHub, so local projects and disconnected GitHub states get an
- * explanatory notice instead of a broken empty list.
+ * Shared frame for the Factory pages (Board, Metrics, Rules, Audit): the standard
+ * app layout (sidebar + mobile header) around a titled content column. Any
+ * server-backed Factory renders its pages — including one with zero linked
+ * repositories (the pages show connect prompts). Local folder factories get an
+ * explanatory notice; when a factory links multiple repositories a picker in
+ * the header scopes repository-based intake.
  */
-export function FactoryPageShell({
-  title,
-  description,
-  maxWidthClassName = 'max-w-3xl',
+function FactoryPageShellFrame({
   children,
-}: FactoryPageShellProps) {
-  const overlays = useOverlays();
-  const { activeProject } = useActiveProjectContext();
-  const isGithubProject = activeProject?.source === 'github' && Boolean(activeProject.githubProjectId);
-  const status = useGithubStatusQuery(isGithubProject);
+  Layout,
+}: FactoryPageShellProps & {
+  Layout: typeof PageLayout;
+}) {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factoryQuery = useFactoryQuery(factoryId);
+
+  if (factoryQuery.isPending) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  }
+
+  const factory = factoryQuery.data;
 
   return (
-    <ChatLayout
-      sidebar={<Sidebar />}
-      header={<ChatHeader />}
-      sidebarOpen={overlays.isOpen('sidebar')}
-      onSidebarClose={() => overlays.close('sidebar')}
-      content={
-        activeProject ? (
-          // The page itself doesn't scroll: the Board's swimlanes scroll
-          // internally, so the frame just hands its height down.
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-6 md:px-6">
-            <div className={`mx-auto flex min-h-0 w-full flex-1 flex-col gap-4 ${maxWidthClassName}`}>
-              <header className="flex flex-col gap-1">
-                <h1 className="m-0 text-xl text-icon6">{title}</h1>
-                <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
-                  {description}
-                </Txt>
-              </header>
-              {!isGithubProject || !activeProject.githubProjectId ? (
-                <Notice variant="info">
-                  Factory is only available for GitHub projects. Switch to a GitHub-backed project.
-                </Notice>
-              ) : status.isPending ? null : status.data?.enabled && status.data.connected ? (
-                children({ ...activeProject, githubProjectId: activeProject.githubProjectId })
-              ) : (
-                <Notice variant="info">
-                  Factory requires a GitHub connection. Connect GitHub from the projects menu to see issues and pull
-                  requests.
-                </Notice>
-              )}
-            </div>
-          </div>
-        ) : (
-          <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />
-        )
-      }
-      footer={null}
-    />
+    <Layout sidebar={<Sidebar />} header={<ChatHeader />}>
+      {factory ? children(factory) : <Notice variant="destructive">Factory not found.</Notice>}
+    </Layout>
+  );
+}
+
+/** Factory page whose content participates in native document scrolling. */
+export function DocumentFactoryPageShell(props: FactoryPageShellProps) {
+  return <FactoryPageShellFrame {...props} Layout={PageLayout} />;
+}
+
+/** Factory page with nested scroll regions constrained to the viewport. */
+export function FactoryPageShell({ children }: FactoryPageShellProps) {
+  return (
+    <FactoryPageShellFrame Layout={ViewportLayout}>
+      {factory => <div className="flex min-h-0 flex-1 flex-col p-5">{children(factory)}</div>}
+    </FactoryPageShellFrame>
   );
 }

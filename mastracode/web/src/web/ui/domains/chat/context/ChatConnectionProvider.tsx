@@ -14,11 +14,12 @@ export function ChatConnectionProvider({
   children: ReactNode;
   onEvent: (event: AgentControllerEvent) => void;
 }) {
-  const { resourceId, projectPath, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { resourceId, projectPath, factorySessionState, sessionEnabled, baseUrl } = useChatSessionContext();
   const connection = useAgentControllerConnection({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
+    factorySessionState,
     baseUrl,
     enabled: sessionEnabled,
     onEvent,
@@ -27,8 +28,8 @@ export function ChatConnectionProvider({
   const connectionValue: ChatConnectionApi = {
     status: connection.status,
     state: connection.state,
-    stateUpdatedAt: connection.stateUpdatedAt,
-    createdThreadId: connection.createdThreadId,
+    threadId: connection.threadId,
+    createdThreadId: connection.threadId,
   };
 
   return <ChatConnectionContext.Provider value={connectionValue}>{children}</ChatConnectionContext.Provider>;

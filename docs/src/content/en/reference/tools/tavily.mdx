@@ -51,9 +51,9 @@ All factory functions accept `TavilyClientOptions` from `@tavily/core`:
     isOptional: true,
   },
   {
-    name: 'clientSource',
+    name: 'clientName',
     type: 'string',
-    description: 'Attribution string sent with each request.',
+    description: 'Attribution string sent with each request in the `X-Client-Name` header.',
     isOptional: true,
     defaultValue: "'mastra'",
   },

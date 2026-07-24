@@ -8,7 +8,7 @@ import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { getDummyResponseModel, getEmptyResponseModel, getErrorResponseModel } from './mock-model';
 
-function runStreamTest(version: 'v1' | 'v2' | 'v3') {
+function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
   const dummyResponseModel = getDummyResponseModel(version);
   const emptyResponseModel = getEmptyResponseModel(version);
   const errorResponseModel = getErrorResponseModel(version);
@@ -400,6 +400,7 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3') {
 runStreamTest('v1');
 runStreamTest('v2');
 runStreamTest('v3');
+runStreamTest('v4');
 
 describe('stream text resolution without memory', () => {
   it('resolves stream.text to the final step text when the model narrates between tool calls', async () => {

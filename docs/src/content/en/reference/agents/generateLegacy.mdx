@@ -9,17 +9,23 @@ packages:
 
 :::warning
 
-**Deprecated**: This method is deprecated and only works with V1 models. For V2 models, use the new [`.generate()`](./generate) method instead.
+**Deprecated**: This method is deprecated and only works with legacy model adapters. For current model adapters, use [`.generate()`](./generate) instead.
 
 :::
 
-The `.generateLegacy()` method is the legacy version of the agent generation API, used to interact with V1 model agents to produce text or structured responses. This method accepts messages and optional generation options.
+The `.generateLegacy()` method is the legacy version of the agent generation API, used with legacy model adapters to produce text or structured responses. This method accepts messages and optional generation options.
 
 ## Usage example
 
 ```typescript
 await agent.generateLegacy('message for agent')
 ```
+
+## Processor retry support
+
+`generateLegacy()` doesn't run error processors or `maxProcessorRetries`. It uses the legacy AI SDK generation path instead.
+
+Scorer judges with legacy model adapters call `generateLegacy()`. They don't receive the coordinated `StreamErrorRetryProcessor` budget available to scorer judges that use Mastra’s current generation API. Use a current model adapter when you need error-processor retries. The legacy `maxRetries` option remains separate and defaults to `2`.
 
 ## Parameters
 

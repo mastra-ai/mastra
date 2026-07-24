@@ -385,6 +385,121 @@ describe('RailwaySandbox', () => {
     });
   });
 
+  describe('clone', () => {
+    it('constructs an unstarted sibling without any I/O', () => {
+      const template = new RailwaySandbox({ token: 'tok', environmentId: 'env-1' });
+
+      const child = template.clone({ id: 'mc-project-1' });
+
+      expect(child).toBeInstanceOf(RailwaySandbox);
+      expect(child).not.toBe(template);
+      expect(child.id).toBe('mc-project-1');
+      expect(child.status).toBe('pending');
+      expect(mockCreate).not.toHaveBeenCalled();
+      expect(mockConnect).not.toHaveBeenCalled();
+    });
+
+    it('does not require the template to be started', () => {
+      const template = new RailwaySandbox({ token: 'tok' });
+      expect(() => template.clone()).not.toThrow();
+    });
+
+    it('inherits credentials and applies env + idle timeout overrides on start', async () => {
+      const template = new RailwaySandbox({
+        token: 'tok',
+        environmentId: 'env-1',
+        idleTimeoutMinutes: 30,
+        networkIsolation: 'PRIVATE',
+      });
+
+      const child = template.clone({
+        env: { GITHUB_TOKEN: 'ghs_abc' },
+        idleTimeoutMinutes: 15,
+      });
+      await child._start();
+
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          token: 'tok',
+          environmentId: 'env-1',
+          idleTimeoutMinutes: 15,
+          networkIsolation: 'PRIVATE',
+          env: { GITHUB_TOKEN: 'ghs_abc' },
+        }),
+      );
+    });
+
+    it('reattaches to a provider sandbox when sandboxId is passed', async () => {
+      const template = new RailwaySandbox({ token: 'tok', environmentId: 'env-1' });
+
+      const child = template.clone({ sandboxId: 'rw-sandbox-123' });
+      await child._start();
+
+      expect(mockConnect).toHaveBeenCalledWith(
+        'rw-sandbox-123',
+        expect.objectContaining({ token: 'tok', environmentId: 'env-1' }),
+      );
+      expect(mockCreate).not.toHaveBeenCalled();
+    });
+
+    it('inherits template defaults when no overrides are passed', async () => {
+      const template = new RailwaySandbox({
+        token: 'tok',
+        idleTimeoutMinutes: 45,
+        env: { BASE: '1' },
+      });
+
+      const child = template.clone();
+      await child._start();
+
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ token: 'tok', idleTimeoutMinutes: 45, env: { BASE: '1' } }),
+      );
+    });
+
+    it('inherits the template checkpoint name when no override is passed', async () => {
+      mockCreate.mockRejectedValueOnce(new Error('checkpoint not found')).mockResolvedValueOnce(mockSandbox);
+      const template = new RailwaySandbox({ token: 'tok', checkpointName: 'root-checkpoint' });
+
+      const child = template.clone({ id: 'mc-project-1' });
+      await child._start();
+
+      expect(mockCreate).toHaveBeenNthCalledWith(1, 'root-checkpoint', expect.objectContaining({ token: 'tok' }));
+      expect(mockSandbox.checkpoint).toHaveBeenCalledWith('root-checkpoint');
+    });
+
+    it('uses a derived checkpoint override when restoring an existing checkpoint', async () => {
+      mockCheckpoints.mockResolvedValueOnce([
+        { id: 'checkpoint-id', key: 'session-checkpoint', environmentId: 'env-1' },
+      ]);
+      const template = new RailwaySandbox({ token: 'tok', checkpointName: 'root-checkpoint' });
+
+      const child = template.clone({ id: 'mc-project-1', checkpointName: 'session-checkpoint' });
+      await child._start();
+
+      expect(mockCreate).toHaveBeenCalledWith('session-checkpoint', expect.objectContaining({ token: 'tok' }));
+      expect(mockCreate).not.toHaveBeenCalledWith('root-checkpoint', expect.anything());
+      expect(mockSandbox.checkpoint).not.toHaveBeenCalled();
+    });
+
+    it('uses a derived checkpoint override when capturing a missing checkpoint', async () => {
+      mockCreate.mockRejectedValueOnce(new Error('checkpoint not found')).mockResolvedValueOnce(mockSandbox);
+      const template = new RailwaySandbox({
+        token: 'tok',
+        checkpointName: 'root-checkpoint',
+        template: t => t.run('npm i -g pnpm'),
+      });
+
+      const child = template.clone({ id: 'mc-project-1', checkpointName: 'session-checkpoint' });
+      await child._start();
+
+      expect(mockCreate).toHaveBeenNthCalledWith(1, 'session-checkpoint', expect.objectContaining({ token: 'tok' }));
+      expect(mockCreate).toHaveBeenNthCalledWith(2, mockTemplate, expect.objectContaining({ token: 'tok' }));
+      expect(mockSandbox.checkpoint).toHaveBeenCalledWith('session-checkpoint');
+      expect(mockSandbox.checkpoint).not.toHaveBeenCalledWith('root-checkpoint');
+    });
+  });
+
   describe('executeCommand', () => {
     it('runs a command and maps a successful result', async () => {
       const sandbox = new RailwaySandbox({ token: 't' });

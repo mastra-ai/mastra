@@ -1,6 +1,6 @@
 {
   "name": "@mastra/nestjs",
-  "version": "0.2.7-alpha.11",
+  "version": "0.2.10-alpha.1",
   "description": "Mastra NestJS adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -45,10 +45,10 @@
     "@nestjs/testing": "^11.1.26",
     "@types/express": "^5.0.6",
     "@types/node": "^20.19.43",
-    "@ai-sdk/openai": "^2.0.110",
+    "@ai-sdk/openai": "^2.0.114",
     "cors": "^2.8.5",
     "@types/cors": "^2.8.19",
-    "eslint": "^10.4.1",
+    "eslint": "^10.7.0",
     "express": "^5.2.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
@@ -56,7 +56,7 @@
     "@types/supertest": "^6.0.2",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
-    "vitest": "^4.1.8",
+    "vitest": "^4.1.10",
     "zod": "^3.25.0"
   },
   "peerDependencies": {

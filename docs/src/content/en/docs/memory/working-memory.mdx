@@ -426,7 +426,7 @@ By default, working memory reaches the model as part of the system message. You 
 
 ```typescript
 const memory = new Memory({
-  storage: new LibSQLStore({ url: 'file:./mastra.db' }),
+  storage: new LibSQLStore({ id: 'mastra-storage', url: 'file:./mastra.db' }),
   options: {
     workingMemory: {
       enabled: true,

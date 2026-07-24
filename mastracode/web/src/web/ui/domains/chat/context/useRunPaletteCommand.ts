@@ -1,17 +1,17 @@
 import type { ToolCategory } from '@mastra/client-js';
-import type { Dispatch, SetStateAction } from 'react';
 
-import { useActiveProjectContext } from '../../workspaces';
+import { useParams } from 'react-router';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
   useResumeAgentControllerGoalMutation,
   useSetAgentControllerGoalMutation,
-} from '../hooks/useAgentControllerGoalMutations';
+} from '../../../../../shared/hooks/useAgentControllerGoalMutations';
 import {
   useAbortAgentControllerMutation,
   useFollowUpAgentControllerMutation,
-} from '../hooks/useAgentControllerRunMutations';
+} from '../../../../../shared/hooks/useAgentControllerRunMutations';
+import { useFactoryQuery } from '../../../../../shared/hooks/useFactories';
 import type { SlashCommand } from '../services/commands';
 import { SLASH_COMMANDS } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -23,17 +23,18 @@ import { useChatTranscript } from './useChatTranscript';
 
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 
-export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAction<string | undefined>>) {
-  const { activeProject } = useActiveProjectContext();
+export function useRunPaletteCommand(prefillComposer: (draft: string) => void) {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factoryQuery = useFactoryQuery(factoryId);
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { transcript, localUser, pushNotice } = useChatTranscript();
+  const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { activeModeId } = useChatModes();
   const { activeModelId, setModel } = useChatModels();
 
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };
@@ -95,12 +96,12 @@ export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAc
       case 'settings':
         pushNotice(
           [
-            `Project: ${activeProject?.name ?? '(none)'}`,
-            `Path: ${activeProject?.path ?? '(default workspace)'}`,
+            `Factory: ${factoryQuery.data?.name ?? '(none)'}`,
+            `Path: ${projectPath ?? '(no workspace selected)'}`,
             `Mode: ${activeModeId ?? '—'}`,
             `Model: ${activeModelId ?? '—'}`,
             `Thread: ${transcript.threadId ?? '—'}`,
-            `Running: ${transcript.running}`,
+            `Running: ${busy}`,
           ].join('\n'),
         );
         return;
@@ -123,7 +124,7 @@ export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAc
 
   const run = (command: SlashCommand) => {
     if (command.args) {
-      setComposerCommandName(command.name);
+      prefillComposer(`/${command.name} `);
       return;
     }
 

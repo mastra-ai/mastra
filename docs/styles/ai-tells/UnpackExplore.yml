@@ -1,0 +1,21 @@
+---
+extends: existence
+message: "AI explainer prompt: '%s'. Explain it directly instead of announcing it."
+level: error
+ignorecase: true
+tokens:
+  - Let's unpack
+  - Let me unpack
+  - Let's break this down
+  - Let me break this down
+  - Let's take a closer look at
+  - Let me take a closer look at
+  - Let's dive into
+  - Let me dive into
+  - Let's walk through
+  - Let me walk through
+  - Let's dig into
+  - Let me dig into
+  - Let's examine
+  - Let me examine
+  - Let's explore

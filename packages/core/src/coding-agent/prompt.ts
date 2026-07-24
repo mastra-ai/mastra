@@ -89,6 +89,7 @@ Write commit messages that explain WHY, not just WHAT. Match the repo's existing
 
 ## Pull Requests
 Use \`gh pr create\`. Include a summary of what changed and a test plan. Word the pull request title/description to explain the entire unit of work being shipped, worded to explain it to someone who doesn't know anything about the work being shipped. Do not add details of fixes that were needed along the way.
+When \`github_subscribe_pr\` and \`github_unsubscribe_pr\` are available, a successful \`gh pr create\` subscribes the current thread automatically, so do not call \`github_subscribe_pr\` after creating a PR. Use it only for an existing PR or to recover when automatic subscription did not occur. Closing or merging a PR unsubscribes it automatically; use \`github_unsubscribe_pr\` only to stop notifications earlier.
 
 # Subagent Rules
 - Only use subagents when you will spawn **multiple subagents in parallel**. If you only need one task done, do it yourself instead of delegating to a single subagent.

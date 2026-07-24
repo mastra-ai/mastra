@@ -18,5 +18,14 @@
     "zai-org/GLM-5-FP8",
     "zai-org/GLM-5.1-FP8",
     "zai-org/GLM-5.2-FP8"
+  ],
+  "structuredOutput": [
+    "deepseek-ai/DeepSeek-V4-Flash",
+    "deepseek-ai/DeepSeek-V4-Pro",
+    "moonshotai/Kimi-K2.6",
+    "moonshotai/kimi-k2.7-code-highspeed",
+    "openai/gpt-5.5",
+    "zai-org/GLM-5.1-FP8",
+    "zai-org/GLM-5.2-FP8"
   ]
 }

@@ -1,0 +1,23 @@
+---
+extends: existence
+message: "AI conclusion: '%s'. Delete this and end on your final point."
+level: error
+ignorecase: true
+tokens:
+  - In conclusion
+  - In summary
+  - To summarize
+  - To sum up
+  - To conclude
+  - In closing
+  - Ultimately
+  - All in all
+  - At the end of the day
+  - When all is said and done
+  - The bottom line is
+  - In the final analysis
+  - Taking everything into account
+  - Taking all of this into account
+  - Overall
+  - On the whole
+  - By way of conclusion

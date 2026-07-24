@@ -40,8 +40,8 @@ For most agent-focused projects, **Turso** is the simplest starting point. It pr
 
 A database is attached at one of two scopes:
 
-- **Project scope**: The default. One database shared by all of the project's [environments](/docs/mastra-platform/environments). Its variables are injected into every deploy.
-- **Environment scope**: Attached to a single environment. Use this to isolate data between environments, for example separate production and staging databases.
+- **Environment scope**: The default. Attached to a single environment so data stays isolated between environments (for example separate production and staging databases). When your project has one environment, `mastra env db create` picks it automatically; with several, the CLI prompts you to select one.
+- **Project scope**: One database shared by all of the project's [environments](/docs/mastra-platform/environments). Opt in with `--shared`. Its variables are injected into every deploy.
 
 The scope is set when you attach the database and shown in `mastra env db list`.
 
@@ -49,22 +49,28 @@ The two scopes can't overlap for the same provider. Because a project-scoped dat
 
 ## Attach with the CLI
 
-Create and attach a database in one command. The CLI polls until it's ready, which takes a few seconds:
+You don't have to run this command up front. If your project needs a hosted database but doesn't have one yet, `mastra deploy` offers to attach one for you when the deploy preflight check runs. Say yes and the deploy continues without leaving the CLI.
+
+Alternatively, create and attach a database ahead of time. The CLI polls until it's ready, which takes a few seconds:
 
 ```bash
-# Shared by all environments
+# Scoped to a single environment (the CLI picks the only one, or prompts if there are several)
 mastra env db create --kind turso
 
-# Scoped to the staging environment
+# Scoped to a specific environment
 mastra env db create staging --kind turso
+
+# Shared by all environments
+mastra env db create --kind turso --shared
 ```
 
 Supported kinds are `turso` and `neon` (Postgres). Useful flags:
 
+- `--shared`: Attach a project-scoped database shared by every environment. Cannot be combined with an environment argument.
 - `--name <name>`: Database name. Defaults to a name derived from the project slug.
 - `--region <region>`: Provider region ID for project-scoped databases (for example `fra`). Environment-scoped databases are placed near the environment's region automatically, and an explicit `--region` is ignored.
 - `--no-wait`: Return immediately instead of polling. Check progress later with `mastra env db show`.
-- `--json`: Machine-readable output.
+- `--json`: Machine-readable output. When the project has multiple environments, `--json` requires an environment argument or `--shared` (no interactive prompt).
 
 Inspect and manage attached databases:
 
@@ -117,6 +123,7 @@ Turso exposes two environment variables: `TURSO_DATABASE_URL` and `TURSO_AUTH_TO
 import { LibSQLStore } from '@mastra/libsql'
 
 export const storage = new LibSQLStore({
+  id: 'mastra-storage',
   url: process.env.TURSO_DATABASE_URL!,
   authToken: process.env.TURSO_AUTH_TOKEN!,
 })

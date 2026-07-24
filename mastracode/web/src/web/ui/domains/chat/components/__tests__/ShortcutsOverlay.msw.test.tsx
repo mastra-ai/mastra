@@ -8,14 +8,14 @@ import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-te
 beforeEach(useOverlayControllerHandlers);
 
 describe('ShortcutsOverlay', () => {
-  it('shows its shortcuts from the overlay provider stack', () => {
+  it('shows its shortcuts from the overlay provider stack', async () => {
     renderWithProviders(
       <OverlayTestProviders>
         <ShortcutsOverlay />
       </OverlayTestProviders>,
     );
-    expect(screen.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
-    expect(screen.getByText('Open the command palette')).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'Keyboard shortcuts' })).toBeInTheDocument();
+    expect(screen.getByText('Show this shortcuts help')).toBeInTheDocument();
     expect(screen.getByText('Insert a newline')).toBeInTheDocument();
   });
 });

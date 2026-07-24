@@ -71,7 +71,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     name: 'tools',
     type: 'Record<string, ToolApi>',
     description:
-      'Custom tools to register. Structured as a key-value pair, with keys being the tool name and values being the tool function.',
+      'Tool instances to register. Keys are registration keys used by [`getTool()`](/reference/core/getTool), and values are tool instances. Use [`getToolById()`](/reference/core/getToolById) for intrinsic ID lookup and [`listTools()`](/reference/core/listTools) to read the registry.',
     isOptional: true,
     defaultValue: '{}',
   },

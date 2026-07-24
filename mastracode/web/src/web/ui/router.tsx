@@ -2,66 +2,62 @@
  * SPA route table (React Router v7, data mode).
  *
  * Auth gating happens in React layout components, not loaders: `RequireAuth`
- * wraps the app routes and reads `/auth/me` through the `useWebAuth` custom
+ * wraps the app routes and reads `/auth/me` through the `useFactoryAuth` custom
  * React Query hook (shared cache key with the rest of the UI), redirecting
  * unauthenticated sessions to `/signin` when web auth is enabled. `SignInGate`
  * mirrors the guard: signed-in (or auth-disabled) visitors are sent back to
- * `/` so the app can render the draft composer.
+ * `/` so the app can choose the active factory's board or draft composer.
+ *
+ * The URL is the single source of truth for the active factory: everything
+ * factory-scoped lives under `/factories/:factoryId/**` behind `FactoryLayout`.
  */
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { createBrowserRouter, Navigate, Outlet } from 'react-router';
+import { createBrowserRouter, Navigate, useLocation } from 'react-router';
 import type { RouteObject } from 'react-router';
 
-import { SignInPage, useWebAuth } from './domains/auth';
 import Chat from './domains/chat/Chat';
-import { NewPage } from './domains/chat/NewPage';
-import { ThreadPage } from './domains/chat/ThreadPage';
-import { BoardPage } from './domains/factory/BoardPage';
+import { RootGuards } from './domains/auth/components/RootGuards';
+import { AuditPage } from './pages/AuditPage';
+import { ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
+import { CreateFactoryPage } from './pages/CreateFactoryPage';
+import { MetricsPage } from './pages/MetricsPage';
+import { NewPage } from './pages/NewPage';
+import { OnboardingPage } from './pages/OnboardingPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { RulesPage } from './pages/RulesPage';
+import { SignInPage } from './pages/SignInPage';
+import { ThreadPage } from './pages/ThreadPage';
 
-/**
- * Full-page placeholder while `/auth/me` resolves — a shimmer block instead
- * of a blank screen on deep links / refreshes.
- */
-function AuthPendingSkeleton() {
-  return (
-    <div
-      role="status"
-      aria-label="Checking sign-in"
-      className="flex h-dvh w-full items-center justify-center bg-surface1"
-    >
-      <div className="flex w-64 flex-col gap-3">
-        <Skeleton className="h-8 w-full" />
-        <Skeleton className="h-4 w-3/4" />
-        <Skeleton className="h-4 w-1/2" />
-      </div>
-    </div>
-  );
+import { useFactoriesQuery } from '../../shared/hooks/useFactories';
+import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
+import { hasPendingCreateFlow } from './domains/workspaces/hooks/useCreateFactoryFlow';
+import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
+
+function RootLanding() {
+  const { data: factories, isPending } = useFactoriesQuery();
+  // Preserve `routeErrorNotice`-style state through the redirect chain (e.g.
+  // FactoryLayout bouncing an unknown factoryId here).
+  const { state, search } = useLocation();
+
+  // OAuth callbacks land on `/?github=connected` etc. When a create-factory
+  // flow is mid-way, resume the wizard (with the search intact) instead of
+  // landing on the first factory's home.
+  if (hasPendingCreateFlow()) return <Navigate to={`/factories/create${search}`} replace />;
+
+  if (isPending || !factories) return null;
+
+  const firstFactory = factories[0];
+  // Empty list is bounced to /onboarding by OnboardingGuard before we render.
+  if (!firstFactory) return null;
+
+  // Same for onboarding once its factory exists (created on repo pick): the
+  // GitHub/Linear round-trips must resume the wizard, not land on the factory.
+  if (hasResumableFactoryOnboarding(factories)) return <Navigate to={`/onboarding${search}`} replace />;
+
+  return <Navigate to={`/factories/${firstFactory.id}`} replace state={state} />;
 }
 
-/**
- * Root layout guard. Shows a skeleton while the auth state resolves (one
- * cached query, shared with the sidebar identity UI) so the app neither
- * flashes protected content nor bounces through /signin on refresh.
- */
-function RequireAuth() {
-  const auth = useWebAuth();
-  if (auth.isPending) return <AuthPendingSkeleton />;
-  const state = auth.data;
-  if (state?.authEnabled && !state.authenticated) return <Navigate to="/signin" replace />;
-  return <Outlet />;
-}
-
-/** Inverse guard for /signin: only unauthenticated (auth-enabled) users stay. */
-function SignInGate() {
-  const auth = useWebAuth();
-  if (auth.isPending) return <AuthPendingSkeleton />;
-  const state = auth.data;
-  if (!state?.authEnabled || state.authenticated) return <Navigate to="/" replace />;
-  return <SignInPage />;
-}
-
-function RedirectToDraftThread() {
-  return <Navigate to="/new" replace />;
+function FactoryHomeRedirect() {
+  return <Navigate to="work" replace />;
 }
 
 export function createAppRoutes(): RouteObject[] {
@@ -71,28 +67,59 @@ export function createAppRoutes(): RouteObject[] {
   return [
     {
       path: '/',
-      element: <RequireAuth />,
+      element: <RootGuards />,
       children: [
-        { index: true, element: <RedirectToDraftThread /> },
+        { index: true, element: <RootLanding /> },
+        { path: 'onboarding', element: <OnboardingPage /> },
+        // Full-screen wizard, outside the factory shell — no factory context
+        // or Chat session needed.
+        { path: 'factories/create', element: <CreateFactoryPage /> },
         {
-          // Pathless layout: <Chat /> (providers, session, SSE stream) stays
-          // mounted while navigating between thread URLs, so thread navigation
-          // never tears down or reconnects the session.
-          element: <Chat />,
+          path: 'factories/:factoryId',
+          element: <FactoryLayout />,
           children: [
-            { path: 'new', element: <NewPage /> },
-            { path: 'threads/:threadId', element: <ThreadPage /> },
-            { path: 'factory/board', element: <BoardPage /> },
-            // Legacy Factory pages, folded into the Board.
-            { path: 'factory/intake', element: <Navigate to="/factory/board" replace /> },
-            { path: 'factory/review', element: <Navigate to="/factory/board" replace /> },
+            {
+              element: <Chat />,
+              children: [{ index: true, element: <FactoryHomeRedirect /> }],
+            },
+            {
+              path: 'workspaces/:sessionId',
+              element: <Chat />,
+              children: [
+                { index: true, element: <NewPage /> },
+                { path: 'threads/:threadId', element: <ThreadPage /> },
+              ],
+            },
+            {
+              path: 'user/threads/:threadId',
+              element: <Chat />,
+              children: [{ index: true, element: <ThreadPage /> }],
+            },
+            {
+              element: <Chat />,
+              children: [
+                { path: 'new', element: <NewPage /> },
+                { path: 'work', element: <WorkBoardPage /> },
+                { path: 'review', element: <ReviewBoardPage /> },
+                { path: 'metrics', element: <MetricsPage /> },
+                { path: 'rules', element: <RulesPage /> },
+                { path: 'audit', element: <AuditPage /> },
+                {
+                  path: 'settings',
+                  children: [
+                    { index: true, element: <Navigate to="general" replace /> },
+                    { path: ':section', element: <SettingsPage /> },
+                  ],
+                },
+              ],
+            },
           ],
         },
         // Legacy deep links (the app used to serve everything at any path).
-        { path: '*', element: <RedirectToDraftThread /> },
+        { path: '*', element: <Navigate to="/" replace /> },
       ],
     },
-    { path: '/signin', element: <SignInGate /> },
+    { path: '/signin', element: <SignInPage /> },
   ];
 }
 

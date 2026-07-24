@@ -8,7 +8,7 @@
     "get-port": "^7.2.0",
     "tinyglobby": "^0.2.17",
     "verdaccio": "^6.7.4",
-    "verdaccio-auth-memory": "^10.3.3"
+    "verdaccio-auth-memory": "^13.0.3"
   },
   "scripts": {
     "publish-ci-registry": "node publish-ci-registry.js"

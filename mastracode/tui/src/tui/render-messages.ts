@@ -6,7 +6,7 @@
 import { Container, Text } from '@earendil-works/pi-tui';
 import type { Component } from '@earendil-works/pi-tui';
 import { readPlanFile, resolvePlanPath } from '@mastra/code-sdk/utils/plans';
-import type { AgentControllerMessage, AgentControllerMessageContent } from '@mastra/core/agent-controller';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { parseSubagentMeta } from '@mastra/core/agent-controller';
 import type { TaskItemInput, TaskItemSnapshot } from '@mastra/core/signals';
 import { assignTaskIds } from '@mastra/core/signals';
@@ -34,6 +34,19 @@ import { formatTaskProgressLine } from './components/task-progress.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
+import {
+  getAssistantRenderParts,
+  getMessageText,
+  getNotificationSummaryView,
+  getNotificationView,
+  getReactiveSignalView,
+  getReminderView,
+  getSignalKind,
+  getStateSignalView,
+  getUserSignalView,
+  isSignalMessage,
+} from './db-message-parts.js';
+import type { AssistantRenderPart } from './db-message-parts.js';
 import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme } from './theme.js';
@@ -51,12 +64,10 @@ function shouldRenderReactiveSignal(tagName: string): boolean {
   return !HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName);
 }
 
-type MessageWithAttributes = AgentControllerMessage & {
-  attributes?: Record<string, string | number | boolean | null | undefined>;
-};
-
-function getUserMessageLabel(message: MessageWithAttributes, fallbackLabel?: string): string | undefined {
-  if (message.attributes?.delivery === 'while-active') return WHILE_ACTIVE_USER_MESSAGE_LABEL;
+function getUserMessageLabel(message: MastraDBMessage, fallbackLabel?: string): string | undefined {
+  const signalAttributes = (message.content?.metadata?.signal as { attributes?: Record<string, unknown> } | undefined)
+    ?.attributes;
+  if (signalAttributes?.delivery === 'while-active') return WHILE_ACTIVE_USER_MESSAGE_LABEL;
   return fallbackLabel;
 }
 
@@ -277,7 +288,12 @@ export function addPendingUserMessage(
   state.ui.requestRender();
 }
 
-export function confirmPendingUserMessage(state: TUIState, messageId: string, text: string): void {
+export function confirmPendingUserMessage(
+  state: TUIState,
+  messageId: string,
+  text: string,
+  attachments?: { imageCount: number; fileCount: number },
+): void {
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
@@ -286,15 +302,22 @@ export function confirmPendingUserMessage(state: TUIState, messageId: string, te
     state.streamingMessage = undefined;
   }
 
-  replacePendingUserMessage(state, messageId, text);
+  replacePendingUserMessage(state, messageId, text, attachments);
 }
 
-function replacePendingUserMessage(state: TUIState, messageId: string, text: string): void {
+function replacePendingUserMessage(
+  state: TUIState,
+  messageId: string,
+  text: string,
+  attachments?: { imageCount: number; fileCount: number },
+): void {
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
-  const imageCount = pending.images?.length ?? 0;
-  const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
+  const prefix = formatAttachmentPrefix(
+    attachments?.imageCount ?? pending.images?.length ?? 0,
+    attachments?.fileCount ?? 0,
+  );
   const label = getPendingUserMessageLabel(pending.isInterjection);
   const confirmed = new UserMessageComponent(prefix + text, getMarkdownTheme(), {
     ...(label ? { label } : {}),
@@ -336,15 +359,24 @@ export function clearPendingUserMessages(state: TUIState): void {
   state.ui.requestRender();
 }
 
-function confirmMatchingPendingUserMessage(state: TUIState, messageId: string, text: string): boolean {
+function confirmMatchingPendingUserMessage(
+  state: TUIState,
+  messageId: string,
+  text: string,
+  attachments: { imageCount: number; fileCount: number },
+): boolean {
   const normalizedText = text.trim();
   for (const [pendingId, pending] of state.pendingSignalMessageComponentsById) {
     if (pending.text.trim() !== normalizedText) continue;
 
     const label = getPendingUserMessageLabel(pending.isInterjection);
-    const confirmed = new UserMessageComponent(text, getMarkdownTheme(), {
-      ...(label ? { label } : {}),
-    });
+    const confirmed = new UserMessageComponent(
+      formatAttachmentPrefix(attachments.imageCount, attachments.fileCount) + text,
+      getMarkdownTheme(),
+      {
+        ...(label ? { label } : {}),
+      },
+    );
     const idx = state.chatContainer.children.indexOf(pending.component as never);
     if (idx >= 0) {
       (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
@@ -364,160 +396,191 @@ function unescapeSkillBoundary(text: string): string {
   return text.replaceAll('&lt;/skill&gt;', '</skill>');
 }
 
-export function addUserMessage(state: TUIState, message: AgentControllerMessage, options?: { label?: string }): void {
-  if (state.messageComponentsById.has(message.id)) {
-    return;
-  }
+function getUserContentParts(
+  message: MastraDBMessage,
+): Array<{ type?: string; mimeType?: string; mediaType?: string }> {
+  const content = message.content;
+  if (typeof content === 'string' || !content?.parts) return [];
+  return content.parts as Array<{ type?: string; mimeType?: string; mediaType?: string }>;
+}
 
-  const reminderPart = message.content.find(
-    (content): content is Extract<AgentControllerMessageContent, { type: 'system_reminder' }> =>
-      content.type === 'system_reminder',
-  );
+/**
+ * DB-native user attachments are persisted as `file` parts; images are `file`
+ * parts whose media type is `image/*`. Distinguish them so the TUI can show
+ * separate image and file counts.
+ */
+function isImagePart(part: { type?: string; mimeType?: string; mediaType?: string }): boolean {
+  if (part.type === 'image') return true;
+  if (part.type !== 'file') return false;
+  const media = part.mediaType ?? part.mimeType ?? '';
+  return media.startsWith('image/');
+}
 
-  if (reminderPart) {
-    const goalMetadata = reminderPart as typeof reminderPart & {
-      goalMaxTurns?: number;
-      judgeModelId?: string;
-      goalEvaluation?: GoalEvaluationPayload;
-    };
+function formatAttachmentPrefix(imageCount: number, fileCount: number): string {
+  const labels = [
+    imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}]` : '',
+    fileCount > 0 ? `[${fileCount} file${fileCount > 1 ? 's' : ''}]` : '',
+  ].filter(Boolean);
+  return labels.length > 0 ? `${labels.join(' ')} ` : '';
+}
 
-    if (reminderPart.reminderType === 'goal-judge' && goalMetadata.goalEvaluation) {
-      const judgeComponent = new JudgeDisplayComponent(
-        null,
-        goalMetadata.goalEvaluation.iteration,
-        goalMetadata.goalEvaluation.maxRuns,
-      );
-      judgeComponent.setEvaluation(goalMetadata.goalEvaluation);
-      addChildBeforeMessageOrFollowUps(state, judgeComponent, reminderPart.precedesMessageId);
-      state.messageComponentsById.set(message.id, judgeComponent);
-      state.ui.requestRender();
-      return;
+/**
+ * Render a `role: 'signal'` message into its dedicated TUI component (reminder,
+ * judge, state, reactive, notification, notification-summary). Returns true when
+ * the signal was fully handled; returns false for `user`-kind signals so the
+ * caller renders it through the shared user-message component path.
+ */
+export function renderSignalMessage(state: TUIState, message: MastraDBMessage): boolean {
+  const kind = getSignalKind(message);
+
+  if (kind === 'reminder') {
+    const reminder = getReminderView(message);
+
+    if (reminder.reminderType === 'goal-judge') {
+      // Goal-judge reminders with an evaluation payload render the judge result.
+      // Bare goal-judge continuation reminders ("[Goal attempt N/M] Continue…")
+      // are suppressed because the goal/judge UI already surfaces that state.
+      if (reminder.goalEvaluation) {
+        const goalEvaluation = reminder.goalEvaluation as GoalEvaluationPayload;
+        const judgeComponent = new JudgeDisplayComponent(null, goalEvaluation.iteration, goalEvaluation.maxRuns);
+        judgeComponent.setEvaluation(goalEvaluation);
+        addChildBeforeMessageOrFollowUps(state, judgeComponent, reminder.precedesMessageId);
+        state.messageComponentsById.set(message.id, judgeComponent);
+        state.ui.requestRender();
+      }
+      return true;
     }
 
-    const reminderComponent = createReminderComponent(reminderPart.reminderType, {
-      message: reminderPart.message,
-      path: reminderPart.path,
-      gapText: reminderPart.gapText,
-      goalMaxTurns: goalMetadata.goalMaxTurns,
-      judgeModelId: goalMetadata.judgeModelId,
+    const reminderComponent = createReminderComponent(reminder.reminderType, {
+      message: reminder.message,
+      path: reminder.path,
+      gapText: reminder.gapText,
+      goalMaxTurns: reminder.goalMaxTurns,
+      judgeModelId: reminder.judgeModelId,
     });
     reminderComponent.setExpanded(state.toolOutputExpanded);
     state.allSystemReminderComponents.push(reminderComponent);
 
-    if (!reminderPart.precedesMessageId && state.streamingComponent) {
-      const idx = state.chatContainer.children.indexOf(state.streamingComponent as never);
-      if (idx >= 0) {
-        (state.chatContainer.children as unknown[]).splice(idx, 0, reminderComponent);
-        reconcileChatBoundarySpacers(state.chatContainer);
-        state.ui.requestRender();
-        return;
+    // If the reminder anchors before a user message that has not been rendered
+    // yet (its id is not mapped), fall back to inserting it before the latest
+    // rendered user message so temporal-gap markers stay above the run they
+    // precede.
+    if (reminder.precedesMessageId && !state.messageComponentsById.has(reminder.precedesMessageId)) {
+      const latestUserComponent = [...state.chatContainer.children]
+        .reverse()
+        .find(child => child instanceof UserMessageComponent);
+      if (latestUserComponent) {
+        const idx = state.chatContainer.children.indexOf(latestUserComponent as never);
+        if (idx >= 0) {
+          insertChatComponentWithBoundarySpacing(state.chatContainer, reminderComponent, idx);
+          state.ui.requestRender();
+          return true;
+        }
       }
     }
 
-    addChildBeforeMessageOrFollowUps(state, reminderComponent, reminderPart.precedesMessageId);
+    if (!reminder.precedesMessageId && state.streamingComponent) {
+      const idx = state.chatContainer.children.indexOf(state.streamingComponent as never);
+      if (idx >= 0) {
+        insertChatComponentWithBoundarySpacing(state.chatContainer, reminderComponent, idx);
+        state.ui.requestRender();
+        return true;
+      }
+    }
+
+    addChildBeforeMessageOrFollowUps(state, reminderComponent, reminder.precedesMessageId);
     state.ui.requestRender();
-    return;
+    return true;
   }
 
-  const stateSignalPart = message.content.find(content => (content as { type?: string }).type === 'state_signal') as
-    | { type: 'state_signal'; stateId: string; mode: 'snapshot' | 'delta'; version?: number; message?: string }
-    | undefined;
+  if (kind === 'state') {
+    const stateSignal = getStateSignalView(message);
 
-  // The `tasks` state signal is rendered by the pinned task list UI (replayed
-  // from task tool history), so skip its raw <current-task-list> snapshot here.
-  // The `goal` state signal is surfaced by the goal/judge UI, so likewise skip
-  // its raw <current-objective> snapshot.
-  if (
-    stateSignalPart &&
-    (stateSignalPart.stateId === TASKS_STATE_ID || stateSignalPart.stateId === GOAL_STATE_SIGNAL_ID)
-  ) {
-    return;
-  }
+    // The `tasks` state signal is rendered by the pinned task list UI (replayed
+    // from task tool history), so skip its raw <current-task-list> snapshot here.
+    // The `goal` state signal is surfaced by the goal/judge UI, so likewise skip
+    // its raw <current-objective> snapshot.
+    if (stateSignal.stateId === TASKS_STATE_ID || stateSignal.stateId === GOAL_STATE_SIGNAL_ID) {
+      return true;
+    }
 
-  if (stateSignalPart) {
     const component = new StateSignalComponent({
-      stateId: stateSignalPart.stateId,
-      mode: stateSignalPart.mode,
-      version: stateSignalPart.version,
-      message: stateSignalPart.message,
+      stateId: stateSignal.stateId,
+      mode: stateSignal.mode,
+      version: stateSignal.version,
+      message: stateSignal.message,
     });
     addChildBeforeFollowUps(state, component);
     state.messageComponentsById.set(message.id, component);
     state.ui.requestRender();
-    return;
+    return true;
   }
 
-  const reactiveSignalPart = message.content.find(
-    content => (content as { type?: string }).type === 'reactive_signal',
-  ) as { type: 'reactive_signal'; tagName: string; message?: string } | undefined;
-
-  if (reactiveSignalPart) {
-    if (!shouldRenderReactiveSignal(reactiveSignalPart.tagName)) return;
+  if (kind === 'reactive') {
+    const reactive = getReactiveSignalView(message);
+    if (!reactive.tagName || !shouldRenderReactiveSignal(reactive.tagName)) return true;
     const component = new ReactiveSignalComponent({
-      tagName: reactiveSignalPart.tagName,
-      message: reactiveSignalPart.message,
+      tagName: reactive.tagName,
+      message: reactive.message,
     });
     addChildBeforeFollowUps(state, component);
     state.messageComponentsById.set(message.id, component);
     state.ui.requestRender();
-    return;
+    return true;
   }
 
-  const notificationPart = message.content.find(content => (content as { type?: string }).type === 'notification') as
-    | {
-        type: 'notification';
-        message: string;
-        source?: string;
-        kind?: string;
-        priority?: string;
-        status?: string;
-      }
-    | undefined;
-
-  if (notificationPart) {
+  if (kind === 'notification') {
+    const notification = getNotificationView(message);
     const component = new NotificationComponent({
-      message: notificationPart.message,
-      source: notificationPart.source,
-      kind: notificationPart.kind,
-      priority: notificationPart.priority,
-      status: notificationPart.status,
+      message: notification.message,
+      source: notification.source,
+      kind: notification.kind,
+      priority: notification.priority,
+      status: notification.status,
     });
     addChildBeforeFollowUps(state, component);
     state.messageComponentsById.set(message.id, component);
     state.ui.requestRender();
-    return;
+    return true;
   }
 
-  const notificationSummaryPart = message.content.find(
-    content => (content as { type?: string }).type === 'notification_summary',
-  ) as
-    | {
-        type: 'notification_summary';
-        message: string;
-        pending: number;
-        bySource: Record<string, number>;
-      }
-    | undefined;
-
-  if (notificationSummaryPart) {
+  if (kind === 'notification-summary') {
+    const summary = getNotificationSummaryView(message);
     const component = new NotificationSummaryComponent({
-      message: notificationSummaryPart.message,
-      pending: notificationSummaryPart.pending,
-      bySource: notificationSummaryPart.bySource,
+      message: summary.message,
+      pending: summary.pending,
+      bySource: summary.bySource,
     });
     addChildBeforeFollowUps(state, component);
     state.messageComponentsById.set(message.id, component);
     state.ui.requestRender();
+    return true;
+  }
+
+  // kind === 'user': fall through to shared user-message text rendering.
+  return false;
+}
+
+export function addUserMessage(state: TUIState, message: MastraDBMessage, options?: { label?: string }): void {
+  if (state.messageComponentsById.has(message.id)) {
     return;
   }
 
-  const textContent = message.content
-    .filter(c => c.type === 'text')
-    .map(c => (c as { type: 'text'; text: string }).text)
-    .join('\n');
-
-  const imageCount = message.content.filter(c => c.type === 'image').length;
-  const fileCount = message.content.filter(c => c.type === 'file').length;
+  let textContent: string;
+  let imageCount: number;
+  let fileCount: number;
+  if (isSignalMessage(message)) {
+    if (renderSignalMessage(state, message)) return;
+    const userSignal = getUserSignalView(message);
+    textContent = userSignal.message;
+    imageCount = userSignal.imageCount;
+    fileCount = userSignal.fileCount;
+  } else {
+    const parts = getUserContentParts(message);
+    textContent = getMessageText(message);
+    imageCount = parts.filter(part => isImagePart(part)).length;
+    fileCount = parts.filter(part => part.type === 'file' && !isImagePart(part)).length;
+  }
 
   // Strip [image] markers from text since we show count separately
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
@@ -577,12 +640,13 @@ export function addUserMessage(state: TUIState, message: AgentControllerMessage,
     return;
   }
 
+  const attachments = { imageCount, fileCount };
   if (state.pendingSignalMessageComponentsById.has(message.id)) {
-    confirmPendingUserMessage(state, message.id, displayText);
+    confirmPendingUserMessage(state, message.id, displayText, attachments);
     return;
   }
 
-  if (confirmMatchingPendingUserMessage(state, message.id, displayText)) {
+  if (confirmMatchingPendingUserMessage(state, message.id, displayText, attachments)) {
     return;
   }
 
@@ -620,11 +684,7 @@ export function addUserMessage(state: TUIState, message: AgentControllerMessage,
     return;
   }
 
-  const attachmentLabels = [
-    imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}]` : '',
-    fileCount > 0 ? `[${fileCount} file${fileCount > 1 ? 's' : ''}]` : '',
-  ].filter(Boolean);
-  const prefix = attachmentLabels.length > 0 ? `${attachmentLabels.join(' ')} ` : '';
+  const prefix = formatAttachmentPrefix(imageCount, fileCount);
   if (displayText || prefix) {
     const label = getUserMessageLabel(message, options?.label);
     const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme(), {
@@ -723,7 +783,50 @@ function applyTaskToolResult(
 
 const STARTUP_MESSAGE_WINDOW_SIZE = 200;
 
-function getLatestMessageTimestamp(messages: AgentControllerMessage[]): number | undefined {
+/**
+ * Build a partial assistant `MastraDBMessage` carrying only the accumulated
+ * text/thinking render parts, so the interleaving history replay can flush a
+ * standalone `AssistantMessageComponent` before each tool/OM boundary.
+ *
+ * Terminal metadata (`stopReason`/`errorMessage`) is stripped from all but the
+ * final slice so an aborted/errored message shows its terminal line once at
+ * the end instead of after every accumulated text slice.
+ */
+function buildAssistantSlice(
+  message: MastraDBMessage,
+  parts: Array<Extract<AssistantRenderPart, { kind: 'text' | 'thinking' }>>,
+  options?: { includeTerminalMetadata?: boolean },
+): MastraDBMessage {
+  const sliceParts = parts.map(part =>
+    part.kind === 'thinking'
+      ? { type: 'reasoning' as const, reasoning: part.text }
+      : { type: 'text' as const, text: part.text },
+  );
+  const baseContent = typeof message.content === 'string' ? { format: 2 } : message.content;
+  let metadata = (baseContent as { metadata?: Record<string, unknown> }).metadata;
+  if (!options?.includeTerminalMetadata && metadata) {
+    const { stopReason: _stopReason, errorMessage: _errorMessage, ...rest } = metadata;
+    metadata = rest;
+  }
+  return {
+    ...message,
+    content: {
+      ...baseContent,
+      format: 2,
+      parts: sliceParts as MastraDBMessage['content']['parts'],
+      ...(metadata !== undefined ? { metadata } : {}),
+    },
+  } as MastraDBMessage;
+}
+
+/** Whether a message carries terminal metadata that renders a trailing abort/error line. */
+function hasTerminalMetadata(message: MastraDBMessage): boolean {
+  if (typeof message.content === 'string') return false;
+  const stopReason = (message.content.metadata as { stopReason?: string } | undefined)?.stopReason;
+  return stopReason === 'aborted' || stopReason === 'error';
+}
+
+function getLatestMessageTimestamp(messages: MastraDBMessage[]): number | undefined {
   let latest: number | undefined;
   for (const message of messages) {
     const time = new Date(message.createdAt).getTime();
@@ -758,38 +861,39 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   let hasReplayedTaskState = false;
 
   for (const message of messages) {
-    if (message.role === 'user') {
+    if (message.role === 'user' || message.role === 'signal') {
       addUserMessage(state, message);
     } else if (message.role === 'assistant') {
       // Render content in order - interleaving text and tool calls
       // Accumulate text/thinking until we hit a tool call, then render both
-      let accumulatedContent: AgentControllerMessageContent[] = [];
+      let accumulatedParts: Array<Extract<AssistantRenderPart, { kind: 'text' | 'thinking' }>> = [];
 
-      for (const content of message.content) {
-        if (content.type === 'text' || content.type === 'thinking') {
-          accumulatedContent.push(content);
-        } else if (content.type === 'tool_call') {
+      const flushAccumulated = (isFinal = false): void => {
+        // The final flush still renders when there is no trailing text but the
+        // message carries terminal metadata, so the abort/error line shows once.
+        if (accumulatedParts.length === 0 && !(isFinal && hasTerminalMetadata(message))) return;
+        const textMessage = buildAssistantSlice(message, accumulatedParts, { includeTerminalMetadata: isFinal });
+        const textComponent = new AssistantMessageComponent(textMessage, state.hideThinkingBlock, getMarkdownTheme());
+        state.chatContainer.addChild(textComponent);
+        accumulatedParts = [];
+      };
+
+      for (const part of getAssistantRenderParts(message)) {
+        if (part.kind === 'text' || part.kind === 'thinking') {
+          accumulatedParts.push(part);
+        } else if (part.kind === 'tool') {
           // Render accumulated text first if any
-          if (accumulatedContent.length > 0) {
-            const textMessage: AgentControllerMessage = {
-              ...message,
-              content: accumulatedContent,
-            };
-            const textComponent = new AssistantMessageComponent(
-              textMessage,
-              state.hideThinkingBlock,
-              getMarkdownTheme(),
-            );
-            state.chatContainer.addChild(textComponent);
-            accumulatedContent = [];
-          }
+          flushAccumulated();
 
-          // Find matching tool result
-          const toolResult = message.content.find(c => c.type === 'tool_result' && c.id === content.id);
+          const toolName = part.toolName;
+          const toolArgs = part.args;
+          const hasResult = part.hasResult;
+          const resultValue = part.result;
+          const resultIsError = part.isError;
 
           // Render subagent tool calls with dedicated component
-          if (content.name === 'subagent') {
-            const subArgs = content.args as
+          if (toolName === 'subagent') {
+            const subArgs = toolArgs as
               | {
                   agentType?: string;
                   task?: string;
@@ -797,8 +901,8 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
                   forked?: boolean;
                 }
               | undefined;
-            const rawResult = toolResult?.type === 'tool_result' ? formatToolResult(toolResult.result) : undefined;
-            const isErr = toolResult?.type === 'tool_result' && toolResult.isError;
+            const rawResult = hasResult ? formatToolResult(resultValue) : undefined;
+            const isErr = hasResult && resultIsError;
 
             // Parse embedded metadata for model ID, duration, tool calls
             const meta = rawResult ? parseSubagentMeta(rawResult) : null;
@@ -829,12 +933,10 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           }
 
           // Render ask_user with the proper question component
-          if (content.name === 'ask_user' && toolResult?.type === 'tool_result') {
-            const askArgs = content.args as
-              | { question?: string; options?: Array<{ label: string; description?: string }> }
-              | undefined;
-            const answer =
-              typeof toolResult.result === 'string' ? toolResult.result : formatToolResult(toolResult.result);
+          if (toolName === 'ask_user' && hasResult) {
+            const askArgs = toolArgs as
+              { question?: string; options?: Array<{ label: string; description?: string }> } | undefined;
+            const answer = typeof resultValue === 'string' ? resultValue : formatToolResult(resultValue);
             const cancelled = answer === '(skipped)';
             if (askArgs?.question) {
               const askComponent = AskQuestionInlineComponent.fromHistory(
@@ -848,13 +950,13 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             }
           }
 
-          const pluginRenderConfig = state.pluginManager?.getToolRenderConfig(content.name);
+          const pluginRenderConfig = state.pluginManager?.getToolRenderConfig(toolName);
           if (pluginRenderConfig?.type === 'subagent') {
-            const rawResult = toolResult?.type === 'tool_result' ? formatToolResult(toolResult.result) : undefined;
-            const isErr = toolResult?.type === 'tool_result' && toolResult.isError;
+            const rawResult = hasResult ? formatToolResult(resultValue) : undefined;
+            const isErr = hasResult && resultIsError;
             const subComponent = new SubagentExecutionComponent(
               pluginRenderConfig.agentType ?? 'plugin',
-              getTaskFromToolArgs(content.args, content.name),
+              getTaskFromToolArgs(toolArgs, toolName),
               state.ui,
               pluginRenderConfig.modelId,
               {
@@ -876,8 +978,8 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
 
           // Render the tool call
           const toolComponent = new ToolExecutionComponentEnhanced(
-            content.name,
-            content.args,
+            toolName,
+            toolArgs,
             {
               showImages: false,
               collapsedByDefault: !state.toolOutputExpanded,
@@ -885,16 +987,16 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             state.ui,
           );
 
-          if (toolResult && toolResult.type === 'tool_result') {
+          if (hasResult) {
             toolComponent.updateResult(
               {
                 content: [
                   {
                     type: 'text',
-                    text: formatToolResult(toolResult.result),
+                    text: formatToolResult(resultValue),
                   },
                 ],
-                isError: toolResult.isError,
+                isError: resultIsError,
               },
               false,
             );
@@ -903,22 +1005,16 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           // Successful task transition tools render through the pinned task UI,
           // not as regular tool result boxes.
           let replacedWithInline = false;
-          if (isTaskMutationTool(content.name) && toolResult?.type === 'tool_result' && !toolResult.isError) {
+          if (isTaskMutationTool(toolName) && hasResult && !resultIsError) {
             hasReplayedTaskState = true;
-            const nextTasks = applyTaskToolResult(
-              previousTasksAcc,
-              content.name,
-              content.args,
-              toolResult.result,
-              toolResult.isError,
-            );
+            const nextTasks = applyTaskToolResult(previousTasksAcc, toolName, toolArgs, resultValue, resultIsError);
             const transition = renderTaskTransitionFromHistory(state, previousTasksAcc, nextTasks);
             previousTasksAcc = transition.tasks;
             replacedWithInline = transition.replacedWithInline;
           }
 
-          if (content.name === 'task_check' && toolResult?.type === 'tool_result' && !toolResult.isError) {
-            const resultTasks = getTaskResultTasks(toolResult.result);
+          if (toolName === 'task_check' && hasResult && !resultIsError) {
+            const resultTasks = getTaskResultTasks(resultValue);
             if (resultTasks) {
               hasReplayedTaskState = true;
               previousTasksAcc = assignTaskIds(resultTasks, previousTasksAcc);
@@ -926,22 +1022,19 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
           }
 
           // If this was submit_plan, show the plan with approval status
-          if (content.name === 'submit_plan' && toolResult?.type === 'tool_result') {
-            const args = content.args as { path?: string } | undefined;
+          if (toolName === 'submit_plan' && hasResult) {
+            const args = toolArgs as { path?: string } | undefined;
             // Result could be a string or an object with content property
             let resultText = '';
             let submittedPlan: { title?: string; path?: string; plan?: string } | undefined;
-            if (typeof toolResult.result === 'string') {
-              resultText = toolResult.result;
-            } else if (typeof toolResult.result === 'object' && toolResult.result !== null) {
-              if ('content' in toolResult.result && typeof (toolResult.result as any).content === 'string') {
-                resultText = (toolResult.result as any).content;
+            if (typeof resultValue === 'string') {
+              resultText = resultValue;
+            } else if (typeof resultValue === 'object' && resultValue !== null) {
+              if ('content' in resultValue && typeof (resultValue as any).content === 'string') {
+                resultText = (resultValue as any).content;
               }
-              if (
-                'submittedPlan' in toolResult.result &&
-                typeof (toolResult.result as any).submittedPlan === 'object'
-              ) {
-                submittedPlan = (toolResult.result as any).submittedPlan;
+              if ('submittedPlan' in resultValue && typeof (resultValue as any).submittedPlan === 'object') {
+                submittedPlan = (resultValue as any).submittedPlan;
               }
             }
             // The approved result starts with "Plan approved." while rejected
@@ -996,70 +1089,56 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             state.allToolComponents.push(toolComponent);
           } else {
           }
-        } else if (
-          content.type === 'om_observation_start' ||
-          content.type === 'om_observation_end' ||
-          content.type === 'om_observation_failed'
-        ) {
+        } else if (part.kind === 'om') {
           // Skip start markers in history — only show completed/failed results
-          if (content.type === 'om_observation_start') continue;
+          if (part.event === 'start') continue;
 
           // Render accumulated text first if any
-          if (accumulatedContent.length > 0) {
-            const textMessage: AgentControllerMessage = {
-              ...message,
-              content: accumulatedContent,
-            };
-            const textComponent = new AssistantMessageComponent(
-              textMessage,
-              state.hideThinkingBlock,
-              getMarkdownTheme(),
-            );
-            state.chatContainer.addChild(textComponent);
-            accumulatedContent = [];
-          }
+          flushAccumulated();
 
-          if (content.type === 'om_observation_end') {
+          const omData = part.data as Record<string, any>;
+
+          if (part.event === 'end') {
             // Render bordered output box with marker info in footer
-            const isReflection = content.operationType === 'reflection';
+            const isReflection = part.operationType === 'reflection';
             const outputComponent = new OMOutputComponent({
               type: isReflection ? 'reflection' : 'observation',
-              observations: content.observations ?? '',
-              currentTask: content.currentTask,
-              suggestedResponse: content.suggestedResponse,
-              durationMs: content.durationMs,
-              tokensObserved: content.tokensObserved,
-              observationTokens: content.observationTokens,
-              compressedTokens: isReflection ? content.observationTokens : undefined,
+              observations: omData.observations ?? '',
+              currentTask: omData.currentTask,
+              suggestedResponse: omData.suggestedResponse,
+              durationMs: omData.durationMs,
+              tokensObserved: omData.tokensObserved,
+              observationTokens: omData.observationTokens,
+              compressedTokens: isReflection ? omData.observationTokens : undefined,
             });
             state.chatContainer.addChild(outputComponent);
-          } else {
+          } else if (part.event === 'failed') {
             // Failed marker
-            state.chatContainer.addChild(new OMMarkerComponent(content));
+            state.chatContainer.addChild(
+              new OMMarkerComponent({
+                type: 'om_observation_failed',
+                error: typeof omData.error === 'string' ? omData.error : 'observation failed',
+                tokensAttempted: typeof omData.tokensAttempted === 'number' ? omData.tokensAttempted : undefined,
+                operationType: omData.operationType,
+              }),
+            );
+          } else if (part.event === 'thread-title') {
+            if (state.quietMode) continue;
+            // Render thread title update marker in history
+            state.chatContainer.addChild(
+              new OMMarkerComponent({
+                type: 'om_thread_title_updated',
+                newTitle: omData.newTitle,
+                oldTitle: omData.oldTitle,
+              }),
+            );
           }
-        } else if (content.type === 'om_thread_title_updated') {
-          if (state.quietMode) continue;
-          // Render thread title update marker in history
-          state.chatContainer.addChild(
-            new OMMarkerComponent({
-              type: 'om_thread_title_updated',
-              newTitle: content.newTitle,
-              oldTitle: content.oldTitle,
-            }),
-          );
         }
-        // Skip tool_result - it's handled with tool_call above
+        // Skip tool result parts - they are folded into the tool-invocation part above
       }
 
       // Render any remaining text after the last tool call
-      if (accumulatedContent.length > 0) {
-        const textMessage: AgentControllerMessage = {
-          ...message,
-          content: accumulatedContent,
-        };
-        const textComponent = new AssistantMessageComponent(textMessage, state.hideThinkingBlock, getMarkdownTheme());
-        state.chatContainer.addChild(textComponent);
-      }
+      flushAccumulated(true);
     }
   }
 

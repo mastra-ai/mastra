@@ -1,6 +1,6 @@
 {
   "name": "@mastra/platform-workspace",
-  "version": "0.1.0-alpha.0",
+  "version": "0.2.1-alpha.0",
   "description": "Mastra Platform workspace sandbox and filesystem providers",
   "type": "module",
   "main": "dist/index.js",
@@ -33,7 +33,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.21",
+    "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.4.1",

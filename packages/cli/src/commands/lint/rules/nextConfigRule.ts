@@ -69,7 +69,7 @@ function readServerExternalPackages(config: t.ObjectExpression): string[] | unde
 function parseProgram(nextConfigContent: string): t.Program {
   return parse(nextConfigContent, {
     sourceType: 'unambiguous',
-    plugins: ['typescript', 'jsx', 'importAttributes'],
+    plugins: ['typescript', 'jsx'],
   }).program;
 }
 

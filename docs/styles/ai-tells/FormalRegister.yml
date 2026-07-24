@@ -1,0 +1,58 @@
+---
+extends: existence
+message: "AI formalism: '%s'. Use a plainer everyday word (e.g., 'use', 'help', 'start')."
+level: error
+tokens:
+  - utilize
+  - utilizes
+  - utilizing
+  - utilized
+  - utilization
+  - facilitate
+  - facilitates
+  - facilitating
+  - facilitated
+  - facilitation
+  - implement
+  - implements
+  - implementing
+  - implementation
+  - commence
+  - commences
+  - commencing
+  - commenced
+  - terminate
+  - terminates
+  - terminating
+  - terminated
+  - ascertain
+  - ascertains
+  - ascertaining
+  - endeavour
+  - endeavours
+  - endeavouring
+  - methodology
+  - methodologies
+  - framework
+  - frameworks
+  - conceptualize
+  - conceptualizes
+  - conceptualizing
+  - operationalize
+  - operationalizes
+  - operationalizing
+  - prioritize
+  - prioritizes
+  - prioritizing
+  - incentivize
+  - incentivizes
+  - incentivizing
+  - optimize
+  - optimizes
+  - optimizing
+  - maximize
+  - maximizes
+  - maximizing
+  - minimize
+  - minimizes
+  - minimizing

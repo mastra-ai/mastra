@@ -137,6 +137,13 @@ export const claudeCodeAgent = new AcpAgent({
     isOptional: true,
   },
   {
+    name: 'createClient',
+    type: '(defaultClient: Client) => Client',
+    description:
+      'Customize the ACP client used to answer agent requests. Receives the default client so it can be wrapped or extended, for example with `extMethod` and `extNotification` handlers. See [Extension methods](/reference/acp/create-acp-tool#extension-methods).',
+    isOptional: true,
+  },
+  {
     name: 'workspace',
     type: 'Workspace',
     description:

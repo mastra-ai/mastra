@@ -1,110 +1,150 @@
-import { Avatar } from '@mastra/playground-ui/components/Avatar';
-import { Button } from '@mastra/playground-ui/components/Button';
+import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
+import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Circle, LogOut, Settings } from 'lucide-react';
+import { CircleUserRound, Settings } from 'lucide-react';
+import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../shared/api/config';
-import { redirectToLogout, useWebAuth } from './domains/auth';
-import { ThreadList, useChatConnection, useChatTranscript } from './domains/chat';
+import { clearMastraCodeStorage, redirectToLogout, useFactoryAuth } from './domains/auth';
 import { FactorySection } from './domains/factory';
-import { ProjectSwitcher, useActiveProjectContext, WorkspacesSection } from './domains/workspaces';
-import { useOverlays } from './lib/overlays';
+import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
+import { useCloseSettings } from './domains/settings/hooks/useCloseSettings';
+import { settingsSectionPath } from './domains/settings/settingsSections';
+import { FactorySwitcher, UserSessionsSection, WorkspacesSection } from './domains/workspaces';
+
+function useSettingsOpen() {
+  const { pathname } = useLocation();
+  return /^\/factories\/[^/]+\/settings(?:\/|$)/.test(pathname);
+}
 
 /**
- * Composition shell: each section owns its data through the domain contexts
- * (`useActiveProjectContext`, focused chat hooks, `useOverlays`), so nothing is
- * wired through props here.
+ * Alpha status tag rendered as a dashed-outline chip (Clerk-style), so it reads
+ * as a subtle stage marker rather than a solid pill competing with the nav items.
+ * Tinted with the Mastra brand green (#7aff78, `--color-ds-green` on the website).
  *
- * Threads are scoped to the worktree they run in. GitHub projects nest the
- * thread list under the main-branch workspace inside the Workspaces section —
- * feature worktrees hold a single conversation, so they show no thread list;
- * local projects (no worktrees) keep the flat list.
+ * The tint is centralised in the `--alpha-green` custom property so it can flip
+ * per theme: the neon brand green only reads on dark surfaces, so light mode uses
+ * a darker brand-green shade that keeps enough contrast against the pale sidebar.
  */
-export function Sidebar() {
-  const overlays = useOverlays();
-  const { activeProject } = useActiveProjectContext();
-  const open = overlays.isOpen('sidebar');
-  const isGithubProject = activeProject?.source === 'github';
-
+function AlphaBadge() {
   return (
-    <div
-      className={`fixed inset-y-0 left-0 z-40 flex h-full w-[82vw] max-w-[300px] shrink-0 flex-col gap-4 border-r border-border1 bg-surface2 p-3 shadow-lg transition-transform duration-200 md:static md:z-auto md:w-full md:max-w-none md:translate-x-0 md:border-r-0 md:bg-transparent md:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}
-    >
-      <ProjectSwitcher />
-      <FactorySection />
-      {isGithubProject ? (
-        <WorkspacesSection>
-          <ThreadList />
-        </WorkspacesSection>
-      ) : (
-        <ThreadList />
-      )}
-      <SidebarFooter />
-    </div>
+    <span className="relative bg-[var(--alpha-green)]/10 px-[0.1875rem] font-medium text-[0.625rem]/[0.875rem] text-[var(--alpha-green)] uppercase tracking-wide [--alpha-green:oklch(48%_0.17_142)] dark:[--alpha-green:#7aff78]">
+      Alpha
+      <span className="-top-px absolute inset-x-[-0.1875rem] block transform-gpu text-[var(--alpha-green)]/40">
+        <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">
+          <line x1="0" x2="100%" y1="0.5" y2="0.5" />
+        </svg>
+      </span>
+      <span className="-bottom-px absolute inset-x-[-0.1875rem] block transform-gpu text-[var(--alpha-green)]/40">
+        <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">
+          <line x1="0" x2="100%" y1="0.5" y2="0.5" />
+        </svg>
+      </span>
+      <span className="-left-px absolute inset-y-[-0.1875rem] block transform-gpu text-[var(--alpha-green)]/40">
+        <svg aria-hidden="true" height="100%" stroke="currentColor" strokeDasharray="3.3 1" width="1">
+          <line x1="0.5" x2="0.5" y1="0" y2="100%" />
+        </svg>
+      </span>
+      <span className="-right-px absolute inset-y-[-0.1875rem] block transform-gpu text-[var(--alpha-green)]/40">
+        <svg aria-hidden="true" height="100%" stroke="currentColor" strokeDasharray="3.3 1" width="1">
+          <line x1="0.5" x2="0.5" y1="0" y2="100%" />
+        </svg>
+      </span>
+    </span>
   );
 }
 
-function statusLabel(status: string, running: boolean): string {
-  if (running) return 'Working…';
-  if (status === 'reconnecting') return 'Reconnecting…';
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
+/**
+ * Composition shell: each section owns its data through local query hooks,
+ * focused chat hooks, or the router location, so nothing is wired through props here.
+ */
+export function Sidebar() {
+  const settingsOpen = useSettingsOpen();
 
-function statusDotClass(status: string): string {
-  if (status === 'ready') return 'fill-accent1 text-accent1';
-  if (status === 'reconnecting') return 'animate-pulse fill-warning1 text-warning1';
-  if (status === 'error') return 'fill-error text-error';
-  return 'animate-pulse fill-icon2 text-icon2';
+  return (
+    <MainSidebar className="h-full">
+      <MainSidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
+        <div className="mt-1 mb-2 flex items-center justify-between gap-2 px-3 pt-1">
+          <LogoWithoutText aria-label="Mastra" role="img" className="h-4 w-auto text-icon6" />
+          <AlphaBadge />
+        </div>
+        {settingsOpen ? (
+          <SettingsNavigation />
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col gap-4">
+            <section aria-label="Factory switcher">
+              <FactorySwitcher />
+            </section>
+            <section className="flex min-h-0 flex-1 flex-col gap-4" aria-label="Navigation">
+              <FactorySection>
+                <WorkspacesSection />
+              </FactorySection>
+              <UserSessionsSection />
+            </section>
+          </div>
+        )}
+      </MainSidebar.Nav>
+      <MainSidebar.Bottom role="region" aria-label="Account and settings">
+        <SidebarFooter />
+      </MainSidebar.Bottom>
+    </MainSidebar>
+  );
 }
 
 function SidebarFooter() {
-  const { status } = useChatConnection();
-  const { busy } = useChatTranscript();
-  const overlays = useOverlays();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const settingsOpen = useSettingsOpen();
+  const closeSettings = useCloseSettings();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const toggleSettings = () => {
+    if (settingsOpen) {
+      closeSettings();
+      return;
+    }
+    if (factoryId) {
+      void navigate(settingsSectionPath(factoryId, 'general'), { state: { from: location } });
+    }
+  };
 
   return (
-    <div className="mt-auto flex flex-col gap-2 border-t border-border1 pt-2">
-      <div
-        className="grid h-10 grid-cols-[2.75rem_1fr_auto] items-center text-ui-sm text-icon3"
-        role="status"
-        aria-live="polite"
-      >
-        <span className="flex items-center justify-center">
-          <Circle size={10} className={statusDotClass(status)} />
-        </span>
-        <span>{statusLabel(status, busy)}</span>
-      </div>
+    <MainSidebar.NavList>
       <SidebarAuth />
-      <Button
-        variant="ghost"
-        size="sm"
-        className="grid h-10 w-full grid-cols-[2.75rem_1fr_auto] items-center justify-normal gap-0 px-0"
-        onClick={() => {
-          overlays.open('settings');
-          overlays.close('sidebar');
+      <MainSidebar.NavLink
+        asChild
+        link={{
+          name: 'Settings',
+          url: '#',
+          icon: <Settings />,
         }}
-        aria-label="Open settings"
+        isActive={settingsOpen}
       >
-        <span className="flex items-center justify-center">
-          <Settings size={18} />
-        </span>
-        <span className="justify-self-start">Settings</span>
-      </Button>
-    </div>
+        <button
+          id="settings-trigger"
+          type="button"
+          onClick={toggleSettings}
+          aria-label="Settings"
+          aria-current={settingsOpen ? 'page' : undefined}
+        >
+          <Settings />
+          <MainSidebar.NavLabel>Settings</MainSidebar.NavLabel>
+        </button>
+      </MainSidebar.NavLink>
+    </MainSidebar.NavList>
   );
 }
 
 function SidebarAuth() {
-  const auth = useWebAuth();
+  const auth = useFactoryAuth();
   const { baseUrl } = useApiConfig();
 
   if (auth.isLoading) {
     return (
-      <div role="status" aria-label="Checking sign-in" className="grid h-10 grid-cols-[2.75rem_1fr_auto] items-center">
-        <Skeleton className="size-6 justify-self-center rounded-full" />
+      <li role="status" aria-label="Checking sign-in" className="flex h-9 items-center gap-2 px-3">
+        <Skeleton className="size-4 rounded-full" />
         <Skeleton className="h-3 w-24" />
-      </div>
+      </li>
     );
   }
 
@@ -113,19 +153,29 @@ function SidebarAuth() {
   const state = auth.data;
   if (!state?.authEnabled || !state.authenticated) return null;
 
-  const identity = state.user?.name ?? state.user?.email ?? 'Signed in';
+  const identity = state.user?.name ?? state.user?.email ?? 'User';
 
   return (
-    <div className="grid h-10 grid-cols-[2.75rem_1fr_auto] items-center">
-      <span className="flex items-center justify-center">
-        <Avatar name={identity} size="sm" />
-      </span>
-      <Txt as="span" variant="ui-sm" className="min-w-0 truncate text-icon6" title={identity}>
-        {identity}
-      </Txt>
-      <Button variant="ghost" size="icon-sm" onClick={() => redirectToLogout(baseUrl)} aria-label="Sign out">
-        <LogOut size={15} />
-      </Button>
-    </div>
+    <MainSidebar.NavLink
+      asChild
+      link={{
+        name: 'User',
+        url: '#',
+        icon: <CircleUserRound />,
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => {
+          clearMastraCodeStorage();
+          redirectToLogout(baseUrl);
+        }}
+        aria-label="Sign out"
+        title={identity}
+      >
+        <CircleUserRound />
+        <MainSidebar.NavLabel>{identity}</MainSidebar.NavLabel>
+      </button>
+    </MainSidebar.NavLink>
   );
 }

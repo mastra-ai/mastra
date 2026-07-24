@@ -39,7 +39,7 @@ export function copyPnpmWorkspaceSettings(source: string, options: ArchitectureO
   const lines = source.split(/\r?\n/);
   const blocks: string[] = [];
 
-  for (let index = 0; index < lines.length; ) {
+  for (let index = 0; index < lines.length;) {
     const key = getTopLevelYamlKey(lines[index] ?? '');
     if (!key) {
       index += 1;

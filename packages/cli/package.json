@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.19.0-alpha.12",
+  "version": "1.20.2-alpha.1",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -11,6 +11,7 @@
   },
   "exports": {
     ".": "./dist/index.js",
+    "./internal/auth": "./dist/internal/auth.js",
     "./package.json": "./package.json",
     "./dist/*": [
       "./dist/*",
@@ -50,8 +51,8 @@
     "devtools"
   ],
   "dependencies": {
-    "@babel/parser": "^7.29.7",
-    "@babel/types": "^7.29.7",
+    "@babel/parser": "^8.0.4",
+    "@babel/types": "^8.0.4",
     "@clack/prompts": "^1.7.0",
     "@expo/devcert": "^1.2.1",
     "@mastra/deployer": "workspace:^",
@@ -82,15 +83,15 @@
     "@mastra/core": "workspace:*",
     "@types/archiver": "^8.0.0",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "22.19.21",
+    "@types/node": "22.20.1",
     "@types/semver": "^7.7.1",
     "@types/serve-handler": "^6.1.4",
     "@types/shell-quote": "^1.7.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.4.1",
+    "eslint": "^10.7.0",
     "memfs": "^4.56.11",
-    "rollup": "^4.61.1",
+    "rollup": "^4.62.2",
     "tsup": "^8.5.1",
     "tsx": "catalog:",
     "type-fest": "^5.4.4",

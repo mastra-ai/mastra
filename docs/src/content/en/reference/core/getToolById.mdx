@@ -1,0 +1,62 @@
+---
+title: "Reference: Mastra.getToolById() | Core"
+description: "Documentation for the `Mastra.getToolById()` method, which retrieves a tool by its intrinsic ID or registration key."
+packages:
+  - "@mastra/core"
+---
+
+# Mastra.getToolById()
+
+The `.getToolById()` method first searches the Mastra-level registry for a tool with a matching intrinsic `id`. If no intrinsic ID matches, it treats the value as a registration key.
+
+## Usage example
+
+This example uses `weather` as the registration key and `weather-tool` as the tool's intrinsic ID.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+const weatherTool = createTool({
+  id: 'weather-tool',
+  description: 'Fetches weather for a location',
+  inputSchema: z.object({
+    location: z.string(),
+  }),
+  outputSchema: z.object({
+    weather: z.string(),
+  }),
+  execute: async ({ location }) => ({
+    weather: `Weather for ${location}`,
+  }),
+})
+
+export const mastra = new Mastra({
+  tools: {
+    weather: weatherTool,
+  },
+})
+
+const toolById = mastra.getToolById('weather-tool')
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: "TTools[TToolName]['id']",
+    description:
+      'The intrinsic tool ID to find. When no tool has that ID, Mastra uses the value as a registration key.',
+  },
+]}
+/>
+
+## Related
+
+- [Share tools across agents](/docs/agents/using-tools#share-tools-across-agents)
+- [Mastra class](/reference/core/mastra-class)
+- [Mastra.getTool()](/reference/core/getTool)
+- [Mastra.listTools()](/reference/core/listTools)

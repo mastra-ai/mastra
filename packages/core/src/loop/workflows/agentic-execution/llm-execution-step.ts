@@ -1775,7 +1775,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         writeScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace', existingWorkspace);
       }
 
-      if (callBail) {
+      const bailFromExecution = () => {
         const usage = outputStream._getImmediateUsage();
         const responseMetadata = runState.state.responseMetadata;
         const text = outputStream._getImmediateText();
@@ -1806,6 +1806,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             nonUser: messageList.get.response.aiV5.model(),
           },
         });
+      };
+
+      if (callBail) {
+        return bailFromExecution();
       }
 
       // Handle processAPIError for API rejections
@@ -1863,6 +1867,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             deferredErrorChunk: undefined,
           });
         }
+      }
+
+      if (apiErrorRetryResult?.retry && options?.abortSignal?.aborted) {
+        cleanupProviderToolSpans(true);
+        await options.onAbort?.({
+          steps: inputData?.output?.steps ?? [],
+        });
+        safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+        return bailFromExecution();
       }
 
       // If processAPIError signaled retry, return early with retry metadata

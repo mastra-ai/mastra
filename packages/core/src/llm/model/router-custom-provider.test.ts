@@ -2,15 +2,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Agent } from '../../agent/index.js';
 import { createMockModel } from '../../test-utils/llm-mock.js';
 
-// Mock the @ai-sdk/openai-compatible-v5 module BEFORE importing it
-vi.mock('@ai-sdk/openai-compatible-v5', async () => {
+// Mock the @ai-sdk/openai-compatible-v6 module BEFORE importing it
+vi.mock('@ai-sdk/openai-compatible-v6', async () => {
   return {
     createOpenAICompatible: vi.fn(),
   };
 });
 
 // Now import the mocked module
-const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible-v5');
+const { createOpenAICompatible } = await import('@ai-sdk/openai-compatible-v6');
 
 describe('ModelRouter - Custom Provider Support', () => {
   beforeEach(() => {

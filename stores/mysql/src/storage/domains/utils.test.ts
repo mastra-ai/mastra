@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   formatTableName,
   prepareDeleteStatement,
+  prepareInsertOnlyStatement,
   prepareStatement,
   prepareWhereClause,
   quoteIdentifier,
@@ -26,6 +27,20 @@ describe('MySQL utils', () => {
     expect(transformToSqlValue(date)).toBe('2024-08-01 13:24:25.123');
     expect(transformToSqlValue({ foo: 'bar' })).toBe('{"foo":"bar"}');
     expect(transformToSqlValue(null)).toBeNull();
+  });
+
+  it('builds insert-only statements with positional placeholders', () => {
+    const statement = prepareInsertOnlyStatement({
+      tableName: TABLE_MESSAGES,
+      record: {
+        id: 'message-1',
+        thread_id: 'thread-1',
+        content: { foo: 'bar' },
+      },
+    });
+
+    expect(statement.sql).toBe('INSERT INTO `mastra_messages` (`id`, `thread_id`, `content`) VALUES (?, ?, ?)');
+    expect(statement.args).toEqual(['message-1', 'thread-1', '{"foo":"bar"}']);
   });
 
   it('builds upsert statements with positional placeholders', () => {

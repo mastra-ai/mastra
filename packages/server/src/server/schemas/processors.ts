@@ -58,7 +58,7 @@ export const listProcessorsResponseSchema = z.record(z.string(), serializedProce
 const messageContentSchema = z
   .object({
     format: z.literal(2).optional(),
-    parts: z.array(z.any()).optional(),
+    parts: z.array(z.unknown()).optional(),
     content: z.string().optional(),
   })
   .passthrough();
@@ -82,7 +82,7 @@ export const executeProcessorBodySchema = z.object({
   phase: z.enum(['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep']),
   messages: z.array(processorMessageSchema),
   agentId: z.string().optional(),
-  requestContext: z.record(z.string(), z.any()).optional(),
+  requestContext: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**
@@ -91,7 +91,7 @@ export const executeProcessorBodySchema = z.object({
 const tripwireSchema = z.object({
   triggered: z.boolean(),
   reason: z.string().optional(),
-  metadata: z.any().optional(),
+  metadata: z.unknown().optional(),
 });
 
 /**

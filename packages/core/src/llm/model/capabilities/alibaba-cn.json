@@ -83,5 +83,20 @@
     "siliconflow/deepseek-v3.1-terminus",
     "siliconflow/deepseek-v3.2",
     "tongyi-intent-detect-v3"
+  ],
+  "structuredOutput": [
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+    "glm-5.1",
+    "glm-5.2",
+    "kimi-k2-thinking",
+    "kimi/kimi-k2.5",
+    "qwen3.5-flash",
+    "qwen3.6-flash",
+    "qwen3.6-max-preview",
+    "siliconflow/deepseek-r1-0528",
+    "siliconflow/deepseek-v3-0324",
+    "siliconflow/deepseek-v3.1-terminus",
+    "siliconflow/deepseek-v3.2"
   ]
 }

@@ -1,0 +1,101 @@
+---
+extends: existence
+message: "AI affirmation: '%s'. Cut the flourish and state the point plainly."
+level: error
+tokens:
+  # "And that's [the/what] X" patterns
+  - "[Aa]nd that'?s the beauty of it"
+  - "[Aa]nd that'?s what makes it [^.!?]+"
+  - "[Aa]nd that'?s what makes this [^.!?]+"
+  - "[Aa]nd that'?s exactly (?:what|why|how) [^.!?]+"
+  - "[Aa]nd that'?s the (?:key|real|true) [^.!?]+"
+  - "[Aa]nd that'?s precisely (?:what|why|how) [^.!?]+"
+
+  # "That's the X" standalone affirmations
+  - "[Tt]hat'?s the key (?:insight|takeaway|point|difference)"
+  - "[Tt]hat'?s the beauty of [^.!?]+"
+  - "[Tt]hat'?s the power of [^.!?]+"
+  - "[Tt]hat'?s the magic of [^.!?]+"
+  - "[Tt]hat'?s the essence of [^.!?]+"
+  - "[Tt]hat'?s the heart of [^.!?]+"
+  - "[Tt]hat'?s the crux of [^.!?]+"
+  - "[Tt]hat'?s the real (?:question|issue|challenge|opportunity)"
+
+  # "This is what X looks like" patterns
+  - '[Tt]his is what [^.!?]+ looks like'
+  - "[Tt]hat'?s what [^.!?]+ looks like"
+  - '[Tt]his is what it means to [^.!?]+'
+  - "[Tt]hat'?s what it means to [^.!?]+"
+
+  # "Here's the thing" and variants
+  - "[Hh]ere'?s the thing"
+  - "[Hh]ere'?s the deal"
+  - "[Hh]ere'?s the truth"
+  - "[Hh]ere'?s the reality"
+  - "[Hh]ere'?s the kicker"
+  - "[Hh]ere'?s the catch"
+  - "[Hh]ere'?s the secret"
+  - "[Hh]ere'?s what (?:most people|many|few) [^.!?]+"
+  - "[Hh]ere'?s why (?:this|that|it) matters"
+
+  # "The [adjective] X is" revelation patterns
+  - '[Tt]he (?:key|fundamental|crucial|core|central|critical|essential|main|primary|underlying|basic|real|true) (?:insight|point|takeaway|lesson|idea|observation|realization|understanding|truth|message|principle) is'
+  # "[Adjective] Xs are" revelation patterns (optional article)
+  - '(?:[Tt]he )?(?:[Kk]ey|[Ff]undamental|[Cc]rucial|[Cc]ore|[Cc]entral|[Cc]ritical|[Ee]ssential|[Mm]ain|[Pp]rimary|[Uu]nderlying|[Bb]asic|[Rr]eal|[Tt]rue) (?:insights|points|takeaways|lessons|ideas|observations|realizations|understandings|truths|messages|principles) are'
+  # Simpler "The X is" patterns
+  - '[Tt]he takeaway (?:here )?is [^.!?]+'
+  - '[Tt]he lesson (?:here )?is [^.!?]+'
+  - '[Tt]he point (?:here )?is [^.!?]+'
+  - '[Tt]he insight (?:here )?is [^.!?]+'
+  - '[Tt]he bottom line is [^.!?]+'
+
+  # "And X is [exactly/precisely] what/why" patterns
+  - '[Aa]nd (?:this|that) is (?:exactly|precisely) (?:what|why|how) [^.!?]+'
+  - "[Aa]nd (?:this|that)'?s (?:exactly|precisely) (?:what|why|how) [^.!?]+"
+
+  # "Think about it" and "Let that sink in" patterns
+  - '[Tt]hink about (?:it|that) for a (?:moment|second)'
+  - '[Ll]et that sink in'
+  - '[Rr]ead that again'
+  - '[Ll]et me say that again'
+
+  # "X, and that's [rare/powerful/significant]"
+  - ", and that'?s (?:rare|powerful|significant|remarkable|important|huge|massive)"
+  - "—and that'?s (?:rare|powerful|significant|remarkable|important|huge|massive)"
+
+  # "The real X is Y" revelation
+  - '[Tt]he real (?:secret|trick|key|answer|solution) is [^.!?]+'
+  - "[Tt]he real (?:question|issue|problem|challenge) isn'?t [^.!?]+"
+
+  # "What X really means" patterns
+  - '[Ww]hat (?:this|that) really means is [^.!?]+'
+  - '[Ww]hat (?:this|that) tells us is [^.!?]+'
+  - '[Ww]hat (?:this|that) shows us is [^.!?]+'
+
+  # "And here's why" / "And here's the thing"
+  - "[Aa]nd here'?s (?:why|the thing|the kicker|the catch)"
+  - "[Bb]ut here'?s (?:why|the thing|the kicker|the catch)"
+
+  # "Let me be clear/honest" patterns
+  - '[Ll]et me be (?:clear|honest|direct|frank|real)'
+  - "[Ll]et'?s be (?:clear|honest|direct|frank|real)"
+  - '[Tt]o be (?:clear|honest|direct|frank)'
+
+  # "Have no doubt" / "Rest assured" patterns
+  - '[Hh]ave no doubt'
+  - '[Rr]est assured'
+
+  # "The truth is" patterns
+  - '[Tt]he truth is'
+  - '[Tt]he reality is'
+  - '[Tt]he fact is'
+  - '[Tt]he simple truth is'
+  - '[Tt]he hard truth is'
+  - '[Tt]he uncomfortable truth is'
+
+  # "Spoiler alert" / meta-commentary
+  - '[Ss]poiler alert'
+  - '[Pp]lot twist'
+  - '[Ff]un fact'
+  - '[Pp]ro tip'
+  - '[Hh]ot take'

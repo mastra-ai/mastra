@@ -73,6 +73,58 @@ describe('BuildBundler', () => {
     });
   });
 
+  describe('bundler options', () => {
+    it('defaults to externals true when no bundler config is provided', async () => {
+      const { Bundler, IS_DEFAULT } = await import('@mastra/deployer/bundler');
+      vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
+        externals: [],
+        sourcemap: false,
+        transpilePackages: [],
+        [IS_DEFAULT]: true,
+      });
+      const { BuildBundler } = await import('./BuildBundler');
+      const bundler = new BuildBundler();
+
+      const options = await (bundler as any).getUserBundlerOptions('/entry.ts', '/output');
+
+      expect(options).toMatchObject({
+        externals: true,
+        sourcemap: false,
+      });
+    });
+
+    it('optimizes dependencies when a bundler config omits externals', async () => {
+      const { Bundler } = await import('@mastra/deployer/bundler');
+      vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({ sourcemap: true });
+      const { BuildBundler } = await import('./BuildBundler');
+      const bundler = new BuildBundler();
+
+      const options = await (bundler as any).getUserBundlerOptions('/entry.ts', '/output');
+
+      expect(options).toEqual({
+        sourcemap: true,
+      });
+      expect(options.externals).toBeUndefined();
+    });
+
+    it('preserves explicit externals true in a custom bundler config', async () => {
+      const { Bundler } = await import('@mastra/deployer/bundler');
+      vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
+        externals: true,
+        sourcemap: true,
+      });
+      const { BuildBundler } = await import('./BuildBundler');
+      const bundler = new BuildBundler();
+
+      const options = await (bundler as any).getUserBundlerOptions('/entry.ts', '/output');
+
+      expect(options).toEqual({
+        externals: true,
+        sourcemap: true,
+      });
+    });
+  });
+
   describe('getEntry', () => {
     it('should include studio: true when studio is enabled', async () => {
       const { BuildBundler } = await import('./BuildBundler');

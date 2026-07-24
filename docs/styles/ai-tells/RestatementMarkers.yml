@@ -1,0 +1,36 @@
+---
+extends: existence
+message: "AI restatement: '%s'. Delete it and trust your original phrasing."
+level: error
+ignorecase: true
+tokens:
+  - In other words
+  - Simply put
+  - Put simply
+  - Put differently
+  - To put it simply
+  - To put it another way
+  - Said differently
+  - To state it plainly
+  - To state this plainly
+  - To be more precise
+  - To be more specific
+  - To be more exact
+  - Or rather
+  - More precisely
+  - More specifically
+  - More accurately
+  - To clarify
+  - To rephrase
+  - To restate
+  - What I mean is
+  - What this means is
+  - What that means is
+  - In plainer terms
+  - In plain terms
+  - In plain English
+  - In simpler terms
+  - In simple terms
+  - To put it another way
+  - To put it more simply
+  - To put it more directly

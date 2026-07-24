@@ -5,8 +5,8 @@ import type { MessageList } from '../../../agent/message-list';
 import { RequestContext } from '../../../request-context';
 import { ToolStream } from '../../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../../../workflows/constants';
-import { createStep } from '../../../workflows/evented';
 import type { ExecuteFunctionParams } from '../../../workflows/step';
+import { createStep } from '../../../workflows/workflow';
 import { createLLMMappingStep } from './llm-mapping-step';
 
 type ToolCallOutput = {

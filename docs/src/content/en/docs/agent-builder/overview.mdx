@@ -60,7 +60,7 @@ import { createBuilderAgent } from '@mastra/editor/ee'
 import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
-  storage: new LibSQLStore({ url: 'file:./mastra.db' }),
+  storage: new LibSQLStore({ id: 'mastra-storage', url: 'file:./mastra.db' }),
   agents: { builderAgent: createBuilderAgent() },
   editor: new MastraEditor({
     builder: {
@@ -80,6 +80,8 @@ Start Mastra's development server:
 ```bash
 npx mastra dev
 ```
+
+For Agent Builder development, you can also use `mastra factory dev`, which uses the same dev runtime and flags as `mastra dev` and writes to the same `.mastra/output` directory. Both commands share a dev lock and can't run simultaneously in the same project. See the [CLI reference](/reference/cli/mastra#mastra-factory-dev) for details.
 
 The Agent Builder is mounted at `http://localhost:4111/agent-builder`.
 

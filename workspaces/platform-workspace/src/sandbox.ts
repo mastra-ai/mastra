@@ -6,12 +6,13 @@ import type {
   MastraSandboxOptions,
   ProcessInfo,
   ProviderStatus,
+  SandboxCloneOptions,
   SandboxInfo,
   SpawnProcessOptions,
 } from '@mastra/core/workspace';
 import { MastraSandbox, ProcessHandle, SandboxNotReadyError, SandboxProcessManager } from '@mastra/core/workspace';
 import type { PlatformClientOptions } from './client.js';
-import { PlatformClient } from './client.js';
+import { PlatformApiError, PlatformClient } from './client.js';
 
 export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
 
@@ -165,16 +166,58 @@ export class PlatformSandbox extends MastraSandbox {
     return `platform-sandbox-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   }
 
+  /**
+   * Construct a sibling {@link PlatformSandbox} that inherits this sandbox's
+   * credentials and defaults (access token, project, environment, network
+   * isolation, timeout, instructions, env, idle timeout) with per-instance
+   * overrides from `options`.
+   *
+   * Performs no I/O and does not require this sandbox to be started — the
+   * returned sandbox is not started and provisions (or reattaches, when
+   * `sandboxId` is set) on its own `start()`. Use it when one configured
+   * sandbox acts as the template for a fleet of independent sandboxes
+   * (e.g. one per project).
+   */
+  clone(options: SandboxCloneOptions = {}): PlatformSandbox {
+    return new PlatformSandbox({
+      ...(options.id !== undefined && { id: options.id }),
+      accessToken: this._client.accessToken,
+      projectId: this._client.projectId,
+      fetch: this._client.fetch,
+      environmentId: this._environmentId,
+      ...(options.sandboxId !== undefined && { sandboxId: options.sandboxId }),
+      idleTimeoutMinutes: options.idleTimeoutMinutes ?? this._idleTimeoutMinutes,
+      ...(this._networkIsolation !== undefined && { networkIsolation: this._networkIsolation }),
+      env: options.env ?? this._env,
+      ...(this._timeout !== undefined && { timeout: this._timeout }),
+      ...(this._instructionsOverride !== undefined && { instructions: this._instructionsOverride }),
+    });
+  }
+
   async start(): Promise<void> {
     if (this._sandboxId) {
-      this._createdAt = new Date();
-      return;
+      try {
+        const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
+        const json = (await response.json()) as CreateSandboxResponse;
+        this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
+        return;
+      } catch (error) {
+        if (!(error instanceof PlatformApiError) || error.status !== 404) throw error;
+        this._sandboxId = undefined;
+      }
     }
+
+    if (!this._environmentId) throw new Error('environmentId is required');
 
     const response = await this._client.request('/sandbox', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
+        // Sent so the platform can associate the provisioned resource with a
+        // caller-stable identifier (used for opt-in checkpoint recovery). The
+        // platform treats it as an advisory key: unknown values fall through
+        // to a fresh sandbox, matching pre-existing behavior.
+        id: this.id,
         environmentId: this._environmentId,
         idleTimeoutMinutes: this._idleTimeoutMinutes,
         networkIsolation: this._networkIsolation,

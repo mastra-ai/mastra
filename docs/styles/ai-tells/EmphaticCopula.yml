@@ -1,0 +1,30 @@
+---
+extends: existence
+message: "AI emphasis: '%s'. Remove the italics. Emphasizing a copula rarely adds meaning."
+level: error
+nonword: true
+scope: raw
+tokens:
+  # Markdown italicized copula verbs - the "manufactured profundity" pattern
+  # Note: underscore patterns require space prefix to avoid matching __dunder__ methods
+  - "\\*is\\*"
+  - ' _is_'
+  - "\\*are\\*"
+  - ' _are_'
+  - "\\*was\\*"
+  - ' _was_'
+  - "\\*were\\*"
+  - ' _were_'
+
+  # Italicized "the" for false emphasis
+  - "\\*the\\*"
+  - ' _the_'
+
+  # Italicized single conjunctions/prepositions for false drama
+  # Note: underscore patterns require space prefix to avoid matching __dunder__ methods
+  - "\\*and\\*"
+  - ' _and_'
+  - "\\*not\\*"
+  - ' _not_'
+  - "\\*or\\*"
+  - ' _or_'

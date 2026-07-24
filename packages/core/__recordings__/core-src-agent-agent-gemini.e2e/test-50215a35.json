@@ -3,14 +3,13 @@
     "name": "test-50215a35",
     "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Agent network() method > should handle basic network generation with Gemini",
-    "createdAt": "2026-05-18T10:50:56.087Z",
-    "updatedAt": "2026-05-28T17:33:47.563Z"
+    "createdAt": "2026-07-14T17:15:05.879Z"
   },
   "recordings": [
     {
-      "hash": "1b9a5c980672f1c7",
+      "hash": "011507c27566207c",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
         "body": {
           "generationConfig": {
@@ -65,7 +64,7 @@
             ]
           }
         },
-        "timestamp": 1779989624112
+        "timestamp": 1784049302883
       },
       "response": {
         "status": 200,
@@ -73,9 +72,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 28 May 2026 17:33:45 GMT",
+          "date": "Tue, 14 Jul 2026 17:15:03 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=873",
+          "server-timing": "gfet4t7; dur=938",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -88,43 +87,37 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"primitiveId\": \"helperAgent\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"What is the capital of France?\",\n  \"selectionReason\": \"The user is asking a question that can be answered by the helper agent.\"\n}"
+                    "text": "{\n  \"primitiveId\": \"helperAgent\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"What is the capital of France?\",\n  \"selectionReason\": \"The user is asking a factual question that a general-purpose AI agent can answer. 'helperAgent' is available and suitable for handling such queries. No workflows or tools are necessary or available for a simple factual question.\"\n}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.030344024039151377
+              "index": 0
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 845,
-            "candidatesTokenCount": 57,
-            "totalTokenCount": 902,
+            "promptTokenCount": 790,
+            "candidatesTokenCount": 86,
+            "totalTokenCount": 876,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 845
-              }
-            ],
-            "candidatesTokensDetails": [
-              {
-                "modality": "TEXT",
-                "tokenCount": 57
+                "tokenCount": 790
               }
             ],
             "serviceTier": "standard"
           },
-          "modelVersion": "gemini-2.0-flash",
-          "responseId": "eHwYauSPGtrR_uMPgNOf6QI"
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "lm5WasLFOf2E7M8P1J3VoQo"
         },
         "isStreaming": false
       }
     },
     {
-      "hash": "2de01441236c458e",
+      "hash": "b6bf154c3623f6b8",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
         "method": "POST",
         "body": {
           "generationConfig": {},
@@ -154,7 +147,7 @@
             ]
           }
         },
-        "timestamp": 1779989625110
+        "timestamp": 1784049303902
       },
       "response": {
         "status": 200,
@@ -163,26 +156,25 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Thu, 28 May 2026 17:33:45 GMT",
+          "date": "Tue, 14 Jul 2026 17:15:04 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=644",
+          "server-timing": "gfet4t7; dur=1033",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Paris\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 34,\"totalTokenCount\": 34,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 34}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"eXwYavzKHcTI1LsPzNia-Ak\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 32,\"candidatesTokenCount\": 2,\"totalTokenCount\": 34,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 32}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 2}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"eXwYavzKHcTI1LsPzNia-Ak\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Paris\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 34,\"candidatesTokenCount\": 1,\"totalTokenCount\": 82,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 34}],\"thoughtsTokenCount\": 47,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"l25WaqyPO5T2nsEPpYzH6Ak\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 9],
+        "chunkTimings": [0],
         "isStreaming": true
       }
     },
     {
-      "hash": "cd86e76878bb84b2",
+      "hash": "61dd54f5b0a3efe9",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
         "method": "POST",
         "body": {
           "generationConfig": {
@@ -211,7 +203,7 @@
               "role": "user",
               "parts": [
                 {
-                  "text": "\n    The agent helperAgent has contributed to the task.\n    This is the result: \"Paris\\n\"\n    \n    \n\nPrimitives already executed: agent \"helperAgent\"\n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: What is the capital of France?\n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the agent helperAgent has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
+                  "text": "\n    The agent helperAgent has contributed to the task.\n    This is the result: \"Paris\"\n    \n    \n\nPrimitives already executed: agent \"helperAgent\"\n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: What is the capital of France?\n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the agent helperAgent has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
                 }
               ]
             }
@@ -224,7 +216,7 @@
             ]
           }
         },
-        "timestamp": 1779989625896
+        "timestamp": 1784049304959
       },
       "response": {
         "status": 200,
@@ -233,22 +225,18 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Thu, 28 May 2026 17:33:47 GMT",
+          "date": "Tue, 14 Jul 2026 17:15:05 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=976",
+          "server-timing": "gfet4t7; dur=862",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 757,\"totalTokenCount\": 757,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 757}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"enwYas_XEM3D7_UP3qSh8Q0\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 757,\"totalTokenCount\": 757,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 757}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"enwYas_XEM3D7_UP3qSh8Q0\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The helperAgent provided\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 757,\"totalTokenCount\": 757,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 757}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"enwYas_XEM3D7_UP3qSh8Q0\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" the capital of France, which fulfills the task's requirement.\\\",\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 757,\"totalTokenCount\": 757,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 757}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"enwYas_XEM3D7_UP3qSh8Q0\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"finalResult\\\": \\\"The capital of France is Paris.\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 801,\"candidatesTokenCount\": 49,\"totalTokenCount\": 850,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 801}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 49}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"enwYas_XEM3D7_UP3qSh8Q0\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\\\"isComplete\\\": true, \\\"completionReason\\\": \\\"The helperAgent successfully identified the capital of France.\\\", \\\"finalResult\\\": \\\"The capital of France is Paris.\\\"}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 755,\"candidatesTokenCount\": 34,\"totalTokenCount\": 844,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 755}],\"thoughtsTokenCount\": 55,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"mW5WapfaAtzwnsEP4szP2A0\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 1, 85, 101, 77],
+        "chunkTimings": [0],
         "isStreaming": true
       }
     }

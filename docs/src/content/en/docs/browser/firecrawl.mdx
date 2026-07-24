@@ -1,0 +1,118 @@
+---
+title: "Firecrawl | Browser"
+description: "Use the Firecrawl provider to run agent browser sessions in the Firecrawl Browser Sandbox."
+packages:
+  - "@mastra/browser-firecrawl"
+---
+
+# Firecrawl
+
+The `@mastra/browser-firecrawl` package provides browser automation using the [Firecrawl Browser Sandbox](https://docs.firecrawl.dev/features/browser). It provisions remote browser sessions through the Firecrawl API and drives them with the same deterministic, accessibility-first tools as [AgentBrowser](/docs/browser/agent-browser).
+
+`FirecrawlBrowser` extends `AgentBrowser`, so agents get the same toolset (`browser_goto`, `browser_snapshot`, `browser_click`, and so on) while the browser itself runs in Firecrawl's hosted infrastructure. No local Chromium install is needed.
+
+## When to use Firecrawl
+
+Use Firecrawl when you need:
+
+- Hosted browser sessions without managing local Chromium binaries
+- Browser automation in environments that can't launch a local browser
+- Per-thread sandbox isolation with automatic session cleanup
+- Named Firecrawl profiles that persist cookies and login state between sessions
+
+## Quickstart
+
+Install the package:
+
+```bash npm2yarn
+npm install @mastra/browser-firecrawl
+```
+
+Set your Firecrawl API key:
+
+```bash title=".env"
+FIRECRAWL_API_KEY=fc-...
+```
+
+Create a browser instance and assign it to an agent:
+
+```typescript title="src/mastra/agents/firecrawl-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { FirecrawlBrowser } from '@mastra/browser-firecrawl'
+
+const browser = new FirecrawlBrowser({
+  apiKey: process.env.FIRECRAWL_API_KEY,
+})
+
+export const firecrawlAgent = new Agent({
+  id: 'firecrawl-agent',
+  name: 'Firecrawl Agent',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  browser,
+  instructions: `You are a web automation assistant.
+
+When interacting with pages:
+1. Use browser_snapshot to get the current page state and element refs
+2. Use the refs (like @e1, @e2) to target elements for clicks and typing
+3. After actions, take another snapshot to verify the result`,
+})
+```
+
+If `apiKey` is omitted, the provider reads `FIRECRAWL_API_KEY` from the environment.
+
+## Session scope
+
+`FirecrawlBrowser` follows the same `scope` option as `AgentBrowser`:
+
+- `'thread'` (default): Each conversation thread gets its own Firecrawl sandbox session. Sessions are deleted when the thread's browser closes.
+- `'shared'`: One Firecrawl sandbox session is shared across all threads and deleted when the browser closes.
+
+```typescript
+const browser = new FirecrawlBrowser({
+  scope: 'shared',
+})
+```
+
+## Session options
+
+Pass Firecrawl-specific session options under the `firecrawl` key. These map to the Firecrawl `browser()` API:
+
+```typescript
+const browser = new FirecrawlBrowser({
+  firecrawl: {
+    ttl: 600,
+    activityTtl: 120,
+    profile: {
+      name: 'my-profile',
+      saveChanges: true,
+    },
+  },
+})
+```
+
+- `ttl`: Maximum session lifetime in seconds.
+- `activityTtl`: Idle timeout in seconds before Firecrawl recycles the session.
+- `profile`: Named Firecrawl profile that persists cookies and login state. Set `saveChanges: true` to save profile changes when the session ends.
+
+:::note
+
+The nested `firecrawl.profile` option refers to a profile stored in Firecrawl's infrastructure. It's different from the top-level `profile` option inherited from `AgentBrowser`, which is a local Playwright user-data directory path.
+
+:::
+
+## Self-hosted Firecrawl
+
+To use a self-hosted Firecrawl API, set `apiUrl`:
+
+```typescript
+const browser = new FirecrawlBrowser({
+  apiUrl: 'https://firecrawl.internal.example.com',
+})
+```
+
+## Related
+
+- [Browser overview](/docs/browser/overview)
+- [AgentBrowser](/docs/browser/agent-browser)
+- [Browser recording (alpha)](/docs/browser/recording)
+- [FirecrawlBrowser reference](/reference/browser/firecrawl-browser)

@@ -25,23 +25,27 @@ import {
   ProviderHistoryCompat,
   StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
+import type { InputProcessor } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
 import { TaskSignalProvider } from '@mastra/core/signals';
 import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
+import type { MastraVector } from '@mastra/core/vector';
 import { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
-import { LibSQLVector } from '@mastra/libsql';
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import {
   Observability,
   MastraStorageExporter,
   MastraPlatformExporter,
   SensitiveDataFilter,
 } from '@mastra/observability';
+import { PostgresStore } from '@mastra/pg';
 
+import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
 import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
@@ -54,7 +58,7 @@ import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-inst
 // import { planSubagent } from './agents/subagents/plan.js';
 import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state.js';
 import { createDynamicTools, createToolHooks } from './agents/tools.js';
-import type { ToolLike } from './agents/tools.js';
+import type { PostToolObserver, ToolLike } from './agents/tools.js';
 
 import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
@@ -80,6 +84,7 @@ import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.j
 import { setAuthStorage } from './providers/claude-max.js';
 import { setAuthStorage as setGitHubCopilotAuthStorage } from './providers/github-copilot.js';
 import { setAuthStorage as setOpenAIAuthStorage } from './providers/openai-codex.js';
+import { setAuthStorage as setXAIAuthStorage } from './providers/xai.js';
 
 import { stateSchema } from './schema.js';
 import type { MastraCodeState } from './schema.js';
@@ -95,36 +100,37 @@ import {
 import type { StorageConfig } from './utils/project.js';
 import { createSignalsPubSub } from './utils/signals-pubsub.js';
 import { createStorage, createVectorStore } from './utils/storage-factory.js';
+import type { StorageResult } from './utils/storage-factory.js';
 import { createStorageMaintenance, DEFAULT_RETENTION, resolveLocalDbFiles } from './utils/storage-maintenance.js';
 import type { StorageMaintenance } from './utils/storage-maintenance.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const CODE_AGENT_ID = 'code-agent';
 
-// Global retry policy for transient network resets (e.g. provider sockets dropping mid-stream).
+// Global retry policy for transient connection failures (e.g. provider sockets dropping mid-stream).
 // Applied centrally to every model call via StreamErrorRetryProcessor, independent of model-pack
-// settings, so all modes/subagents benefit from a short wait before retrying an ECONNRESET.
+// settings, so all modes/subagents benefit from a short wait before retrying a dropped connection.
 // Delay uses exponential backoff: initialDelay * 2^retryCount, capped at maxDelay.
-const MASTRACODE_ECONNRESET_MAX_RETRIES = 2;
-const MASTRACODE_ECONNRESET_RETRY_INITIAL_DELAY_MS = 1000;
-const MASTRACODE_ECONNRESET_RETRY_MAX_DELAY_MS = 30000;
+const MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES = 2;
+const MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS = 1000;
+const MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS = 30000;
 
-const ECONNRESET_MESSAGE_PATTERN = /econnreset|socket hang up/i;
+const TRANSIENT_CONNECTION_ERROR_CODES = new Set(['ECONNRESET', 'EPIPE']);
+const TRANSIENT_CONNECTION_MESSAGE_PATTERN = /econnreset|socket hang up|write epipe|other side closed/i;
 
 /**
- * Matcher for transient network-reset failures. Checks the immediate error for
- * an `ECONNRESET` code or a `socket hang up` message. Cause-chain traversal is
- * handled by `StreamErrorRetryProcessor.isRetryableStreamError`, which calls
- * each matcher at every level of the cause chain.
+ * Matcher for transient connection failures. Cause-chain traversal is handled
+ * by `StreamErrorRetryProcessor.isRetryableStreamError`, which calls each
+ * matcher at every level of the cause chain.
  */
-function isECONNRESETError(error: unknown): boolean {
+function isTransientConnectionError(error: unknown): boolean {
   if (!error) return false;
 
   const code = typeof error === 'object' && 'code' in error ? (error as { code?: unknown }).code : undefined;
-  if (typeof code === 'string' && code.toUpperCase() === 'ECONNRESET') return true;
+  if (typeof code === 'string' && TRANSIENT_CONNECTION_ERROR_CODES.has(code.toUpperCase())) return true;
 
   const message = error instanceof Error ? error.message : undefined;
-  if (typeof message === 'string' && ECONNRESET_MESSAGE_PATTERN.test(message)) return true;
+  if (typeof message === 'string' && TRANSIENT_CONNECTION_MESSAGE_PATTERN.test(message)) return true;
 
   return false;
 }
@@ -175,12 +181,29 @@ export interface MastraCodeConfig {
   subagents?: AgentControllerSubagent[];
   /** Extra tools merged into the dynamic tool set. Can be a static record or a (sync or async) function that receives requestContext. */
   extraTools?:
-    | Record<string, ToolLike>
-    | ((ctx: { requestContext: RequestContext }) => Record<string, ToolLike> | Promise<Record<string, ToolLike>>);
+    | Record<string, ToolLike | undefined>
+    | ((ctx: {
+        requestContext: RequestContext;
+      }) => Record<string, ToolLike | undefined> | Promise<Record<string, ToolLike | undefined>>);
+  /** Observe completed tool calls without replacing or modifying the built-in tool implementation. */
+  postToolObserver?: PostToolObserver;
+  /**
+   * Stateless input processor instances prepended before Mastra Code's mandatory processors.
+   * Embedders may extend processing but cannot replace built-in safety and compatibility policy.
+   */
+  inputProcessors?: InputProcessor[];
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
-  /** Custom storage config instead of auto-detected default */
-  storage?: StorageConfig;
+  /**
+   * Custom storage config instead of auto-detected default, or a pre-built
+   * store instance. An instance is used as-is: no connection test and no
+   * LibSQL fallback — if the injected store fails, that's a hard error.
+   */
+  storage?: StorageConfig | MastraCompositeStore;
+  /** Backend for an injected custom storage instance. Inferred for LibSQLStore and PostgresStore. */
+  storageBackend?: 'libsql' | 'pg';
+  /** Pre-built vector store instance for recall search. Skips the default vector store creation. */
+  vector?: MastraVector;
   /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
   omScope?: 'thread' | 'resource';
   /** Path to a custom settings.json file. Default: global settings */
@@ -203,11 +226,21 @@ export interface MastraCodeConfig {
   disableHooks?: boolean;
   /** Disable plugin discovery/loading. Default: false */
   disablePlugins?: boolean;
+  /** Disable the polling-based GitHub signal provider even when enabled in global settings. Default: false */
+  disableGithubSignals?: boolean;
+  /**
+   * Skip seeding observational-memory knobs (observer/reflector models,
+   * thresholds, caveman mode, attachment observation) from settings.json.
+   * Server deployments that persist memory settings in their own database
+   * (the factory's `memory-settings` domain) set this so the host machine's
+   * TUI settings file never leaks into server sessions. Default: false.
+   */
+  disableSettingsOmSeed?: boolean;
   /** Override the plugin manager. Primarily useful for tests or embedding. */
   pluginManager?: PluginManager;
   /**
    * Override the memory instance (or dynamic factory) passed to the AgentController.
-   * When provided, this replaces the default `getDynamicMemory(storage, vectorStore)` which
+   * When provided, this replaces the default `getDynamicMemory(storage, vector)` which
    * uses mastracode's built-in model gateway (Anthropic OAuth, OpenAI Codex,
    * custom providers, and models.dev fallback).
    *
@@ -229,6 +262,7 @@ export function createAuthStorage() {
   setAuthStorage(authStorage);
   setOpenAIAuthStorage(authStorage);
   setGitHubCopilotAuthStorage(authStorage);
+  setXAIAuthStorage(authStorage);
   return authStorage;
 }
 
@@ -263,6 +297,43 @@ function resolveCloudObservabilityConfig(
  *
  * See {@link bootLocalAgentController} (Case 3) and `mountAgentControllerOnMastra` (Cases 1 & 2).
  */
+/**
+ * `instanceof` checks against Mastra classes are unreliable here: published
+ * packages pin exact `@mastra/core` versions, so a user's dependency graph can
+ * contain multiple copies of core (and peer-keyed copies of `@mastra/libsql` /
+ * `@mastra/pg`). A store built against one copy fails `instanceof` against
+ * another — the injected instance then silently fell through to the
+ * StorageConfig path and crashed on `config.url`. These structural checks work
+ * across duplicated copies.
+ */
+function isInjectedStorageInstance(storage: MastraCodeConfig['storage']): storage is MastraCompositeStore {
+  if (!storage) return false;
+  if (storage instanceof MastraCompositeStore) return true;
+  // A StorageConfig is a plain data object with a string `backend`
+  // discriminant; a store instance carries the MastraCompositeStore method
+  // surface.
+  const candidate = storage as Partial<MastraCompositeStore>;
+  return typeof candidate.init === 'function' && typeof candidate.__registerMastra === 'function';
+}
+
+/** Cross-copy-safe class check: walks the prototype chain by constructor name. */
+function hasAncestorClassNamed(value: object, className: string): boolean {
+  for (let proto = Object.getPrototypeOf(value); proto; proto = Object.getPrototypeOf(proto)) {
+    if (proto.constructor?.name === className) return true;
+  }
+  return false;
+}
+
+function resolveInjectedStorageBackend(
+  storage: MastraCompositeStore,
+  configuredBackend?: 'libsql' | 'pg',
+): 'libsql' | 'pg' {
+  if (configuredBackend) return configuredBackend;
+  if (storage instanceof LibSQLStore || hasAncestorClassNamed(storage, 'LibSQLStore')) return 'libsql';
+  if (storage instanceof PostgresStore || hasAncestorClassNamed(storage, 'PostgresStore')) return 'pg';
+  throw new Error('storageBackend is required when injecting a custom storage instance.');
+}
+
 export async function createMastraCodeAgentController(config?: MastraCodeConfig) {
   const cwd = config?.cwd ?? process.cwd();
   const homeDir = config?.homeDir ?? config?.initialState?.homeDir;
@@ -297,26 +368,31 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   }
 
   // Load user-entered API keys from auth.json into process.env
-  // (only sets env vars that aren't already present — env vars take precedence)
-  try {
-    const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
-    const providerEnvVars: Record<string, string | undefined> = {};
-    for (const [provider, cfg] of Object.entries(registry)) {
-      const envVars = cfg?.apiKeyEnvVar;
-      providerEnvVars[provider] = Array.isArray(envVars) ? envVars[0] : envVars;
+  // (only sets env vars that aren't already present — env vars take precedence).
+  // Skipped in deployed multi-tenant mode: when a per-tenant credential store
+  // provider is registered, provider keys are resolved per request and must
+  // never leak into process-global env vars.
+  if (!hasCredentialStoreProvider()) {
+    try {
+      const registry = PROVIDER_REGISTRY as Record<string, ProviderConfig>;
+      const providerEnvVars: Record<string, string | undefined> = {};
+      for (const [provider, cfg] of Object.entries(registry)) {
+        const envVars = cfg?.apiKeyEnvVar;
+        providerEnvVars[provider] = Array.isArray(envVars) ? envVars[0] : envVars;
+      }
+      providerEnvVars[MASTRA_GATEWAY_PROVIDER] ??= 'MASTRA_GATEWAY_API_KEY';
+      authStorage.loadStoredApiKeysIntoEnv(providerEnvVars);
+    } catch {
+      // Registry unavailable — load well-known provider keys so non-gateway flows still work
+      authStorage.loadStoredApiKeysIntoEnv({
+        [MASTRA_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY',
+        anthropic: 'ANTHROPIC_API_KEY',
+        openai: 'OPENAI_API_KEY',
+        google: 'GOOGLE_GENERATIVE_AI_API_KEY',
+        cerebras: 'CEREBRAS_API_KEY',
+        deepseek: 'DEEPSEEK_API_KEY',
+      });
     }
-    providerEnvVars[MASTRA_GATEWAY_PROVIDER] ??= 'MASTRA_GATEWAY_API_KEY';
-    authStorage.loadStoredApiKeysIntoEnv(providerEnvVars);
-  } catch {
-    // Registry unavailable — load well-known provider keys so non-gateway flows still work
-    authStorage.loadStoredApiKeysIntoEnv({
-      [MASTRA_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY',
-      anthropic: 'ANTHROPIC_API_KEY',
-      openai: 'OPENAI_API_KEY',
-      google: 'GOOGLE_GENERATIVE_AI_API_KEY',
-      cerebras: 'CEREBRAS_API_KEY',
-      deepseek: 'DEEPSEEK_API_KEY',
-    });
   }
 
   const mgApiKey = process.env['MASTRA_GATEWAY_API_KEY'] ?? storedGatewayKey;
@@ -359,9 +435,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     throw new Error('crossProcessPubSub requires a pubsub instance');
   }
 
-  // Storage
-  const storageConfig = config?.storage ?? getStorageConfig(project.rootPath, globalSettings.storage, configDir);
-  const storageResult = await createStorage(storageConfig);
+  // Storage. An injected instance is used as-is — no connection test, no
+  // LibSQL fallback: if the injected store fails, that's a hard error.
+  const injectedStorage = isInjectedStorageInstance(config?.storage) ? config.storage : undefined;
+  const storageConfig = injectedStorage
+    ? undefined
+    : ((config?.storage as StorageConfig | undefined) ??
+      getStorageConfig(project.rootPath, globalSettings.storage, configDir));
+  const storageResult: StorageResult = injectedStorage
+    ? { storage: injectedStorage, backend: resolveInjectedStorageBackend(injectedStorage, config?.storageBackend) }
+    : await createStorage(storageConfig!);
   const storageWarning = storageResult.warning;
 
   // Observability storage (DuckDB — separate file for OLAP-style trace/score/feedback queries).
@@ -460,8 +543,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
   });
 
-  // Vector store for recall search (separate DB file to avoid bloating main storage)
-  const vectorStore = await createVectorStore(storageConfig, storageResult.backend);
+  // Vector store for recall search (separate DB file to avoid bloating main
+  // storage). An injected instance is used as-is; with an injected storage
+  // instance and no injected vector, recall search stays vector-less.
+  const vector =
+    config?.vector ?? (storageConfig ? await createVectorStore(storageConfig, storageResult.backend) : undefined);
 
   // Maintenance handle for /prune: prunes via the inner store (whose retention
   // config covers every domain, including legacy libsql observability spans)
@@ -472,11 +558,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     storage: storageResult.storage,
     backend: storageResult.backend,
     retention: DEFAULT_RETENTION,
-    localDbFiles: resolveLocalDbFiles(storageConfig, storageResult.backend),
-    closeVector: vectorStore instanceof LibSQLVector ? () => vectorStore.close() : undefined,
+    localDbFiles: storageConfig ? resolveLocalDbFiles(storageConfig, storageResult.backend) : [],
+    closeVector: vector instanceof LibSQLVector ? () => vector.close() : undefined,
   });
 
-  const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vectorStore));
+  const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vector));
 
   // MCP
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, configDir, config?.mcpServers);
@@ -501,61 +587,62 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // well after controller is constructed (line ~692). Explicit type annotations
   // on githubSignals, codeAgent, modes, and controller break the circular
   // inference chain this forward reference would otherwise create.
-  const githubSignals: GithubSignals | undefined = globalSettings.signals?.experimentalGithubSignals
-    ? new GithubSignals({
-        cwd: project.rootPath,
-        gitcrawlCommand:
-          process.env.MASTRACODE_GITCRAWL_BIN ??
-          process.env.GITCRAWL_BIN ??
-          process.env.MASTRACODE_GITCRAWL_COMMAND ??
-          process.env.GITCRAWL_COMMAND,
-        getNotificationStreamOptions: async ({ resourceId, threadId }) => {
-          // Run the woken notification as the session that owns the target
-          // resource so it uses that session's model/mode/state. Fall back to
-          // the current session only when no session owns the resource yet.
-          const session = (await controller.getSessionByResource(resourceId)) ?? activeSession!;
-          // A long-running system must be able to drive work unattended, so a
-          // target session without an explicit model selection falls back to a
-          // real model rather than failing the run: the current session's live
-          // selection (what the user actually picked), then the mode's default.
-          const modeId = session.mode.get();
-          const defaultModeModelId = controller.listModes().find(mode => mode.id === modeId)?.defaultModelId;
-          const modelId = session.model.get() || activeSession?.model.get() || defaultModeModelId || '';
-          const requestContext = new RequestContext();
-          const agentControllerContext: AgentControllerRequestContext = {
-            controllerId: controller.id,
-            state: session.state.get(),
-            getState: () => session.state.get(),
-            setState: updates => session.state.set(updates),
-            threadId,
-            resourceId,
-            session: {
-              id: session.identity.getId(),
-              ownerId: session.identity.getOwnerId(),
-              modeId,
-              modelId,
-              state: {
-                get: () => session.state.get(),
-                set: updates => session.state.set(updates),
-                update: updater => session.state.update(updater),
+  const githubSignals: GithubSignals | undefined =
+    globalSettings.signals?.experimentalGithubSignals && !config?.disableGithubSignals
+      ? new GithubSignals({
+          cwd: project.rootPath,
+          gitcrawlCommand:
+            process.env.MASTRACODE_GITCRAWL_BIN ??
+            process.env.GITCRAWL_BIN ??
+            process.env.MASTRACODE_GITCRAWL_COMMAND ??
+            process.env.GITCRAWL_COMMAND,
+          getNotificationStreamOptions: async ({ resourceId, threadId }) => {
+            // Run the woken notification as the session that owns the target
+            // resource so it uses that session's model/mode/state. Fall back to
+            // the current session only when no session owns the resource yet.
+            const session = (await controller.getSessionByResource(resourceId)) ?? activeSession!;
+            // A long-running system must be able to drive work unattended, so a
+            // target session without an explicit model selection falls back to a
+            // real model rather than failing the run: the current session's live
+            // selection (what the user actually picked), then the mode's default.
+            const modeId = session.mode.get();
+            const defaultModeModelId = controller.listModes().find(mode => mode.id === modeId)?.defaultModelId;
+            const modelId = session.model.get() || activeSession?.model.get() || defaultModeModelId || '';
+            const requestContext = new RequestContext();
+            const agentControllerContext: AgentControllerRequestContext = {
+              controllerId: controller.id,
+              state: session.state.get(),
+              getState: () => session.state.get(),
+              setState: updates => session.state.set(updates),
+              threadId,
+              resourceId,
+              session: {
+                id: session.identity.getId(),
+                ownerId: session.identity.getOwnerId(),
+                modeId,
+                modelId,
+                state: {
+                  get: () => session.state.get(),
+                  set: updates => session.state.set(updates),
+                  update: updater => session.state.update(updater),
+                },
               },
-            },
-            workspace: controller.getWorkspace(),
-            getSubagentModelId: params => session.subagents.model.get(params ?? {}),
-          };
-          requestContext.set('controller', agentControllerContext);
+              workspace: controller.getWorkspace(),
+              getSubagentModelId: params => session.subagents.model.get(params ?? {}),
+            };
+            requestContext.set('controller', agentControllerContext);
 
-          return {
-            memory: { thread: threadId, resource: resourceId },
-            requestContext,
-            maxSteps: 1000,
-            savePerStep: false,
-            requireToolApproval: (session.state.get() as Record<string, unknown>).yolo !== true,
-            modelSettings: { temperature: 1 },
-          };
-        },
-      })
-    : undefined;
+            return {
+              memory: { thread: threadId, resource: resourceId },
+              requestContext,
+              maxSteps: 1000,
+              savePerStep: false,
+              requireToolApproval: (session.state.get() as Record<string, unknown>).yolo !== true,
+              modelSettings: { temperature: 1 },
+            };
+          },
+        })
+      : undefined;
   const codeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
@@ -567,7 +654,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     instructions: getDynamicInstructions,
     model: getDynamicModel,
     tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage, pluginTools),
-    hooks: createToolHooks(hookManager),
+    hooks: createToolHooks(hookManager, config?.postToolObserver),
     scorers: {
       outcome: {
         scorer: outcomeScorer,
@@ -606,12 +693,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       tools: getGoalJudgeTools,
     },
     inputProcessors: [
+      ...(config?.inputProcessors ?? []),
       new PlanRejectionAbortProcessor(),
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
           const agentControllerContext = requestContext?.get('controller') as
-            | AgentControllerRequestContext<{ projectPath?: string }>
-            | undefined;
+            AgentControllerRequestContext<{ projectPath?: string }> | undefined;
           const state = agentControllerContext?.getState();
           return getStaticallyLoadedInstructionPaths(state?.projectPath ?? project.rootPath);
         },
@@ -619,22 +706,28 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       new ProviderHistoryCompat(),
     ],
     errorProcessors: [
+      // ProviderHistoryCompat must run before StreamErrorRetryProcessor: both react to
+      // HTTP 400s, but ProviderHistoryCompat repairs the incompatible history (e.g.
+      // sanitizing tool-call IDs) before retrying, while StreamErrorRetryProcessor's
+      // isBadRequestError matcher retries the identical request. Error processors
+      // short-circuit on the first `retry: true`, so a blind retry first would resend
+      // the broken history and fail again.
+      new ProviderHistoryCompat(),
       new StreamErrorRetryProcessor({
         matchers: [
           { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },
           {
-            match: isECONNRESETError,
-            maxRetries: MASTRACODE_ECONNRESET_MAX_RETRIES,
+            match: isTransientConnectionError,
+            maxRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES,
             delayMs: ({ retryCount }) =>
               Math.min(
-                MASTRACODE_ECONNRESET_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount),
-                MASTRACODE_ECONNRESET_RETRY_MAX_DELAY_MS,
+                MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount),
+                MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS,
               ),
           },
         ],
       }),
       new PrefillErrorHandler(),
-      new ProviderHistoryCompat(),
     ],
   });
 
@@ -747,25 +840,29 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Apply disabledTools filter to both default and custom subagents.
   // const subagents = [];
 
-  // Build initial state with global preferences
+  // Build initial state with global preferences. OM knobs are skipped when the
+  // host persists memory settings elsewhere (`disableSettingsOmSeed`) so the
+  // machine-local settings.json never leaks into server sessions.
   const globalInitialState: Partial<MastraCodeState> = {};
-  if (effectiveObserverModel) {
-    globalInitialState.observerModelId = effectiveObserverModel;
-  }
-  if (effectiveReflectorModel) {
-    globalInitialState.reflectorModelId = effectiveReflectorModel;
-  }
-  if (effectiveObservationThreshold !== undefined) {
-    globalInitialState.observationThreshold = effectiveObservationThreshold;
-  }
-  if (effectiveReflectionThreshold !== undefined) {
-    globalInitialState.reflectionThreshold = effectiveReflectionThreshold;
-  }
-  if (effectiveCavemanObservations !== undefined) {
-    globalInitialState.cavemanObservations = effectiveCavemanObservations;
-  }
-  if (effectiveObserveAttachments !== undefined) {
-    globalInitialState.observeAttachments = effectiveObserveAttachments;
+  if (!config?.disableSettingsOmSeed) {
+    if (effectiveObserverModel) {
+      globalInitialState.observerModelId = effectiveObserverModel;
+    }
+    if (effectiveReflectorModel) {
+      globalInitialState.reflectorModelId = effectiveReflectorModel;
+    }
+    if (effectiveObservationThreshold !== undefined) {
+      globalInitialState.observationThreshold = effectiveObservationThreshold;
+    }
+    if (effectiveReflectionThreshold !== undefined) {
+      globalInitialState.reflectionThreshold = effectiveReflectionThreshold;
+    }
+    if (effectiveCavemanObservations !== undefined) {
+      globalInitialState.cavemanObservations = effectiveCavemanObservations;
+    }
+    if (effectiveObserveAttachments !== undefined) {
+      globalInitialState.observeAttachments = effectiveObserveAttachments;
+    }
   }
   if (globalSettings.preferences.yolo !== null) {
     globalInitialState.yolo = globalSettings.preferences.yolo;

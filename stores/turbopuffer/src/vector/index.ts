@@ -18,7 +18,20 @@ import type { DistanceMetric, NamespaceWriteParams, Row } from '@turbopuffer/tur
 import { TurbopufferFilterTranslator } from './filter';
 import type { TurbopufferVectorFilter } from './filter';
 
-type TurbopufferQueryVectorParams = QueryVectorParams<TurbopufferVectorFilter>;
+/**
+ * The consistency level for Turbopuffer queries.
+ * - 'strong': Queries see all data written before the query started. Higher latency (default).
+ * - 'eventual': Lower latency, but recently written data may not be visible yet.
+ */
+export type TurbopufferConsistencyLevel = 'strong' | 'eventual';
+
+export interface TurbopufferQueryVectorParams extends QueryVectorParams<TurbopufferVectorFilter> {
+  /**
+   * The consistency level for this query. Overrides the instance-level
+   * `consistency` option. Defaults to 'strong'.
+   */
+  consistency?: TurbopufferConsistencyLevel;
+}
 type Schema = NonNullable<NamespaceWriteParams['schema']>;
 
 export interface TurbopufferVectorOptions {
@@ -34,6 +47,12 @@ export interface TurbopufferVectorOptions {
   warmConnections?: number;
   /** Whether to compress requests and accept compressed responses. Default is true. */
   compression?: boolean;
+  /**
+   * The default consistency level for queries. Can be overridden per query.
+   * - 'strong': Queries see all data written before the query started. Higher latency (default).
+   * - 'eventual': Lower latency, but recently written data may not be visible yet.
+   */
+  consistency?: TurbopufferConsistencyLevel;
   /**
    * A callback function that takes an index name and returns a config object for that index.
    * This allows you to define explicit schemas per index.
@@ -210,6 +229,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
     topK,
     filter,
     includeVector,
+    consistency,
   }: TurbopufferQueryVectorParams): Promise<QueryResult[]> {
     if (!queryVector) {
       throw new MastraError({
@@ -258,7 +278,7 @@ export class TurbopufferVector extends MastraVector<TurbopufferVectorFilter> {
         filters: translatedFilter,
         vector_encoding: includeVector ? 'float' : undefined,
         include_attributes: true,
-        consistency: { level: 'strong' }, // todo: make this configurable somehow?
+        consistency: { level: consistency ?? this.opts.consistency ?? 'strong' },
       });
       return (results.rows ?? []).map(item => {
         const { id, vector, $dist, ...metadata } = item;

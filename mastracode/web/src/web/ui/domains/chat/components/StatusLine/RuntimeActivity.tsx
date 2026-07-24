@@ -1,13 +1,12 @@
 import { Brain } from 'lucide-react';
 
-import { useChatTranscript } from '../../context/useChatTranscript';
+import { useChatRuntime } from '../../context/useChatRuntime';
 
 const statusItem = 'inline-flex items-center gap-1 text-icon3 [&_svg]:text-icon2';
 
 /** Transient execution telemetry: active OM phase and decode throughput. */
 export function RuntimeActivity() {
-  const { transcript } = useChatTranscript();
-  const { omPhase, tokensPerSec } = transcript;
+  const { omPhase, tokensPerSec } = useChatRuntime();
 
   return (
     <>

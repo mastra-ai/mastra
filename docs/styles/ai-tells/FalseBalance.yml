@@ -1,0 +1,31 @@
+---
+extends: existence
+message: "AI evasion: '%s'. Take a clear position or remove the hedge."
+level: error
+ignorecase: true
+tokens:
+  - both sides of the argument
+  - both sides present valid points
+  - there are valid points on both sides
+  - each perspective has merit
+  - each side has merit
+  - it's important to consider all perspectives
+  - important to consider the perspectives
+  - consider all stakeholders
+  - perspectives of all stakeholders
+  - a balanced approach
+  - strike a balance
+  - find a balance
+  - nuanced understanding
+  - nuanced approach
+  - the answer is not straightforward
+  - not a simple answer
+  - there is no simple answer
+  - the issue is complex
+  - this is a complex issue
+  - depends on various factors
+  - depends on many factors
+  - varies depending on
+  - context-dependent
+  - situation-dependent
+  - case-by-case basis

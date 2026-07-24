@@ -6,7 +6,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Container, Markdown, Spacer, Text } from '@earendil-works/pi-tui';
 import type { MarkdownTheme } from '@earendil-works/pi-tui';
-import type { AgentControllerMessage } from '@mastra/core/agent-controller';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import { getAssistantRenderParts } from '../db-message-parts.js';
+import type { AssistantRenderPart } from '../db-message-parts.js';
 import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
 import { CHAT_INDENT, getMarkdownTheme, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
@@ -22,18 +24,21 @@ function asmDebugLog(...args: unknown[]) {
   } catch {}
 }
 
+function getStopReason(message: MastraDBMessage): { stopReason?: string; errorMessage?: string } {
+  const content = message.content;
+  if (typeof content === 'string') return {};
+  const metadata = content.metadata as { stopReason?: string; errorMessage?: string } | undefined;
+  return { stopReason: metadata?.stopReason, errorMessage: metadata?.errorMessage };
+}
+
 export class AssistantMessageComponent extends Container {
   private contentContainer: Container;
   private hideThinkingBlock: boolean;
   private markdownTheme: MarkdownTheme;
-  private lastMessage?: AgentControllerMessage;
+  private lastMessage?: MastraDBMessage;
   private _id: number;
 
-  constructor(
-    message?: AgentControllerMessage,
-    hideThinkingBlock = false,
-    markdownTheme: MarkdownTheme = getMarkdownTheme(),
-  ) {
+  constructor(message?: MastraDBMessage, hideThinkingBlock = false, markdownTheme: MarkdownTheme = getMarkdownTheme()) {
     super();
     this._id = ++_compId;
 
@@ -54,8 +59,8 @@ export class AssistantMessageComponent extends Container {
   override invalidate(): void {
     super.invalidate();
     if (this.lastMessage) {
-      const summary = this.lastMessage.content
-        .map(c => (c.type === 'text' ? `text(${c.text.length}ch)` : c.type))
+      const summary = getAssistantRenderParts(this.lastMessage)
+        .map(part => (part.kind === 'text' ? `text(${part.text.length}ch)` : part.kind))
         .join(', ');
       asmDebugLog(`COMP#${this._id} INVALIDATE lastMessage=[${summary}]`);
       this.updateContent(this.lastMessage);
@@ -70,30 +75,33 @@ export class AssistantMessageComponent extends Container {
     return this.contentContainer.children.length > 0 ? 'assistant-message' : undefined;
   }
 
-  updateContent(message: AgentControllerMessage): void {
-    // Deep copy the message to prevent mutation from the controller's shared content array
-    this.lastMessage = {
-      ...message,
-      content: message.content.map(c => ({ ...c })),
-    };
+  updateContent(message: MastraDBMessage): void {
+    this.lastMessage = message;
 
     // Clear content container
     this.contentContainer.clear();
 
-    // Render content in order
-    for (let i = 0; i < message.content.length; i++) {
-      const content = message.content[i]!;
+    // Project the nested DB message parts into ordered render items, then render
+    // text and thinking traces in document order (tool parts are rendered by the
+    // dedicated ToolExecutionComponent, so they are ignored here).
+    const renderParts = getAssistantRenderParts(message).filter(
+      (part): part is Extract<AssistantRenderPart, { kind: 'text' | 'thinking' }> =>
+        part.kind === 'text' || part.kind === 'thinking',
+    );
 
-      if (content.type === 'text' && (content as any).text.trim()) {
+    for (let i = 0; i < renderParts.length; i++) {
+      const part = renderParts[i]!;
+
+      if (part.kind === 'text' && part.text.trim()) {
         // Assistant text messages - trim and sanitize escape codes
         this.contentContainer.addChild(
-          new Markdown(sanitizeAnsiForRendering((content as any).text.trim()), CHAT_INDENT, 0, this.markdownTheme, {
+          new Markdown(sanitizeAnsiForRendering(part.text.trim()), CHAT_INDENT, 0, this.markdownTheme, {
             color: (text: string) => theme.fg('text', text),
           }),
         );
-      } else if (content.type === 'thinking' && (content as any).thinking.trim()) {
+      } else if (part.kind === 'thinking' && part.text.trim()) {
         // Check if there's text content after this thinking block
-        const hasTextAfter = message.content.slice(i + 1).some(c => c.type === 'text' && (c as any).text.trim());
+        const hasTextAfter = renderParts.slice(i + 1).some(p => p.kind === 'text' && p.text.trim());
 
         if (this.hideThinkingBlock) {
           // Show static "Thinking..." label when hidden
@@ -106,29 +114,23 @@ export class AssistantMessageComponent extends Container {
         } else {
           // Thinking traces in thinkingText color, italic
           this.contentContainer.addChild(
-            new Markdown(
-              sanitizeAnsiForRendering((content as any).thinking.trim()),
-              CHAT_INDENT,
-              0,
-              this.markdownTheme,
-              {
-                color: (text: string) => theme.fg('thinkingText', text),
-                italic: true,
-              },
-            ),
+            new Markdown(sanitizeAnsiForRendering(part.text.trim()), CHAT_INDENT, 0, this.markdownTheme, {
+              color: (text: string) => theme.fg('thinkingText', text),
+              italic: true,
+            }),
           );
           this.contentContainer.addChild(new Spacer(1));
         }
       }
-      // Skip tool_call and tool_result - those are rendered by ToolExecutionComponent
     }
 
     // Check if aborted or error - show after partial content
-    if (message.stopReason === 'aborted') {
-      const abortMessage = message.errorMessage || 'Interrupted';
+    const { stopReason, errorMessage } = getStopReason(message);
+    if (stopReason === 'aborted') {
+      const abortMessage = errorMessage || 'Interrupted';
       this.contentContainer.addChild(new Text(theme.fg('error', abortMessage), CHAT_INDENT, 0));
-    } else if (message.stopReason === 'error') {
-      const errorMsg = message.errorMessage || 'Unknown error';
+    } else if (stopReason === 'error') {
+      const errorMsg = errorMessage || 'Unknown error';
       this.contentContainer.addChild(new Text(theme.fg('error', `Error: ${errorMsg}`), CHAT_INDENT, 0));
     }
   }

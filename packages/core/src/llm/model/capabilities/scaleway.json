@@ -24,5 +24,12 @@
     "qwen3.5-397b-a17b",
     "qwen3.6-35b-a3b",
     "voxtral-small-24b-2507"
+  ],
+  "structuredOutput": [
+    "gemma-4-26b-a4b-it",
+    "glm-5.2",
+    "mistral-medium-3.5-128b",
+    "qwen3.5-397b-a17b",
+    "qwen3.6-35b-a3b"
   ]
 }

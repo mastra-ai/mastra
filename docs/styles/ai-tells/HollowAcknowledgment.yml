@@ -1,0 +1,27 @@
+---
+extends: existence
+message: "AI hollow acknowledgment: '%s'. Resolve the thing you just named or cut the clause."
+level: error
+nonword: true
+ignorecase: true
+# A rhetorical antithesis that performs insight while doing nothing: a
+# notice-verb ("names," "identifies," "raises") takes an object, then
+# "without" plus a gerund of resolution ("filling it," "solving it,"
+# "answering it") declines to act on that same object. The tell is the
+# back-referring pronoun tail: the sentence acknowledges a thing and then
+# refuses to act on that thing. That pronoun is the gate, so an ordinary
+# "left without saying goodbye" (no prior object to refer back to) stays
+# quiet. Distinct from ContrastiveFormulas, which negates a category ("not
+# X, but Y") rather than an action.
+tokens:
+  # --- Notice-verb + object + "without" + gerund + back-reference. The
+  # object is one to three words; the closing pronoun ("it," "them") or a
+  # short "the <noun>" is what makes the clause self-cancel.
+  - "\\b(?:names?|identifies|identified|describes?|described|raises?|raised|poses?|posed|flags?|flagged|lists?|listed|catalog(?:s|ues|ued)?|catalogues?|surfaces?|surfaced|diagnoses|diagnosed|enumerates?|enumerated|notes?|noted|acknowledges?|acknowledged|highlights?|highlighted|maps?|mapped|gestures? at|points? out) (?:the|a|an|its|this|that|these|those|their) (?:\\w+ ){0,2}\\w+ without (?:ever |actually |really |truly |once )?\\w+ing (?:it|them|that|those|these|the \\w+)\\b"
+
+  # --- Symmetric shorthand: "all X, no Y" where both slots are the same
+  # kind of noun of insight versus action ("all diagnosis, no treatment,"
+  # "all analysis, no action"). Curated pairs keep the ordinary "all talk,
+  # no action" cliche adjacent without flooding on every "all X, no Y."
+  - "\\ball (?:diagnosis|analysis|critique|description|observation|theory|talk|questions?|naming|labeling|labelling) and no (?:treatment|action|solutions?|answers?|prescription|remedy|remedies|fixes?|follow-through)\\b"
+  - "\\ball (?:diagnosis|analysis|critique|description|observation|theory|talk|questions?|naming|labeling|labelling), no (?:treatment|action|solutions?|answers?|prescription|remedy|remedies|fixes?|follow-through)\\b"

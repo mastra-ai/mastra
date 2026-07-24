@@ -13,10 +13,10 @@
     "tinyglobby": "^0.2.17",
     "npm-cli-login": "^1.0.0",
     "verdaccio": "^6.7.4",
-    "verdaccio-auth-memory": "^10.3.3",
-    "vitest": "^4.1.8"
+    "verdaccio-auth-memory": "^13.0.3",
+    "vitest": "^4.1.10"
   },
   "dependencies": {
-    "form-data": "^2.5.6"
+    "form-data": "^4.0.6"
   }
 }

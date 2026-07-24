@@ -6,18 +6,21 @@ import type { ActivateModelPackResponse, ModelPacksResponse, OkResponse, SaveMod
 
 /**
  * Model packs (mirrors the TUI `/models-pack` command). Listing + custom-pack
- * CRUD are global; activation is session-scoped and needs the active project's
- * `resourceId`. The list is keyed by `resourceId` so switching projects yields a
+ * CRUD are global; activation is session-scoped and needs the active factory's
+ * `resourceId`. The list is keyed by `resourceId` so switching factories yields a
  * distinct cache entry (active-pack state differs per session). The query stays
  * enabled without a `resourceId` — it just returns packs with no active flag,
  * matching the current component which loads the catalog either way.
  */
-export function useModelPacksQuery(resourceId: string | undefined) {
+export function useModelPacksQuery(resourceId: string | undefined, scope?: string) {
   const { client } = useApiConfig();
   return useQuery<ModelPacksResponse>({
     queryKey: queryKeys.modelPacks(resourceId),
     queryFn: () => {
-      const qs = resourceId ? `?resourceId=${encodeURIComponent(resourceId)}` : '';
+      const params = new URLSearchParams();
+      if (resourceId) params.set('resourceId', resourceId);
+      if (resourceId && scope) params.set('scope', scope);
+      const qs = params.size ? `?${params.toString()}` : '';
       return client.get<ModelPacksResponse>(`/web/config/model-packs${qs}`);
     },
   });
@@ -27,13 +30,14 @@ export interface ActivateModelPackArgs {
   id: string;
 }
 
-export function useActivateModelPack(resourceId: string | undefined) {
+export function useActivateModelPack(resourceId: string | undefined, scope?: string) {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id }: ActivateModelPackArgs) =>
       client.post<ActivateModelPackResponse>(`/web/config/model-packs/${encodeURIComponent(id)}/activate`, {
         resourceId,
+        scope,
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.modelPacks(resourceId) }),
   });

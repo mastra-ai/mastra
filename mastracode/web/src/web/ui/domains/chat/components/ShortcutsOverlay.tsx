@@ -10,7 +10,6 @@ interface Shortcut {
 }
 
 const SHORTCUTS: Shortcut[] = [
-  { keys: ['⌘', 'K'], description: 'Open the command palette' },
   { keys: ['?'], description: 'Show this shortcuts help' },
   { keys: ['Enter'], description: 'Send the message' },
   { keys: ['Shift', 'Enter'], description: 'Insert a newline' },

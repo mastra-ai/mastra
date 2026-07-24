@@ -1,3 +1,4 @@
 {
-  "attachment": ["claude-fable-5"]
+  "attachment": ["claude-fable-5"],
+  "structuredOutput": ["xpersona-frieren-coder", "xpersona-gpt-5.5"]
 }

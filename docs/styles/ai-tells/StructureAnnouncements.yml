@@ -1,0 +1,22 @@
+---
+extends: existence
+message: "AI structure announcement: '%s'. Present the content instead of narrating that you're about to."
+level: error
+ignorecase: true
+tokens:
+  - key takeaway
+  - key takeaways
+  - the takeaway is
+  - the takeaway here is
+  - main takeaway
+  - main takeaways
+  - quick recap
+  - a quick recap
+  - to recap
+  - to recap briefly
+  - quick summary
+  - a quick summary
+  - quick overview
+  - a quick overview
+  - to put it plainly
+  - to put this in perspective
