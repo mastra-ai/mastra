@@ -138,12 +138,14 @@ minimumReleaseAgeExclude:
   - fast-xml-parser@5.10.1
   # Renovate security update: svgo@3.3.4
   - svgo@3.3.4
-  # Renovate security update: @hono/node-server@2.0.10
-  - "@hono/node-server@2.0.10"
+  # Renovate security update: @hono/node-server@2.0.10 || 2.0.5
+  - "@hono/node-server@2.0.10 || 2.0.5"
   # Renovate security update: brace-expansion@2.1.2
   - brace-expansion@2.1.2
   # Renovate security update: react-router@7.18.0
   - react-router@7.18.0
+  # Renovate security update: js-yaml@5.2.2
+  - js-yaml@5.2.2
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
@@ -173,7 +175,7 @@ overrides:
   # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
   # (GHSA Dependabot alert #2266).
   better-auth: ^1.6.13
-  js-yaml: ^3.15.0
+  js-yaml: ^5.2.2
   glob@<=10.5.0: 10.5.0
   # image-size 2.x (incl. 2.0.2 latest) has unpatched DoS infinite-loop flaws
   # (CVE-2025-71330 / GHSA-w3rx-r6r6-pgpr). No fixed 2.x exists, so pin to the

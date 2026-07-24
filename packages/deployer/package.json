@@ -123,7 +123,7 @@
     "ws": "^8.21.0"
   },
   "devDependencies": {
-    "@hono/node-server": "^1.19.14",
+    "@hono/node-server": "^2.0.0",
     "@hono/standard-validator": "^0.3.0",
     "@hono/swagger-ui": "^0.5.3",
     "@internal/lint": "workspace:*",
