@@ -144,6 +144,14 @@ trustPolicyExclude:
   # without the trusted-publisher evidence that older @mesadev/sdk versions had.
   - '@mesadev/sdk@0.38.0'
 overrides:
+  # bson 7.3.0+ introduced a regression where BSON.calculateObjectSize hangs
+  # indefinitely (blocks the event loop, no error, no timeout) on a document
+  # containing a circular JS object reference, instead of throwing like
+  # bson@7.2.0 (and JSON.stringify) do. This is what the mongodb store's
+  # shared "should handle metadata with circular references" vector test
+  # exercises. Pin to 7.2.0 until the regression is fixed upstream; see
+  # https://github.com/mongodb/js-bson (issue TBD).
+  bson: 7.2.0
   typescript: ^6.0.3
   '@types/node': 22.19.15
   # Capped below 2: cookie@2 renamed parse/serialize to parseCookie/stringifyCookie,
