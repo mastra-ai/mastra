@@ -8,6 +8,7 @@ import { useChatSessionContext } from '../../web/ui/domains/chat/context/useChat
 import { useChatTranscript } from '../../web/ui/domains/chat/context/useChatTranscript';
 import { createAgentControllerClient } from '../../web/ui/domains/chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../web/ui/domains/chat/services/constants';
+import { agentControllerSwitchThreadMutationKey } from './agentControllerMutationArgs';
 import { useSwitchAgentControllerThreadMutation } from './useAgentControllerThreadMutations';
 import { useAgentControllerThreads } from './useAgentControllerThreads';
 
@@ -44,6 +45,21 @@ export function useRouteThreadSync() {
   const sessionKey = `${resourceId}:${projectPath ?? ''}`;
 
   const switchToRouteThread = useEffectEvent((targetThreadId: string, fallbackForScopeChange: boolean) => {
+    // `mutateAsync` registers its mutation in the cache synchronously, so the
+    // cache alone answers "is this exact switch already in flight?" — across
+    // every hook instance, no local bookkeeping needed.
+    const alreadyPending =
+      queryClient.isMutating({
+        mutationKey: agentControllerSwitchThreadMutationKey({
+          agentControllerId: AGENT_CONTROLLER_ID,
+          resourceId,
+          scope: projectPath,
+          baseUrl,
+        }),
+        exact: true,
+        predicate: mutation => mutation.state.variables === targetThreadId,
+      }) > 0;
+    if (alreadyPending) return;
     latestRouteThreadId.current = targetThreadId;
     const isLatestRequest = () => latestRouteThreadId.current === targetThreadId;
 

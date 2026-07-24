@@ -1,7 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Circle, Hammer, Map, Zap } from 'lucide-react';
-import { useState } from 'react';
 
 import { useChatModes } from '../../context/useChatModes';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
@@ -38,9 +37,8 @@ function ModeLabel({ modeId, name }: { modeId: string; name: string }) {
  */
 export function ModesSelection() {
   const { kind } = useChatSessionContext();
-  const { modes, activeModeId, setMode } = useChatModes();
-  const [pendingModeId, setPendingModeId] = useState<string>();
-  const selectedModeId = pendingModeId ?? activeModeId ?? modes[0]?.id;
+  const { modes, activeModeId, isSwitchingMode, setMode } = useChatModes();
+  const selectedModeId = activeModeId ?? modes[0]?.id;
   const selectedMode = modes.find(mode => mode.id === selectedModeId) ?? modes[0];
 
   if (kind === 'factory') return null;
@@ -49,21 +47,17 @@ export function ModesSelection() {
   return (
     <Select
       value={selectedModeId}
-      disabled={Boolean(pendingModeId)}
+      disabled={isSwitchingMode}
       onValueChange={modeId => {
-        if (pendingModeId) return;
-        setPendingModeId(modeId);
-        void setMode(modeId).then(
-          () => setPendingModeId(undefined),
-          () => setPendingModeId(undefined),
-        );
+        if (isSwitchingMode) return;
+        void setMode(modeId).catch(() => {});
       }}
     >
       <SelectTrigger
         variant="ghost"
         size="xs"
         aria-label="Session mode"
-        aria-busy={Boolean(pendingModeId)}
+        aria-busy={isSwitchingMode}
         className={cn('chat-mode-text w-auto', getModeColorClass(selectedMode.id))}
       >
         <ModeLabel modeId={selectedMode.id} name={selectedMode.name ?? selectedMode.id} />

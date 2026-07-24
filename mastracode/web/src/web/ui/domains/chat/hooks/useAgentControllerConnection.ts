@@ -1,4 +1,4 @@
-import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerSessionState, KnownAgentControllerEvent } from '@mastra/client-js';
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { queryKeys } from '../../../../../shared/api/keys';
@@ -10,6 +10,17 @@ import { useAgentControllerSessionSync } from '../../../../../shared/hooks/useAg
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
 type SseConnectionState = 'never' | 'connected' | 'dropped';
+
+/**
+ * `AgentControllerEvent` includes an untyped catch-all member, so a literal
+ * `event.type` check alone cannot narrow to the known event's payload.
+ */
+function isEventOfType<T extends KnownAgentControllerEvent['type']>(
+  event: AgentControllerEvent,
+  type: T,
+): event is Extract<KnownAgentControllerEvent, { type: T }> {
+  return event.type === type;
+}
 
 interface UseAgentControllerConnectionArgs {
   agentControllerId: string;
@@ -66,6 +77,26 @@ export function useAgentControllerConnection({
   };
 
   const handleEvent = (event: AgentControllerEvent) => {
+    const stateQueryKey = queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope);
+    const patchConnectionState = (updates: Partial<AgentControllerSessionState>) => {
+      const updatedAt = queryClient.getQueryState(stateQueryKey)?.dataUpdatedAt;
+      queryClient.setQueryData<AgentControllerSessionState>(
+        stateQueryKey,
+        current => (current ? { ...current, ...updates } : current),
+        { updatedAt },
+      );
+    };
+
+    if (isEventOfType(event, 'mode_changed')) {
+      patchConnectionState({ modeId: event.modeId });
+    } else if (isEventOfType(event, 'model_changed')) {
+      patchConnectionState({ modelId: event.modelId });
+    } else if (event.type === 'thread_changed') {
+      // A thread switch also hydrates that thread's persisted mode and model.
+      // The event only carries the id, so fetch the complete canonical state.
+      void queryClient.invalidateQueries({ queryKey: stateQueryKey, exact: true });
+    }
+
     const displayStateRunning =
       event.type === 'display_state_changed' &&
       typeof event.displayState === 'object' &&
@@ -75,13 +106,7 @@ export function useAgentControllerConnection({
         : undefined;
     const running = event.type === 'agent_start' ? true : event.type === 'agent_end' ? false : displayStateRunning;
     if (typeof running === 'boolean') {
-      const stateQueryKey = queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope);
-      const updatedAt = queryClient.getQueryState(stateQueryKey)?.dataUpdatedAt;
-      queryClient.setQueryData<AgentControllerSessionState>(
-        stateQueryKey,
-        current => (current ? { ...current, running } : current),
-        { updatedAt },
-      );
+      patchConnectionState({ running });
     }
     onEvent(event);
   };

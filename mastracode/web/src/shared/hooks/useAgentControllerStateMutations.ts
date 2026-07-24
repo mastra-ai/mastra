@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
 import type { AgentControllerMutationArgs } from './agentControllerMutationArgs';
+import { agentControllerSessionMutationScope } from './agentControllerMutationArgs';
 import {
   createAgentControllerClient,
   requireAgentControllerSession,
@@ -37,10 +38,17 @@ export function useSetAgentControllerStateMutation({
 }
 
 export function useSwitchAgentControllerModeMutation(args: AgentControllerMutationArgs) {
+  const queryClient = useQueryClient();
   const { session } = createAgentControllerClient(args);
 
   return useMutation({
+    scope: agentControllerSessionMutationScope(args),
     mutationFn: (modeId: string) => requireAgentControllerSession(session).switchMode(modeId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.resourceId, args.scope),
+        exact: true,
+      }),
   });
 }
 
@@ -49,6 +57,7 @@ export function useSwitchAgentControllerModelMutation(args: AgentControllerMutat
   const { session } = createAgentControllerClient(args);
 
   return useMutation({
+    scope: agentControllerSessionMutationScope(args),
     mutationFn: (modelId: string) => requireAgentControllerSession(session).switchModel(modelId),
     onSuccess: () =>
       queryClient.invalidateQueries({

@@ -5,6 +5,7 @@ export interface ChatModesApi {
   modes: AgentControllerModeInfo[];
   activeMode: AgentControllerModeInfo | undefined;
   activeModeId: string | undefined;
+  isSwitchingMode: boolean;
   setMode: (modeId: string) => Promise<void>;
 }
 

@@ -4,6 +4,7 @@ import { useAvailableModelsQuery } from '../../../../../../shared/hooks/useAvail
 
 import { useChatConnection } from '../../context/useChatConnection';
 import { useChatModels } from '../../context/useChatModels';
+import { useIsRouteThreadSwitching } from '../../hooks/useIsRouteThreadSwitching';
 
 function titleCase(value: string): string {
   return value ? `${value[0]?.toUpperCase()}${value.slice(1).toLowerCase()}` : value;
@@ -37,11 +38,12 @@ function formatModelName(id: string): string {
 export function ActiveModel() {
   const { activeModelId } = useChatModels();
   const { status } = useChatConnection();
+  const isSwitchingThread = useIsRouteThreadSwitching();
   const modelsQuery = useAvailableModelsQuery();
 
-  // While the connection is still resolving there is no model id yet — show a
-  // placeholder instead of a misleading "No model" label.
-  if (!activeModelId && status === 'connecting') {
+  // Never label a new route with the previously-bound thread's model. While an
+  // initial connection is resolving there is no model id yet either.
+  if (isSwitchingThread || (!activeModelId && status === 'connecting')) {
     return <Skeleton aria-label="Loading model" className="h-3.5 w-24" />;
   }
 

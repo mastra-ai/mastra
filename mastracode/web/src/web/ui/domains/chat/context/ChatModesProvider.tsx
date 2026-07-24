@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
 
 import { useAgentControllerModes } from '../../../../../shared/hooks/useAgentControllerModes';
 import { useSwitchAgentControllerModeMutation } from '../../../../../shared/hooks/useAgentControllerStateMutations';
@@ -31,26 +30,14 @@ export function ChatModesProvider({ children }: ChatModesProviderProps) {
     enabled: sessionEnabled,
   });
   const modes = modesQuery.data ?? [];
-  const [activeModeId, setActiveModeId] = useState(state?.modeId);
-
-  useEffect(() => {
-    setActiveModeId(state?.modeId);
-  }, [state?.modeId]);
+  const activeModeId = switchModeMutation.isPending ? switchModeMutation.variables : state?.modeId;
 
   const value: ChatModesApi = {
     modes,
     activeModeId,
     activeMode: modes.find(mode => mode.id === activeModeId),
-    setMode: async modeId => {
-      const previousModeId = activeModeId;
-      setActiveModeId(modeId);
-      try {
-        await switchModeMutation.mutateAsync(modeId);
-      } catch (error) {
-        setActiveModeId(currentModeId => (currentModeId === modeId ? previousModeId : currentModeId));
-        throw error;
-      }
-    },
+    isSwitchingMode: switchModeMutation.isPending,
+    setMode: modeId => switchModeMutation.mutateAsync(modeId),
   };
 
   return <ChatModesContext.Provider value={value}>{children}</ChatModesContext.Provider>;

@@ -8,6 +8,7 @@
 import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
+import { MemoryRouter, Route, Routes } from 'react-router';
 
 import { server } from '../../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../../e2e/web-ui/render';
@@ -19,16 +20,29 @@ import { ActiveModel } from '../ActiveModel';
 function renderActiveModel({
   activeModelId,
   status,
+  activeThreadId = 'thread-a',
+  routeThreadId = 'thread-a',
 }: {
   activeModelId: string | undefined;
   status: ChatConnectionApi['status'];
+  activeThreadId?: string;
+  routeThreadId?: string;
 }) {
   return renderWithProviders(
-    <ChatConnectionContext.Provider value={{ status }}>
-      <ChatModelsContext.Provider value={{ activeModelId, setModel: () => Promise.resolve() }}>
-        <ActiveModel />
-      </ChatModelsContext.Provider>
-    </ChatConnectionContext.Provider>,
+    <MemoryRouter initialEntries={[`/threads/${routeThreadId}`]}>
+      <Routes>
+        <Route
+          path="/threads/:threadId"
+          element={
+            <ChatConnectionContext.Provider value={{ status, threadId: activeThreadId }}>
+              <ChatModelsContext.Provider value={{ activeModelId, setModel: () => Promise.resolve() }}>
+                <ActiveModel />
+              </ChatModelsContext.Provider>
+            </ChatConnectionContext.Provider>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
   );
 }
 
@@ -49,6 +63,20 @@ describe('ActiveModel', () => {
 
       expect(screen.getByLabelText('Loading model')).toBeInTheDocument();
       expect(screen.queryByText('No model')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('given the route changed before the controller bound the new thread', () => {
+    it("does not label the new conversation with the previous thread's model", () => {
+      renderActiveModel({
+        activeModelId: 'anthropic/claude-opus-4-8',
+        status: 'ready',
+        activeThreadId: 'thread-a',
+        routeThreadId: 'thread-b',
+      });
+
+      expect(screen.getByLabelText('Loading model')).toBeInTheDocument();
+      expect(screen.queryByText('Claude Opus 4.8')).not.toBeInTheDocument();
     });
   });
 

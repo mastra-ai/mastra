@@ -225,6 +225,52 @@ describe('useAgentControllerConnection', () => {
     expect(onStream).toHaveBeenCalledTimes(1);
   });
 
+  it('given an active stream, when mode and model events arrive, then session state is reconciled immediately', async () => {
+    const encoder = new TextEncoder();
+    const onEvent = vi.fn();
+    let emit: (event: AgentControllerEvent) => void = () => {};
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'state-thread' }),
+      ),
+      http.get(sessionUrl, () =>
+        HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'state-thread',
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        }),
+      ),
+      http.get(
+        `${sessionUrl}/stream`,
+        () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                emit = event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+              },
+              cancel() {},
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          ),
+      ),
+    );
+
+    const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent }));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    emit({ type: 'mode_changed', modeId: 'plan', previousModeId: 'build' });
+    emit({ type: 'model_changed', modelId: 'anthropic/claude-opus-4-8' });
+
+    await waitFor(() => {
+      expect(result.current.state?.modeId).toBe('plan');
+      expect(result.current.state?.modelId).toBe('anthropic/claude-opus-4-8');
+    });
+  });
+
   it('given reconnect polling is disconnected, then it backs off and stops at the retry cap', () => {
     expect(reconnectRefetchInterval(true, 0)).toBe(false);
     expect(reconnectRefetchInterval(false, 0)).toBe(1000);
