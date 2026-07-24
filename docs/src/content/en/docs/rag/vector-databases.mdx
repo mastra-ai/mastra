@@ -10,6 +10,7 @@ packages:
   - "@mastra/lance"
   - "@mastra/mongodb"
   - "@mastra/opensearch"
+  - "@mastra/oracledb"
   - "@mastra/pg"
   - "@mastra/pinecone"
   - "@mastra/qdrant"
@@ -83,6 +84,35 @@ After generating embeddings, you need to store them in a database that supports 
 
     PostgreSQL with the pgvector extension is a good solution for teams already using PostgreSQL who want to minimize infrastructure complexity.
     For detailed setup instructions and best practices, see the [official pgvector repository](https://github.com/pgvector/pgvector).
+  </TabItem>
+
+  <TabItem value="oracledb" label="OracleDB">
+    ```ts title="vector-store.ts"
+    import { OracleVector } from '@mastra/oracledb'
+
+    const store = new OracleVector({
+      id: 'oracle-vector',
+      user: process.env.ORACLE_DATABASE_USER,
+      password: process.env.ORACLE_DATABASE_PASSWORD,
+      connectString: process.env.ORACLE_DATABASE_CONNECT_STRING,
+    })
+
+    await store.createIndex({
+      indexName: 'myCollection',
+      dimension: 1536,
+      indexConfig: { type: 'none' },
+    })
+
+    await store.upsert({
+      indexName: 'myCollection',
+      vectors: embeddings,
+      metadata: chunks.map(chunk => ({ text: chunk.text })),
+    })
+    ```
+
+    <h3>Using Oracle Database Vector Search</h3>
+
+    OracleDB stores embeddings in native `VECTOR` columns and metadata in Oracle JSON. Exact search is the default; HNSW and IVF indexes can be configured for tuned deployments.
   </TabItem>
 
   <TabItem value="pinecone" label="Pinecone">
@@ -420,6 +450,18 @@ Each vector database enforces specific naming conventions for indexes and collec
     - Contain only letters, numbers, and underscores
     - Example: `my_index_123` is valid
     - Example: `my-index` is not valid (contains hyphen)
+  </TabItem>
+
+  <TabItem value="oracledb" label="OracleDB">
+    Index names are logical Mastra names. OracleDB maps each logical index to a physical Oracle table internally.
+
+    Logical index names must:
+
+    - Be non-empty
+    - Be 512 characters or fewer
+    - Be stable for the lifetime of the vector index
+    - Example: `my_collection_123` is valid
+    - Example: `customer-support/docs:v1` is valid and is mapped to a safe Oracle table name
   </TabItem>
 
   <TabItem value="pinecone" label="Pinecone">

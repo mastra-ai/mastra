@@ -363,3 +363,5 @@ allowBuilds:
   node-liblzma: false
   workerd: false
   braintrust: false
+  # node-oracledb runs in Thin mode (pure JS); its install script is a no-op stub.
+  oracledb: false

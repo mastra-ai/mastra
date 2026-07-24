@@ -8,6 +8,7 @@ packages:
   - "@mastra/libsql"
   - "@mastra/mongodb"
   - "@mastra/opensearch"
+  - "@mastra/oracledb"
   - "@mastra/pg"
   - "@mastra/pinecone"
   - "@mastra/qdrant"
@@ -454,6 +455,23 @@ When implementing filtering, these prompts are required in the agent's instructi
       instructions: `
       Process queries using the provided context. Structure responses to be concise and relevant.
       ${OPENSEARCH_PROMPT}
+      `,
+      tools: { vectorQueryTool },
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="oracledb" label="OracleDB">
+    ```ts title="vector-store.ts"
+    import { ORACLEDB_PROMPT } from '@mastra/oracledb'
+
+    export const ragAgent = new Agent({
+      id: 'rag-agent',
+      name: 'RAG Agent',
+      model: '__GATEWAY_OPENAI_MODEL__',
+      instructions: `
+      Process queries using the provided context. Structure responses to be concise and relevant.
+      ${ORACLEDB_PROMPT}
       `,
       tools: { vectorQueryTool },
     })
