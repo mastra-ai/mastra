@@ -45,6 +45,11 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
   let previousContentLength = 0;
   // When continue:false + feedback, allow one more LLM turn then stop
   let pendingFeedbackStop = false;
+  // When this loop is a resume (e.g. after tool approval), the suspended run
+  // already flushed its in-progress assistant message to storage. The first
+  // continuation must start a fresh response message instead of merging into
+  // that persisted row — see the guard in the dowhile below (issue #19445).
+  let isResumeContinuationPending = !!rest.resumeContext;
 
   const agenticExecutionWorkflow = createAgenticExecutionWorkflow<Tools, OUTPUT>({
     messageId: messageId!,
@@ -90,6 +95,29 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
     .dowhile(agenticExecutionWorkflow, async ({ inputData }) => {
       const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
       let hasFinishedSteps = false;
+
+      // First loop-back after a resume: the suspended run flushed its
+      // in-progress assistant message (reasoning + text + the pending
+      // tool-call) to storage before parking. The approved tool result has
+      // now attached to that same message — which is correct, it resolves the
+      // message's own tool call — but everything the model produces from here
+      // is a separate response and must NOT merge back into the persisted row.
+      // Appending a second response's parts mutates the row in place, and
+      // providers that sign reasoning blocks (Anthropic extended thinking)
+      // then reject the next turn ("thinking blocks in the latest assistant
+      // message cannot be modified"). Seal the flushed message and rotate to a
+      // fresh response message for the continuation. See issue #19445.
+      if (isResumeContinuationPending) {
+        isResumeContinuationPending = false;
+        messageList.markResponseMessageBoundary(typedInputData.stepResult?.messageId ?? typedInputData.messageId);
+
+        const nextMessageId = rest.rotateResponseMessageId();
+        typedInputData.messageId = nextMessageId;
+        if (typedInputData.stepResult) {
+          typedInputData.stepResult.messageId = nextMessageId;
+          typedInputData.stepResult.isContinued = true;
+        }
+      }
 
       const pendingSignals = readScoped(scopeCtx, DRAIN_PENDING_SIGNALS_KEY, 'drainPendingSignals')?.(runId) ?? [];
       if (pendingSignals.length > 0) {
