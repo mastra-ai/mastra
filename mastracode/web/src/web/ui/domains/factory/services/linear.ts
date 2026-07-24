@@ -8,7 +8,11 @@
  */
 
 export type LinearStatusReason =
-  'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';
+  | 'missing_config'
+  | 'auth_required'
+  | 'organization_required'
+  | 'not_connected'
+  | 'ready';
 
 export interface LinearStatus {
   enabled: boolean;

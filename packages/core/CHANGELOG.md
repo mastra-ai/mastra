@@ -1,5 +1,25 @@
 # @mastra/core
 
+## 1.53.0-alpha.1
+
+### Minor Changes
+
+- Added `resolveThreadId` to `ChannelConfig`: resolve the internal Mastra thread id before a channel thread is created, mirroring `resolveResourceId`. The hook runs after `resolveResourceId` (the resolved owner is on the context) and only for newly-created threads — existing threads keep their stored id. This lets a host align channel thread ids with ids it controls, e.g. give the thread the same id as the session it belongs to: ([#20147](https://github.com/mastra-ai/mastra/pull/20147))
+
+  ```ts
+  const channels = new AgentChannels({
+    adapters,
+    resolveResourceId: async ctx => resolveSessionId(ctx),
+    resolveThreadId: ({ resourceId, defaultThreadId }) => (isSessionId(resourceId) ? resourceId : defaultThreadId),
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`c8d8a01`](https://github.com/mastra-ai/mastra/commit/c8d8a010ee2efe2b7bf4d07707382c34c87b14e4))
+
+- Fixed thread title generation receiving each conversation message twice. The duplicated transcript confused small title models into replying to the conversation instead of producing a title, so threads could get refusal text as their title. ([#20141](https://github.com/mastra-ai/mastra/pull/20141))
+
 ## 1.52.2-alpha.0
 
 ### Patch Changes

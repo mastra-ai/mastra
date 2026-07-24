@@ -34,11 +34,11 @@ export function FactorySwitcher() {
           'mt-1 w-full justify-start gap-2 px-2.5 text-left [&>svg]:mx-0',
         )}
       >
-        <FactoryIcon size={16} className="shrink-0 text-icon3" />
-        <Txt as="span" variant="ui-sm" className="min-w-0 flex-1 truncate text-icon6">
+        <FactoryIcon size={16} className="text-icon3 shrink-0" />
+        <Txt as="span" variant="ui-sm" className="text-icon6 min-w-0 flex-1 truncate">
           {activeFactory?.name ?? 'Select a factory…'}
         </Txt>
-        <ChevronsUpDown size={13} className="shrink-0 text-icon3" />
+        <ChevronsUpDown size={13} className="text-icon3 shrink-0" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
         {factories.map(factory => (

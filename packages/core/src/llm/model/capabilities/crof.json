@@ -1,5 +1,13 @@
 {
-  "attachment": ["gemma-4-31b-it", "kimi-k2.6", "kimi-k2.7-code", "qwen3.5-397b-a17b", "qwen3.5-9b", "qwen3.6-27b"],
+  "attachment": [
+    "gemma-4-31b-it",
+    "kimi-k2.5",
+    "kimi-k2.6",
+    "kimi-k2.7-code",
+    "qwen3.5-397b-a17b",
+    "qwen3.5-9b",
+    "qwen3.6-27b"
+  ],
   "temperature": [
     "deepseek-v3.2",
     "deepseek-v4-flash",

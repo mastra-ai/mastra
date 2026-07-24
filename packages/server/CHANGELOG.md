@@ -1,5 +1,17 @@
 # @mastra/server
 
+## 1.53.0-alpha.1
+
+### Patch Changes
+
+- Fix Studio's provider connection banner incorrectly showing Google and Vertex AI as disconnected. ([#19816](https://github.com/mastra-ai/mastra/pull/19816))
+
+  - Google now connects with either `GOOGLE_API_KEY` or `GOOGLE_GENERATIVE_AI_API_KEY`, not both.
+  - Vertex AI is now checked separately from Google AI Studio, using its own `GOOGLE_VERTEX_PROJECT` and `GOOGLE_VERTEX_LOCATION` settings.
+
+- Updated dependencies [[`c8d8a01`](https://github.com/mastra-ai/mastra/commit/c8d8a010ee2efe2b7bf4d07707382c34c87b14e4), [`371cf60`](https://github.com/mastra-ai/mastra/commit/371cf6075cef88ac6919a08d59a82e485397364a), [`263d2ca`](https://github.com/mastra-ai/mastra/commit/263d2cac80ba3b03b9c0f008db6f1f1b9eb0278c)]:
+  - @mastra/core@1.53.0-alpha.1
+
 ## 1.52.2-alpha.0
 
 ### Patch Changes

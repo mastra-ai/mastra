@@ -13,7 +13,7 @@ export const EntityHeader = ({ icon, title, isLoading, children }: EntityHeaderP
   return (
     <div className="w-full overflow-x-hidden p-3 pb-1">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-        <div className="flex min-w-0 items-center gap-2 text-neutral6">
+        <div className="text-neutral6 flex min-w-0 items-center gap-2">
           <span className="flex size-7 shrink-0 items-center justify-center">
             <Icon size="lg">{icon}</Icon>
           </span>
