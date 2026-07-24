@@ -118,6 +118,17 @@ function shouldDetachPersistentTransportRequest(init?: RequestInit): boolean {
 function extractToolErrorText(content: unknown): string {
   const fallback = 'MCP tool execution failed';
   if (!Array.isArray(content)) return fallback;
+  const text = extractModelTextFromToolContent(content);
+  return text || fallback;
+}
+
+/**
+ * Extract LLM-facing text from a successful CallToolResult's `content` blocks.
+ * Per MCP spec, `content` is the human/model-readable channel; `structuredContent`
+ * is for client/UI consumption.
+ */
+function extractModelTextFromToolContent(content: unknown): string | undefined {
+  if (!Array.isArray(content)) return undefined;
   const text = content
     .filter((part): part is { type: 'text'; text: string } => {
       return !!part && typeof part === 'object' && (part as { type?: unknown }).type === 'text';
@@ -125,7 +136,43 @@ function extractToolErrorText(content: unknown): string {
     .map(part => part.text)
     .join('\n')
     .trim();
-  return text || fallback;
+  return text || undefined;
+}
+
+/**
+ * Non-enumerable metadata attached to structured tool execute results so
+ * `toModelOutput` can read MCP `content` without changing the execute return shape.
+ */
+export const MCP_CALL_TOOL_CONTENT = Symbol.for('mastra.mcp.callToolContent');
+
+function attachMcpCallToolContent(structuredContent: unknown, content: unknown): unknown {
+  if (structuredContent !== null && typeof structuredContent === 'object') {
+    Object.defineProperty(structuredContent, MCP_CALL_TOOL_CONTENT, {
+      value: content,
+      enumerable: false,
+      configurable: true,
+    });
+  }
+  return structuredContent;
+}
+
+function getMcpCallToolContent(output: unknown): unknown {
+  if (output !== null && typeof output === 'object') {
+    return (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_CONTENT];
+  }
+  return undefined;
+}
+
+function createStructuredToolToModelOutput(): (
+  output: unknown,
+) => { type: 'text'; value: string } | { type: 'json'; value: unknown } {
+  return output => {
+    const modelText = extractModelTextFromToolContent(getMcpCallToolContent(output));
+    if (modelText !== undefined) {
+      return { type: 'text', value: modelText };
+    }
+    return { type: 'json', value: output };
+  };
 }
 
 function getDatadogScope(): DatadogScopeLike | null {
@@ -1094,6 +1141,7 @@ export class InternalMastraMCPClient extends MastraBase {
             forwardInstructions: this.forwardInstructions,
             instructionsMaxLength: this.instructionsMaxLength,
           },
+          ...(tool.outputSchema ? { toModelOutput: createStructuredToolToModelOutput() } : {}),
           execute: async (
             input: any,
             context?: {
@@ -1148,10 +1196,8 @@ export class InternalMastraMCPClient extends MastraBase {
 
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
 
-                // When a tool has an outputSchema, return the structuredContent directly
-                // so that output validation works correctly
                 if (res.structuredContent !== undefined) {
-                  return res.structuredContent;
+                  return attachMcpCallToolContent(res.structuredContent, res.content);
                 }
 
                 return res;

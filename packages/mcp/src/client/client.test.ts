@@ -733,9 +733,9 @@ describe('MastraMCPClient - no outputSchema', () => {
 });
 
 describe('MastraMCPClient - outputSchema with structuredContent', () => {
-  // When a tool has an outputSchema and returns structuredContent, the
-  // structuredContent is returned directly. We don't pass outputSchema to
-  // createTool so there's no Zod stripping — the MCP SDK validates via AJV.
+  // When a tool has an outputSchema and returns structuredContent, execute() still
+  // returns the structured object for callers/UI. toModelOutput maps MCP content
+  // text for the LLM without changing the execute return shape.
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
@@ -760,7 +760,100 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
     testServer?.httpServer.close();
   });
 
-  it('should return structuredContent directly, preserving all fields', async () => {
+  it('should return content text for the model when structuredContent is also present', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'calendar_search',
+          description: 'Search calendar events',
+          inputSchema: {
+            type: 'object' as const,
+            properties: {
+              startdate: { type: 'string' },
+              enddate: { type: 'string' },
+            },
+          },
+          outputSchema: {
+            type: 'object' as const,
+            properties: {
+              count: { type: 'number' },
+              events: { type: 'array', items: { type: 'object' } },
+            },
+          },
+        },
+      ],
+    });
+
+    const fullResult = {
+      success: true,
+      events: [{ id: 1, title: 'Meeting' }],
+      count: 1,
+      message: 'Found 1 calendar event(s)',
+      tool: 'microsoft_calendar_search',
+    };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: fullResult,
+      content: [{ type: 'text', text: 'Found 1 calendar event(s)' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['calendar_search'];
+    const result = await tool.execute?.({
+      startdate: '2026-02-27T00:00:00Z',
+      enddate: '2026-02-27T23:59:59Z',
+    });
+
+    expect(result).toEqual(fullResult);
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: 'Found 1 calendar event(s)',
+    });
+  });
+
+  it('should fall back to json toModelOutput when content has no text blocks', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'image_only_tool',
+          description: 'Returns structured output without text content',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { query: { type: 'string' } },
+          },
+          outputSchema: {
+            type: 'object' as const,
+            properties: { count: { type: 'number' } },
+          },
+        },
+      ],
+    });
+
+    const fullResult = { count: 3 };
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
+      structuredContent: fullResult,
+      content: [{ type: 'image', data: 'abc', mimeType: 'image/png' }],
+      isError: false,
+    });
+
+    const tools = await client.tools();
+    const tool = tools['image_only_tool'];
+    const result = await tool.execute?.({ query: 'test' });
+
+    expect(result).toEqual(fullResult);
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'json',
+      value: fullResult,
+    });
+  });
+
+  it('should use JSON content text in toModelOutput when the server mirrors structuredContent in content', async () => {
     const sdkClient = (client as any).client as Client;
 
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
@@ -807,11 +900,15 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
       enddate: '2026-02-27T23:59:59Z',
     });
 
-    // structuredContent is returned directly — all fields preserved
+    // execute() keeps returning structuredContent for callers
     expect(result).toEqual(fullResult);
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: JSON.stringify(fullResult),
+    });
   });
 
-  it('should return structuredContent even with generic object outputSchema', async () => {
+  it('should use JSON content text in toModelOutput for generic object outputSchema', async () => {
     const sdkClient = (client as any).client as Client;
 
     vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
@@ -843,6 +940,10 @@ describe('MastraMCPClient - outputSchema with structuredContent', () => {
     const result = await tool.execute?.({ query: 'test' });
 
     expect(result).toEqual(fullResult);
+    expect(tool.toModelOutput?.(result)).toEqual({
+      type: 'text',
+      value: JSON.stringify(fullResult),
+    });
   });
 });
 
