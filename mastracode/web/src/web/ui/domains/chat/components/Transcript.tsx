@@ -482,22 +482,22 @@ function SubmitPlanCard({
   return (
     <div className={promptCardSuspension} role="group" aria-label="Plan approval">
       <div className={promptTitle}>Plan: {title}</div>
-      {planPath && <div className="mb-1.5 truncate font-mono text-xs text-icon3">{planPath}</div>}
+      {planPath && <div className="text-icon3 mb-1.5 truncate font-mono text-xs">{planPath}</div>}
 
       {planPath && planQuery.isPending ? (
-        <div className="flex items-center gap-2 text-xs text-icon3">
+        <div className="text-icon3 flex items-center gap-2 text-xs">
           <Spinner className="text-icon3" />
           Loading plan…
         </div>
       ) : null}
       {planQuery.isError && !body ? (
-        <div className="text-xs text-icon4">Unable to load the plan file{planPath ? ` (${planPath})` : ''}.</div>
+        <div className="text-icon4 text-xs">Unable to load the plan file{planPath ? ` (${planPath})` : ''}.</div>
       ) : null}
       {planQuery.data?.contentType === 'unsupported' && !body ? (
-        <div className="text-xs text-icon3">This plan file cannot be previewed as text.</div>
+        <div className="text-icon3 text-xs">This plan file cannot be previewed as text.</div>
       ) : null}
       {body ? (
-        <div className="max-h-96 overflow-auto rounded-md border border-border1 bg-surface1 px-3 py-2">
+        <div className="border-border1 bg-surface1 max-h-96 overflow-auto rounded-md border px-3 py-2">
           <Markdown className="max-w-none">{body}</Markdown>
         </div>
       ) : null}
