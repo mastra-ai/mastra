@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from '@internal/lint/vitest';
 
 // Note: You may see "punycode module is deprecated" warnings during tests.
 // This is a known issue from OpenTelemetry dependencies (uri-js, whatwg-url)
