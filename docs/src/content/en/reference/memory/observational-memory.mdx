@@ -98,7 +98,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
   },
   {
     name: 'retrieval',
-    type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource' }",
+    type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string }",
     description:
       "Enable retrieval-mode observation groups as durable pointers to raw message history. `true` enables cross-thread browsing by default. `{ vector: true }` also enables semantic search using Memory's vector store and embedder. `{ scope: 'thread' }` restricts the recall tool to the current thread only. Default scope is `'resource'`. `{ instructions: '...' }` appends application-specific recall guidance after Mastra's built-in retrieval instructions.",
     isOptional: true,
