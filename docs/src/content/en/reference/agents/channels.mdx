@@ -117,7 +117,7 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
     type: '(ctx: ResolveThreadIdContext) => string | Promise<string>',
     isOptional: true,
     description:
-      'Decide the internal Mastra thread id for a channel thread. Runs after `resolveResourceId` with the resolved owner on the context, and only when a new thread is created; reused threads keep their stored id and never call the hook. The returned id must be unique across the memory store. Return `ctx.defaultThreadId` (a random UUID) to keep the built-in behavior.',
+      'Decide the internal Mastra thread id for a channel thread. Runs after `resolveResourceId` with the resolved owner on the context, and only when a new thread is created; reused threads keep their stored id and never call the hook. The returned id must be unique across the memory store — on collision a generated id is used instead. Return `ctx.defaultThreadId` (a random UUID) to keep the built-in behavior.',
   },
   {
     name: 'waitUntil',
