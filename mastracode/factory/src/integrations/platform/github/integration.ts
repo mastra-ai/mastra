@@ -4,7 +4,13 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
-import type { Intake, IntakeIssue, IntakeIssueDetail } from '../../../capabilities/intake.js';
+import type {
+  CreateIntakeCommentInput,
+  Intake,
+  IntakeIssue,
+  IntakeIssueDetail,
+  UpdateIntakeIssueInput,
+} from '../../../capabilities/intake.js';
 import type {
   CreatePullRequestCommentInput,
   CreatePullRequestInput,
@@ -44,7 +50,13 @@ import {
   subscribeCurrentSessionToPullRequest,
 } from '../../github/session-subscriptions.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
-import { logPlatformInfo, PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from '../api-client.js';
+import {
+  logPlatformInfo,
+  logPlatformWarn,
+  PlatformApiClient,
+  PlatformApiError,
+  platformApiClientConfigFromEnv,
+} from '../api-client.js';
 import { PlatformGithubEventWorker } from './event-worker.js';
 import type { PlatformGithubEventStorage } from './event-worker.js';
 
@@ -56,6 +68,12 @@ type PlatformGithubInstallation = {
   accountType: string;
   suspendedAt: string | null;
   usable: boolean;
+};
+
+type PlatformGithubUserConnection = {
+  connected: boolean;
+  githubUsername: string | null;
+  reason?: 'token-invalid' | 'no-accessible-installation' | 'missing-permissions' | 'verification-unavailable' | null;
 };
 
 type GithubIssue = {
@@ -117,6 +135,11 @@ type GithubReviewComment = GithubComment & {
 
 const PAGE_SIZE = 30;
 const API_PREFIX = '/v1/server';
+const REPOSITORY_TOKEN_PERMISSIONS = {
+  contents: 'write',
+  issues: 'write',
+  pull_requests: 'write',
+} as const;
 
 function loose(c: unknown): Context {
   return c as Context;
@@ -136,6 +159,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   #integrationStorage: GithubSubscriptionStorage | undefined;
 
   readonly intake: Intake = {
+    resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId, userId }) => {
       const installations = await this.#client.request<{
         installations: Array<{
@@ -250,7 +274,8 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       return this.#listIssues(input.connection, sourceId, parsePositiveCursor(input.cursor), input.labels);
     },
     getIssue: input => this.#getIssue(input.connection, input.sourceId, input.issueId),
-    createComment: input => this.#createIssueComment(input.connection, input.sourceId, input.issueId, input.body),
+    createComment: input => this.#createIssueComment(input),
+    updateIssue: input => this.#updateIntakeIssue(input),
   };
 
   readonly versionControl: VersionControl = {
@@ -284,6 +309,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     getRepositoryAccess: async ({ orgId, repositoryId }) => {
       const repository = await this.storage.repositories.get({ orgId, id: repositoryId });
       if (!repository) throw new Error('Version-control repository not found.');
+      const cloneUrl = `https://github.com/${repository.slug}.git`;
       const installation = await this.storage.installations.get({ orgId, id: repository.installationId });
       if (!installation) throw new Error('Version-control installation not found.');
       const installationId = parsePositiveInteger(installation.externalId);
@@ -292,10 +318,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       const token = await this.#client.request<{ token: string }>(
         'POST',
         `${API_PREFIX}/github-app/installations/${installationId}/token`,
-        { repositories: [repositoryName], permissions: { contents: 'write' } },
+        { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
       );
       return {
-        cloneUrl: `https://github.com/${repository.slug}.git`,
+        cloneUrl,
         authorization: { scheme: 'bearer', token: token.token },
       };
     },
@@ -349,6 +375,27 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return this.#integrationStorage;
   }
 
+  /** Resolve a stored GitHub locator without scanning installations or repositories. */
+  async #resolveIntakeDispatch({
+    orgId,
+    externalSource,
+  }: {
+    orgId: string;
+    externalSource: { type: string; externalId: string };
+  }): Promise<{ connection: IntegrationConnection; sourceId: string; issueId: string } | null> {
+    const target = parseGithubExternalTarget(externalSource.externalId);
+    if (!target) return null;
+    const repository = target.repository.includes('/')
+      ? target.repository
+      : (await this.storage.repositories.findByExternalId({ orgId, externalId: target.repository }))?.slug;
+    if (!repository) return null;
+    return {
+      connection: { type: 'app-installation', installationId: 1 },
+      sourceId: repository,
+      issueId: target.issueId,
+    };
+  }
+
   initialize({ storage }: { storage: IntegrationStorageHandle }): void {
     this.#integrationStorage = storage as unknown as GithubSubscriptionStorage;
     logPlatformInfo('Platform GitHub integration initialized', {
@@ -362,6 +409,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return [
       this.#statusRoute(ctx),
       this.#connectRoute(ctx),
+      this.#connectUserRoute(ctx),
       ...buildGithubRoutes({
         auth: ctx.auth,
         fleet: ctx.fleet,
@@ -397,12 +445,17 @@ export class PlatformGithubIntegration implements FactoryIntegration {
             organizationRequired: true,
             connected: false,
             installations: [],
+            userConnected: false,
+            userGithubUsername: null,
             reason: 'organization_required',
             diagnostics: this.diagnostics(),
           });
         }
 
-        const installations = await this.#syncInstallations(tenant.orgId, tenant.userId);
+        const [installations, userConnection] = await Promise.all([
+          this.#syncInstallations(tenant.orgId, tenant.userId),
+          this.#fetchUserConnection(tenant.userId),
+        ]);
         return c.json({
           enabled: true,
           sandboxEnabled: ctx.fleet.enabled,
@@ -412,6 +465,8 @@ export class PlatformGithubIntegration implements FactoryIntegration {
             accountLogin: installation.accountName,
             accountType: installation.accountType,
           })),
+          userConnected: userConnection.connected,
+          userGithubUsername: userConnection.githubUsername,
           reason: installations.length > 0 ? 'ready' : 'not_connected',
           diagnostics: this.diagnostics(),
         });
@@ -447,6 +502,58 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         return c.redirect(url);
       },
     });
+  }
+
+  #connectUserRoute(ctx: IntegrationContext): ApiRoute {
+    return registerApiRoute('/auth/github/connect-user', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        await ctx.auth.ensureUser(loose(c));
+        const tenant = ctx.auth.tenant(loose(c));
+        if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
+
+        const redirectTo = c.req.query('redirectTo') || c.req.query('return_to') || '/';
+        const originator = routeBaseUrl(ctx, c.req.url);
+        logPlatformInfo('Starting Platform GitHub user authorization flow', {
+          orgId: tenant.orgId,
+          redirectTo,
+          originator,
+        });
+        const query = new URLSearchParams({
+          userId: tenant.userId,
+          redirectTo,
+          originator,
+        });
+        const { url } = await this.#client.request<{ url: string }>(
+          'GET',
+          `${API_PREFIX}/github-app/authenticate?${query}`,
+        );
+        return c.redirect(url);
+      },
+    });
+  }
+
+  /**
+   * Personal GitHub connection status for the acting user. Returns
+   * not-connected when the platform predates the user-connection endpoint.
+   */
+  async #fetchUserConnection(userId: string): Promise<PlatformGithubUserConnection> {
+    try {
+      const connection = await this.#client.request<PlatformGithubUserConnection>(
+        'GET',
+        `${API_PREFIX}/github-app/user-connection?${new URLSearchParams({ userId })}`,
+      );
+      if (!connection.connected && connection.reason) {
+        logPlatformWarn('Platform GitHub user connection verification failed', {
+          userId,
+          reason: connection.reason,
+        });
+      }
+      return connection;
+    } catch {
+      return { connected: false, githubUsername: null };
+    }
   }
 
   async #syncInstallations(orgId: string, userId: string): Promise<SourceControlInstallation[]> {
@@ -565,7 +672,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const result = await this.#client.request<{ token: string }>(
       'POST',
       `${API_PREFIX}/github-app/installations/${installationId}/token`,
-      { repositories: repositories.map(repository => repository.name), permissions: { contents: 'write' } },
+      { repositories: repositories.map(repository => repository.name), permissions: REPOSITORY_TOKEN_PERMISSIONS },
     );
     return result.token;
   }
@@ -630,20 +737,56 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     }
   }
 
-  async #createIssueComment(
-    connection: IntegrationConnection,
-    sourceId: string | undefined,
-    issueId: string,
-    body: string,
-  ) {
-    requireGithubConnection(connection);
-    const repository = requireSource(sourceId, 'GitHub Intake requires a repository source.');
-    const issueNumber = requirePositiveId(issueId, 'issue');
+  async #updateIntakeIssue(input: UpdateIntakeIssueInput): Promise<IntakeIssue | null> {
+    requireGithubConnection(input.connection);
+    const repository = requireSource(input.sourceId, 'GitHub Intake requires a repository source.');
+    const issueNumber = requirePositiveId(input.issueId, 'issue');
+    if (input.state.kind === 'byName') {
+      logPlatformWarn(`Platform GitHub: updateIssue byName is not supported (name=${input.state.name}); ignoring.`);
+      return null;
+    }
+    const targetState: 'open' | 'closed' =
+      input.state.stateType === 'unstarted' || input.state.stateType === 'started' ? 'open' : 'closed';
+    const stateReason: 'completed' | 'not_planned' | null =
+      targetState === 'closed' ? (input.state.stateType === 'canceled' ? 'not_planned' : 'completed') : null;
+    // Reject PR targets: probe the pulls endpoint. A 200 means the number is a
+    // pull request, not an issue. Factory does not close PRs via updateIssue —
+    // PR merges/closes go through the version-control pipeline.
+    try {
+      await this.#client.request<GithubPullRequest>('GET', repositoryPath(repository, `pulls/${issueNumber}`));
+      logPlatformWarn(`Platform GitHub: updateIssue rejected — target ${repository}#${issueNumber} is a pull request.`);
+      return null;
+    } catch (error) {
+      if (!isNotFound(error)) throw error;
+      // 404 on pulls means it's an issue (or nothing) — fall through to PATCH.
+    }
+    try {
+      const issue = await this.#client.request<GithubIssue>(
+        'PATCH',
+        repositoryPath(repository, `issues/${issueNumber}`),
+        {
+          state: targetState,
+          ...(stateReason ? { state_reason: stateReason } : {}),
+        },
+        { actingUserId: input.actingUserId },
+      );
+      return parseIntakeIssue(repository, issue);
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw error;
+    }
+  }
+
+  async #createIssueComment(input: CreateIntakeCommentInput) {
+    requireGithubConnection(input.connection);
+    const repository = requireSource(input.sourceId, 'GitHub Intake requires a repository source.');
+    const issueNumber = requirePositiveId(input.issueId, 'issue');
     try {
       const comment = await this.#client.request<GithubComment>(
         'POST',
         repositoryPath(repository, `issues/${issueNumber}/comments`),
-        { body },
+        { body: input.body },
+        { actingUserId: input.actingUserId },
       );
       return { id: String(comment.id), url: comment.htmlUrl };
     } catch (error) {
@@ -685,23 +828,33 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   async #createPullRequest(input: CreatePullRequestInput) {
     requireGithubConnection(input.connection);
-    const result = await this.#client.request<GithubPullRequest>('POST', repositoryPath(input.sourceId, 'pulls'), {
-      head: input.headBranch,
-      base: input.baseBranch,
-      title: input.title,
-      body: input.body,
-      draft: input.draft,
-    });
+    const result = await this.#client.request<GithubPullRequest>(
+      'POST',
+      repositoryPath(input.sourceId, 'pulls'),
+      {
+        head: input.headBranch,
+        base: input.baseBranch,
+        title: input.title,
+        body: input.body,
+        draft: input.draft,
+      },
+      { actingUserId: input.actingUserId },
+    );
     return parsePullRequest(result);
   }
 
   async #updatePullRequest(input: UpdatePullRequestInput) {
-    const result = await this.#client.request<GithubPullRequest>('PATCH', pullRequestPath(input, input.pullRequestId), {
-      title: input.title,
-      body: input.body === null ? '' : input.body,
-      base: input.baseBranch,
-      state: input.state,
-    });
+    const result = await this.#client.request<GithubPullRequest>(
+      'PATCH',
+      pullRequestPath(input, input.pullRequestId),
+      {
+        title: input.title,
+        body: input.body === null ? '' : input.body,
+        base: input.baseBranch,
+        state: input.state,
+      },
+      { actingUserId: input.actingUserId },
+    );
     return parsePullRequest(result);
   }
 
@@ -710,6 +863,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       'PUT',
       `${pullRequestPath(input, input.pullRequestId)}/merge`,
       { commitTitle: input.commitTitle, commitMessage: input.commitMessage, method: input.method },
+      { actingUserId: input.actingUserId },
     );
   }
 
@@ -730,6 +884,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       'POST',
       repositoryPath(input.sourceId, `issues/${requirePositiveId(input.pullRequestId, 'pull request')}/comments`),
       { body: input.body },
+      { actingUserId: input.actingUserId },
     );
     return parseComment(comment);
   }
@@ -740,6 +895,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       'PATCH',
       repositoryPath(input.sourceId, `issues/comments/${requirePositiveId(input.commentId, 'comment')}`),
       { body: input.body },
+      { actingUserId: input.actingUserId },
     );
     return parseComment(comment);
   }
@@ -749,6 +905,8 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     await this.#client.request<void>(
       'DELETE',
       repositoryPath(input.sourceId, `issues/comments/${requirePositiveId(input.commentId, 'comment')}`),
+      undefined,
+      { actingUserId: input.actingUserId },
     );
   }
 
@@ -783,6 +941,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       'POST',
       `${pullRequestPath(input, input.pullRequestId)}/reviews`,
       { body: input.body, commitId: input.commitId, event: input.event ? reviewEvent(input.event) : undefined },
+      { actingUserId: input.actingUserId },
     );
     return parseReview(review);
   }
@@ -792,6 +951,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       'PUT',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}`,
       { body: input.body },
+      { actingUserId: input.actingUserId },
     );
     return parseReview(review);
   }
@@ -801,6 +961,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       'POST',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}/events`,
       { body: input.body, event: reviewEvent(input.event) },
+      { actingUserId: input.actingUserId },
     );
     return parseReview(review);
   }
@@ -810,6 +971,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       'PUT',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}/dismissals`,
       { message: input.message },
+      { actingUserId: input.actingUserId },
     );
     return parseReview(review);
   }
@@ -818,6 +980,8 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     await this.#client.request<void>(
       'DELETE',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}`,
+      undefined,
+      { actingUserId: input.actingUserId },
     );
   }
 
@@ -856,6 +1020,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         'POST',
         `${pullRequestPath(input, input.pullRequestId)}/comments`,
         body,
+        { actingUserId: input.actingUserId },
       ),
     );
   }
@@ -867,6 +1032,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         'PATCH',
         repositoryPath(input.sourceId, `pulls/comments/${requirePositiveId(input.commentId, 'review comment')}`),
         { body: input.body },
+        { actingUserId: input.actingUserId },
       ),
     );
   }
@@ -876,6 +1042,8 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     await this.#client.request<void>(
       'DELETE',
       repositoryPath(input.sourceId, `pulls/comments/${requirePositiveId(input.commentId, 'review comment')}`),
+      undefined,
+      { actingUserId: input.actingUserId },
     );
   }
 
@@ -885,6 +1053,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       method,
       `${pullRequestPath(input, input.pullRequestId)}/requested-reviewers`,
       method === 'GET' ? undefined : { users: input.users, teams: input.teams },
+      method === 'GET' ? undefined : { actingUserId: input.actingUserId },
     );
   }
 }
@@ -1032,6 +1201,15 @@ function parsePositiveInteger(value: string): number | null {
   if (!/^\d+$/.test(value)) return null;
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseGithubExternalTarget(externalId: string): { repository: string; issueId: string } | null {
+  const match =
+    externalId.match(/^(.+\/.+):(\d+)$/) ??
+    externalId.match(/^github:(\d+):(?:issue|pull-request):(\d+)$/) ??
+    externalId.match(/^(\d+):(\d+)$/);
+  if (!match?.[1] || !match[2] || parsePositiveInteger(match[2]) === null) return null;
+  return { repository: match[1], issueId: match[2] };
 }
 
 function optionalPositiveIntegerEnv(name: 'MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS'): number | undefined {

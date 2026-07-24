@@ -125,7 +125,8 @@ export interface MastraFactoryConfig {
    * Browser-facing origin used to build integration OAuth/install callback
    * URLs and to derive the auth redirect URI. On the platform the SPA is
    * hosted separately, so this MUST be the public API origin.
-   * Default: `http://localhost:5173` (the local Factory UI origin).
+   * Default: `http://localhost:4111` (the local Factory server, which also
+   * serves the UI).
    */
   publicUrl?: string;
   /**
@@ -297,7 +298,7 @@ export class MastraFactory {
     if (this.#preparing) throw new Error('MastraFactory.prepare() called twice');
     this.#preparing = true;
 
-    const publicOrigin = (this.#config.publicUrl ?? 'http://localhost:5173').replace(/\/+$/, '');
+    const publicOrigin = (this.#config.publicUrl ?? 'http://localhost:4111').replace(/\/+$/, '');
     const allowedOrigins = (this.#config.allowedOrigins ?? []).map(o => o.replace(/\/+$/, '')).filter(Boolean);
     const storage = this.#config.storage;
     const vector = this.#config.vector;
@@ -492,7 +493,8 @@ export class MastraFactory {
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
-      GithubIntegration | undefined;
+      | GithubIntegration
+      | undefined;
     const workItemsReady = storage.isDomainReady('work-items');
     const transitionService = workItemsReady
       ? new FactoryTransitionService({ rules, storage: workItemsStorage })
@@ -535,6 +537,19 @@ export class MastraFactory {
       }
     }
 
+    // The SDK needs to know which backend the injected Mastra store uses
+    // (its own `instanceof` detection breaks when the dependency graph holds
+    // duplicate package copies). Resolve it by walking the FactoryStorage
+    // prototype chain by class name — the factory can't import the concrete
+    // classes since '@mastra/pg' / '@mastra/libsql' are the user's choice.
+    const mastraStorageBackend = (() => {
+      for (let proto = Object.getPrototypeOf(storage); proto; proto = Object.getPrototypeOf(proto)) {
+        if (proto.constructor?.name === 'PgFactoryStorage') return 'pg' as const;
+        if (proto.constructor?.name === 'LibSQLFactoryStorage') return 'libsql' as const;
+      }
+      return undefined;
+    })();
+
     // Integrations contributing tools to agent sessions: org-scoped
     // `agentTools` (resolved per request) + session-scoped `sessionTools`.
     const toolIntegrations = integrationRegistrations.filter(
@@ -550,6 +565,7 @@ export class MastraFactory {
       workspace: createWorkspaceFactory({
         ...(this.#config.sandbox ? { sandbox: this.#config.sandbox } : {}),
         ...(githubIntegration ? { github: githubIntegration } : {}),
+        ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
         fleet,
       }),
       disableGithubSignals: true,
@@ -557,6 +573,7 @@ export class MastraFactory {
       // org/user), so the host machine's TUI settings.json must not seed them.
       disableSettingsOmSeed: true,
       storage: storage.getMastraStorage(),
+      ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
       ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
       ...(vector ? { vector } : {}),
       ...(toolIntegrations.length > 0 || (workItemsStorage && transitionService)

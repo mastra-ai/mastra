@@ -91,7 +91,10 @@ export type ProcessorMessageType = {
  * In workflows, model configs may not yet be resolved, so we accept both resolved and unresolved types.
  */
 export type ProcessorStepModelConfig =
-  LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModel;
+  | LanguageModelV2
+  | ModelRouterModelId
+  | OpenAICompatibleConfig
+  | MastraLanguageModel;
 
 /**
  * Tools type for processor step schema.

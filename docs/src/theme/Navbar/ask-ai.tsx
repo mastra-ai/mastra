@@ -6,7 +6,8 @@ import type { Ref } from 'react'
 
 export function AskAI() {
   const pluginData = usePluginData('docusaurus-plugin-kapa', 'default', { failfast: false }) as
-    KapaPluginOptions | undefined
+    | KapaPluginOptions
+    | undefined
   const { toggle, triggerRef } = useDocsChat()
 
   // Kapa theme is not registered (e.g. CI without credentials) — no chat to open.

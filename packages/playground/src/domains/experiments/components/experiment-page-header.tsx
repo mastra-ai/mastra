@@ -80,7 +80,7 @@ export function ExperimentPageHeader({ experimentId, experiment }: ExperimentPag
               {experiment.targetType === 'agent' && experiment.targetId ? (
                 <Link
                   href={`${paths.agentLink(experiment.targetId)}/editor?version=${encodeURIComponent(experiment.agentVersion)}`}
-                  className="font-mono text-xs underline hover:text-accent1"
+                  className="hover:text-accent1 font-mono text-xs underline"
                 >
                   {experiment.agentVersion}
                 </Link>

@@ -19,7 +19,7 @@ export function handleServerError(err: Error, c: Context): Response {
   }
 
   const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
-  console.error(`[MastraCode Web] ${c.req.method} ${c.req.path} failed: ${detail}`);
+  console.error(`[Mastra Factory] ${c.req.method} ${c.req.path} failed: ${detail}`);
 
   return c.json(
     {

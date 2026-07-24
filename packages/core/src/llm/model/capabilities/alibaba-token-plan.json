@@ -1,5 +1,15 @@
 {
-  "attachment": ["kimi-k2.5", "kimi-k2.6", "kimi-k2.7-code", "qwen3.6-flash", "qwen3.8-max-preview"],
+  "attachment": [
+    "happyhorse-1.1-i2v",
+    "happyhorse-1.1-r2v",
+    "kimi-k2.5",
+    "kimi-k2.6",
+    "kimi-k2.7-code",
+    "qwen3.6-flash",
+    "qwen3.6-plus",
+    "qwen3.7-plus",
+    "qwen3.8-max-preview"
+  ],
   "temperature": [
     "MiniMax-M2.5",
     "deepseek-v3.2",
@@ -8,6 +18,9 @@
     "glm-5",
     "glm-5.1",
     "glm-5.2",
+    "happyhorse-1.1-i2v",
+    "happyhorse-1.1-r2v",
+    "happyhorse-1.1-t2v",
     "kimi-k2.5",
     "kimi-k2.6",
     "qwen-image-2.0",
@@ -20,5 +33,20 @@
     "wan2.7-image",
     "wan2.7-image-pro"
   ],
-  "structuredOutput": ["deepseek-v3.2", "deepseek-v4-flash", "deepseek-v4-pro", "glm-5.1", "glm-5.2", "qwen3.6-flash"]
+  "structuredOutput": [
+    "deepseek-v3.2",
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+    "glm-5",
+    "glm-5.1",
+    "glm-5.2",
+    "kimi-k2.5",
+    "kimi-k2.6",
+    "kimi-k2.7-code",
+    "qwen3.6-flash",
+    "qwen3.6-plus",
+    "qwen3.7-max",
+    "qwen3.7-plus",
+    "qwen3.8-max-preview"
+  ]
 }

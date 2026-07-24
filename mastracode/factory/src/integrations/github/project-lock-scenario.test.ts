@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { LockClient, LockPool } from './project-lock.js';
-import { __resetProjectLocksForTests, hashKey, withDbAdvisoryLock, withProjectLock } from './project-lock.js';
+import {
+  __resetProjectLocksForTests,
+  hashKey,
+  ProjectLockTimeoutError,
+  withDbAdvisoryLock,
+  withProjectLock,
+} from './project-lock.js';
 
 // ── Phase 5 distributed project-lock scenario tests ──────────────────────
 // These prove cross-replica serialization on the same key using a fake pg
@@ -243,5 +249,106 @@ describe('disabled distributed lock falls back to in-process only', () => {
     });
     expect(ran).toBe(true);
     expect(connects).toBe(0);
+  });
+});
+
+// The 2025-07-23 shipyard incident: an untimed outbound call inside `fn` left
+// the advisory-lock transaction open in `idle in transaction` for up to
+// 5 minutes (Neon's IIT killer), pinning the pool connection and the lock. The
+// timeout is the belt-and-suspenders fix: even if `fn` hangs forever, the
+// wrapper aborts, rolls back, releases the connection, and surfaces
+// `ProjectLockTimeoutError` to the caller.
+describe('critical section timeout', () => {
+  it('aborts the fn signal and rolls back when fn exceeds timeoutMs', async () => {
+    const pg = new FakePg();
+    const [k1, k2] = hashKey('proj1:user1');
+    const key = `${k1}:${k2}`;
+
+    let sawAbort = false;
+    const rejected = withProjectLock({
+      key: 'proj1:user1',
+      timeoutMs: 20,
+      fn: signal =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener(
+            'abort',
+            () => {
+              sawAbort = true;
+              // Model an outbound call that eventually reports the abort
+              // back to the caller. The wrapper does not wait for us.
+              reject(new Error('aborted'));
+            },
+            { once: true },
+          );
+          // Never resolves on its own.
+        }),
+      pool: pg,
+    });
+
+    await expect(rejected).rejects.toBeInstanceOf(ProjectLockTimeoutError);
+    expect(sawAbort).toBe(true);
+    // ROLLBACK ran and released the advisory lock.
+    expect(pg.isHeld(key)).toBe(false);
+
+    // A follow-up caller acquires the same key without waiting.
+    let ran = false;
+    await withProjectLock({
+      key: 'proj1:user1',
+      fn: async () => {
+        ran = true;
+      },
+      pool: pg,
+    });
+    expect(ran).toBe(true);
+    expect(pg.isHeld(key)).toBe(false);
+  });
+
+  it('leaves a well-behaved fast fn completely alone', async () => {
+    const pg = new FakePg();
+    const [k1, k2] = hashKey('proj1:user1');
+    const key = `${k1}:${k2}`;
+
+    const result = await withProjectLock({
+      key: 'proj1:user1',
+      timeoutMs: 1_000,
+      fn: async () => 'ok',
+      pool: pg,
+    });
+    expect(result).toBe('ok');
+    expect(pg.isHeld(key)).toBe(false);
+  });
+
+  it('does not fire when fn ignores the signal but completes in time', async () => {
+    const pg = new FakePg();
+    const value = await withProjectLock({
+      key: 'proj1:user1',
+      timeoutMs: 200,
+      fn: async () => {
+        await new Promise(r => setTimeout(r, 20));
+        return 42;
+      },
+      pool: pg,
+    });
+    expect(value).toBe(42);
+  });
+
+  it('also applies to withDbAdvisoryLock invoked directly', async () => {
+    const pg = new FakePg();
+    const [k1, k2] = hashKey('proj1:user1');
+    const key = `${k1}:${k2}`;
+
+    await expect(
+      withDbAdvisoryLock({
+        key: 'proj1:user1',
+        timeoutMs: 20,
+        // Callback ignores the signal — the timeout still fires and the
+        // wrapper resolves before `fn` ever settles.
+        fn: () => new Promise<never>(() => {}),
+        pool: pg,
+      }),
+    ).rejects.toBeInstanceOf(ProjectLockTimeoutError);
+
+    // Lock released even though fn never returned.
+    expect(pg.isHeld(key)).toBe(false);
   });
 });

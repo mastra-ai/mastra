@@ -36,6 +36,7 @@ import type {
   IntakeIssue,
   IntakeIssueDetail,
   ListIntakeIssuesInput,
+  UpdateIntakeIssueInput,
 } from '../../capabilities/intake.js';
 import type {
   PullRequest,
@@ -146,6 +147,7 @@ export class GithubIntegration implements FactoryIntegration {
   /** Stable integration identifier (see `../factory-integration.ts`). */
   readonly id = 'github';
   readonly intake: Intake = {
+    resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId }) => {
       const installations = await this.sourceControlStorage.installations.list({ orgId });
       const repositories = await Promise.all(
@@ -227,6 +229,7 @@ export class GithubIntegration implements FactoryIntegration {
     listIssues: input => this.#listIntakeIssues(input),
     getIssue: input => this.#getIntakeIssue(input),
     createComment: input => this.#createIntakeComment(input),
+    updateIssue: input => this.#updateIntakeIssue(input),
   };
   readonly versionControl: VersionControl = {
     initialize: ({ storage }) => {
@@ -347,6 +350,32 @@ export class GithubIntegration implements FactoryIntegration {
   get integrationStorage(): GithubSubscriptionStorage {
     if (!this.#storage) throw new Error('GithubIntegration storage has not been initialized.');
     return this.#storage.generic as unknown as GithubSubscriptionStorage;
+  }
+
+  /** Resolve a stored GitHub locator without scanning installations or repositories. */
+  async #resolveIntakeDispatch({
+    orgId,
+    externalSource,
+  }: {
+    orgId: string;
+    externalSource: { type: string; externalId: string };
+  }): Promise<{ connection: IntegrationConnection; sourceId: string; issueId: string } | null> {
+    const target = parseGithubExternalTarget(externalSource.externalId);
+    if (!target) return null;
+    const repository = await this.sourceControlStorage.repositories.findByExternalId({
+      orgId,
+      externalId: target.repositoryId,
+    });
+    if (!repository) return null;
+    const installation = await this.sourceControlStorage.installations.get({ orgId, id: repository.installationId });
+    if (!installation) return null;
+    const installationId = Number.parseInt(installation.externalId, 10);
+    if (!Number.isSafeInteger(installationId)) return null;
+    return {
+      connection: { type: 'app-installation', installationId },
+      sourceId: repository.slug,
+      issueId: target.issueId,
+    };
   }
 
   /** Secret GitHub uses to sign webhook deliveries, when configured. */
@@ -545,6 +574,66 @@ export class GithubIntegration implements FactoryIntegration {
           body: comment.body ?? '',
           createdAt: comment.created_at,
         })),
+      };
+    } catch (err) {
+      if (isNotFoundError(err)) return null;
+      throw err;
+    }
+  }
+
+  async #updateIntakeIssue(input: UpdateIntakeIssueInput): Promise<IntakeIssue | null> {
+    const installationId = getGithubInstallationId(input.connection);
+    const repoFullName = requireSourceId(input.sourceId, 'GitHub Intake requires a repository source.');
+    const parts = splitRepoFullName(repoFullName);
+    const issueNumber = parsePositiveInteger(input.issueId);
+    if (!parts || issueNumber === null) return null;
+    // GitHub has no custom workflow states; only open/closed. `byName` is a
+    // no-op with a warn log.
+    if (input.state.kind === 'byName') {
+      console.warn(`GitHub integration: updateIssue byName is not supported (name=${input.state.name}); ignoring.`);
+      return null;
+    }
+    const targetState: 'open' | 'closed' =
+      input.state.stateType === 'unstarted' || input.state.stateType === 'started' ? 'open' : 'closed';
+    const stateReason: 'completed' | 'not_planned' | null =
+      targetState === 'closed' ? (input.state.stateType === 'canceled' ? 'not_planned' : 'completed') : null;
+    const octokit = this.getInstallationOctokit(installationId);
+    try {
+      // Pre-flight: Factory does not close pull requests via `updateIssue`.
+      // PR merges/closes belong to the version-control pipeline.
+      const { data: current } = await octokit.issues.get({
+        owner: parts.owner,
+        repo: parts.repo,
+        issue_number: issueNumber,
+      });
+      if (current.pull_request) {
+        console.warn(
+          `GitHub integration: updateIssue rejected — target ${repoFullName}#${issueNumber} is a pull request.`,
+        );
+        return null;
+      }
+      const { data: issue } = await octokit.issues.update({
+        owner: parts.owner,
+        repo: parts.repo,
+        issue_number: issueNumber,
+        state: targetState,
+        ...(stateReason ? { state_reason: stateReason } : {}),
+      });
+      return {
+        id: String(issue.number),
+        identifier: `#${issue.number}`,
+        title: issue.title,
+        url: issue.html_url,
+        author: issue.user?.login ?? null,
+        state: issue.state,
+        stateType: issue.state,
+        priority: null,
+        assignee: issue.assignee?.login ?? null,
+        source: repoFullName,
+        labels: issue.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
+        commentCount: issue.comments,
+        createdAt: issue.created_at,
+        updatedAt: issue.updated_at,
       };
     } catch (err) {
       if (isNotFoundError(err)) return null;
@@ -1004,8 +1093,8 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   /**
-   * Session-scoped agent tools: PR subscribe/unsubscribe for sessions bound
-   * to a GitHub-backed project. Empty for sessions outside a GitHub project.
+   * Session-scoped agent tools for token refresh and PR subscriptions in
+   * sessions bound to a GitHub-backed project. Empty elsewhere.
    */
   sessionTools({ requestContext }: { requestContext: RequestContext }): IntegrationTools {
     return createGithubSubscriptionTools(requestContext, this);
@@ -1208,4 +1297,12 @@ function splitRepoFullName(repoFullName: string): { owner: string; repo: string 
   const slash = repoFullName.indexOf('/');
   if (slash <= 0 || slash === repoFullName.length - 1) return null;
   return { owner: repoFullName.slice(0, slash), repo: repoFullName.slice(slash + 1) };
+}
+
+function parseGithubExternalTarget(externalId: string): { repositoryId: string; issueId: string } | null {
+  const match = externalId.match(/^github:(\d+):(?:issue|pull-request):(\d+)$/) ?? externalId.match(/^(\d+):(\d+)$/);
+  if (!match?.[1] || !match[2]) return null;
+  const repositoryId = parsePositiveInteger(match[1]);
+  const issueId = parsePositiveInteger(match[2]);
+  return repositoryId && issueId ? { repositoryId: String(repositoryId), issueId: String(issueId) } : null;
 }

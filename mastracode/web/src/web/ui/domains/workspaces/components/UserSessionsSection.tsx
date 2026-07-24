@@ -1,24 +1,25 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { GitBranch, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Plus } from 'lucide-react';
 import { useState } from 'react';
-import type { FormEvent, KeyboardEvent } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import type { FormEvent } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../../shared/api/keys';
+import { useFactoryQuery } from '../../../../../shared/hooks/useFactories';
+import { useWorkspacesQuery } from '../../../../../shared/hooks/useWorkspaces';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { useActiveFactoryContext } from '../context/ActiveFactoryProvider';
-import { isServerFactory, selectedRepository, USER_SESSION_BRANCH_PREFIX } from '../services/factories';
+import { USER_SESSION_BRANCH_PREFIX } from '../services/github';
 import type { FactoryUserSession } from '../services/github';
-import { createUserSession, deleteUserSession, listUserSessions } from '../services/github';
+import { createUserSession, deleteUserSession } from '../services/github';
+import { SessionNavRow } from './SessionNavRow';
 
 function sessionLabel(session: FactoryUserSession): string {
   return session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)
@@ -29,7 +30,8 @@ function sessionLabel(session: FactoryUserSession): string {
 /** Personal sessions whose isolated repository workspace is prepared lazily by AgentController. */
 export function UserSessionsSection() {
   const { baseUrl } = useApiConfig();
-  const { activeFactory } = useActiveFactoryContext();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factoryQuery = useFactoryQuery(factoryId);
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -37,20 +39,13 @@ export function UserSessionsSection() {
   const [name, setName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
 
-  const repository = activeFactory && isServerFactory(activeFactory) ? selectedRepository(activeFactory) : undefined;
+  const repository = factoryQuery.data?.repositories[0];
   const sessionsEnabled = Boolean(repository);
-  const sessionsQuery = useQuery({
-    queryKey: queryKeys.userSessions(activeFactory?.id),
-    queryFn: async () => {
-      if (!repository) throw new Error('User sessions require a linked repository');
-      return listUserSessions(baseUrl, repository.projectRepositoryId);
-    },
-    enabled: sessionsEnabled,
-  });
-  const sessions = sessionsQuery.data ?? [];
+  const sessionsQuery = useWorkspacesQuery(repository?.projectRepositoryId);
+  const sessions = sessionsQuery.data?.userSessions ?? [];
 
   const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.userSessions(activeFactory?.id) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository?.projectRepositoryId) });
   };
 
   const controllerSession = (sessionId: string) => {
@@ -90,7 +85,7 @@ export function UserSessionsSection() {
       setCreating(false);
       setName('');
       invalidate();
-      void navigate(`/factories/${activeFactory?.id}/user/threads/${session.sessionId}`);
+      void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`);
     },
   });
 
@@ -108,8 +103,8 @@ export function UserSessionsSection() {
       setConfirmDelete(null);
       invalidate();
       toast('Session deleted');
-      if (location.pathname === `/factories/${activeFactory?.id}/user/threads/${session.sessionId}`) {
-        void navigate(`/factories/${activeFactory?.id}/new`, { replace: true });
+      if (location.pathname === `/factories/${factoryId}/user/threads/${session.sessionId}`) {
+        void navigate(`/factories/${factoryId}`, { replace: true });
       }
     },
     onError: error => {
@@ -121,35 +116,28 @@ export function UserSessionsSection() {
   if (!sessionsEnabled) return null;
   const pending = createSession.isPending || deleteSession.isPending;
 
-  const openSession = async (session: FactoryUserSession) => {
-    try {
-      await controllerSession(session.sessionId).create({ threadId: session.sessionId });
-      void navigate(`/factories/${activeFactory?.id}/user/threads/${session.sessionId}`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to open session');
-    }
+  const openSession = (session: FactoryUserSession) => {
+    // A user session's thread id is its own id (created with that binding in
+    // `createSession`), so navigate straight to it instead of blocking on a
+    // session create round-trip first — the thread page brings the session
+    // online on mount and shows a skeleton while its messages load.
+    void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`);
   };
 
-  const resetCreate = () => {
+  const closeCreateDialog = () => {
     setCreating(false);
     setName('');
+    createSession.reset();
   };
   const submitCreate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (name.trim()) createSession.mutate(name);
   };
-  const onCreateKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Escape') resetCreate();
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      if (name.trim()) createSession.mutate(name);
-    }
-  };
 
   return (
     <section className="flex flex-col gap-2" aria-label="User sessions">
       <div className="flex items-center justify-between px-1">
-        <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
+        <Txt as="span" variant="ui-xs" className="text-icon3 tracking-wide uppercase">
           User Sessions
         </Txt>
         <Button
@@ -157,7 +145,7 @@ export function UserSessionsSection() {
           size="icon-sm"
           aria-label="New user session"
           onClick={() => setCreating(true)}
-          disabled={creating || pending}
+          disabled={pending}
         >
           <Plus size={15} />
         </Button>
@@ -167,82 +155,62 @@ export function UserSessionsSection() {
         <MainSidebar.NavList>
           {sessions.map(session => {
             const name = sessionLabel(session);
-            const url = `/factories/${activeFactory?.id}/user/threads/${session.sessionId}`;
+            const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
             const active = location.pathname === url;
 
             return (
-              <MainSidebar.NavLink
+              <SessionNavRow
                 key={session.sessionId}
-                link={{ name, url }}
-                isActive={active}
-                className="group/session"
-                render={
-                  <button
-                    type="button"
-                    aria-current={active ? 'page' : undefined}
-                    aria-label={name}
-                    disabled={pending}
-                    onClick={() => void openSession(session)}
-                    title={session.branch}
-                  >
-                    <GitBranch />
-                    <MainSidebar.NavLabel>{name}</MainSidebar.NavLabel>
-                  </button>
-                }
-                action={
-                  <DropdownMenu>
-                    <DropdownMenu.Trigger
-                      render={
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon-sm"
-                          aria-label={`Session actions for ${name}`}
-                          disabled={pending}
-                          className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/session:opacity-100 group-focus-within/session:opacity-100 data-[popup-open]:opacity-100"
-                        >
-                          <MoreHorizontal />
-                        </Button>
-                      }
-                    />
-                    <DropdownMenu.Content align="end" className="min-w-28">
-                      <DropdownMenu.Item variant="destructive" onClick={() => setConfirmDelete(session)}>
-                        <Trash2 />
-                        Delete
-                      </DropdownMenu.Item>
-                    </DropdownMenu.Content>
-                  </DropdownMenu>
-                }
+                name={name}
+                title={session.branch}
+                url={url}
+                active={active}
+                disabled={pending}
+                onSelect={() => openSession(session)}
+                onDelete={() => setConfirmDelete(session)}
               />
             );
           })}
         </MainSidebar.NavList>
-        {sessions.length === 0 && !creating && (
-          <Txt as="p" variant="ui-xs" className="m-0 px-2 py-1 text-icon3">
+        {sessions.length === 0 && (
+          <Txt as="p" variant="ui-xs" className="text-icon3 m-0 px-2 py-1">
             No sessions yet
           </Txt>
         )}
-
-        {creating && (
-          <form aria-label="Create user session" className="flex flex-col gap-1" onSubmit={submitCreate}>
-            <Input
-              aria-label="Session name"
-              autoFocus
-              value={name}
-              onChange={event => setName(event.target.value)}
-              onKeyDown={onCreateKeyDown}
-              placeholder="session-name"
-              disabled={createSession.isPending}
-              className="h-8 text-xs"
-            />
-            {createSession.error && (
-              <Txt as="p" variant="ui-xs" className="m-0 text-red-400">
-                {createSession.error instanceof Error ? createSession.error.message : 'Failed to create session'}
-              </Txt>
-            )}
-          </form>
-        )}
       </div>
+
+      {creating && (
+        <Dialog open onOpenChange={open => !open && closeCreateDialog()}>
+          <DialogContent className="w-full max-w-sm" aria-label="New user session">
+            <DialogHeader className="px-5 pt-4 pb-2">
+              <DialogTitle>New user session</DialogTitle>
+            </DialogHeader>
+            <form aria-label="Create user session" className="flex flex-col gap-4 px-5 pb-4" onSubmit={submitCreate}>
+              <Input
+                aria-label="Session name"
+                autoFocus
+                value={name}
+                onChange={event => setName(event.target.value)}
+                placeholder="session-name"
+                disabled={createSession.isPending}
+              />
+              {createSession.error && (
+                <Txt as="p" variant="ui-xs" className="m-0 text-red-400">
+                  {createSession.error instanceof Error ? createSession.error.message : 'Failed to create session'}
+                </Txt>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="ghost" onClick={closeCreateDialog} disabled={createSession.isPending}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" disabled={createSession.isPending || !name.trim()}>
+                  {createSession.isPending ? 'Creating…' : 'Create'}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {confirmDelete && (
         <Dialog open onOpenChange={open => !open && setConfirmDelete(null)}>
@@ -251,7 +219,7 @@ export function UserSessionsSection() {
               <DialogTitle>Delete session?</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-4 px-5 pb-4">
-              <Txt as="p" variant="ui-sm" className="m-0 text-icon4">
+              <Txt as="p" variant="ui-sm" className="text-icon4 m-0">
                 This deletes the <span className="text-icon6">{sessionLabel(confirmDelete)}</span> session, its checkout
                 with any uncommitted changes, and its conversation. This can’t be undone.
               </Txt>

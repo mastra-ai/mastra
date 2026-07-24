@@ -21,7 +21,7 @@ export const Default: Story = {
           <MetricsCard.Summary value="$124.50" label="Total cost" />
         </MetricsCard.TopBar>
         <MetricsCard.Content>
-          <p className="text-sm text-neutral2">Chart or table content goes here</p>
+          <p className="text-neutral2 text-sm">Chart or table content goes here</p>
         </MetricsCard.Content>
       </MetricsCard>
     </div>
@@ -81,7 +81,7 @@ export const WithSummary: Story = {
           <MetricsCard.Summary value="45.2k" label="Total tokens" />
         </MetricsCard.TopBar>
         <MetricsCard.Content>
-          <p className="text-sm text-neutral2">Bar chart content goes here</p>
+          <p className="text-neutral2 text-sm">Bar chart content goes here</p>
         </MetricsCard.Content>
       </MetricsCard>
     </div>
@@ -99,7 +99,7 @@ export const TitleOnly: Story = {
           </MetricsCard.TitleAndDescription>
         </MetricsCard.TopBar>
         <MetricsCard.Content>
-          <p className="text-sm text-neutral2">Content area</p>
+          <p className="text-neutral2 text-sm">Content area</p>
         </MetricsCard.Content>
       </MetricsCard>
     </div>

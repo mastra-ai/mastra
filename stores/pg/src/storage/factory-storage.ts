@@ -562,6 +562,14 @@ export class PgFactoryStorage extends FactoryStorage {
       await this.#pool.query(`ALTER TABLE "${schema.name}" ADD COLUMN IF NOT EXISTS ${this.#columnDdl(name, spec)}`);
     }
 
+    // Relaxing evolution: a table created by an older schema may still say
+    // NOT NULL on a column that is now declared nullable — drop the stale
+    // constraint so inserts of null don't fail on pre-existing databases.
+    for (const [name, spec] of Object.entries(schema.columns)) {
+      if (!spec.nullable || spec.type === 'uuid-pk' || spec.primaryKey) continue;
+      await this.#pool.query(`ALTER TABLE "${schema.name}" ALTER COLUMN "${name}" DROP NOT NULL`);
+    }
+
     for (const index of schema.uniqueIndexes ?? []) {
       assertIdentifier('index', index.name);
       index.columns.forEach(column => assertIdentifier('column', column));

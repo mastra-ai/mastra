@@ -9,7 +9,13 @@
  * `import type` keeps this module type-only — no server runtime code is pulled
  * into the shared/platform-agnostic bundle.
  */
-import type { CustomProviderInfo, ModelPackInfo, OMConfigInfo, ProviderInfo } from '@mastra/factory/routes/config';
+import type {
+  CustomProviderInfo,
+  ModelPackInfo,
+  OMConfigInfo,
+  ProviderInfo,
+  ProviderOMDefaultsResponse,
+} from '@mastra/factory/routes/config';
 import type {
   ArtifactEntry,
   ArtifactListing,
@@ -20,7 +26,7 @@ import type {
   WorkspaceRenderedListing,
 } from '@mastra/factory/routes/fs';
 
-export type { ProviderInfo, CustomProviderInfo, ModelPackInfo, OMConfigInfo };
+export type { ProviderInfo, CustomProviderInfo, ModelPackInfo, OMConfigInfo, ProviderOMDefaultsResponse };
 export type {
   ArtifactEntry,
   ArtifactListing,
@@ -127,7 +133,9 @@ export interface OAuthStartResponse {
 }
 
 export type OAuthPollResponse =
-  { status: 'pending'; nextPollMs: number } | { status: 'complete' } | { status: 'failed'; error: string };
+  | { status: 'pending'; nextPollMs: number }
+  | { status: 'complete' }
+  | { status: 'failed'; error: string };
 
 export interface ActivateModelPackResponse {
   ok: true;

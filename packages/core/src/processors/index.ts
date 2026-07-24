@@ -800,7 +800,9 @@ export type ErrorProcessor<TTripwireMetadata = unknown> = WithRequired<
   Processor<string, TTripwireMetadata>;
 
 export type ProcessorTypes<TTripwireMetadata = unknown> =
-  InputProcessor<TTripwireMetadata> | OutputProcessor<TTripwireMetadata> | ErrorProcessor<TTripwireMetadata>;
+  | InputProcessor<TTripwireMetadata>
+  | OutputProcessor<TTripwireMetadata>
+  | ErrorProcessor<TTripwireMetadata>;
 
 /**
  * A Workflow that can be used as a processor.
@@ -815,13 +817,15 @@ export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOut
  * Input processor config: can be a Processor or a Workflow.
  */
 export type InputProcessorOrWorkflow<TTripwireMetadata = unknown> =
-  InputProcessor<TTripwireMetadata> | ProcessorWorkflow;
+  | InputProcessor<TTripwireMetadata>
+  | ProcessorWorkflow;
 
 /**
  * Output processor config: can be a Processor or a Workflow.
  */
 export type OutputProcessorOrWorkflow<TTripwireMetadata = unknown> =
-  OutputProcessor<TTripwireMetadata> | ProcessorWorkflow;
+  | OutputProcessor<TTripwireMetadata>
+  | ProcessorWorkflow;
 
 /**
  * Error processor config: must be a processor with processAPIError.

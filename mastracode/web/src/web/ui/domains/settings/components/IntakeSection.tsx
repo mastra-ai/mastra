@@ -1,7 +1,14 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { DataList } from '@mastra/playground-ui/components/DataList';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ChevronRight } from 'lucide-react';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
@@ -11,7 +18,6 @@ import { connectLinear, isLinearReauthError } from '../../factory/services/linea
 import type { LinearProject } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
-import { isServerFactory } from '../../workspaces/services/factories';
 
 /**
  * Toggle `id` in the selection list. `null` means "nothing selected" (nothing
@@ -52,34 +58,116 @@ function SourceHeader({
   );
 }
 
+interface SourcePickerItem {
+  id: string;
+  label: string;
+}
+
 /**
- * Compact pill toggle backed by a real (visually hidden) checkbox so it stays
- * a `role="checkbox"` for assistive tech. Pills wrap horizontally, keeping
- * large project lists short instead of one row per project.
+ * Card container for a stack of picker sections: one shared border, dividers
+ * between sections, and rounding only on the group's outer edges.
  */
-function SourceCheckbox({
+function SourcePickerGroup({ children }: { children: ReactNode }) {
+  return <div className="border-border1 divide-border1 divide-y overflow-hidden rounded-lg border">{children}</div>;
+}
+
+/**
+ * Collapsible picker for one source section (a Linear team or the GitHub
+ * repository list). Collapsed by default with a "n selected" hint; expanded it
+ * shows a client-side search bar scoped to this section plus a checkbox row
+ * per item. Collapsing resets the search (the panel unmounts, so the input
+ * remounts empty on reopen).
+ */
+function SourcePickerSection({
   label,
-  checked,
+  items,
+  selectedIds,
   disabled,
-  onChange,
+  pending,
+  onToggleItem,
 }: {
   label: string;
-  checked: boolean;
-  disabled?: boolean;
-  onChange: () => void;
+  items: SourcePickerItem[];
+  selectedIds: string[] | null;
+  disabled: boolean;
+  /** True while the selection save is in flight — shows the section spinner. */
+  pending: boolean;
+  onToggleItem: (id: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const selectedCount = items.filter(item => selectedIds?.includes(item.id)).length;
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleItems = items.filter(item => item.label.toLowerCase().includes(normalizedQuery));
+
+  const toggle = (id: string) => {
+    if (disabled) return;
+    onToggleItem(id);
+  };
+
   return (
-    <label
-      className={`inline-flex max-w-64 items-center gap-1 rounded-full border px-2.5 py-0.5 cursor-pointer text-ui-sm transition-colors has-disabled:opacity-50 has-disabled:cursor-not-allowed ${
-        checked
-          ? 'border-accent1 bg-accent1/10 text-icon6'
-          : 'border-border1 text-icon4 hover:border-border2 hover:text-icon5'
-      }`}
-    >
-      <input type="checkbox" className="sr-only" checked={checked} disabled={disabled} onChange={onChange} />
-      {checked && <span aria-hidden="true">✓</span>}
-      <span className="truncate">{label}</span>
-    </label>
+    // Border/rounding live on the parent SourcePickerGroup so stacked cards
+    // share dividers and only the group's first/last edges are rounded.
+    <div role="group" aria-label={label}>
+      <Collapsible
+        open={open}
+        onOpenChange={next => {
+          setOpen(next);
+          if (!next) setQuery('');
+        }}
+      >
+        <CollapsibleTrigger className="text-icon4 flex w-full items-center gap-1.5 px-3 py-2">
+          <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
+          <Txt as="span" variant="ui-sm">
+            {label}
+          </Txt>
+          {selectedCount > 0 && (
+            <Txt as="span" variant="ui-xs" className="text-accent1">
+              {selectedCount} selected
+            </Txt>
+          )}
+          {pending && (
+            // Wrapped in a span so the trigger's `[&>svg]` chevron-rotation
+            // rules don't apply to the spinner svg.
+            <span className="ml-auto flex shrink-0">
+              <Spinner size="sm" aria-label={`Saving ${label} selection`} />
+            </span>
+          )}
+        </CollapsibleTrigger>
+        <CollapsibleContent className="flex flex-col gap-2 px-3 pb-3">
+          <ListSearch label={`Search ${label}`} placeholder="Search…" size="sm" value={query} onSearch={setQuery} />
+          <DataList columns="auto minmax(0,1fr)" variant="lined" className="max-h-64">
+            {visibleItems.length === 0 ? (
+              <DataList.NoMatch message="No matches" />
+            ) : (
+              visibleItems.map(item => (
+                <DataList.RowWrapper key={item.id}>
+                  <DataList.SelectCell
+                    checked={selectedIds?.includes(item.id) ?? false}
+                    onToggle={() => toggle(item.id)}
+                    disabled={disabled}
+                    aria-label={item.label}
+                  />
+                  <DataList.RowButton
+                    flushLeft
+                    colStart={2}
+                    disabled={disabled}
+                    onClick={() => toggle(item.id)}
+                    // The whole row is one action here, so drop the button's own
+                    // hover/focus fill and let the root's uniform `.data-list-row`
+                    // hover overlay be the only highlight (no stacked fills).
+                    className="hover:bg-transparent focus-visible:bg-transparent"
+                  >
+                    <DataList.NameCell>{item.label}</DataList.NameCell>
+                  </DataList.RowButton>
+                </DataList.RowWrapper>
+              ))
+            )}
+          </DataList>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
   );
 }
 
@@ -101,9 +189,7 @@ export function IntakeSection() {
   const linearProjectsQuery = useLinearProjectsQuery(linearConnected);
 
   const config = configQuery.data;
-  const linkedRepositories = (factoriesQuery.data ?? [])
-    .filter(isServerFactory)
-    .flatMap(factory => factory.binding.repositories);
+  const linkedRepositories = (factoriesQuery.data ?? []).flatMap(factory => factory.repositories);
 
   const heading = (
     <Txt variant="ui-lg" className="text-icon6 font-medium">
@@ -139,7 +225,7 @@ export function IntakeSection() {
   const busy = saveMutation.isPending;
 
   return (
-    <div className="mt-6 pt-4 flex flex-col gap-6">
+    <div className="mt-6 flex flex-col gap-6 pt-4">
       {heading}
       <section className="flex flex-col gap-2" aria-label="GitHub intake">
         <SourceHeader
@@ -149,33 +235,31 @@ export function IntakeSection() {
           disabled={busy}
           onToggle={enabled => update({ ...config, github: { ...config.github, enabled } })}
         />
-        {config.github.enabled && (
-          <div className="flex flex-wrap gap-1.5 pl-1">
-            {linkedRepositories.length === 0 ? (
-              <Txt as="span" variant="ui-xs" className="text-icon3">
-                No linked repositories yet — link a repository to a factory to add one.
-              </Txt>
-            ) : (
-              linkedRepositories.map(repository => (
-                <SourceCheckbox
-                  key={repository.projectRepositoryId}
-                  label={repository.slug}
-                  checked={config.github.sourceIds?.includes(repository.projectRepositoryId) ?? false}
-                  disabled={busy}
-                  onChange={() =>
-                    update({
-                      ...config,
-                      github: {
-                        ...config.github,
-                        sourceIds: toggleId(config.github.sourceIds, repository.projectRepositoryId),
-                      },
-                    })
-                  }
-                />
-              ))
-            )}
-          </div>
-        )}
+        {config.github.enabled &&
+          (linkedRepositories.length === 0 ? (
+            <Txt as="span" variant="ui-xs" className="text-icon3">
+              No linked repositories yet — link a repository to a factory to add one.
+            </Txt>
+          ) : (
+            <SourcePickerGroup>
+              <SourcePickerSection
+                label="Repositories"
+                items={linkedRepositories.map(repository => ({ id: repository.slug, label: repository.slug }))}
+                selectedIds={config.github.sourceIds}
+                disabled={busy}
+                pending={busy}
+                onToggleItem={slug =>
+                  update({
+                    ...config,
+                    github: {
+                      ...config.github,
+                      sourceIds: toggleId(config.github.sourceIds, slug),
+                    },
+                  })
+                }
+              />
+            </SourcePickerGroup>
+          ))}
       </section>
 
       <section className="flex flex-col gap-2" aria-label="Linear intake">
@@ -212,7 +296,7 @@ export function IntakeSection() {
           </div>
         ) : (
           config.linear.enabled && (
-            <div className="flex flex-col gap-2.5 pl-1">
+            <div className="flex flex-col gap-2.5">
               <div className="flex items-center gap-2">
                 <Txt as="span" variant="ui-xs" className="text-icon3">
                   Connected to {linearStatus?.workspace?.name ?? 'a Linear workspace'}
@@ -221,48 +305,31 @@ export function IntakeSection() {
                   Reconnect
                 </Button>
               </div>
-              {groupLinearProjectsByTeam(linearProjectsQuery.data ?? []).map(group => (
-                <div key={group.id} className="flex flex-col gap-1" role="group" aria-label={group.label}>
-                  <div className="flex items-baseline gap-2">
-                    <Txt as="span" variant="ui-xs" className="font-medium uppercase tracking-wide text-icon3">
-                      {group.label}
-                    </Txt>
-                    <SelectedCount ids={config.linear.sourceIds} projects={group.projects} />
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {group.projects.map(project => (
-                      <SourceCheckbox
-                        key={project.id}
-                        label={project.name}
-                        checked={config.linear.sourceIds?.includes(project.id) ?? false}
-                        disabled={busy}
-                        onChange={() =>
-                          update({
-                            ...config,
-                            linear: { ...config.linear, sourceIds: toggleId(config.linear.sourceIds, project.id) },
-                          })
-                        }
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
+              {(linearProjectsQuery.data ?? []).length > 0 && (
+                <SourcePickerGroup>
+                  {groupLinearProjectsByTeam(linearProjectsQuery.data ?? []).map(group => (
+                    <SourcePickerSection
+                      key={group.id}
+                      label={group.label}
+                      items={group.projects.map(project => ({ id: project.id, label: project.name }))}
+                      selectedIds={config.linear.sourceIds}
+                      disabled={busy}
+                      pending={busy}
+                      onToggleItem={projectId =>
+                        update({
+                          ...config,
+                          linear: { ...config.linear, sourceIds: toggleId(config.linear.sourceIds, projectId) },
+                        })
+                      }
+                    />
+                  ))}
+                </SourcePickerGroup>
+              )}
             </div>
           )
         )}
       </section>
     </div>
-  );
-}
-
-/** Tiny "n selected" hint next to a team header; hidden when nothing is picked. */
-function SelectedCount({ ids, projects }: { ids: string[] | null; projects: LinearProject[] }) {
-  const count = projects.filter(p => ids?.includes(p.id)).length;
-  if (!count) return null;
-  return (
-    <Txt as="span" variant="ui-xs" className="text-accent1">
-      {count} selected
-    </Txt>
   );
 }
 

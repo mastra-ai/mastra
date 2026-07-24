@@ -3,7 +3,11 @@ import * as React from 'react';
 
 /** Anything Base UI's `*.Portal` `container` accepts. */
 export type PortalContainer =
-  HTMLElement | ShadowRoot | React.RefObject<HTMLElement | ShadowRoot | null> | null | undefined;
+  | HTMLElement
+  | ShadowRoot
+  | React.RefObject<HTMLElement | ShadowRoot | null>
+  | null
+  | undefined;
 
 // Why: modal SideDialog/Drawer traps focus+clicks inside its region. Popups portal to
 // document.body by default → land outside the trap → unclickable. SideDialog publishes a

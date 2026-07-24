@@ -3,19 +3,17 @@
  * Produces the Mastra Factory template tree from `mastracode/web`.
  *
  * The template is the web project minus monorepo coupling:
- *   - `link:` deps           -> `"latest"` (matches the templates/* pattern)
+ *   - `link:` deps           -> exact versions resolved from npm
  *   - monorepo tsconfig      -> standalone tsconfig
  *   - contributor README     -> checked-in template/README.md
  *   - e2e/tests/test deps    -> stripped
  *   - monorepo-only scripts  -> user-facing scripts (dev/build/start/deploy)
  *   - .env.schema            -> also emitted as .env.example (decorators stripped)
  *
- * Versions: every `link:` dep becomes `"latest"`, matching the monorepo's
- * other templates (templates/*). We do not pin the current monorepo version
- * because pinning a mid-train alpha would make the template uninstallable
- * whenever the alpha has not been published yet, and it forces peer-range
- * relaxation for prereleases. `"latest"` floats to whatever is currently on
- * the `latest` dist-tag, which is exactly what create-mastra scaffolds do.
+ * Versions: every `link:` dep is resolved from npm and written as an exact
+ * version. The sync selects `latest` or `alpha`, whichever has the same base
+ * version as the local source package, so release transitions cannot pair new
+ * source with an older stable package.
  *
  * Usage:
  *   node scripts/sync-template.mjs [--out <dir>]
@@ -26,6 +24,7 @@
  * softwarefactory-template repository, mirroring the templates/* sync process
  * (one-way overwrite; the monorepo is truth).
  */
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -96,7 +95,13 @@ const EXCLUDE_TOP_LEVEL = new Set([
   'node_modules',
   '.mastra',
   'e2e',
+  // The web project is its own pnpm workspace root wired to the monorepo via
+  // `link:` deps — none of that applies to the standalone template. A clean
+  // template-specific pnpm-workspace.yaml (allowBuilds only) is written by
+  // writePnpmWorkspace() below.
   'pnpm-lock.yaml',
+  'pnpm-workspace.yaml',
+  'package-lock.json',
   'vitest.config.ts',
   // Replaced with template-specific versions:
   'README.md',
@@ -136,55 +141,94 @@ function copyTree(srcDir, destDir, relBase = '') {
   }
 }
 
-/**
- * Verify the linked package exists in the monorepo and its manifest name
- * matches the dependency key. This is a source-of-truth check only — no
- * version is read from it; the template pins `"latest"` from npm.
- */
-function assertLinkedPackage(name, relPath) {
+/** Verify the linked package exists and return its local version. */
+function linkedPackageVersion(name, relPath) {
   const pkgJsonPath = path.join(monorepoRoot, relPath, 'package.json');
   const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
   if (pkg.name !== name) {
     throw new Error(`sync-template: ${pkgJsonPath} is named ${pkg.name}, expected ${name}`);
   }
+  return pkg.version;
+}
+
+const resolvedVersions = new Map();
+let usesPrereleaseVersions = false;
+function resolveTaggedVersion(name, tag) {
+  const key = `${name}@${tag}`;
+  const cached = resolvedVersions.get(key);
+  if (cached) return cached;
+
+  try {
+    const version = execFileSync('npm', ['view', name, `dist-tags.${tag}`], { stdio: 'pipe' })
+      .toString()
+      .trim();
+    if (!version) throw new Error('empty version');
+    if (version.includes('-')) usesPrereleaseVersions = true;
+    resolvedVersions.set(key, version);
+    return version;
+  } catch {
+    throw new Error(`sync-template: could not resolve ${name}@${tag} on npm.`);
+  }
+}
+
+function baseVersion(version) {
+  return version.split('-')[0];
+}
+
+function resolveLinkedVersion(name, localVersion) {
+  const localBase = baseVersion(localVersion);
+
+  if (!localVersion.includes('-alpha.')) {
+    const latestVersion = resolveTaggedVersion(name, 'latest');
+    if (baseVersion(latestVersion) === localBase) {
+      return { version: latestVersion, tag: 'latest' };
+    }
+  }
+
+  const alphaVersion = resolveTaggedVersion(name, 'alpha');
+  if (baseVersion(alphaVersion) === localBase) {
+    return { version: alphaVersion, tag: 'alpha' };
+  }
+
+  throw new Error(`sync-template: no published ${name} version matches local release ${localBase}.`);
 }
 
 function transformPackageJson() {
   const manifest = JSON.parse(fs.readFileSync(path.join(webRoot, 'package.json'), 'utf8'));
 
-  manifest.name = 'mastra-software-factory';
+  manifest.name = 'mastra-factory';
   manifest.version = '0.1.0';
   manifest.description =
     'Mastra Factory: an agent-powered software delivery environment. Intake GitHub/Linear issues, work them with coding agents, and ship pull requests — all from your own deployable web app.';
   manifest.private = true;
   manifest.license = 'Apache-2.0';
 
-  // Direct mapping of the web project's own scripts (web:dev / web:build /
-  // web:start), minus monorepo-only bits (prebuild, monorepo-deps.mjs).
+  // Use the Factory server's integrated UI instead of running a separate
+  // Vite process. Keep standalone validation and lifecycle scripts.
   manifest.scripts = {
-    dev: 'concurrently --kill-others-on-fail --names server,ui "MASTRA_SKIP_PEERDEP_CHECK=1 varlock run -- mastra dev --dir src/mastra" "vite --config src/web/vite.config.ts"',
+    dev: 'mastra factory dev --dir src/mastra',
     'db:up': 'docker compose up -d --wait',
     'db:down': 'docker compose down',
-    build: 'npm run build:ui && npm run build:server',
-    'build:ui': 'vite --config src/web/vite.config.ts build',
-    'build:server': 'mastra build --dir src/mastra',
-    start: 'varlock run -- mastra start',
-    deploy: 'npm run build && node scripts/validate-output.mjs && mastra deploy --skip-build',
     check: 'tsc --noEmit && tsc --noEmit -p src/web/ui/tsconfig.json',
+    build: 'mastra build --dir src/mastra',
+    start: 'varlock run -- mastra start',
+    deploy: 'mastra deploy',
   };
 
-  // Every `link:` dep becomes `"latest"`, matching the monorepo's other
-  // templates (templates/*). We still resolve the link target so an invalid
-  // `link:` spec (typo, deleted package) fails the sync loudly.
-  console.log('sync-template: rewriting link: deps to "latest"...');
+  // Resolve each linked package from a published release with the same base
+  // version as its local source. Immediately after exiting prerelease mode,
+  // `latest` can still point at the previous stable release while `alpha`
+  // contains the package matching the newly-stable local source version.
+  console.log('sync-template: resolving published versions for link: deps...');
   for (const section of ['dependencies', 'devDependencies']) {
     const deps = manifest[section];
     if (!deps) continue;
     for (const [name, spec] of Object.entries(deps)) {
       if (!spec.startsWith('link:')) continue;
-      assertLinkedPackage(name, linkSpecToRelPath(spec));
-      deps[name] = 'latest';
-      console.log(`  ✓ ${name}@latest`);
+      const localVersion = linkedPackageVersion(name, linkSpecToRelPath(spec));
+      const { version, tag } = resolveLinkedVersion(name, localVersion);
+      deps[name] = version;
+      console.log(`  ✓ ${name}@${version} (${tag})`);
     }
   }
 
@@ -204,8 +248,25 @@ function transformPackageJson() {
   // Transitive runtime peers that must be declared as direct deps so npm
   // resolves them without needing pnpm's auto-install-peers behavior.
   // (In the monorepo dev setup pnpm provides them automatically.)
-  manifest.dependencies['@mastra/memory'] = 'latest'; // peer of @mastra/playground-ui
+  manifest.dependencies['@mastra/memory'] = resolveTaggedVersion('@mastra/memory', 'latest'); // peer of @mastra/playground-ui
   manifest.dependencies['react-is'] = '^19.0.0'; // peer of recharts (via @mastra/playground-ui)
+
+  // Downgrade `typescript` from tsgo (v7) to classic (v5). The Mastra Factory
+  // sources happily typecheck under tsgo, but `mastra build` transitively
+  // loads the classic TypeScript API via `typescript-paths` — tsgo's ESM
+  // package doesn't expose `ts.sys`, so `require('typescript')` returns an
+  // almost-empty module and analyzeBundle crashes with
+  //   TypeError: Cannot read properties of undefined (reading 'readFile')
+  // In the monorepo pnpm hoists classic TypeScript from another workspace
+  // package, hiding the problem. In the standalone template there is no
+  // hoist, so we pin the classic compiler here. Remove once
+  // `typescript-paths` (or whatever @mastra/deployer uses) supports tsgo.
+  if (manifest.devDependencies?.typescript) {
+    manifest.devDependencies.typescript = '^5.9.2';
+  }
+  if (manifest.devDependencies?.concurrently) {
+    delete manifest.devDependencies.concurrently;
+  }
 
   fs.writeFileSync(path.join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 }
@@ -296,11 +357,56 @@ function writeGitignore() {
 !.env.example
 !.env.schema
 .mastra/
-src/mastra/public/ui/
+src/mastra/public/factory/
 *.log
 .DS_Store
 `,
   );
+}
+
+/**
+ * Relax npm's peer resolver when the generated package set includes
+ * prereleases. npm does not match prerelease versions against otherwise
+ * compatible peer ranges unless the range names that prerelease explicitly.
+ */
+function writeNpmrc() {
+  if (!usesPrereleaseVersions) return;
+  fs.writeFileSync(path.join(outDir, '.npmrc'), 'legacy-peer-deps=true\n');
+}
+
+/**
+ * Emit `pnpm-workspace.yaml` with `allowBuilds`.
+ *
+ * pnpm v10+ blocks install scripts by default and exits with
+ * ERR_PNPM_IGNORED_BUILDS if any dependency has a build script that isn't
+ * explicitly approved. The deployer also copies this file to `.mastra/output`,
+ * so without it `mastra build` / `mastra start` fail under pnpm.
+ *
+ * Mirrors the mastracode/web allowBuilds policy, minus test-only deps (msw)
+ * stripped by the template. Packages marked `false` don't need their build
+ * script at runtime — listing them prevents the ignored-builds error without
+ * actually running the script.
+ */
+function writePnpmWorkspace() {
+  const content = `# pnpm configuration for the Mastra Factory template.
+# Prevents ERR_PNPM_IGNORED_BUILDS on pnpm v10+ by explicitly approving
+# (or declining) build scripts for dependencies that have them.
+# npm ignores this file entirely; it only affects pnpm installs.
+minimumReleaseAgeExclude:
+  - '@mastra/*'
+  - mastra
+allowBuilds:
+  '@google/genai': true
+  agent-browser: true
+  bufferutil: true
+  edgedriver: false
+  esbuild: true
+  geckodriver: false
+  onnxruntime-node: true
+  protobufjs: true
+  utf-8-validate: true
+`;
+  fs.writeFileSync(path.join(outDir, 'pnpm-workspace.yaml'), content);
 }
 
 /** Copy the checked-in user-facing README verbatim. */
@@ -335,6 +441,8 @@ writeTsconfig();
 stripTestingTypesFromUiTsconfig();
 writeEnvExample();
 writeGitignore();
+writeNpmrc();
+writePnpmWorkspace();
 writeReadme();
 
 console.log(`sync-template: done. Template written to ${outDir}`);

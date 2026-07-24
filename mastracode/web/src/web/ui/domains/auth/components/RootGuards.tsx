@@ -1,6 +1,7 @@
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { useFactoryAuth } from '../../../../../shared/hooks/useFactoryAuth';
 import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
+import { hasResumableFactoryOnboarding } from '../../workspaces/services/onboardingFlow';
 import { Navigate, Outlet, useLocation } from 'react-router';
 
 export const RootGuards = () => {
@@ -8,15 +9,14 @@ export const RootGuards = () => {
 };
 
 const AuthGuard = () => {
-  const auth = useFactoryAuth();
+  const { isPending, isError, data } = useFactoryAuth();
   const location = useLocation();
 
-  if (auth.isPending) return <AuthPendingSkeleton />;
-  if (auth.isError) return <AuthPendingSkeleton label="Unable to reach MastraCode server" />;
+  if (isPending) return <AuthPendingSkeleton />;
+  if (isError) return <AuthPendingSkeleton label="Unable to reach MastraCode server" />;
 
-  // Local factory situation
-  const state = auth.data;
-  if (!state?.authEnabled) return <OnboardingGuard />;
+  const state = data;
+  if (!state?.authEnabled) return <AuthNotConfiguredScreen />;
 
   if (!state.authenticated) {
     // Router location (not window.location) so memory routers and in-app
@@ -34,18 +34,33 @@ const OnboardingGuard = () => {
 
   if (factoriesPending) return <AuthPendingSkeleton label="Loading factories" />;
   if ((factories?.length ?? 0) === 0 && pathname !== '/onboarding') return <Navigate to="/onboarding" replace />;
+  if (factories && factories.length > 0 && pathname === '/onboarding' && !hasResumableFactoryOnboarding(factories)) {
+    return <Navigate to={`/factories/${factories[0].id}`} replace />;
+  }
 
   return <Outlet />;
 };
 
+function AuthNotConfiguredScreen() {
+  return (
+    <div className="bg-surface1 grid h-dvh w-full place-items-center px-6 text-center">
+      <div className="max-w-md space-y-3">
+        <h1 className="text-icon6 text-xl font-semibold">
+          This MastraCode server has no authentication provider configured
+        </h1>
+        <p className="text-icon3 text-sm leading-6">
+          MastraCode web requires authenticated remote Factories. Configure a supported auth provider on the server,
+          then reload this page.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function AuthPendingSkeleton({ label = 'Checking sign-in' }: { label?: string }) {
   return (
-    <div role="status" aria-label={label} className="flex h-dvh w-full items-center justify-center bg-surface1">
-      <div className="flex w-64 flex-col gap-3">
-        <Skeleton className="h-8 w-full" />
-        <Skeleton className="h-4 w-3/4" />
-        <Skeleton className="h-4 w-1/2" />
-      </div>
+    <div className="bg-surface1 flex h-dvh w-full items-center justify-center">
+      <BrandLoader size="lg" aria-label={label} />
     </div>
   );
 }

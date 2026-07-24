@@ -5,76 +5,58 @@ import { queryKeys } from '../api/keys';
 import {
   connectInstallation,
   createFactoryProject,
+  deleteFactoryProject,
   linkRepository,
+  listFactoryProjects,
   unlinkRepository,
 } from '../../web/ui/domains/workspaces/services/github';
-import type { GithubRepo } from '../../web/ui/domains/workspaces/services/github';
-import {
-  addLocalFactory,
-  addServerFactory,
-  loadFactories,
-  loadFactoriesWithResolvedIds,
-  removeFactory,
-} from '../../web/ui/domains/workspaces/services/factories';
+import type { FactoryProject, GithubRepo } from '../../web/ui/domains/workspaces/services/github';
 
 function invalidateFactories(queryClient: ReturnType<typeof useQueryClient>) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
 }
 
-/**
- * Refetch the factories query after a mutation that changes the factory list.
- * Returned from `onSuccess` so `mutateAsync` resolves only once the list is
- * fresh — callers navigate/select right after, and must see the new factory.
- */
 function refetchFactories(queryClient: ReturnType<typeof useQueryClient>) {
   return queryClient.refetchQueries({ queryKey: queryKeys.factories() });
 }
 
-export function useLoadFactories() {
-  return useQuery({
-    queryKey: queryKeys.persistedFactories(),
-    queryFn: () => Promise.resolve(loadFactories()),
-  });
+async function fetchFactoryProjects(baseUrl: string): Promise<FactoryProject[]> {
+  const projects = await listFactoryProjects(baseUrl);
+  if (!projects) throw new Error('Failed to load Factories');
+  return projects;
 }
 
 export function useFactoriesQuery() {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.factories(),
-    queryFn: () => loadFactoriesWithResolvedIds(baseUrl),
+    queryFn: () => fetchFactoryProjects(baseUrl),
   });
 }
 
-/** Bind a local folder as a factory (secondary onboarding path). */
-export function useAddFactoryMutation() {
+export function useFactoryQuery(factoryId: string | undefined) {
   const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ name, path }: { name: string; path: string }) => addLocalFactory(baseUrl, name, path),
-    onSuccess: () => refetchFactories(queryClient),
+  return useQuery({
+    queryKey: queryKeys.factories(),
+    queryFn: () => fetchFactoryProjects(baseUrl),
+    select: (factories: FactoryProject[]) => factories.find(factory => factory.id === factoryId),
+    enabled: Boolean(factoryId),
   });
 }
 
-/**
- * Create a named server-backed Factory project (the primary onboarding path).
- * The new factory starts with zero linked repositories — repositories are
- * connected afterwards from the Board or Factory settings.
- */
 export function useCreateFactoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ name, description }: { name: string; description?: string }) =>
-      addServerFactory(await createFactoryProject(baseUrl, name, description)),
+    mutationFn: ({ name, description }: { name: string; description?: string }) =>
+      createFactoryProject(baseUrl, name, description),
     onSuccess: () => refetchFactories(queryClient),
   });
 }
 
-/**
- * Link a GitHub repository to a Factory project: ensures a source-control
- * connection exists for the repo's installation (reusing one when present),
- * then links the repository under it.
- */
+/** @deprecated Use useCreateFactoryMutation. */
+export const useAddFactoryMutation = useCreateFactoryMutation;
+
 export function useLinkRepositoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
@@ -87,7 +69,6 @@ export function useLinkRepositoryMutation() {
   });
 }
 
-/** Unlink a repository from its Factory project. */
 export function useUnlinkRepositoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
@@ -107,10 +88,7 @@ export function useRemoveFactoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => removeFactory(baseUrl, id),
-    onSuccess: () => {
-      queryClient.setQueryData(queryKeys.factories(), loadFactories());
-      invalidateFactories(queryClient);
-    },
+    mutationFn: (factoryProjectId: string) => deleteFactoryProject(baseUrl, factoryProjectId),
+    onSuccess: () => invalidateFactories(queryClient),
   });
 }

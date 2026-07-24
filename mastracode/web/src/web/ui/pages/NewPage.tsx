@@ -1,47 +1,61 @@
+import { buttonVariants } from '@mastra/playground-ui/components/Button';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { GitBranch } from 'lucide-react';
-import { Navigate, useLocation } from 'react-router';
+import { Bot, GitBranch } from 'lucide-react';
+import { Link, useLocation, useParams } from 'react-router';
 
 import { Sidebar } from '../Sidebar';
-import { ChatLayout } from '../ui/ChatLayout';
+import { ChatLayout } from '../layouts/ChatLayout';
 import { FolderIcon } from '../ui/icons';
-import { useActiveFactoryContext } from '../domains/workspaces/context/ActiveFactoryProvider';
-import { isLocalFactory, isServerFactory, selectedRepository } from '../domains/workspaces/services/factories';
-import type { Factory } from '../domains/workspaces/services/factories';
-import { deriveProjectPath } from '../../../shared/hooks/useWorkspaces';
+import { useFactoryQuery } from '../../../shared/hooks/useFactories';
+import { useFactoryProjectQuery } from '../../../shared/hooks/useFactoryDefaultModel';
+import { useUserSessionQuery } from '../../../shared/hooks/useWorkspaces';
+import type { FactoryProject } from '../domains/workspaces/services/github';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
 import { TranscriptEntries } from '../domains/chat/components/Transcript';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
 export function NewPage() {
-  const { activeFactory } = useActiveFactoryContext();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factoryQuery = useFactoryQuery(factoryId);
+  const activeFactory = factoryQuery.data;
+  const projectQuery = useFactoryProjectQuery(activeFactory?.id);
+  const resolvingModelGuard = factoryQuery.isPending || (Boolean(activeFactory) && projectQuery.isPending);
+  const missingDefaultModel = Boolean(activeFactory) && projectQuery.isSuccess && !projectQuery.data?.defaultModelId;
 
-  // The factory layout guarantees a resolved factory before rendering children.
-  if (!activeFactory) return null;
-
-  if (isServerFactory(activeFactory)) {
-    return <Navigate to={`/factories/${activeFactory.id}/work`} replace />;
-  }
   return (
     <ChatLayout
       sidebar={<Sidebar />}
       header={<ChatHeader />}
       main={
         <ChatSessionBoundary>
-          <NewPageContent activeFactory={activeFactory} />
+          {resolvingModelGuard ? (
+            <div className="grid min-h-0 flex-1 place-items-center">
+              <Spinner aria-label="Loading Factory" className="text-icon3" />
+            </div>
+          ) : (
+            <NewPageContent activeFactory={activeFactory} missingDefaultModel={missingDefaultModel} />
+          )}
         </ChatSessionBoundary>
       }
     />
   );
 }
 
-function NewPageContent({ activeFactory }: { activeFactory: Factory }) {
+function NewPageContent({
+  activeFactory,
+  missingDefaultModel,
+}: {
+  activeFactory: FactoryProject | undefined;
+  missingDefaultModel: boolean;
+}) {
   useGlobalShortcuts();
   const { transcript } = useChatTranscript();
   const location = useLocation();
@@ -53,7 +67,7 @@ function NewPageContent({ activeFactory }: { activeFactory: Factory }) {
   return (
     <div className="grid min-h-0 flex-1 place-items-center overflow-y-auto px-4 py-10 md:px-6">
       <div className="flex w-full max-w-xl flex-col items-center gap-4">
-        <DraftStart activeFactory={activeFactory} />
+        <DraftStart activeFactory={activeFactory} missingDefaultModel={missingDefaultModel} />
         {hasNotices && (
           <div className="flex w-full flex-col gap-4">
             {routeErrorNotice && <Notice variant="destructive">{routeErrorNotice}</Notice>}
@@ -65,12 +79,26 @@ function NewPageContent({ activeFactory }: { activeFactory: Factory }) {
   );
 }
 
-function DraftStart({ activeFactory }: { activeFactory: Factory }) {
+function DraftStart({
+  activeFactory,
+  missingDefaultModel,
+}: {
+  activeFactory: FactoryProject | undefined;
+  missingDefaultModel: boolean;
+}) {
+  if (activeFactory && missingDefaultModel) {
+    return (
+      <section className={draftStartClass} aria-label="Model setup required">
+        <MissingDefaultModelState factoryId={activeFactory.id} />
+      </section>
+    );
+  }
+
   return (
     <section className={draftStartClass} aria-labelledby="draft-start-heading">
       <div className="flex flex-col items-center gap-3 text-center">
         <BrandLockup />
-        <h1 id="draft-start-heading" className="m-0 text-2xl text-icon6">
+        <h1 id="draft-start-heading" className="text-icon6 m-0 text-2xl">
           What do you want to work on?
         </h1>
         <FactoryContext activeFactory={activeFactory} />
@@ -81,30 +109,48 @@ function DraftStart({ activeFactory }: { activeFactory: Factory }) {
   );
 }
 
+function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
+  return (
+    <EmptyState
+      as="h2"
+      iconSlot={<Bot size={40} className="text-icon3" />}
+      titleSlot="No default model configured for this Factory"
+      descriptionSlot="Connect a model provider and choose a default model in Model settings before starting a chat."
+      actionSlot={
+        <Link to={`/factories/${factoryId}/settings/model`} className={buttonVariants({ variant: 'primary' })}>
+          Open Model settings
+        </Link>
+      }
+    />
+  );
+}
+
 function BrandLockup() {
   return (
-    <div className="inline-flex items-center gap-2 text-icon3">
+    <div className="text-icon3 inline-flex items-center gap-2">
       <LogoWithoutText aria-hidden className="h-4 w-auto" />
-      <span className="text-ui-sm font-medium uppercase tracking-widest">Mastra Code</span>
+      <span className="text-ui-sm font-medium tracking-widest uppercase">Mastra Code</span>
     </div>
   );
 }
 
-function FactoryContext({ activeFactory }: { activeFactory: Factory }) {
-  // Server factories have no local `path`; show the sandbox worktree path instead.
-  const projectPath = deriveProjectPath(activeFactory);
-  const gitBranch = isLocalFactory(activeFactory)
-    ? activeFactory.binding.gitBranch
-    : selectedRepository(activeFactory)?.gitBranch;
+function FactoryContext({ activeFactory }: { activeFactory: FactoryProject | undefined }) {
+  const { sessionId } = useParams<{ sessionId: string }>();
+  const sessionQuery = useUserSessionQuery(sessionId);
+  const repository = activeFactory?.repositories.find(
+    repo => repo.projectRepositoryId === sessionQuery.data?.projectRepositoryId,
+  );
+  const projectPath = sessionQuery.data?.sessionId;
+  const gitBranch = repository?.gitBranch;
   return (
-    <div className="flex max-w-full items-center justify-center gap-1.5 text-ui-sm text-icon3">
+    <div className="text-ui-sm text-icon3 flex max-w-full items-center justify-center gap-1.5">
       <div className="flex min-w-0 items-center gap-1.5">
-        <FolderIcon size={13} className="shrink-0 text-icon2" />
-        <span className="shrink-0 font-medium">{activeFactory.name}</span>
+        <FolderIcon size={13} className="text-icon2 shrink-0" />
+        <span className="shrink-0 font-medium">{activeFactory?.name ?? 'Factory'}</span>
         {projectPath && (
           <>
-            <span className="shrink-0 text-icon2">·</span>
-            <span className="min-w-0 truncate text-icon2" title={projectPath}>
+            <span className="text-icon2 shrink-0">·</span>
+            <span className="text-icon2 min-w-0 truncate" title={projectPath}>
               {projectPath}
             </span>
           </>
@@ -112,11 +158,11 @@ function FactoryContext({ activeFactory }: { activeFactory: Factory }) {
       </div>
       {gitBranch && (
         <>
-          <span aria-hidden className="shrink-0 text-icon2">
+          <span aria-hidden className="text-icon2 shrink-0">
             ·
           </span>
           <div className="flex min-w-0 items-center gap-1.5">
-            <GitBranch size={13} aria-hidden className="shrink-0 text-icon2" />
+            <GitBranch size={13} aria-hidden className="text-icon2 shrink-0" />
             <span className="min-w-0 truncate" title={gitBranch}>
               {gitBranch}
             </span>

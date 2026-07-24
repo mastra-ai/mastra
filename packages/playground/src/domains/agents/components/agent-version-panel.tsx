@@ -39,14 +39,14 @@ export function AgentVersionPanel({
   const activeVersionNumber = activeVersion?.versionNumber;
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="px-3 py-3 border-b border-border1">
-        <Txt variant="ui-sm" className="font-medium text-neutral5">
+    <div className="flex h-full flex-col">
+      <div className="border-border1 border-b px-3 py-3">
+        <Txt variant="ui-sm" className="text-neutral5 font-medium">
           Version history
         </Txt>
       </div>
 
-      <ScrollArea className="flex-1 min-h-0">
+      <ScrollArea className="min-h-0 flex-1">
         {isLoading ? (
           <div className="px-3 py-4">
             <Txt variant="ui-xs" className="text-neutral2">

@@ -84,9 +84,9 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
   return (
     <ToolCard testId="agent-builder-chat-tool-approval" className="bg-surface4 border-transparent">
       <Txt variant="ui-sm" className="text-neutral5 pb-2" as="div">
-        Approval required for <span className="font-mono text-neutral6">{toolName}</span>
+        Approval required for <span className="text-neutral6 font-mono">{toolName}</span>
       </Txt>
-      <div className="flex gap-2 items-center">
+      <div className="flex items-center gap-2">
         <Button
           variant="default"
           onClick={handleApprove}
@@ -268,7 +268,7 @@ export const Txtmessage = ({
       <div className="flex justify-end">
         <Txt
           variant="ui-md"
-          className="bg-white text-black rounded-2xl px-4 py-2.5 max-w-[80%] [&_ul]:!space-y-1 [&_ol]:!space-y-1 [&_li]:!my-0 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_li]:!leading-normal"
+          className="max-w-[80%] rounded-2xl bg-white px-4 py-2.5 text-black [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
           as="div"
         >
           <MarkdownRenderer>{txt}</MarkdownRenderer>
@@ -281,7 +281,7 @@ export const Txtmessage = ({
     return (
       <Txt
         variant="ui-md"
-        className="text-neutral4 max-w-[80%] [&_ul]:!space-y-1 [&_ol]:!space-y-1 [&_li]:!my-0 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_li]:!leading-normal"
+        className="text-neutral4 max-w-[80%] [&_li]:!my-0 [&_li]:!leading-normal [&_ol]:!space-y-1 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_ul]:!space-y-1"
         as="div"
       >
         <MessageText text={txt} metadata={metadata} />
@@ -295,13 +295,13 @@ export const Txtmessage = ({
 export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onRetry: (() => void) | null }) => {
   return (
     <Card
-      className="border-accent6/40 bg-accent6/5 max-w-[80%] p-4 flex flex-col gap-3"
+      className="border-accent6/40 bg-accent6/5 flex max-w-[80%] flex-col gap-3 p-4"
       role="alert"
       data-testid="agent-builder-chat-error"
     >
       <div className="flex items-start gap-2.5">
-        <AlertTriangle className="size-4 mt-0.5 shrink-0 text-accent6" aria-hidden />
-        <div className="flex flex-col gap-1 min-w-0">
+        <AlertTriangle className="text-accent6 mt-0.5 size-4 shrink-0" aria-hidden />
+        <div className="flex min-w-0 flex-col gap-1">
           <Txt variant="ui-md" className="text-icon6 font-medium" as="div">
             Something went wrong while building the agent.
           </Txt>
@@ -339,7 +339,7 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
           </div>
           <CollapsibleContent>
             <pre
-              className="text-xs text-neutral4 whitespace-pre-wrap break-all bg-surface1 rounded-md p-2 max-h-48 overflow-auto"
+              className="text-neutral4 bg-surface1 max-h-48 overflow-auto rounded-md p-2 text-xs break-all whitespace-pre-wrap"
               data-testid="agent-builder-chat-error-details"
             >
               {error.details}
@@ -399,40 +399,40 @@ const GenericTool = ({ toolName, input, output }: { toolName: string; input?: un
     <ToolCard testId="agent-builder-chat-generic-tool">
       <Collapsible>
         <CollapsibleTrigger
-          className="flex w-full items-center gap-2 text-left group"
+          className="group flex w-full items-center gap-2 text-left"
           data-testid="agent-builder-chat-generic-tool-trigger"
         >
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-border1/60 bg-surface1 px-2 py-0.5">
-            <Wrench className="size-3.5 shrink-0 text-neutral4" aria-hidden />
+          <span className="border-border1/60 bg-surface1 inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5">
+            <Wrench className="text-neutral4 size-3.5 shrink-0" aria-hidden />
             <Txt variant="ui-sm" className="text-neutral5" as="span">
-              Executing <span className="font-mono text-neutral6">{toolName}</span>
+              Executing <span className="text-neutral6 font-mono">{toolName}</span>
             </Txt>
           </span>
           <ChevronRight
-            className="size-4 shrink-0 text-neutral4 transition-transform group-data-[state=open]:rotate-90"
+            className="text-neutral4 size-4 shrink-0 transition-transform group-data-[state=open]:rotate-90"
             aria-hidden
           />
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="mt-3 flex flex-col gap-2" data-testid="agent-builder-chat-generic-tool-content">
-            <div className="rounded-md border border-border1/60 bg-surface1 overflow-hidden">
-              <div className="px-2 py-1 border-b border-border1/60">
+            <div className="border-border1/60 bg-surface1 overflow-hidden rounded-md border">
+              <div className="border-border1/60 border-b px-2 py-1">
                 <Txt variant="ui-sm" className="text-neutral3" as="div">
                   Input
                 </Txt>
               </div>
-              <pre className="m-0 max-h-[320px] overflow-auto p-3 text-xs leading-relaxed text-neutral5 whitespace-pre-wrap break-words">
+              <pre className="text-neutral5 m-0 max-h-[320px] overflow-auto p-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
                 {inputJson || '{}'}
               </pre>
             </div>
             {hasOutput ? (
-              <div className="rounded-md border border-border1/60 bg-surface1 overflow-hidden">
-                <div className="px-2 py-1 border-b border-border1/60">
+              <div className="border-border1/60 bg-surface1 overflow-hidden rounded-md border">
+                <div className="border-border1/60 border-b px-2 py-1">
                   <Txt variant="ui-sm" className="text-neutral3" as="div">
                     Output
                   </Txt>
                 </div>
-                <pre className="m-0 max-h-[320px] overflow-auto p-3 text-xs leading-relaxed text-neutral5 whitespace-pre-wrap break-words">
+                <pre className="text-neutral5 m-0 max-h-[320px] overflow-auto p-3 text-xs leading-relaxed break-words whitespace-pre-wrap">
                   {outputJson}
                 </pre>
               </div>
@@ -465,12 +465,12 @@ export const ToolCard = ({
 );
 
 const SkillToolLine = ({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) => (
-  <div className="flex items-start gap-2 min-w-0 max-w-full animate-in fade-in slide-in-from-right-4 duration-500 ease-out">
+  <div className="animate-in fade-in slide-in-from-right-4 flex max-w-full min-w-0 items-start gap-2 duration-500 ease-out">
     <div className="pt-0.5">
       <Icon>{icon}</Icon>
     </div>
     <Txt variant="ui-md" className="text-neutral3 min-w-0 flex-1 truncate" as="div">
-      {label} <strong className="font-semibold text-neutral6">{value}</strong>
+      {label} <strong className="text-neutral6 font-semibold">{value}</strong>
     </Txt>
   </div>
 );

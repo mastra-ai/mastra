@@ -22,7 +22,13 @@ export { calculateTtl, getTtlAttributeName, isTtlEnabled, getTtlProps } from './
  * Entity names that support TTL configuration.
  */
 export type DynamoDBTtlEntityName =
-  'thread' | 'message' | 'trace' | 'eval' | 'workflow_snapshot' | 'resource' | 'score';
+  | 'thread'
+  | 'message'
+  | 'trace'
+  | 'eval'
+  | 'workflow_snapshot'
+  | 'resource'
+  | 'score';
 
 /**
  * TTL configuration for a single entity type.

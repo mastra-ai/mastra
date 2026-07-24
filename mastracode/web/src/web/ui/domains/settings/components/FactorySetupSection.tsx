@@ -13,7 +13,6 @@ import {
   useSaveRepositorySettingsMutation,
 } from '../../../../../shared/hooks/useRepositorySettings';
 import { useFactoriesQuery } from '../../../../../shared/hooks/useFactories';
-import { isServerFactory } from '../../workspaces/services/factories';
 
 /**
  * One editable setup-command row per linked repository. The field is a draft —
@@ -80,8 +79,8 @@ function RepositorySetupRow({ projectRepositoryId, label }: { projectRepositoryI
  */
 export function FactorySetupSection() {
   const factoriesQuery = useFactoriesQuery();
-  const rows = (factoriesQuery.data ?? []).filter(isServerFactory).flatMap(factory =>
-    factory.binding.repositories.map(repository => ({
+  const rows = (factoriesQuery.data ?? []).flatMap(factory =>
+    factory.repositories.map(repository => ({
       projectRepositoryId: repository.projectRepositoryId,
       label: factory.name === repository.slug ? repository.slug : `${factory.name} · ${repository.slug}`,
     })),
@@ -89,7 +88,7 @@ export function FactorySetupSection() {
   if (rows.length === 0) return null;
 
   return (
-    <div className="mt-6 pt-4 flex flex-col gap-4 not-last:border-b not-last:border-border1/40 not-last:pb-6">
+    <div className="not-last:border-border1/40 mt-6 flex flex-col gap-4 pt-4 not-last:border-b not-last:pb-6">
       <div className="flex flex-col">
         <Txt variant="ui-lg" className="text-icon6 font-medium">
           Worktree setup

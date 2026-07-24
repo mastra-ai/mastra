@@ -320,7 +320,7 @@ function MetricsContent() {
           />
         </div>
       ) : (
-        <div className="grid gap-8 content-start pb-10">
+        <div className="grid content-start gap-8 pb-10">
           {isInMemory && (
             <Notice variant="info" title="Metrics are not persisted">
               <Notice.Message>

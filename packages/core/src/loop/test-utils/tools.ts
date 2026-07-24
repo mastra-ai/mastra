@@ -1057,7 +1057,8 @@ export function toolsTests({ loopFn, runId }: { loopFn: typeof loop; runId: stri
       expect(parts.map(part => part.type)).toEqual(['text', 'tool-invocation', 'step-start', 'text']);
 
       const toolPart = parts.find(part => part.type === 'tool-invocation') as
-        { toolInvocation: { state: string; result?: unknown } } | undefined;
+        | { toolInvocation: { state: string; result?: unknown } }
+        | undefined;
       expect(toolPart?.toolInvocation.state).toBe('result');
       expect(toolPart?.toolInvocation.result).toEqual({
         results: [{ url: 'https://example.com', title: 'Example' }],

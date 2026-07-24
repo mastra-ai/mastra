@@ -1,0 +1,24 @@
+{
+  "attachment": ["google/gemma-4-31b-it", "moonshotai/kimi-k2.6", "moonshotai/kimi-k2.7-code"],
+  "temperature": [
+    "deepseek-ai/deepseek-v4-flash",
+    "deepseek-ai/deepseek-v4-pro",
+    "google/gemma-4-31b-it",
+    "moonshotai/kimi-k2.6",
+    "openai/gpt-oss-120b",
+    "qwen/qwen3.6-27b",
+    "zai-org/glm-5.1",
+    "zai-org/glm-5.2"
+  ],
+  "structuredOutput": [
+    "deepseek-ai/deepseek-v4-flash",
+    "deepseek-ai/deepseek-v4-pro",
+    "google/gemma-4-31b-it",
+    "moonshotai/kimi-k2.6",
+    "moonshotai/kimi-k2.7-code",
+    "openai/gpt-oss-120b",
+    "qwen/qwen3.6-27b",
+    "zai-org/glm-5.1",
+    "zai-org/glm-5.2"
+  ]
+}

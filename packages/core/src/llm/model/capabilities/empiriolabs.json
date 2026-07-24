@@ -1,6 +1,5 @@
 {
   "attachment": [
-    "fugu-ultra",
     "gemma-4-26b-a4b",
     "kimi-k2-6",
     "kimi-k2-7-code",
@@ -62,7 +61,6 @@
   "structuredOutput": [
     "deepseek-v4-flash",
     "deepseek-v4-pro",
-    "fugu-ultra",
     "gemma-4-26b-a4b",
     "glm-4-5-flash",
     "glm-4-7-flash",

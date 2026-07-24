@@ -19,13 +19,13 @@ export function WorkflowStepDetailContent() {
   }
 
   return (
-    <div className="flex flex-col h-full" data-testid="workflow-step-detail-panel">
+    <div className="flex h-full flex-col" data-testid="workflow-step-detail-panel">
       {/* Header with title and close button */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border1 bg-surface1">
+      <div className="border-border1 bg-surface1 flex items-center justify-between border-b px-4 py-3">
         <div className="flex items-center gap-2">
-          {stepDetail.type === 'map-config' && <List className="w-4 h-4" style={{ color: BADGE_COLORS.map }} />}
+          {stepDetail.type === 'map-config' && <List className="h-4 w-4" style={{ color: BADGE_COLORS.map }} />}
           {stepDetail.type === 'nested-graph' && (
-            <WorkflowIcon className="w-4 h-4" style={{ color: BADGE_COLORS.workflow }} />
+            <WorkflowIcon className="h-4 w-4" style={{ color: BADGE_COLORS.workflow }} />
           )}
           <div className="flex flex-col">
             <Txt variant="ui-md" className="text-neutral6 font-medium">
@@ -40,10 +40,10 @@ export function WorkflowStepDetailContent() {
         </div>
         <button
           onClick={closeStepDetail}
-          className="p-1 hover:bg-surface3 rounded transition-colors"
+          className="hover:bg-surface3 rounded p-1 transition-colors"
           aria-label="Close"
         >
-          <X className="w-4 h-4 text-neutral3" />
+          <X className="text-neutral3 h-4 w-4" />
         </button>
       </div>
 
@@ -77,7 +77,7 @@ export function WorkflowStepDetailPanel() {
   }
 
   return (
-    <div className="h-full w-[400px] max-w-[45%] shrink-0 border-l border-border1 bg-surface2">
+    <div className="border-border1 bg-surface2 h-full w-[400px] max-w-[45%] shrink-0 border-l">
       <WorkflowStepDetailContent />
     </div>
   );

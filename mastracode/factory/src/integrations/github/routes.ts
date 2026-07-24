@@ -33,6 +33,8 @@ import type {
 } from '../../storage/domains/source-control/base.js';
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js';
 import type { GithubIntegration } from './integration.js';
+import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
+import type { GithubPatKind } from './pat.js';
 import { withProjectLock } from './project-lock.js';
 
 import {
@@ -637,7 +639,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             // reflects reality and the UI prompts a reconnect, then keep
             // listing the remaining installations.
             if ((err as { status?: number }).status !== 404) throw err;
-            console.error(`[MastraCode Web] pruning stale GitHub installation ${inst.externalId} (404 from GitHub)`);
+            console.error(`[Mastra Factory] pruning stale GitHub installation ${inst.externalId} (404 from GitHub)`);
             await github.sourceControlStorage.installations.delete({ orgId: resolved.tenant.orgId, id: inst.id });
             continue;
           }
@@ -947,6 +949,66 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
     }),
   );
 
+  // ── Org GitHub PATs ──────────────────────────────────────────────────────
+  // Installation tokens are the wrong credential for the `gh` CLI (integration
+  // -restricted endpoints 403 regardless of permissions), so orgs paste
+  // classic PATs the sandboxes use instead: a `default` worker token, and an
+  // optional `reviewer` token that review-board sessions use so PR reviews
+  // come from a different account. Tokens are never sent back to the browser —
+  // only whether each is configured.
+  const parsePatKind = (value: unknown): GithubPatKind | null => {
+    if (value === undefined || value === null || value === 'default') return 'default';
+    if (value === 'reviewer') return 'reviewer';
+    return null;
+  };
+  routes.push(
+    registerApiRoute('/web/github/pat', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+        return c.json(await getGithubPatStatus(() => github.integrationStorage, resolved.tenant.orgId));
+      },
+    }),
+    registerApiRoute('/web/github/pat', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+
+        let body: { token?: unknown; kind?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        const kind = parsePatKind(body.kind);
+        if (!kind) return c.json({ error: "kind must be 'default' or 'reviewer'" }, 400);
+        const token = typeof body.token === 'string' ? body.token.trim() : '';
+        if (!token) return c.json({ error: 'A token is required' }, 400);
+        if (token.length > 500) return c.json({ error: 'Token too long (max 500 characters)' }, 400);
+        if (/\s/.test(token)) return c.json({ error: 'Token must not contain whitespace' }, 400);
+
+        await setGithubPat(github.integrationStorage, resolved.tenant.orgId, token, kind);
+        return c.json(await getGithubPatStatus(() => github.integrationStorage, resolved.tenant.orgId));
+      },
+    }),
+    registerApiRoute('/web/github/pat', {
+      method: 'DELETE',
+      requiresAuth: false,
+      handler: async c => {
+        const resolved = await resolveOrgTenant(loose(c), auth);
+        if ('response' in resolved) return resolved.response;
+        const kind = parsePatKind(c.req.query('kind'));
+        if (!kind) return c.json({ error: "kind must be 'default' or 'reviewer'" }, 400);
+        await clearGithubPat(github.integrationStorage, resolved.tenant.orgId, kind);
+        return c.json(await getGithubPatStatus(() => github.integrationStorage, resolved.tenant.orgId));
+      },
+    }),
+  );
+
   // ── Sessions / commit / push / PR ────────────────────────────────────────
   routes.push(...buildProjectGitRoutes({ github, auth, fleet, storage, emitAudit }));
 
@@ -1038,14 +1100,6 @@ async function prepareProject(options: {
 }): Promise<EnsureResult> {
   const { github, fleet, project, userId, onProgress } = options;
   const sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
-  const sandbox = await ensureProjectSandbox({
-    fleet,
-    row: sandboxRow,
-    storage: github.sourceControlStorage.sandboxes,
-    onProgress,
-  });
-  // Re-read the sandbox binding so we have the freshly persisted sandboxId.
-  const fresh = await github.sourceControlStorage.sandboxes.getById({ id: sandboxRow.id });
   const access = await github.versionControl.getRepositoryAccess({
     orgId: project.installation.orgId,
     repositoryId: project.repository.id,
@@ -1053,6 +1107,19 @@ async function prepareProject(options: {
   if (!access.authorization) {
     throw new MaterializeError('Repository access did not include a bearer token.', 'clone-failed');
   }
+  // The sandbox env token feeds the `gh` CLI — a configured org PAT wins
+  // there. Git clone/pull below keep the minted installation token.
+  const ghCliToken =
+    (await getGithubPat(() => github.integrationStorage, project.installation.orgId)) ?? access.authorization.token;
+  const sandbox = await ensureProjectSandbox({
+    fleet,
+    row: sandboxRow,
+    storage: github.sourceControlStorage.sandboxes,
+    token: ghCliToken,
+    onProgress,
+  });
+  // Re-read the sandbox binding so we have the freshly persisted sandboxId.
+  const fresh = await github.sourceControlStorage.sandboxes.getById({ id: sandboxRow.id });
   const finalRow = fresh ?? sandboxRow;
   await materializeRepo({
     row: finalRow,
@@ -1424,6 +1491,7 @@ function buildProjectGitRoutes({
                 headBranch: head,
                 title,
                 body: prBody,
+                actingUserId: userId,
               });
               await emitAudit?.({
                 context: loose(c),
