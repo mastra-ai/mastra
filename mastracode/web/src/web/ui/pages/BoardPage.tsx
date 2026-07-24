@@ -15,6 +15,8 @@ import {
   GitCompareArrows,
   GitPullRequest,
   Link2,
+  MessageSquare,
+  Play,
   Plus,
   Stethoscope,
   Trash2,
@@ -612,6 +614,18 @@ function BoardContent({
     [workspaces.data],
   );
 
+  // A card click refetches worktrees and items before it can decide whether to
+  // open an existing thread or mint a new session. That wait is several round
+  // trips long and the run mutation isn't pending yet, so without this the card
+  // sits completely silent after the click.
+  const [preparingItems, setPreparingItems] = useState<Record<string, string>>({});
+  const clearPreparingItem = (itemId: string) =>
+    setPreparingItems(current => {
+      if (!(itemId in current)) return current;
+      const { [itemId]: _cleared, ...rest } = current;
+      return rest;
+    });
+
   const openThread = async (session: WorkItemSessionRef) => {
     navigate(`/factories/${factory.id}/workspaces/${session.sessionId}/threads/${session.threadId}`);
   };
@@ -628,32 +642,46 @@ function BoardContent({
   };
 
   const openOrCreateSession = async (item: WorkItem, destinationStage: string) => {
-    const refreshed = await refreshItemAndWorktrees(item.id);
-    if (!refreshed) return;
-    const liveSessions = Object.fromEntries(
-      Object.entries(refreshed.item.sessions).filter(([, session]) => refreshed.paths.has(session.sessionId)),
-    );
-    const existingSession = itemThreadSession(liveSessions);
-    if (existingSession) {
-      await openThread(existingSession);
-      return;
+    setPreparingItems(current => ({ ...current, [item.id]: 'Preparing session…' }));
+    try {
+      const refreshed = await refreshItemAndWorktrees(item.id);
+      if (!refreshed) return;
+      const liveSessions = Object.fromEntries(
+        Object.entries(refreshed.item.sessions).filter(([, session]) => refreshed.paths.has(session.sessionId)),
+      );
+      const existingSession = itemThreadSession(liveSessions);
+      if (existingSession) {
+        await openThread(existingSession);
+        return;
+      }
+      const spec = itemSessionSpec(refreshed.item);
+      start.mutate({
+        branch: spec.branch,
+        threadTitle: spec.threadTitle,
+        workItem: {
+          id: refreshed.item.id,
+          role: 'chat',
+          stages: [destinationStage],
+          source: refreshed.item.source,
+          sourceKey: refreshed.item.sourceKey,
+          title: refreshed.item.title,
+        },
+      });
+    } finally {
+      clearPreparingItem(item.id);
     }
-    const spec = itemSessionSpec(refreshed.item);
-    start.mutate({
-      branch: spec.branch,
-      threadTitle: spec.threadTitle,
-      workItem: {
-        id: refreshed.item.id,
-        role: 'chat',
-        stages: [destinationStage],
-        source: refreshed.item.source,
-        sourceKey: refreshed.item.sourceKey,
-        title: refreshed.item.title,
-      },
-    });
   };
 
   const openOrStartRun = async (item: WorkItem, role: RunAction['role']) => {
+    setPreparingItems(current => ({ ...current, [item.id]: 'Preparing run…' }));
+    try {
+      await startRunForItem(item, role);
+    } finally {
+      clearPreparingItem(item.id);
+    }
+  };
+
+  const startRunForItem = async (item: WorkItem, role: RunAction['role']) => {
     const refreshed = await refreshItemAndWorktrees(item.id);
     if (!refreshed) return;
     const existingSession = refreshed.item.sessions[role];
@@ -901,6 +929,7 @@ function BoardContent({
                     // for a perfectly live thread. Hold run/create actions until
                     // liveness is known.
                     runDisabled={!runEnabled || !workspaces.isSuccess}
+                    preparing={preparingItems[item.id]}
                     evaluatingStage={evaluatingStages.get(item.id)}
                     transitionReason={transitionReasons[item.id]}
                     decision={decisionByItem.get(item.id)}
@@ -1362,6 +1391,7 @@ function WorkItemCard({
   allItems,
   liveWorktreePaths,
   runDisabled,
+  preparing,
   evaluatingStage,
   transitionReason,
   decision,
@@ -1379,6 +1409,8 @@ function WorkItemCard({
   /** Worktrees that still exist; session refs outside this set are stale. */
   liveWorktreePaths: ReadonlySet<string>;
   runDisabled: boolean;
+  /** Status text while the click is resolving, before the run mutation starts. */
+  preparing?: string;
   /** Destination stage of an in-flight transition; undefined = not moving. */
   evaluatingStage?: string;
   transitionReason?: string;
@@ -1398,7 +1430,7 @@ function WorkItemCard({
     className: 'text-icon3',
   };
   const evaluating = evaluatingStage !== undefined;
-  const runPending = pendingRunRoles.size > 0;
+  const runPending = pendingRunRoles.size > 0 || preparing !== undefined;
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const runSpec = itemRunSpec(item);
   // Session refs whose worktree was deleted are stale: their threads went with
@@ -1546,6 +1578,12 @@ function WorkItemCard({
           {evaluatingStage === 'done' ? 'Marking done…' : `Moving to ${itemStageLabel(item, evaluatingStage)}…`}
         </span>
       )}
+      {pendingRunRoles.size === 0 && preparing !== undefined && (
+        <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
+          <Spinner size="sm" aria-hidden className="size-3" />
+          {preparing}
+        </span>
+      )}
       {[...pendingRunRoles].map(([role, phase]) => (
         <span key={role} role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
           <Spinner size="sm" aria-hidden className="size-3" />
@@ -1553,6 +1591,24 @@ function WorkItemCard({
           {phase !== undefined ? RUN_PHASE_LABELS[phase] : 'starting…'}
         </span>
       ))}
+      {!evaluating && !runPending && (
+        <span
+          aria-hidden
+          className="text-ui-xs text-icon3 flex items-center gap-1.5 transition-opacity motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-focus-within:opacity-100 pointer-fine:group-hover:opacity-100"
+        >
+          {threadSession !== null ? (
+            <>
+              <MessageSquare size={11} aria-hidden />
+              Open session
+            </>
+          ) : (
+            <>
+              <Play size={11} aria-hidden />
+              Start session
+            </>
+          )}
+        </span>
+      )}
       {!evaluating && decision !== undefined && (
         <div className="flex items-center justify-between gap-2">
           <span

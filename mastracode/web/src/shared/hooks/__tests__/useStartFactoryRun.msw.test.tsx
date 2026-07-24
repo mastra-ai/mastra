@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import { useStartFactoryRun } from '../useStartFactoryRun';
+import { useWorkspacesQuery } from '../useWorkspaces';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
@@ -26,8 +27,13 @@ function deferred() {
 function stubKickoffEndpoints() {
   const sessionGate = deferred();
   const runGate = deferred();
+  const sessionListRequests: string[] = [];
 
   server.use(
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => {
+      sessionListRequests.push(REPO_ID);
+      return HttpResponse.json({ sessions: [] });
+    }),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
     ),
@@ -71,7 +77,7 @@ function stubKickoffEndpoints() {
     }),
   );
 
-  return { sessionGate, runGate };
+  return { sessionGate, runGate, sessionListRequests };
 }
 
 /** The hook reads `:factoryId` and navigates, so it renders inside a real router. */
@@ -79,6 +85,9 @@ function renderStartFactoryRun() {
   let latest!: ReturnType<typeof useStartFactoryRun>;
   function Probe() {
     latest = useStartFactoryRun();
+    // Stands in for the sidebar: an active subscriber to the session list, so
+    // an invalidation actually refetches instead of silently marking it stale.
+    useWorkspacesQuery(REPO_ID);
     return null;
   }
   const router = createMemoryRouter([{ path: '/factories/:factoryId/*', element: <Probe /> }], {
@@ -129,5 +138,36 @@ describe('useStartFactoryRun', () => {
     await waitFor(() =>
       expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/workspaces/session-1/threads/thread-1`),
     );
+  });
+
+  it('refetches the session list so the new session shows up without navigating around', async () => {
+    const { sessionGate, runGate, sessionListRequests } = stubKickoffEndpoints();
+    const { current } = renderStartFactoryRun();
+
+    await waitFor(() => expect(current().enabled).toBe(true));
+    await waitFor(() => expect(sessionListRequests.length).toBeGreaterThan(0));
+    const beforeRun = sessionListRequests.length;
+
+    act(() => {
+      current().start.mutate({
+        branch: 'feat/investigate-1',
+        threadTitle: 'Investigate #1',
+        workItem: {
+          id: 'item-1',
+          role: 'investigator',
+          stages: ['triage'],
+          source: 'github-issue',
+          sourceKey: 'github-issue:1',
+          title: 'Investigate #1',
+        },
+      });
+    });
+
+    sessionGate.resolve();
+    runGate.resolve();
+    await waitFor(() => expect(current().pendingRuns).toHaveLength(0));
+
+    // The run minted a session, so the cached list the sidebar renders is stale.
+    await waitFor(() => expect(sessionListRequests.length).toBeGreaterThan(beforeRun));
   });
 });

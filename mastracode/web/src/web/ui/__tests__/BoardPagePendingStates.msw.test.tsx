@@ -205,6 +205,67 @@ describe('Board card pending states', () => {
     expect(matches?.at(-1)?.route.path).toBe('threads/:threadId');
   });
 
+  it('names the click outcome differently for cards that have a session and cards that do not', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [workItem, { ...workItem, id: 'fresh-item', title: 'Unstarted work', sessions: {} }],
+        }),
+      ),
+    );
+    renderWorkBoard();
+
+    const started = (await screen.findByText('Fix login bug')).closest<HTMLElement>('[data-testid="work-item-card"]');
+    const unstarted = (await screen.findByText('Unstarted work')).closest<HTMLElement>(
+      '[data-testid="work-item-card"]',
+    );
+    if (!started || !unstarted) throw new Error('Expected both work item cards');
+
+    // The consequence of the click differs per card, so the card has to say which one it is.
+    expect(within(started).getByText('Open session')).toBeInTheDocument();
+    expect(within(started).queryByText('Start session')).not.toBeInTheDocument();
+    expect(within(unstarted).getByText('Start session')).toBeInTheDocument();
+    expect(within(unstarted).queryByText('Open session')).not.toBeInTheDocument();
+  });
+
+  it('acknowledges a session-starting card click while it is still resolving the session', async () => {
+    stubBoardEndpoints();
+    const refreshGate = deferred();
+    let workItemRequests = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async () => {
+        workItemRequests += 1;
+        // The click refetches before it can decide to open or create; hold that
+        // refetch open so the pre-mutation window is observable.
+        if (workItemRequests > 1) await refreshGate.promise;
+        return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
+      }),
+      http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+        HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, () =>
+        HttpResponse.json({
+          prepared: { workItemId: ITEM_ID, threadId: THREAD_ID, sessionId: SESSION_ID, kickoffStatus: 'sent' },
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(within(card).getByRole('button', { name: /Create thread/ })).toBeEnabled());
+    await user.click(within(card).getByRole('button', { name: 'Create thread for Fix login bug' }));
+
+    // No run mutation exists yet, so this row is the only feedback the click can produce.
+    const status = await screen.findByText('Preparing session…');
+    expect(status.closest('[role="status"]')).not.toBeNull();
+    expect(await screen.findByTestId('work-item-card')).toHaveAttribute('aria-busy', 'true');
+
+    refreshGate.resolve();
+    await waitFor(() => expect(screen.queryByText('Preparing session…')).not.toBeInTheDocument());
+  });
+
   it('opens GitHub and Linear intake issues in their external provider', async () => {
     stubBoardEndpoints();
     server.use(
