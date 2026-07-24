@@ -1,7 +1,7 @@
 import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
-import { filterObservedMessages } from '../message-utils';
+import { filterObservedMessages, getBufferedChunks } from '../message-utils';
 import { getLastActivityFromMessages, getLatestStepParts } from '../observational-memory';
 import { resolveRetentionFloor } from '../thresholds';
 
@@ -70,28 +70,38 @@ export class ObservationStep {
 
     // ── Step 0: Activate buffered chunks ──────────────────────
     if (this.stepNumber === 0) {
-      const step0Messages = messageList.get.all.db();
-      const activation = await om.activate({
-        threadId,
-        resourceId,
-        checkThreshold: true,
-        messages: step0Messages,
-        currentModel: this.turn.actorModelContext,
-        writer: this.turn.writer,
-        messageList,
-      });
-
-      if (activation.activated) {
-        activated = true;
-        if (activation.activatedMessageIds?.length) {
-          messageList.removeByIds(activation.activatedMessageIds);
-        }
-        await om.resetBufferingState({
+      const step0Record = this.turn.record;
+      // Step 0 still needs activation when prior buffered chunks exist, when a
+      // previous async buffer is still settling, or when a stale DB boundary
+      // must be reset before the next turn can buffer again.
+      if (
+        step0Record.isBufferingObservation ||
+        getBufferedChunks(step0Record).length > 0 ||
+        (step0Record.lastBufferedAtTokens ?? 0) > 0
+      ) {
+        const step0Messages = messageList.get.all.db();
+        const activation = await om.activate({
           threadId,
           resourceId,
-          recordId: activation.record.id,
+          checkThreshold: true,
+          messages: step0Messages,
+          currentModel: this.turn.actorModelContext,
+          writer: this.turn.writer,
+          messageList,
         });
-        await this.turn.refreshRecord();
+
+        if (activation.activated) {
+          activated = true;
+          if (activation.activatedMessageIds?.length) {
+            messageList.removeByIds(activation.activatedMessageIds);
+          }
+          await om.resetBufferingState({
+            threadId,
+            resourceId,
+            recordId: activation.record.id,
+          });
+          await this.turn.refreshRecord();
+        }
       }
 
       // Check if reflection is needed (whether or not activation happened).
@@ -100,6 +110,12 @@ export class ObservationStep {
       const record = this.turn.record;
       const preReflectGeneration = record.generationCount;
       const obsTokens = record.observationTokenCount ?? 0;
+      const shouldRefreshAfterReflect =
+        activated ||
+        obsTokens > 0 ||
+        !!record.activeObservations ||
+        !!record.bufferedReflection ||
+        record.isBufferingReflection === true;
       await om.reflector.maybeReflect({
         record,
         observationTokens: obsTokens,
@@ -111,9 +127,11 @@ export class ObservationStep {
         observabilityContext: this.turn.observabilityContext,
         lastActivityAt: getLastActivityFromMessages(messageList.get.all.db()),
       });
-      await this.turn.refreshRecord();
-      if (this.turn.record.generationCount > preReflectGeneration) {
-        reflected = true;
+      if (shouldRefreshAfterReflect) {
+        await this.turn.refreshRecord();
+        if (this.turn.record.generationCount > preReflectGeneration) {
+          reflected = true;
+        }
       }
     }
 
@@ -138,6 +156,7 @@ export class ObservationStep {
     let statusSnapshot = await om.getStatus({
       threadId,
       resourceId,
+      record: this.turn.record,
       messages: messageList.get.all.db(),
     });
 
@@ -254,6 +273,7 @@ export class ObservationStep {
       statusSnapshot = await om.getStatus({
         threadId,
         resourceId,
+        record: this.turn.record,
         messages: messageList.get.all.db(),
       });
     }
@@ -325,11 +345,15 @@ export class ObservationStep {
 
     // Wait for any in-flight buffering to settle
     await om.waitForBuffering(threadId, resourceId);
+    // Buffering may have completed on a fresh storage row, so refresh the turn cache
+    // before we decide whether to activate buffered chunks or observe synchronously.
+    await this.turn.refreshRecord();
 
     // Re-check status with fresh state
     const freshStatus = await om.getStatus({
       threadId,
       resourceId,
+      record: this.turn.record,
       messages: messageList.get.all.db(),
     });
 
@@ -349,6 +373,7 @@ export class ObservationStep {
       });
 
       if (activation.activated) {
+        this.turn.setRecord(activation.record);
         // Check reflection after activation — use maybeReflect so that a
         // completed buffered reflection is activated instantly instead of
         // running a redundant sync reflection from scratch.

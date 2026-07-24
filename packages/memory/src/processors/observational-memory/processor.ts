@@ -304,18 +304,19 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         });
 
         // ── Progress emission (processor-specific) ──────────
-        // Fetch a fresh record from storage so buffering flags (e.g.
-        // isBufferingObservation set by fire-and-forget buffer()) are visible.
-        // The cached this.turn.record is stale in production DBs where each
-        // query returns a new row object.
-        const freshRecord = await this.engine.getOrCreateRecord(threadId, resourceId);
+        // Use the turn-scoped record so we avoid redundant read/write churn.
+        const turnRecord = this.turn!.record;
+        const progressRecord =
+          ctx.buffered && !turnRecord.isBufferingObservation
+            ? { ...turnRecord, isBufferingObservation: true }
+            : turnRecord;
         await this.engine.emitProgress({
-          record: freshRecord,
+          record: progressRecord,
           stepNumber,
           pendingTokens: ctx.status.pendingTokens,
           threshold: ctx.status.threshold,
           effectiveObservationTokensThreshold: ctx.status.effectiveObservationTokensThreshold,
-          currentObservationTokens: freshRecord.observationTokenCount ?? 0,
+          currentObservationTokens: progressRecord.observationTokenCount ?? 0,
           writer,
           threadId,
           resourceId,
@@ -329,10 +330,12 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         const otherThreadTokens = otherThreadsContext ? tokenCounter.countString(otherThreadsContext) : 0;
         const finalTotalPending = contextTokens + otherThreadTokens;
 
-        await this.engine
-          .getStorage()
-          .setPendingMessageTokens(freshRecord.id, finalTotalPending)
-          .catch(() => {});
+        try {
+          await this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending);
+          this.turn?.patchRecord({ pendingMessageTokens: finalTotalPending });
+        } catch {
+          // No-op: token persistence failures are intentionally non-fatal for streaming UX.
+        }
 
         // ── Repro capture (processor-specific) ──────────────
         if (reproCaptureEnabled) {
@@ -342,7 +345,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
             stepNumber,
             args,
             preRecord: preRecordSnapshot!,
-            postRecord: safeCaptureJson(freshRecord) as ObservationalMemoryRecord,
+            postRecord: safeCaptureJson(turnRecord) as ObservationalMemoryRecord,
             preMessages: preMessagesSnapshot!,
             preBufferedChunks: [],
             preContextTokenCount: 0,
