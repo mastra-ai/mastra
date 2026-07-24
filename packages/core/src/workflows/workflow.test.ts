@@ -955,6 +955,101 @@ describe('Workflow (Default Engine Specifics)', () => {
       expect(result).toEqual({ value: 'ok' });
       expect(fgaProvider.require).not.toHaveBeenCalled();
     });
+
+    /**
+     * @see https://github.com/mastra-ai/mastra/issues/18165
+     */
+    describe('Run.resume FGA enforcement', () => {
+      function createSuspendableFGAWorkflow() {
+        const suspendStep = createStep({
+          id: 'fga-suspend-step',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          suspendSchema: z.object({ message: z.string() }),
+          resumeSchema: z.object({ confirm: z.boolean() }),
+          execute: async ({ inputData, resumeData, suspend }) => {
+            if (!resumeData?.confirm) {
+              await suspend({ message: 'awaiting confirm' });
+            }
+            return inputData;
+          },
+        });
+        return createWorkflow({
+          id: 'fga-resume-workflow',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          steps: [suspendStep],
+        })
+          .then(suspendStep)
+          .commit();
+      }
+
+      async function suspendedRun(opts: { runId: string; fgaProvider?: unknown }) {
+        const storage = new MockStore();
+        const workflow = createSuspendableFGAWorkflow();
+        const mastra = new Mastra({
+          logger: false,
+          storage,
+          ...(opts.fgaProvider ? { server: { fga: opts.fgaProvider as any } } : {}),
+        });
+        workflow.__registerMastra(mastra);
+        const run = await workflow.createRun({ runId: opts.runId });
+        const result = await run.start({ inputData: { value: 'ok' } });
+        expect(result.status).toBe('suspended');
+        return run;
+      }
+
+      it('checks workflows:execute on resume with request context metadata', async () => {
+        const fgaProvider = {
+          require: vi.fn().mockResolvedValue(undefined),
+          check: vi.fn(),
+          filterAccessible: vi.fn(),
+        };
+        const run = await suspendedRun({ runId: 'fga-resume-run-1', fgaProvider });
+        const requestContext = new RequestContext();
+        requestContext.set('user', { id: 'user-1' });
+
+        await run.resume({ resumeData: { confirm: true }, requestContext });
+
+        expect(fgaProvider.require).toHaveBeenCalledTimes(1);
+        expect(fgaProvider.require).toHaveBeenCalledWith(
+          { id: 'user-1' },
+          {
+            resource: { type: 'workflow', id: 'fga-resume-workflow' },
+            permission: 'workflows:execute',
+            context: expect.objectContaining({
+              requestContext,
+              metadata: expect.objectContaining({
+                workflowId: 'fga-resume-workflow',
+                runId: 'fga-resume-run-1',
+              }),
+            }),
+          },
+        );
+      });
+
+      it('fails closed on resume when FGA is configured and no user is available', async () => {
+        const fgaProvider = {
+          require: vi.fn().mockResolvedValue(undefined),
+          check: vi.fn(),
+          filterAccessible: vi.fn(),
+        };
+        const run = await suspendedRun({ runId: 'fga-resume-run-2', fgaProvider });
+
+        await expect(
+          run.resume({ resumeData: { confirm: true }, requestContext: new RequestContext() }),
+        ).rejects.toThrow('authenticated user is required');
+        expect(fgaProvider.require).not.toHaveBeenCalled();
+      });
+
+      it('no-ops on resume when no FGA provider is configured', async () => {
+        const run = await suspendedRun({ runId: 'fga-resume-run-3' });
+
+        // No FGA provider → resume completes without any auth indirection.
+        const result = await run.resume({ resumeData: { confirm: true } });
+        expect(result.status).toBe('success');
+      });
+    });
   });
 
   describe('Nested workflow abort listener cleanup (issue #16125)', () => {

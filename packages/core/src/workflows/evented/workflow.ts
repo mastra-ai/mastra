@@ -2162,6 +2162,33 @@ export class EventedRun<
       includeResumeLabels?: boolean;
     };
   }): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    // FGA authorization check — mirrors Workflow.execute() so the evented
+    // resume path goes through the same `workflows:execute` gate as the
+    // initial execution. Without this, callers reaching EventedRun.resume
+    // directly bypass the internal check while the server route adapter
+    // still enforces it on the HTTP path.
+    const fgaProvider = this.mastra?.getServer()?.fga;
+    if (fgaProvider) {
+      const user = params.requestContext?.get('user' as any);
+      const { getWorkflowFGAResourceId, requireFGA } = await import('../../auth/ee/fga-check');
+      const { MastraFGAPermissions } = await import('../../auth/ee');
+      await requireFGA({
+        fgaProvider,
+        user,
+        resource: { type: 'workflow', id: getWorkflowFGAResourceId(this.workflowId) },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        requestContext: params.requestContext,
+        context: {
+          resourceId: this.resourceId,
+        },
+        metadata: {
+          workflowId: this.workflowId,
+          runId: this.runId,
+          resourceId: this.resourceId,
+        },
+      });
+    }
+
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     if (!workflowsStore) {
       throw new Error('Cannot resume workflow: workflows store is required');
