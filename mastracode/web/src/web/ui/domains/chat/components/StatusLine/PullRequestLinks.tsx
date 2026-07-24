@@ -95,11 +95,15 @@ export function PullRequestLinks({
     .filter(id => typeof id === 'string')
     .join(':');
   const enabled = typeof projectRepositoryId === 'string' && Boolean(threadId);
+  // Subscriptions are stored keyed on the factory project id (see the server's
+  // subscriptionInput: resourceId = connection.factoryProjectId), so factory
+  // sessions must query with it — the chat resourceId only matches legacy rows.
+  const subscriptionResourceId = factoryProjectKey ?? resourceId;
   const query = useQuery({
-    queryKey: ['github', 'subscriptions', resourceId, threadId, projectPath],
+    queryKey: ['github', 'subscriptions', subscriptionResourceId, threadId, projectPath],
     queryFn: async () => {
       if (!threadId) return { subscriptions: [] };
-      const params = new URLSearchParams({ resourceId, threadId });
+      const params = new URLSearchParams({ resourceId: subscriptionResourceId, threadId });
       if (projectPath) params.set('scope', projectPath);
       const response = await fetch(`${baseUrl}/web/github/subscriptions?${params}`, { credentials: 'include' });
       if (!response.ok) throw new Error(`Failed to load pull request subscriptions (${response.status}).`);
