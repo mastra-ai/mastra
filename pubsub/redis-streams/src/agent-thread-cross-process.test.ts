@@ -32,6 +32,11 @@ function leaseKeyFor(resourceId: string, threadId: string): string {
   return `mastra:topic:lease:${resourceId}${AGENT_THREAD_KEY_SEPARATOR}${threadId}`;
 }
 
+function streamKeyFor(resourceId: string, threadId: string): string {
+  const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}${AGENT_THREAD_KEY_SEPARATOR}${threadId}`)}`;
+  return `mastra:topic:${topic}`;
+}
+
 interface Worker extends ManagedProcess {
   proc: ChildProcess;
   send: (msg: Record<string, unknown>) => void;
@@ -131,6 +136,41 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       workers = [];
       await flushRedis(REDIS_URL).catch(() => {});
     });
+
+    it('acknowledges thread events so the private fanout pending list stays empty', async () => {
+      const resourceId = `ack-${Date.now()}`;
+      const threadId = `thread-${Date.now()}`;
+      const streamKey = streamKeyFor(resourceId, threadId);
+      const worker = spawnWorker('ack-worker', {
+        RESOURCE_ID: resourceId,
+        THREAD_ID: threadId,
+        RUN_MS: '200',
+      });
+      workers = [worker];
+
+      await waitForLine(worker, '"type":"ready"');
+      worker.send({ cmd: 'send', sigId: 'ack-signal' });
+      await waitForLine(worker, '"type":"run-finished"');
+
+      const inspector = createClient({ url: REDIS_URL });
+      await inspector.connect();
+      try {
+        await waitFor(async () => {
+          const groups = await inspector.xInfoGroups(streamKey);
+          return (
+            (await inspector.xLen(streamKey)) >= 2 &&
+            groups.length > 0 &&
+            groups.every(group => Number(group.lag) === 0)
+          );
+        });
+
+        const groups = await inspector.xInfoGroups(streamKey);
+        expect(groups.every(group => group.name.startsWith('__fanout-'))).toBe(true);
+        expect(groups.reduce((total, group) => total + Number(group.pending), 0)).toBe(0);
+      } finally {
+        await inspector.quit();
+      }
+    }, 30_000);
 
     it('serializes rapid-fire signals through one lease winner with no dropped signals', async () => {
       const resourceId = `rapid-${Date.now()}`;

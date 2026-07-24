@@ -90,9 +90,14 @@ export interface SubscribeOptions {
  * Callback signature for PubSub subscribers.
  *
  * @param event - The delivered event
- * @param ack - Acknowledge successful processing. Message is removed from the queue.
+ * @param ack - Acknowledge successful processing for this subscription. Persistent backends may retain the event
+ *              for other subscribers or replay.
  * @param nack - Negative acknowledge. Message is requeued for redelivery after a delay.
- *               Not calling either ack or nack leaves the message in-flight until the
- *               backend's ack deadline expires (typically 10s for GCP).
+ *               Not calling either ack or nack leaves the message in-flight according to the backend's delivery
+ *               policy; some backends retain it indefinitely.
  */
-export type EventCallback = (event: Event, ack?: () => Promise<void>, nack?: () => Promise<void>) => void;
+export type EventCallback = (
+  event: Event,
+  ack?: () => Promise<void>,
+  nack?: () => Promise<void>,
+) => void | Promise<void>;

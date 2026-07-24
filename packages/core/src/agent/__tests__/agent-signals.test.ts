@@ -93,6 +93,78 @@ class AsyncCallbackPubSub extends PubSub {
   }
 }
 
+class AckTrackingPubSub extends PubSub {
+  #subscribers = new Map<string, Set<EventCallback>>();
+  #index = 0;
+  #pendingCallbacks = new Set<Promise<void>>();
+  delivered = 0;
+  acked = 0;
+  nacked = 0;
+
+  constructor(private readonly rejectAckForEvent?: (event: any) => boolean) {
+    super();
+  }
+
+  get pending() {
+    return this.delivered - this.acked - this.nacked;
+  }
+
+  subscriberCount(topic: string) {
+    return this.#subscribers.get(topic)?.size ?? 0;
+  }
+
+  async publish(topic: string, event: any, _options?: { localOnly?: boolean }): Promise<void> {
+    const envelope = {
+      ...event,
+      id: `tracked-event-${this.#index++}`,
+      createdAt: new Date(),
+    };
+    for (const subscriber of [...(this.#subscribers.get(topic) ?? [])]) {
+      this.delivered += 1;
+      let settled = false;
+      const ack = async () => {
+        if (settled) return;
+        if (this.rejectAckForEvent?.(envelope)) {
+          throw new Error('Acknowledgement failed');
+        }
+        settled = true;
+        this.acked += 1;
+      };
+      const nack = async () => {
+        if (settled) return;
+        settled = true;
+        this.nacked += 1;
+      };
+      try {
+        const result = subscriber(envelope, ack, nack);
+        if (result) {
+          const pending = result.catch(nack);
+          this.#pendingCallbacks.add(pending);
+          void pending.finally(() => this.#pendingCallbacks.delete(pending));
+        }
+      } catch {
+        await nack();
+      }
+    }
+  }
+
+  async subscribe(topic: string, cb: EventCallback): Promise<void> {
+    const subscribers = this.#subscribers.get(topic) ?? new Set<EventCallback>();
+    subscribers.add(cb);
+    this.#subscribers.set(topic, subscribers);
+  }
+
+  async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    this.#subscribers.get(topic)?.delete(cb);
+  }
+
+  async flush(): Promise<void> {
+    while (this.#pendingCallbacks.size > 0) {
+      await Promise.all([...this.#pendingCallbacks]);
+    }
+  }
+}
+
 async function readNextRun(iterator: AsyncIterator<any>) {
   const nextRun = await readNextRunWithParts(iterator);
   if (nextRun.done) return nextRun;
@@ -2810,6 +2882,105 @@ describe('Agent signals', () => {
     await pubsub.releaseLease('remote-resource\u0000remote-thread', 'remote-run-1');
     ownerSubscription.unsubscribe();
     senderSubscription.unsubscribe();
+  });
+
+  it('acknowledges persistent thread events after subscription and remote-run wait handlers process them', async () => {
+    const pubsub = new AckTrackingPubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const owner = { id: 'ack-owner-agent' } as Agent<any, any, any, any>;
+    const waiter = { id: 'ack-waiter-agent' } as Agent<any, any, any, any>;
+    const resourceId = 'ack-resource';
+    const threadId = 'ack-thread';
+    const runId = 'ack-run';
+    const streamId = 'ack-stream';
+    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+    const subscription = await runtime.subscribeToThread(owner, { resourceId, threadId }, pubsub);
+
+    try {
+      await pubsub.publish(topic, {
+        type: 'agent.thread-stream',
+        runId,
+        data: { type: 'run-registered', runId, streamId, streamSeq: 1 },
+      });
+      await pubsub.flush();
+
+      const waiting = runtime.waitForCrossAgentThreadRun(
+        waiter,
+        { memory: { resource: resourceId, thread: threadId } },
+        pubsub,
+      );
+
+      await pubsub.publish(topic, {
+        type: 'agent.thread-stream',
+        runId,
+        data: { type: 'stream-part', runId, streamId, part: { type: 'text-delta' }, sourceId: 'remote-runtime' },
+      });
+      await pubsub.publish(topic, {
+        type: 'agent.thread-stream',
+        runId,
+        data: { type: 'run-completed', runId, streamId },
+      });
+
+      await waiting;
+      await pubsub.flush();
+
+      expect(pubsub.delivered).toBe(5);
+      expect(pubsub.acked).toBe(pubsub.delivered);
+      expect(pubsub.nacked).toBe(0);
+      expect(pubsub.pending).toBe(0);
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
+  it('settles remote-run waiters and nacks when terminal event acknowledgement fails', async () => {
+    const pubsub = new AckTrackingPubSub(event => event.data?.type === 'run-completed');
+    const runtime = new AgentThreadStreamRuntime();
+    const owner = { id: 'ack-failure-owner-agent' } as Agent<any, any, any, any>;
+    const waiter = { id: 'ack-failure-waiter-agent' } as Agent<any, any, any, any>;
+    const resourceId = 'ack-failure-resource';
+    const threadId = 'ack-failure-thread';
+    const runId = 'ack-failure-run';
+    const streamId = 'ack-failure-stream';
+    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+    const subscription = await runtime.subscribeToThread(owner, { resourceId, threadId }, pubsub);
+
+    try {
+      await pubsub.publish(topic, {
+        type: 'agent.thread-stream',
+        runId,
+        data: { type: 'run-registered', runId, streamId, streamSeq: 1 },
+      });
+      await pubsub.flush();
+
+      const waiting = runtime.waitForCrossAgentThreadRun(
+        waiter,
+        { memory: { resource: resourceId, thread: threadId } },
+        pubsub,
+      );
+
+      await pubsub.publish(topic, {
+        type: 'agent.thread-stream',
+        runId,
+        data: { type: 'stream-part', runId, streamId, part: { type: 'text-delta' }, sourceId: 'remote-runtime' },
+      });
+      await pubsub.publish(topic, {
+        type: 'agent.thread-stream',
+        runId,
+        data: { type: 'run-completed', runId, streamId },
+      });
+
+      await withTimeout(waiting, 'Timed out waiting after terminal acknowledgement failure');
+      await pubsub.flush();
+
+      expect(pubsub.delivered).toBe(5);
+      expect(pubsub.acked).toBe(3);
+      expect(pubsub.nacked).toBe(2);
+      expect(pubsub.pending).toBe(0);
+      expect(pubsub.subscriberCount(topic)).toBe(1);
+    } finally {
+      subscription.unsubscribe();
+    }
   });
 
   it('wakes a new run instead of delivering to a stale remote active run id', async () => {
