@@ -662,13 +662,22 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         }) as Promise<InngestAgentStreamResult<TOutput>>;
       }
 
-      // 1. Prepare for durable execution
+      // 1. Prepare for durable execution.
+      // `mastra` + the public (wrapper) agent identity are REQUIRED for tracing:
+      // preparation creates the run's AGENT_RUN span (and parents the
+      // preparation-phase processor spans — custom input processors,
+      // message-history recall — under it). Without `mastra` it cannot resolve
+      // an observability instance, so those spans ended up parentless in a
+      // rootless second trace. Mirrors core's DurableAgent.stream() prep call.
       const preparation = await prepareForDurableExecution<TOutput>({
         agent: agent as Agent<string, any, TOutput>,
         messages,
         options: streamOptions as AgentExecutionOptions<TOutput>,
         runId: streamOptions?.runId,
         requestContext: streamOptions?.requestContext,
+        mastra,
+        durableAgentId: agentId,
+        durableAgentName: agentName,
         methodType: (streamOptions as any)?.__methodType ?? 'stream',
       });
 
@@ -705,43 +714,56 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // workflow steps running in the same process can recover it.
       globalRunRegistry.set(runId, registryEntry);
 
-      // 2. Create AGENT_RUN span BEFORE the workflow starts
-      // This ensures the agent_run is the root of the trace, not the workflow
-      const observability = mastra?.observability?.getSelectedInstance({
-        requestContext: streamOptions?.requestContext,
-      });
-      const agentSpan = observability?.startSpan({
-        type: SpanType.AGENT_RUN,
-        name: `agent run: '${agentId}'`,
-        entityType: EntityType.AGENT,
-        entityId: agentId,
-        entityName: agentName,
-        input: workflowInput.messageListState,
-        metadata: {
-          runId,
-          threadId,
-          resourceId,
-        },
-      });
-      // Export span data so it can be passed to the workflow
-      const agentSpanData = agentSpan?.exportSpan();
-
-      // 3. Create MODEL_GENERATION span BEFORE the workflow starts
-      // This ensures ONE model_generation span contains all steps (like regular agents)
-      const modelSpan = agentSpan?.createChildSpan({
-        type: SpanType.MODEL_GENERATION,
-        name: `llm: '${workflowInput.modelConfig.modelId}'`,
-        input: { messages: workflowInput.messageListState },
-        attributes: {
-          model: workflowInput.modelConfig.modelId,
-          provider: workflowInput.modelConfig.provider,
-          streaming: true,
-          parameters: {
-            temperature: workflowInput.options?.modelSettings?.temperature,
+      // 2. AGENT_RUN / MODEL_GENERATION spans. Preparation already created BOTH —
+      // with the run's preparation-phase processor spans (custom input processors,
+      // message-history recall) parented under the agent span — and exported them
+      // onto the workflow input. REUSE them so the whole run lands in ONE trace.
+      // Minting fresh spans here (the previous behavior) left preparation's trace
+      // rootless: its agent span was never ended or exported, and every prep-phase
+      // processor span became a parentless span in a trace with no agent_run.
+      let agentSpanData: any = workflowInput.agentSpanData;
+      let agentSpanFallback: any;
+      if (!agentSpanData) {
+        // Fallback (no observability during preparation): create the trace root here.
+        const observability = mastra?.observability?.getSelectedInstance({
+          requestContext: streamOptions?.requestContext,
+        });
+        agentSpanFallback = observability?.startSpan({
+          type: SpanType.AGENT_RUN,
+          name: `agent run: '${agentId}'`,
+          entityType: EntityType.AGENT,
+          entityId: agentId,
+          entityName: agentName,
+          // The caller's raw messages — parity with the non-durable Agent, whose
+          // AGENT_RUN input is `options.messages`.
+          input: messages,
+          metadata: {
+            runId,
+            threadId,
+            resourceId,
           },
-        },
-      });
-      const modelSpanData = modelSpan?.exportSpan();
+        });
+        agentSpanData = agentSpanFallback?.exportSpan();
+      }
+
+      let modelSpanData = workflowInput.modelSpanData;
+      if (!modelSpanData && agentSpanFallback) {
+        const modelSpan = agentSpanFallback.createChildSpan({
+          type: SpanType.MODEL_GENERATION,
+          name: `llm: '${workflowInput.modelConfig.modelId}'`,
+          // Raw messages, matching the non-durable model span's `{ messages }` shape.
+          input: { messages },
+          attributes: {
+            model: workflowInput.modelConfig.modelId,
+            provider: workflowInput.modelConfig.provider,
+            streaming: true,
+            parameters: {
+              temperature: workflowInput.options?.modelSettings?.temperature,
+            },
+          },
+        });
+        modelSpanData = modelSpan?.exportSpan();
+      }
 
       // Add span data to workflow input
       workflowInput.agentSpanData = agentSpanData;
@@ -1039,6 +1061,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         messages,
         options: prepareOptions,
         requestContext: prepareOptions?.requestContext,
+        mastra,
+        durableAgentId: agentId,
+        durableAgentName: agentName,
       });
 
       // Override with durable agent's id/name
