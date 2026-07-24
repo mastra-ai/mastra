@@ -573,17 +573,16 @@ export class MessageList {
           if (dbMsg.content?.format !== 2 || !dbMsg.content.parts) continue;
 
           for (const part of dbMsg.content.parts) {
-            if (
-              part.type === 'tool-invocation' &&
-              part.toolInvocation?.state === 'result' &&
-              part.providerMetadata?.mastra &&
-              typeof part.providerMetadata.mastra === 'object' &&
-              'modelOutput' in (part.providerMetadata.mastra as Record<string, unknown>)
-            ) {
-              storedModelOutputs.set(
-                part.toolInvocation.toolCallId,
-                (part.providerMetadata.mastra as Record<string, unknown>).modelOutput,
-              );
+            if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
+
+            // A tool's `toModelOutput` can return `undefined` (e.g. a text-only result), which the
+            // durable llm-mapping step still persists as `mastra: { modelOutput: undefined }`. Skip
+            // nullish values: the override below would otherwise clobber the correctly-converted
+            // `output` with `undefined`, producing a tool-result whose `output` is missing — which
+            // then throws in providers that read `output.type` (e.g. @openrouter/ai-sdk-provider).
+            const mastra = part.providerMetadata?.mastra as Record<string, unknown> | undefined;
+            if (mastra?.modelOutput != null) {
+              storedModelOutputs.set(part.toolInvocation.toolCallId, mastra.modelOutput);
             }
           }
         }
