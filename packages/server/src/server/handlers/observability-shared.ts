@@ -52,9 +52,7 @@ export async function getObservabilityStore(mastra: Mastra): Promise<Observabili
   if (!observability) {
     // 501, not 500: a missing or explicitly disabled observability domain
     // (e.g. `domains: { observability: false }`) is a capability gap, not a
-    // server failure. Matches the 501s used for other capability gaps (see
-    // assertObservabilityDeltaSupported below); Studio treats 501 as
-    // non-retryable and stops polling.
+    // server failure — matching the other 501s in this file.
     throw new HTTPException(501, { message: 'Observability storage domain is not available' });
   }
   return observability;

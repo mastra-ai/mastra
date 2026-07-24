@@ -126,11 +126,9 @@ export function isUnsupportedObservabilityOperationError(
 
 /**
  * Check if an error came from a server whose observability storage domain is
- * unavailable — e.g. explicitly disabled with `domains: { observability: false }`
- * on a composite store. This affects every observability endpoint (traces, logs,
- * metrics, scores, feedback), so unlike the per-operation check above it takes
- * no operation argument. Matches the stable message thrown by the server's
- * `getObservabilityStore()`.
+ * unavailable — e.g. disabled with `domains: { observability: false }` on a
+ * composite store. Affects every observability endpoint, so no operation
+ * argument. Matches the stable message from the server's `getObservabilityStore()`.
  */
 export function isObservabilityUnavailableError(error: unknown): boolean {
   if (!error || typeof error !== 'object' || !('message' in error)) return false;
