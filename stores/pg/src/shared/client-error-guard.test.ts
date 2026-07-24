@@ -33,7 +33,19 @@ describe('attachClientErrorHandler', () => {
     expect(() => client.emit('error', new Error('Connection terminated unexpectedly'))).not.toThrow();
   });
 
-  it('detach() removes the listener', () => {
+  it('is idempotent: re-attaching to the same client does not add a second listener', () => {
+    const client = makeFakeClient();
+
+    attachClientErrorHandler(client);
+    attachClientErrorHandler(client);
+    attachClientErrorHandler(client);
+
+    // Pooled clients are reused across checkouts; a single persistent listener
+    // covers every checkout without leaking one listener per checkout.
+    expect(client.listenerCount('error')).toBe(1);
+  });
+
+  it('detach() removes the listener and allows a fresh re-attach', () => {
     const client = makeFakeClient();
     const detach = attachClientErrorHandler(client);
     expect(client.listenerCount('error')).toBe(1);
@@ -43,6 +55,10 @@ describe('attachClientErrorHandler', () => {
     // Idempotent: a second detach is a no-op.
     detach();
     expect(client.listenerCount('error')).toBe(0);
+
+    // After detaching, the client can be guarded again.
+    attachClientErrorHandler(client);
+    expect(client.listenerCount('error')).toBe(1);
   });
 
   it('routes the error to the provided logger', () => {
@@ -54,6 +70,17 @@ describe('attachClientErrorHandler', () => {
 
     expect(warn).toHaveBeenCalledOnce();
     expect(warn.mock.calls[0]![1]).toMatchObject({ err: 'boom' });
+  });
+
+  it('no-ops for clients that are not EventEmitters', () => {
+    // Some call sites (and test doubles) pass a plain object client without
+    // `on`/`removeListener`; the guard must not throw for them.
+    const client = { query: vi.fn(), release: vi.fn() } as unknown as PoolClient;
+    let detach: () => void;
+    expect(() => {
+      detach = attachClientErrorHandler(client);
+    }).not.toThrow();
+    expect(() => detach()).not.toThrow();
   });
 });
 
@@ -69,30 +96,29 @@ describe('connectWithClientErrorHandler', () => {
     expect(() => client.emit('error', new Error('backend died mid-checkout'))).not.toThrow();
   });
 
-  it('detaches the listener when the client is released', async () => {
+  it('does not replace the client release function', async () => {
+    // The guard must be transparent to callers' `finally { client.release() }`
+    // and must not clobber `release` (pooled clients / test doubles reuse it).
     const client = makeFakeClient();
     const originalRelease = client.release;
     const pool = makeFakePool(client);
 
     const checkedOut = await connectWithClientErrorHandler(pool);
-    expect(client.listenerCount('error')).toBe(1);
 
+    expect(checkedOut.release).toBe(originalRelease);
     checkedOut.release();
-
-    expect(client.listenerCount('error')).toBe(0);
     expect(originalRelease).toHaveBeenCalledOnce();
+    // The listener persists across release (it is attached once per client).
+    expect(client.listenerCount('error')).toBe(1);
   });
 
-  it('forwards the release error argument to the underlying release', async () => {
+  it('is idempotent across repeated checkouts of the same pooled client', async () => {
     const client = makeFakeClient();
-    const originalRelease = client.release;
     const pool = makeFakePool(client);
 
-    const checkedOut = await connectWithClientErrorHandler(pool);
-    const err = new Error('discard me');
-    checkedOut.release(err);
+    await connectWithClientErrorHandler(pool);
+    await connectWithClientErrorHandler(pool);
 
-    expect(originalRelease).toHaveBeenCalledWith(err);
-    expect(client.listenerCount('error')).toBe(0);
+    expect(client.listenerCount('error')).toBe(1);
   });
 });

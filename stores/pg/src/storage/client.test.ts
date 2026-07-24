@@ -34,16 +34,17 @@ describe('PoolAdapter checked-out client error handling', () => {
     const checkedOut = await adapter.connect();
 
     expect(checkedOut.listenerCount('error')).toBe(1);
+    // Without a listener this would escalate to an uncaughtException; with the
+    // guard it is a no-op and the process survives.
     expect(() => client.emit('error', new Error('Connection terminated unexpectedly'))).not.toThrow();
 
+    // release() is left untouched (the guard is attached once per client).
     checkedOut.release();
-    expect(client.listenerCount('error')).toBe(0);
+    expect(client.release).toHaveBeenCalledOnce();
   });
 
   it('tx() guards the transaction client for the duration of the callback', async () => {
     const client = makeFakeClient();
-    // connect() wraps client.release, so capture the underlying spy first.
-    const underlyingRelease = client.release;
     const pool = { connect: vi.fn(async () => client) } as unknown as Pool;
     const adapter = new PoolAdapter(pool);
 
@@ -53,8 +54,7 @@ describe('PoolAdapter checked-out client error handling', () => {
       expect(() => client.emit('error', new Error('Connection terminated unexpectedly'))).not.toThrow();
     });
 
-    // Released in finally → listener detached.
-    expect(underlyingRelease).toHaveBeenCalledOnce();
-    expect(client.listenerCount('error')).toBe(0);
+    // Released in finally.
+    expect(client.release).toHaveBeenCalledOnce();
   });
 });
