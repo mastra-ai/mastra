@@ -101,8 +101,16 @@ class AckTrackingPubSub extends PubSub {
   acked = 0;
   nacked = 0;
 
+  constructor(private readonly rejectAckForEvent?: (event: any) => boolean) {
+    super();
+  }
+
   get pending() {
     return this.delivered - this.acked - this.nacked;
+  }
+
+  subscriberCount(topic: string) {
+    return this.#subscribers.get(topic)?.size ?? 0;
   }
 
   async publish(topic: string, event: any, _options?: { localOnly?: boolean }): Promise<void> {
@@ -116,6 +124,9 @@ class AckTrackingPubSub extends PubSub {
       let settled = false;
       const ack = async () => {
         if (settled) return;
+        if (this.rejectAckForEvent?.(envelope)) {
+          throw new Error('Acknowledgement failed');
+        }
         settled = true;
         this.acked += 1;
       };
@@ -2917,6 +2928,56 @@ describe('Agent signals', () => {
       expect(pubsub.acked).toBe(pubsub.delivered);
       expect(pubsub.nacked).toBe(0);
       expect(pubsub.pending).toBe(0);
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
+  it('settles remote-run waiters and nacks when terminal event acknowledgement fails', async () => {
+    const pubsub = new AckTrackingPubSub(event => event.data?.type === 'run-completed');
+    const runtime = new AgentThreadStreamRuntime();
+    const owner = { id: 'ack-failure-owner-agent' } as Agent<any, any, any, any>;
+    const waiter = { id: 'ack-failure-waiter-agent' } as Agent<any, any, any, any>;
+    const resourceId = 'ack-failure-resource';
+    const threadId = 'ack-failure-thread';
+    const runId = 'ack-failure-run';
+    const streamId = 'ack-failure-stream';
+    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+    const subscription = await runtime.subscribeToThread(owner, { resourceId, threadId }, pubsub);
+
+    try {
+      await pubsub.publish(topic, {
+        type: 'agent.thread-stream',
+        runId,
+        data: { type: 'run-registered', runId, streamId, streamSeq: 1 },
+      });
+      await pubsub.flush();
+
+      const waiting = runtime.waitForCrossAgentThreadRun(
+        waiter,
+        { memory: { resource: resourceId, thread: threadId } },
+        pubsub,
+      );
+
+      await pubsub.publish(topic, {
+        type: 'agent.thread-stream',
+        runId,
+        data: { type: 'stream-part', runId, streamId, part: { type: 'text-delta' }, sourceId: 'remote-runtime' },
+      });
+      await pubsub.publish(topic, {
+        type: 'agent.thread-stream',
+        runId,
+        data: { type: 'run-completed', runId, streamId },
+      });
+
+      await withTimeout(waiting, 'Timed out waiting after terminal acknowledgement failure');
+      await pubsub.flush();
+
+      expect(pubsub.delivered).toBe(5);
+      expect(pubsub.acked).toBe(3);
+      expect(pubsub.nacked).toBe(2);
+      expect(pubsub.pending).toBe(0);
+      expect(pubsub.subscriberCount(topic)).toBe(1);
     } finally {
       subscription.unsubscribe();
     }
