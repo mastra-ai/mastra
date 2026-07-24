@@ -27,7 +27,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@libsql/kysely-libsql": "^0.4.1",
-    "better-auth": "^1.6.13"
+    "better-auth": "^1.6.23"
   },
   "peerDependencies": {
     "hono": "^4.0.0"
