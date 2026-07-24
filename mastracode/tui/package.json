@@ -116,7 +116,7 @@
     "@mastra/tavily": "workspace:*",
     "@mastra/voice-deepgram": "workspace:*",
     "@mastra/voice-openai": "workspace:*",
-    "ai": "^6.0.230",
+    "ai": "^6.0.231",
     "chalk": "^5.5.0",
     "cli-highlight": "^2.1.11",
     "execa": "^9.6.1",
