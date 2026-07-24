@@ -1,5 +1,6 @@
 import {
   LIST_WORKFLOWS_ROUTE,
+  LIST_WORKFLOW_RUN_COUNTS_ROUTE,
   GET_WORKFLOW_BY_ID_ROUTE,
   LIST_WORKFLOW_RUNS_ROUTE,
   GET_WORKFLOW_RUN_BY_ID_ROUTE,
@@ -27,6 +28,9 @@ import {
 
 export const WORKFLOWS_ROUTES = [
   LIST_WORKFLOWS_ROUTE,
+  // Static path must register before the parameterized /workflows/:workflowId
+  // route below, or the router would capture "run-counts" as a workflowId.
+  LIST_WORKFLOW_RUN_COUNTS_ROUTE,
   GET_WORKFLOW_BY_ID_ROUTE,
   LIST_WORKFLOW_RUNS_ROUTE,
   GET_WORKFLOW_RUN_BY_ID_ROUTE,

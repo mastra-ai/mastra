@@ -636,6 +636,13 @@ export interface ListWorkflowRunsParams {
 
 export type ListWorkflowRunsResponse = WorkflowRuns;
 
+export interface WorkflowRunCounts {
+  running: number;
+  suspended: number;
+}
+
+export type ListWorkflowRunCountsResponse = Record<string, WorkflowRunCounts>;
+
 export type GetWorkflowRunByIdResponse = WorkflowState;
 
 export interface GetWorkflowResponse {

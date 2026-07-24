@@ -1,14 +1,16 @@
 import { DataListCell } from './data-list-cells';
 import { DataListRoot } from './data-list-root';
+import type { DataListFit } from './data-list-root';
 
 const widths = ['75%', '50%', '65%', '90%', '60%', '80%'];
 
 export type DataListSkeletonProps = {
   columns?: string;
   numberOfRows?: number;
+  fit?: DataListFit;
 };
 
-export function DataListSkeleton({ columns = 'auto 1fr auto auto', numberOfRows = 3 }: DataListSkeletonProps) {
+export function DataListSkeleton({ columns = 'auto 1fr auto auto', numberOfRows = 3, fit }: DataListSkeletonProps) {
   const columnParts = columns.trim().split(/\s+/);
   const columnCount = columnParts.length;
   const skeletonColumns = columnParts.map(col => (col === 'auto' ? 'minmax(6rem, auto)' : col)).join(' ');
@@ -19,7 +21,7 @@ export function DataListSkeleton({ columns = 'auto 1fr auto auto', numberOfRows 
   };
 
   return (
-    <DataListRoot columns={skeletonColumns}>
+    <DataListRoot columns={skeletonColumns} fit={fit}>
       {Array.from({ length: numberOfRows }).map((_, rowIdx) => (
         <div
           key={rowIdx}

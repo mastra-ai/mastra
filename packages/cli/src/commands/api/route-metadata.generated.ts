@@ -533,6 +533,18 @@ export const API_ROUTE_METADATA = {
       "kind": "record"
     }
   },
+  "GET /workflows/run-counts": {
+    "method": "GET",
+    "path": "/workflows/run-counts",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "record"
+    }
+  },
   "GET /workflows/:workflowId": {
     "method": "GET",
     "path": "/workflows/:workflowId",

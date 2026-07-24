@@ -13,6 +13,17 @@ import { cn } from '@/lib/utils';
  *   and use subtle separators instead of zebra tints.
  */
 export type DataListVariant = 'striped' | 'lined';
+
+/**
+ * Horizontal sizing of the list grid.
+ *
+ * - `content`: the grid is as wide as its widest content (`w-max`) and the
+ *   ScrollArea scrolls horizontally when it exceeds the container.
+ * - `container`: the grid fills the container width and never exceeds it;
+ *   flexible tracks (`minmax(0, 1fr)`) shrink so truncating cells ellipsize
+ *   instead of widening the table.
+ */
+export type DataListFit = 'content' | 'container';
 export type DataListStickyHeaderBackground = 'tinted' | 'surface' | 'transparent';
 type DataListStickyHeaderBackgroundValue = { background: string; hoverBackground: string };
 
@@ -20,6 +31,8 @@ export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation'
   children: ReactNode;
   columns: string;
   variant?: DataListVariant;
+  /** Grid width behavior; defaults to `content` (existing horizontal-scroll sizing). */
+  fit?: DataListFit;
   /**
    * Shared fill for the sticky top header and sticky row-header column.
    * `tinted` is an opaque equivalent of the former `neutral6/10` tint, so sticky
@@ -108,7 +121,12 @@ const borderlessTableStyles = [
   '[&_.data-list-top>.data-list-sticky-start+*]:before:hidden',
 ] as const;
 
-const dataListRootVariants = cva(cn('grid w-max max-w-none min-w-full content-start'), {
+const dataListFitClasses: Record<DataListFit, string> = {
+  content: 'w-max max-w-none min-w-full',
+  container: 'w-full max-w-full',
+};
+
+const dataListRootVariants = cva(cn('grid content-start'), {
   variants: {
     variant: {
       striped: cn(
@@ -133,6 +151,7 @@ export function DataListRoot({
   columns,
   className,
   variant = 'lined',
+  fit = 'content',
   stickyHeaderBackground = 'tinted',
   mask,
   scrollRef,
@@ -148,7 +167,7 @@ export function DataListRoot({
   const grid = (
     <div
       // Lists scroll inside the ScrollArea viewport (below); the grid just lays out.
-      className={dataListRootVariants({ variant })}
+      className={cn(dataListRootVariants({ variant }), dataListFitClasses[fit])}
       style={gridStyle}
     >
       {children}

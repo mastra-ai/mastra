@@ -5245,6 +5245,31 @@ export interface GetWorkflows_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /workflows/run-counts
+// ============================================================================
+export type GetWorkflowsRunCounts_Response = {
+  [key: string]: {
+    running: number;
+    suspended: number;
+  };
+};
+
+export type GetWorkflowsRunCounts_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetWorkflowsRunCounts_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetWorkflowsRunCounts_Request;
+  response: GetWorkflowsRunCounts_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /workflows/:workflowId
 // ============================================================================
 export type GetWorkflowsWorkflowId_PathParams = {
@@ -20788,6 +20813,7 @@ export interface RouteTypes {
   'GET /auth/roles/:roleId/permissions': GetAuthRolesRoleIdPermissions_RouteContract;
   'GET /auth/permission-patterns': GetAuthPermissionPatterns_RouteContract;
   'GET /workflows': GetWorkflows_RouteContract;
+  'GET /workflows/run-counts': GetWorkflowsRunCounts_RouteContract;
   'GET /workflows/:workflowId': GetWorkflowsWorkflowId_RouteContract;
   'GET /workflows/:workflowId/runs': GetWorkflowsWorkflowIdRuns_RouteContract;
   'GET /workflows/:workflowId/runs/:runId': GetWorkflowsWorkflowIdRunsRunId_RouteContract;
@@ -22130,6 +22156,9 @@ export interface Client {
   };
   '/workflows/events': {
     POST: PostWorkflowsEvents_RouteContract;
+  };
+  '/workflows/run-counts': {
+    GET: GetWorkflowsRunCounts_RouteContract;
   };
   '/workspaces': {
     GET: GetWorkspaces_RouteContract;
