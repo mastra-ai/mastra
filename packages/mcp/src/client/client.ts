@@ -140,21 +140,39 @@ function extractModelTextFromToolContent(content: unknown): string | undefined {
 }
 
 /**
- * Choose the value Mastra should return from MCP tool execute() for downstream
- * model context. When the server returned structuredContent, prefer the LLM-facing
- * text from `content` and only fall back to structuredContent when no text is available.
+ * Non-enumerable metadata attached to structured tool execute results so
+ * `toModelOutput` can read MCP `content` without changing the execute return shape.
  */
-function resolveModelFacingToolOutput(res: { structuredContent?: unknown; content?: unknown }): unknown {
-  if (res.structuredContent === undefined) {
-    return res;
-  }
+export const MCP_CALL_TOOL_CONTENT = Symbol.for('mastra.mcp.callToolContent');
 
-  const modelText = extractModelTextFromToolContent(res.content);
-  if (modelText !== undefined) {
-    return modelText;
+function attachMcpCallToolContent(structuredContent: unknown, content: unknown): unknown {
+  if (structuredContent !== null && typeof structuredContent === 'object') {
+    Object.defineProperty(structuredContent, MCP_CALL_TOOL_CONTENT, {
+      value: content,
+      enumerable: false,
+      configurable: true,
+    });
   }
+  return structuredContent;
+}
 
-  return res.structuredContent;
+function getMcpCallToolContent(output: unknown): unknown {
+  if (output !== null && typeof output === 'object') {
+    return (output as Record<PropertyKey, unknown>)[MCP_CALL_TOOL_CONTENT];
+  }
+  return undefined;
+}
+
+function createStructuredToolToModelOutput(): (
+  output: unknown,
+) => { type: 'text'; value: string } | { type: 'json'; value: unknown } {
+  return output => {
+    const modelText = extractModelTextFromToolContent(getMcpCallToolContent(output));
+    if (modelText !== undefined) {
+      return { type: 'text', value: modelText };
+    }
+    return { type: 'json', value: output };
+  };
 }
 
 function getDatadogScope(): DatadogScopeLike | null {
@@ -1037,6 +1055,7 @@ export class InternalMastraMCPClient extends MastraBase {
             forwardInstructions: this.forwardInstructions,
             instructionsMaxLength: this.instructionsMaxLength,
           },
+          ...(tool.outputSchema ? { toModelOutput: createStructuredToolToModelOutput() } : {}),
           execute: async (
             input: any,
             context?: {
@@ -1091,7 +1110,11 @@ export class InternalMastraMCPClient extends MastraBase {
 
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
 
-                return resolveModelFacingToolOutput(res);
+                if (res.structuredContent !== undefined) {
+                  return attachMcpCallToolContent(res.structuredContent, res.content);
+                }
+
+                return res;
               };
 
               try {
