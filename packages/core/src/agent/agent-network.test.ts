@@ -274,11 +274,11 @@ describe('Agent - network - finalResult token efficiency', () => {
     // But the tool call data should still be present in the messages array
     const messagesInFinalResult = parsedContent.finalResult.messages || [];
     const toolCallMessages = messagesInFinalResult.filter((m: any) => m.type === 'tool-call');
-    const toolResultMessages = messagesInFinalResult.filter((m: any) => m.type === 'tool-result');
+    const toolOutcomeMessages = messagesInFinalResult.filter((m: any) => m.type === 'tool-result' || m.type === 'tool-error');
 
-    // Verify tool calls are preserved in messages
+    // Verify tool calls and their result/error outcomes are preserved in messages
     expect(toolCallMessages.length).toBeGreaterThan(0);
-    expect(toolResultMessages.length).toBeGreaterThan(0);
+    expect(toolOutcomeMessages.length).toBeGreaterThan(0);
   });
 });
 

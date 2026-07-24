@@ -4302,7 +4302,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                   "value": "value",
                 },
                 "output": {
-                  "type": "text",
+                  "type": "error-text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
@@ -4335,7 +4335,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                   "value": "value",
                 },
                 "output": {
-                  "type": "text",
+                  "type": "error-text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
@@ -4451,7 +4451,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                         "value": "value",
                       },
                       "output": {
-                        "type": "text",
+                        "type": "error-text",
                         "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                       },
                       "toolCallId": "call-1",
@@ -4602,7 +4602,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                   "value": "value",
                 },
                 "output": {
-                  "type": "text",
+                  "type": "error-text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
@@ -4645,7 +4645,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                   "value": "value",
                 },
                 "output": {
-                  "type": "text",
+                  "type": "error-text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
@@ -4771,7 +4771,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                         "value": "value",
                       },
                       "output": {
-                        "type": "text",
+                        "type": "error-text",
                         "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                       },
                       "toolCallId": "call-1",
@@ -4874,7 +4874,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                   "value": "value",
                 },
                 "output": {
-                  "type": "text",
+                  "type": "error-text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
@@ -4917,7 +4917,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                   "value": "value",
                 },
                 "output": {
-                  "type": "text",
+                  "type": "error-text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
@@ -5043,7 +5043,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                         "value": "value",
                       },
                       "output": {
-                        "type": "text",
+                        "type": "error-text",
                         "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                       },
                       "toolCallId": "call-1",
@@ -5842,7 +5842,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                   "value": "value",
                 },
                 "output": {
-                  "type": "text",
+                  "type": "error-text",
                   "value": "test error",
                 },
                 "toolCallId": "call-1",
@@ -5875,7 +5875,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                   "value": "value",
                 },
                 "output": {
-                  "type": "text",
+                  "type": "error-text",
                   "value": "test error",
                 },
                 "toolCallId": "call-1",
@@ -5999,7 +5999,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                         "value": "value",
                       },
                       "output": {
-                        "type": "text",
+                        "type": "error-text",
                         "value": "test error",
                       },
                       "toolCallId": "call-1",
@@ -6158,7 +6158,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                   "value": "value",
                 },
                 "output": {
-                  "type": "text",
+                  "type": "error-text",
                   "value": "test error",
                 },
                 "toolCallId": "call-1",
@@ -6205,7 +6205,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                   "value": "value",
                 },
                 "output": {
-                  "type": "text",
+                  "type": "error-text",
                   "value": "test error",
                 },
                 "toolCallId": "call-1",
@@ -6343,7 +6343,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                         "value": "value",
                       },
                       "output": {
-                        "type": "text",
+                        "type": "error-text",
                         "value": "test error",
                       },
                       "toolCallId": "call-1",
@@ -6454,7 +6454,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                   "value": "value",
                 },
                 "output": {
-                  "type": "text",
+                  "type": "error-text",
                   "value": "test error",
                 },
                 "toolCallId": "call-1",
@@ -6501,7 +6501,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                   "value": "value",
                 },
                 "output": {
-                  "type": "text",
+                  "type": "error-text",
                   "value": "test error",
                 },
                 "toolCallId": "call-1",
@@ -6639,7 +6639,7 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                         "value": "value",
                       },
                       "output": {
-                        "type": "text",
+                        "type": "error-text",
                         "value": "test error",
                       },
                       "toolCallId": "call-1",
@@ -11349,7 +11349,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                   "value": "value",
                 },
                 "output": {
-                  "type": "text",
+                  "type": "error-text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
@@ -11382,7 +11382,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                   "value": "value",
                 },
                 "output": {
-                  "type": "text",
+                  "type": "error-text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
@@ -11504,7 +11504,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                         "value": "value",
                       },
                       "output": {
-                        "type": "text",
+                        "type": "error-text",
                         "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                       },
                       "toolCallId": "call-1",
@@ -11667,7 +11667,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                   "value": "value",
                 },
                 "output": {
-                  "type": "text",
+                  "type": "error-text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
@@ -11710,7 +11710,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                   "value": "value",
                 },
                 "output": {
-                  "type": "text",
+                  "type": "error-text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
@@ -11842,7 +11842,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                         "value": "value",
                       },
                       "output": {
-                        "type": "text",
+                        "type": "error-text",
                         "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                       },
                       "toolCallId": "call-1",
@@ -11957,7 +11957,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                   "value": "value",
                 },
                 "output": {
-                  "type": "text",
+                  "type": "error-text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
@@ -12000,7 +12000,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                   "value": "value",
                 },
                 "output": {
-                  "type": "text",
+                  "type": "error-text",
                   "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                 },
                 "toolCallId": "call-1",
@@ -12132,7 +12132,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                         "value": "value",
                       },
                       "output": {
-                        "type": "text",
+                        "type": "error-text",
                         "value": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
                       },
                       "toolCallId": "call-1",

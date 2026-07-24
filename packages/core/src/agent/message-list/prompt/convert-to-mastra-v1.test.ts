@@ -5,6 +5,62 @@ import { MessageList } from '../../message-list';
 import { convertToV1Messages } from './convert-to-mastra-v1';
 
 describe('convertToV1Messages', () => {
+  it('should preserve output-error tool outcomes as legacy tool-result messages', () => {
+    const messages: MastraDBMessage[] = [
+      {
+        id: 'msg-output-error',
+        role: 'assistant',
+        createdAt: new Date('2024-01-01'),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'output-error',
+                toolCallId: 'call-1',
+                toolName: 'lookupCustomer',
+                args: { customerId: 'cus_123' },
+                errorText: 'Lookup failed',
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const v1Messages = convertToV1Messages(messages);
+
+    expect(v1Messages).toEqual([
+      expect.objectContaining({
+        role: 'assistant',
+        type: 'tool-call',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-1',
+            toolName: 'lookupCustomer',
+            args: { customerId: 'cus_123' },
+          },
+        ],
+      }),
+      expect.objectContaining({
+        role: 'tool',
+        type: 'tool-result',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-1',
+            toolName: 'lookupCustomer',
+            result: 'Lookup failed',
+          },
+        ],
+      }),
+    ]);
+  });
+
   it('should preserve toolInvocations when text follows tool invocations (reproduces issue #6087)', () => {
     // This reproduces the exact issue from GitHub issue #6087
     // When an assistant message has tool invocations followed by text,
