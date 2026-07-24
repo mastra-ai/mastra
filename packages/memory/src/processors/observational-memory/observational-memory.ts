@@ -20,7 +20,7 @@ import {
   OBSERVATIONAL_MEMORY_DEFAULTS,
   OBSERVATION_CONTEXT_PROMPT,
   OBSERVATION_CONTEXT_INSTRUCTIONS,
-  OBSERVATION_RETRIEVAL_INSTRUCTIONS,
+  getRetrievalInstructions,
 } from './constants';
 
 /**
@@ -284,6 +284,10 @@ export class ObservationalMemory {
   readonly scope: 'resource' | 'thread';
   /** Whether retrieval-mode observation groups are enabled. */
   readonly retrieval: boolean;
+  /** Scope the recall tool was registered with — controls which retrieval instructions are injected. */
+  readonly retrievalScope: 'thread' | 'resource';
+  /** Application-provided guidance appended after the native retrieval instructions. */
+  private retrievalInstructions?: string;
   private observationConfig: ResolvedObservationConfig;
   private reflectionConfig: ResolvedReflectionConfig;
   private onDebugEvent?: (event: ObservationDebugEvent) => void;
@@ -388,6 +392,8 @@ export class ObservationalMemory {
     this.storage = config.storage;
     this.scope = config.scope ?? 'thread';
     this.retrieval = Boolean(config.retrieval);
+    this.retrievalScope = typeof config.retrieval === 'object' ? (config.retrieval.scope ?? 'resource') : 'resource';
+    this.retrievalInstructions = typeof config.retrieval === 'object' ? config.retrieval.instructions : undefined;
     this.onIndexObservations = config.onIndexObservations;
     this.mastra = config.mastra;
     this.memory = config.memory;
@@ -1603,7 +1609,7 @@ export class ObservationalMemory {
     }
 
     const messages = [
-      `${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${OBSERVATION_RETRIEVAL_INSTRUCTIONS}` : ''}`,
+      `${OBSERVATION_CONTEXT_PROMPT}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions)}` : ''}`,
     ];
 
     // Add unobserved context from other threads (resource scope only)
@@ -2508,7 +2514,14 @@ ${formattedMessages}
     const { threadId, resourceId, unobservedContextBlocks } = opts;
     const record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
 
-    if (!record.activeObservations) return undefined;
+    if (!record.activeObservations) {
+      // Resource-scoped recall can browse and search other threads even before any
+      // observation group exists, so the actor still needs to know how to use it.
+      if (this.retrieval && this.retrievalScope === 'resource') {
+        return [getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions)];
+      }
+      return undefined;
+    }
 
     // Read thread metadata for continuation hints
     const thread = await this.storage.getThreadById({ threadId });

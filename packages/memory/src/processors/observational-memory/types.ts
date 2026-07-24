@@ -903,9 +903,13 @@ export interface ObservationalMemoryConfig {
    * configured vector store for semantic recall, and `scope` to limit recall
    * browsing to the current thread instead of the whole resource.
    *
+   * Use `instructions` to append application-specific recall guidance after
+   * Mastra's built-in retrieval instructions. The built-in instructions are
+   * never replaced.
+   *
    * @default false
    */
-  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
+  retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string };
 
   /**
    * Optional callback used to index emitted observation groups for semantic retrieval.

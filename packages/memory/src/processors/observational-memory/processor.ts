@@ -201,15 +201,17 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           threadId,
           resourceId,
         });
-        const systemMessages =
-          ctx.hasObservations && ctx.omRecord
-            ? await this.engine.buildContextSystemMessages({
-                threadId,
-                resourceId,
-                record: ctx.omRecord,
-                unobservedContextBlocks: ctx.otherThreadsContext,
-              })
-            : undefined;
+        // Pass the record through even without observations — resource-scoped
+        // retrieval still injects recall guidance so the actor can browse and
+        // search other threads.
+        const systemMessages = ctx.omRecord
+          ? await this.engine.buildContextSystemMessages({
+              threadId,
+              resourceId,
+              record: ctx.omRecord,
+              unobservedContextBlocks: ctx.otherThreadsContext,
+            })
+          : undefined;
 
         injectObservationContextMessages({
           messageList,

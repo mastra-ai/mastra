@@ -77,8 +77,43 @@ SYSTEM REMINDERS: Messages wrapped in <system-reminder>...</system-reminder> con
 /**
  * Instructions for retrieval mode — explains observation-group ranges and the recall tool.
  * Appended to context when `retrieval` is enabled.
+ *
+ * The content adapts to the retrieval scope:
+ * - `'resource'`: covers routing between `search`, `threads`, and `messages` across
+ *   all of the user's threads, including fallback when search results are unsuitable.
+ * - `'thread'`: covers cursor-based browsing and search within the current thread.
+ *
+ * @param scope - The retrieval scope the recall tool was registered with.
+ * @param customInstructions - Optional application-provided guidance appended after
+ *   the native instructions. Never replaces them.
  */
-export const OBSERVATION_RETRIEVAL_INSTRUCTIONS = `## Recall — looking up source messages
+export function getRetrievalInstructions(
+  scope: 'thread' | 'resource' = 'resource',
+  customInstructions?: string,
+): string {
+  const isResource = scope === 'resource';
+
+  const modeSection = isResource
+    ? `### Choosing a mode
+The recall tool works across ALL of this user's conversation threads, not just the current one.
+
+- Use \`mode: "search"\` with a \`query\` when you don't know which thread contains the answer. Each result includes its thread ID and the raw message IDs it came from, which you can use as a \`cursor\`.
+- Use \`mode: "messages"\` when you already know the thread — pass \`threadId\` to read another thread, or a \`cursor\` from an observation-group range or a search result.
+- Use \`mode: "threads"\` to list the user's threads (IDs, titles, dates) when you need to discover where something was discussed. Use \`before\`/\`after\` to narrow by date.
+
+**If search results look irrelevant, do not give up.** Search only covers content that has been indexed — a short or recent conversation may exist in raw message history before any observation of it was created. When search returns nothing suitable but the user is clearly referring to a past conversation, call \`mode: "threads"\` to find candidate threads (titles and dates are strong clues), then read them with \`mode: "messages"\`. If a search result already gives you a thread ID, go straight to \`mode: "messages"\`.`
+    : `### Choosing a mode
+The recall tool is limited to the current conversation thread.
+
+- Use \`mode: "messages"\` (default) to page through this thread's message history near a cursor.
+- Use \`mode: "search"\` with a \`query\` to find messages by content within this thread.
+- Use \`mode: "threads"\` to get the current thread's ID, title, and dates.`;
+
+  const notNeededScopeBullet = isResource
+    ? `- No relevant observation range exists AND \`search\`/\`threads\` turned up nothing — but remember that raw history may exist for threads that have no observations yet, so check before concluding the information is unavailable`
+    : `- There is no relevant range in your observations for the topic`;
+
+  const base = `## Recall — looking up source messages
 
 Your memory is comprised of observations which are sometimes wrapped in <observation-group> xml tags containing ranges like <observation-group range="startId:endId">. These ranges point back to the raw messages that each observation group was derived from. The original messages are still available — use the **recall** tool to retrieve them.
 
@@ -86,11 +121,18 @@ Your memory is comprised of observations which are sometimes wrapped in <observa
 - The user asks you to **repeat, show, or reproduce** something from a past conversation
 - The user asks for **exact content** — code, text, quotes, error messages, URLs, file paths, specific numbers
 - Your observations mention something but your memory lacks the detail needed to fully answer (e.g. you know a blog post was shared but only have a summary of it)
-- You want to **verify or expand on** an observation before responding
+- You want to **verify or expand on** an observation before responding${
+    isResource
+      ? `
+- The user references another conversation that your observations don't cover — even if you have no observations yet, their other threads may contain it`
+      : ''
+  }
 
 **Default to using recall when the user references specific past content.** Your observations capture the gist, not the details. If there's any doubt whether your memory is complete enough, use recall.
 
-### How to use recall
+${modeSection}
+
+### How to use recall with a cursor
 Each range has the format \`startId:endId\` where both are message IDs separated by a colon.
 
 1. Find the observation group relevant to the user's question and extract the start or end ID from its range.
@@ -116,6 +158,15 @@ Low-detail results may include truncation hints like:
 ### When recall is NOT needed
 - The user is asking for a high-level summary and your observations already cover it
 - The question is about general preferences or facts that don't require source text
-- There is no relevant range in your observations for the topic
+${notNeededScopeBullet}
 
 Observation groups with range IDs and your recall tool allows you to think back and remember details you're fuzzy on.`;
+
+  const custom = customInstructions?.trim();
+  if (!custom) return base;
+
+  return `${base}
+
+### Additional recall guidance
+${custom}`;
+}
