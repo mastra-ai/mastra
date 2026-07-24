@@ -1284,7 +1284,7 @@ export class AgentThreadStreamRuntime {
           finishWaiting();
           return;
         }
-        return acknowledgement.then(finishWaiting);
+        return acknowledgement.finally(finishWaiting);
       };
       void resolvedPubSub.subscribe(topic, onEvent).catch(() => resolve());
     });
