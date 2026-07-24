@@ -14,7 +14,7 @@ import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../../.
 import { isProviderDefinedTool } from '../../../../tools/toolchecks';
 
 /** Model specification version for tool type conversion */
-export type ModelSpecVersion = 'v2' | 'v3';
+export type ModelSpecVersion = 'v2' | 'v3' | 'v4';
 
 /** Combined tool types for both V2 and V3 */
 type PreparedTool =
@@ -78,7 +78,7 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
   tools: TOOLS | undefined;
   toolChoice: ToolChoice<TOOLS> | undefined;
   activeTools: Array<keyof TOOLS> | undefined;
-  /** Target model version: 'v2' for AI SDK v5, 'v3' for AI SDK v6. Defaults to 'v2'. */
+  /** Target model version: 'v2' for AI SDK v5, 'v3' for AI SDK v6, 'v4' for AI SDK v7. Defaults to 'v2'. */
   targetVersion?: ModelSpecVersion;
 }): {
   tools: PreparedTool[] | undefined;
@@ -108,21 +108,21 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
 
   // Provider tool type differs between versions:
   // - V2 (AI SDK v5): 'provider-defined'
-  // - V3 (AI SDK v6): 'provider'
-  const providerToolType = targetVersion === 'v3' ? 'provider' : 'provider-defined';
+  // - V3/V4 (AI SDK v6/v7): 'provider'
+  const providerToolType = targetVersion === 'v2' ? 'provider-defined' : 'provider';
 
   return {
     tools: filteredTools
       .map(([name, tool]) => {
         try {
           // Check if this is a provider tool BEFORE calling toolFn
-          // V6 provider tools (like openaiV6.tools.webSearch()) have type='function' but
+          // Newer provider tools (like openaiV6.tools.webSearch()) have type='function' but
           // contain an 'id' property with format '<provider>.<tool_name>'
           if (isProviderDefinedTool(tool)) {
             // V5 SDK factories set a hardcoded `.name` (e.g. "web_search"
-            // for anthropic.web_search_20250305). V6 factories don't, so
-            // we fall back to the user-provided key. Either way, the V6
-            // provider's bidirectional toolNameMapping will map correctly.
+            // for anthropic.web_search_20250305). Newer factories don't, so
+            // we fall back to the user-provided key. Either way, the provider's
+            // bidirectional toolNameMapping will map correctly.
             const toolName = (tool as any).name ?? name;
             return {
               type: providerToolType,

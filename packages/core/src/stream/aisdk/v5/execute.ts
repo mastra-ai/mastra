@@ -120,7 +120,7 @@ export function execute<OUTPUT = undefined>({
   // Determine target version based on model's specificationVersion
   // V3 (AI SDK v6) and V4 (AI SDK v7) models need 'provider' type, V2 models need 'provider-defined'
   const targetVersion: ModelSpecVersion =
-    model.specificationVersion === 'v3' || model.specificationVersion === 'v4' ? 'v3' : 'v2';
+    model.specificationVersion === 'v4' ? 'v4' : model.specificationVersion === 'v3' ? 'v3' : 'v2';
 
   const toolsAndToolChoice = prepareToolsAndToolChoice({
     tools,

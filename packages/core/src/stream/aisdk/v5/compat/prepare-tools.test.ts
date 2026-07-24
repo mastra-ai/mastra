@@ -56,6 +56,28 @@ describe('prepareToolsAndToolChoice', () => {
       });
     });
 
+    it('should use provider type for v4 target version', () => {
+      const providerTool = {
+        id: 'openai.web_search',
+        type: 'provider-defined',
+        args: {},
+      };
+
+      const result = prepareToolsAndToolChoice({
+        tools: { search: providerTool as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v4',
+      });
+
+      expect(result.tools).toBeDefined();
+      expect(result.tools![0]).toMatchObject({
+        type: 'provider',
+        name: 'search',
+        id: 'openai.web_search',
+      });
+    });
+
     it('should handle nested provider tool names correctly', () => {
       // Tool with nested name like 'provider.category.tool_name'
       const providerTool = {
