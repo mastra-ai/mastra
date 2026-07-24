@@ -2668,6 +2668,10 @@ export interface DatasetExperiment {
   agentVersion: string | null;
   targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
   targetId: string;
+  /** Human-readable name used as the primary label wherever the experiment is displayed. */
+  name?: string;
+  /** Longer description shown as secondary detail (e.g. in a tooltip). */
+  description?: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
   totalItems: number;
   succeededCount: number;
