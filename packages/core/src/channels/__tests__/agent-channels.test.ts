@@ -106,13 +106,13 @@ describe('AgentChannels', () => {
   });
 
   describe('channel tools are not auto-injected into an agent toolset', () => {
-    it('resolves an agent toolset without the channel tools even when the agent has channels', async () => {
+    it('resolves a channel-bearing agent toolset without the channel tools', async () => {
       // getTools() still returns the channel tools (the explicit opt-in)...
       const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
       expect(Object.keys(channels.getTools())).toContain('add_reaction');
 
-      // ...but attaching channels to an agent no longer injects those tools into
-      // the agent's resolved toolset. Channel tools are explicit opt-in now.
+      // ...but attaching channels to an agent does not inject them into the
+      // agent's resolved toolset.
       const agent = new Agent({
         id: 'no-auto-tools',
         name: 'no-auto-tools',
@@ -134,7 +134,7 @@ describe('AgentChannels', () => {
         name: 'explicit-tools',
         instructions: 'test',
         model: 'openai/gpt-4o',
-        tools: channels.getTools() as any,
+        tools: { ...(channels.getTools() as Record<string, any>) },
       });
       agent.setChannels(channels);
 
