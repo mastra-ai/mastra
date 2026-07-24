@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { z } from 'zod/v3';
 
 import { MCPServer } from '../server';
+import { makeMockExtra } from './mock-extra';
 
 /**
  * Tests for FGA authorization in MCP server tool execution.
@@ -274,12 +275,7 @@ describe('MCP Server FGA checks', () => {
         id: 'test-list',
         method: 'tools/list',
       },
-      {
-        authInfo,
-        signal: new AbortController().signal,
-        sendNotification: vi.fn(),
-        sendRequest: vi.fn(),
-      },
+      makeMockExtra({ authInfo }),
     );
 
     expect(result.tools.map((tool: { name: string }) => tool.name)).toEqual(['test-tool']);
@@ -344,12 +340,7 @@ describe('MCP Server FGA checks', () => {
           arguments: { input: 'hello' },
         },
       },
-      {
-        authInfo,
-        signal: new AbortController().signal,
-        sendNotification: vi.fn(),
-        sendRequest: vi.fn(),
-      },
+      makeMockExtra({ authInfo }),
     );
 
     expect(result.isError).toBe(false);

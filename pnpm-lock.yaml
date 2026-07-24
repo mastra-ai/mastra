@@ -4103,8 +4103,8 @@ importers:
         specifier: workspace:*
         version: link:../schema-compat
       '@modelcontextprotocol/server':
-        specifier: 2.0.0-alpha.3
-        version: 2.0.0-alpha.3
+        specifier: 2.0.0-beta.5
+        version: 2.0.0-beta.5
       '@sindresorhus/slugify':
         specifier: ^2.2.1
         version: 2.2.1
@@ -4812,23 +4812,23 @@ importers:
   packages/mcp:
     dependencies:
       '@modelcontextprotocol/client':
-        specifier: 2.0.0-alpha.3
-        version: 2.0.0-alpha.3
+        specifier: 2.0.0-beta.5
+        version: 2.0.0-beta.5
       '@modelcontextprotocol/core':
-        specifier: 2.0.0-alpha.1
-        version: 2.0.0-alpha.1
+        specifier: 2.0.0-beta.5
+        version: 2.0.0-beta.5
       '@modelcontextprotocol/ext-apps':
         specifier: ^1.7.1
         version: 1.7.1(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)
       '@modelcontextprotocol/node':
-        specifier: 2.0.0-alpha.3
-        version: 2.0.0-alpha.3(@modelcontextprotocol/server@2.0.0-alpha.3)(hono@4.12.30)
+        specifier: 2.0.0-beta.5
+        version: 2.0.0-beta.5(@modelcontextprotocol/server@2.0.0-beta.5)(hono@4.12.30)
       '@modelcontextprotocol/server':
-        specifier: 2.0.0-alpha.3
-        version: 2.0.0-alpha.3
+        specifier: 2.0.0-beta.5
+        version: 2.0.0-beta.5
       '@modelcontextprotocol/server-legacy':
-        specifier: 2.0.0-alpha.3
-        version: 2.0.0-alpha.3(express@5.2.1)
+        specifier: 2.0.0-beta.5
+        version: 2.0.0-beta.5(express@5.2.1)
       exit-hook:
         specifier: ^5.1.0
         version: 5.1.0
@@ -14828,12 +14828,12 @@ packages:
   '@mixmark-io/domino@2.2.0':
     resolution: {integrity: sha512-Y28PR25bHXUg88kCV7nivXrP2Nj2RueZ3/l/jdx6J9f8J4nsEGcgX0Qe6lt7Pa+J79+kPiJU3LguR6O/6zrLOw==}
 
-  '@modelcontextprotocol/client@2.0.0-alpha.3':
-    resolution: {integrity: sha512-NNjaRRwHMKDgARgAlPt0Vkj963A+zoBOX2TtHptNjncjYCwadxx+reU5/H+nlimZmibhJEUznNMQr3UktzBVig==}
+  '@modelcontextprotocol/client@2.0.0-beta.5':
+    resolution: {integrity: sha512-YuuNm5f2TMoFQRje1UqVP8TJRjijCXMz4ckvoVpx1cUXuBEmykWQ2d8R536pek6UKcXT41T5nWc4qR1JFIbEmg==}
     engines: {node: '>=20'}
 
-  '@modelcontextprotocol/core@2.0.0-alpha.1':
-    resolution: {integrity: sha512-AWdY7gcVq3mRdekXOI+Gh1W+B7aeWDaGERmcQ7PfSu9C0S78yu8jR+JseNWO375l6MM8FjIWVLD9U7KX2sbTpg==}
+  '@modelcontextprotocol/core@2.0.0-beta.5':
+    resolution: {integrity: sha512-HKbY9XTbsDy1Y6r2I55TGE3JEapM0vg96e1MUmBIF9LGjos5gjhcIrTz1yvBPLg2aFKHjwhUAQfRdrCEnPxNew==}
     engines: {node: '>=20'}
 
   '@modelcontextprotocol/ext-apps@1.7.1':
@@ -14850,11 +14850,11 @@ packages:
       react-dom:
         optional: true
 
-  '@modelcontextprotocol/node@2.0.0-alpha.3':
-    resolution: {integrity: sha512-3S/1lsMoN4dLifs9cZXq5eZ0/yygjQY5iyx8dv9NKEM9r3347vSB3S025tIukr+Kc5y4uaq1ZsYg/idEycFe/Q==}
+  '@modelcontextprotocol/node@2.0.0-beta.5':
+    resolution: {integrity: sha512-flrOzx5qFLBM9I8IYRGfYUY02erFmxOvYQ9sEE6iSj/ZZpRYKorXWscM/qrfW9rwlcGLyymHhnP2AaDbMB1lIA==}
     engines: {node: '>=20'}
     peerDependencies:
-      '@modelcontextprotocol/server': ^2.0.0-alpha.3
+      '@modelcontextprotocol/server': ^2.0.0-beta.5
       hono: ^4.11.4
     peerDependenciesMeta:
       hono:
@@ -14870,8 +14870,8 @@ packages:
       '@cfworker/json-schema':
         optional: true
 
-  '@modelcontextprotocol/server-legacy@2.0.0-alpha.3':
-    resolution: {integrity: sha512-ny2TlhsXMlO5LguBB2udADMT1O96nFghKdh8P4BSkgh1AmQSq28PVrJaN3BVJQXlRv5PKRA4u9Ow0CNw3nfXKA==}
+  '@modelcontextprotocol/server-legacy@2.0.0-beta.5':
+    resolution: {integrity: sha512-8BemN4avQnG6Fu660fZCqnPGpeyL7gg5kxUceZQh7JCt8oqzX1bwJkNV+cKS01LPAaPbl93INneD+mBtJWKWvQ==}
     engines: {node: '>=20'}
     deprecated: This package is a frozen copy of v1's SSE transport and OAuth Authorization Server helpers for migration purposes only. Use StreamableHTTP from @modelcontextprotocol/server and a dedicated OAuth server in production. Will not receive new features.
     peerDependencies:
@@ -14880,8 +14880,8 @@ packages:
       express:
         optional: true
 
-  '@modelcontextprotocol/server@2.0.0-alpha.3':
-    resolution: {integrity: sha512-PYdVDA6x3joCy/rw1mGdMSvqisPKlmt5QN/ILcT8R7efgvmhij14L87lJrWAm4pszaThzwpV49BmBBTZWtlY3A==}
+  '@modelcontextprotocol/server@2.0.0-beta.5':
+    resolution: {integrity: sha512-i1E5l75rQKsgY/AKAIspgMBH1vEL7dqiK7tHr0L+raYcb0SWOziqNGJXGIG6NY4AlXDWIKGJQGB7Nqfs3oUi5g==}
     engines: {node: '>=20'}
 
   '@module-federation/error-codes@0.22.0':
@@ -37563,8 +37563,9 @@ snapshots:
 
   '@mixmark-io/domino@2.2.0': {}
 
-  '@modelcontextprotocol/client@2.0.0-alpha.3':
+  '@modelcontextprotocol/client@2.0.0-beta.5':
     dependencies:
+      '@modelcontextprotocol/core': 2.0.0-beta.5
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.0.8
@@ -37572,7 +37573,7 @@ snapshots:
       pkce-challenge: 5.0.0
       zod: 4.4.3
 
-  '@modelcontextprotocol/core@2.0.0-alpha.1':
+  '@modelcontextprotocol/core@2.0.0-beta.5':
     dependencies:
       zod: 4.4.3
 
@@ -37594,10 +37595,10 @@ snapshots:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
 
-  '@modelcontextprotocol/node@2.0.0-alpha.3(@modelcontextprotocol/server@2.0.0-alpha.3)(hono@4.12.30)':
+  '@modelcontextprotocol/node@2.0.0-beta.5(@modelcontextprotocol/server@2.0.0-beta.5)(hono@4.12.30)':
     dependencies:
       '@hono/node-server': 1.19.14(hono@4.12.30)
-      '@modelcontextprotocol/server': 2.0.0-alpha.3
+      '@modelcontextprotocol/server': 2.0.0-beta.5
     optionalDependencies:
       hono: 4.12.30
 
@@ -37649,8 +37650,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@modelcontextprotocol/server-legacy@2.0.0-alpha.3(express@5.2.1)':
+  '@modelcontextprotocol/server-legacy@2.0.0-beta.5(express@5.2.1)':
     dependencies:
+      '@modelcontextprotocol/core': 2.0.0-beta.5
       content-type: 1.0.5
       cors: 2.8.6
       express-rate-limit: 8.5.1(express@5.2.1)
@@ -37660,8 +37662,9 @@ snapshots:
     optionalDependencies:
       express: 5.2.1
 
-  '@modelcontextprotocol/server@2.0.0-alpha.3':
+  '@modelcontextprotocol/server@2.0.0-beta.5':
     dependencies:
+      '@modelcontextprotocol/core': 2.0.0-beta.5
       zod: 4.4.3
 
   '@module-federation/error-codes@0.22.0': {}

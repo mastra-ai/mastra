@@ -28,6 +28,7 @@ import { z } from 'zod/v3';
 import { mockWeatherTool } from '../__fixtures__/tools';
 import { InternalMastraMCPClient } from '../client/client';
 import { MCPClient } from '../client/configuration';
+import { makeMockExtra } from './__tests__/mock-extra';
 import { MCPServer } from './server';
 import type { MastraPrompt, MCPServerResources, MCPServerResourceContent, MCPRequestHandlerExtra } from './types';
 
@@ -1182,8 +1183,7 @@ describe('MCPServer', () => {
     });
 
     it('should pass auth information through extra parameter', async () => {
-      const mockExtra: MCPRequestHandlerExtra = {
-        signal: new AbortController().signal,
+      const mockExtra = makeMockExtra({
         sessionId: 'test-session-id',
         authInfo: {
           token: TOKEN,
@@ -1191,9 +1191,7 @@ describe('MCPServer', () => {
           scopes: ['read'],
         },
         requestId: 'test-request-id',
-        sendNotification: vi.fn(),
-        sendRequest: vi.fn(),
-      };
+      });
 
       const mockRequest = {
         jsonrpc: '2.0' as const,
@@ -1940,8 +1938,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
   });
 
   it('should pass MCP context to tools both directly and through agents', async () => {
-    const mockExtra: MCPRequestHandlerExtra = {
-      signal: new AbortController().signal,
+    const mockExtra = makeMockExtra({
       sessionId: 'auth-test-session',
       authInfo: {
         token: 'test-auth-token-123',
@@ -1949,9 +1946,7 @@ describe('MCPServer - Agent to Tool Conversion', () => {
         scopes: ['read', 'write'],
       },
       requestId: 'auth-test-request',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    };
+    });
 
     let directToolOptions: any = null;
     const directAuthCheckTool: ToolsInput = {
@@ -2286,8 +2281,7 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
   });
 
   it('should pass MCP context through requestContext to workflow steps', async () => {
-    const mockExtra: MCPRequestHandlerExtra = {
-      signal: new AbortController().signal,
+    const mockExtra = makeMockExtra({
       sessionId: 'workflow-auth-test-session',
       authInfo: {
         token: 'workflow-auth-token-456',
@@ -2295,9 +2289,7 @@ describe('MCPServer - Workflow to Tool Conversion', () => {
         scopes: ['workflow:read', 'workflow:write'],
       },
       requestId: 'workflow-request-id',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    };
+    });
 
     let capturedRequestContext: any = null;
 
@@ -3261,13 +3253,7 @@ describe('MCPServer - Tool Input Validation', () => {
     const callToolHandler = requestHandlers.get('tools/call');
     expect(callToolHandler).toBeDefined();
 
-    const mockExtra = {
-      signal: new AbortController().signal,
-      sessionId: 'test-session',
-      requestId: 'test-request',
-      sendNotification: vi.fn(),
-      sendRequest: vi.fn(),
-    };
+    const mockExtra = makeMockExtra({ sessionId: 'test-session', requestId: 'test-request' });
 
     // "bad" is a valid string (passes JSON Schema) but fails the .refine() check
     const result = await callToolHandler(

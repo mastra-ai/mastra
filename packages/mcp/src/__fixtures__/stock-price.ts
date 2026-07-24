@@ -1,4 +1,5 @@
 import { Server } from '@modelcontextprotocol/server';
+import type { Tool } from '@modelcontextprotocol/server';
 import { StdioServerTransport } from '@modelcontextprotocol/server/stdio';
 import { z } from 'zod/v3';
 import zodToJsonSchema from 'zod-to-json-schema';
@@ -36,7 +37,7 @@ const stockTool = {
       return {
         content: [
           {
-            type: 'text',
+            type: 'text' as const,
             text: JSON.stringify(priceData),
           },
         ],
@@ -47,7 +48,7 @@ const stockTool = {
         return {
           content: [
             {
-              type: 'text',
+              type: 'text' as const,
               text: `Stock price fetch failed: ${error.message}`,
             },
           ],
@@ -57,7 +58,7 @@ const stockTool = {
       return {
         content: [
           {
-            type: 'text',
+            type: 'text' as const,
             text: 'An unknown error occurred.',
           },
         ],
@@ -73,7 +74,7 @@ server.setRequestHandler('tools/list', async () => ({
     {
       name: stockTool.name,
       description: stockTool.description,
-      inputSchema: zodToJsonSchema(stockInputSchema),
+      inputSchema: zodToJsonSchema(stockInputSchema) as Tool['inputSchema'],
     },
   ],
 }));
@@ -89,7 +90,7 @@ server.setRequestHandler('tools/call', async request => {
         return {
           content: [
             {
-              type: 'text',
+              type: 'text' as const,
               text: `Unknown tool: ${request.params.name}`,
             },
           ],
@@ -101,7 +102,7 @@ server.setRequestHandler('tools/call', async request => {
       return {
         content: [
           {
-            type: 'text',
+            type: 'text' as const,
             text: `Invalid arguments: ${error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
           },
         ],
@@ -111,7 +112,7 @@ server.setRequestHandler('tools/call', async request => {
     return {
       content: [
         {
-          type: 'text',
+          type: 'text' as const,
           text: `Error: ${error instanceof Error ? error.message : String(error)}`,
         },
       ],
