@@ -35,16 +35,10 @@ describe('PlatformApiClient', () => {
     expect(() => platformApiClientConfigFromEnv()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
   });
 
-  it('prefers MASTRA_PLATFORM_SECRET_KEY over the deprecated MASTRA_PLATFORM_ACCESS_TOKEN', () => {
-    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', accessToken);
-    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'legacy-token');
-    expect(platformApiClientConfigFromEnv()).toMatchObject({ accessToken });
-  });
-
-  it('falls back to the deprecated MASTRA_PLATFORM_ACCESS_TOKEN', () => {
+  it('requires MASTRA_PLATFORM_SECRET_KEY even when the deprecated access token is set', () => {
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'legacy-token');
-    expect(platformApiClientConfigFromEnv()).toMatchObject({ accessToken: 'legacy-token' });
+    expect(() => platformApiClientConfigFromEnv()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
   });
 
   it('uses bearer authentication without ambient cookie credentials', async () => {
@@ -101,7 +95,7 @@ describe('PlatformApiClient', () => {
     expect(error).toBeInstanceOf(PlatformApiError);
     expect(error).toMatchObject({ message: 'Rate limited', status: 429, retryAfterSeconds: 17 });
     const logged = String(errorLog.mock.calls[0]?.[0]);
-    expect(logged).toContain('[MastraCode Web] ERROR Platform API request failed');
+    expect(logged).toContain('[Mastra Factory] ERROR Platform API request failed');
     expect(logged).toContain('"method":"GET"');
     expect(logged).toContain('"path":"/v1/test"');
     expect(logged).toContain('"status":429');

@@ -1,10 +1,10 @@
 /**
  * `MastraFactory` — the single entry point to the whole Mastra Software Factory.
  *
- * The consumer's deploy entry is the ONE place deployment env is read: it
- * constructs config instances (auth adapter, pubsub) and passes them here
- * explicitly. The factory itself never reads deployment env vars and never
- * constructs providers on the caller's behalf.
+ * The consumer's deploy entry constructs deployment-specific config instances
+ * (auth adapter, pubsub) and passes them here explicitly. The only provider
+ * defaults constructed here are Platform GitHub and Linear integrations when
+ * Platform credentials exist and the caller did not provide those integrations.
  *
  * `prepare()` resolves feature readiness, threads every dependency explicitly,
  * assembles the web routes/middleware, and returns the constructor args for
@@ -39,6 +39,9 @@ import {
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { recordFactoryPullRequestProvenance } from './integrations/github/provenance.js';
+import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
+import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
+import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
@@ -63,8 +66,10 @@ import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { AuditDomain } from './storage/domains/audit/domain.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
+import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
+import { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import { ModelPacksStorage } from './storage/domains/model-packs/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
@@ -120,7 +125,8 @@ export interface MastraFactoryConfig {
    * Browser-facing origin used to build integration OAuth/install callback
    * URLs and to derive the auth redirect URI. On the platform the SPA is
    * hosted separately, so this MUST be the public API origin.
-   * Default: `http://localhost:4111`.
+   * Default: `http://localhost:4111` (the local Factory server, which also
+   * serves the UI).
    */
   publicUrl?: string;
   /**
@@ -141,8 +147,8 @@ export interface MastraFactoryConfig {
    * Registered capability providers. The factory registers the pieces each
    * `FactoryIntegration` instance provides — HTTP routes, storage domains,
    * agent/session tools, intake, source control, and diagnostics — into the
-   * diagnostics — into the system. An absent integration means its routes
-   * never mount, its tools never register, and the server boots fine.
+   * system. When Platform credentials are configured, missing `github` and
+   * `linear` integrations default to their Platform-backed implementations.
    */
   integrations?: FactoryIntegration[];
   /**
@@ -177,6 +183,10 @@ export interface MastraFactorySandboxConfig {
 }
 
 const CONTROLLER_ID = 'code';
+
+function hasPlatformSecretKey(): boolean {
+  return Boolean(process.env.MASTRA_PLATFORM_SECRET_KEY?.trim());
+}
 
 /**
  * The template sandbox's own working directory, when it exposes one as a
@@ -305,9 +315,20 @@ export class MastraFactory {
     // factory route module receives this handle — no service locator.
     const routeAuth = createFactoryRouteAuth(auth);
 
-    // Registered integrations: validate ids up front so a copy-paste duplicate
-    // fails loud instead of one instance silently shadowing the other.
-    const integrations = this.#config.integrations ?? [];
+    // Explicit integrations win. Platform credentials fill only missing GitHub
+    // and Linear slots so callers can override either provider independently.
+    const integrations = [...(this.#config.integrations ?? [])];
+    if (hasPlatformSecretKey()) {
+      if (!integrations.some(integration => integration.id === 'github')) {
+        integrations.push(new PlatformGithubIntegration());
+      }
+      if (!integrations.some(integration => integration.id === 'linear')) {
+        integrations.push(new PlatformLinearIntegration());
+      }
+    }
+
+    // Validate ids up front so a copy-paste duplicate fails loud instead of one
+    // instance silently shadowing the other.
     const integrationIds = new Set<string>();
     for (const integration of integrations) {
       if (integrationIds.has(integration.id)) {
@@ -325,6 +346,8 @@ export class MastraFactory {
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage());
     const modelPacksStorage = storage.registerDomain(new ModelPacksStorage());
+    const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
+    const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage());
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
     // default persistence surface for integrations without a bespoke domain.
@@ -337,6 +360,8 @@ export class MastraFactory {
       intake: intakeStorage,
       modelCredentials: modelCredentialsStorage,
       modelPacks: modelPacksStorage,
+      memorySettings: memorySettingsStorage,
+      customProviders: customProvidersStorage,
       projects: factoryProjectsStorage,
       queueHealth: queueHealthStorage,
       workItems: workItemsStorage,
@@ -433,6 +458,11 @@ export class MastraFactory {
       registerTenantCredentialResolver(modelCredentialsStorage);
     }
 
+    // Custom providers: DB-backed in both modes (org rows in tenant mode, the
+    // sentinel `local` org in no-auth mode). Once registered, model resolution
+    // and the gateway catalog never read settings.json custom providers.
+    registerCustomProvidersSource({ storage: customProvidersStorage, authEnabled: Boolean(auth) });
+
     for (const integration of integrations) {
       integration.initialize?.({
         storage: integrationStorage.forIntegration(integration.id),
@@ -506,6 +536,19 @@ export class MastraFactory {
       }
     }
 
+    // The SDK needs to know which backend the injected Mastra store uses
+    // (its own `instanceof` detection breaks when the dependency graph holds
+    // duplicate package copies). Resolve it by walking the FactoryStorage
+    // prototype chain by class name — the factory can't import the concrete
+    // classes since '@mastra/pg' / '@mastra/libsql' are the user's choice.
+    const mastraStorageBackend = (() => {
+      for (let proto = Object.getPrototypeOf(storage); proto; proto = Object.getPrototypeOf(proto)) {
+        if (proto.constructor?.name === 'PgFactoryStorage') return 'pg' as const;
+        if (proto.constructor?.name === 'LibSQLFactoryStorage') return 'libsql' as const;
+      }
+      return undefined;
+    })();
+
     // Integrations contributing tools to agent sessions: org-scoped
     // `agentTools` (resolved per request) + session-scoped `sessionTools`.
     const toolIntegrations = integrationRegistrations.filter(
@@ -521,10 +564,15 @@ export class MastraFactory {
       workspace: createWorkspaceFactory({
         ...(this.#config.sandbox ? { sandbox: this.#config.sandbox } : {}),
         ...(githubIntegration ? { github: githubIntegration } : {}),
+        ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
         fleet,
       }),
       disableGithubSignals: true,
+      // Memory settings live in the factory's `memory-settings` app table (per
+      // org/user), so the host machine's TUI settings.json must not seed them.
+      disableSettingsOmSeed: true,
       storage: storage.getMastraStorage(),
+      ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
       ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
       ...(vector ? { vector } : {}),
       ...(toolIntegrations.length > 0 || (workItemsStorage && transitionService)
@@ -640,21 +688,39 @@ export class MastraFactory {
         const uiDist = resolveUiDistDir();
         const spa = uiDist ? [createSpaStaticMiddleware(uiDist)] : [];
         if (!auth) {
-          // Auth disabled: no gate. SPA + CORS only.
-          return { ...(spa.length ? { middleware: spa } : {}), ...cors, ...onError };
+          // Auth disabled: no gate. Still prime the sentinel-local custom
+          // provider snapshot so model calls see DB rows, then SPA + CORS.
+          return {
+            middleware: [
+              createCustomProvidersPrimer({ auth: routeAuth, storage: customProvidersStorage, authEnabled: false }),
+              ...spa,
+            ],
+            ...cors,
+            ...onError,
+          };
         }
 
         // Ordered middleware. The deployer applies these AFTER its context
         // middleware sets `c.set('mastra', mastra)` and BEFORE routes, so:
         //   1. gate   — validates the auth session, stashes the user, and 401s /
         //               redirects unauthenticated requests. Skips public `/auth/*`.
-        //   2. primer — hydrates the caller's model-credential snapshot so the
-        //               request's first model call resolves tenant credentials.
+        //   2. primers — hydrate the caller's model-credential and custom
+        //               provider snapshots so the request's first model call
+        //               resolves tenant credentials and custom providers.
         //   3. spa    — serves the built UI for everything the server doesn't own.
+        // `auth` also lands on `server.auth` so the core auth middleware (and
+        // Studio's dual-auth routing — see `studio.auth` on the returned args)
+        // authenticates core `/api/*` routes with the same provider.
         return {
+          auth,
           middleware: [
             createFactoryAuthGate(auth),
             createTenantCredentialPrimer({ auth: routeAuth, credentials: modelCredentialsStorage }),
+            createCustomProvidersPrimer({
+              auth: routeAuth,
+              storage: customProvidersStorage,
+              authEnabled: Boolean(auth),
+            }),
             ...spa,
           ],
           ...cors,
@@ -695,6 +761,10 @@ export class MastraFactory {
 
     return {
       ...prepared.mastraArgs,
+      // Same provider on `studio.auth` as on `server.auth` (buildServerConfig):
+      // deployed factories must authenticate BOTH plain API callers and Studio
+      // requests (`x-mastra-client-type: studio` routes to `studio.auth`).
+      ...(auth ? { studio: { auth } } : {}),
       ...(integrationWorkers.length > 0 ? { workers: integrationWorkers } : {}),
     };
   }

@@ -471,6 +471,56 @@ describe('createMastraCode', () => {
     expect(createStorageMock).not.toHaveBeenCalled();
   });
 
+  // Simulates a duplicated-dependency graph: the injected store was built
+  // against a different copy of @mastra/core, so `instanceof
+  // MastraCompositeStore` (and `instanceof LibSQLStore`/`PostgresStore`) fail
+  // even though the instance is a real store. Detection must be structural.
+  describe('injected storage from a foreign @mastra/core copy', () => {
+    class ForeignCompositeStore {
+      stores = {};
+      async init() {}
+      __registerMastra() {}
+    }
+
+    it('detects a foreign LibSQLStore instance and resolves the libsql backend', async () => {
+      class LibSQLStore extends ForeignCompositeStore {}
+      const { createMastraCode } = await import('../index.js');
+
+      await createMastraCode({ storage: new LibSQLStore() as any });
+
+      expect(createStorageMock).not.toHaveBeenCalled();
+    });
+
+    it('detects a foreign PostgresStore subclass and resolves the pg backend', async () => {
+      class PostgresStore extends ForeignCompositeStore {}
+      class CustomPgStore extends PostgresStore {}
+      const { createMastraCode } = await import('../index.js');
+
+      await createMastraCode({ storage: new CustomPgStore() as any });
+
+      expect(createStorageMock).not.toHaveBeenCalled();
+    });
+
+    it('accepts an unrecognized foreign store when storageBackend is configured', async () => {
+      class SomeOtherStore extends ForeignCompositeStore {}
+      const { createMastraCode } = await import('../index.js');
+
+      await createMastraCode({ storage: new SomeOtherStore() as any, storageBackend: 'pg' });
+
+      expect(createStorageMock).not.toHaveBeenCalled();
+    });
+
+    it('still requires an explicit backend for unrecognized foreign stores', async () => {
+      class SomeOtherStore extends ForeignCompositeStore {}
+      const { createMastraCode } = await import('../index.js');
+
+      await expect(createMastraCode({ storage: new SomeOtherStore() as any })).rejects.toThrow(
+        'storageBackend is required when injecting a custom storage instance.',
+      );
+      expect(createStorageMock).not.toHaveBeenCalled();
+    });
+  });
+
   it('uses caller memory while applying configDir to startup services and state', async () => {
     const projectPath = '/tmp/mastracode-project';
     const customMemory = { id: 'custom-memory' };
@@ -753,7 +803,7 @@ describe('createMastraCode', () => {
     expect(controllerSetStateMock).toHaveBeenCalledWith({ observeAttachments: 'auto' });
   });
 
-  it('runs stream error retries before provider-specific error recovery processors', async () => {
+  it('runs provider history compat before stream error retries so bad requests are repaired, not blindly retried', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
@@ -762,9 +812,9 @@ describe('createMastraCode', () => {
     const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
       { errorProcessors?: Array<{ id?: string }> } | undefined;
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
+      'provider-history-compat',
       'stream-error-retry-processor',
       'prefill-error-handler',
-      'provider-history-compat',
     ]);
   });
 

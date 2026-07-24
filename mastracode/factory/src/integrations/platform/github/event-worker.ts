@@ -16,7 +16,7 @@ import type { PlatformApiClient } from '../api-client.js';
 import { PlatformApiError } from '../api-client.js';
 
 const API_PREFIX = '/v1/server/github-app';
-const DEFAULT_POLL_INTERVAL_MS = 5_000;
+const DEFAULT_POLL_INTERVAL_MS = 20_000;
 const EVENT_PAGE_SIZE = 500;
 const MIN_LEASE_TTL_MS = 30_000;
 const CURSOR_ORG_ID = '__platform_github_event_worker__';
@@ -74,6 +74,7 @@ export interface PlatformGithubEventWorkerConfig {
   controller: MountedMastraCode['controller'];
   github: PlatformGithubEventDispatchIntegration;
   storage: PlatformGithubEventStorage;
+  ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
   intervalMs?: number;
   now?: () => number;
   dispatch?: typeof dispatchGithubWebhook;
@@ -86,6 +87,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
   readonly #controller: MountedMastraCode['controller'];
   readonly #github: PlatformGithubEventDispatchIntegration;
   readonly #storage: PlatformGithubEventStorage;
+  readonly #ingestFactoryEvent: ((event: ParsedGithubWebhook) => Promise<unknown>) | undefined;
   readonly #intervalMs: number;
   readonly #now: () => number;
   readonly #dispatch: typeof dispatchGithubWebhook;
@@ -107,6 +109,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
     this.#controller = config.controller;
     this.#github = config.github;
     this.#storage = config.storage;
+    this.#ingestFactoryEvent = config.ingestFactoryEvent;
     this.#intervalMs = config.intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     if (!Number.isFinite(this.#intervalMs) || this.#intervalMs <= 0) {
       throw new Error('Platform GitHub event polling interval must be a positive number.');
@@ -277,10 +280,16 @@ export class PlatformGithubEventWorker extends MastraWorker {
       if ('afterEventId' in cursor) query.set('afterEventId', cursor.afterEventId);
       else query.set('afterTimestamp', String(cursor.afterTimestamp));
 
+      const pollStartedAt = performance.now();
       const page = await this.#client.request<{ events: EventLogEntry[]; nextCursor: string | null }>(
         'GET',
         `${API_PREFIX}/repositories/${repositoryId}/events?${query}`,
       );
+      this.deps?.logger.info('Platform GitHub repository event poll completed', {
+        repositoryId,
+        eventCount: page.events.length,
+        latencyMs: Math.round(performance.now() - pollStartedAt),
+      });
       if (page.events.length === 0 || !page.nextCursor) return;
 
       for (const event of page.events) {
@@ -292,6 +301,9 @@ export class PlatformGithubEventWorker extends MastraWorker {
             eventId: event.id,
           });
           continue;
+        }
+        if (isFactoryClosureEvent(parsed)) {
+          await this.#ingestFactoryEvent?.(parsed);
         }
         const result = await this.#dispatch(parsed, {
           controller: this.#controller,
@@ -366,6 +378,10 @@ function normalizeSettings(value: PlatformGithubEventWorkerSettings | null): Pla
     return { version: 1, repositories: {} };
   }
   return { version: 1, repositories: { ...value.repositories } };
+}
+
+function isFactoryClosureEvent(event: ParsedGithubWebhook): boolean {
+  return (event.event === 'issues' || event.event === 'pull_request') && event.payload.action === 'closed';
 }
 
 function parseEvent(event: EventLogEntry): ParsedGithubWebhook | null {

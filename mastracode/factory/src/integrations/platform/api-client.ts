@@ -6,10 +6,7 @@ export interface PlatformApiClientConfig {
 
 export function platformApiClientConfigFromEnv(): PlatformApiClientConfig {
   const sharedApiUrl = process.env.MASTRA_SHARED_API_URL?.trim() || 'https://platform.mastra.ai/v1';
-  const accessToken =
-    process.env.MASTRA_PLATFORM_SECRET_KEY?.trim() ||
-    // Deprecated alias — prefer MASTRA_PLATFORM_SECRET_KEY.
-    process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim();
+  const accessToken = process.env.MASTRA_PLATFORM_SECRET_KEY?.trim();
   if (!accessToken) {
     throw new Error('Platform integration: missing required environment variable MASTRA_PLATFORM_SECRET_KEY.');
   }
@@ -47,7 +44,12 @@ export class PlatformApiClient {
     this.#fetch = config.fetchImpl ?? globalThis.fetch;
   }
 
-  async request<T>(method: string, path: string, body?: unknown, options?: { signal?: AbortSignal }): Promise<T> {
+  async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    options?: { signal?: AbortSignal; actingUserId?: string },
+  ): Promise<T> {
     const response = await this.#send(method, path, body, options);
     if (!response.ok) {
       const message = redact(await extractError(response), this.#accessToken);
@@ -91,13 +93,19 @@ export class PlatformApiClient {
     method: string,
     path: string,
     body?: unknown,
-    options?: { signal?: AbortSignal },
+    options?: { signal?: AbortSignal; actingUserId?: string },
     redirect?: RequestInit['redirect'],
   ): Promise<Response> {
     const headers: Record<string, string> = {
       accept: 'application/json',
       authorization: `Bearer ${this.#accessToken}`,
     };
+    // Acting end-user for platform GitHub writes: the platform resolves this
+    // user's GitHub OAuth connection (org-scoped) so issues/PRs are authored
+    // by the human instead of the App bot. Ignored by older platforms.
+    if (options?.actingUserId) {
+      headers['x-acting-user-id'] = options.actingUserId;
+    }
     const timeoutSignal = AbortSignal.timeout(15_000);
     const init: RequestInit = {
       method,
@@ -155,13 +163,17 @@ export function logPlatformInfo(message: string, fields?: Record<string, unknown
   writePlatformLog('info', message, fields);
 }
 
+export function logPlatformWarn(message: string, fields?: Record<string, unknown>): void {
+  writePlatformLog('warn', message, fields);
+}
+
 export function logPlatformError(message: string, fields?: Record<string, unknown>): void {
   writePlatformLog('error', message, fields);
 }
 
-function writePlatformLog(level: 'info' | 'error', message: string, fields?: Record<string, unknown>): void {
+function writePlatformLog(level: 'info' | 'warn' | 'error', message: string, fields?: Record<string, unknown>): void {
   const metadata = fields ? ` ${JSON.stringify(stripUndefined(fields))}` : '';
-  process.stderr.write(`[MastraCode Web] ${level.toUpperCase()} ${message}${metadata}\n`);
+  process.stderr.write(`[Mastra Factory] ${level.toUpperCase()} ${message}${metadata}\n`);
 }
 
 function stripUndefined(fields: Record<string, unknown>): Record<string, unknown> {

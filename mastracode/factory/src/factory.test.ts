@@ -205,6 +205,8 @@ describe('MastraFactory.prepare', () => {
       'work-items',
       'model-credentials',
       'model-packs',
+      'memory-settings',
+      'custom-providers',
       'queue-health',
       'integrations',
       'projects',
@@ -283,6 +285,18 @@ describe('MastraFactory.prepare', () => {
     expect(config.vector).toBe(vector);
   });
 
+  it('tells the SDK which backend the Mastra store uses (instanceof breaks across duplicate package copies)', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+    expect(config.storageBackend).toBe('libsql');
+  });
+
+  it('resolves the pg backend from the FactoryStorage class name', async () => {
+    class PgFactoryStorage extends LibSQLFactoryStorage {}
+    const storage = new PgFactoryStorage({ url: ':memory:', id: 'factory-test-pg-named' });
+    const config = await prepareFactory({ storage });
+    expect(config.storageBackend).toBe('pg');
+  });
+
   it('installs a Web Factory session workspace resolver instead of changing the SDK default', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     expect(config.workspace).toEqual(expect.any(Function));
@@ -314,6 +328,17 @@ describe('MastraFactory.prepare', () => {
       database: storage.authDatabase(),
       publicUrl: 'https://factory.acme.com',
       allowedOrigins: ['https://app.acme.com'],
+    } satisfies AuthInitContext);
+  });
+
+  it('defaults publicUrl to the local Factory server origin (single server serves UI and API)', async () => {
+    const auth = fakeProvider();
+    const storage = fakeStorage();
+    await prepareFactory({ auth, storage });
+    expect(auth.init).toHaveBeenCalledExactlyOnceWith({
+      database: storage.authDatabase(),
+      publicUrl: 'http://localhost:4111',
+      allowedOrigins: [],
     } satisfies AuthInitContext);
   });
 
@@ -377,8 +402,9 @@ describe('MastraFactory.prepare', () => {
   });
 
   it('installs the auth gate and tenant credential primer when auth is configured', async () => {
-    // The SPA static middleware is environment-dependent (present when ui/dist
-    // exists), so assert the delta from the two auth-specific middleware.
+    // Both modes mount the custom-providers primer and the SPA static
+    // middleware is environment-dependent (present when ui/dist exists), so
+    // assert the delta from the two auth-specific middleware.
     const openConfig = await prepareFactory({ storage: fakeStorage(), auth: null });
     const openMiddleware = (openConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
 
@@ -387,6 +413,29 @@ describe('MastraFactory.prepare', () => {
     const gatedConfig = await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
     const gatedMiddleware = (gatedConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
     expect(gatedMiddleware).toHaveLength(openMiddleware.length + 2);
+  });
+
+  it('passes the resolved auth provider to both server.auth and studio.auth', async () => {
+    // Deploys must authenticate BOTH plain API callers (server.auth) and
+    // Studio requests routed via `x-mastra-client-type: studio` (studio.auth).
+    const provider = fakeProvider();
+    const factory = new MastraFactory({ storage: fakeStorage(), auth: provider });
+    const args = (await factory.prepare()) as { studio?: { auth?: unknown } };
+    expect(args.studio?.auth).toBe(provider);
+
+    const config = prepareMock.mock.calls[0]![0];
+    const serverConfig = (config.buildServerConfig as () => { auth?: unknown })();
+    expect(serverConfig.auth).toBe(provider);
+  });
+
+  it('omits server.auth and studio.auth when auth is explicitly disabled (auth: null)', async () => {
+    const factory = new MastraFactory({ storage: fakeStorage(), auth: null });
+    const args = (await factory.prepare()) as { studio?: unknown };
+    expect(args.studio).toBeUndefined();
+
+    const config = prepareMock.mock.calls[0]![0];
+    const serverConfig = (config.buildServerConfig as () => { auth?: unknown })();
+    expect(serverConfig.auth).toBeUndefined();
   });
 
   it('registers the per-tenant credential resolver when auth is configured', async () => {

@@ -1,12 +1,11 @@
+import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { useState } from 'react';
-import { useLocation, useParams } from 'react-router';
+import { useMatch, useParams } from 'react-router';
 
 import { Sidebar } from '../Sidebar';
-import { ChatLayout } from '../ui/ChatLayout';
+import { ChatLayout } from '../layouts/ChatLayout';
 import { renderedPaths } from '../domains/workspace-viewer/config';
 import { WorkspaceViewerPanel } from '../domains/workspace-viewer/components/WorkspaceViewerPanel';
-import { useActiveFactoryContext } from '../domains/workspaces/context/ActiveFactoryProvider';
-import { activeWorkspacePath, findUserSessionByThreadId } from '../domains/workspaces/services/factories';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { FactorySessionHeader } from '../domains/factory/components/RelatedFactorySessions';
 import { ChatMessageList } from '../domains/chat/components/ChatMessageList';
@@ -16,33 +15,27 @@ import { ChatMessageBoundary, ChatSessionBoundary } from '../domains/chat/contex
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
 import { useRouteThreadSync } from '../../../shared/hooks/useRouteThreadSync';
 import { useThreadPageKickoffs } from '../domains/chat/hooks/useThreadPageKickoffs';
+import { useFactoryQuery } from '../../../shared/hooks/useFactories';
+import { useUserSessionQuery } from '../../../shared/hooks/useWorkspaces';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 const threadComposerContainerClass = 'w-full p-3 md:p-5';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
 
 export function ThreadPage() {
-  const { activeFactory, factoriesPending } = useActiveFactoryContext();
-  const { threadId } = useParams();
-  const location = useLocation();
+  const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId?: string; threadId?: string }>();
+  const userThreadMatch = useMatch('/factories/:factoryId/user/threads/:threadId');
+  const isMobile = useIsMobile();
   const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
   const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
-  const userSessionMatch = threadId ? findUserSessionByThreadId(threadId) : undefined;
-  const activeUserSessionMatch =
-    userSessionMatch && activeFactory?.id === userSessionMatch.factory.id ? userSessionMatch : undefined;
-  const isUserThreadRoute = location.pathname.startsWith('/user/threads/');
-  const workspaceFactory = isUserThreadRoute ? activeUserSessionMatch?.factory : activeFactory;
-  const workspacePath = workspaceFactory
-    ? activeWorkspacePath(workspaceFactory, activeUserSessionMatch?.worktree)
-    : undefined;
+  const factoryQuery = useFactoryQuery(factoryId);
+  const userSessionQuery = useUserSessionQuery(userThreadMatch ? threadId : undefined);
+  const isUserThreadRoute = Boolean(userThreadMatch);
+  const workspaceFactory = factoryQuery.data;
+  const workspacePath = isUserThreadRoute ? userSessionQuery.data?.sessionId : sessionId;
 
-  if (factoriesPending) {
-    return (
-      <div className="flex h-full w-full items-center justify-center">
-        <Spinner />
-      </div>
-    );
-  }
+  const resolvingSession = factoryQuery.isPending || (isUserThreadRoute && userSessionQuery.isPending);
+
   return (
     <ChatLayout
       sidebar={<Sidebar />}
@@ -50,22 +43,28 @@ export function ThreadPage() {
       rightPanelExpanded={workspaceViewerExpanded}
       rightPanelAvailable={Boolean(workspacePath)}
       onRightPanelOpen={() => setWorkspaceViewerVisible(true)}
+      onRightPanelClose={() => setWorkspaceViewerVisible(false)}
       rightPanel={
-        workspacePath && workspaceViewerVisible ? (
+        workspacePath && (workspaceViewerVisible || isMobile) ? (
           <WorkspaceViewerPanel
             workspacePath={workspacePath}
             renderedPaths={renderedPaths}
             title="Workspace files"
             context={workspaceFactory?.name}
             onExpandedChange={setWorkspaceViewerExpanded}
-            onCollapse={() => setWorkspaceViewerVisible(false)}
           />
         ) : undefined
       }
       main={
-        <ChatSessionBoundary threadId={threadId}>
-          <ThreadPageMain />
-        </ChatSessionBoundary>
+        resolvingSession ? (
+          <div className="grid h-full min-h-0 place-items-center">
+            <Spinner aria-label="Loading session" className="text-icon3" />
+          </div>
+        ) : (
+          <ChatSessionBoundary threadId={threadId}>
+            <ThreadPageMain />
+          </ChatSessionBoundary>
+        )
       }
     />
   );

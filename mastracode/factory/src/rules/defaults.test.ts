@@ -66,18 +66,28 @@ function toolContext(
   };
 }
 
-function githubContext(event: FactoryGithubRuleContext['event']): FactoryGithubRuleContext {
+function githubContext(
+  event: FactoryGithubRuleContext['event'],
+  sourceCreatedAt = '2026-07-01T00:00:00Z',
+): FactoryGithubRuleContext {
   return {
     ...base,
     actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
     event,
     deliveryId: 'delivery-1',
+    factory: { createdAt: '2026-06-01T00:00:00Z' },
     repository: { id: 10, fullName: 'acme/repo' },
-    issue: { number: 42, title: 'Issue 42', url: 'https://github.test/acme/repo/issues/42' },
+    issue: {
+      number: 42,
+      title: 'Issue 42',
+      url: 'https://github.test/acme/repo/issues/42',
+      createdAt: sourceCreatedAt,
+    },
     pullRequest: {
       number: 17,
       title: 'PR 17',
       url: 'https://github.test/acme/repo/pull/17',
+      createdAt: sourceCreatedAt,
       state: 'open',
       merged: false,
       headBranch: 'feature',
@@ -180,7 +190,7 @@ describe('defaultFactoryRules', () => {
     expect(await rule?.(context)).toMatchObject({
       type: 'invokeSkill',
       role: 'triage',
-      skillName: 'understand-issue',
+      skillName: 'factory-triage',
       arguments: 'Linear issue ENG-42 (https://linear.app/acme/issue/ENG-42)',
     });
   });
@@ -196,7 +206,7 @@ describe('defaultFactoryRules', () => {
     expect(await rule?.(context)).toMatchObject({
       type: 'invokeSkill',
       role: 'triage',
-      skillName: 'understand-issue',
+      skillName: 'factory-triage',
       arguments: 'GitHub issue (https://github.test/acme/repo/issues/42)',
     });
   });
@@ -212,8 +222,50 @@ describe('defaultFactoryRules', () => {
     expect(await rule?.(context)).toMatchObject({
       type: 'invokeSkill',
       role: 'review',
-      skillName: 'understand-pr',
+      skillName: 'factory-review',
       arguments: 'GitHub pull request (https://github.test/acme/repo/issues/42)',
+    });
+  });
+
+  it.each([
+    ['issue', 'github-issue'],
+    ['linearIssue', 'linear-issue'],
+    ['manual', 'manual'],
+  ] as const)('starts factory planning when a %s item enters Planning', async (source, itemSource) => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.planning?.[source]?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      item: { ...item, source: itemSource },
+      source,
+      stage: 'planning',
+      fromStage: 'triage',
+      toStage: 'planning',
+    } as FactoryStageRuleContext;
+
+    expect(await rule?.(context)).toMatchObject({
+      type: 'invokeSkill',
+      idempotencyKey: 'delivery-1:factory-plan',
+      role: 'plan',
+      skillName: 'factory-plan',
+      arguments: 'Work item (https://github.test/acme/repo/issues/42)',
+    });
+  });
+
+  it('keys the planning skill invocation once per ingress', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.planning?.issue?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      stage: 'planning',
+      fromStage: 'triage',
+      toStage: 'planning',
+    } as FactoryStageRuleContext;
+
+    const first = await rule?.(context);
+    const second = await rule?.(context);
+    expect(first).toMatchObject({ idempotencyKey: 'delivery-1:factory-plan' });
+    expect(second).toMatchObject({ idempotencyKey: 'delivery-1:factory-plan' });
+    expect(await rule?.({ ...context, ingress: { type: 'human' as const, id: 'delivery-2' } })).toMatchObject({
+      idempotencyKey: 'delivery-2:factory-plan',
     });
   });
 
@@ -269,6 +321,19 @@ describe('defaultFactoryRules', () => {
     },
   );
 
+  it.each(['issueOpened', 'pullRequestOpened'] as const)(
+    'keeps trusted %s items created before the Factory in Intake',
+    async event => {
+      const rules = defaultFactoryRules({ version: 'deployment-7' });
+      const olderContext = githubContext(event, '2026-05-01T00:00:00Z');
+
+      expect(await rules.github[event]?.onEvent?.(olderContext)).toMatchObject({
+        type: 'upsertLinkedWorkItem',
+        stage: 'intake',
+      });
+    },
+  );
+
   it('uses the same issue and pull-request identities as board Intake', async () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     expect(await rules.github.issueOpened?.onEvent?.(githubContext('issueOpened'))).toMatchObject({
@@ -278,6 +343,13 @@ describe('defaultFactoryRules', () => {
     expect(await rules.github.pullRequestOpened?.onEvent?.(githubContext('pullRequestOpened'))).toMatchObject({
       source: 'github-pr',
       sourceKey: 'github-pr:17',
+    });
+  });
+
+  it('records the PR head branch on Review intake so the card links back to its work item', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    expect(await rules.github.pullRequestOpened?.onEvent?.(githubContext('pullRequestOpened'))).toMatchObject({
+      metadata: { headBranch: 'feature', baseBranch: 'main' },
     });
   });
 

@@ -37,7 +37,7 @@ import type {
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import { WorkItemRelationError } from '../storage/domains/work-items/base.js';
-import { clampMetricsWindow, computeFactoryMetrics } from '../storage/domains/work-items/metrics.js';
+import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
@@ -380,7 +380,9 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
    */
   async #resolveProject(
     c: Context,
-  ): Promise<{ orgId: string; userId: string; factoryProjectId: string } | { response: Response }> {
+  ): Promise<
+    { orgId: string; userId: string; factoryProjectId: string; defaultModelId: string | null } | { response: Response }
+  > {
     const tenant = await this.#resolveTenant(c);
     if ('response' in tenant) return tenant;
 
@@ -394,7 +396,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
     if (!project) {
       return { response: c.json({ error: 'Project not found' }, 404) };
     }
-    return { ...tenant, factoryProjectId: projectId };
+    return { ...tenant, factoryProjectId: projectId, defaultModelId: project.defaultModelId };
   }
 
   /**
@@ -487,13 +489,17 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         handler: async c => {
           const resolved = await this.#resolveProject(loose(c));
           if ('response' in resolved) return resolved.response;
-          const days = clampMetricsWindow(loose(c).req.query('days'));
+          const { windowStart, windowEnd } = parseMetricsRange(
+            loose(c).req.query('from'),
+            loose(c).req.query('to'),
+            new Date(),
+          );
           await workItems.ensureReady();
           const items = await workItems.list({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          return c.json({ metrics: computeFactoryMetrics({ items, days, now: new Date() }) });
+          return c.json({ metrics: computeFactoryMetrics(items, { windowStart, windowEnd }) });
         },
       }),
 
@@ -707,6 +713,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const input = parseStartBody(await readJson(loose(c)), resolved, resolved.factoryProjectId);
           if (!input) return c.json({ error: 'invalid_factory_start' }, 400);
           input.requestContext = loose(c).get('requestContext');
+          input.defaultModelId = resolved.defaultModelId ?? undefined;
           if (
             !input.workItem.id &&
             ((input.workItem.input.stages ?? ['intake']).length !== 1 ||
