@@ -162,7 +162,7 @@ function stubBoardEndpoints() {
 
 function renderWorkBoard() {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
-  return renderWithProviders(<RouterProvider router={router} />);
+  return { ...renderWithProviders(<RouterProvider router={router} />), router };
 }
 
 describe('Board card pending states', () => {
@@ -292,7 +292,7 @@ describe('Board card pending states', () => {
     // once the button goes disabled: the handler itself has to refuse it, since
     // the disabled attribute alone wouldn't stop a programmatic re-dispatch.
     const user = userEvent.setup({ pointerEventsCheck: 0 });
-    renderWorkBoard();
+    const { router } = renderWorkBoard();
 
     const card = await screen.findByTestId('work-item-card');
     await waitFor(() => expect(within(card).getByRole('button', { name: /Create thread/ })).toBeEnabled());
@@ -306,9 +306,15 @@ describe('Board card pending states', () => {
     await waitFor(() => expect(screen.queryByText('Preparing session…')).not.toBeInTheDocument());
     await waitFor(() => expect(runStarts).toHaveLength(1));
 
-    // Each pass mints its own kickoffKey, so a second start would land as a
-    // distinct pending row and deliver the kickoff message to the thread twice.
-    await delay(50);
+    // Both clicks would unblock on the same gate release, so a duplicate start
+    // is already in flight by the time the first one navigates. Waiting on that
+    // navigation is deterministic, unlike a fixed sleep that a slower duplicate
+    // can outrun.
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
+      ),
+    );
     expect(runStarts).toHaveLength(1);
   });
 
