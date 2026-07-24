@@ -1,5 +1,9 @@
 import type { GetScorerResponse, ListScoresResponse } from '@mastra/client-js';
 import { useInView } from '@mastra/playground-ui/hooks/use-in-view';
+import {
+  isObservabilityUnavailableError,
+  isUnsupportedObservabilityOperationError,
+} from '@mastra/playground-ui/utils/query-utils';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
@@ -7,6 +11,17 @@ import { useEffect, useState } from 'react';
 import { useMergedRequestContext } from '@/domains/request-context';
 
 const SCORES_PER_PAGE = 25;
+const SCORES_REFETCH_INTERVAL_MS = 5000;
+
+export function getScoresRefetchInterval(query: { state: { error: unknown } }) {
+  if (
+    isUnsupportedObservabilityOperationError(query.state.error, 'scores') ||
+    isObservabilityUnavailableError(query.state.error)
+  ) {
+    return false;
+  }
+  return SCORES_REFETCH_INTERVAL_MS;
+}
 
 type UseScoresByScorerIdProps = {
   scorerId: string;
@@ -37,14 +52,20 @@ export const useScoresByScorerId = ({ scorerId, entityId, entityType }: UseScore
   const client = useMastraClient();
   const { inView: isEndOfListInView, setRef: setEndOfListElement } = useInView();
 
-  const query = useInfiniteQuery({
+  const query = useInfiniteQuery<
+    ListScoresResponse,
+    Error,
+    ReturnType<typeof selectFlatScores>,
+    readonly unknown[],
+    number
+  >({
     queryKey: ['scores', scorerId, entityId, entityType],
     queryFn: ({ pageParam }) =>
       client.listScoresByScorerId({ scorerId, page: pageParam, perPage: SCORES_PER_PAGE, entityId, entityType }),
     initialPageParam: 0,
     getNextPageParam: getScoresNextPageParam,
     select: selectFlatScores,
-    refetchInterval: 5000,
+    refetchInterval: getScoresRefetchInterval,
   });
 
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = query;

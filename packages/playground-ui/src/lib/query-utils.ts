@@ -4,8 +4,9 @@
  * - 401: Unauthorized (needs re-auth, not retry)
  * - 403: Forbidden (RBAC permission denied)
  * - 404: Not Found (resource doesn't exist)
+ * - 501: Not Implemented (capability gap, e.g. disabled storage domain, won't change)
  */
-const HTTP_NO_RETRY_STATUSES = [400, 401, 403, 404];
+const HTTP_NO_RETRY_STATUSES = [400, 401, 403, 404, 501];
 
 /**
  * Check if error is a 401 Unauthorized response.
@@ -124,6 +125,31 @@ export function isUnsupportedObservabilityOperationError(
 }
 
 /**
+ * Stable messages from the server's observability domain getters when the
+ * backing storage domain is disabled — e.g. `domains: { observability: false }`
+ * on a composite store. Most observability endpoints report the
+ * `observability` domain; span scores are backed by the separate `scores`
+ * domain and report their own message. Kept as an explicit list because many
+ * other (non-observability) server domains share the same message suffix.
+ */
+const OBSERVABILITY_UNAVAILABLE_MESSAGES = [
+  'Observability storage domain is not available',
+  'Scores storage domain is not available',
+];
+
+/**
+ * Check if an error came from a server whose observability (or scores)
+ * storage domain is unavailable. Affects every observability endpoint, so no
+ * operation argument.
+ */
+export function isObservabilityUnavailableError(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || !('message' in error)) return false;
+  const message = (error as { message: unknown }).message;
+  if (typeof message !== 'string') return false;
+  return OBSERVABILITY_UNAVAILABLE_MESSAGES.some(m => message.includes(m));
+}
+
+/**
  * Check if error has a status code that shouldn't be retried.
  * Used to prevent retrying client errors that won't resolve.
  */
@@ -155,7 +181,7 @@ export function isNonRetryableError(error: unknown): boolean {
 
 /**
  * Default retry function for TanStack Query.
- * Does not retry 4xx client errors (400, 401, 403, 404).
+ * Does not retry 4xx client errors (400, 401, 403, 404) or 501 capability gaps.
  * Retries other errors up to 3 times.
  */
 export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
