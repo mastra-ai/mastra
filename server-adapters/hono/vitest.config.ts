@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from '@internal/lint/vitest';
 
 // `@mastra/server` loads its MCP Apps from `@mastra/mcp-apps-components`, an optional peer that the server's
 // workspace doesn't install (see `pnpm-workspace.yaml`). Point its imports at this package's copy, so the MCP Apps

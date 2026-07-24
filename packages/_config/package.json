@@ -7,14 +7,17 @@
   "private": true,
   "exports": {
     "./prettier": "./src/prettier.js",
-    "./e18e": "./src/e18e.js"
+    "./e18e": "./src/e18e.js",
+    "./vitest": "./src/vitest.js"
   },
   "scripts": {},
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@e18e/eslint-plugin": "^0.8.1"
+    "@e18e/eslint-plugin": "^0.8.1",
+    "vitest": "catalog:",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from '@internal/lint/vitest';
 
 const coreDir = path.resolve(__dirname, '../../packages/core');
 const corePkg = JSON.parse(fs.readFileSync(path.join(coreDir, 'package.json'), 'utf-8'));
