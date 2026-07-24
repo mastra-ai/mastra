@@ -469,7 +469,11 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       } as TStepOutput;
     },
     component: 'AGENT',
-  };
+    // Preserve the declarative inputs so the workflow builder can emit a
+    // `{ type: 'agent', agentId, options }` graph entry instead of an opaque step.
+    __agentRef: params,
+    __agentOptions: agentOrToolOptions,
+  } as Step<TStepId, any, any, TStepOutput, unknown, unknown, InngestEngineType>;
 }
 
 function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
@@ -521,7 +525,11 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
       return params.execute(inputData, toolContext) as TStepOutput;
     },
     component: 'TOOL',
-  };
+    // Preserve the declarative inputs so the workflow builder can emit a
+    // `{ type: 'tool', toolId, options }` graph entry instead of an opaque step.
+    __toolRef: params,
+    __toolOptions: toolOpts,
+  } as Step<string, any, TStepInput, TStepOutput, TResume, TSuspend, InngestEngineType>;
 }
 
 function createStepFromProcessor<TProcessorId extends string>(

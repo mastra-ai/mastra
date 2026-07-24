@@ -12,6 +12,7 @@ export const getProcessOutputTool = createTool({
 
 Use this after starting a background command with execute_command (background: true) to check if the process is still running and read its output.`,
   toModelOutput: sandboxToModelOutput,
+  outputSchema: z.string(),
   inputSchema: z.object({
     pid: z.string().describe('The process ID returned when the background command was started'),
     tail: z

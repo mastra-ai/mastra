@@ -8,6 +8,7 @@ import { startWorkspaceSpan } from './tracing';
 export const deleteFileTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.DELETE,
   description: 'Delete a file or directory from the workspace filesystem',
+  outputSchema: z.string(),
   inputSchema: z.object({
     path: z.string().describe('The path to the file or directory to delete'),
     recursive: z

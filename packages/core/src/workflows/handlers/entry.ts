@@ -18,6 +18,7 @@ import type {
   WorkflowRunStatus,
   WorkflowRunState,
 } from '../types';
+import { getSingleStepEntryId, isSingleStepEntry } from '../utils';
 
 /**
  * After resuming a single step within a parallel or conditional block, check whether
@@ -33,12 +34,12 @@ function buildResumedBlockResult(
   opts?: { onlyExecutedSteps?: boolean },
 ): any {
   const stepsToCheck = opts?.onlyExecutedSteps
-    ? entrySteps.filter(s => s.type === 'step' && stepResults[s.step.id] !== undefined)
+    ? entrySteps.filter(s => isSingleStepEntry(s) && stepResults[getSingleStepEntryId(s)] !== undefined)
     : entrySteps;
 
   const allComplete = stepsToCheck.every(s => {
-    if (s.type === 'step') {
-      const r = stepResults[s.step.id];
+    if (isSingleStepEntry(s)) {
+      const r = stepResults[getSingleStepEntryId(s)];
       return r && r.status === 'success';
     }
     return true;
@@ -49,10 +50,11 @@ function buildResumedBlockResult(
     result = {
       status: 'success',
       output: entrySteps.reduce((acc: Record<string, any>, s) => {
-        if (s.type === 'step') {
-          const r = stepResults[s.step.id];
+        if (isSingleStepEntry(s)) {
+          const id = getSingleStepEntryId(s);
+          const r = stepResults[id];
           if (r && r.status === 'success') {
-            acc[s.step.id] = r.output;
+            acc[id] = r.output;
           }
         }
         return acc;
@@ -60,18 +62,24 @@ function buildResumedBlockResult(
     };
   } else {
     // Check for failed steps before assuming suspended
-    const failedStep = stepsToCheck.find(s => s.type === 'step' && stepResults[s.step.id]?.status === 'failed');
-    if (failedStep && failedStep.type === 'step') {
-      const failedResult = stepResults[failedStep.step.id] as StepFailure<any, any, any, any> | undefined;
+    const failedStep = stepsToCheck.find(
+      s => isSingleStepEntry(s) && stepResults[getSingleStepEntryId(s)]?.status === 'failed',
+    );
+    if (failedStep && isSingleStepEntry(failedStep)) {
+      const failedResult = stepResults[getSingleStepEntryId(failedStep)] as StepFailure<any, any, any, any> | undefined;
       result = {
         status: 'failed',
         error: failedResult?.error ?? new Error('Workflow step failed after resume'),
         tripwire: failedResult?.tripwire,
       };
     } else {
-      const stillSuspended = entrySteps.find(s => s.type === 'step' && stepResults[s.step.id]?.status === 'suspended');
+      const stillSuspended = entrySteps.find(
+        s => isSingleStepEntry(s) && stepResults[getSingleStepEntryId(s)]?.status === 'suspended',
+      );
       const suspendData =
-        stillSuspended && stillSuspended.type === 'step' ? stepResults[stillSuspended.step.id]?.suspendPayload : {};
+        stillSuspended && isSingleStepEntry(stillSuspended)
+          ? stepResults[getSingleStepEntryId(stillSuspended)]?.suspendPayload
+          : {};
       result = {
         status: 'suspended',
         payload: suspendData,
@@ -83,8 +91,8 @@ function buildResumedBlockResult(
 
   if (result.status === 'suspended') {
     entrySteps.forEach((s, stepIndex) => {
-      if (s.type === 'step' && stepResults[s.step.id]?.status === 'suspended') {
-        executionContext.suspendedPaths[s.step.id] = [...executionContext.executionPath, stepIndex];
+      if (isSingleStepEntry(s) && stepResults[getSingleStepEntryId(s)]?.status === 'suspended') {
+        executionContext.suspendedPaths[getSingleStepEntryId(s)] = [...executionContext.executionPath, stepIndex];
       }
     });
   }
@@ -228,6 +236,7 @@ export interface ExecuteEntryParams extends ObservabilityContext {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     resumePayload: any;
     resumePath: number[];
+    forEachIndex?: number;
   };
   executionContext: ExecutionContext;
   pubsub: PubSub;
@@ -247,7 +256,7 @@ export async function executeEntry(
     workflowId,
     runId,
     resourceId,
-    entry,
+    entry: rawEntry,
     prevStep,
     serializedStepGraph,
     stepResults,
@@ -266,27 +275,32 @@ export async function executeEntry(
   } = params;
   const observabilityContext = resolveObservabilityContext(rest);
 
+  const entry = rawEntry;
+
   const prevOutput = engine.getStepOutput(stepResults, prevStep);
   let execResults: any;
   let entryRequestContext: Record<string, any> | undefined;
 
-  if (entry.type === 'step') {
-    const isResumedStep = resume?.steps?.includes(entry.step.id) ?? false;
+  if (isSingleStepEntry(entry)) {
+    // The engine dispatches by step type: a plain `step` runs as-is, while the
+    // declarative `agent` / `tool` / `mapping` variants each have their own
+    // execute method that resolves and runs the step. Resume bookkeeping keys
+    // off the entry id and is shared across all single-step kinds.
+    const stepId = getSingleStepEntryId(entry);
+    const isResumedStep = resume?.steps?.includes(stepId) ?? false;
     if (!isResumedStep) {
-      executionContext.stepExecutionPath?.push(entry.step.id);
+      executionContext.stepExecutionPath?.push(stepId);
     }
-    const { step } = entry;
     const stepPrevOutput = getResumeStepPrevOutput({
       isResumedStep,
-      stepId: step.id,
+      stepId,
       stepResults,
       prevOutput,
     });
-    const stepExecResult = await engine.executeStep({
+    const singleStepParams = {
       workflowId,
       runId,
       resourceId,
-      step,
       stepResults,
       executionContext,
       timeTravel,
@@ -302,7 +316,15 @@ export async function executeEntry(
       disableScorers,
       serializedStepGraph,
       perStep,
-    });
+    };
+    const stepExecResult =
+      entry.type === 'step'
+        ? await engine.executeStep({ ...singleStepParams, step: entry.step })
+        : entry.type === 'agent'
+          ? await engine.executeAgent({ ...singleStepParams, entry })
+          : entry.type === 'tool'
+            ? await engine.executeTool({ ...singleStepParams, entry })
+            : await engine.executeMapping({ ...singleStepParams, entry });
 
     // Extract result and apply context changes
     execResults = stepExecResult.result;
@@ -515,9 +537,10 @@ export async function executeEntry(
       perStep,
     });
   } else if (entry.type === 'foreach') {
+    const foreachStepId = getSingleStepEntryId(entry.step);
     const foreachPrevOutput = getResumeStepPrevOutput({
-      isResumedStep: resume?.steps?.includes(entry.step.id) ?? false,
-      stepId: entry.step.id,
+      isResumedStep: resume?.steps?.includes(foreachStepId) ?? false,
+      stepId: foreachStepId,
       stepResults,
       prevOutput,
     });
@@ -755,8 +778,10 @@ export async function executeEntry(
     });
   }
 
-  if (entry.type === 'step' || entry.type === 'loop' || entry.type === 'foreach') {
-    stepResults[entry.step.id] = execResults;
+  if (isSingleStepEntry(entry)) {
+    stepResults[getSingleStepEntryId(entry)] = execResults;
+  } else if (entry.type === 'loop' || entry.type === 'foreach') {
+    stepResults[getSingleStepEntryId(entry.step)] = execResults;
   }
 
   if (abortController?.signal?.aborted) {

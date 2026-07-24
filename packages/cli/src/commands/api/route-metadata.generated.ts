@@ -3606,6 +3606,71 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /stored/workflows": {
+    "method": "GET",
+    "path": "/stored/workflows",
+    "pathParams": [],
+    "queryParams": [
+      "authorId",
+      "status"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "workflows"
+    }
+  },
+  "POST /stored/workflows": {
+    "method": "POST",
+    "path": "/stored/workflows",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "description",
+      "graph",
+      "id",
+      "inputSchema",
+      "metadata",
+      "outputSchema",
+      "requestContextSchema",
+      "stateSchema"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /stored/workflows/:storedWorkflowId": {
+    "method": "GET",
+    "path": "/stored/workflows/:storedWorkflowId",
+    "pathParams": [
+      "storedWorkflowId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /stored/workflows/:storedWorkflowId": {
+    "method": "DELETE",
+    "path": "/stored/workflows/:storedWorkflowId",
+    "pathParams": [
+      "storedWorkflowId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /stored/mcp-clients": {
     "method": "GET",
     "path": "/stored/mcp-clients",
@@ -5264,6 +5329,18 @@ export const API_ROUTE_METADATA = {
   "GET /editor/builder/settings": {
     "method": "GET",
     "path": "/editor/builder/settings",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/workflow-builder/settings": {
+    "method": "GET",
+    "path": "/editor/workflow-builder/settings",
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [],

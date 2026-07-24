@@ -1,4 +1,5 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import {
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
@@ -53,7 +54,16 @@ export function WorkflowsList({ workflows, isLoading, search = '' }: WorkflowsLi
 
         return (
           <EntityList.RowLink key={`workflow-${wf.id}`} to={paths.workflowLink(wf.id)} LinkComponent={Link}>
-            <EntityList.NameCell>{name}</EntityList.NameCell>
+            <EntityList.NameCell>
+              <span className="inline-flex items-center gap-2">
+                {name}
+                {wf.origin === 'stored' && (
+                  <Badge size="xs" variant="info" title="Registered via the stored-workflows API">
+                    Stored
+                  </Badge>
+                )}
+              </span>
+            </EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
             <EntityList.TextCell className="text-center">{stepsCount || ''}</EntityList.TextCell>
           </EntityList.RowLink>

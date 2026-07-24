@@ -107,6 +107,20 @@ import { askUserAgent } from './agents/ask-user-agent';
 import { codeModeAgent } from './agents/code-mode-agent';
 import { clinicDirectAgent, clinicSpecialistAgent, clinicSupervisorAgent } from './agents/clinic-context-agents';
 import { approvalDemoAgent } from './agents/approval-demo-agent';
+import {
+  standupNoteNormalizerAgent,
+  standupDigestAgent,
+  standupEscalationAgent,
+} from './stored-workflows/daily-standup-agents';
+import {
+  buildNormalizerPromptsTool,
+  detectBlockersTool,
+  formatDigestTool,
+  formatDigestWithEscalationTool,
+} from './stored-workflows/daily-standup-tools';
+import dailyStandupDigestGraph from './stored-workflows/daily-standup-digest.json' with { type: 'json' };
+import dailyStandupPlainGraph from './stored-workflows/daily-standup-plain.json' with { type: 'json' };
+import dailyStandupWithEscalationGraph from './stored-workflows/daily-standup-with-escalation.json' with { type: 'json' };
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
@@ -161,6 +175,15 @@ export const mastra = new Mastra({
     clinicDirectAgent,
     clinicSpecialistAgent,
     clinicSupervisorAgent,
+    'standup-note-normalizer': standupNoteNormalizerAgent,
+    'standup-digest': standupDigestAgent,
+    'standup-escalation': standupEscalationAgent,
+  },
+  tools: {
+    'build-normalizer-prompts': buildNormalizerPromptsTool,
+    'detect-blockers': detectBlockersTool,
+    'format-standup-digest': formatDigestTool,
+    'format-standup-digest-with-escalation': formatDigestWithEscalationTool,
   },
   processors: {
     moderationProcessor,
@@ -230,4 +253,29 @@ export const mastra = new Mastra({
       },
     },
   }),
+});
+
+/**
+ * Seed the `daily-standup-digest` stored workflow (and its two sub-workflows) on boot.
+ *
+ * This is the point of the demo: on `pnpm mastra dev`, JSON WorkflowDefinitions
+ * are upserted into `WorkflowDefinitionsStorage` and live-registered via
+ * `mastra.addStoredWorkflow()`. Studio then shows them as runnable workflows,
+ * even though none were authored with `createWorkflow(...)`.
+ *
+ * Ordering matters: the parent workflow's `type: 'workflow'` entries reference
+ * the two sub-workflows by id, and `addStoredWorkflow`'s pre-flight `collectRefs`
+ * check rejects unknown workflow ids. Seed sub-workflows first, then the parent.
+ *
+ * `addStoredWorkflow` is idempotent — re-running replaces any existing row and
+ * live registration with the same id, so this is safe to call on every boot.
+ */
+type StoredWorkflowInput = Parameters<typeof mastra.addStoredWorkflow>[0];
+async function seedDailyStandupStoredWorkflows() {
+  await mastra.addStoredWorkflow(dailyStandupPlainGraph as StoredWorkflowInput);
+  await mastra.addStoredWorkflow(dailyStandupWithEscalationGraph as StoredWorkflowInput);
+  await mastra.addStoredWorkflow(dailyStandupDigestGraph as StoredWorkflowInput);
+}
+void seedDailyStandupStoredWorkflows().catch((err: unknown) => {
+  mastra.getLogger().error('Failed to seed daily-standup stored workflows', { err });
 });

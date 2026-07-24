@@ -49,12 +49,14 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
         };
       }
 
+      // Back-compat: older serialized graphs encoded `.map()` as a `step` entry
+      // carrying a `mapConfig`. Newer graphs use the dedicated `mapping` entry.
       if (flow.step.mapConfig) {
         return {
           kind: 'map-step',
           id: flow.step.id,
           step: flow.step,
-          flow,
+          flow: flow as never,
         };
       }
 
@@ -64,13 +66,34 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
         step: flow.step,
         flow,
       };
-    case 'foreach':
+    case 'agent':
       return {
-        kind: 'foreach-step',
-        id: flow.step.id,
-        step: flow.step,
+        kind: 'agent-step',
+        id: flow.id,
         flow,
       };
+    case 'tool':
+      return {
+        kind: 'tool-step',
+        id: flow.id,
+        flow,
+      };
+    case 'mapping':
+      return {
+        kind: 'map-step',
+        id: flow.id,
+        flow,
+      };
+    case 'foreach': {
+      const inner = flow.step;
+      const innerStep = inner.type === 'step' ? inner.step : ({ id: inner.id } as never);
+      return {
+        kind: 'foreach-step',
+        id: innerStep.id,
+        step: innerStep,
+        flow,
+      };
+    }
     case 'parallel':
       return {
         kind: 'parallel-step',
@@ -83,13 +106,16 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
         id: flow.serializedConditions[0]?.id ?? 'conditional',
         flow,
       };
-    case 'loop':
+    case 'loop': {
+      const inner = flow.step;
+      const innerStep = inner.type === 'step' ? inner.step : ({ id: inner.id } as never);
       return {
         kind: 'loop-step',
-        id: flow.step.id,
-        step: flow.step,
+        id: innerStep.id,
+        step: innerStep,
         flow,
       };
+    }
     case 'sleep':
       return {
         kind: 'sleep-step',
@@ -100,6 +126,18 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
       return {
         kind: 'sleep-until-step',
         id: flow.id,
+        flow,
+      };
+    case 'workflow':
+      return {
+        kind: 'nested-workflow-step',
+        id: flow.id,
+        step: {
+          id: flow.workflowId,
+          description: flow.description,
+          component: 'WORKFLOW',
+          serializedStepFlow: flow.serializedStepFlow,
+        } as never,
         flow,
       };
   }

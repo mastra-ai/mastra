@@ -21,6 +21,7 @@ export const ArrayWrapper: React.FC<ArrayWrapperProps> = ({ label, children, onA
           <Tooltip>
             <TooltipTrigger asChild>
               <button
+                aria-label={`Add ${label} item`}
                 onClick={onAddItem}
                 type="button"
                 className="text-neutral3 bg-surface3 rounded-md p-1 hover:bg-surface4 hover:text-neutral6 h-icon-sm w-icon-sm"

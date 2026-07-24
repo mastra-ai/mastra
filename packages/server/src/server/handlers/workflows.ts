@@ -157,7 +157,7 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
-      return getWorkflowInfo(workflow);
+      return getWorkflowInfo(workflow, false);
     } catch (error) {
       return handleError(error, 'Error getting workflow');
     }

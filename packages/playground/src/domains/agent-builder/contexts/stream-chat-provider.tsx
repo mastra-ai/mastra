@@ -33,6 +33,7 @@ export interface StreamChatProviderProps {
    */
   initialUserMessage?: string;
   clientTools?: ClientToolsInput;
+  createClientTools?: () => ClientToolsInput;
   /**
    * Optional per-call system-prompt augmentation forwarded to the agent on
    * every send via `modelSettings.instructions`. Read fresh at send time so the
@@ -40,7 +41,13 @@ export interface StreamChatProviderProps {
    * list and is not persisted as a chat turn.
    */
   extraInstructions?: string;
+  streamPath?: string;
+  enableThreadSignals?: boolean;
   debounceTime?: number;
+  maxSteps?: number;
+  onSendStart?: () => void;
+  onSendComplete?: () => void;
+  onSendError?: (error: Error) => void;
   children: ReactNode;
 }
 
@@ -50,15 +57,23 @@ export const StreamChatProvider = ({
   initialMessages,
   initialUserMessage,
   clientTools,
+  createClientTools,
   extraInstructions,
+  streamPath,
+  enableThreadSignals,
   debounceTime = 0,
+  maxSteps = 100,
+  onSendStart,
+  onSendComplete,
+  onSendError,
   children,
 }: StreamChatProviderProps) => {
-  const threadSignalsEnabled = window.MASTRA_AGENT_SIGNALS !== 'false';
+  const threadSignalsEnabled = enableThreadSignals ?? window.MASTRA_AGENT_SIGNALS !== 'false';
   const { messages, isRunning, sendMessage, approveToolCall, declineToolCall } = useChat({
     agentId,
     initialMessages,
     enableThreadSignals: threadSignalsEnabled,
+    streamPath,
   });
   const { data: currentUser } = useCurrentUser();
 
@@ -74,7 +89,7 @@ export const StreamChatProvider = ({
 
   const send = useCallback(
     (message: string) => {
-      const tools = clientToolsRef.current;
+      const tools = createClientTools?.() ?? clientToolsRef.current;
       const instructions = instructionsRef.current;
       const requestContext = new RequestContext();
       requestContext.set('user', currentUser);
@@ -84,7 +99,7 @@ export const StreamChatProvider = ({
         threadId: threadIdRef.current,
         modelSettings: {
           maxRetries: 3,
-          maxSteps: 100,
+          maxSteps,
           // Sized to fit one `set-agent-instructions` tool call carrying up to
           // ~3,000 chars of generated instructions plus the JSON envelope and
           // any hidden reasoning tokens emitted by the builder model. Below
@@ -108,9 +123,12 @@ export const StreamChatProvider = ({
         payload.modelSettings = { ...payload.modelSettings, instructions };
       }
 
-      void sendMessage(payload);
+      onSendStart?.();
+      void sendMessage(payload)
+        .then(() => onSendComplete?.())
+        .catch(error => onSendError?.(error instanceof Error ? error : new Error(String(error))));
     },
-    [sendMessage, currentUser],
+    [sendMessage, currentUser, createClientTools, maxSteps, onSendStart, onSendComplete, onSendError],
   );
 
   const hasDispatchedStarterRef = useRef(false);

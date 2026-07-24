@@ -17,6 +17,8 @@ const WorkflowStepFactoryComponent = <TStep extends ResolvedWorkflowStep>({
   step,
   Step,
   MapStep,
+  AgentStep,
+  ToolStep,
   ForEachStep,
   ParallelStep,
   Conditional,
@@ -31,6 +33,10 @@ const WorkflowStepFactoryComponent = <TStep extends ResolvedWorkflowStep>({
       return <>{Step?.(step as Extract<TStep, { kind: 'step' }>) ?? renderUnknown(step, UnknownStep)}</>;
     case 'map-step':
       return <>{MapStep?.(step as Extract<TStep, { kind: 'map-step' }>) ?? renderUnknown(step, UnknownStep)}</>;
+    case 'agent-step':
+      return <>{AgentStep?.(step as Extract<TStep, { kind: 'agent-step' }>) ?? renderUnknown(step, UnknownStep)}</>;
+    case 'tool-step':
+      return <>{ToolStep?.(step as Extract<TStep, { kind: 'tool-step' }>) ?? renderUnknown(step, UnknownStep)}</>;
     case 'foreach-step':
       return <>{ForEachStep?.(step as Extract<TStep, { kind: 'foreach-step' }>) ?? renderUnknown(step, UnknownStep)}</>;
     case 'parallel-step':

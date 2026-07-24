@@ -16,6 +16,7 @@ import type { ChunkType, WorkflowStreamEvent } from '../stream/types';
 import type { Tool, ToolExecutionContext } from '../tools';
 import type { DynamicArgument } from '../types';
 import type { ExecutionEngine } from './execution-engine';
+import type { Predicate } from './predicate';
 import type { WorkflowScheduleInput } from './scheduler/types';
 import type { ConditionFunction, ExecuteFunction, ExecuteFunctionParams, LoopConditionFunction, Step } from './step';
 
@@ -523,34 +524,96 @@ export type WorkflowInfo = {
   stepCount?: number;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
   isProcessorWorkflow?: boolean;
+  /**
+   * How this workflow got into the live registry. `'code'` for statically
+   * authored / `addWorkflow()`-added workflows, `'stored'` for anything
+   * hydrated or added via `addStoredWorkflow()` (HTTP or SDK).
+   *
+   * Optional so external consumers of `WorkflowInfo` don't break; the server
+   * reads it from `workflow.origin`, which `rehydrateWorkflow` sets to
+   * `'stored'` at construction time (defaults to `'code'`).
+   */
+  origin?: 'code' | 'stored';
 };
 
 export type DefaultEngineType = {};
 
-export type StepFlowEntry<TEngineType = DefaultEngineType> =
+/**
+ * Object form of a `.map()` mapping config: a record of output keys to mapping
+ * sources (`value`, `fn`, `requestContextPath`, `step`+`path`, `initData`+`path`).
+ * Kept loose here because the precise per-key union lives in the `.map()` overload.
+ */
+export type MappingConfig = Record<string, any>;
+
+/**
+ * The "single step-like" graph entries: a plain user step plus the declarative
+ * variants that Mastra interprets at execution time (agent / tool / mapping).
+ *
+ * The live form carries runtime references (`agent`, `tool`, `mapConfig`,
+ * `options`) so the engine can materialize a runnable step on demand - mirroring
+ * how `loop` carries a live `condition`. These references are intentionally loose
+ * (`any`) because the public type-safety for these entries is enforced by the
+ * `Workflow` builder method overloads, not by this internal union.
+ */
+export type SingleStepEntry<TEngineType = DefaultEngineType> =
   | { type: 'step'; step: Step }
+  | { type: 'agent'; id: string; agentId: string; agent?: any; options?: any }
+  | { type: 'tool'; id: string; toolId: string; tool?: any; options?: any }
+  | { type: 'mapping'; id: string; mapConfig: MappingConfig | ExecuteFunction<any, any, any, any, any, TEngineType> };
+
+/** The `{ type: 'step' }` variant of {@link SingleStepEntry}: a plain live step. */
+export type StepEntry = Extract<SingleStepEntry, { type: 'step' }>;
+/** The `{ type: 'agent' }` variant of {@link SingleStepEntry}. */
+export type AgentStepEntry = Extract<SingleStepEntry, { type: 'agent' }>;
+/** The `{ type: 'tool' }` variant of {@link SingleStepEntry}. */
+export type ToolStepEntry = Extract<SingleStepEntry, { type: 'tool' }>;
+/** The `{ type: 'mapping' }` variant of {@link SingleStepEntry}. */
+export type MappingStepEntry<TEngineType = DefaultEngineType> = Extract<
+  SingleStepEntry<TEngineType>,
+  { type: 'mapping' }
+>;
+
+export type StepFlowEntry<TEngineType = DefaultEngineType> =
+  | SingleStepEntry<TEngineType>
   | { type: 'sleep'; id: string; duration?: number; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
   | { type: 'sleepUntil'; id: string; date?: Date; fn?: ExecuteFunction<any, any, any, any, any, TEngineType> }
   | {
       type: 'parallel';
-      steps: { type: 'step'; step: Step }[];
+      steps: SingleStepEntry<TEngineType>[];
     }
   | {
       type: 'conditional';
-      steps: { type: 'step'; step: Step }[];
+      steps: SingleStepEntry<TEngineType>[];
       conditions: ConditionFunction<any, any, any, any, any, TEngineType>[];
       serializedConditions: { id: string; fn: string }[];
+      /**
+       * Declarative predicates for each condition, aligned by index. Present
+       * for entries built via the `.branch({ predicate })` overload; absent
+       * for `.branch(fn)` closures. When present the entry is storable and
+       * round-trips through `toStorableGraph` / `rehydrateWorkflow`.
+       */
+      predicates?: (Predicate | null)[];
     }
   | {
+      // `loop` supports two condition forms: a closure (`.dowhile(fn)`, not
+      // storable) and a declarative predicate (`.dowhile({ predicate })`,
+      // storable). The live step shape is aligned with `parallel` / `foreach`
+      // so the builder can accept an Agent / Tool directly.
       type: 'loop';
-      step: Step;
+      step: SingleStepEntry<TEngineType>;
       condition: LoopConditionFunction<any, any, any, any, any, TEngineType>;
       serializedCondition: { id: string; fn: string };
       loopType: 'dowhile' | 'dountil';
+      /**
+       * Declarative predicate for the loop condition. Present when built via
+       * `.dowhile({ predicate })` / `.dountil({ predicate })`; absent for
+       * closure loops. Enables storage round-trip.
+       */
+      predicate?: Predicate;
     }
   | {
       type: 'foreach';
-      step: Step;
+      step: SingleStepEntry<TEngineType>;
       opts: ForeachOptions;
     };
 
@@ -590,11 +653,68 @@ export type SerializedStep<TEngineType = DefaultEngineType> = Pick<
   canSuspend?: boolean;
 };
 
-export type SerializedStepFlowEntry =
+/**
+ * JSON-safe mirror of {@link SingleStepEntry}: declarative variants carry
+ * ids/strings only (no closures or live references).
+ */
+/**
+ * JSON-safe subset of {@link AgentStepOptions} / tool step options carried on
+ * a serialized declarative entry. Closure-valued fields (`onFinish`, function
+ * `scorers`) don't round-trip and are rejected at `toStorableGraph` time.
+ */
+export type SerializedStepOptions = {
+  retries?: number;
+  metadata?: StepMetadata;
+};
+
+export type SerializedSingleStepEntry =
+  | { type: 'step'; step: SerializedStep }
   | {
-      type: 'step';
-      step: SerializedStep;
+      type: 'agent';
+      id: string;
+      agentId: string;
+      description?: string;
+      /**
+       * The step's output shape. When `.agent()` is called with
+       * `structuredOutput.schema`, that schema becomes the step output; this
+       * field captures it as JSON Schema so rehydration can reconstruct the
+       * same `structuredOutput` wiring. Absent means the step produces the
+       * default `{ text: string }`.
+       */
+      outputSchema?: Record<string, any>;
+      options?: SerializedStepOptions;
     }
+  | {
+      type: 'tool';
+      id: string;
+      toolId: string;
+      description?: string;
+      // No outputSchema: a tool's output shape lives on the tool itself and is
+      // looked up from the live Mastra instance at rehydration time.
+      options?: SerializedStepOptions;
+    }
+  | { type: 'mapping'; id: string; mapConfig: string }
+  /**
+   * A nested workflow referenced by its registered id (code-defined or
+   * another stored workflow). The referenced workflow must resolve on the
+   * live Mastra registry at rehydration time; missing refs fail loudly.
+   *
+   * `serializedStepFlow` is the nested workflow's full graph, inlined for
+   * Studio/API consumers (same role `SerializedStep.serializedStepFlow`
+   * played when nested workflows were emitted as `type: 'step'` +
+   * `component: 'WORKFLOW'`). Stored JSON definitions may omit it and keep
+   * only the id reference.
+   */
+  | {
+      type: 'workflow';
+      id: string;
+      workflowId: string;
+      description?: string;
+      serializedStepFlow?: SerializedStepFlowEntry[];
+    };
+
+export type SerializedStepFlowEntry =
+  | SerializedSingleStepEntry
   | {
       type: 'sleep';
       id: string;
@@ -609,29 +729,44 @@ export type SerializedStepFlowEntry =
     }
   | {
       type: 'parallel';
-      steps: {
-        type: 'step';
-        step: SerializedStep;
-      }[];
+      steps: SerializedSingleStepEntry[];
     }
   | {
       type: 'conditional';
-      steps: {
-        type: 'step';
-        step: SerializedStep;
-      }[];
+      steps: SerializedSingleStepEntry[];
       serializedConditions: { id: string; fn: string }[];
+      /**
+       * Optional declarative predicate for each condition, aligned by index
+       * with `steps` / `serializedConditions`. When present, the entry is
+       * fully round-trippable through storage — the runtime rebuilds a live
+       * `ConditionFunction` by evaluating the predicate against the workflow
+       * context. When absent, the entry originated from a closure-based
+       * `.branch(fn)` call and cannot be stored (see `toStorableGraph`).
+       * Additive: never changes the shape of closure-based workflows.
+       */
+      predicates?: (Predicate | null)[];
     }
   | {
       type: 'loop';
-      step: SerializedStep;
+      step: SerializedSingleStepEntry;
       serializedCondition: { id: string; fn: string };
       loopType: 'dowhile' | 'dountil';
+      /**
+       * Optional declarative predicate for the loop condition. When present,
+       * the entry is fully round-trippable through storage. When absent, the
+       * loop uses a closure predicate and cannot be stored. Additive.
+       */
+      predicate?: Predicate;
     }
   | {
       type: 'foreach';
-      step: SerializedStep;
-      opts: {
+      step: SerializedSingleStepEntry;
+      /**
+       * Optional. When omitted, the engine defaults to `concurrency: 1`. Present
+       * when the foreach entry carries a static concurrency value or a
+       * serialized concurrency resolver function.
+       */
+      opts?: {
         /** Static concurrency. Omitted when a resolver function is used. */
         concurrency?: number;
         /** Source of the concurrency resolver function, when one is used. */

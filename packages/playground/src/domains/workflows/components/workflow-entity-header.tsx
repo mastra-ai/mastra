@@ -3,7 +3,7 @@ import { EntityHeader } from '@mastra/playground-ui/components/EntityHeader';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
-import { CopyIcon, Cpu } from 'lucide-react';
+import { CopyIcon, Cpu, Database } from 'lucide-react';
 
 import { useWorkflow } from '@/hooks/use-workflows';
 
@@ -41,6 +41,19 @@ export const WorkflowEntityHeader = ({ workflowId }: WorkflowEntityHeaderProps) 
             <Badge icon={<Cpu className="h-3 w-3" />} className="bg-violet-500/20 text-violet-400">
               Processor
             </Badge>
+          )}
+
+          {workflow?.origin === 'stored' && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div>
+                  <Badge icon={<Database className="h-3 w-3" />} variant="info">
+                    Stored
+                  </Badge>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>Registered via the stored-workflows API — lives in storage</TooltipContent>
+            </Tooltip>
           )}
         </div>
       </EntityHeader>

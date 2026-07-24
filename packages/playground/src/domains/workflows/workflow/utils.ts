@@ -178,6 +178,41 @@ export type WStep = {
   };
 };
 
+/** Resolves the id of a single step-like serialized entry (step / agent / tool / mapping). */
+const getSingleStepFlowId = (flow: SerializedStepFlowEntry): string => {
+  if ('id' in flow) return flow.id;
+  if ('step' in flow) {
+    const inner = flow.step;
+    if ('id' in inner) return inner.id;
+    if ('step' in inner) return inner.step.id;
+  }
+  return '';
+};
+
+type SerializedStepInner = Extract<SerializedStepFlowEntry, { type: 'step' }>['step'];
+type SerializedStepLike = Pick<SerializedStepInner, 'id' | 'description' | 'component'> &
+  Partial<Pick<SerializedStepInner, 'serializedStepFlow' | 'mapConfig' | 'canSuspend' | 'metadata'>>;
+
+/**
+ * `foreach.step` / `loop.step` widened to `SerializedSingleStepEntry`
+ * (agent | tool | step | mapping | workflow). For the `type: 'step'` variant,
+ * forward the wrapped step directly; for agent/tool/mapping variants,
+ * synthesize an id-only shim so downstream reads (`.id`, `.description`,
+ * `.component`, ...) don't blow up.
+ */
+const unwrapInnerEntry = (inner: Extract<SerializedStepFlowEntry, { type: 'foreach' }>['step']): SerializedStepLike => {
+  if (inner.type === 'step') return inner.step;
+  if (inner.type === 'workflow') {
+    return {
+      id: inner.id,
+      description: inner.description,
+      component: 'WORKFLOW',
+      serializedStepFlow: inner.serializedStepFlow,
+    };
+  }
+  return { id: inner.id, description: undefined, component: undefined };
+};
+
 const getStepNodeAndEdge = ({
   stepFlow,
   xIndex,
@@ -200,13 +235,21 @@ const getStepNodeAndEdge = ({
   let nextNodeIds: string[] = [];
   let nextStepIds: string[] = [];
   if (nextStepFlow?.type === 'step' || nextStepFlow?.type === 'foreach' || nextStepFlow?.type === 'loop') {
-    const nextStepId = allPrevNodeIds.has(getWorkflowNodeId(nextStepFlow.step.id))
-      ? `${nextStepFlow.step.id}-${yIndex + 1}`
-      : nextStepFlow.step.id;
+    const nextInner = nextStepFlow.type === 'step' ? nextStepFlow.step : unwrapInnerEntry(nextStepFlow.step);
+    const nextStepId = allPrevNodeIds.has(getWorkflowNodeId(nextInner.id))
+      ? `${nextInner.id}-${yIndex + 1}`
+      : nextInner.id;
     nextNodeIds = [getWorkflowNodeId(nextStepId)];
-    nextStepIds = [nextStepFlow.step.id];
+    nextStepIds = [nextInner.id];
   }
-  if (nextStepFlow?.type === 'sleep' || nextStepFlow?.type === 'sleepUntil') {
+  if (
+    nextStepFlow?.type === 'sleep' ||
+    nextStepFlow?.type === 'sleepUntil' ||
+    nextStepFlow?.type === 'agent' ||
+    nextStepFlow?.type === 'tool' ||
+    nextStepFlow?.type === 'mapping' ||
+    nextStepFlow?.type === 'workflow'
+  ) {
     const nextStepId = allPrevNodeIds.has(getWorkflowNodeId(nextStepFlow.id))
       ? `${nextStepFlow.id}-${yIndex + 1}`
       : nextStepFlow.id;
@@ -216,22 +259,21 @@ const getStepNodeAndEdge = ({
   if (nextStepFlow?.type === 'parallel') {
     nextNodeIds =
       nextStepFlow?.steps.map(step => {
-        const stepId = step.step.id;
+        const stepId = getSingleStepFlowId(step);
         const nextStepId = allPrevNodeIds.has(getWorkflowNodeId(stepId)) ? `${stepId}-${yIndex + 1}` : stepId;
         return getWorkflowNodeId(nextStepId);
       }) || [];
-    nextStepIds = nextStepFlow?.steps.map(step => step.step.id) || [];
+    nextStepIds = nextStepFlow?.steps.map(step => getSingleStepFlowId(step)) || [];
   }
   if (nextStepFlow?.type === 'conditional') {
     nextNodeIds = nextStepFlow?.serializedConditions.map(cond => getWorkflowConditionNodeId(cond.id)) || [];
-    nextStepIds = nextStepFlow?.steps?.map(step => step.step.id) || [];
+    nextStepIds = nextStepFlow?.steps?.map(step => getSingleStepFlowId(step)) || [];
   }
 
   if (stepFlow.type === 'step' || stepFlow.type === 'foreach') {
-    const hasGraph = stepFlow.step.component === 'WORKFLOW';
-    const rawNodeId = allPrevNodeIds.has(getWorkflowNodeId(stepFlow.step.id))
-      ? `${stepFlow.step.id}-${yIndex}`
-      : stepFlow.step.id;
+    const innerStep = stepFlow.type === 'foreach' ? unwrapInnerEntry(stepFlow.step) : stepFlow.step;
+    const hasGraph = innerStep.component === 'WORKFLOW';
+    const rawNodeId = allPrevNodeIds.has(getWorkflowNodeId(innerStep.id)) ? `${innerStep.id}-${yIndex}` : innerStep.id;
     const nodeId = getWorkflowNodeId(rawNodeId);
     const conditionNodes: WorkflowStepNode[] = condition
       ? [
@@ -244,7 +286,7 @@ const getStepNodeAndEdge = ({
               workflowStep: conditionWorkflowStep(condition),
               nodeRole: 'condition',
               previousStepId: prevStepIds[prevStepIds.length - 1],
-              nextStepId: stepFlow.step.id,
+              nextStepId: innerStep.id,
               withoutTopHandle: !prevNodeIds.length,
               withoutBottomHandle: !nextNodeIds.length,
               isLarge: true,
@@ -260,17 +302,17 @@ const getStepNodeAndEdge = ({
         position: { x: xIndex * 300, y: (yIndex + (condition ? 1 : 0)) * 100 },
         type: WORKFLOW_STEP_NODE_TYPE,
         data: {
-          label: formatMappingLabel(stepFlow.step.id, prevStepIds, nextStepIds),
+          label: formatMappingLabel(innerStep.id, prevStepIds, nextStepIds),
           workflowStep: resolveWorkflowGraphStep(stepFlow),
-          stepId: stepFlow.step.id,
-          description: stepFlow.step.description,
+          stepId: innerStep.id,
+          description: innerStep.description,
           withoutTopHandle: condition ? false : !prevNodeIds.length,
           withoutBottomHandle: !nextNodeIds.length,
-          stepGraph: hasGraph ? stepFlow.step.serializedStepFlow : undefined,
-          mapConfig: stepFlow.step.mapConfig,
-          canSuspend: stepFlow.step.canSuspend,
+          stepGraph: hasGraph ? innerStep.serializedStepFlow : undefined,
+          mapConfig: innerStep.mapConfig,
+          canSuspend: innerStep.canSuspend,
           isForEach: stepFlow.type === 'foreach',
-          metadata: stepFlow.step.metadata,
+          metadata: innerStep.metadata,
         },
       },
     ];
@@ -280,7 +322,7 @@ const getStepNodeAndEdge = ({
             ...(prevNodeIds || []).map((prevNodeId, i) => ({
               id: getWorkflowEdgeId(prevNodeId, getWorkflowConditionNodeId(condition.id), 'condition'),
               source: prevNodeId,
-              data: { previousStepId: prevStepIds[i], nextStepId: stepFlow.step.id, conditionNode: true },
+              data: { previousStepId: prevStepIds[i], nextStepId: innerStep.id, conditionNode: true },
               target: getWorkflowConditionNodeId(condition.id),
               ...defaultEdgeOptions,
             })),
@@ -289,7 +331,7 @@ const getStepNodeAndEdge = ({
               source: getWorkflowConditionNodeId(condition.id),
               data: {
                 previousStepId: prevStepIds[prevStepIds.length - 1],
-                nextStepId: stepFlow.step.id,
+                nextStepId: innerStep.id,
                 conditionNode: true,
               },
               target: nodeId,
@@ -299,19 +341,108 @@ const getStepNodeAndEdge = ({
         : (prevNodeIds || []).map((prevNodeId, i) => ({
             id: getWorkflowEdgeId(prevNodeId, nodeId),
             source: prevNodeId,
-            data: { previousStepId: prevStepIds[i], nextStepId: stepFlow.step.id },
+            data: { previousStepId: prevStepIds[i], nextStepId: innerStep.id },
             target: nodeId,
             ...defaultEdgeOptions,
           }))),
       ...(nextNodeIds || []).map((nextNodeId, i) => ({
         id: getWorkflowEdgeId(nodeId, nextNodeId),
         source: nodeId,
-        data: { previousStepId: stepFlow.step.id, nextStepId: nextStepIds[i] },
+        data: { previousStepId: innerStep.id, nextStepId: nextStepIds[i] },
         target: nextNodeId,
         ...defaultEdgeOptions,
       })),
     ];
-    return { nodes, edges, nextPrevNodeIds: [nodeId], nextPrevStepIds: [stepFlow.step.id] };
+    return { nodes, edges, nextPrevNodeIds: [nodeId], nextPrevStepIds: [innerStep.id] };
+  }
+
+  if (
+    stepFlow.type === 'agent' ||
+    stepFlow.type === 'tool' ||
+    stepFlow.type === 'mapping' ||
+    stepFlow.type === 'workflow'
+  ) {
+    const stepId = stepFlow.id;
+    const rawNodeId = allPrevNodeIds.has(getWorkflowNodeId(stepId)) ? `${stepId}-${yIndex}` : stepId;
+    const nodeId = getWorkflowNodeId(rawNodeId);
+    const description = stepFlow.type === 'mapping' ? undefined : stepFlow.description;
+    const label = stepFlow.type === 'mapping' ? formatMappingLabel(stepId, prevStepIds, nextStepIds) : stepId;
+    const conditionNodes: WorkflowStepNode[] = condition
+      ? [
+          {
+            id: getWorkflowConditionNodeId(condition.id),
+            position: { x: xIndex * 300, y: yIndex * 100 },
+            type: WORKFLOW_STEP_NODE_TYPE,
+            data: {
+              label: condition.id,
+              workflowStep: conditionWorkflowStep(condition),
+              nodeRole: 'condition',
+              previousStepId: prevStepIds[prevStepIds.length - 1],
+              nextStepId: stepId,
+              withoutTopHandle: !prevNodeIds.length,
+              withoutBottomHandle: !nextNodeIds.length,
+              isLarge: true,
+              conditions: [{ type: 'when', fnString: condition.fn }],
+            },
+          },
+        ]
+      : [];
+    const nodes: WorkflowStepNode[] = [
+      ...conditionNodes,
+      {
+        id: nodeId,
+        position: { x: xIndex * 300, y: (yIndex + (condition ? 1 : 0)) * 100 },
+        type: WORKFLOW_STEP_NODE_TYPE,
+        data: {
+          label,
+          workflowStep: resolveWorkflowGraphStep(stepFlow),
+          stepId,
+          description,
+          withoutTopHandle: condition ? false : !prevNodeIds.length,
+          withoutBottomHandle: !nextNodeIds.length,
+          mapConfig: stepFlow.type === 'mapping' ? stepFlow.mapConfig : undefined,
+          stepGraph: stepFlow.type === 'workflow' ? stepFlow.serializedStepFlow : undefined,
+        },
+      },
+    ];
+    const edges: WorkflowGraphEdge[] = [
+      ...(condition
+        ? [
+            ...(prevNodeIds || []).map((prevNodeId, i) => ({
+              id: getWorkflowEdgeId(prevNodeId, getWorkflowConditionNodeId(condition.id), 'condition'),
+              source: prevNodeId,
+              data: { previousStepId: prevStepIds[i], nextStepId: stepId, conditionNode: true },
+              target: getWorkflowConditionNodeId(condition.id),
+              ...defaultEdgeOptions,
+            })),
+            {
+              id: getWorkflowEdgeId(getWorkflowConditionNodeId(condition.id), nodeId, 'condition'),
+              source: getWorkflowConditionNodeId(condition.id),
+              data: {
+                previousStepId: prevStepIds[prevStepIds.length - 1],
+                nextStepId: stepId,
+                conditionNode: true,
+              },
+              target: nodeId,
+              ...defaultEdgeOptions,
+            },
+          ]
+        : (prevNodeIds || []).map((prevNodeId, i) => ({
+            id: getWorkflowEdgeId(prevNodeId, nodeId),
+            source: prevNodeId,
+            data: { previousStepId: prevStepIds[i], nextStepId: stepId },
+            target: nodeId,
+            ...defaultEdgeOptions,
+          }))),
+      ...(nextNodeIds || []).map((nextNodeId, i) => ({
+        id: getWorkflowEdgeId(nodeId, nextNodeId),
+        source: nodeId,
+        data: { previousStepId: stepId, nextStepId: nextStepIds[i] },
+        target: nextNodeId,
+        ...defaultEdgeOptions,
+      })),
+    ];
+    return { nodes, edges, nextPrevNodeIds: [nodeId], nextPrevStepIds: [stepId] };
   }
 
   if (stepFlow.type === 'sleep' || stepFlow.type === 'sleepUntil') {
@@ -398,7 +529,8 @@ const getStepNodeAndEdge = ({
   }
 
   if (stepFlow.type === 'loop') {
-    const { step: _step, serializedCondition, loopType } = stepFlow;
+    const { serializedCondition, loopType } = stepFlow;
+    const _step = unwrapInnerEntry(stepFlow.step);
     const nodeId = getWorkflowNodeId(_step.id);
     const conditionNodeId = getWorkflowConditionNodeId(serializedCondition.id);
     const nodes: WorkflowStepNode[] = [
@@ -700,14 +832,19 @@ export const collectGraphStepFlags = (
 
   const visit = (entry: SerializedStepFlowEntry | undefined) => {
     if (!entry) return;
+    if (entry.type === 'workflow') {
+      nestedWorkflowStepIds.add(entry.id);
+      return;
+    }
     if (entry.type === 'step' || entry.type === 'foreach' || entry.type === 'loop') {
-      if (entry.step?.component === 'WORKFLOW' && entry.step?.id) {
-        nestedWorkflowStepIds.add(entry.step.id);
+      const inner = entry.type === 'step' ? entry.step : unwrapInnerEntry(entry.step);
+      if (inner?.component === 'WORKFLOW' && inner?.id) {
+        nestedWorkflowStepIds.add(inner.id);
       }
     }
     if (entry.type === 'conditional') {
       for (const child of entry.steps) {
-        conditionalStepIds.add(child.step.id);
+        conditionalStepIds.add(getSingleStepFlowId(child));
         visit(child);
       }
     }

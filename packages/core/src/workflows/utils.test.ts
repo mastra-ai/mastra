@@ -199,7 +199,10 @@ describe('getStepIds', () => {
   it('returns all step ids for a "parallel" entry', () => {
     const entry = {
       type: 'parallel',
-      steps: [{ step: makeStep('a') }, { step: makeStep('b') }],
+      steps: [
+        { type: 'step', step: makeStep('a') },
+        { type: 'step', step: makeStep('b') },
+      ],
     } as any;
     expect(getStepIds(entry)).toEqual(['a', 'b']);
   });
@@ -207,7 +210,11 @@ describe('getStepIds', () => {
   it('returns all step ids for a "conditional" entry', () => {
     const entry = {
       type: 'conditional',
-      steps: [{ step: makeStep('x') }, { step: makeStep('y') }, { step: makeStep('z') }],
+      steps: [
+        { type: 'step', step: makeStep('x') },
+        { type: 'step', step: makeStep('y') },
+        { type: 'step', step: makeStep('z') },
+      ],
     } as any;
     expect(getStepIds(entry)).toEqual(['x', 'y', 'z']);
   });

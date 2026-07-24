@@ -132,6 +132,15 @@ export const readFileTool = createTool({
   id: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
   description:
     'Read a file from the workspace filesystem. Text files come back as text — use offset/limit to read a line range from large files. Supported media files come back as a native file part you can view directly. Other binary files return only their metadata (path, size, mime type) since their raw contents are not useful to read.',
+  outputSchema: z.union([
+    z.string(),
+    z.object({
+      __workspaceMedia: z.literal(true),
+      text: z.string(),
+      mediaType: z.string(),
+      data: z.string(),
+    }),
+  ]),
   inputSchema: z.object({
     path: z.string().describe('The path to the file to read (e.g., "data/config.json")'),
     offset: z

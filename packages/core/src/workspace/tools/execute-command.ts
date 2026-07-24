@@ -290,6 +290,7 @@ export const executeCommandTool = createTool({
   id: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
   description: baseDescription,
   inputSchema: executeCommandInputSchema,
+  outputSchema: z.string(),
   execute: executeCommand,
   toModelOutput: sandboxToModelOutput,
 });
@@ -301,6 +302,7 @@ export const executeCommandWithBackgroundTool = createTool({
 
 Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process.`,
   inputSchema: executeCommandWithBackgroundSchema,
+  outputSchema: z.string(),
   execute: executeCommand,
   toModelOutput: sandboxToModelOutput,
 });

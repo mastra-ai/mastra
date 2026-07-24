@@ -3135,7 +3135,13 @@ Notes:
     );
     if (hasObservationalMemory) return null;
 
-    const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: RuntimeMemoryConfig } | undefined;
+    const runtimeMemory = context?.get('MastraMemory') as
+      | { thread?: { id?: string }; memoryConfig?: RuntimeMemoryConfig }
+      | undefined;
+    // Observational memory attaches observations to a thread. Ephemeral
+    // invocations (e.g. workflow agent steps) run without a thread; skip OM
+    // rather than throwing when it can't find one at runtime.
+    if (!runtimeMemory?.thread?.id) return null;
     const runtimeObservationalMemory = normalizeObservationalMemoryConfig(
       runtimeMemory?.memoryConfig?.observationalMemory,
     );
@@ -3167,7 +3173,13 @@ Notes:
     configuredProcessors: InputProcessorOrWorkflow[] = [],
     context?: RequestContext,
   ): Promise<InputProcessor | null> {
-    const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: MemoryConfigInternal } | undefined;
+    const runtimeMemory = context?.get('MastraMemory') as
+      | { thread?: { id?: string }; memoryConfig?: MemoryConfigInternal }
+      | undefined;
+    // Working-memory state signals compute against a thread. Ephemeral
+    // invocations (e.g. workflow agent steps) run without a thread; skip the
+    // state processor rather than throwing when it can't find one.
+    if (!runtimeMemory?.thread?.id) return null;
     const mergedConfig = this.getMergedThreadConfig(runtimeMemory?.memoryConfig);
     this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
     if (!mergedConfig.workingMemory?.enabled) return null;

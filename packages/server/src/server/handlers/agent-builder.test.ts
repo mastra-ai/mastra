@@ -84,7 +84,7 @@ function createReusableMockWorkflow(name: string) {
 }
 
 function serializeWorkflow(workflow: Workflow) {
-  return getWorkflowInfo(workflow);
+  return getWorkflowInfo(workflow, false, 'code');
 }
 
 describe('Agent Builder Handlers', () => {

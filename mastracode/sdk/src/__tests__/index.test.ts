@@ -809,8 +809,12 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      { errorProcessors?: Array<{ id?: string }> } | undefined;
+    // createCodingAgent and workflowBuilderAgent both hit this mock; pick the
+    // code-agent config by the processors under test (not calls[0], which is the
+    // eagerly-constructed workflow-builder).
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(call => call[0] as { errorProcessors?: Array<{ id?: string }> } | undefined)
+      .find(config => config?.errorProcessors?.some(p => p.id === 'stream-error-retry-processor'));
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
       'provider-history-compat',
       'stream-error-retry-processor',
@@ -876,8 +880,12 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      { inputProcessors?: Array<{ id?: string }>; errorProcessors?: Array<{ id?: string }> } | undefined;
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(
+        call =>
+          call[0] as { inputProcessors?: Array<{ id?: string }>; errorProcessors?: Array<{ id?: string }> } | undefined,
+      )
+      .find(config => config?.errorProcessors?.some(p => p.id === 'provider-history-compat'));
     expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
   });
@@ -891,8 +899,12 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ disableGithubSignals: true });
 
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { signals?: Array<{ id?: string }> } | undefined;
-    expect(agentConfig?.signals?.map(signal => signal.id)).not.toContain('github-signals');
+    // github-signals is wired on the code-agent; find a config that has a signals array.
+    const agentConfigs = agentConstructorMock.mock.calls.map(
+      call => call[0] as { signals?: Array<{ id?: string }> } | undefined,
+    );
+    const hasGithub = agentConfigs.some(config => config?.signals?.some(s => s.id === 'github-signals'));
+    expect(hasGithub).toBe(false);
   });
 
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {
@@ -909,7 +921,9 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { signals?: Array<{ id?: string }> } | undefined;
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(call => call[0] as { signals?: Array<{ id?: string }> } | undefined)
+      .find(config => config?.signals?.some(s => s.id === 'github-signals'));
     expect(agentConfig?.signals?.map(s => s.id)).toContain('github-signals');
     expect(startPollingForThread).toHaveBeenCalledWith(
       { threadId: 'thread-1', resourceId: 'thread-resource' },

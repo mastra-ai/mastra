@@ -8,10 +8,19 @@ import { BackgroundTasksMSSQL } from './domains/background-tasks';
 import { MemoryMSSQL } from './domains/memory';
 import { ObservabilityMSSQL } from './domains/observability';
 import { ScoresMSSQL } from './domains/scores';
+import { WorkflowDefinitionsMSSQL } from './domains/workflow-definitions';
 import { WorkflowsMSSQL } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
-export { AgentsMSSQL, BackgroundTasksMSSQL, MemoryMSSQL, ObservabilityMSSQL, ScoresMSSQL, WorkflowsMSSQL };
+export {
+  AgentsMSSQL,
+  BackgroundTasksMSSQL,
+  MemoryMSSQL,
+  ObservabilityMSSQL,
+  ScoresMSSQL,
+  WorkflowDefinitionsMSSQL,
+  WorkflowsMSSQL,
+};
 export type { MssqlDomainConfig } from './db';
 
 /**
@@ -203,6 +212,7 @@ export class MSSQLStore extends MastraCompositeStore {
       const backgroundTasks = new BackgroundTasksMSSQL(domainConfig);
 
       const agents = new AgentsMSSQL(domainConfig);
+      const workflowDefinitions = new WorkflowDefinitionsMSSQL(domainConfig);
 
       this.stores = {
         scores,
@@ -211,6 +221,7 @@ export class MSSQLStore extends MastraCompositeStore {
         observability,
         backgroundTasks,
         agents,
+        workflowDefinitions,
       };
     } catch (e) {
       throw new MastraError(

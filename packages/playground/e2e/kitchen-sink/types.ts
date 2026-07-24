@@ -10,7 +10,8 @@ export type Fixtures =
   | 'agent-builder-standup'
   | 'agent-builder-pr-reviewer'
   | 'agent-builder-onboarding'
-  | 'agent-builder-complex';
+  | 'agent-builder-complex'
+  | 'workflow-builder-lifecycle';
 
 export type FixtureConfig = {
   name: Fixtures;

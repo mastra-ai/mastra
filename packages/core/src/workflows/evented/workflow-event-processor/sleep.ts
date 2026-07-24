@@ -2,7 +2,7 @@ import type { StepFlowEntry, WorkflowRunState } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
 import type { StepExecutor } from '../step-executor';
-import { getStep } from './utils';
+import { getStepId } from './utils';
 import type { ProcessorArgs } from '.';
 
 export async function processWorkflowWaitForEvent(
@@ -22,10 +22,10 @@ export async function processWorkflowWaitForEvent(
     return;
   }
 
-  const currentStep = getStep(workflowData.workflow, executionPath);
+  const currentStepId = getStepId(workflowData.workflow, executionPath);
   const prevResult = {
     status: 'success',
-    output: currentState?.context[currentStep?.id ?? 'input']?.payload,
+    output: currentState?.context[currentStepId ?? 'input']?.payload,
   };
 
   await pubsub.publish('workflows', {

@@ -37,6 +37,7 @@ import { ScorerDefinitionsPG } from './domains/scorer-definitions';
 import { ScoresPG } from './domains/scores';
 import { SkillsPG } from './domains/skills';
 import { ToolProviderConnectionsPG } from './domains/tool-provider-connections';
+import { WorkflowDefinitionsPG } from './domains/workflow-definitions';
 import { WorkflowsPG } from './domains/workflows';
 import { WorkspacesPG } from './domains/workspaces';
 
@@ -104,6 +105,7 @@ const ALL_DOMAINS = [
   BlobsPG,
   ToolProviderConnectionsPG,
   WorkflowsPG,
+  WorkflowDefinitionsPG,
   DatasetsPG,
   ExperimentsPG,
   BackgroundTasksPG,
@@ -154,6 +156,7 @@ export {
   FavoritesPG,
   ToolProviderConnectionsPG,
   WorkflowsPG,
+  WorkflowDefinitionsPG,
   WorkspacesPG,
 };
 export type { VNextPostgresObservabilityConfig };
@@ -229,6 +232,7 @@ export class PostgresStore extends MastraCompositeStore {
       this.stores = {
         scores: new ScoresPG(domainConfig),
         workflows: new WorkflowsPG(domainConfig),
+        workflowDefinitions: new WorkflowDefinitionsPG(domainConfig),
         memory: new MemoryPG(domainConfig),
         notifications: new NotificationsPG(domainConfig),
         observability: new ObservabilityPG(domainConfig),

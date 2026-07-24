@@ -350,6 +350,18 @@ export function setupAutocomplete(state: TUIState): void {
       description: 'Manage allowed paths (add/remove directories)',
     },
     {
+      name: 'workflows',
+      description: 'List / show / run / delete saved workflows',
+      getArgumentCompletions: (argumentPrefix: string) =>
+        [
+          { value: 'list', label: 'list', description: 'List all saved workflows' },
+          { value: 'show', label: 'show', description: 'Print a workflow definition (graph + schemas)' },
+          { value: 'run', label: 'run', description: 'Run a workflow: /workflows run <id> <json-input>' },
+          { value: 'delete', label: 'delete', description: 'Delete a workflow from storage' },
+          { value: 'help', label: 'help', description: 'Show /workflows subcommand help' },
+        ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+    },
+    {
       name: 'permissions',
       description: 'View/manage tool approval permissions',
     },
