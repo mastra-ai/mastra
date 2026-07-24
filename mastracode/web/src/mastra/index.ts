@@ -225,26 +225,22 @@ export const factory = new MastraFactory({
   stateSecret: process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined,
 });
 
-const preparedArgs = await factory.prepare();
+// Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
+// in the entry file (see module docs). `prepare()` returns the constructor args
+// carrying the controller (via `agentControllers`), storage, and the assembled
+// `server` config (middleware + apiRoutes + cors).
+const prepared = await factory.prepare();
 
-const mcAgentController = preparedArgs.agentControllers?.['code'];
 // Slack channels are optional: chat's Slack adapter validates `signingSecret`
 // at construction, so only wire channels when the Slack app env is configured.
+// Set LOG_LEVEL=debug locally for verbose channel logs.
+const mcAgentController = prepared.agentControllers?.['code'];
 if (mcAgentController && process.env.SLACK_APP_SIGNING_SECRET) {
   mcAgentController.setChannels(createAgentControllerSlackChannels({ getMastra: () => mcAgentController.getMastra() }));
 }
 
-// Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
-// in the entry file (see module docs). `prepare()` returns the constructor args
-// carrying the controller (via `agentControllers`), storage, and the assembled
-// `server` config (middleware + apiRoutes + cors). The Slack channels are
-// layered onto the controller above via `setChannels`, and the logger is set
-// here so channel rendering rides the same deployed instance while the
-// factory keeps owning the rest of the config. Set LOG_LEVEL=debug locally for
-// verbose channel logs; the default stays info so production doesn't leak
-// runtime details.
-export const mastra: Mastra = new Mastra({
-  ...preparedArgs,
+export const mastra = new Mastra({
+  ...prepared,
   logger: new ConsoleLogger({ level: (process.env.LOG_LEVEL as LogLevelType) ?? 'info' }),
 });
 
