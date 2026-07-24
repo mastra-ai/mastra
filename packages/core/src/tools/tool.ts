@@ -25,6 +25,45 @@ import { validateToolInput, validateToolOutput, validateToolSuspendData, validat
 export const MASTRA_TOOL_MARKER = Symbol.for('mastra.core.tool.Tool');
 
 /**
+ * A per-tool view of the request context that serves values transformed by the
+ * tool's `requestContextSchema` (codecs, coercions, defaults) while writing all
+ * mutations through to the shared context. This keeps two behaviors intact:
+ * - automatically transformed values never leak into the shared context, so
+ *   other tools re-validate against the original raw values
+ * - mutations made inside `execute` stay visible to subsequent tool calls,
+ *   which share the same underlying RequestContext reference
+ *
+ * Explicit mutations are written through unmodified (matching the behavior
+ * before this view existed): setting a decoded value (e.g. a Date) into a
+ * schema key stores it as-is in the shared context, and a later validation
+ * expecting the wire format will reject it. Standard Schema has no encode
+ * direction, so values cannot be generically re-encoded on write.
+ */
+class TransformedRequestContext extends RequestContext<Record<string, any>> {
+  #source: RequestContext<any>;
+
+  constructor(source: RequestContext<any>, transformedValues: Record<string, unknown>) {
+    super(Object.entries({ ...source.all, ...transformedValues }));
+    this.#source = source;
+  }
+
+  public override set(key: string, value: any): void {
+    super.set(key, value);
+    this.#source.set(key, value);
+  }
+
+  public override delete(key: string): boolean {
+    this.#source.delete(key);
+    return super.delete(key);
+  }
+
+  public override clear(): void {
+    this.#source.clear();
+    super.clear();
+  }
+}
+
+/**
  * A type-safe tool that agents and workflows can call to perform specific actions.
  *
  * @template TSchemaIn - Input schema type
@@ -328,13 +367,26 @@ export class Tool<
         }
 
         // Validate request context if schema exists
-        const { error: requestContextError } = validateRequestContext(
+        const { data: validatedRequestContext, error: requestContextError } = validateRequestContext(
           this.requestContextSchema,
           context?.requestContext,
           this.id,
         );
         if (requestContextError) {
           return requestContextError as any;
+        }
+
+        // Hand execute a view of the request context with schema transformations
+        // (codecs, coercions, defaults) applied, writing mutations through to the
+        // shared context so they remain visible to subsequent tool calls.
+        if (this.requestContextSchema) {
+          context = {
+            ...context,
+            requestContext: new TransformedRequestContext(
+              context?.requestContext ?? new RequestContext(),
+              validatedRequestContext as Record<string, unknown>,
+            ),
+          };
         }
 
         let suspendData = null;

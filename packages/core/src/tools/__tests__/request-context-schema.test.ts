@@ -172,6 +172,128 @@ describe('Tool requestContextSchema', () => {
     });
   });
 
+  describe('schema transformations', () => {
+    const dateCodec = z.codec(z.string(), z.date(), {
+      decode: value => new Date(value),
+      encode: value => value.toISOString(),
+    });
+
+    it('should pass transformed values to execute', async () => {
+      let capturedDate: unknown;
+      const tool = createTool({
+        id: 'transform-tool',
+        description: 'A test tool',
+        requestContextSchema: z.object({ date: dateCodec }),
+        execute: async (_, context) => {
+          capturedDate = context.requestContext.get('date');
+          return { success: true };
+        },
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('date', '2026-07-23T00:00:00.000Z');
+
+      await tool.execute!({}, { requestContext });
+
+      expect(capturedDate).toBeInstanceOf(Date);
+      expect((capturedDate as Date).toISOString()).toBe('2026-07-23T00:00:00.000Z');
+    });
+
+    it('should preserve keys outside the schema', async () => {
+      let capturedContext: any;
+      const tool = createTool({
+        id: 'transform-tool',
+        description: 'A test tool',
+        requestContextSchema: z.object({ date: dateCodec }),
+        execute: async (_, context) => {
+          capturedContext = context.requestContext;
+          return { success: true };
+        },
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('date', '2026-07-23T00:00:00.000Z');
+      requestContext.set('traceId', 'trace-123');
+
+      await tool.execute!({}, { requestContext });
+
+      expect(capturedContext.get('date')).toBeInstanceOf(Date);
+      expect(capturedContext.get('traceId')).toBe('trace-123');
+    });
+
+    it('should not mutate the caller-provided requestContext', async () => {
+      const tool = createTool({
+        id: 'transform-tool',
+        description: 'A test tool',
+        requestContextSchema: z.object({ date: dateCodec }),
+        execute: async () => ({ success: true }),
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('date', '2026-07-23T00:00:00.000Z');
+
+      await tool.execute!({}, { requestContext });
+
+      expect(requestContext.get('date')).toBe('2026-07-23T00:00:00.000Z');
+    });
+
+    it('should write mutations made in execute through to the shared requestContext', async () => {
+      const tool = createTool({
+        id: 'transform-tool',
+        description: 'A test tool',
+        requestContextSchema: z.object({ date: dateCodec }),
+        execute: async (_, context) => {
+          context.requestContext.set('discoveredProvider', 'google');
+          return { success: true };
+        },
+      });
+
+      const requestContext = new RequestContext();
+      requestContext.set('date', '2026-07-23T00:00:00.000Z');
+
+      await tool.execute!({}, { requestContext });
+
+      // Mutation propagates to the caller's shared context
+      expect(requestContext.get('discoveredProvider')).toBe('google');
+      // But the transformed value does not leak back
+      expect(requestContext.get('date')).toBe('2026-07-23T00:00:00.000Z');
+    });
+
+    it('should apply schema defaults when execute is called without context', async () => {
+      let capturedMode: unknown;
+      const tool = createTool({
+        id: 'default-tool',
+        description: 'A test tool',
+        requestContextSchema: z.object({ mode: z.string().default('fast') }),
+        execute: async (_, context) => {
+          capturedMode = context.requestContext.get('mode');
+          return { success: true };
+        },
+      });
+
+      await tool.execute!({}, undefined as any);
+
+      expect(capturedMode).toBe('fast');
+    });
+
+    it('should apply schema defaults when context has no requestContext', async () => {
+      let capturedMode: unknown;
+      const tool = createTool({
+        id: 'default-tool',
+        description: 'A test tool',
+        requestContextSchema: z.object({ mode: z.string().default('fast') }),
+        execute: async (_, context) => {
+          capturedMode = context.requestContext.get('mode');
+          return { success: true };
+        },
+      });
+
+      await tool.execute!({}, {});
+
+      expect(capturedMode).toBe('fast');
+    });
+  });
+
   describe('combined with inputSchema validation', () => {
     it('should validate both inputSchema and requestContextSchema', async () => {
       const inputSchema = z.object({
