@@ -107,6 +107,11 @@ interface FactoryPullRequestProvenanceData {
   workItemId: string;
 }
 
+function pullRequestProvenance(data: Record<string, unknown> | undefined): FactoryPullRequestProvenanceData | null {
+  if (!data || data.kind !== 'factory-pr-provenance' || typeof data.workItemId !== 'string') return null;
+  return { kind: 'factory-pr-provenance', workItemId: data.workItemId };
+}
+
 export interface GithubRulesIntegration {
   getRepositoryCollaboratorPermission(
     installationId: number,
@@ -118,11 +123,8 @@ export interface GithubRulesIntegration {
 export interface GithubRulesOptions {
   github: GithubRulesIntegration;
   sourceControl: SourceControlStorageHandle;
-  integrationStorage: IntegrationStorageHandle<
-    Record<string, unknown>,
-    Record<string, unknown>,
-    FactoryPullRequestProvenanceData
-  >;
+  /** Integration-scoped storage; provenance rows are validated at read. */
+  integrationStorage: IntegrationStorageHandle;
   projects: FactoryProjectsStorage;
   storage: WorkItemsStorage;
   rules: FactoryRules;
@@ -175,12 +177,14 @@ export class GithubRules {
     const issueNumber = number(issue?.number);
     const pullRequestNumber = number(pullRequest?.number);
     const provenance = pullRequestNumber
-      ? ((
-          await this.options.integrationStorage.subscriptions.listByTarget(
-            provenanceTarget(repositoryId, pullRequestNumber),
-            { status: 'active' },
-          )
-        ).find(subscription => subscription.orgId === project.orgId)?.data ?? null)
+      ? pullRequestProvenance(
+          (
+            await this.options.integrationStorage.subscriptions.listByTarget(
+              provenanceTarget(repositoryId, pullRequestNumber),
+              { status: 'active' },
+            )
+          ).find(subscription => subscription.orgId === project.orgId)?.data,
+        )
       : null;
     const relatedItem = await this.#relatedItem(
       project.orgId,
@@ -347,11 +351,7 @@ export function attachGithubRules(
   const rules = new GithubRules({
     github,
     sourceControl: context.storage.sourceControl,
-    integrationStorage: context.storage.generic as unknown as IntegrationStorageHandle<
-      Record<string, unknown>,
-      Record<string, unknown>,
-      FactoryPullRequestProvenanceData
-    >,
+    integrationStorage: context.storage.generic,
     projects: context.storage.projects,
     storage: context.rules.workItems,
     rules: context.rules.config,
