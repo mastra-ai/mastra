@@ -132,6 +132,7 @@ import type {
   DelegationStartContext,
   DelegationCompleteContext,
 } from './agent.types';
+import { DurableStepIds } from './durable/constants';
 // Type-only imports from the durable module: erased at build time so they
 // don't create the runtime cycle `agent → agent/durable → agent`.
 import type {
@@ -6449,7 +6450,9 @@ export class Agent<
       }
     }
 
-    return undefined;
+    // Durable/evented loop snapshots carry no stream state in suspend
+    // payloads; their memory info is serialized in the workflow input instead.
+    return this.#getDurableSnapshotInput(existingSnapshot)?.messageListState?.memoryInfo;
   }
 
   #getSnapshotAgentId(existingSnapshot: WorkflowRunState | null | undefined): string | undefined {
@@ -6460,7 +6463,29 @@ export class Agent<
       }
     }
 
-    return undefined;
+    // Durable/evented loop snapshots don't stamp `__agentId` into suspend
+    // payloads; the owning agent id is serialized in the workflow input.
+    // In-process loop snapshots have no `agentId` on their input, so legacy
+    // snapshots without an owning agent id stay hidden (default-deny).
+    const agentId = this.#getDurableSnapshotInput(existingSnapshot)?.agentId;
+    return typeof agentId === 'string' ? agentId : undefined;
+  }
+
+  /**
+   * The durable/evented agentic loop serializes its full run input (agent id,
+   * message-list state, options) into the workflow snapshot under
+   * `context.input`. Used as the discovery fallback for snapshots persisted by
+   * that engine.
+   */
+  #getDurableSnapshotInput(existingSnapshot: WorkflowRunState | null | undefined):
+    | {
+        agentId?: string;
+        messageListState?: { memoryInfo?: AgentSnapshotMemoryInfo };
+      }
+    | undefined {
+    const input = (existingSnapshot?.context as Record<string, unknown> | undefined)?.input;
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined;
+    return input as { agentId?: string; messageListState?: { memoryInfo?: AgentSnapshotMemoryInfo } };
   }
 
   #getSuspendedToolCalls(existingSnapshot: WorkflowRunState | null | undefined): AgentRunToolCall[] {
@@ -6472,6 +6497,16 @@ export class Agent<
           toolCallId: payload.requireToolApproval.toolCallId,
           toolName: payload.requireToolApproval.toolName,
           args: payload.requireToolApproval.args,
+          requiresApproval: true,
+        });
+      } else if (payload.type === 'approval' && (payload.toolCallId || payload.toolName)) {
+        // Approval suspensions from the durable/evented loop carry the tool
+        // call at the top level of the payload rather than under
+        // `requireToolApproval`.
+        toolCalls.push({
+          toolCallId: payload.toolCallId,
+          toolName: payload.toolName,
+          args: payload.args,
           requiresApproval: true,
         });
       } else if (payload.toolCallSuspended || payload.toolName || payload.toolCallId) {
@@ -7710,12 +7745,22 @@ export class Agent<
     // threadId/resourceId live inside the snapshot state rather than in storage
     // columns, so fetch all matching rows and filter/paginate here to keep
     // `total` accurate.
-    const { runs } = await workflowsStore.listWorkflowRuns({
-      workflowName: 'agentic-loop',
-      status: 'suspended',
-      fromDate,
-      toDate,
-    });
+    // Durable/evented agents persist the loop under a different workflow name
+    // than the in-process loop, so query both; the per-snapshot agent-id
+    // filter below scopes results regardless of which engine wrote them.
+    const runs = (
+      await Promise.all(
+        ['agentic-loop', DurableStepIds.AGENTIC_LOOP].map(async workflowName => {
+          const { runs: workflowRuns } = await workflowsStore.listWorkflowRuns({
+            workflowName,
+            status: 'suspended',
+            fromDate,
+            toDate,
+          });
+          return workflowRuns;
+        }),
+      )
+    ).flat();
 
     const matchedRuns: AgentRun[] = [];
     for (const run of runs) {

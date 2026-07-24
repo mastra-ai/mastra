@@ -14,6 +14,7 @@ import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import type { WorkflowRunState } from '../../workflows/types';
 import { Agent } from '../agent';
+import { createEventedAgent } from '../durable';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
 
 const mockFindUser = vi.fn().mockImplementation(async (data: { name: string }) => {
@@ -938,4 +939,54 @@ describe('suspended-run discovery', () => {
       ).rejects.toThrow('storage outage');
     }, 30000);
   });
+});
+
+// Evented/durable agents persist their loop snapshots under
+// DurableStepIds.AGENTIC_LOOP ('durable-agentic-loop') rather than
+// 'agentic-loop', so discovery must query both names (#19302).
+describe('suspended-run discovery (evented/durable agent)', () => {
+  it('discovers runs persisted under the durable agentic loop', async () => {
+    const storage = new InMemoryStore();
+    const baseAgent = new Agent({
+      id: 'evented-user-agent',
+      name: 'Evented User Agent',
+      instructions: 'You find users.',
+      model: createMockModel(),
+      tools: { findUserTool: createFindUserTool() },
+    });
+    const agent = createEventedAgent({ agent: baseAgent });
+    new Mastra({ agents: { agent }, logger: false, storage });
+
+    const { runId, cleanup } = await agent.stream('Find the user with name - Dero Israel', {
+      requireToolApproval: true,
+      memory: { thread: 'thread-evented', resource: 'resource-evented' },
+    });
+
+    try {
+      // Evented runs execute fire-and-forget; wait for the run to suspend in
+      // storage. This also pins the premise: the snapshot is persisted under
+      // the durable loop's workflow name, not 'agentic-loop'.
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      await vi.waitFor(
+        async () => {
+          const { runs } = await workflowsStore.listWorkflowRuns({
+            workflowName: 'durable-agentic-loop',
+            status: 'suspended',
+          });
+          expect(runs.some(run => run.runId === runId)).toBe(true);
+        },
+        { timeout: 15000, interval: 200 },
+      );
+
+      const { runs, total } = await agent.listSuspendedRuns({ threadId: 'thread-evented' });
+      expect(total).toBe(1);
+      expect(runs).toHaveLength(1);
+      expect(runs[0]?.runId).toBe(runId);
+      expect(runs[0]?.threadId).toBe('thread-evented');
+      expect(runs[0]?.resourceId).toBe('resource-evented');
+      expect(runs[0]?.toolCalls.some(toolCall => toolCall.toolName === 'findUserTool')).toBe(true);
+    } finally {
+      cleanup();
+    }
+  }, 30000);
 });
