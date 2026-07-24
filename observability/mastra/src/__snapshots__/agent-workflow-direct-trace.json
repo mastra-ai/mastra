@@ -294,6 +294,7 @@
                     "attributes": {
                       "toolDescription": "Workflow: simpleWorkflow",
                       "toolType": "tool",
+                      "toolCallId": "call-workflow-1",
                       "success": true
                     },
                     "metadata": {

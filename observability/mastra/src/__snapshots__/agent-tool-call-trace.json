@@ -305,6 +305,7 @@
                     "attributes": {
                       "toolDescription": "Performs calculations",
                       "toolType": "tool",
+                      "toolCallId": "call-calc-1",
                       "success": true
                     },
                     "metadata": {
