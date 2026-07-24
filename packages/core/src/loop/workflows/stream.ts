@@ -186,7 +186,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
         resumeContext,
-        messageId: messageId!,
+        messageId: messageId,
         models,
         _internal,
         modelSettings,
@@ -244,7 +244,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       let keepRegisteredForResume = false;
       try {
         const initialData = {
-          messageId: messageId!,
+          messageId: messageId,
           messages: {
             all: messageList.get.all.aiV5.model(),
             user: messageList.get.input.aiV5.model(),
