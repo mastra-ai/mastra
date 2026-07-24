@@ -543,10 +543,17 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       }
     }, 60_000);
 
-    it('a plain stream() run holds the thread lease while live', async () => {
+    it('a plain stream() run holds and renews the thread lease while live', async () => {
       const resourceId = `plain-lease-${Date.now()}`;
       const threadId = `thread-${Date.now()}`;
-      const env = { RESOURCE_ID: resourceId, THREAD_ID: threadId, RUN_MS: '3000' };
+      // TTL shorter than the run: the lease only survives to the end of the
+      // run if renewal is running, so this also proves #startLeaseRenewal.
+      const env = {
+        RESOURCE_ID: resourceId,
+        THREAD_ID: threadId,
+        RUN_MS: '6000',
+        MASTRA_AGENT_THREAD_LEASE_TTL_MS: '1000',
+      };
       const leaseKey = leaseKeyFor(resourceId, threadId);
 
       const a = spawnWorker('plain-holder', env);
@@ -570,6 +577,13 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
           return owner === runId;
         }, 2_000).catch(() => {});
         expect(owner).toBe(runId);
+
+        // Renewal proof: wait two full TTLs past the acquire while the run is
+        // still live. Without renewal the 1000ms lease would have expired and
+        // the key would be nil; with renewal the owner is unchanged.
+        await new Promise(r => setTimeout(r, 2_000));
+        expect(eventsByType(a, 'run-finished')).toHaveLength(0); // run must still be live for this to prove anything
+        expect(await probe.get(leaseKey)).toBe(runId);
 
         // After the run finishes the lease is released — release is
         // fire-and-forget, so poll rather than asserting immediately.
