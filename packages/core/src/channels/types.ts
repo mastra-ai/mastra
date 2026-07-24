@@ -342,8 +342,8 @@ export interface ResolveThreadIdContext {
 
 /**
  * Resolve the internal Mastra thread id for a channel thread before it's created.
- * The returned id must be unique across the memory store — reusing an existing
- * thread's id would write the conversation into that thread.
+ * The returned id must be unique across the memory store — if it already belongs
+ * to an existing thread, a warning is logged and a generated id is used instead.
  */
 export type ResolveThreadId = (ctx: ResolveThreadIdContext) => string | Promise<string>;
 
@@ -489,8 +489,10 @@ export interface ChannelConfig {
   };
 
   /**
-   * Whether to include channel tools (add_reaction, remove_reaction).
-   * Set to `false` for models that don't support function calling.
+   * Whether `getTools()` returns the channel tools (add_reaction,
+   * remove_reaction). Set to `false` for models that don't support function
+   * calling. Channel tools are never injected into the agent automatically —
+   * pass them explicitly via `tools: { ...channels.getTools() }`.
    *
    * @default true
    */
@@ -541,7 +543,8 @@ export interface ChannelConfig {
    * names threads it creates itself.
    *
    * Only affects **newly-created** threads; existing threads keep their stored id.
-   * The returned id must be unique across the memory store.
+   * The returned id must be unique across the memory store — on collision with an
+   * existing thread, a warning is logged and a generated id is used instead.
    *
    * Return `defaultThreadId` (a random UUID) to keep the built-in behavior.
    * Not set: behavior is unchanged.

@@ -105,14 +105,6 @@ export class AgentControllerChannels extends AgentChannels {
    */
   override __setAgent(_agent: Agent<any, any, any, any>): void {}
 
-  /**
-   * @internal No-op override. The missing-channel-tools migration warning
-   * targets standalone agents that lost auto-injected tools on upgrade.
-   * Controller mode agents never had them auto-injected (channels shipped for
-   * controllers after the removal), so a warning here would be pure noise.
-   */
-  override __warnIfChannelToolsMissing(_resolvedToolNames: string[]): void {}
-
   protected override getOwnerId(): string | null {
     return this.controller?.id ?? null;
   }

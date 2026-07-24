@@ -106,13 +106,13 @@ describe('AgentChannels', () => {
   });
 
   describe('channel tools are not auto-injected into an agent toolset', () => {
-    it('resolves an agent toolset without send_message/add_reaction even when the agent has channels', async () => {
-      // getTools() still returns channel tools (deprecated but functional)...
+    it('resolves a channel-bearing agent toolset without the channel tools', async () => {
+      // getTools() still returns the channel tools (the explicit opt-in)...
       const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
       expect(Object.keys(channels.getTools())).toContain('add_reaction');
 
-      // ...but attaching channels to an agent no longer injects those tools into
-      // the agent's resolved toolset. Channel tools are explicit opt-in now.
+      // ...but attaching channels to an agent does not inject them into the
+      // agent's resolved toolset.
       const agent = new Agent({
         id: 'no-auto-tools',
         name: 'no-auto-tools',
@@ -123,62 +123,25 @@ describe('AgentChannels', () => {
 
       const resolved = await agent.getToolsForExecution({});
       const toolNames = Object.keys(resolved);
-      expect(toolNames).not.toContain('send_message');
       expect(toolNames).not.toContain('add_reaction');
       expect(toolNames).not.toContain('remove_reaction');
     });
 
-    it('warns once when a channel-bearing agent resolves a toolset with no channel tools', async () => {
-      const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
-      const agent = new Agent({
-        id: 'warn-missing-tools',
-        name: 'warn-missing-tools',
-        instructions: 'test',
-        model: 'openai/gpt-4o',
-      });
-      agent.setChannels(channels);
-      const warnSpy = vi.spyOn((agent as any).logger, 'warn');
-
-      await agent.getToolsForExecution({});
-      await agent.getToolsForExecution({});
-
-      const migrationWarnings = warnSpy.mock.calls.filter(([msg]) => String(msg).includes('no longer auto-injected'));
-      expect(migrationWarnings).toHaveLength(1);
-    });
-
-    it('does not warn when the channel tools were passed explicitly', async () => {
+    it('resolves the channel tools when passed explicitly via tools: { ...channels.getTools() }', async () => {
       const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
       const agent = new Agent({
         id: 'explicit-tools',
         name: 'explicit-tools',
         instructions: 'test',
         model: 'openai/gpt-4o',
-        tools: channels.getTools() as any,
+        tools: { ...(channels.getTools() as Record<string, any>) },
       });
       agent.setChannels(channels);
-      const warnSpy = vi.spyOn((agent as any).logger, 'warn');
 
-      await agent.getToolsForExecution({});
-
-      const migrationWarnings = warnSpy.mock.calls.filter(([msg]) => String(msg).includes('no longer auto-injected'));
-      expect(migrationWarnings).toHaveLength(0);
-    });
-
-    it('does not warn when channel tools are disabled via tools: false', async () => {
-      const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') }, tools: false });
-      const agent = new Agent({
-        id: 'tools-disabled',
-        name: 'tools-disabled',
-        instructions: 'test',
-        model: 'openai/gpt-4o',
-      });
-      agent.setChannels(channels);
-      const warnSpy = vi.spyOn((agent as any).logger, 'warn');
-
-      await agent.getToolsForExecution({});
-
-      const migrationWarnings = warnSpy.mock.calls.filter(([msg]) => String(msg).includes('no longer auto-injected'));
-      expect(migrationWarnings).toHaveLength(0);
+      const resolved = await agent.getToolsForExecution({});
+      const toolNames = Object.keys(resolved);
+      expect(toolNames).toContain('add_reaction');
+      expect(toolNames).toContain('remove_reaction');
     });
   });
 
@@ -856,6 +819,47 @@ describe('AgentChannels', () => {
       const memoryStore = await mockMastra.getStorage().getStore('memory');
       const stored = await memoryStore.getThreadById({ threadId: defaultThreadId });
       expect(stored).toMatchObject({ id: defaultThreadId, resourceId: 'discord:user-1' });
+    });
+
+    it('falls back to the generated id when the resolver id already belongs to another thread', async () => {
+      const resolveThreadId = vi.fn(async () => 'taken-id');
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveThreadId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+
+      // An unrelated thread already owns the id the resolver returns.
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      const original = {
+        id: 'taken-id',
+        title: 'someone elses thread',
+        resourceId: 'other-owner',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: { unrelated: true },
+      };
+      await memoryStore.saveThread({ thread: original });
+
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await (channels as any).processChatMessage(chatThread, message, mockMastra);
+
+      // The original thread is untouched (saveThread upserts by id, so a
+      // collision would have overwritten its owner and metadata).
+      const kept = await memoryStore.getThreadById({ threadId: 'taken-id' });
+      expect(kept).toMatchObject({ resourceId: 'other-owner', title: 'someone elses thread' });
+      expect(kept?.metadata).toMatchObject({ unrelated: true });
+
+      // The channel conversation got its own thread under a generated id.
+      const { threads } = await memoryStore.listThreads({
+        filter: { metadata: { channel_externalThreadId: 'channel-1:thread-1' } },
+        perPage: 10,
+      });
+      expect(threads).toHaveLength(1);
+      expect(threads[0]!.id).not.toBe('taken-id');
     });
 
     it('does not run the resolver when reusing an existing thread (keeps stored id)', async () => {

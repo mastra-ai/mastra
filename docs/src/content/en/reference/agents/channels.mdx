@@ -72,7 +72,7 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
     isOptional: true,
     defaultValue: 'true',
     description:
-      "Controls whether the channel exposes channel-specific tools (`add_reaction`, `remove_reaction`) via the deprecated `AgentChannels.getTools()`. Channel tools are no longer auto-injected into the agent's resolved toolset — to let the agent send messages or add reactions on a channel run, pass the chat tools to your agent explicitly. Set to `false` to disable the channel tools entirely, e.g. for models that do not support function calling.",
+      'Whether `getTools()` returns the channel-specific tools (`add_reaction`, `remove_reaction`). Set to `false` for models that do not support function calling. Channel tools are never added to the agent automatically — pass them explicitly via `tools: { ...channels.getTools() }`.',
   },
   {
     name: 'state',
@@ -111,6 +111,13 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
     isOptional: true,
     description:
       'Decide which `resourceId` owns resource-level memory for a channel thread, separately from who sent the message. Runs only when a new thread is created; reused threads keep their stored owner and never call the hook. Return `ctx.defaultResourceId` (`${platform}:${message.author.userId}`) to keep the built-in behavior.',
+  },
+  {
+    name: 'resolveThreadId',
+    type: '(ctx: ResolveThreadIdContext) => string | Promise<string>',
+    isOptional: true,
+    description:
+      'Decide the internal Mastra thread id for a channel thread. Runs after `resolveResourceId` with the resolved owner on the context, and only when a new thread is created; reused threads keep their stored id and never call the hook. The returned id must be unique across the memory store — on collision a generated id is used instead. Return `ctx.defaultThreadId` (a random UUID) to keep the built-in behavior.',
   },
   {
     name: 'waitUntil',
@@ -436,6 +443,69 @@ The `ResolveResourceIdContext` passed to the function:
     type: 'string',
     description:
       'The built-in default (`${platform}:${message.author.userId}`). Return this to keep the current behavior.',
+  },
+]}
+/>
+
+## Thread ID resolution
+
+By default a new channel thread gets a random UUID as its internal Mastra thread id. Pass `resolveThreadId` to pick the id yourself — for example, give the thread the same id as the session it belongs to, matching how your app names threads it creates itself.
+
+The hook runs after `resolveResourceId`, so the resolved owner is available on the context. Like `resolveResourceId` it runs only when a new thread is created: reused threads keep their stored id and never call the hook. The returned id must be unique across the memory store — if it already belongs to an existing thread, Mastra logs a warning and uses a generated id instead so the existing thread is never overwritten. Return `ctx.defaultThreadId` to keep the built-in behavior.
+
+```typescript title="src/mastra/agents/session-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+const agent = new Agent({
+  id: 'session-agent',
+  name: 'Session Agent',
+  instructions: '...',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+    // Owner: a session id resolved from the sender's linked account
+    resolveResourceId: async ctx => resolveSessionId(ctx),
+    // Thread id: align with the session id so app URLs that address
+    // threads by session id resolve channel-created threads too
+    resolveThreadId: ({ resourceId, defaultThreadId }) => {
+      return isSessionId(resourceId) ? resourceId : defaultThreadId
+    },
+  },
+})
+```
+
+The `ResolveThreadIdContext` passed to the function:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'platform',
+    type: 'string',
+    description: 'Platform name (e.g. `slack`, `discord`).',
+  },
+  {
+    name: 'thread',
+    type: 'Thread',
+    description:
+      'The channel thread the message arrived on. Use `thread.isDM` to tell DMs apart from group/channel threads.',
+  },
+  {
+    name: 'message',
+    type: 'Message',
+    description: 'The incoming message.',
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'The resolved memory `resourceId` the new thread will belong to (after `resolveResourceId`).',
+  },
+  {
+    name: 'defaultThreadId',
+    type: 'string',
+    description: 'The built-in default (a random UUID). Return this to keep the current behavior.',
   },
 ]}
 />

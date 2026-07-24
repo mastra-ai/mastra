@@ -857,47 +857,25 @@ export class AgentChannels {
   }
 
   /**
-   * Returns generic channel tools (send_message, add_reaction, etc.)
-   * that resolve the target adapter from the current request context.
+   * Returns generic channel tools (add_reaction, remove_reaction) that resolve
+   * the target adapter from the current request context.
    *
-   * @deprecated Channel tools are no longer auto-injected into an agent's
-   * resolved toolset. If you want your agent to be able to send messages or add
-   * reactions from a channel run, pass the chat tools to your agent explicitly.
-   * This method stays functional (it still returns the channel tools) and is used
-   * internally to derive channel tool names, but consumers should not rely on
-   * core injecting these tools for them.
+   * These are not injected into the agent automatically — pass them explicitly
+   * if the agent should react to channel messages:
+   *
+   * ```ts
+   * const agent = new Agent({
+   *   channels,
+   *   tools: { ...channels.getTools() },
+   * });
+   * ```
+   *
+   * Replies don't need a tool: the agent's response streams back to the
+   * channel through the output processor.
    */
   getTools(): Record<string, unknown> {
     if (!this.toolsEnabled) return {};
     return this.makeChannelTools();
-  }
-
-  /** One-time guard for the missing-channel-tools migration warning. */
-  private warnedMissingChannelTools = false;
-
-  /**
-   * One-time migration nudge for the auto-injection removal: core no longer
-   * injects channel tools (send_message, add_reaction, ...) into a
-   * channel-bearing agent's resolved toolset. The Agent calls this after tool
-   * assembly; the first time none of the channel tool names appear in the
-   * resolved toolset, warn so upgrading users discover the explicit opt-in
-   * without reading the changelog.
-   *
-   * @internal
-   */
-  __warnIfChannelToolsMissing(resolvedToolNames: string[], logger?: IMastraLogger): void {
-    if (this.warnedMissingChannelTools) return;
-    if (!this.toolsEnabled) return;
-    const channelToolNames = Object.keys(this.getTools());
-    if (channelToolNames.length === 0) return;
-    const resolved = new Set(resolvedToolNames);
-    if (channelToolNames.some(name => resolved.has(name))) return;
-    this.warnedMissingChannelTools = true;
-    (logger ?? this.logger)?.warn(
-      `[AgentChannels] This agent has chat channels configured, but none of the channel tools (${channelToolNames.join(', ')}) are in its resolved toolset. ` +
-        `Channel tools are no longer auto-injected — pass them to the agent explicitly (e.g. \`tools: { ...channels.getTools() }\`) if the agent should send messages or add reactions from channel runs, ` +
-        `or set \`tools: false\` on the channels config to silence this warning.`,
-    );
   }
 
   // ---------------------------------------------------------------------------
@@ -1541,7 +1519,20 @@ export class AgentChannels {
 
     const resolvedResourceId = typeof resourceId === 'function' ? await resourceId() : resourceId;
     const defaultThreadId = crypto.randomUUID();
-    const resolvedThreadId = threadId ? await threadId(resolvedResourceId, defaultThreadId) : defaultThreadId;
+    let resolvedThreadId = threadId ? await threadId(resolvedResourceId, defaultThreadId) : defaultThreadId;
+
+    // saveThread upserts by id, so a resolver id that already belongs to another
+    // thread would overwrite it. Fall back to the generated id instead.
+    if (resolvedThreadId && resolvedThreadId !== defaultThreadId) {
+      const existing = await memoryStore.getThreadById({ threadId: resolvedThreadId }).catch(() => null);
+      if (existing) {
+        this.log(
+          'warn',
+          `resolveThreadId returned "${resolvedThreadId}" which already belongs to an existing thread; using a generated id instead`,
+        );
+        resolvedThreadId = defaultThreadId;
+      }
+    }
 
     return memoryStore.saveThread({
       thread: {
@@ -1557,7 +1548,7 @@ export class AgentChannels {
 
   /**
    * Generate generic channel tools that resolve the adapter from request context.
-   * Tool names are platform-agnostic (e.g. `send_message`, not `discord_send_message`).
+   * Tool names are platform-agnostic (e.g. `add_reaction`, not `discord_add_reaction`).
    */
   private makeChannelTools() {
     return {
