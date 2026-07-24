@@ -38,6 +38,11 @@ export const systemPackagesResponseSchema = z.object({
   isDev: z.boolean(),
   cmsEnabled: z.boolean(),
   /**
+   * Whether Studio's exact default LiveKit connection-details route is registered.
+   * This does not verify LiveKit credentials or worker health.
+   */
+  liveKitConnectionRouteEnabled: z.boolean(),
+  /**
    * The editor's configured source, when set. `'code'` swaps Studio's
    * Save/Publish UI for Download JSON + Open PR. `'db'` keeps the standard
    * Save/Publish flow. Omitted when the editor has no explicit source.
