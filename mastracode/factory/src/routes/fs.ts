@@ -279,6 +279,20 @@ export async function readWorkspaceFile(root: string, workspacePath: string, pat
   const safePath = assertRelativePath(path, 'path');
   const relativeRoot = safePath.split('/')[0] ?? '';
   assertApprovedRenderedRoot(relativeRoot);
+  return readConfinedWorkspaceFile(root, workspacePath, path);
+}
+
+/**
+ * Read a workspace-relative file, confined to the workspace (and browsable
+ * root) but WITHOUT the rendered-root allowlist check. Callers must enforce
+ * their own path allowlist before calling (see `readWorkspaceFile` and the
+ * plans routes).
+ */
+export async function readConfinedWorkspaceFile(
+  root: string,
+  workspacePath: string,
+  path: string,
+): Promise<WorkspaceFile> {
   const {
     workspace,
     path: confinedPath,
@@ -351,7 +365,7 @@ export interface SessionFsDeps {
  * matches (the caller should fall back to local-path handling), and throws
  * when a session exists but belongs to another tenant.
  */
-async function resolveAuthorizedSession(
+export async function resolveAuthorizedSession(
   c: Context,
   deps: SessionFsDeps | undefined,
   workspacePath: string,
@@ -458,6 +472,20 @@ export async function readSessionWorkspaceFile(
 ): Promise<WorkspaceFile> {
   const safePath = assertRelativePath(path, 'path');
   assertApprovedRenderedRoot(safePath.split('/')[0] ?? '');
+  return readConfinedSessionWorkspaceFile(fleet, session, path);
+}
+
+/**
+ * Read a file inside a session's sandbox workdir WITHOUT the rendered-root
+ * allowlist check. Callers must enforce their own path allowlist before
+ * calling (see `readSessionWorkspaceFile` and the plans routes).
+ */
+export async function readConfinedSessionWorkspaceFile(
+  fleet: SandboxFleet,
+  session: SourceControlSession,
+  path: string,
+): Promise<WorkspaceFile> {
+  const safePath = assertRelativePath(path, 'path');
 
   const handle = await sessionSandbox(fleet, session);
   if (!handle) throw new Error('Session workspace is not available');
