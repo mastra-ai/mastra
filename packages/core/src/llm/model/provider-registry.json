@@ -4325,7 +4325,7 @@
       "apiKeyEnvVar": "KIMI_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Kimi For Coding",
-      "models": ["k3", "kimi-for-coding", "kimi-for-coding-highspeed"],
+      "models": ["k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"],
       "docUrl": "https://www.kimi.com/code/docs/en/third-party-tools/other-coding-agents.html",
       "gateway": "models.dev",
       "npm": "@ai-sdk/anthropic"
@@ -9787,7 +9787,7 @@
       "whisper-large-v3-turbo"
     ],
     "deepseek": ["deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash", "deepseek-v4-pro"],
-    "kimi-for-coding": ["k3", "kimi-for-coding", "kimi-for-coding-highspeed"],
+    "kimi-for-coding": ["k3", "k3-256k", "kimi-for-coding", "kimi-for-coding-highspeed"],
     "requesty": [
       "anthropic/claude-3-7-sonnet",
       "anthropic/claude-haiku-4-5",

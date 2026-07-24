@@ -2974,7 +2974,7 @@ export type ProviderModelsMap = {
     'whisper-large-v3-turbo',
   ];
   readonly deepseek: readonly ['deepseek-chat', 'deepseek-reasoner', 'deepseek-v4-flash', 'deepseek-v4-pro'];
-  readonly 'kimi-for-coding': readonly ['k3', 'kimi-for-coding', 'kimi-for-coding-highspeed'];
+  readonly 'kimi-for-coding': readonly ['k3', 'k3-256k', 'kimi-for-coding', 'kimi-for-coding-highspeed'];
   readonly requesty: readonly [
     'anthropic/claude-3-7-sonnet',
     'anthropic/claude-haiku-4-5',
