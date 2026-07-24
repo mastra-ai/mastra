@@ -1443,8 +1443,29 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       return [...result, newMessage];
     }
 
+    // ----- Rotated response message ids (`step-start.payload.messageId` carries
+    // the id the following step's output is persisted under; processors like
+    // observational memory can rotate it mid-run) -----
+    case 'step-start': {
+      const stepMessageId = typeof chunk.payload?.messageId === 'string' ? chunk.payload.messageId : undefined;
+      if (!stepMessageId) return result;
+
+      const lastMessage = result[result.length - 1];
+      if (!lastMessage || lastMessage.role !== 'assistant') return result;
+      if (result.some(message => message.id === stepMessageId)) return result;
+
+      // Re-key the pending message in place while it only holds `data-*` parts
+      // (they belong to the run, not a persisted row); once model content has
+      // streamed under the previous id, split into a new message instead.
+      const hasModelContent = lastMessage.content.parts.some(part => !String(part.type).startsWith('data-'));
+      if (!hasModelContent) {
+        return replaceLast(result, { ...lastMessage, id: stepMessageId });
+      }
+
+      return appendAssistantMessage(finishStreamingAssistantMessage(result), stepMessageId, [], metadata);
+    }
+
     // ----- Lifecycle / step / framing chunks (not surfaced on DB messages) -----
-    case 'step-start':
     case 'step-finish':
     case 'step-output':
     case 'raw':

@@ -351,91 +351,141 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
   let bufferedSteps = new Map<string, any>();
   let tripwireOccurred = false;
   let finishEventSent = false;
+  // Processors can rotate the response message id before the first model step
+  // (e.g. observational memory). Hold `start` (and any preceding `data-*`
+  // chunks) until the first `step-start` so the announced id matches the id
+  // the response is actually persisted under.
+  let heldChunks: ChunkType<OUTPUT>[] | null = null;
+  let startIdResolved = false;
+
+  const processChunk = (chunk: ChunkType<OUTPUT>, controller: TransformStreamDefaultController<object>) => {
+    if (chunk.type === 'tripwire') {
+      tripwireOccurred = true;
+    }
+
+    if (chunk.type === 'finish') {
+      finishEventSent = true;
+    }
+
+    if (chunk.type === 'object-result') {
+      controller.enqueue({
+        type: 'data-structured-output',
+        data: {
+          object: chunk.object,
+        },
+      });
+    }
+
+    const part = convertMastraChunkToAISDK({ chunk, mode: 'stream' });
+
+    const enqueueTransformedPart = (p: any) => {
+      const transformedChunk = convertFullStreamChunkToUIMessageStream<any>({
+        part: p as any,
+        sendReasoning,
+        sendSources,
+        messageMetadataValue: p ? messageMetadata?.({ part: p as TextStreamPart<ToolSet> }) : undefined,
+        sendStart,
+        sendFinish,
+        responseMessageId: lastMessageId,
+        onError(error) {
+          return onError ? onError(error) : safeParseErrorObject(error);
+        },
+      });
+
+      if (transformedChunk) {
+        if (transformedChunk.type === 'tool-agent') {
+          const payload = transformedChunk.payload;
+          const agentTransformed = transformAgent<OUTPUT>(payload, bufferedSteps);
+          if (agentTransformed) controller.enqueue(agentTransformed);
+        } else if (transformedChunk.type === 'tool-workflow') {
+          const payload = transformedChunk.payload;
+          const workflowChunk = transformWorkflow(
+            payload,
+            bufferedSteps,
+            true,
+            undefined,
+            undefined,
+            convertMastraChunkToAISDK,
+          );
+          if (workflowChunk) {
+            if (Array.isArray(workflowChunk)) {
+              for (const item of workflowChunk) {
+                controller.enqueue(item);
+              }
+            } else {
+              controller.enqueue(workflowChunk);
+            }
+          }
+        } else if (transformedChunk.type === 'tool-network') {
+          const payload = transformedChunk.payload;
+          const networkChunk = transformNetwork(payload, bufferedSteps, true);
+          if (Array.isArray(networkChunk)) {
+            for (const c of networkChunk) {
+              if (c) controller.enqueue(c);
+            }
+          } else if (networkChunk) {
+            controller.enqueue(networkChunk);
+          }
+        } else {
+          controller.enqueue(transformedChunk as any);
+        }
+      }
+    };
+
+    if (Array.isArray(part)) {
+      for (const p of part) {
+        enqueueTransformedPart(p);
+      }
+    } else {
+      enqueueTransformedPart(part);
+    }
+  };
 
   return new TransformStream<ChunkType<OUTPUT>, object>({
     transform(chunk, controller) {
-      if (chunk.type === 'tripwire') {
-        tripwireOccurred = true;
-      }
-
-      if (chunk.type === 'finish') {
-        finishEventSent = true;
-      }
-
-      if (chunk.type === 'object-result') {
-        controller.enqueue({
-          type: 'data-structured-output',
-          data: {
-            object: chunk.object,
-          },
-        });
-      }
-
-      const part = convertMastraChunkToAISDK({ chunk, mode: 'stream' });
-
-      const enqueueTransformedPart = (p: any) => {
-        const transformedChunk = convertFullStreamChunkToUIMessageStream<any>({
-          part: p as any,
-          sendReasoning,
-          sendSources,
-          messageMetadataValue: p ? messageMetadata?.({ part: p as TextStreamPart<ToolSet> }) : undefined,
-          sendStart,
-          sendFinish,
-          responseMessageId: lastMessageId,
-          onError(error) {
-            return onError ? onError(error) : safeParseErrorObject(error);
-          },
-        });
-
-        if (transformedChunk) {
-          if (transformedChunk.type === 'tool-agent') {
-            const payload = transformedChunk.payload;
-            const agentTransformed = transformAgent<OUTPUT>(payload, bufferedSteps);
-            if (agentTransformed) controller.enqueue(agentTransformed);
-          } else if (transformedChunk.type === 'tool-workflow') {
-            const payload = transformedChunk.payload;
-            const workflowChunk = transformWorkflow(
-              payload,
-              bufferedSteps,
-              true,
-              undefined,
-              undefined,
-              convertMastraChunkToAISDK,
-            );
-            if (workflowChunk) {
-              if (Array.isArray(workflowChunk)) {
-                for (const item of workflowChunk) {
-                  controller.enqueue(item);
-                }
-              } else {
-                controller.enqueue(workflowChunk);
-              }
-            }
-          } else if (transformedChunk.type === 'tool-network') {
-            const payload = transformedChunk.payload;
-            const networkChunk = transformNetwork(payload, bufferedSteps, true);
-            if (Array.isArray(networkChunk)) {
-              for (const c of networkChunk) {
-                if (c) controller.enqueue(c);
-              }
-            } else if (networkChunk) {
-              controller.enqueue(networkChunk);
-            }
-          } else {
-            controller.enqueue(transformedChunk as any);
+      if (!startIdResolved) {
+        if (chunk.type === 'start') {
+          heldChunks = [chunk];
+          return;
+        }
+        if (heldChunks) {
+          if (typeof chunk.type === 'string' && chunk.type.startsWith('data-')) {
+            heldChunks.push(chunk);
+            return;
           }
+          startIdResolved = true;
+          const held = heldChunks;
+          heldChunks = null;
+          if (chunk.type === 'step-start') {
+            // held[0] is the run-level `start` chunk (the only chunk type that opens the hold).
+            const startPayload = (held[0] as { payload?: { messageId?: unknown } } | undefined)?.payload;
+            const stepMessageId = (chunk.payload as { messageId?: unknown } | undefined)?.messageId;
+            // Durable streams emit `start` without an id — leave those untouched.
+            if (
+              held[0] &&
+              typeof stepMessageId === 'string' &&
+              typeof startPayload?.messageId === 'string' &&
+              stepMessageId !== startPayload.messageId
+            ) {
+              held[0] = { ...held[0], payload: { ...startPayload, messageId: stepMessageId } } as ChunkType<OUTPUT>;
+            }
+          }
+          for (const heldChunk of held) {
+            processChunk(heldChunk, controller);
+          }
+        } else {
+          startIdResolved = true;
         }
-      };
-
-      if (Array.isArray(part)) {
-        for (const p of part) {
-          enqueueTransformedPart(p);
-        }
-      } else {
-        enqueueTransformedPart(part);
       }
+      processChunk(chunk, controller);
     },
     flush(controller) {
+      if (heldChunks) {
+        for (const heldChunk of heldChunks) {
+          processChunk(heldChunk, controller);
+        }
+        heldChunks = null;
+      }
       if (tripwireOccurred && !finishEventSent && sendFinish) {
         controller.enqueue({
           type: 'finish',
