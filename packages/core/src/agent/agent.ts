@@ -115,7 +115,7 @@ import type { Step } from '../workflows/step';
 import type { OutputWriter, WorkflowResult, WorkflowRunState, WorkflowRunStatus } from '../workflows/types';
 import { waitForSuspendedSnapshot } from '../workflows/utils';
 import type { AnyWorkflow } from '../workflows/workflow';
-import { createStep, isProcessor } from '../workflows/workflow';
+import { createStepFromProcessor, isProcessor } from '../workflows/workflow';
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import { createSkillTools } from '../workspace/skills';
@@ -1662,7 +1662,7 @@ export class Agent<
         const processor = processorOrWorkflow as Processor;
         processor.processorIndex = index;
         // Cast needed because TypeScript can't narrow after isProcessorWorkflow check
-        step = createStep(processor as unknown as Parameters<typeof createStep>[0]);
+        step = createStepFromProcessor(processor, this);
         const toolProvider = processor as ProcessorLoadedToolsProvider;
         if (typeof toolProvider.getLoadedToolsForRequestContext === 'function') {
           (step as ProcessorLoadedToolsProvider).getLoadedToolsForRequestContext =
@@ -1676,6 +1676,9 @@ export class Agent<
     }
 
     const committedWorkflow = workflow.commit() as T;
+    if (validProcessors.every(processor => !isProcessorWorkflow(processor))) {
+      (committedWorkflow as ProcessorWorkflow & { __processorAgentBound?: boolean }).__processorAgentBound = true;
+    }
     // Register the parent Mastra instance on this internal processor workflow so that its
     // createRun() -> getWorkflowRunById() can read configured storage instead of logging
     // "Cannot get workflow run. Mastra storage is not initialized" on every run (then falling

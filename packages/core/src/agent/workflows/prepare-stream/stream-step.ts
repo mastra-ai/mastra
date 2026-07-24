@@ -108,6 +108,7 @@ export function createStreamStep<OUTPUT = undefined>({
         toolCallConcurrency,
         resumeContext,
         _internal: {
+          agent: capabilities.agent,
           generateId: capabilities.generateMessageId,
           saveQueueManager,
           memoryConfig,

@@ -12,6 +12,7 @@
 
 import type { Mastra } from '../mastra';
 import {
+  AGENT_KEY,
   AGENT_BACKGROUND_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_KEY,
@@ -45,6 +46,7 @@ export function hydrateRunScopeFromInternal(mastra: Mastra, runId: string, inter
   // bootstrap input (durable resume via `resolveInternalState`, e.g. the
   // `ToolSearchProcessor` pattern) still works because `readScoped` falls
   // back to `_internal[field]` when the scope slot is `undefined`.
+  if (internal.agent) scope.set(AGENT_KEY, internal.agent);
   if (internal.now) scope.set(NOW_KEY, internal.now);
   if (internal.generateId) scope.set(GENERATE_ID_KEY, internal.generateId);
   if (internal.currentDate) scope.set(CURRENT_DATE_KEY, internal.currentDate);

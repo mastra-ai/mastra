@@ -1,8 +1,10 @@
-import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Agent } from '../agent/agent';
 import { Mastra } from '../mastra';
+import { MockMemory } from '../memory/mock';
 import { MockStore } from '../storage/mock';
+import { executeAgentSchedule } from './worker';
 
 // Track every Mastra instance created in a test so it is always shut down,
 // even if an assertion throws before the test reaches its own shutdown call.
@@ -52,6 +54,74 @@ function makeAgent(id: string): Agent {
 }
 
 describe('Agent schedules — scheduler integration', () => {
+  it('wakes an existing thread with the exact scheduled agent in processor context', async () => {
+    const memory = new MockMemory();
+    await memory.createThread({ threadId: 'scheduled-thread', resourceId: 'scheduled-resource' });
+    const observations: Array<{ hook: string; agent: unknown }> = [];
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'scheduled response' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          },
+        ]),
+      }),
+    });
+    const agent = new Agent({
+      id: 'scheduled-agent-context',
+      instructions: 'test',
+      model,
+      memory,
+      inputProcessors: [
+        {
+          id: 'scheduled-agent-observer',
+          processInput: async ({ agent, messages }) => {
+            observations.push({ hook: 'processInput', agent });
+            return messages;
+          },
+          processInputStep: async ({ agent }) => {
+            observations.push({ hook: 'processInputStep', agent });
+          },
+          processLLMRequest: async ({ agent, prompt }) => {
+            observations.push({ hook: 'processLLMRequest', agent });
+            return { prompt };
+          },
+        },
+      ],
+    });
+    const mastra = track(
+      new Mastra({
+        logger: false,
+        storage: new MockStore(),
+        agents: { scheduledAgent: agent },
+        notifications: { dispatch: { enabled: false } },
+      }),
+    );
+
+    const result = await executeAgentSchedule(mastra, 'schedule-context-test', {
+      type: 'agent',
+      agentId: agent.id,
+      prompt: 'scheduled check-in',
+      threadId: 'scheduled-thread',
+      resourceId: 'scheduled-resource',
+    });
+
+    expect(result).toMatchObject({ status: 'signal-accepted', outcome: 'succeeded', runId: expect.any(String) });
+    await waitUntil(() => new Set(observations.map(observation => observation.hook)).size === 3);
+    expect(new Set(observations.map(observation => observation.hook))).toEqual(
+      new Set(['processInput', 'processInputStep', 'processLLMRequest']),
+    );
+    expect(observations.every(observation => observation.agent === agent)).toBe(true);
+  });
+
   it('auto-enables the scheduler when create() is called before startWorkers()', async () => {
     const agent = makeAgent('beat');
     const storage = new MockStore();

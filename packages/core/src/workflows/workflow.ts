@@ -33,6 +33,7 @@ import {
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
+import { resolveProcessorAgent } from '../processors/agent-context';
 import { ProcessorRunner, ProcessorState } from '../processors/runner';
 import { createProcessorSendSignal } from '../processors/send-signal';
 import {
@@ -660,8 +661,9 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
   };
 }
 
-function createStepFromProcessor<TProcessorId extends string>(
+export function createStepFromProcessor<TProcessorId extends string>(
   processor: Processor<TProcessorId>,
+  boundAgent?: Agent<any, any, any, any>,
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
@@ -737,7 +739,7 @@ function createStepFromProcessor<TProcessorId extends string>(
     description: processor.name ?? `Processor ${processor.id}`,
     inputSchema: toStandardSchema(ProcessorStepInputSchema) as StandardSchemaWithJSON<ProcessorStepInput>,
     outputSchema: toStandardSchema(ProcessorStepOutputSchema) as StandardSchemaWithJSON<ProcessorStepOutput>,
-    execute: async ({ inputData, requestContext, tracingContext, outputWriter }) => {
+    execute: async ({ inputData, requestContext, tracingContext, outputWriter, mastra }) => {
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
@@ -777,6 +779,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         // Abort signal for cancelling in-flight processor work (e.g. OM observations)
         abortSignal,
       } = input;
+      const processorAgent = await resolveProcessorAgent({ requestContext, mastra, boundAgent });
 
       // Create a minimal abort function that throws TripWire
       const abort = (reason?: string, options?: { retry?: boolean; metadata?: unknown }): never => {
@@ -1018,6 +1021,7 @@ function createStepFromProcessor<TProcessorId extends string>(
 
       const baseContext = {
         abort,
+        agent: processorAgent,
         retryCount: retryCount ?? 0,
         requestContext,
         ...processorObservabilityContext,

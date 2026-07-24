@@ -18,6 +18,7 @@ import { hydrateRunScopeFromInternal } from './hydrate-run-scope';
 import { getRunScope, readScoped, writeScoped } from './run-scope-access';
 import type { RunScopeContext } from './run-scope-access';
 import {
+  AGENT_KEY,
   AGENT_BACKGROUND_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_KEY,
@@ -69,6 +70,7 @@ describe('hydrateRunScopeFromInternal', () => {
     mastra.__createRunScope('run-1');
 
     const now = () => 1234;
+    const agent = { id: 'scope-agent' } as any;
     const generateId = (() => 'id') as StreamInternal['generateId'];
     const currentDate = () => new Date(0);
     const saveQueueManager = { tag: 'saveQueueManager' } as any;
@@ -83,6 +85,7 @@ describe('hydrateRunScopeFromInternal', () => {
     const toolPayloadTransform = { tag: 'toolPayloadTransform' } as any;
 
     const internal: StreamInternal = {
+      agent,
       now,
       generateId,
       currentDate,
@@ -105,6 +108,7 @@ describe('hydrateRunScopeFromInternal', () => {
     hydrateRunScopeFromInternal(mastra, 'run-1', internal);
     const scope = mastra.__getRunScope('run-1')!;
 
+    expect(scope.get(AGENT_KEY)).toBe(agent);
     expect(scope.get(NOW_KEY)).toBe(now);
     expect(scope.get(GENERATE_ID_KEY)).toBe(generateId);
     expect(scope.get(CURRENT_DATE_KEY)).toBe(currentDate);
