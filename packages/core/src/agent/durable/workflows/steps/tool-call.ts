@@ -644,14 +644,12 @@ export function createDurableToolCallStep() {
 
       // Check if resuming from in-execution suspension
       // Pass resumeData through to the tool so it can continue from where it left off.
-      // For approval-gated tools, the approval check above already handled the
-      // `approved` field, so the tool executes fresh (not as a "from-suspension"
-      // resume).  For non-approval tools, ANY resume data is forwarded.
+      // For approval-gated tools, only an object with an `approved` field is an
+      // approval decision; any other defined resume data is forwarded from an
+      // in-execution suspension.
       const isResumingFromSuspension =
-        resumeData &&
-        typeof resumeData === 'object' &&
-        resumeData !== null &&
-        (requiresApproval ? !('approved' in resumeData) : true);
+        resumeData !== undefined &&
+        !(requiresApproval && typeof resumeData === 'object' && resumeData !== null && 'approved' in resumeData);
 
       // Remove suspension metadata when resuming from an in-execution (non-approval-decision) suspension.
       // `isResumingFromSuspension` already excludes the approval-decision case above.
