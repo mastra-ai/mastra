@@ -70,12 +70,19 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENTS,
       schema: EXPERIMENTS_SCHEMA,
-      ifNotExists: ['agentVersion', 'organizationId', 'projectId'],
+      ifNotExists: [
+        'agentVersion',
+        'organizationId',
+        'projectId',
+        'executionStatusCounts',
+        'scorerStatusCounts',
+        'thresholds',
+      ],
     });
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['status', 'tags', 'toolMockReport', 'organizationId', 'projectId'],
+      ifNotExists: ['status', 'tags', 'toolMockReport', 'organizationId', 'projectId', 'executionStatus'],
     });
 
     // Indexes — idempotent, safe to run on every init
@@ -189,6 +196,17 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       metadata: row.metadata ? safelyParseJSON(row.metadata as string) : undefined,
       status: row.status as Experiment['status'],
       totalItems: row.totalItems as number,
+      executionStatusCounts:
+        row.executionStatusCounts != null
+          ? safelyParseJSON(row.executionStatusCounts as string)
+          : {
+              completed: row.succeededCount as number,
+              skipped: (row.skippedCount as number) ?? 0,
+              error: row.failedCount as number,
+              cancelled: 0,
+            },
+      scorerStatusCounts: row.scorerStatusCounts != null ? safelyParseJSON(row.scorerStatusCounts as string) : null,
+      thresholds: row.thresholds != null ? safelyParseJSON(row.thresholds as string) : null,
       succeededCount: row.succeededCount as number,
       failedCount: row.failedCount as number,
       skippedCount: (row.skippedCount as number) ?? 0,
@@ -212,6 +230,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       output: row.output ? safelyParseJSON(row.output as string) : null,
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth as string) : null,
       error: row.error ? safelyParseJSON(row.error as string) : null,
+      executionStatus: (row.executionStatus as ExperimentResult['executionStatus']) ?? null,
       startedAt: ensureDate(row.startedAt as string | Date)!,
       completedAt: ensureDate(row.completedAt as string | Date)!,
       retryCount: row.retryCount as number,
@@ -229,6 +248,12 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       const id = input.id ?? crypto.randomUUID();
       const now = new Date();
       const nowIso = now.toISOString();
+      const thresholds = (input.thresholds ?? []).map(binding => ({
+        ...binding,
+        threshold: typeof binding.threshold === 'number' ? binding.threshold : { ...binding.threshold },
+      }));
+      const executionStatusCounts = { completed: 0, skipped: 0, error: 0, cancelled: 0 };
+      const scorerStatusCounts = { completed: 0, error: 0 };
 
       await this.#db.insert({
         tableName: TABLE_EXPERIMENTS,
@@ -246,6 +271,9 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           metadata: input.metadata ?? null,
           status: 'pending',
           totalItems: input.totalItems,
+          executionStatusCounts,
+          scorerStatusCounts,
+          thresholds,
           succeededCount: 0,
           failedCount: 0,
           skippedCount: 0,
@@ -270,6 +298,9 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         metadata: input.metadata,
         status: 'pending',
         totalItems: input.totalItems,
+        executionStatusCounts,
+        scorerStatusCounts,
+        thresholds,
         succeededCount: 0,
         failedCount: 0,
         skippedCount: 0,
@@ -302,6 +333,20 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         });
       }
 
+      const hasLegacyCountUpdate =
+        input.succeededCount !== undefined || input.failedCount !== undefined || input.skippedCount !== undefined;
+      const executionStatusCounts =
+        input.executionStatusCounts !== undefined
+          ? input.executionStatusCounts
+          : hasLegacyCountUpdate
+            ? {
+                completed: input.succeededCount ?? existing.succeededCount,
+                skipped: input.skippedCount ?? existing.skippedCount,
+                error: input.failedCount ?? existing.failedCount,
+                cancelled: 0,
+              }
+            : undefined;
+
       const now = new Date().toISOString();
       const updates: string[] = ['updatedAt = ?'];
       const values: InValue[] = [now];
@@ -333,6 +378,14 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       if (input.skippedCount !== undefined) {
         updates.push('skippedCount = ?');
         values.push(input.skippedCount);
+      }
+      if (executionStatusCounts !== undefined) {
+        updates.push('executionStatusCounts = ?');
+        values.push(executionStatusCounts === null ? null : JSON.stringify(executionStatusCounts));
+      }
+      if (input.scorerStatusCounts !== undefined) {
+        updates.push('scorerStatusCounts = ?');
+        values.push(input.scorerStatusCounts === null ? null : JSON.stringify(input.scorerStatusCounts));
       }
       if (input.name !== undefined) {
         updates.push('name = ?');
@@ -527,6 +580,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           output: input.output,
           groundTruth: input.groundTruth,
           error: input.error ?? null,
+          executionStatus: input.executionStatus ?? null,
           startedAt: input.startedAt.toISOString(),
           completedAt: input.completedAt.toISOString(),
           retryCount: input.retryCount,
@@ -549,6 +603,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         output: input.output,
         groundTruth: input.groundTruth,
         error: input.error,
+        executionStatus: input.executionStatus ?? null,
         startedAt: input.startedAt,
         completedAt: input.completedAt,
         retryCount: input.retryCount,

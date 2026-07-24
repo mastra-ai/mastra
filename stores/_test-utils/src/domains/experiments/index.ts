@@ -46,14 +46,29 @@ export function createExperimentsTests({
           targetType: 'agent',
           targetId: 'agent-1',
           totalItems: 5,
+          thresholds: [
+            { scorerId: 'quality', threshold: { min: 0.7, max: 0.9 }, targetScope: 'span' },
+            { scorerId: 'style', threshold: 0.6, targetScope: 'span', stepId: 'draft' },
+          ],
         });
 
         expect(exp.id).toBeDefined();
         expect(exp.name).toBe('test-exp');
         expect(exp.status).toBe('pending');
+        expect(exp.executionStatusCounts).toEqual({ completed: 0, skipped: 0, error: 0, cancelled: 0 });
+        expect(exp.scorerStatusCounts).toEqual({ completed: 0, error: 0 });
+        expect(exp.thresholds).toEqual([
+          { scorerId: 'quality', threshold: { min: 0.7, max: 0.9 }, targetScope: 'span' },
+          { scorerId: 'style', threshold: 0.6, targetScope: 'span', stepId: 'draft' },
+        ]);
         expect(exp.succeededCount).toBe(0);
         expect(exp.failedCount).toBe(0);
         expect(exp.skippedCount).toBe(0);
+
+        const fetched = await experimentsStorage.getExperimentById({ id: exp.id });
+        expect(fetched?.executionStatusCounts).toEqual(exp.executionStatusCounts);
+        expect(fetched?.scorerStatusCounts).toEqual(exp.scorerStatusCounts);
+        expect(fetched?.thresholds).toEqual(exp.thresholds);
       });
 
       it('createExperiment accepts custom id', async () => {
@@ -133,11 +148,17 @@ export function createExperimentsTests({
         const updated = await experimentsStorage.updateExperiment({
           id: exp.id,
           status: 'running',
+          executionStatusCounts: { completed: 1, skipped: 0, error: 1, cancelled: 1 },
+          scorerStatusCounts: { completed: 4, error: 2 },
           succeededCount: 1,
+          failedCount: 2,
         });
 
         expect(updated.status).toBe('running');
+        expect(updated.executionStatusCounts).toEqual({ completed: 1, skipped: 0, error: 1, cancelled: 1 });
+        expect(updated.scorerStatusCounts).toEqual({ completed: 4, error: 2 });
         expect(updated.succeededCount).toBe(1);
+        expect(updated.failedCount).toBe(2);
         expect(updated.id).toBe(exp.id);
       });
 
@@ -163,6 +184,7 @@ export function createExperimentsTests({
         expect(updated.description).toBe('A test');
         expect(updated.metadata).toEqual({ key: 'value' });
         expect(updated.skippedCount).toBe(1);
+        expect(updated.executionStatusCounts).toEqual({ completed: 0, skipped: 1, error: 0, cancelled: 0 });
       });
 
       it('createExperiment sets initial totalItems and updateExperiment persists change', async () => {
@@ -296,6 +318,7 @@ export function createExperimentsTests({
           output: { a: 'world' },
           groundTruth: null,
           error: null,
+          executionStatus: 'completed',
           startedAt: new Date(),
           completedAt: new Date(),
           retryCount: 0,
@@ -304,6 +327,10 @@ export function createExperimentsTests({
         expect(result.id).toBeDefined();
         expect(result.experimentId).toBe(exp.id);
         expect(result.input).toEqual({ q: 'hello' });
+        expect(result.executionStatus).toBe('completed');
+
+        const fetched = await experimentsStorage.getExperimentResultById({ id: result.id });
+        expect(fetched?.executionStatus).toBe('completed');
       });
 
       it('addExperimentResult with integer itemDatasetVersion', async () => {

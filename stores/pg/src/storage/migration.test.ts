@@ -4,12 +4,15 @@ import {
   OLD_SPAN_SCHEMA,
   TABLE_SPANS,
   TABLE_SCHEMAS,
+  TABLE_EXPERIMENTS,
+  TABLE_EXPERIMENT_RESULTS,
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PgDB } from './db';
+import { ExperimentsPG } from './domains/experiments';
 import type { ObservabilityPG } from './domains/observability';
 import { TEST_CONFIG, connectionString } from './test-utils';
 import { PostgresStore } from '.';
@@ -1609,5 +1612,91 @@ describe('PostgreSQL Workflow Snapshot Migration', () => {
       ['new-workflow', 'run-1'],
     );
     expect(newSnapshot?.snapshot).toEqual({ status: 'new', data: [1, 2, 3] });
+  }, 30000);
+});
+
+describe('PostgreSQL experiment status migration', () => {
+  it('adds nullable status columns idempotently and derives historical execution counts', async () => {
+    const schemaName = `experiment_status_migration_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    const pool = new Pool({ connectionString });
+    const omittedExperimentColumns = new Set(['executionStatusCounts', 'scorerStatusCounts', 'thresholds']);
+    const omittedResultColumns = new Set(['executionStatus']);
+    const toColumns = (schema: Record<string, (typeof TABLE_SCHEMAS)[typeof TABLE_EXPERIMENTS][string]>) =>
+      Object.entries(schema)
+        .map(([name, column]) => {
+          const type =
+            column.type === 'jsonb'
+              ? 'JSONB'
+              : column.type === 'timestamp'
+                ? 'TIMESTAMP'
+                : column.type === 'integer'
+                  ? 'INTEGER'
+                  : column.type === 'bigint'
+                    ? 'BIGINT'
+                    : column.type === 'boolean'
+                      ? 'BOOLEAN'
+                      : column.type === 'float'
+                        ? 'DOUBLE PRECISION'
+                        : 'TEXT';
+          return `"${name}" ${type}${column.primaryKey ? ' PRIMARY KEY' : ''}${column.nullable === false ? ' NOT NULL' : ''}`;
+        })
+        .join(', ');
+    const oldExperimentSchema = Object.fromEntries(
+      Object.entries(TABLE_SCHEMAS[TABLE_EXPERIMENTS]).filter(([name]) => !omittedExperimentColumns.has(name)),
+    );
+    const oldResultSchema = Object.fromEntries(
+      Object.entries(TABLE_SCHEMAS[TABLE_EXPERIMENT_RESULTS]).filter(([name]) => !omittedResultColumns.has(name)),
+    );
+
+    try {
+      await pool.query(`CREATE SCHEMA "${schemaName}"`);
+      await pool.query(`CREATE TABLE "${schemaName}"."${TABLE_EXPERIMENTS}" (${toColumns(oldExperimentSchema)})`);
+      await pool.query(`CREATE TABLE "${schemaName}"."${TABLE_EXPERIMENT_RESULTS}" (${toColumns(oldResultSchema)})`);
+      await pool.query(
+        `INSERT INTO "${schemaName}"."${TABLE_EXPERIMENTS}"
+          ("id", "datasetId", "datasetVersion", "targetType", "targetId", "status", "totalItems", "succeededCount", "failedCount", "skippedCount", "createdAt", "updatedAt")
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [
+          'legacy-experiment',
+          null,
+          null,
+          'agent',
+          'agent-1',
+          'completed',
+          4,
+          1,
+          2,
+          1,
+          new Date('2024-01-01T00:00:00.000Z'),
+          new Date('2024-01-01T00:00:01.000Z'),
+        ],
+      );
+
+      const storage = new ExperimentsPG({ pool, schemaName });
+      await storage.init();
+      await storage.init();
+
+      const { rows: columns } = await pool.query<{ table_name: string; column_name: string }>(
+        `SELECT table_name, column_name FROM information_schema.columns
+         WHERE table_schema = $1 AND table_name IN ($2, $3)`,
+        [schemaName, TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS],
+      );
+      const experimentColumns = columns.filter(row => row.table_name === TABLE_EXPERIMENTS).map(row => row.column_name);
+      const resultColumns = columns
+        .filter(row => row.table_name === TABLE_EXPERIMENT_RESULTS)
+        .map(row => row.column_name);
+      expect(experimentColumns).toEqual(
+        expect.arrayContaining(['executionStatusCounts', 'scorerStatusCounts', 'thresholds']),
+      );
+      expect(resultColumns).toContain('executionStatus');
+
+      const legacy = await storage.getExperimentById({ id: 'legacy-experiment' });
+      expect(legacy?.executionStatusCounts).toEqual({ completed: 1, skipped: 1, error: 2, cancelled: 0 });
+      expect(legacy?.scorerStatusCounts).toBeNull();
+      expect(legacy?.thresholds).toBeNull();
+    } finally {
+      await pool.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`).catch(() => {});
+      await pool.end();
+    }
   }, 30000);
 });

@@ -1,5 +1,6 @@
 import { MastraError } from '@mastra/core/error';
 import { SpanType, EntityType } from '@mastra/core/observability';
+import { TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS } from '@mastra/core/storage';
 import { MongoClient } from 'mongodb';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { MongoDBStore } from './index';
@@ -886,6 +887,71 @@ describe('MongoDB Migration Required Error', () => {
       await store.close();
     } finally {
       await cleanupDatabase(testDbName);
+    }
+  });
+});
+
+describe('MongoDB experiment status compatibility', () => {
+  it('derives target counts and leaves unavailable historical fields null', async () => {
+    const dbName = `experiment_status_migration_${Date.now().toString(36)}`;
+    const client = new MongoClient(TEST_CONFIG.url);
+    const now = new Date('2024-01-01T00:00:00.000Z');
+    const store = new MongoDBStore({ id: `experiment-migration-${Date.now()}`, url: TEST_CONFIG.url, dbName });
+
+    try {
+      await client.connect();
+      const db = client.db(dbName);
+      await db.collection(TABLE_EXPERIMENTS).insertOne({
+        id: 'legacy-experiment',
+        datasetId: null,
+        datasetVersion: null,
+        agentVersion: null,
+        targetType: 'agent',
+        targetId: 'agent-1',
+        status: 'completed',
+        totalItems: 4,
+        succeededCount: 1,
+        failedCount: 2,
+        skippedCount: 1,
+        startedAt: now,
+        completedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await db.collection(TABLE_EXPERIMENT_RESULTS).insertOne({
+        id: 'legacy-result',
+        experimentId: 'legacy-experiment',
+        itemId: 'item-1',
+        itemDatasetVersion: null,
+        input: { prompt: 'hello' },
+        output: null,
+        groundTruth: null,
+        error: { message: 'failed' },
+        startedAt: now,
+        completedAt: now,
+        retryCount: 0,
+        traceId: null,
+        status: null,
+        tags: null,
+        createdAt: now,
+      });
+
+      await store.init();
+      const experiments = await store.getStore('experiments');
+      const experiment = await experiments?.getExperimentById({ id: 'legacy-experiment' });
+      const result = await experiments?.getExperimentResultById({ id: 'legacy-result' });
+
+      expect(experiment?.executionStatusCounts).toEqual({ completed: 1, skipped: 1, error: 2, cancelled: 0 });
+      expect(experiment?.scorerStatusCounts).toBeNull();
+      expect(experiment?.thresholds).toBeNull();
+      expect(result?.executionStatus).toBeNull();
+    } finally {
+      await store.close();
+      await client
+        .db(dbName)
+        .dropDatabase()
+        .catch(() => {});
+      await client.close();
     }
   });
 });
