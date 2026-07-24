@@ -309,7 +309,10 @@ function runStreamTest(version: 'v1' | 'v2' | 'v3' | 'v4') {
       // v1 (legacy): Does not use memory processors, so the old behavior applies where
       // threads are not saved until the request completes successfully.
       const mockMemory = new MockMemory();
-      const storage = await mockMemory.getMemoryStore();
+      const storage = await mockMemory.storage.getStore('memory');
+      if (!storage) {
+        throw new Error('Memory storage is not available');
+      }
       const saveMessagesSpy = vi.spyOn(storage, 'saveMessages');
 
       let errorModel: MockLanguageModelV1 | MockLanguageModelV2;
