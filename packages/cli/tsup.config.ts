@@ -23,7 +23,9 @@ export default defineConfig({
       cwd: factoryWebPath,
       stdio: 'inherit',
     });
-    await execa('pnpm', ['run', 'build:ui:embedded'], {
+    // build:ui:embedded alone skips mastracode/web's own prebuild step, which builds
+    // @mastra/playground-ui and other workspace deps; build:ui runs prebuild first.
+    await execa('pnpm', ['run', 'build:ui'], {
       cwd: factoryWebPath,
       stdio: 'inherit',
     });
