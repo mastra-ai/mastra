@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
+import { queryKeys } from '../../api/keys';
 import { createQueryClient } from '../../query-client';
 import { removeCachedSession, useWorkspacesQuery } from '../useWorkspaces';
 
@@ -59,7 +60,7 @@ describe('removeCachedSession', () => {
     await waitFor(() => expect(result.current.data?.workspaces).toHaveLength(1));
 
     // Put a read in flight, then delete while it is still outstanding.
-    void client.refetchQueries({ queryKey: ['sessions', REPO_ID] });
+    void client.refetchQueries({ queryKey: queryKeys.sessions(REPO_ID) });
     await waitFor(() => expect(requests).toBe(2));
     removeCachedSession(client, REPO_ID, SESSION_ID);
     await waitFor(() => expect(result.current.data?.workspaces).toHaveLength(0));
