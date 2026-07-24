@@ -318,7 +318,7 @@ importers:
   agent-sdks/claude:
     devDependencies:
       '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.3.215
+        specifier: ^0.3.216
         version: 0.3.217(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3)
       '@internal/lint':
         specifier: workspace:*
