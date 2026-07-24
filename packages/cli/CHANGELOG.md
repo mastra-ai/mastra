@@ -1,5 +1,7 @@
 # mastra
 
+## 1.20.2-alpha.2
+
 ## 1.20.2-alpha.1
 
 ### Patch Changes

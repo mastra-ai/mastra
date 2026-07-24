@@ -1,5 +1,11 @@
 # @mastra/client-js
 
+## 1.34.0-alpha.2
+
+### Patch Changes
+
+- Improved generated route type formatting. ([#19807](https://github.com/mastra-ai/mastra/pull/19807))
+
 ## 1.34.0-alpha.1
 
 ### Patch Changes
