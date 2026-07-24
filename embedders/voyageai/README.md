@@ -86,6 +86,7 @@ const model = voyageEmbedding({
   outputDimension: 512, // 256 | 512 | 1024 | 2048
   outputDtype: 'float', // 'float' | 'int8' | 'uint8' | 'binary' | 'ubinary'
   truncation: true, // Handle long inputs
+  baseUrl: 'https://ai.mongodb.com/v1', // Optional: custom endpoint (e.g. MongoDB-hosted Voyage)
 });
 ```
 
