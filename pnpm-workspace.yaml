@@ -50,6 +50,7 @@ patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
   '@earendil-works/pi-tui@0.80.6': patches/@earendil-works__pi-tui@0.80.6.patch
   tsup@8.5.1: patches/tsup@8.5.1.patch
+  typescript@7.0.2: patches/typescript@7.0.2.patch
 
 packageExtensions:
   '@ai-sdk/provider-utils@3.0.25':

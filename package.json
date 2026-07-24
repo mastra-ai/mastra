@@ -22,6 +22,7 @@
     "tsx": "catalog:",
     "turbo": "^2.10.5",
     "typescript": "catalog:",
+    "typescript-native": "npm:typescript@^7.0.2",
     "vite": "^7.3.1",
     "vitest": "catalog:",
     "zod": "catalog:"
@@ -96,7 +97,9 @@
     "list-changed-files": "(git diff --name-only --diff-filter=ACMR $(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo 'main')...HEAD && git diff --name-only --diff-filter=ACMR && git diff --cached --name-only --diff-filter=ACMR) | sort -u",
     "list-prettier-files": "pnpm --silent list-changed-files | grep -E '\\.(js|mjs|ts|tsx|md|mdx|json|graphql|gql)$' | while IFS= read -r file; do [ ! -f \"$file\" ] || [ -L \"$file\" ] || printf '%s\\n' \"$file\"; done || true",
     "prettier:changed": "pnpm --silent list-prettier-files | xargs prettier --write --log-level warn",
-    "typecheck": "pnpm --filter \"!./explorations/**/*\" -r typecheck",
+    "typecheck": "node scripts/typecheck-typescript-7.mjs",
+    "typecheck:ts6": "pnpm --filter \"!./explorations/**/*\" -r typecheck",
+    "typecheck:ts7": "node scripts/typecheck-typescript-7.mjs",
     "format": "pnpm format:eslint && pnpm format:prettier",
     "format:eslint": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!@internal/playground\" lint -- --fix",
     "format:prettier": "pnpm prettier:format",

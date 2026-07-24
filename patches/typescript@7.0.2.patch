@@ -1,0 +1,29 @@
+diff --git a/lib/getExePath.js b/lib/getExePath.js
+index ade3d7bb92e2125c4306d71620666c0eba3371d4..b557f8f5edb121aae2dd861189ba7b4c773537b1 100644
+--- a/lib/getExePath.js
++++ b/lib/getExePath.js
+@@ -12,10 +12,6 @@ export default function getExePath() {
+     const pkgName = pkg.name;
+     const baseName = pkgName.startsWith("@") ? pkgName.split("/")[1] : pkgName;
+     const expectedBinName = baseName === "typescript" ? "tsc" : "tsgo";
+-    const binNames = pkg.bin && typeof pkg.bin === "object" ? Object.keys(pkg.bin) : [];
+-    if (binNames.length !== 1 || binNames[0] !== expectedBinName) {
+-        throw new Error(`Expected ${pkgName} to declare exactly one bin entry named ${expectedBinName}.`);
+-    }
+     let binName = expectedBinName;
+     let exeDir;
+ 
+diff --git a/package.json b/package.json
+index f4242a69df961fcaf5210ac08ace176ced18c6a4..e590daea693a2287039a08c1ff9558ff01657b9f 100644
+--- a/package.json
++++ b/package.json
+@@ -31,9 +31,6 @@
+         "vendor",
+         "NOTICE.txt"
+     ],
+-    "bin": {
+-        "tsc": "./bin/tsc"
+-    },
+     "exports": {
+         "./package.json": "./package.json",
+         ".": "./lib/version.cjs",
