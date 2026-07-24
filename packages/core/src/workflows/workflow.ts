@@ -56,6 +56,8 @@ import type { DynamicArgument } from '../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
+import { validateCron } from './scheduler/cron';
+import type { WorkflowScheduleConfig } from './scheduler/types';
 import type {
   ConditionFunction,
   ExecuteFunction,
@@ -1592,6 +1594,7 @@ export class Workflow<
   #mastra?: Mastra;
 
   #runs: Map<string, Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> = new Map();
+  #schedules: WorkflowScheduleConfig[] = [];
 
   constructor({
     mastra,
@@ -1607,6 +1610,7 @@ export class Workflow<
     steps,
     options = {},
     type,
+    schedule,
   }: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
@@ -1647,10 +1651,38 @@ export class Workflow<
     this.engineType = 'default';
 
     this.#runs = new Map();
+
+    if (schedule) {
+      const schedules = Array.isArray(schedule) ? schedule : [schedule];
+      if (Array.isArray(schedule)) {
+        const seenIds = new Set<string>();
+        for (const entry of schedules) {
+          if (!entry.id) {
+            throw new Error(
+              `Workflow "${id}" declares an array of schedules but one entry is missing the required \`id\` field. Every entry in a schedule array must have a unique stable id.`,
+            );
+          }
+          if (seenIds.has(entry.id)) {
+            throw new Error(`Workflow "${id}" declares duplicate schedule id "${entry.id}".`);
+          }
+          seenIds.add(entry.id);
+        }
+      }
+      for (const entry of schedules) {
+        validateCron(entry.cron, entry.timezone);
+      }
+      this.#schedules = schedules.map(cfg => ({ ...cfg })) as any;
+    } else {
+      this.#schedules = [];
+    }
   }
 
   get runs() {
     return this.#runs;
+  }
+
+  getScheduleConfigs(): WorkflowScheduleConfig[] {
+    return this.#schedules.map(cfg => ({ ...cfg }));
   }
 
   get mastra() {

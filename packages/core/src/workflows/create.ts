@@ -31,18 +31,6 @@ export function createWorkflow<
   TSteps extends Step<string, any, any, any, any, any, DefaultEngineType>[] = Step[],
   TRequestContextSchema extends PublicSchema<any> | undefined = undefined,
 >(params: CreateWorkflowParams<TWorkflowId, TStateSchema, TInputSchema, TOutputSchema, TSteps, TRequestContextSchema>) {
-  if (params.schedule) {
-    return createEventedWorkflowImpl(params as any) as unknown as Workflow<
-      DefaultEngineType,
-      TSteps,
-      TWorkflowId,
-      InferSchemaOutput<TStateSchema>,
-      InferPublicSchema<TInputSchema>,
-      InferPublicSchema<TOutputSchema>,
-      InferPublicSchema<TInputSchema>,
-      InferSchemaOutput<TRequestContextSchema>
-    >;
-  }
   return new Workflow<
     DefaultEngineType,
     TSteps,
