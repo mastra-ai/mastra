@@ -718,18 +718,20 @@ export class MemoryLibSQL extends MemoryStorage {
       const messageStatements = batchStatements.slice(0, -1);
       const threadUpdateStatement = batchStatements[batchStatements.length - 1];
 
-      // Process message statements in batches
-      for (let i = 0; i < messageStatements.length; i += BATCH_SIZE) {
-        const batch = messageStatements.slice(i, i + BATCH_SIZE);
-        if (batch.length > 0) {
-          await this.#client.batch(batch, 'write');
+      await withClientWriteLock(this.#client, async () => {
+        // Process message statements in batches
+        for (let i = 0; i < messageStatements.length; i += BATCH_SIZE) {
+          const batch = messageStatements.slice(i, i + BATCH_SIZE);
+          if (batch.length > 0) {
+            await this.#client.batch(batch, 'write');
+          }
         }
-      }
 
-      // Execute thread update separately
-      if (threadUpdateStatement) {
-        await this.#client.execute(threadUpdateStatement);
-      }
+        // Execute thread update separately
+        if (threadUpdateStatement) {
+          await this.#client.execute(threadUpdateStatement);
+        }
+      });
 
       const list = new MessageList().add(messages as any, 'memory');
       return { messages: list.get.all.db() };
@@ -768,7 +770,7 @@ export class MemoryLibSQL extends MemoryStorage {
       return [];
     }
 
-    const batchStatements = [];
+    const batchStatements: Parameters<Client['batch']>[0] = [];
     const threadIdsToUpdate = new Set<string>();
     const columnMapping: Record<string, string> = {
       threadId: 'thread_id',
@@ -845,7 +847,7 @@ export class MemoryLibSQL extends MemoryStorage {
       }
     }
 
-    await this.#client.batch(batchStatements, 'write');
+    await withClientWriteLock(this.#client, () => this.#client.batch(batchStatements, 'write'));
 
     const updatedResult = await this.#client.execute({ sql: selectSql, args: messageIds });
     return updatedResult.rows.map(row => this.parseRow(row));
@@ -861,49 +863,51 @@ export class MemoryLibSQL extends MemoryStorage {
       const BATCH_SIZE = 100;
       const threadIds = new Set<string>();
 
-      // Use a transaction to ensure consistency
-      const tx = await this.#client.transaction('write');
+      await withClientWriteLock(this.#client, async () => {
+        // Use a transaction to ensure consistency
+        const tx = await this.#client.transaction('write');
 
-      try {
-        for (let i = 0; i < messageIds.length; i += BATCH_SIZE) {
-          const batch = messageIds.slice(i, i + BATCH_SIZE);
-          const placeholders = batch.map(() => '?').join(',');
+        try {
+          for (let i = 0; i < messageIds.length; i += BATCH_SIZE) {
+            const batch = messageIds.slice(i, i + BATCH_SIZE);
+            const placeholders = batch.map(() => '?').join(',');
 
-          // Get thread IDs for this batch
-          const result = await tx.execute({
-            sql: `SELECT DISTINCT thread_id FROM "${TABLE_MESSAGES}" WHERE id IN (${placeholders})`,
-            args: batch,
-          });
+            // Get thread IDs for this batch
+            const result = await tx.execute({
+              sql: `SELECT DISTINCT thread_id FROM "${TABLE_MESSAGES}" WHERE id IN (${placeholders})`,
+              args: batch,
+            });
 
-          result.rows?.forEach(row => {
-            if (row.thread_id) threadIds.add(row.thread_id as string);
-          });
+            result.rows?.forEach(row => {
+              if (row.thread_id) threadIds.add(row.thread_id as string);
+            });
 
-          // Delete messages in this batch
-          await tx.execute({
-            sql: `DELETE FROM "${TABLE_MESSAGES}" WHERE id IN (${placeholders})`,
-            args: batch,
-          });
-        }
-
-        // Update thread timestamps within the transaction
-        if (threadIds.size > 0) {
-          const now = new Date().toISOString();
-          for (const threadId of threadIds) {
+            // Delete messages in this batch
             await tx.execute({
-              sql: `UPDATE "${TABLE_THREADS}" SET "updatedAt" = ? WHERE id = ?`,
-              args: [now, threadId],
+              sql: `DELETE FROM "${TABLE_MESSAGES}" WHERE id IN (${placeholders})`,
+              args: batch,
             });
           }
-        }
 
-        // Commit the transaction
-        await tx.commit();
-      } catch (error) {
-        // Rollback on error
-        await tx.rollback();
-        throw error;
-      }
+          // Update thread timestamps within the transaction
+          if (threadIds.size > 0) {
+            const now = new Date().toISOString();
+            for (const threadId of threadIds) {
+              await tx.execute({
+                sql: `UPDATE "${TABLE_THREADS}" SET "updatedAt" = ? WHERE id = ?`,
+                args: [now, threadId],
+              });
+            }
+          }
+
+          // Commit the transaction
+          await tx.commit();
+        } catch (error) {
+          // Rollback on error
+          if (!tx.closed) await tx.rollback();
+          throw error;
+        }
+      });
 
       // TODO: Delete from vector store if semantic recall is enabled
     } catch (error) {
@@ -1005,10 +1009,12 @@ export class MemoryLibSQL extends MemoryStorage {
 
     values.push(resourceId);
 
-    await this.#client.execute({
-      sql: `UPDATE ${TABLE_RESOURCES} SET ${updates.join(', ')} WHERE id = ?`,
-      args: values,
-    });
+    await withClientWriteLock(this.#client, () =>
+      this.#client.execute({
+        sql: `UPDATE ${TABLE_RESOURCES} SET ${updates.join(', ')} WHERE id = ?`,
+        args: values,
+      }),
+    );
 
     return updatedResource;
   }
@@ -1272,10 +1278,12 @@ export class MemoryLibSQL extends MemoryStorage {
     };
 
     try {
-      await this.#client.execute({
-        sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = jsonb(?), updatedAt = ? WHERE id = ?`,
-        args: [title, JSON.stringify(updatedThread.metadata), now.toISOString(), id],
-      });
+      await withClientWriteLock(this.#client, () =>
+        this.#client.execute({
+          sql: `UPDATE ${TABLE_THREADS} SET title = ?, metadata = jsonb(?), updatedAt = ? WHERE id = ?`,
+          args: [title, JSON.stringify(updatedThread.metadata), now.toISOString(), id],
+        }),
+      );
 
       return updatedThread;
     } catch (error) {
@@ -1294,17 +1302,17 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async deleteThread({ threadId }: { threadId: string }): Promise<void> {
     try {
-      // Delete messages first (child records), then thread
-      // Note: Not using a transaction to avoid SQLITE_BUSY errors when multiple
-      // deleteThread calls run concurrently. The two deletes are independent and
-      // orphaned messages (if thread delete fails) would be cleaned up on next delete attempt.
-      await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_MESSAGES} WHERE thread_id = ?`,
-        args: [threadId],
-      });
-      await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
-        args: [threadId],
+      await withClientWriteLock(this.#client, async () => {
+        // Delete messages first (child records), then thread. Keep both writes in
+        // the same critical section so neither can enter another open transaction.
+        await this.#client.execute({
+          sql: `DELETE FROM ${TABLE_MESSAGES} WHERE thread_id = ?`,
+          args: [threadId],
+        });
+        await this.#client.execute({
+          sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
+          args: [threadId],
+        });
       });
     } catch (error) {
       throw new MastraError(
@@ -1418,77 +1426,79 @@ export class MemoryLibSQL extends MemoryStorage {
         updatedAt: now,
       };
 
-      // Use transaction for consistency
-      const tx = await this.#client.transaction('write');
+      return await withClientWriteLock(this.#client, async () => {
+        // Use transaction for consistency
+        const tx = await this.#client.transaction('write');
 
-      try {
-        // Insert the new thread
-        await tx.execute({
-          sql: `INSERT INTO "${TABLE_THREADS}" (id, "resourceId", title, metadata, "createdAt", "updatedAt")
-                VALUES (?, ?, ?, jsonb(?), ?, ?)`,
-          args: [
-            newThread.id,
-            newThread.resourceId,
-            newThread.title ?? '',
-            JSON.stringify(newThread.metadata),
-            nowStr,
-            nowStr,
-          ],
-        });
-
-        // Clone messages with new IDs
-        const clonedMessages: MastraDBMessage[] = [];
-        const messageIdMap: Record<string, string> = {};
-        const targetResourceId = resourceId || sourceThread.resourceId;
-
-        for (const sourceMsg of sourceMessages) {
-          const newMessageId = crypto.randomUUID();
-          messageIdMap[sourceMsg.id as string] = newMessageId;
-          const contentStr = sourceMsg.content as string;
-          let parsedContent: MastraDBMessage['content'];
-          try {
-            parsedContent = JSON.parse(contentStr);
-          } catch {
-            // use content as is - wrap in format 2 structure if needed
-            parsedContent = { format: 2, parts: [{ type: 'text', text: contentStr }] };
-          }
-
+        try {
+          // Insert the new thread
           await tx.execute({
-            sql: `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "resourceId")
-                  VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            sql: `INSERT INTO "${TABLE_THREADS}" (id, "resourceId", title, metadata, "createdAt", "updatedAt")
+                  VALUES (?, ?, ?, jsonb(?), ?, ?)`,
             args: [
-              newMessageId,
-              newThreadId,
-              contentStr,
-              sourceMsg.role as string,
-              (sourceMsg.type as string) || 'v2',
-              sourceMsg.createdAt as string,
-              targetResourceId,
+              newThread.id,
+              newThread.resourceId,
+              newThread.title ?? '',
+              JSON.stringify(newThread.metadata),
+              nowStr,
+              nowStr,
             ],
           });
 
-          clonedMessages.push({
-            id: newMessageId,
-            threadId: newThreadId,
-            content: parsedContent,
-            role: sourceMsg.role as MastraDBMessage['role'],
-            type: (sourceMsg.type as string) || undefined,
-            createdAt: new Date(sourceMsg.createdAt as string),
-            resourceId: targetResourceId,
-          });
+          // Clone messages with new IDs
+          const clonedMessages: MastraDBMessage[] = [];
+          const messageIdMap: Record<string, string> = {};
+          const targetResourceId = resourceId || sourceThread.resourceId;
+
+          for (const sourceMsg of sourceMessages) {
+            const newMessageId = crypto.randomUUID();
+            messageIdMap[sourceMsg.id as string] = newMessageId;
+            const contentStr = sourceMsg.content as string;
+            let parsedContent: MastraDBMessage['content'];
+            try {
+              parsedContent = JSON.parse(contentStr);
+            } catch {
+              // use content as is - wrap in format 2 structure if needed
+              parsedContent = { format: 2, parts: [{ type: 'text', text: contentStr }] };
+            }
+
+            await tx.execute({
+              sql: `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "resourceId")
+                    VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              args: [
+                newMessageId,
+                newThreadId,
+                contentStr,
+                sourceMsg.role as string,
+                (sourceMsg.type as string) || 'v2',
+                sourceMsg.createdAt as string,
+                targetResourceId,
+              ],
+            });
+
+            clonedMessages.push({
+              id: newMessageId,
+              threadId: newThreadId,
+              content: parsedContent,
+              role: sourceMsg.role as MastraDBMessage['role'],
+              type: (sourceMsg.type as string) || undefined,
+              createdAt: new Date(sourceMsg.createdAt as string),
+              resourceId: targetResourceId,
+            });
+          }
+
+          await tx.commit();
+
+          return {
+            thread: newThread,
+            clonedMessages,
+            messageIdMap,
+          };
+        } catch (error) {
+          if (!tx.closed) await tx.rollback();
+          throw error;
         }
-
-        await tx.commit();
-
-        return {
-          thread: newThread,
-          clonedMessages,
-          messageIdMap,
-        };
-      } catch (error) {
-        await tx.rollback();
-        throw error;
-      }
+      });
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;

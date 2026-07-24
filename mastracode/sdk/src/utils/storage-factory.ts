@@ -34,6 +34,7 @@ export function buildLibSQLStore(opts: {
     url: opts.url,
     ...(opts.authToken ? { authToken: opts.authToken } : {}),
     ...(opts.retention ? { retention: opts.retention } : {}),
+    ...(opts.url.startsWith('file:') && !opts.url.includes(':memory:') ? { journalMode: 'delete' as const } : {}),
     localPragmas: MASTRA_CODE_LOCAL_PRAGMAS,
   });
 }

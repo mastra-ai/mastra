@@ -45,6 +45,38 @@ describe('LibSQLStore.close()', () => {
     expect(client.closed).toBe(true);
   });
 
+  it('keeps DELETE-mode databases out of the WAL cleanup path', async () => {
+    const dbPath = path.join(tmpDir, 'delete-mode.db');
+    const store = new LibSQLStore({ id: 'close-delete', url: `file:${dbPath}`, journalMode: 'delete' });
+    await store.init();
+
+    const client = getClient(store);
+    const mode = await client.execute('PRAGMA journal_mode;');
+    expect(Object.values(mode.rows[0] ?? {})[0]).toBe('delete');
+
+    const executeSpy = vi.spyOn(client, 'execute');
+    await store.close();
+
+    const executedSql = executedSqlFrom(executeSpy);
+    expect(executedSql).not.toContain('PRAGMA wal_checkpoint(TRUNCATE);');
+    expect(executedSql).not.toContain('PRAGMA journal_mode=DELETE;');
+    expect(client.closed).toBe(true);
+  });
+
+  it('fails initialization rather than silently keeping WAL when DELETE mode cannot be applied', async () => {
+    const dbPath = path.join(tmpDir, 'locked-wal.db');
+    const walStore = new LibSQLStore({ id: 'wal-owner', url: `file:${dbPath}` });
+    await walStore.init();
+    const deleteStore = new LibSQLStore({ id: 'delete-owner', url: `file:${dbPath}`, journalMode: 'delete' });
+
+    try {
+      await expect(deleteStore.init()).rejects.toThrow();
+    } finally {
+      await deleteStore.close().catch(() => undefined);
+      await walStore.close();
+    }
+  });
+
   it('is idempotent — a second close() is a no-op', async () => {
     const dbPath = path.join(tmpDir, 'mastra.db');
     const store = new LibSQLStore({ id: 'close-idempotent', url: `file:${dbPath}` });
