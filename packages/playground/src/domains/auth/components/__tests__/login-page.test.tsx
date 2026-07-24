@@ -1,12 +1,13 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { LoginPage } from '../login-page';
 import { Login } from '@/pages/login';
 import { SignUp } from '@/pages/signup';
 import { server } from '@/test/msw-server';
@@ -190,6 +191,46 @@ describe('LoginPage UI parity for /login and /signup', () => {
 
     await waitFor(() => {
       expect(screen.getByText('oops')).toBeTruthy();
+    });
+  });
+
+  describe('when credentials login succeeds without a redirect target', () => {
+    it('redirects to the studio base path', async () => {
+      window.MASTRA_STUDIO_BASE_PATH = '/studio';
+      mockCapabilities(credentialsCapabilities);
+      server.use(
+        http.post(`${BASE_URL}/api/auth/credentials/sign-in`, () =>
+          HttpResponse.json({ user: { id: 'user-1', email: 'user@example.com' } }),
+        ),
+      );
+
+      const originalLocation = window.location;
+      const hrefSetter = vi.fn();
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: new Proxy(originalLocation, {
+          set(_target, prop, value) {
+            if (prop === 'href') hrefSetter(value);
+            return true;
+          },
+          get(target, prop) {
+            // @ts-expect-error indexed access
+            return target[prop];
+          },
+        }),
+      });
+
+      try {
+        renderRoute('/login', <LoginPage />);
+        fireEvent.change(await screen.findByLabelText('Email'), { target: { value: 'user@example.com' } });
+        fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'password' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+
+        await waitFor(() => expect(hrefSetter).toHaveBeenCalledWith('/studio/'));
+      } finally {
+        Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
+        delete window.MASTRA_STUDIO_BASE_PATH;
+      }
     });
   });
 });
