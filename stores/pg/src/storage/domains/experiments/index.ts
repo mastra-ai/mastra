@@ -90,12 +90,19 @@ export class ExperimentsPG extends ExperimentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENTS,
       schema: EXPERIMENTS_SCHEMA,
-      ifNotExists: ['agentVersion', 'organizationId', 'projectId'],
+      ifNotExists: [
+        'agentVersion',
+        'organizationId',
+        'projectId',
+        'executionStatusCounts',
+        'scorerStatusCounts',
+        'thresholds',
+      ],
     });
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['status', 'tags', 'toolMockReport', 'organizationId', 'projectId'],
+      ifNotExists: ['status', 'tags', 'toolMockReport', 'organizationId', 'projectId', 'executionStatus'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -244,6 +251,17 @@ export class ExperimentsPG extends ExperimentsStorage {
       targetId: row.targetId as string,
       status: row.status as Experiment['status'],
       totalItems: row.totalItems as number,
+      executionStatusCounts:
+        row.executionStatusCounts != null
+          ? safelyParseJSON(row.executionStatusCounts)
+          : {
+              completed: row.succeededCount as number,
+              skipped: (row.skippedCount as number) ?? 0,
+              error: row.failedCount as number,
+              cancelled: 0,
+            },
+      scorerStatusCounts: row.scorerStatusCounts != null ? safelyParseJSON(row.scorerStatusCounts) : null,
+      thresholds: row.thresholds != null ? safelyParseJSON(row.thresholds) : null,
       succeededCount: row.succeededCount as number,
       failedCount: row.failedCount as number,
       skippedCount: (row.skippedCount as number) ?? 0,
@@ -266,6 +284,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       output: row.output ? safelyParseJSON(row.output) : null,
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : null,
       error: row.error ? safelyParseJSON(row.error) : null,
+      executionStatus: (row.executionStatus as ExperimentResult['executionStatus']) ?? null,
       startedAt: ensureDate(row.startedAtZ || row.startedAt)!,
       completedAt: ensureDate(row.completedAtZ || row.completedAt)!,
       retryCount: row.retryCount as number,
@@ -284,6 +303,12 @@ export class ExperimentsPG extends ExperimentsStorage {
       const id = input.id ?? crypto.randomUUID();
       const now = new Date();
       const nowIso = now.toISOString();
+      const thresholds = (input.thresholds ?? []).map(binding => ({
+        ...binding,
+        threshold: typeof binding.threshold === 'number' ? binding.threshold : { ...binding.threshold },
+      }));
+      const executionStatusCounts = { completed: 0, skipped: 0, error: 0, cancelled: 0 };
+      const scorerStatusCounts = { completed: 0, error: 0 };
 
       await this.#db.insert({
         tableName: TABLE_EXPERIMENTS,
@@ -301,6 +326,9 @@ export class ExperimentsPG extends ExperimentsStorage {
           targetId: input.targetId,
           status: 'pending',
           totalItems: input.totalItems,
+          executionStatusCounts,
+          scorerStatusCounts,
+          thresholds,
           succeededCount: 0,
           failedCount: 0,
           skippedCount: 0,
@@ -325,6 +353,9 @@ export class ExperimentsPG extends ExperimentsStorage {
         targetId: input.targetId,
         status: 'pending',
         totalItems: input.totalItems,
+        executionStatusCounts,
+        scorerStatusCounts,
+        thresholds,
         succeededCount: 0,
         failedCount: 0,
         skippedCount: 0,
@@ -356,6 +387,20 @@ export class ExperimentsPG extends ExperimentsStorage {
           details: { experimentId: input.id },
         });
       }
+
+      const hasLegacyCountUpdate =
+        input.succeededCount !== undefined || input.failedCount !== undefined || input.skippedCount !== undefined;
+      const executionStatusCounts =
+        input.executionStatusCounts !== undefined
+          ? input.executionStatusCounts
+          : hasLegacyCountUpdate
+            ? {
+                completed: input.succeededCount ?? existing.succeededCount,
+                skipped: input.skippedCount ?? existing.skippedCount,
+                error: input.failedCount ?? existing.failedCount,
+                cancelled: 0,
+              }
+            : undefined;
 
       const tableName = getTableName({ indexName: TABLE_EXPERIMENTS, schemaName: getSchemaName(this.#schema) });
       const now = new Date().toISOString();
@@ -394,6 +439,14 @@ export class ExperimentsPG extends ExperimentsStorage {
       if (input.skippedCount !== undefined) {
         setClauses.push(`"skippedCount" = $${paramIndex++}`);
         values.push(input.skippedCount);
+      }
+      if (executionStatusCounts !== undefined) {
+        setClauses.push(`"executionStatusCounts" = $${paramIndex++}`);
+        values.push(executionStatusCounts === null ? null : JSON.stringify(executionStatusCounts));
+      }
+      if (input.scorerStatusCounts !== undefined) {
+        setClauses.push(`"scorerStatusCounts" = $${paramIndex++}`);
+        values.push(input.scorerStatusCounts === null ? null : JSON.stringify(input.scorerStatusCounts));
       }
       if (input.startedAt !== undefined) {
         setClauses.push(`"startedAt" = $${paramIndex++}`);
@@ -589,6 +642,7 @@ export class ExperimentsPG extends ExperimentsStorage {
           output: input.output ?? null,
           groundTruth: input.groundTruth ?? null,
           error: input.error ?? null,
+          executionStatus: input.executionStatus ?? null,
           startedAt: input.startedAt.toISOString(),
           completedAt: input.completedAt.toISOString(),
           retryCount: input.retryCount,
@@ -611,6 +665,7 @@ export class ExperimentsPG extends ExperimentsStorage {
         output: input.output ?? null,
         groundTruth: input.groundTruth ?? null,
         error: input.error ?? null,
+        executionStatus: input.executionStatus ?? null,
         startedAt: input.startedAt,
         completedAt: input.completedAt,
         retryCount: input.retryCount,

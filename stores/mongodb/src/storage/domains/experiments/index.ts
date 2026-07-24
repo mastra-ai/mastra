@@ -70,6 +70,20 @@ function transformExperimentRow(row: Record<string, unknown>): Experiment {
     targetId: row.targetId as string,
     status: row.status as Experiment['status'],
     totalItems: Number(row.totalItems ?? 0),
+    executionStatusCounts:
+      row.executionStatusCounts != null
+        ? (parseJsonField(row.executionStatusCounts) as Experiment['executionStatusCounts'])
+        : {
+            completed: Number(row.succeededCount ?? 0),
+            skipped: Number(row.skippedCount ?? 0),
+            error: Number(row.failedCount ?? 0),
+            cancelled: 0,
+          },
+    scorerStatusCounts:
+      row.scorerStatusCounts != null
+        ? (parseJsonField(row.scorerStatusCounts) as Experiment['scorerStatusCounts'])
+        : null,
+    thresholds: row.thresholds != null ? (parseJsonField(row.thresholds) as Experiment['thresholds']) : null,
     succeededCount: Number(row.succeededCount ?? 0),
     failedCount: Number(row.failedCount ?? 0),
     skippedCount: Number(row.skippedCount ?? 0),
@@ -93,6 +107,7 @@ function transformExperimentResultRow(row: Record<string, unknown>): ExperimentR
     output: parseJsonField(row.output) ?? null,
     groundTruth: parseJsonField(row.groundTruth) ?? null,
     error: parseJsonField(row.error) ?? null,
+    executionStatus: (row.executionStatus as ExperimentResult['executionStatus']) ?? null,
     startedAt: toDate(row.startedAt),
     completedAt: toDate(row.completedAt),
     retryCount: Number(row.retryCount ?? 0),
@@ -257,6 +272,12 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
   async createExperiment(input: CreateExperimentInput): Promise<Experiment> {
     const id = input.id ?? randomUUID();
     const now = new Date();
+    const thresholds = (input.thresholds ?? []).map(binding => ({
+      ...binding,
+      threshold: typeof binding.threshold === 'number' ? binding.threshold : { ...binding.threshold },
+    }));
+    const executionStatusCounts = { completed: 0, skipped: 0, error: 0, cancelled: 0 };
+    const scorerStatusCounts = { completed: 0, error: 0 };
 
     const doc = {
       id,
@@ -271,6 +292,9 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       targetId: input.targetId,
       status: 'pending' as const,
       totalItems: input.totalItems,
+      executionStatusCounts,
+      scorerStatusCounts,
+      thresholds,
       succeededCount: 0,
       failedCount: 0,
       skippedCount: 0,
@@ -298,6 +322,9 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
         targetId: input.targetId,
         status: 'pending',
         totalItems: input.totalItems,
+        executionStatusCounts,
+        scorerStatusCounts,
+        thresholds,
         succeededCount: 0,
         failedCount: 0,
         skippedCount: 0,
@@ -321,6 +348,28 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
   }
 
   async updateExperiment(input: UpdateExperimentInput): Promise<Experiment> {
+    const existing = await this.getExperimentById({ id: input.id });
+    if (!existing) {
+      throw new MastraError({
+        id: createStorageErrorId('MONGODB', 'UPDATE_EXPERIMENT', 'NOT_FOUND'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { experimentId: input.id },
+      });
+    }
+    const hasLegacyCountUpdate =
+      input.succeededCount !== undefined || input.failedCount !== undefined || input.skippedCount !== undefined;
+    const executionStatusCounts =
+      input.executionStatusCounts !== undefined
+        ? input.executionStatusCounts
+        : hasLegacyCountUpdate
+          ? {
+              completed: input.succeededCount ?? existing.succeededCount,
+              skipped: input.skippedCount ?? existing.skippedCount,
+              error: input.failedCount ?? existing.failedCount,
+              cancelled: 0,
+            }
+          : undefined;
     const updateFields: Record<string, unknown> = { updatedAt: new Date() };
 
     if (input.name !== undefined) updateFields.name = input.name;
@@ -331,6 +380,8 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
     if (input.succeededCount !== undefined) updateFields.succeededCount = input.succeededCount;
     if (input.failedCount !== undefined) updateFields.failedCount = input.failedCount;
     if (input.skippedCount !== undefined) updateFields.skippedCount = input.skippedCount;
+    if (executionStatusCounts !== undefined) updateFields.executionStatusCounts = executionStatusCounts;
+    if (input.scorerStatusCounts !== undefined) updateFields.scorerStatusCounts = input.scorerStatusCounts;
     if (input.startedAt !== undefined) updateFields.startedAt = input.startedAt;
     if (input.completedAt !== undefined) updateFields.completedAt = input.completedAt;
 
@@ -517,6 +568,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
       output: input.output ?? null,
       groundTruth: input.groundTruth ?? null,
       error: input.error ?? null,
+      executionStatus: input.executionStatus ?? null,
       startedAt: input.startedAt,
       completedAt: input.completedAt,
       retryCount: input.retryCount,
@@ -542,6 +594,7 @@ export class MongoDBExperimentsStorage extends ExperimentsStorage {
         output: input.output ?? null,
         groundTruth: input.groundTruth ?? null,
         error: input.error ?? null,
+        executionStatus: input.executionStatus ?? null,
         startedAt: input.startedAt,
         completedAt: input.completedAt,
         retryCount: input.retryCount,

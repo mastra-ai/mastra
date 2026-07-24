@@ -5,11 +5,14 @@ import {
   OLD_SPAN_SCHEMA,
   TABLE_SPANS,
   TABLE_SCHEMAS,
+  TABLE_EXPERIMENTS,
+  TABLE_EXPERIMENT_RESULTS,
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
 } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { LibSQLDB } from './db';
+import { ExperimentsLibSQL } from './domains/experiments';
 import { LibSQLStore } from './index';
 
 /**
@@ -984,6 +987,63 @@ describe('LibSQL Migration Required Error', () => {
         (row: any) => row.name === 'mastra_ai_spans_spanid_traceid_idx' && row.unique === 1,
       );
       expect(uniqueIndex).toBeDefined();
+    } finally {
+      testClient.close();
+    }
+  });
+});
+
+describe('LibSQL experiment status migration', () => {
+  it('adds nullable status columns idempotently and derives historical execution counts', async () => {
+    const testClient = createClient({ url: ':memory:' });
+    const db = new LibSQLDB({ client: testClient, maxRetries: 5, initialBackoffMs: 100 });
+    const omittedExperimentColumns = new Set(['executionStatusCounts', 'scorerStatusCounts', 'thresholds']);
+    const omittedResultColumns = new Set(['executionStatus']);
+    const oldExperimentSchema = Object.fromEntries(
+      Object.entries(TABLE_SCHEMAS[TABLE_EXPERIMENTS]).filter(([name]) => !omittedExperimentColumns.has(name)),
+    );
+    const oldResultSchema = Object.fromEntries(
+      Object.entries(TABLE_SCHEMAS[TABLE_EXPERIMENT_RESULTS]).filter(([name]) => !omittedResultColumns.has(name)),
+    );
+
+    try {
+      await db.createTable({ tableName: TABLE_EXPERIMENTS, schema: oldExperimentSchema });
+      await db.createTable({ tableName: TABLE_EXPERIMENT_RESULTS, schema: oldResultSchema });
+      await testClient.execute({
+        sql: `INSERT INTO "${TABLE_EXPERIMENTS}"
+          ("id", "datasetId", "datasetVersion", "targetType", "targetId", "status", "totalItems", "succeededCount", "failedCount", "skippedCount", "createdAt", "updatedAt")
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [
+          'legacy-experiment',
+          null,
+          null,
+          'agent',
+          'agent-1',
+          'completed',
+          4,
+          1,
+          2,
+          1,
+          '2024-01-01T00:00:00.000Z',
+          '2024-01-01T00:00:01.000Z',
+        ],
+      });
+
+      const storage = new ExperimentsLibSQL({ client: testClient });
+      await storage.init();
+      await storage.init();
+
+      const experimentColumns = await testClient.execute(`PRAGMA table_info("${TABLE_EXPERIMENTS}")`);
+      const resultColumns = await testClient.execute(`PRAGMA table_info("${TABLE_EXPERIMENT_RESULTS}")`);
+      expect(experimentColumns.rows.map(row => row.name)).toEqual(
+        expect.arrayContaining(['executionStatusCounts', 'scorerStatusCounts', 'thresholds']),
+      );
+      expect(resultColumns.rows.map(row => row.name)).toContain('executionStatus');
+
+      const legacy = await storage.getExperimentById({ id: 'legacy-experiment' });
+      expect(legacy?.executionStatusCounts).toEqual({ completed: 1, skipped: 1, error: 2, cancelled: 0 });
+      expect(legacy?.scorerStatusCounts).toBeNull();
+      expect(legacy?.thresholds).toBeNull();
     } finally {
       testClient.close();
     }

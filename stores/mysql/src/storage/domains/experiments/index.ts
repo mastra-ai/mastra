@@ -59,6 +59,9 @@ interface ExperimentRow {
   metadata: string | null;
   status: string;
   totalItems: number;
+  executionStatusCounts: string | null;
+  scorerStatusCounts: string | null;
+  thresholds: string | null;
   succeededCount: number;
   failedCount: number;
   skippedCount: number;
@@ -79,6 +82,7 @@ interface ExperimentResultRow {
   output: string | null;
   groundTruth: string | null;
   error: string | null;
+  executionStatus: string | null;
   startedAt: Date | string;
   completedAt: Date | string;
   retryCount: number;
@@ -180,12 +184,19 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     await this.operations.alterTable({
       tableName: TABLE_EXPERIMENTS,
       schema: EXPERIMENTS_SCHEMA,
-      ifNotExists: ['agentVersion', 'organizationId', 'projectId'],
+      ifNotExists: [
+        'agentVersion',
+        'organizationId',
+        'projectId',
+        'executionStatusCounts',
+        'scorerStatusCounts',
+        'thresholds',
+      ],
     });
     await this.operations.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['organizationId', 'projectId'],
+      ifNotExists: ['organizationId', 'projectId', 'executionStatus'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -211,6 +222,14 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       metadata: parseJSON<Record<string, unknown>>(row.metadata),
       status: row.status as Experiment['status'],
       totalItems: row.totalItems,
+      executionStatusCounts: parseJSON<Experiment['executionStatusCounts']>(row.executionStatusCounts) ?? {
+        completed: row.succeededCount,
+        skipped: row.skippedCount ?? 0,
+        error: row.failedCount,
+        cancelled: 0,
+      },
+      scorerStatusCounts: parseJSON<Experiment['scorerStatusCounts']>(row.scorerStatusCounts) ?? null,
+      thresholds: parseJSON<Experiment['thresholds']>(row.thresholds) ?? null,
       succeededCount: row.succeededCount,
       failedCount: row.failedCount,
       skippedCount: row.skippedCount ?? 0,
@@ -233,6 +252,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       output: row.output ? parseJSON<Record<string, unknown>>(row.output) : null,
       groundTruth: row.groundTruth ? parseJSON<Record<string, unknown>>(row.groundTruth) : null,
       error: row.error ? (parseJSON<{ message: string; stack?: string; code?: string }>(row.error) ?? null) : null,
+      executionStatus: (row.executionStatus as ExperimentResult['executionStatus']) ?? null,
       startedAt: parseDateTime(row.startedAt) ?? new Date(),
       completedAt: parseDateTime(row.completedAt) ?? new Date(),
       retryCount: row.retryCount,
@@ -247,6 +267,12 @@ export class ExperimentsMySQL extends ExperimentsStorage {
     try {
       const id = input.id ?? randomUUID();
       const now = new Date();
+      const thresholds = (input.thresholds ?? []).map(binding => ({
+        ...binding,
+        threshold: typeof binding.threshold === 'number' ? binding.threshold : { ...binding.threshold },
+      }));
+      const executionStatusCounts = { completed: 0, skipped: 0, error: 0, cancelled: 0 };
+      const scorerStatusCounts = { completed: 0, error: 0 };
 
       await this.operations.insert({
         tableName: TABLE_EXPERIMENTS,
@@ -264,6 +290,9 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           metadata: input.metadata ? JSON.stringify(input.metadata) : null,
           status: 'pending',
           totalItems: input.totalItems,
+          executionStatusCounts: JSON.stringify(executionStatusCounts),
+          scorerStatusCounts: JSON.stringify(scorerStatusCounts),
+          thresholds: JSON.stringify(thresholds),
           succeededCount: 0,
           failedCount: 0,
           skippedCount: 0,
@@ -288,6 +317,9 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         metadata: input.metadata,
         status: 'pending',
         totalItems: input.totalItems,
+        executionStatusCounts,
+        scorerStatusCounts,
+        thresholds,
         succeededCount: 0,
         failedCount: 0,
         skippedCount: 0,
@@ -320,12 +352,31 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         });
       }
 
+      const hasLegacyCountUpdate =
+        input.succeededCount !== undefined || input.failedCount !== undefined || input.skippedCount !== undefined;
+      const executionStatusCounts =
+        input.executionStatusCounts !== undefined
+          ? input.executionStatusCounts
+          : hasLegacyCountUpdate
+            ? {
+                completed: input.succeededCount ?? existing.succeededCount,
+                skipped: input.skippedCount ?? existing.skippedCount,
+                error: input.failedCount ?? existing.failedCount,
+                cancelled: 0,
+              }
+            : undefined;
       const data: Record<string, any> = { updatedAt: new Date() };
 
       if (input.status !== undefined) data.status = input.status;
       if (input.succeededCount !== undefined) data.succeededCount = input.succeededCount;
       if (input.failedCount !== undefined) data.failedCount = input.failedCount;
       if (input.skippedCount !== undefined) data.skippedCount = input.skippedCount;
+      if (executionStatusCounts !== undefined) {
+        data.executionStatusCounts = executionStatusCounts === null ? null : JSON.stringify(executionStatusCounts);
+      }
+      if (input.scorerStatusCounts !== undefined) {
+        data.scorerStatusCounts = input.scorerStatusCounts === null ? null : JSON.stringify(input.scorerStatusCounts);
+      }
       if (input.totalItems !== undefined) data.totalItems = input.totalItems;
       if (input.startedAt !== undefined) data.startedAt = input.startedAt ?? null;
       if (input.completedAt !== undefined) data.completedAt = input.completedAt ?? null;
@@ -559,6 +610,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           output: input.output ? JSON.stringify(input.output) : null,
           groundTruth: input.groundTruth ? JSON.stringify(input.groundTruth) : null,
           error: input.error ? JSON.stringify(input.error) : null,
+          executionStatus: input.executionStatus ?? null,
           startedAt: input.startedAt,
           completedAt: input.completedAt,
           retryCount: input.retryCount,
@@ -580,6 +632,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         output: input.output,
         groundTruth: input.groundTruth,
         error: input.error,
+        executionStatus: input.executionStatus ?? null,
         startedAt: input.startedAt,
         completedAt: input.completedAt,
         retryCount: input.retryCount,

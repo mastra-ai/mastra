@@ -49,6 +49,17 @@ function rowToExperiment(row: Record<string, any>): Experiment {
     targetId: String(t.targetId),
     status: t.status,
     totalItems: Number(t.totalItems ?? 0),
+    executionStatusCounts:
+      t.executionStatusCounts != null
+        ? t.executionStatusCounts
+        : {
+            completed: Number(t.succeededCount ?? 0),
+            skipped: Number(t.skippedCount ?? 0),
+            error: Number(t.failedCount ?? 0),
+            cancelled: 0,
+          },
+    scorerStatusCounts: t.scorerStatusCounts ?? null,
+    thresholds: t.thresholds ?? null,
     succeededCount: Number(t.succeededCount ?? 0),
     failedCount: Number(t.failedCount ?? 0),
     skippedCount: Number(t.skippedCount ?? 0),
@@ -73,6 +84,7 @@ function rowToExperimentResult(row: Record<string, any>): ExperimentResult {
     output: t.output ?? null,
     groundTruth: t.groundTruth ?? null,
     error: (t.error ?? null) as ExperimentResult['error'],
+    executionStatus: (t.executionStatus ?? null) as ExperimentResult['executionStatus'],
     startedAt: toDate(t.startedAt),
     completedAt: toDate(t.completedAt),
     retryCount: Number(t.retryCount ?? 0),
@@ -114,12 +126,12 @@ export class ExperimentsSpanner extends ExperimentsStorage {
     await this.db.alterTable({
       tableName: TABLE_EXPERIMENTS,
       schema: TABLE_SCHEMAS[TABLE_EXPERIMENTS],
-      ifNotExists: ['organizationId', 'projectId'],
+      ifNotExists: ['organizationId', 'projectId', 'executionStatusCounts', 'scorerStatusCounts', 'thresholds'],
     });
     await this.db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: TABLE_SCHEMAS[TABLE_EXPERIMENT_RESULTS],
-      ifNotExists: ['organizationId', 'projectId'],
+      ifNotExists: ['organizationId', 'projectId', 'executionStatus'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -177,6 +189,12 @@ export class ExperimentsSpanner extends ExperimentsStorage {
     try {
       const now = new Date();
       const id = input.id ?? randomUUID();
+      const thresholds = (input.thresholds ?? []).map(binding => ({
+        ...binding,
+        threshold: typeof binding.threshold === 'number' ? binding.threshold : { ...binding.threshold },
+      }));
+      const executionStatusCounts = { completed: 0, skipped: 0, error: 0, cancelled: 0 };
+      const scorerStatusCounts = { completed: 0, error: 0 };
       const experiment: Experiment = {
         id,
         name: input.name ?? undefined,
@@ -190,6 +208,9 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         targetId: input.targetId,
         status: 'pending',
         totalItems: input.totalItems,
+        executionStatusCounts,
+        scorerStatusCounts,
+        thresholds,
         succeededCount: 0,
         failedCount: 0,
         skippedCount: 0,
@@ -214,6 +235,9 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           targetId: experiment.targetId,
           status: experiment.status,
           totalItems: experiment.totalItems,
+          executionStatusCounts: experiment.executionStatusCounts,
+          scorerStatusCounts: experiment.scorerStatusCounts,
+          thresholds: experiment.thresholds,
           succeededCount: 0,
           failedCount: 0,
           skippedCount: 0,
@@ -250,6 +274,19 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         });
       }
 
+      const hasLegacyCountUpdate =
+        input.succeededCount !== undefined || input.failedCount !== undefined || input.skippedCount !== undefined;
+      const executionStatusCounts =
+        input.executionStatusCounts !== undefined
+          ? input.executionStatusCounts
+          : hasLegacyCountUpdate
+            ? {
+                completed: input.succeededCount ?? existing.succeededCount,
+                skipped: input.skippedCount ?? existing.skippedCount,
+                error: input.failedCount ?? existing.failedCount,
+                cancelled: 0,
+              }
+            : undefined;
       const data: Record<string, any> = {};
       if (input.name !== undefined) data.name = input.name;
       if (input.description !== undefined) data.description = input.description;
@@ -259,6 +296,8 @@ export class ExperimentsSpanner extends ExperimentsStorage {
       if (input.succeededCount !== undefined) data.succeededCount = input.succeededCount;
       if (input.failedCount !== undefined) data.failedCount = input.failedCount;
       if (input.skippedCount !== undefined) data.skippedCount = input.skippedCount;
+      if (executionStatusCounts !== undefined) data.executionStatusCounts = executionStatusCounts;
+      if (input.scorerStatusCounts !== undefined) data.scorerStatusCounts = input.scorerStatusCounts;
       if (input.startedAt !== undefined) data.startedAt = input.startedAt;
       if (input.completedAt !== undefined) data.completedAt = input.completedAt;
       data.updatedAt = new Date();
@@ -488,6 +527,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         output: input.output ?? null,
         groundTruth: input.groundTruth ?? null,
         error: input.error ?? null,
+        executionStatus: input.executionStatus ?? null,
         startedAt: input.startedAt,
         completedAt: input.completedAt,
         retryCount: input.retryCount,
@@ -510,6 +550,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           output: result.output,
           groundTruth: result.groundTruth,
           error: result.error,
+          executionStatus: result.executionStatus,
           startedAt: result.startedAt,
           completedAt: result.completedAt,
           retryCount: result.retryCount,
