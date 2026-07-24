@@ -1,6 +1,7 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { coreFeatures } from '@mastra/core/features';
+import { getThreadOMMetadata } from '@mastra/core/memory';
 import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -9735,6 +9736,68 @@ describe('Async Buffering Processor Logic', () => {
       expect(result.activated).toBe(true);
       expect(result.record).toBeDefined();
       expect(result.record.activeObservations).toContain('Important observation');
+    });
+
+    it('should preserve existing continuation hints when activating buffered chunks without hints (#19809)', async () => {
+      const storage = createInMemoryStorage();
+      const threadId = 'thread-1';
+      const resourceId = 'resource-1';
+      const om = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }),
+        observation: {
+          messageTokens: 50000,
+          bufferTokens: 10000,
+          bufferActivation: 1,
+        },
+        reflection: { observationTokens: 20000, bufferActivation: 0.5 },
+      });
+
+      await storage.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Test Thread',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {
+            mastra: {
+              om: {
+                currentTask: 'Finalize regulatory advice',
+                suggestedResponse: 'Confirm the summary with the user.',
+              },
+            },
+          },
+        },
+      });
+
+      const record = await storage.initializeObservationalMemory({
+        threadId,
+        resourceId,
+        scope: 'thread',
+        config: {},
+      });
+
+      await storage.updateBufferedObservations({
+        id: record.id,
+        chunk: {
+          observations: '- Buffered observation without continuation hints',
+          tokenCount: 100,
+          messageIds: ['msg-1'],
+          messageTokens: 45000,
+          lastObservedAt: new Date('2026-02-05T10:00:00Z'),
+          cycleId: 'cycle-1',
+        },
+      });
+
+      const result = await om.activate({ threadId, resourceId });
+
+      expect(result.activated).toBe(true);
+      const updatedThread = await storage.getThreadById({ threadId });
+      const omMetadata = getThreadOMMetadata(updatedThread?.metadata);
+      expect(omMetadata?.currentTask).toBe('Finalize regulatory advice');
+      expect(omMetadata?.suggestedResponse).toBe('Confirm the summary with the user.');
     });
 
     it('should skip activation when pending tokens are below threshold (checkThreshold)', async () => {
