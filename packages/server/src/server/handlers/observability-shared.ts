@@ -45,12 +45,17 @@ export function getStorage(mastra: Mastra): MastraCompositeStore {
   return storage;
 }
 
-/** Retrieves the observability storage domain or throws 500 if unavailable. */
+/** Retrieves the observability storage domain or throws 501 if unavailable. */
 export async function getObservabilityStore(mastra: Mastra): Promise<ObservabilityStorage> {
   const storage = getStorage(mastra);
   const observability = await storage.getStore('observability');
   if (!observability) {
-    throw new HTTPException(500, { message: 'Observability storage domain is not available' });
+    // 501, not 500: a missing or explicitly disabled observability domain
+    // (e.g. `domains: { observability: false }`) is a capability gap, not a
+    // server failure. Matches the 501s used for other capability gaps (see
+    // assertObservabilityDeltaSupported below); Studio treats 501 as
+    // non-retryable and stops polling.
+    throw new HTTPException(501, { message: 'Observability storage domain is not available' });
   }
   return observability;
 }
