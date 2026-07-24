@@ -158,6 +158,12 @@ function assertPlanPath(path: string): string {
   return safePath;
 }
 
+/** Extract a Node.js filesystem error code (e.g. `ENOENT`) without leaking the raw error. */
+function nodeErrorCode(error: unknown): string | undefined {
+  if (error instanceof Error && 'code' in error && typeof error.code === 'string') return error.code;
+  return undefined;
+}
+
 async function confinedWorkspacePath(
   root: string,
   workspacePath: string,
@@ -685,6 +691,14 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
           }
           return c.json(await readWorkspacePlan(root, workspacePath, path));
         } catch (error) {
+          // Map filesystem errors by code and return generic text so raw fs
+          // messages (which embed absolute server paths) never reach the client.
+          const code = nodeErrorCode(error);
+          if (code === 'ENOENT') return c.json({ error: 'Plan file not found' }, 404);
+          if (code === 'EACCES' || code === 'EPERM') return c.json({ error: 'Access denied' }, 403);
+          if (code) return c.json({ error: 'Failed to read plan file' }, 500);
+
+          // Remaining errors are our own validation Errors with safe messages.
           const message = error instanceof Error ? error.message : String(error);
           const status =
             message.includes('outside') ||
