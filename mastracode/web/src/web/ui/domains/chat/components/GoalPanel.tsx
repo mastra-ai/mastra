@@ -18,11 +18,12 @@ const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border1 bg-a
  * stays uncluttered by default.
  */
 export function GoalPanel() {
-  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript } = useChatTranscript();
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };

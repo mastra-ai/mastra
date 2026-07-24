@@ -190,7 +190,7 @@ describe('defaultFactoryRules', () => {
     expect(await rule?.(context)).toMatchObject({
       type: 'invokeSkill',
       role: 'triage',
-      skillName: 'understand-issue',
+      skillName: 'factory-triage',
       arguments: 'Linear issue ENG-42 (https://linear.app/acme/issue/ENG-42)',
     });
   });
@@ -206,7 +206,7 @@ describe('defaultFactoryRules', () => {
     expect(await rule?.(context)).toMatchObject({
       type: 'invokeSkill',
       role: 'triage',
-      skillName: 'understand-issue',
+      skillName: 'factory-triage',
       arguments: 'GitHub issue (https://github.test/acme/repo/issues/42)',
     });
   });
@@ -222,8 +222,50 @@ describe('defaultFactoryRules', () => {
     expect(await rule?.(context)).toMatchObject({
       type: 'invokeSkill',
       role: 'review',
-      skillName: 'understand-pr',
+      skillName: 'factory-review',
       arguments: 'GitHub pull request (https://github.test/acme/repo/issues/42)',
+    });
+  });
+
+  it.each([
+    ['issue', 'github-issue'],
+    ['linearIssue', 'linear-issue'],
+    ['manual', 'manual'],
+  ] as const)('starts factory planning when a %s item enters Planning', async (source, itemSource) => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.planning?.[source]?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      item: { ...item, source: itemSource },
+      source,
+      stage: 'planning',
+      fromStage: 'triage',
+      toStage: 'planning',
+    } as FactoryStageRuleContext;
+
+    expect(await rule?.(context)).toMatchObject({
+      type: 'invokeSkill',
+      idempotencyKey: 'delivery-1:factory-plan',
+      role: 'plan',
+      skillName: 'factory-plan',
+      arguments: 'Work item (https://github.test/acme/repo/issues/42)',
+    });
+  });
+
+  it('keys the planning skill invocation once per ingress', async () => {
+    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.planning?.issue?.onEnter;
+    const context = {
+      ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
+      stage: 'planning',
+      fromStage: 'triage',
+      toStage: 'planning',
+    } as FactoryStageRuleContext;
+
+    const first = await rule?.(context);
+    const second = await rule?.(context);
+    expect(first).toMatchObject({ idempotencyKey: 'delivery-1:factory-plan' });
+    expect(second).toMatchObject({ idempotencyKey: 'delivery-1:factory-plan' });
+    expect(await rule?.({ ...context, ingress: { type: 'human' as const, id: 'delivery-2' } })).toMatchObject({
+      idempotencyKey: 'delivery-2:factory-plan',
     });
   });
 
@@ -301,6 +343,13 @@ describe('defaultFactoryRules', () => {
     expect(await rules.github.pullRequestOpened?.onEvent?.(githubContext('pullRequestOpened'))).toMatchObject({
       source: 'github-pr',
       sourceKey: 'github-pr:17',
+    });
+  });
+
+  it('records the PR head branch on Review intake so the card links back to its work item', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    expect(await rules.github.pullRequestOpened?.onEvent?.(githubContext('pullRequestOpened'))).toMatchObject({
+      metadata: { headBranch: 'feature', baseBranch: 'main' },
     });
   });
 

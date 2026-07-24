@@ -26,7 +26,7 @@ const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'othe
 export function useRunPaletteCommand(prefillComposer: (draft: string) => void) {
   const { factoryId } = useParams<{ factoryId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
-  const { resourceId, sessionEnabled, factorySessionState, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { activeModeId } = useChatModes();
   const { activeModelId, setModel } = useChatModels();
@@ -34,6 +34,7 @@ export function useRunPaletteCommand(prefillComposer: (draft: string) => void) {
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   };
@@ -96,7 +97,7 @@ export function useRunPaletteCommand(prefillComposer: (draft: string) => void) {
         pushNotice(
           [
             `Factory: ${factoryQuery.data?.name ?? '(none)'}`,
-            `Path: ${factorySessionState?.sandboxWorkdir ?? '(no workspace selected)'}`,
+            `Path: ${projectPath ?? '(no workspace selected)'}`,
             `Mode: ${activeModeId ?? '—'}`,
             `Model: ${activeModelId ?? '—'}`,
             `Thread: ${transcript.threadId ?? '—'}`,
