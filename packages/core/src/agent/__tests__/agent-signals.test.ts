@@ -1263,14 +1263,31 @@ describe('Agent signals', () => {
     );
   });
 
-  it('delivers medium-priority notification records while idle', async () => {
+  it('delivers high-priority notification records with owning processor context while idle', async () => {
     const notifications = new InMemoryNotificationsStorage();
     const storage = new MastraCompositeStore({ id: 'notification-storage', domains: { notifications } });
+    const processorAgents: unknown[] = [];
     const agent = new Agent({
       id: 'notification-agent',
       name: 'Notification Agent',
       instructions: 'Test',
       model: createTextStreamModel('notification response'),
+      inputProcessors: [
+        {
+          id: 'notification-agent-context',
+          processInput: async ({ agent, messages }) => {
+            processorAgents.push(agent);
+            return messages;
+          },
+          processInputStep: async ({ agent }) => {
+            processorAgents.push(agent);
+          },
+          processLLMRequest: async ({ agent, prompt }) => {
+            processorAgents.push(agent);
+            return { prompt };
+          },
+        },
+      ],
     });
     new Mastra({ agents: { notificationAgent: agent }, storage, logger: false });
 
@@ -1284,7 +1301,7 @@ describe('Agent signals', () => {
       {
         source: 'github',
         kind: 'ci-status',
-        priority: 'medium',
+        priority: 'high',
         summary: 'CI failed on main',
         dedupeKey: 'main-ci',
       },
@@ -1312,11 +1329,13 @@ describe('Agent signals', () => {
       type: 'notification',
       tagName: 'notification',
       contents: 'CI failed on main',
-      attributes: { source: 'github', kind: 'ci-status', priority: 'medium', status: 'delivered' },
+      attributes: { source: 'github', kind: 'ci-status', priority: 'high', status: 'delivered' },
     });
     await expect(
       notifications.getNotification({ threadId: 'notification-thread', id: result.record.id }),
     ).resolves.toMatchObject({ status: 'delivered', deliveredSignalId: result.signal?.id });
+    expect(processorAgents.length).toBeGreaterThanOrEqual(3);
+    expect(processorAgents.every(processorAgent => processorAgent === agent)).toBe(true);
 
     subscription.unsubscribe();
   });
@@ -3723,6 +3742,7 @@ describe('Agent signals', () => {
 
   it('drains thread-targeted follow-up signals into an idle-started run before the run record exists', async () => {
     const prompts: any[][] = [];
+    const processorObservations: Array<{ hook: string; agent: unknown }> = [];
 
     const model = new MockLanguageModelV2({
       doStream: async ({ prompt }) => {
@@ -3752,6 +3772,22 @@ describe('Agent signals', () => {
       name: 'Idle Start Thread Target Agent',
       instructions: 'Test',
       model,
+      inputProcessors: [
+        {
+          id: 'pre-run-signal-agent-context',
+          processInput: async ({ agent, messages }) => {
+            processorObservations.push({ hook: 'processInput', agent });
+            return messages;
+          },
+          processInputStep: async ({ agent }) => {
+            processorObservations.push({ hook: 'processInputStep', agent });
+          },
+          processLLMRequest: async ({ agent, prompt }) => {
+            processorObservations.push({ hook: 'processLLMRequest', agent });
+            return { prompt };
+          },
+        },
+      ],
     });
 
     const subscription = await agent.subscribeToThread({
@@ -3791,6 +3827,10 @@ describe('Agent signals', () => {
     expect(run.value.text).toBe('response');
     expect(prompts).toHaveLength(1);
     expect(JSON.stringify(prompts[0])).toContain('thread targeted follow up');
+    expect(new Set(processorObservations.map(observation => observation.hook))).toEqual(
+      new Set(['processInput', 'processInputStep', 'processLLMRequest']),
+    );
+    expect(processorObservations.every(observation => observation.agent === agent)).toBe(true);
 
     subscription.unsubscribe();
   });

@@ -14,6 +14,7 @@ import type {
   LogProbs as LanguageModelV1LogProbs,
 } from '@internal/ai-sdk-v4';
 import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
+import type { Agent } from '../agent/agent';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
@@ -1111,6 +1112,7 @@ export type MastraStreamTransformOptions<OUTPUT = undefined> =
 
 export type MastraModelOutputOptions<OUTPUT = undefined> = {
   runId: string;
+  agent?: Agent<any, any, any, any>;
   toolCallStreaming?: boolean;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   onStepFinish?: MastraOnStepFinishCallback<OUTPUT>;

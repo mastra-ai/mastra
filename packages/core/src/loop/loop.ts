@@ -59,6 +59,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   }
 
   const internalToUse: StreamInternal = {
+    agent: _internal?.agent,
     now: _internal?.now || (() => Date.now()),
     generateId: _internal?.generateId || (() => generateId()),
     currentDate: _internal?.currentDate || (() => new Date()),
@@ -158,6 +159,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     messageId: currentResponseMessageId!,
     options: {
       runId: runIdToUse,
+      agent: internalToUse.agent,
       toolCallStreaming: rest.toolCallStreaming,
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,

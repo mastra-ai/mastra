@@ -12,6 +12,8 @@ import { safeClose, safeEnqueue } from '../../stream/base';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
+import { readScoped } from '../run-scope-access';
+import { AGENT_KEY } from '../run-scope-keys';
 import type { LoopRun } from '../types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID } from './agentic-execution';
 import { createAgenticLoopWorkflow } from './agentic-loop';
@@ -33,6 +35,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
   toolCallConcurrency,
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
+  const scopeCtx = { mastra: rest.mastra, runId, _internal };
   return new ReadableStream<ChunkType<OUTPUT>>({
     start: async controller => {
       // Normalize requestContext so data-chunk processors and the agentic loop share the same instance
@@ -51,6 +54,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         ? new ProcessorRunner({
             outputProcessors: rest.outputProcessors,
             logger: rest.logger || new ConsoleLogger({ level: 'error' }),
+            agent: readScoped(scopeCtx, AGENT_KEY, 'agent'),
             agentName: agentId || 'unknown',
             processorStates: dataChunkProcessorStates,
           })

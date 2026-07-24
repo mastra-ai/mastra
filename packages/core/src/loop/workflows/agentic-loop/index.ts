@@ -9,9 +9,16 @@ import { createWorkflow } from '../../../workflows/create';
 import type { OutputWriter } from '../../../workflows/types';
 import type { RunScopeContext } from '../../run-scope-access';
 import { readScoped, writeScoped } from '../../run-scope-access';
-import { DELEGATION_BAILED_KEY, DRAIN_PENDING_SIGNALS_KEY, RESOURCE_ID_KEY, THREAD_ID_KEY } from '../../run-scope-keys';
+import {
+  AGENT_KEY,
+  DELEGATION_BAILED_KEY,
+  DRAIN_PENDING_SIGNALS_KEY,
+  RESOURCE_ID_KEY,
+  THREAD_ID_KEY,
+} from '../../run-scope-keys';
 import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
+import { processSignalInput } from '../agentic-execution/process-signal-input';
 import { pruneAgentLoopSnapshot } from '../prune-snapshot';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
@@ -92,12 +99,21 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       let hasFinishedSteps = false;
 
       const pendingSignals = readScoped(scopeCtx, DRAIN_PENDING_SIGNALS_KEY, 'drainPendingSignals')?.(runId) ?? [];
-      if (pendingSignals.length > 0) {
+      const approvedSignals = await processSignalInput({
+        signals: pendingSignals,
+        inputProcessors: rest.inputProcessors,
+        logger: rest.logger,
+        agentId: rest.agentId,
+        agent: readScoped(scopeCtx, AGENT_KEY, 'agent'),
+        processorStates: rest.processorStates,
+        requestContext: rest.requestContext,
+      });
+      if (approvedSignals.length > 0) {
         messageList.markResponseMessageBoundary(typedInputData.stepResult?.messageId ?? typedInputData.messageId);
 
         const nextMessageId = rest.rotateResponseMessageId();
         typedInputData.messageId = nextMessageId;
-        for (const pendingSignal of pendingSignals) {
+        for (const pendingSignal of approvedSignals) {
           const signalForTranscript = messageList.addSignal(pendingSignal);
           safeEnqueue(controller, signalForTranscript.toDataPart() as any);
         }
