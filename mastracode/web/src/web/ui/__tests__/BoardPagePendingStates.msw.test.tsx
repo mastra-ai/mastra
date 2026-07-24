@@ -266,6 +266,52 @@ describe('Board card pending states', () => {
     await waitFor(() => expect(screen.queryByText('Preparing session…')).not.toBeInTheDocument());
   });
 
+  it('starts one run when a session-starting card is clicked twice before it resolves', async () => {
+    stubBoardEndpoints();
+    const refreshGate = deferred();
+    let workItemRequests = 0;
+    const runStarts: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async () => {
+        workItemRequests += 1;
+        if (workItemRequests > 1) await refreshGate.promise;
+        return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
+      }),
+      http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+        HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, async ({ request }) => {
+        const body = (await request.json()) as { kickoffKey?: string };
+        runStarts.push(body.kickoffKey ?? '');
+        return HttpResponse.json({
+          prepared: { workItemId: ITEM_ID, threadId: THREAD_ID, sessionId: SESSION_ID, kickoffStatus: 'sent' },
+        });
+      }),
+    );
+    // pointerEventsCheck is off so the second click still reaches the handler
+    // once the button goes disabled: the handler itself has to refuse it, since
+    // the disabled attribute alone wouldn't stop a programmatic re-dispatch.
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(within(card).getByRole('button', { name: /Create thread/ })).toBeEnabled());
+    const trigger = within(card).getByRole('button', { name: 'Create thread for Fix login bug' });
+
+    await user.click(trigger);
+    await screen.findByText('Preparing session…');
+    await user.click(trigger);
+
+    refreshGate.resolve();
+    await waitFor(() => expect(screen.queryByText('Preparing session…')).not.toBeInTheDocument());
+    await waitFor(() => expect(runStarts).toHaveLength(1));
+
+    // Each pass mints its own kickoffKey, so a second start would land as a
+    // distinct pending row and deliver the kickoff message to the thread twice.
+    await delay(50);
+    expect(runStarts).toHaveLength(1);
+  });
+
   it('opens GitHub and Linear intake issues in their external provider', async () => {
     stubBoardEndpoints();
     server.use(

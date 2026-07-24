@@ -619,12 +619,26 @@ function BoardContent({
   // trips long and the run mutation isn't pending yet, so without this the card
   // sits completely silent after the click.
   const [preparingItems, setPreparingItems] = useState<Record<string, string>>({});
-  const clearPreparingItem = (itemId: string) =>
+  // Guarded by a ref, not by preparingItems: two clicks landing in the same
+  // render both read the pre-click state, so the state value can't reject the
+  // second one. Preparing is several round trips long and each pass mints its
+  // own kickoffKey, so the server's start lock keys differently per click and
+  // won't collapse them either.
+  const preparingRef = useRef<Set<string>>(new Set());
+  const beginPreparingItem = (itemId: string, label: string) => {
+    if (preparingRef.current.has(itemId)) return false;
+    preparingRef.current.add(itemId);
+    setPreparingItems(current => ({ ...current, [itemId]: label }));
+    return true;
+  };
+  const clearPreparingItem = (itemId: string) => {
+    preparingRef.current.delete(itemId);
     setPreparingItems(current => {
       if (!(itemId in current)) return current;
       const { [itemId]: _cleared, ...rest } = current;
       return rest;
     });
+  };
 
   const openThread = async (session: WorkItemSessionRef) => {
     navigate(`/factories/${factory.id}/workspaces/${session.sessionId}/threads/${session.threadId}`);
@@ -642,7 +656,7 @@ function BoardContent({
   };
 
   const openOrCreateSession = async (item: WorkItem, destinationStage: string) => {
-    setPreparingItems(current => ({ ...current, [item.id]: 'Preparing session…' }));
+    if (!beginPreparingItem(item.id, 'Preparing session…')) return;
     try {
       const refreshed = await refreshItemAndWorktrees(item.id);
       if (!refreshed) return;
@@ -673,7 +687,7 @@ function BoardContent({
   };
 
   const openOrStartRun = async (item: WorkItem, role: RunAction['role']) => {
-    setPreparingItems(current => ({ ...current, [item.id]: 'Preparing run…' }));
+    if (!beginPreparingItem(item.id, 'Preparing run…')) return;
     try {
       await startRunForItem(item, role);
     } finally {
@@ -1471,8 +1485,8 @@ function WorkItemCard({
         <button
           type="button"
           draggable={false}
-          disabled={runDisabled}
-          aria-busy={pendingRunRoles.size > 0 || undefined}
+          disabled={runDisabled || runPending}
+          aria-busy={runPending || undefined}
           aria-label={`Create thread for ${item.title}`}
           className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
           onClick={() => onCreateSession(itemSessionSpec(item))}
