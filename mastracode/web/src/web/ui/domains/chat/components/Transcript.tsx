@@ -38,6 +38,7 @@ import { stripSerializedAnsi } from '../services/ansi';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { isTranscriptToolVisible, ToolFactory } from './ToolFactory';
 import { Markdown } from '../../../ui/Markdown';
+import { useWorkspacePlan } from '../../../../../shared/hooks/use-fs';
 
 import type {
   ApprovalPrompt,
@@ -370,6 +371,8 @@ interface SuspendPayloadShape {
   reason?: string;
   plan?: { title?: string; summary?: string };
   title?: string;
+  /** For `submit_plan`: the workspace-relative path to the plan markdown file. */
+  path?: string;
 }
 
 function suspensionPayloadShape(payload: unknown): SuspendPayloadShape {
@@ -399,6 +402,7 @@ function suspensionPayloadShape(payload: unknown): SuspendPayloadShape {
     reason: stringProperty(payload, 'reason'),
     title: stringProperty(payload, 'title'),
     plan,
+    path: stringProperty(payload, 'path'),
   };
 }
 
@@ -414,36 +418,7 @@ function SuspensionCard({
   const payload = suspensionPayloadShape(prompt.suspendPayload);
 
   if (prompt.toolName === 'submit_plan') {
-    return (
-      <div className={promptCardSuspension} role="group" aria-label="Plan approval">
-        <div className={promptTitle}>Plan: {payload.plan?.title ?? payload.title ?? 'Proposed plan'}</div>
-        {payload.plan?.summary && (
-          <div className="text-ui-smd text-icon5 font-mono leading-relaxed break-words whitespace-pre-wrap">
-            {payload.plan.summary}
-          </div>
-        )}
-        <div className={promptActions}>
-          <Button
-            variant="primary"
-            size="sm"
-            aria-label="Approve the plan and switch to build"
-            autoFocus
-            disabled={isSubmitting}
-            onClick={() => onRespond(prompt.toolCallId, { action: 'approved' }, prompt.id)}
-          >
-            Approve &amp; build
-          </Button>
-          <Button
-            size="sm"
-            aria-label="Reject the plan"
-            disabled={isSubmitting}
-            onClick={() => onRespond(prompt.toolCallId, { action: 'rejected' }, prompt.id)}
-          >
-            Reject
-          </Button>
-        </div>
-      </div>
-    );
+    return <SubmitPlanCard prompt={prompt} payload={payload} isSubmitting={isSubmitting} onRespond={onRespond} />;
   }
 
   if (prompt.toolName === 'request_access') {
@@ -476,6 +451,79 @@ function SuspensionCard({
   }
 
   return <AskUserCard prompt={prompt} payload={payload} isSubmitting={isSubmitting} onRespond={onRespond} />;
+}
+
+/**
+ * Plan-approval card. The agent submits `submit_plan` with the path to a plan
+ * markdown file in its sandbox; this fetches that file's contents from the
+ * server (`useWorkspacePlan`, keyed by the session's `resourceId`) and renders
+ * the markdown so the user reviews the actual plan instead of a bare path.
+ */
+function SubmitPlanCard({
+  prompt,
+  payload,
+  isSubmitting,
+  onRespond,
+}: {
+  prompt: SuspensionPrompt;
+  payload: SuspendPayloadShape;
+  isSubmitting: boolean;
+  onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+}) {
+  const { resourceId } = useChatSessionContext();
+  const planPath = payload.path;
+  const planQuery = useWorkspacePlan(resourceId || undefined, planPath);
+
+  const fileName = planPath?.split('/').pop();
+  const title = payload.plan?.title ?? payload.title ?? fileName ?? 'Proposed plan';
+  const fetchedContent = planQuery.data?.contentType === 'text' ? planQuery.data.content : undefined;
+  const body = fetchedContent ?? payload.plan?.summary;
+
+  return (
+    <div className={promptCardSuspension} role="group" aria-label="Plan approval">
+      <div className={promptTitle}>Plan: {title}</div>
+      {planPath && <div className="text-icon3 mb-1.5 truncate font-mono text-xs">{planPath}</div>}
+
+      {planPath && planQuery.isPending ? (
+        <div className="text-icon3 flex items-center gap-2 text-xs">
+          <Spinner className="text-icon3" />
+          Loading plan…
+        </div>
+      ) : null}
+      {planQuery.isError && !body ? (
+        <div className="text-icon4 text-xs">Unable to load the plan file{planPath ? ` (${planPath})` : ''}.</div>
+      ) : null}
+      {planQuery.data?.contentType === 'unsupported' && !body ? (
+        <div className="text-icon3 text-xs">This plan file cannot be previewed as text.</div>
+      ) : null}
+      {body ? (
+        <div className="border-border1 bg-surface1 max-h-96 overflow-auto rounded-md border px-3 py-2">
+          <Markdown className="max-w-none">{body}</Markdown>
+        </div>
+      ) : null}
+
+      <div className={promptActions}>
+        <Button
+          variant="primary"
+          size="sm"
+          aria-label="Approve the plan and switch to build"
+          autoFocus
+          disabled={isSubmitting}
+          onClick={() => onRespond(prompt.toolCallId, { action: 'approved' }, prompt.id)}
+        >
+          Approve &amp; build
+        </Button>
+        <Button
+          size="sm"
+          aria-label="Reject the plan"
+          disabled={isSubmitting}
+          onClick={() => onRespond(prompt.toolCallId, { action: 'rejected' }, prompt.id)}
+        >
+          Reject
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 function AskUserCard({

@@ -11,7 +11,9 @@ import {
   listSessionRenderedPath,
   listWorkspaceRenderedPath,
   readSessionWorkspaceFile,
+  readSessionWorkspacePlan,
   readWorkspaceFile,
+  readWorkspacePlan,
 } from './fs.js';
 
 describe('listArtifacts', () => {
@@ -193,6 +195,54 @@ describe('readWorkspaceFile', () => {
 
     await expect(readWorkspaceFile(root, join(root, 'workspace'), '.artifacts/secret.md')).rejects.toThrow(
       'Path is outside the workspace',
+    );
+  });
+});
+
+describe('readWorkspacePlan', () => {
+  it('reads a plan markdown file outside the approved rendered roots', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-plan-root-'));
+    const file = join(root, 'workspace', '.mastracode', 'plans', 'add-readme.md');
+    await mkdir(join(file, '..'), { recursive: true });
+    await writeFile(file, '# Plan\n\n- step one');
+
+    const result = await readWorkspacePlan(root, join(root, 'workspace'), '.mastracode/plans/add-readme.md');
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        path: '.mastracode/plans/add-readme.md',
+        name: 'add-readme.md',
+        contentType: 'text',
+        content: '# Plan\n\n- step one',
+      }),
+    );
+  });
+
+  it('rejects non-markdown plan paths', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-plan-root-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace);
+
+    await expect(readWorkspacePlan(root, workspace, '.mastracode/plans/add-readme.txt')).rejects.toThrow(
+      'Plan path must be a Markdown (.md) file',
+    );
+  });
+
+  it('rejects traversal outside the workspace', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-plan-root-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace);
+
+    await expect(readWorkspacePlan(root, workspace, '../secret.md')).rejects.toThrow('path escapes workspace');
+  });
+
+  it('rejects absolute plan paths', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mc-plan-root-'));
+    const workspace = join(root, 'workspace');
+    await mkdir(workspace);
+
+    await expect(readWorkspacePlan(root, workspace, join(workspace, 'plan.md'))).rejects.toThrow(
+      'path must be relative',
     );
   });
 });
@@ -383,6 +433,55 @@ describe('readSessionWorkspaceFile', () => {
 
     await expect(readSessionWorkspaceFile(fleet, makeSession(), '.artifacts/a.md')).rejects.toThrow(
       'Session workspace is not available',
+    );
+  });
+});
+
+describe('readSessionWorkspacePlan', () => {
+  function respondForPlan(content: string) {
+    const abs = `${WORKDIR}/.mastracode/plans/add-readme.md`;
+    return (script: string) => {
+      if (script.startsWith('readlink -f')) return { exitCode: 0, stdout: `${abs}\n` };
+      if (script.startsWith('stat -c'))
+        return { exitCode: 0, stdout: `regular file\t${content.length}\t1700000000\t0\n` };
+      if (script.startsWith('base64 <'))
+        return { exitCode: 0, stdout: Buffer.from(content, 'utf8').toString('base64') };
+      return { exitCode: 1, stdout: '', stderr: `unexpected script: ${script}` };
+    };
+  }
+
+  it('reads a plan markdown file from the session sandbox', async () => {
+    const { fleet } = makeFleet(respondForPlan('# Plan'));
+
+    const session = makeSession();
+    const plan = await readSessionWorkspacePlan(fleet, session, '.mastracode/plans/add-readme.md');
+
+    expect(plan).toEqual(
+      expect.objectContaining({
+        workspacePath: session.sessionId,
+        path: '.mastracode/plans/add-readme.md',
+        name: 'add-readme.md',
+        contentType: 'text',
+        content: '# Plan',
+        truncated: false,
+      }),
+    );
+  });
+
+  it('rejects non-markdown plan paths without touching the sandbox', async () => {
+    const { fleet, executeCommand } = makeFleet(respondForPlan('secret'));
+
+    await expect(readSessionWorkspacePlan(fleet, makeSession(), '.mastracode/plans/add-readme.txt')).rejects.toThrow(
+      'Plan path must be a Markdown (.md) file',
+    );
+    expect(executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('rejects traversal outside the workspace', async () => {
+    const { fleet } = makeFleet(respondForPlan('secret'));
+
+    await expect(readSessionWorkspacePlan(fleet, makeSession(), '../secret.md')).rejects.toThrow(
+      'path escapes workspace',
     );
   });
 });
