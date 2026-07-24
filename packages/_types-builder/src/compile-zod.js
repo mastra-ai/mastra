@@ -1,5 +1,5 @@
-import { createRequire } from 'module';
-import fs from 'fs/promises';
+import { createRequire } from 'node:module';
+import fs from 'node:fs/promises';
 import ts from 'typescript';
 
 /**

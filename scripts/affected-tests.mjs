@@ -15,10 +15,10 @@
  * BFS to find all transitively-dependent test files.
  */
 
-import { execSync } from 'child_process';
-import { existsSync, readFileSync, readdirSync } from 'fs';
-import { resolve, relative, dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+import { execSync } from 'node:child_process';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { resolve, relative, dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

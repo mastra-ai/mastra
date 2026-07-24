@@ -9,9 +9,9 @@ import {
   deleteUserSession,
   getUserSession,
   listUserSessions,
+  USER_SESSION_BRANCH_PREFIX,
 } from '../../web/ui/domains/workspaces/services/github';
 import type { FactoryUserSession } from '../../web/ui/domains/workspaces/services/github';
-import { USER_SESSION_BRANCH_PREFIX } from '../../web/ui/domains/workspaces/services/github';
 
 /**
  * The slice of the agent-controller session the delete mutation needs to

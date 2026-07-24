@@ -11,8 +11,7 @@
  * Resolved text segments are joined with double newlines.
  */
 
-import type { AgentInstructionBlock, StorageResolvedPromptBlockType } from '@mastra/core/storage';
-import type { PromptBlocksStorage } from '@mastra/core/storage';
+import type { AgentInstructionBlock, StorageResolvedPromptBlockType, PromptBlocksStorage } from '@mastra/core/storage';
 
 import { renderTemplate } from './template-engine';
 import { evaluateRuleGroup } from './rule-evaluator';

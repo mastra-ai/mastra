@@ -1,6 +1,5 @@
 import { Workspace, CompositeFilesystem } from '@mastra/core/workspace';
-import type { WorkspaceFilesystem, WorkspaceSandbox, SkillSource } from '@mastra/core/workspace';
-import type { WorkspaceConfig } from '@mastra/core/workspace';
+import type { WorkspaceFilesystem, WorkspaceSandbox, SkillSource, WorkspaceConfig } from '@mastra/core/workspace';
 import type {
   StorageCreateWorkspaceInput,
   StorageUpdateWorkspaceInput,

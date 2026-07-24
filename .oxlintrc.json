@@ -1,0 +1,225 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["import", "unicorn", "react", "typescript", "vitest"],
+  "categories": {
+    "correctness": "off"
+  },
+  "env": {
+    "builtin": true,
+    "browser": true,
+    "node": true
+  },
+  "globals": {
+    "AudioWorkletGlobalScope": "readonly",
+    "AudioWorkletProcessor": "readonly",
+    "currentFrame": "readonly",
+    "currentTime": "readonly",
+    "registerProcessor": "readonly",
+    "sampleRate": "readonly",
+    "WorkletGlobalScope": "readonly"
+  },
+  "ignorePatterns": [
+    "**/.tsup/**",
+    "**/.mastra/**",
+    "**/.cache/**",
+    "**/node_modules/**",
+    "**/playwright-report/**",
+    "**/dist/**",
+    "**/coverage/**",
+    "**/tsup.config.bundled_*",
+    "examples/**",
+    "docs/**",
+    "explorations/**",
+    "e2e-tests/**",
+    "templates/**",
+    "ee/**",
+    "packages/playground/**",
+    "packages/codemod/src/test/__fixtures__/**"
+  ],
+  "rules": {
+    "no-restricted-globals": ["error", "global"],
+    "no-unexpected-multiline": "error",
+    "no-warning-comments": ["error", { "terms": ["FIXME"], "location": "anywhere" }],
+    "import/no-duplicates": ["error", { "prefer-inline": false }],
+    "unicorn/prefer-node-protocol": "error"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.ts?(x)", "**/*.js?(x)"],
+      "rules": {
+        "no-console": ["error", { "allow": ["warn", "error", "info", "table", "time", "timeEnd", "dir"] }],
+        "no-debugger": "error"
+      }
+    },
+    {
+      "files": ["packages/playground-ui/**"],
+      "rules": {
+        "react/only-export-components": ["warn", { "allowConstantExport": true }],
+        "react/rules-of-hooks": "error",
+        "react/exhaustive-deps": "warn",
+        "typescript/no-non-null-assertion": "error"
+      }
+    },
+    {
+      "files": ["packages/playground-ui/**/*.stories.tsx"],
+      "rules": {
+        "no-console": "off",
+        "no-unused-vars": "off",
+        "react/rules-of-hooks": "off"
+      }
+    },
+    {
+      "files": ["**/*.js?(x)"],
+      "rules": {
+        "no-undef": "error",
+        "no-unused-vars": [
+          "error",
+          {
+            "args": "after-used",
+            "argsIgnorePattern": "^_",
+            "caughtErrors": "all",
+            "destructuredArrayIgnorePattern": "^_",
+            "varsIgnorePattern": "^_",
+            "ignoreRestSiblings": true
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/*.ts?(x)"],
+      "rules": {
+        "import/consistent-type-specifier-style": ["error", "prefer-top-level"],
+        "no-unused-vars": [
+          "error",
+          {
+            "args": "after-used",
+            "argsIgnorePattern": "^_",
+            "caughtErrors": "all",
+            "destructuredArrayIgnorePattern": "^_",
+            "varsIgnorePattern": "^_",
+            "ignoreRestSiblings": true
+          }
+        ],
+        "typescript/consistent-type-imports": [
+          "error",
+          {
+            "prefer": "type-imports",
+            "disallowTypeAnnotations": true,
+            "fixStyle": "separate-type-imports"
+          }
+        ],
+        "typescript/no-require-imports": "error",
+        "typescript/ban-ts-comment": [
+          "error",
+          {
+            "ts-expect-error": "allow-with-description",
+            "ts-ignore": true,
+            "ts-nocheck": true,
+            "ts-check": false,
+            "minimumDescriptionLength": 3
+          }
+        ]
+      },
+      "plugins": ["typescript"]
+    },
+    {
+      "files": ["**/*.ts?(x)", "**/*.js?(x)"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/tests/**", "**/#tests/**", "**/__tests__/**/*", "**/*.test.*", "**/*.spec.*"],
+                "message": "Do not import test files in source files"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["**/tests/**", "**/#tests/**", "**/__tests__/**/*", "**/*.test.*", "**/*.spec.*", "vitest.config.ts"],
+      "rules": {
+        "typescript/await-thenable": "off",
+        "typescript/consistent-return": "off",
+        "typescript/consistent-type-exports": "off",
+        "typescript/dot-notation": "off",
+        "typescript/no-array-delete": "off",
+        "typescript/no-base-to-string": "off",
+        "typescript/no-confusing-void-expression": "off",
+        "typescript/no-deprecated": "off",
+        "typescript/no-duplicate-type-constituents": "off",
+        "typescript/no-floating-promises": "off",
+        "typescript/no-for-in-array": "off",
+        "typescript/no-implied-eval": "off",
+        "typescript/no-meaningless-void-operator": "off",
+        "typescript/no-misused-promises": "off",
+        "typescript/no-misused-spread": "off",
+        "typescript/no-mixed-enums": "off",
+        "typescript/no-redundant-type-constituents": "off",
+        "typescript/no-unnecessary-boolean-literal-compare": "off",
+        "typescript/no-unnecessary-condition": "off",
+        "typescript/no-unnecessary-qualifier": "off",
+        "typescript/no-unnecessary-template-expression": "off",
+        "typescript/no-unnecessary-type-arguments": "off",
+        "typescript/no-unnecessary-type-assertion": "off",
+        "typescript/no-unnecessary-type-conversion": "off",
+        "typescript/no-unnecessary-type-parameters": "off",
+        "typescript/no-unsafe-argument": "off",
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-call": "off",
+        "typescript/no-unsafe-enum-comparison": "off",
+        "typescript/no-unsafe-member-access": "off",
+        "typescript/no-unsafe-return": "off",
+        "typescript/no-unsafe-type-assertion": "off",
+        "typescript/no-unsafe-unary-minus": "off",
+        "typescript/no-useless-default-assignment": "off",
+        "typescript/non-nullable-type-assertion-style": "off",
+        "typescript/only-throw-error": "off",
+        "typescript/prefer-find": "off",
+        "typescript/prefer-includes": "off",
+        "typescript/prefer-nullish-coalescing": "off",
+        "typescript/prefer-optional-chain": "off",
+        "typescript/prefer-promise-reject-errors": "off",
+        "typescript/prefer-readonly": "off",
+        "typescript/prefer-readonly-parameter-types": "off",
+        "typescript/prefer-reduce-type-parameter": "off",
+        "typescript/prefer-regexp-exec": "off",
+        "typescript/prefer-return-this-type": "off",
+        "typescript/prefer-string-starts-ends-with": "off",
+        "typescript/promise-function-async": "off",
+        "typescript/related-getter-setter-pairs": "off",
+        "typescript/require-array-sort-compare": "off",
+        "typescript/require-await": "off",
+        "typescript/restrict-plus-operands": "off",
+        "typescript/restrict-template-expressions": "off",
+        "typescript/return-await": "off",
+        "typescript/strict-boolean-expressions": "off",
+        "typescript/strict-void-return": "off",
+        "typescript/switch-exhaustiveness-check": "off",
+        "typescript/unbound-method": "off",
+        "typescript/use-unknown-in-catch-callback-variable": "off"
+      },
+      "plugins": ["typescript"]
+    },
+    {
+      "files": ["**/tests/**", "**/#tests/**", "**/__tests__/**/*", "**/*.test.*", "**/*.spec.*"],
+      "rules": {
+        "no-console": "off",
+        "no-debugger": "off",
+        "no-restricted-globals": "off",
+        "no-restricted-imports": "off",
+        "vitest/no-focused-tests": "warn"
+      },
+      "plugins": ["vitest"]
+    },
+    {
+      "files": ["packages/create-mastra/**"],
+      "jsPlugins": ["eslint-plugin-depend"],
+      "rules": {
+        "depend/ban-dependencies": "error"
+      }
+    }
+  ]
+}

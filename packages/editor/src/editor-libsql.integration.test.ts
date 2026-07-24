@@ -7,7 +7,7 @@ import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { createScorer } from '@mastra/core/evals';
 import { RequestContext } from '@mastra/core/request-context';
 import { MastraEditor } from './index';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import { convertArrayToReadableStream, LanguageModelV2, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import {
