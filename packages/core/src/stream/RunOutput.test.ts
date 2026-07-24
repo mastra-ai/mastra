@@ -70,4 +70,51 @@ describe('WorkflowRunOutput', () => {
     expect(usage.cachedInputTokens).toBe(12686);
     expect((usage as { cacheCreationInputTokens?: number }).cacheCreationInputTokens).toBe(5268);
   });
+
+  it('does not stop other fullStream subscribers when one subscriber cancels (#19743)', async () => {
+    let enqueue: (chunk: WorkflowStreamEvent) => void = () => {};
+    let closeSource: () => void = () => {};
+    const source = new ReadableStream<WorkflowStreamEvent>({
+      start(controller) {
+        enqueue = chunk => controller.enqueue(chunk);
+        closeSource = () => controller.close();
+      },
+    });
+
+    const output = new WorkflowRunOutput({
+      runId: 'run-1',
+      workflowId: 'workflow-1',
+      stream: source,
+    });
+
+    const receivedByA: WorkflowStreamEvent[] = [];
+    let aClosed = false;
+    const consumeA = (async () => {
+      for await (const chunk of output.fullStream as unknown as AsyncIterable<WorkflowStreamEvent>) {
+        receivedByA.push(chunk);
+      }
+      aClosed = true;
+    })();
+
+    // Let consumer A's start() register its listeners before anything is enqueued.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Consumer B attaches, reads one chunk, then cancels — simulating a client
+    // disconnect on a second /stream request for the same run.
+    const readerB = output.fullStream.getReader();
+    enqueue(createWorkflowStepOutput({ inputTokens: 1, outputTokens: 1, totalTokens: 2, cachedInputTokens: 0 }));
+    await readerB.read();
+    await readerB.cancel();
+
+    // More chunks arrive after B has cancelled — A must still receive them.
+    enqueue(createWorkflowStepOutput({ inputTokens: 2, outputTokens: 2, totalTokens: 4, cachedInputTokens: 0 }));
+    enqueue(createWorkflowStepOutput({ inputTokens: 3, outputTokens: 3, totalTokens: 6, cachedInputTokens: 0 }));
+    closeSource();
+
+    await consumeA;
+
+    expect(aClosed).toBe(true);
+    expect(receivedByA.length).toBeGreaterThanOrEqual(3);
+  }, 5000);
 });
