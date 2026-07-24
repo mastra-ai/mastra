@@ -82,6 +82,12 @@ const allSchemas = {
     ])
     .describe('give an valid object'),
 
+  // Record types
+  record: z.record(z.string(), z.string()).describe('a map of two sample string keys to sample string values'),
+  recordEnumKeys: z
+    .record(z.enum(['A', 'B']), z.string())
+    .describe('a map with exactly the keys A and B mapped to sample strings'),
+
   // Default values
   default: z.string().default('test').describe('sample text that is the default value'),
 } as const;
@@ -131,9 +137,18 @@ const expectedOutput = {
   unionObjects: expect.toSatisfy(
     v => ('amount' in v && 'inventoryItemName' in v) || ('type' in v && 'permissions' in v),
   ),
+  // folded back from the {key, value} pair wire format by ~standard.validate
+  record: expect.toSatisfy(v => typeof v === 'object' && v !== null && !Array.isArray(v)),
+  recordEnumKeys: { A: expect.any(String), B: expect.any(String) },
   default: expect.any(String),
   enum: expect.stringMatching(/^[ABC]$/),
   nativeEnum: expect.stringMatching(/^[ABC]$/),
+};
+
+// Raw wire shape before validation folds pairs back into a record
+const rawRecordShapes = {
+  record: expect.arrayContaining([expect.objectContaining({ key: expect.any(String), value: expect.any(String) })]),
+  recordEnumKeys: { A: expect.any(String), B: expect.any(String) },
 };
 
 describe('OpenAI e2e test', () => {
@@ -203,6 +218,7 @@ describe('OpenAI e2e test', () => {
       nativeEnum: expect.stringMatching(/^[ABC]$/),
       optional: null,
       default: expect.any(String),
+      ...rawRecordShapes,
     });
     expect(compatSchema['~standard'].validate(result.output)).toMatchSnapshot();
   });
@@ -245,6 +261,7 @@ describe('OpenAI e2e test', () => {
       dateBefore: expect.any(String),
       actualData: expect.any(String),
       optional: null,
+      ...rawRecordShapes,
     });
     expect(compatSchema['~standard'].validate(toolCall.input)).toMatchSnapshot();
   });

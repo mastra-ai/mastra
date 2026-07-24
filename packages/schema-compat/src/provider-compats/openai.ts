@@ -200,7 +200,12 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
     }
 
     if (isObjectSchema(schema)) {
-      this.defaultObjectHandler(schema);
+      // Record nodes (z.record) are rewritten in postProcessJSONNode. Skip the default
+      // handler so it doesn't reset `required` — zod emits the full key list there for
+      // enum-keyed records, which the rewrite needs.
+      if (!isRecordNode(schema)) {
+        this.defaultObjectHandler(schema);
+      }
     } else if (isArraySchema(schema)) {
       this.defaultArrayHandler(schema);
     } else if (isNumberSchema(schema)) {
@@ -217,7 +222,7 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
     }
   }
 
-  postProcessJSONNode(schema: JSONSchema7): void {
+  postProcessJSONNode(schema: JSONSchema7, parentSchema?: JSONSchema7): void {
     // Handle union schemas in post-processing (after children are processed)
     if (isUnionSchema(schema)) {
       this.defaultUnionHandler(schema);
@@ -243,7 +248,66 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
     // Ensure bare {"type":"object"} nodes (e.g., inside anyOf) have additionalProperties: false.
     // OpenAI strict mode requires this on every object-type node, even without properties.
     if (isObjectSchema(schema)) {
+      // z.record(...) emits `{ type: 'object', additionalProperties: <valueSchema>, propertyNames?: <keySchema> }`.
+      // OpenAI strict mode rejects `propertyNames` and requires `additionalProperties: false`,
+      // so records are not directly expressible. Rewrite them into shapes strict mode accepts,
+      // preserving the record semantics instead of silently degrading to an always-empty object.
+      if (isRecordNode(schema) && typeof schema.additionalProperties === 'object') {
+        const valueSchema = schema.additionalProperties as JSONSchema7;
+        const keySchema = schema.propertyNames as JSONSchema7 | undefined;
+        const enumKeys =
+          keySchema && Array.isArray(keySchema.enum) && keySchema.enum.every(k => typeof k === 'string')
+            ? (keySchema.enum as string[])
+            : undefined;
+
+        if (enumKeys?.length) {
+          // Finite key set (z.record with enum keys): expand losslessly into a closed
+          // object with one property per key. zod already emitted `required` with all
+          // keys for exhaustive records; the standard handling below fixes up the rest.
+          // `x-record-object` tells #traverse this object validates as a record, so
+          // null values for keys made nullable below (z.partialRecord) must be
+          // deleted — records validate any *present* key's value.
+          schema.properties = Object.fromEntries(enumKeys.map(key => [key, structuredClone(valueSchema)]));
+          (schema as Record<string, unknown>)['x-record-object'] = true;
+          delete (schema as Record<string, unknown>)['propertyNames'];
+        } else if (parentSchema) {
+          // Arbitrary keys: rewrite as an array of { key, value } pairs, marked with
+          // `x-record` so #traverse folds it back into a plain object before the value
+          // is validated against the original schema. Skipped at the root because
+          // OpenAI requires the top-level schema to be an object.
+          const description = schema.description;
+          for (const key of Object.keys(schema)) {
+            delete (schema as Record<string, unknown>)[key];
+          }
+          schema.type = 'array';
+          (schema as Record<string, unknown>)['x-record'] = true;
+          if (description) {
+            schema.description = description;
+          }
+          schema.items = {
+            type: 'object',
+            properties: {
+              key: keySchema ?? { type: 'string' },
+              value: valueSchema,
+            },
+            required: ['key', 'value'],
+            additionalProperties: false,
+          };
+          return;
+        }
+      }
+
       schema.additionalProperties = false;
+
+      // Strip `propertyNames` in the cases not handled above (e.g., a record at the
+      // root, or one without a value schema). OpenAI Structured Outputs strict mode
+      // rejects it (only properties/required/additionalProperties are permitted on an
+      // object), so leaving it in makes the whole request fail. Mirrors the Google layer.
+      delete (schema as Record<string, unknown>)['propertyNames'];
+
+      if (!schema.properties && !schema.required) {
+        schema.required = [];
+      }
 
       if (schema.properties) {
         for (const key of Object.keys(schema.properties)) {
@@ -306,6 +370,24 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
       return new Date(value);
     }
 
+    // Fold record nodes that postProcessJSONNode rewrote as key/value pair arrays
+    // back into plain objects so they validate against the original z.record schema.
+    if (resolved['x-record'] === true) {
+      if (!Array.isArray(value)) {
+        return value;
+      }
+      const items = resolved.items as Record<string, unknown> | undefined;
+      const valueSchema = (items?.properties as Record<string, Record<string, unknown>> | undefined)?.value;
+      const record: Record<string, unknown> = {};
+      for (const pair of value) {
+        if (pair && typeof pair === 'object' && 'key' in pair) {
+          const { key, value: pairValue } = pair as { key: string; value: unknown };
+          record[key] = valueSchema ? this.#traverse(pairValue, valueSchema) : pairValue;
+        }
+      }
+      return record;
+    }
+
     const isArrayType =
       resolved.type === 'array' || (Array.isArray(resolved.type) && (resolved.type as string[]).includes('array'));
     if (isArrayType) {
@@ -330,7 +412,13 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
     const optionalProperties = (resolved['x-optional'] ?? []) as string[];
     for (const key in obj) {
       if (optionalProperties.includes(key) && obj[key] === null) {
-        obj[key] = undefined;
+        if (resolved['x-record-object'] === true) {
+          // Enum-keyed records rewritten to closed objects (z.partialRecord) validate
+          // any *present* key's value, so only a truly absent key round-trips.
+          delete obj[key];
+        } else {
+          obj[key] = undefined;
+        }
       } else if (properties[key]) {
         obj[key] = this.#traverse(obj[key], properties[key]);
       }
@@ -357,4 +445,15 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
 
 function isDateFormat(schema: Record<string, unknown>): boolean {
   return schema.format === 'date-time' || schema.format === 'date';
+}
+
+/**
+ * A record node is what z.record(...) emits: an object schema with open-ended keys —
+ * no `properties`, values described by a schema-valued `additionalProperties`
+ * (zod v4 additionally emits `propertyNames` for the key schema).
+ */
+function isRecordNode(schema: JSONSchema7): boolean {
+  return (
+    !schema.properties && (typeof schema.additionalProperties === 'object' || typeof schema.propertyNames === 'object')
+  );
 }

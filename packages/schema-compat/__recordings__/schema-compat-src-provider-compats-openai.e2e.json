@@ -5,11 +5,11 @@
     "testName": "OpenAI e2e test",
     "model": "gpt-4.1",
     "createdAt": "2026-03-24T13:36:54.661Z",
-    "updatedAt": "2026-07-14T14:00:39.764Z"
+    "updatedAt": "2026-07-14T13:13:45.767Z"
   },
   "recordings": [
     {
-      "hash": "0482d3b9ce63e25e",
+      "hash": "8a263314aa250ce0",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -269,6 +269,39 @@
                     ],
                     "description": "give an valid object"
                   },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
                   "default": {
                     "default": "test",
                     "description": "sample text that is the default value",
@@ -308,6 +341,8 @@
                   "nativeEnum",
                   "unionPrimitives",
                   "unionObjects",
+                  "record",
+                  "recordEnumKeys",
                   "default",
                   "optional"
                 ],
@@ -317,7 +352,7 @@
             }
           }
         },
-        "timestamp": 1784037612610
+        "timestamp": 1784034805625
       },
       "response": {
         "status": 200,
@@ -326,12 +361,12 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b10d675a492a59-CDG",
+          "cf-ray": "a1b0c8df9d27b8c3-CDG",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 14:00:16 GMT",
+          "date": "Tue, 14 Jul 2026 13:13:30 GMT",
           "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "4030",
+          "openai-processing-ms": "4293",
           "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -340,21 +375,21 @@
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "30000000",
           "x-ratelimit-remaining-requests": "9999",
-          "x-ratelimit-remaining-tokens": "29999724",
+          "x-ratelimit-remaining-tokens": "29999690",
           "x-ratelimit-reset-requests": "6ms",
           "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_4273b23780664e499d3e8a0bdf6cd0f0"
+          "x-request-id": "req_07bcac09193c4743889af248ef16e990"
         },
         "body": {
-          "id": "resp_059f062f69bb0092006a5640ecd47481a38521f98ced76f05b",
+          "id": "resp_069cca348db47084006a5635f5d28081928f3b0429c21aa20f",
           "object": "response",
-          "created_at": 1784037612,
+          "created_at": 1784034805,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784037616,
+          "completed_at": 1784034809,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -365,7 +400,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_059f062f69bb0092006a5640ed1cf481a3859922dc6906649e",
+              "id": "msg_069cca348db47084006a5635f625fc8192a1bece6ba24178d9",
               "type": "message",
               "status": "completed",
               "content": [
@@ -373,7 +408,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "{\"string\":\"example text\",\"stringMin\":\"hello\",\"stringMax\":\"short\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjnbl5xy00000q9rbz5x5pgr6\",\"stringRegex\":\"test-value\",\"number\":42,\"numberGt\":5,\"numberLt\":3,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"item1\",\"item2\"],\"arrayMin\":[\"one\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2023-04-01T12:00:00Z\",\"dateAfter\":\"2024-06-10T00:00:00Z\",\"dateBefore\":\"2024-06-09T00:00:00Z\",\"actualData\":\"2024-06-10T15:00:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Alex\",\"age\":28}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"string value\",\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"Widget\"},\"default\":\"\"}"
+                  "text": "{\"string\":\"sample text\",\"stringMin\":\"hello\",\"stringMax\":\"shorttext\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjnz7qug50000q4rmniodw5k9\",\"stringRegex\":\"test-string\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":6,\"numberInt\":10,\"exampleArray\":[\"one\",\"two\"],\"arrayMin\":[\"sample\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2023-12-15T10:00:00Z\",\"dateAfter\":\"2024-02-01T12:00:00Z\",\"dateBefore\":\"2024-05-01T08:00:00Z\",\"actualData\":\"2024-06-01T16:30:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":7},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":28}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"example\",\"unionObjects\":{\"amount\":100,\"inventoryItemName\":\"Widget\"},\"record\":[{\"key\":\"first\",\"value\":\"value1\"},{\"key\":\"second\",\"value\":\"value2\"}],\"recordEnumKeys\":{\"A\":\"alpha\",\"B\":\"bravo\"},\"default\":\"\"}"
                 }
               ],
               "role": "assistant"
@@ -635,6 +670,39 @@
                     ],
                     "description": "give an valid object"
                   },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
                   "default": {
                     "default": "test",
                     "description": "sample text that is the default value",
@@ -674,6 +742,8 @@
                   "nativeEnum",
                   "unionPrimitives",
                   "unionObjects",
+                  "record",
+                  "recordEnumKeys",
                   "default",
                   "optional"
                 ],
@@ -708,16 +778,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 1002,
+            "input_tokens": 1097,
             "input_tokens_details": {
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 295,
+            "output_tokens": 329,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 1297
+            "total_tokens": 1426
           },
           "user": null,
           "metadata": {}
@@ -726,7 +796,7 @@
       }
     },
     {
-      "hash": "2b82eb5fb664db02",
+      "hash": "ff50d863ecb2444a",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -986,6 +1056,39 @@
                     ],
                     "description": "give an valid object"
                   },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
                   "default": {
                     "default": "test",
                     "description": "sample text that is the default value",
@@ -1025,6 +1128,8 @@
                   "nativeEnum",
                   "unionPrimitives",
                   "unionObjects",
+                  "record",
+                  "recordEnumKeys",
                   "default",
                   "optional"
                 ],
@@ -1035,7 +1140,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1784037616867
+        "timestamp": 1784034810251
       },
       "response": {
         "status": 200,
@@ -1044,12 +1149,12 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b10d81caa82a59-CDG",
+          "cf-ray": "a1b0c8fc3a30b8c3-CDG",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 14:00:29 GMT",
+          "date": "Tue, 14 Jul 2026 13:13:34 GMT",
           "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "12143",
+          "openai-processing-ms": "4196",
           "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -1058,21 +1163,21 @@
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "30000000",
           "x-ratelimit-remaining-requests": "9999",
-          "x-ratelimit-remaining-tokens": "29999904",
+          "x-ratelimit-remaining-tokens": "29999876",
           "x-ratelimit-reset-requests": "6ms",
           "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_3ee55ad528e140dab11812cdaee68240"
+          "x-request-id": "req_e573a12bd1ba445fa16b25b9bedbb51d"
         },
         "body": {
-          "id": "resp_029a92394287e975006a5640f1029881a08e48b6daf192f998",
+          "id": "resp_078c1ef01d7f239c006a5635fa59b081a0bc0b1f8091b2df41",
           "object": "response",
-          "created_at": 1784037617,
+          "created_at": 1784034810,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784037628,
+          "completed_at": 1784034814,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -1083,11 +1188,11 @@
           "moderation": null,
           "output": [
             {
-              "id": "fc_029a92394287e975006a5640f1a6ac81a0821707dfc62154bb",
+              "id": "fc_078c1ef01d7f239c006a5635fb00cc81a09863b4dccd3d8474",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"string\":\"Sample string\",\"stringMin\":\"Hello, world!\",\"stringMax\":\"ShortTxt\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://www.example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cixl4bin00001t2t78iz0rec5\",\"stringRegex\":\"test-match\",\"number\":42,\"numberGt\":5,\"numberLt\":3,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":8,\"numberInt\":7,\"exampleArray\":[\"apples\",\"bananas\",\"grapes\"],\"arrayMin\":[\"firstItem\"],\"arrayMax\":[\"one\",\"two\",\"three\"],\"date\":\"2024-06-01T12:00:00Z\",\"dateAfter\":\"2024-06-02T00:00:00Z\",\"dateBefore\":\"2023-12-31T23:59:59Z\",\"actualData\":\"2024-06-10T12:00:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"JD\",\"age\":21}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":123,\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"ItemA\"},\"default\":\"test\"}",
-              "call_id": "call_WEDSeu8VQDhZWfdOnpiWcuiG",
+              "arguments": "{\"string\":\"Sample text\",\"stringMin\":\"More than five\",\"stringMax\":\"Short\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cixl2cyk0000y3rmniodnnqr5\",\"stringRegex\":\"test-value\",\"number\":10,\"numberGt\":4,\"numberLt\":2,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":42,\"exampleArray\":[\"foo\",\"bar\"],\"arrayMin\":[\"item1\"],\"arrayMax\":[\"one\",\"two\"],\"date\":\"2024-05-01T12:00:00Z\",\"dateAfter\":\"2024-06-10T00:00:00Z\",\"dateBefore\":\"2023-12-01T08:00:00Z\",\"actualData\":\"2024-04-12T10:30:00Z\",\"object\":{\"foo\":\"baz\",\"bar\":12},\"objectNested\":{\"user\":{\"name\":\"Ed\",\"age\":22}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"A\",\"unionPrimitives\":\"hello\",\"unionObjects\":{\"amount\":7,\"inventoryItemName\":\"apple\"},\"record\":[{\"key\":\"k1\",\"value\":\"val1\"},{\"key\":\"k2\",\"value\":\"val2\"}],\"recordEnumKeys\":{\"A\":\"alpha\",\"B\":\"bravo\"},\"default\":\"test\"}",
+              "call_id": "call_DYnUwbDZUD5azWTB8gPSq51L",
               "name": "manySchemasTool"
             }
           ],
@@ -1374,6 +1479,39 @@
                     ],
                     "description": "give an valid object"
                   },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
                   "default": {
                     "default": "test",
                     "description": "sample text that is the default value",
@@ -1414,6 +1552,8 @@
                   "nativeEnum",
                   "unionPrimitives",
                   "unionObjects",
+                  "record",
+                  "recordEnumKeys",
                   "default"
                 ],
                 "additionalProperties": false,
@@ -1426,16 +1566,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 761,
+            "input_tokens": 813,
             "input_tokens_details": {
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 313,
+            "output_tokens": 341,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 1074
+            "total_tokens": 1154
           },
           "user": null,
           "metadata": {}
@@ -1444,7 +1584,7 @@
       }
     },
     {
-      "hash": "045049f0b89ac12a",
+      "hash": "f752a7d6303b8f5c",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1462,14 +1602,14 @@
             },
             {
               "type": "function_call",
-              "call_id": "call_WEDSeu8VQDhZWfdOnpiWcuiG",
+              "call_id": "call_DYnUwbDZUD5azWTB8gPSq51L",
               "name": "manySchemasTool",
-              "arguments": "{\"string\":\"Sample string\",\"stringMin\":\"Hello, world!\",\"stringMax\":\"ShortTxt\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://www.example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cixl4bin00001t2t78iz0rec5\",\"stringRegex\":\"test-match\",\"number\":42,\"numberGt\":5,\"numberLt\":3,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":8,\"numberInt\":7,\"exampleArray\":[\"apples\",\"bananas\",\"grapes\"],\"arrayMin\":[\"firstItem\"],\"arrayMax\":[\"one\",\"two\",\"three\"],\"date\":\"2024-06-01T12:00:00Z\",\"dateAfter\":\"2024-06-02T00:00:00Z\",\"dateBefore\":\"2023-12-31T23:59:59Z\",\"actualData\":\"2024-06-10T12:00:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"JD\",\"age\":21}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":123,\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"ItemA\"},\"default\":\"test\"}"
+              "arguments": "{\"string\":\"Sample text\",\"stringMin\":\"More than five\",\"stringMax\":\"Short\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cixl2cyk0000y3rmniodnnqr5\",\"stringRegex\":\"test-value\",\"number\":10,\"numberGt\":4,\"numberLt\":2,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":42,\"exampleArray\":[\"foo\",\"bar\"],\"arrayMin\":[\"item1\"],\"arrayMax\":[\"one\",\"two\"],\"date\":\"2024-05-01T12:00:00Z\",\"dateAfter\":\"2024-06-10T00:00:00Z\",\"dateBefore\":\"2023-12-01T08:00:00Z\",\"actualData\":\"2024-04-12T10:30:00Z\",\"object\":{\"foo\":\"baz\",\"bar\":12},\"objectNested\":{\"user\":{\"name\":\"Ed\",\"age\":22}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"A\",\"unionPrimitives\":\"hello\",\"unionObjects\":{\"amount\":7,\"inventoryItemName\":\"apple\"},\"record\":[{\"key\":\"k1\",\"value\":\"val1\"},{\"key\":\"k2\",\"value\":\"val2\"}],\"recordEnumKeys\":{\"A\":\"alpha\",\"B\":\"bravo\"},\"default\":\"test\"}"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_WEDSeu8VQDhZWfdOnpiWcuiG",
-              "output": "{\"string\":\"Sample string\",\"stringMin\":\"Hello, world!\",\"stringMax\":\"ShortTxt\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://www.example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cixl4bin00001t2t78iz0rec5\",\"stringRegex\":\"test-match\",\"number\":42,\"numberGt\":5,\"numberLt\":3,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":8,\"numberInt\":7,\"exampleArray\":[\"apples\",\"bananas\",\"grapes\"],\"arrayMin\":[\"firstItem\"],\"arrayMax\":[\"one\",\"two\",\"three\"],\"date\":\"2024-06-01T12:00:00Z\",\"dateAfter\":\"2024-06-02T00:00:00Z\",\"dateBefore\":\"2023-12-31T23:59:59Z\",\"actualData\":\"2024-06-10T12:00:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"JD\",\"age\":21}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":123,\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"ItemA\"},\"default\":\"test\"}"
+              "call_id": "call_DYnUwbDZUD5azWTB8gPSq51L",
+              "output": "{\"string\":\"Sample text\",\"stringMin\":\"More than five\",\"stringMax\":\"Short\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cixl2cyk0000y3rmniodnnqr5\",\"stringRegex\":\"test-value\",\"number\":10,\"numberGt\":4,\"numberLt\":2,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":42,\"exampleArray\":[\"foo\",\"bar\"],\"arrayMin\":[\"item1\"],\"arrayMax\":[\"one\",\"two\"],\"date\":\"2024-05-01T12:00:00Z\",\"dateAfter\":\"2024-06-10T00:00:00Z\",\"dateBefore\":\"2023-12-01T08:00:00Z\",\"actualData\":\"2024-04-12T10:30:00Z\",\"object\":{\"foo\":\"baz\",\"bar\":12},\"objectNested\":{\"user\":{\"name\":\"Ed\",\"age\":22}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"A\",\"unionPrimitives\":\"hello\",\"unionObjects\":{\"amount\":7,\"inventoryItemName\":\"apple\"},\"record\":[{\"key\":\"k1\",\"value\":\"val1\"},{\"key\":\"k2\",\"value\":\"val2\"}],\"recordEnumKeys\":{\"A\":\"alpha\",\"B\":\"bravo\"},\"default\":\"test\"}"
             }
           ],
           "tools": [
@@ -1715,6 +1855,39 @@
                     ],
                     "description": "give an valid object"
                   },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
                   "default": {
                     "default": "test",
                     "description": "sample text that is the default value",
@@ -1754,6 +1927,8 @@
                   "nativeEnum",
                   "unionPrimitives",
                   "unionObjects",
+                  "record",
+                  "recordEnumKeys",
                   "default",
                   "optional"
                 ],
@@ -1764,7 +1939,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1784037629156
+        "timestamp": 1784034814590
       },
       "response": {
         "status": 200,
@@ -1773,12 +1948,12 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b10dce9bf62a59-CDG",
+          "cf-ray": "a1b0c9175e92b8c3-CDG",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 14:00:32 GMT",
+          "date": "Tue, 14 Jul 2026 13:13:38 GMT",
           "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "3413",
+          "openai-processing-ms": "3625",
           "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -1787,21 +1962,21 @@
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "30000000",
           "x-ratelimit-remaining-requests": "9999",
-          "x-ratelimit-remaining-tokens": "30000000",
+          "x-ratelimit-remaining-tokens": "29999769",
           "x-ratelimit-reset-requests": "6ms",
           "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_87496f038f554a7cae988b22c4947f4e"
+          "x-request-id": "req_53cc7b0f6e7443ef9c31dfdc69ae44b6"
         },
         "body": {
-          "id": "resp_0684d5e12aef0070006a5640fd54ec81a19eab37f647f7c284",
+          "id": "resp_05b87674c6e3cd4a006a5635feb2c881a0bd8a1598d7b31455",
           "object": "response",
-          "created_at": 1784037629,
+          "created_at": 1784034814,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784037632,
+          "completed_at": 1784034818,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -1812,7 +1987,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_0684d5e12aef0070006a5640fe451481a1a7090fab9d736adf",
+              "id": "msg_05b87674c6e3cd4a006a5635ff3af481a0aca4196855c6511c",
               "type": "message",
               "status": "completed",
               "content": [
@@ -1820,7 +1995,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "I have called the manySchemasTool tool with valid sample data for all fields as specified. If you want to see the details or a summary of the data sent, let me know!"
+                  "text": "The manySchemasTool tool was successfully called with valid sample data for all its fields. Here’s a summary of the input provided:\n\n- string: \"Sample text\"\n- stringMin: \"More than five\"\n- stringMax: \"Short\"\n- stringEmail: \"example@email.com\"\n- stringEmoji: \"😊\"\n- stringUrl: \"https://example.com\"\n- stringUuid: \"123e4567-e89b-12d3-a456-426614174000\"\n- stringCuid: \"cixl2cyk0000y3rmniodnnqr5\"\n- stringRegex: \"test-value\"\n- number: 10\n- numberGt: 4\n- numberLt: 2\n- numberGte: 1\n- numberLte: 1\n- numberMultipleOf: 4\n- numberInt: 42\n- exampleArray: [\"foo\", \"bar\"]\n- arrayMin: [\"item1\"]\n- arrayMax: [\"one\", \"two\"]\n- date: \"2024-05-01T12:00:00Z\"\n- dateAfter: \"2024-06-10T00:00:00Z\"\n- dateBefore: \"2023-12-01T08:00:00Z\"\n- actualData: \"2024-04-12T10:30:00Z\"\n- object: { foo: \"baz\", bar: 12 }\n- objectNested: { user: { name: \"Ed\", age: 22 } }\n- objectPassthrough: {}\n- objectLoose: {}\n- optional: null\n- nullable: null\n- enum: \"B\"\n- nativeEnum: \"A\"\n- unionPrimitives: \"hello\"\n- unionObjects: { amount: 7, inventoryItemName: \"apple\" }\n- record: [{ key: \"k1\", value: \"val1\" }, { key: \"k2\", value: \"val2\" }]\n- recordEnumKeys: { A: \"alpha\", B: \"bravo\" }\n- default: \"test\"\n\nIf you need the output or results interpreted, let me know!"
                 }
               ],
               "role": "assistant"
@@ -2109,6 +2284,39 @@
                     ],
                     "description": "give an valid object"
                   },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
                   "default": {
                     "default": "test",
                     "description": "sample text that is the default value",
@@ -2149,6 +2357,8 @@
                   "nativeEnum",
                   "unionPrimitives",
                   "unionObjects",
+                  "record",
+                  "recordEnumKeys",
                   "default"
                 ],
                 "additionalProperties": false,
@@ -2161,16 +2371,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 1382,
+            "input_tokens": 1490,
             "input_tokens_details": {
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 39,
+            "output_tokens": 448,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 1421
+            "total_tokens": 1938
           },
           "user": null,
           "metadata": {}
@@ -2179,7 +2389,7 @@
       }
     },
     {
-      "hash": "1c8958d6671b5a63",
+      "hash": "6c499737bfec9671",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -2439,6 +2649,39 @@
                     ],
                     "description": "give an valid object"
                   },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
                   "default": {
                     "default": "test",
                     "description": "sample text that is the default value",
@@ -2478,6 +2721,8 @@
                   "nativeEnum",
                   "unionPrimitives",
                   "unionObjects",
+                  "record",
+                  "recordEnumKeys",
                   "default",
                   "optional"
                 ],
@@ -2488,7 +2733,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1784037632835
+        "timestamp": 1784034818348
       },
       "response": {
         "status": 200,
@@ -2497,12 +2742,12 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b10de58ab22a59-CDG",
+          "cf-ray": "a1b0c92ecd59b8c3-CDG",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 14:00:36 GMT",
+          "date": "Tue, 14 Jul 2026 13:13:42 GMT",
           "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "3295",
+          "openai-processing-ms": "3742",
           "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -2511,21 +2756,21 @@
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "30000000",
           "x-ratelimit-remaining-requests": "9999",
-          "x-ratelimit-remaining-tokens": "29999903",
+          "x-ratelimit-remaining-tokens": "29999874",
           "x-ratelimit-reset-requests": "6ms",
           "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_4732957d12494ef3b3da004ab296b936"
+          "x-request-id": "req_9f2252fc33b24ec2968bbba92f629379"
         },
         "body": {
-          "id": "resp_0acee11f5d8905c3006a564100fa4881a2a5910d9db72616de",
+          "id": "resp_06ccec08104a9b67006a56360272fc81a0af9dfa4eba694095",
           "object": "response",
-          "created_at": 1784037633,
+          "created_at": 1784034818,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784037636,
+          "completed_at": 1784034821,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -2536,11 +2781,11 @@
           "moderation": null,
           "output": [
             {
-              "id": "fc_0acee11f5d8905c3006a5641015c8081a296b3c8fc74946968",
+              "id": "fc_06ccec08104a9b67006a563603207881a080fba5dd1f5f07be",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"string\":\"Sample text for testing.\",\"stringMin\":\"Hello World\",\"stringMax\":\"ShortText\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://www.example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjoa1n8w80000q1rcb254xn5r\",\"stringRegex\":\"test-value\",\"number\":42,\"numberGt\":5,\"numberLt\":3,\"numberGte\":10,\"numberLte\":1,\"numberMultipleOf\":8,\"numberInt\":7,\"exampleArray\":[\"item1\",\"item2\",\"item3\"],\"arrayMin\":[\"minItem\"],\"arrayMax\":[\"itemA\",\"itemB\"],\"date\":\"2023-11-10T12:00:00Z\",\"dateAfter\":\"2024-02-15T09:00:00Z\",\"dateBefore\":\"2023-12-30T15:00:00Z\",\"actualData\":\"2024-04-01T00:00:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":25}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"union\",\"unionObjects\":{\"amount\":15,\"inventoryItemName\":\"Widget\"},\"default\":\"test\"}",
-              "call_id": "call_Q7ZAKpxqFpG880CZmugN1CwF",
+              "arguments": "{\"string\":\"Sample text\",\"stringMin\":\"Hello!\",\"stringMax\":\"ShortText\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjo8e8abb0000q9r6svi0qz4z\",\"stringRegex\":\"test-1234\",\"number\":42,\"numberGt\":10,\"numberLt\":3,\"numberGte\":5,\"numberLte\":1,\"numberMultipleOf\":8,\"numberInt\":7,\"exampleArray\":[\"apple\",\"banana\"],\"arrayMin\":[\"one\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2024-06-20T12:00:00Z\",\"dateAfter\":\"2024-06-02T00:00:00Z\",\"dateBefore\":\"2024-06-01T00:00:00Z\",\"actualData\":\"2024-06-02T14:30:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":25}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"A\",\"unionPrimitives\":\"Text value\",\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"Book\"},\"record\":[{\"key\":\"name\",\"value\":\"John\"},{\"key\":\"city\",\"value\":\"London\"}],\"recordEnumKeys\":{\"A\":\"first\",\"B\":\"second\"},\"default\":\"test\"}",
+              "call_id": "call_TEySn4skpAXdge7NF0mvhgrl",
               "name": "manySchemasTool"
             }
           ],
@@ -2827,6 +3072,39 @@
                     ],
                     "description": "give an valid object"
                   },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
                   "default": {
                     "default": "test",
                     "description": "sample text that is the default value",
@@ -2867,6 +3145,8 @@
                   "nativeEnum",
                   "unionPrimitives",
                   "unionObjects",
+                  "record",
+                  "recordEnumKeys",
                   "default"
                 ],
                 "additionalProperties": false,
@@ -2879,16 +3159,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 767,
+            "input_tokens": 819,
             "input_tokens_details": {
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 314,
+            "output_tokens": 343,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 1081
+            "total_tokens": 1162
           },
           "user": null,
           "metadata": {}
@@ -2897,7 +3177,7 @@
       }
     },
     {
-      "hash": "e272d3e936f89635",
+      "hash": "ef554586c03c26fe",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -2915,14 +3195,14 @@
             },
             {
               "type": "function_call",
-              "call_id": "call_Q7ZAKpxqFpG880CZmugN1CwF",
+              "call_id": "call_TEySn4skpAXdge7NF0mvhgrl",
               "name": "manySchemasTool",
-              "arguments": "{\"string\":\"Sample text for testing.\",\"stringMin\":\"Hello World\",\"stringMax\":\"ShortText\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://www.example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjoa1n8w80000q1rcb254xn5r\",\"stringRegex\":\"test-value\",\"number\":42,\"numberGt\":5,\"numberLt\":3,\"numberGte\":10,\"numberLte\":1,\"numberMultipleOf\":8,\"numberInt\":7,\"exampleArray\":[\"item1\",\"item2\",\"item3\"],\"arrayMin\":[\"minItem\"],\"arrayMax\":[\"itemA\",\"itemB\"],\"date\":\"2023-11-10T12:00:00Z\",\"dateAfter\":\"2024-02-15T09:00:00Z\",\"dateBefore\":\"2023-12-30T15:00:00Z\",\"actualData\":\"2024-04-01T00:00:00.000Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":25}},\"objectPassthrough\":{},\"objectLoose\":{},\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"union\",\"unionObjects\":{\"amount\":15,\"inventoryItemName\":\"Widget\"},\"default\":\"test\"}"
+              "arguments": "{\"string\":\"Sample text\",\"stringMin\":\"Hello!\",\"stringMax\":\"ShortText\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjo8e8abb0000q9r6svi0qz4z\",\"stringRegex\":\"test-1234\",\"number\":42,\"numberGt\":10,\"numberLt\":3,\"numberGte\":5,\"numberLte\":1,\"numberMultipleOf\":8,\"numberInt\":7,\"exampleArray\":[\"apple\",\"banana\"],\"arrayMin\":[\"one\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2024-06-20T12:00:00Z\",\"dateAfter\":\"2024-06-02T00:00:00Z\",\"dateBefore\":\"2024-06-01T00:00:00Z\",\"actualData\":\"2024-06-02T14:30:00.000Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":25}},\"objectPassthrough\":{},\"objectLoose\":{},\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"A\",\"unionPrimitives\":\"Text value\",\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"Book\"},\"record\":{\"name\":\"John\",\"city\":\"London\"},\"recordEnumKeys\":{\"A\":\"first\",\"B\":\"second\"},\"default\":\"test\"}"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_Q7ZAKpxqFpG880CZmugN1CwF",
-              "output": "{\"string\":\"Sample text for testing.\",\"stringMin\":\"Hello World\",\"stringMax\":\"ShortText\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://www.example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjoa1n8w80000q1rcb254xn5r\",\"stringRegex\":\"test-value\",\"number\":42,\"numberGt\":5,\"numberLt\":3,\"numberGte\":10,\"numberLte\":1,\"numberMultipleOf\":8,\"numberInt\":7,\"exampleArray\":[\"item1\",\"item2\",\"item3\"],\"arrayMin\":[\"minItem\"],\"arrayMax\":[\"itemA\",\"itemB\"],\"date\":\"2023-11-10T12:00:00.000Z\",\"dateAfter\":\"2024-02-15T09:00:00.000Z\",\"dateBefore\":\"2023-12-30T15:00:00.000Z\",\"actualData\":\"2024-04-01T00:00:00.000Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":25}},\"objectPassthrough\":{},\"objectLoose\":{},\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"union\",\"unionObjects\":{\"amount\":15,\"inventoryItemName\":\"Widget\"},\"default\":\"test\"}"
+              "call_id": "call_TEySn4skpAXdge7NF0mvhgrl",
+              "output": "{\"string\":\"Sample text\",\"stringMin\":\"Hello!\",\"stringMax\":\"ShortText\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjo8e8abb0000q9r6svi0qz4z\",\"stringRegex\":\"test-1234\",\"number\":42,\"numberGt\":10,\"numberLt\":3,\"numberGte\":5,\"numberLte\":1,\"numberMultipleOf\":8,\"numberInt\":7,\"exampleArray\":[\"apple\",\"banana\"],\"arrayMin\":[\"one\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2024-06-20T12:00:00.000Z\",\"dateAfter\":\"2024-06-02T00:00:00.000Z\",\"dateBefore\":\"2024-06-01T00:00:00.000Z\",\"actualData\":\"2024-06-02T14:30:00.000Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":25}},\"objectPassthrough\":{},\"objectLoose\":{},\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"A\",\"unionPrimitives\":\"Text value\",\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"Book\"},\"record\":{\"name\":\"John\",\"city\":\"London\"},\"recordEnumKeys\":{\"A\":\"first\",\"B\":\"second\"},\"default\":\"test\"}"
             }
           ],
           "tools": [
@@ -3168,6 +3448,39 @@
                     ],
                     "description": "give an valid object"
                   },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
                   "default": {
                     "default": "test",
                     "description": "sample text that is the default value",
@@ -3207,6 +3520,8 @@
                   "nativeEnum",
                   "unionPrimitives",
                   "unionObjects",
+                  "record",
+                  "recordEnumKeys",
                   "default",
                   "optional"
                 ],
@@ -3217,7 +3532,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1784037636273
+        "timestamp": 1784034822309
       },
       "response": {
         "status": 200,
@@ -3226,12 +3541,12 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b10dfb09d32a59-CDG",
+          "cf-ray": "a1b0c9479f42b8c3-CDG",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 14:00:39 GMT",
+          "date": "Tue, 14 Jul 2026 13:13:45 GMT",
           "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "3126",
+          "openai-processing-ms": "3330",
           "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -3240,21 +3555,21 @@
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "30000000",
           "x-ratelimit-remaining-requests": "9999",
-          "x-ratelimit-remaining-tokens": "29999791",
+          "x-ratelimit-remaining-tokens": "29999757",
           "x-ratelimit-reset-requests": "6ms",
           "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_6f668da6632e496f9a087287803ba5a2"
+          "x-request-id": "req_5aac901af3364f3c87b667de3005d9b8"
         },
         "body": {
-          "id": "resp_0995e380819a9330006a5641046b7881a2ab2bc921cc71b94c",
+          "id": "resp_01233b477cca49b5006a5636066ab4819c9d27fcd32c9242cf",
           "object": "response",
-          "created_at": 1784037636,
+          "created_at": 1784034822,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784037639,
+          "completed_at": 1784034825,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -3265,7 +3580,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_0995e380819a9330006a564104cf1481a28aeeea978d7b8667",
+              "id": "msg_01233b477cca49b5006a563606f5a0819cbd3c4b46ecfcd266",
               "type": "message",
               "status": "completed",
               "content": [
@@ -3273,7 +3588,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "Here is the validated tool output with sample data provided to manySchemasTool:\n\n{\n  \"string\": \"Sample text for testing.\",\n  \"stringMin\": \"Hello World\",\n  \"stringMax\": \"ShortText\",\n  \"stringEmail\": \"example@email.com\",\n  \"stringEmoji\": \"😊\",\n  \"stringUrl\": \"https://www.example.com\",\n  \"stringUuid\": \"123e4567-e89b-12d3-a456-426614174000\",\n  \"stringCuid\": \"cjoa1n8w80000q1rcb254xn5r\",\n  \"stringRegex\": \"test-value\",\n  \"number\": 42,\n  \"numberGt\": 5,\n  \"numberLt\": 3,\n  \"numberGte\": 10,\n  \"numberLte\": 1,\n  \"numberMultipleOf\": 8,\n  \"numberInt\": 7,\n  \"exampleArray\": [\"item1\", \"item2\", \"item3\"],\n  \"arrayMin\": [\"minItem\"],\n  \"arrayMax\": [\"itemA\", \"itemB\"],\n  \"date\": \"2023-11-10T12:00:00.000Z\",\n  \"dateAfter\": \"2024-02-15T09:00:00.000Z\",\n  \"dateBefore\": \"2023-12-30T15:00:00.000Z\",\n  \"actualData\": \"2024-04-01T00:00:00.000Z\",\n  \"object\": {\"foo\": \"bar\", \"bar\": 123},\n  \"objectNested\": {\"user\": {\"name\": \"Al\", \"age\": 25}},\n  \"objectPassthrough\": {},\n  \"objectLoose\": {},\n  \"nullable\": null,\n  \"enum\": \"B\",\n  \"nativeEnum\": \"C\",\n  \"unionPrimitives\": \"union\",\n  \"unionObjects\": {\"amount\": 15, \"inventoryItemName\": \"Widget\"},\n  \"default\": \"test\"\n}"
+                  "text": "Here is the validated tool output with sample data:\n\n{\n  \"string\": \"Sample text\",\n  \"stringMin\": \"Hello!\",\n  \"stringMax\": \"ShortText\",\n  \"stringEmail\": \"example@email.com\",\n  \"stringEmoji\": \"😊\",\n  \"stringUrl\": \"https://example.com\",\n  \"stringUuid\": \"123e4567-e89b-12d3-a456-426614174000\",\n  \"stringCuid\": \"cjo8e8abb0000q9r6svi0qz4z\",\n  \"stringRegex\": \"test-1234\",\n  \"number\": 42,\n  \"numberGt\": 10,\n  \"numberLt\": 3,\n  \"numberGte\": 5,\n  \"numberLte\": 1,\n  \"numberMultipleOf\": 8,\n  \"numberInt\": 7,\n  \"exampleArray\": [\"apple\", \"banana\"],\n  \"arrayMin\": [\"one\"],\n  \"arrayMax\": [\"a\", \"b\", \"c\"],\n  \"date\": \"2024-06-20T12:00:00.000Z\",\n  \"dateAfter\": \"2024-06-02T00:00:00.000Z\",\n  \"dateBefore\": \"2024-06-01T00:00:00.000Z\",\n  \"actualData\": \"2024-06-02T14:30:00.000Z\",\n  \"object\": { \"foo\": \"bar\", \"bar\": 123 },\n  \"objectNested\": { \"user\": { \"name\": \"Al\", \"age\": 25 } },\n  \"objectPassthrough\": {},\n  \"objectLoose\": {},\n  \"nullable\": null,\n  \"enum\": \"B\",\n  \"nativeEnum\": \"A\",\n  \"unionPrimitives\": \"Text value\",\n  \"unionObjects\": { \"amount\": 10, \"inventoryItemName\": \"Book\" },\n  \"record\": { \"name\": \"John\", \"city\": \"London\" },\n  \"recordEnumKeys\": { \"A\": \"first\", \"B\": \"second\" },\n  \"default\": \"test\"\n}"
                 }
               ],
               "role": "assistant"
@@ -3562,6 +3877,39 @@
                     ],
                     "description": "give an valid object"
                   },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
                   "default": {
                     "default": "test",
                     "description": "sample text that is the default value",
@@ -3602,6 +3950,8 @@
                   "nativeEnum",
                   "unionPrimitives",
                   "unionObjects",
+                  "record",
+                  "recordEnumKeys",
                   "default"
                 ],
                 "additionalProperties": false,
@@ -3614,16 +3964,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 1392,
+            "input_tokens": 1484,
             "input_tokens_details": {
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 426,
+            "output_tokens": 460,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 1818
+            "total_tokens": 1944
           },
           "user": null,
           "metadata": {}
