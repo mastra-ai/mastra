@@ -1,4 +1,0 @@
-{
-  "extends": ["../../.oxlintrc.json"],
-  "ignorePatterns": ["src/public/**", "src/commands/api/route-metadata.generated.ts"]
-}

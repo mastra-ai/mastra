@@ -1,4 +1,0 @@
-{
-  "extends": ["../../.oxlintrc.json"],
-  "ignorePatterns": ["**/__fixtures__/**"]
-}
