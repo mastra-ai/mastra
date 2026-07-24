@@ -24,7 +24,10 @@ import { MessageList } from './message-list/index';
 import { Agent } from './index';
 
 async function spyOnMemoryStorageSaveMessages(mockMemory: MockMemory) {
-  const storage = await mockMemory.getMemoryStore();
+  const storage = await mockMemory.storage.getStore('memory');
+  if (!storage) {
+    throw new Error('Memory storage is not available');
+  }
   return vi.spyOn(storage, 'saveMessages');
 }
 
