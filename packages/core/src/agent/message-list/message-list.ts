@@ -242,17 +242,8 @@ export class MessageList {
     const source = options?.source ?? 'input';
     const createdAt = this.generateCreatedAt(source, new Date());
     const acceptedAt = signal.acceptedAt ?? signal.createdAt;
-    const signalForTranscript = createSignal({
-      id: signal.id,
-      type: signal.type,
-      tagName: signal.tagName,
-      contents: signal.contents,
-      attributes: signal.attributes,
-      metadata: signal.metadata,
-      providerOptions: signal.providerOptions,
-      createdAt,
-      acceptedAt,
-    });
+    const input = { ...signal, createdAt, acceptedAt };
+    const signalForTranscript = createSignal(input);
 
     this.addOne(signalForTranscript.toDBMessage(this.memoryInfo ?? undefined), source);
     return signalForTranscript;

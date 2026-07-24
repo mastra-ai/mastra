@@ -1117,6 +1117,7 @@ type Shared_Type_54 = {
         };
       }
     | undefined;
+  transient?: boolean | undefined;
 };
 
 type Shared_Type_55 = {

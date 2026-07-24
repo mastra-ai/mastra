@@ -113,9 +113,13 @@ type NormalizedObservationalMemoryConfig = MemoryObservationalMemoryOptions & {
  * published memory build during ESM instantiation before user code runs.
  *
  * Until v2 can tighten the peer contract, keep these copies manually in sync
- * with packages/core/src/memory/working-memory-utils.ts and
- * packages/core/src/memory/system-reminders.ts. Those source files also carry
- * compatibility notes that point back here.
+ * with packages/core/src/memory/working-memory-utils.ts,
+ * packages/core/src/memory/system-reminders.ts, and
+ * packages/core/src/agent/signals.ts (isTransientSignalMessage). Those source
+ * files also carry compatibility notes that point back here.
+ *
+ * TODO(v2): once the peer contract is tightened, delete these copies and
+ * import the helpers from @mastra/core directly.
  */
 const WORKING_MEMORY_START_TAG = '<working_memory>';
 const WORKING_MEMORY_END_TAG = '</working_memory>';
@@ -214,6 +218,28 @@ function filterSystemReminderMessages(
   }
 
   return messages.filter(message => !isSystemReminderMessage(message));
+}
+
+/*
+ * Mirror of `isTransientSignalMessage` from @mastra/core/agent/signals — kept as a local copy
+ * for the same compatibility reason as the helpers above (see the note at the top of this file).
+ * True for a signal created with `transient: true`; such signals are delivery-only and must never
+ * be written to storage.
+ *
+ * TODO(v2): dedupe — import from @mastra/core once the peer contract is tightened. The core copy
+ * carries a compatibility note that points back here; keep both sides manually in sync until then.
+ */
+function isTransientSignalMessage(message: MastraDBMessage): boolean {
+  if (message.role !== 'signal' || !isRecord(message.content)) {
+    return false;
+  }
+  const metadata = message.content.metadata;
+  return (
+    isRecord(metadata) &&
+    isRecord(metadata.signal) &&
+    !Array.isArray(metadata.signal) &&
+    metadata.signal.transient === true
+  );
 }
 
 function normalizeObservationalMemoryConfig(
@@ -1150,9 +1176,10 @@ ${workingMemory}`;
 
     try {
       // System messages are runtime instructions and should never be stored in memory.
+      // Transient signals (`transient: true`) are delivery-only and must never be stored.
       // Then strip working memory tags from all persistable messages.
       const updatedMessages = messages
-        .filter(m => m.role !== 'system')
+        .filter(m => m.role !== 'system' && !isTransientSignalMessage(m))
         .map(m => {
           return this.updateMessageToHideWorkingMemoryV2(m);
         })
@@ -1657,7 +1684,7 @@ ${workingMemory}`;
   async persistMessages(messages: MastraDBMessage[]): Promise<void> {
     if (messages.length === 0) return;
 
-    const persistableMessages = messages.filter(m => m.role !== 'system');
+    const persistableMessages = messages.filter(m => m.role !== 'system' && !isTransientSignalMessage(m));
     if (persistableMessages.length === 0) return;
 
     const memoryStore = await this.getMemoryStore();

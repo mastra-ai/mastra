@@ -54,11 +54,10 @@ export type AgentMessageInput =
       providerOptions?: MastraProviderMetadata;
     };
 
-export type AgentSignalInput = {
+type AgentSignalInputBase = {
   id?: string;
   createdAt?: Date | string;
   acceptedAt?: Date | string;
-  type: AgentSignalType;
   tagName?: AgentSignalTagName;
   contents: AgentSignalContents;
   attributes?: AgentSignalAttributes;
@@ -70,6 +69,33 @@ export type AgentSignalInput = {
    */
   providerOptions?: MastraProviderMetadata;
 };
+
+export type AgentSignalInput =
+  | (AgentSignalInputBase & {
+      type: 'state';
+      /**
+       * State signals cannot be transient: they maintain cross-turn tracking
+       * (version/cacheKey/activeCopies) that is rebuilt from persisted history, so a
+       * delivery-only state signal would silently break dedupe.
+       */
+      transient?: never;
+    })
+  | (AgentSignalInputBase & {
+      type: Exclude<AgentSignalType, 'state'>;
+      /**
+       * Whether this signal is transient. Defaults to `false`.
+       *
+       * A transient signal is delivered to the model for the current call (it appears in the prompt
+       * for this turn), but it is not retained as part of the conversation: it is not written to
+       * storage and never re-enters the prompt on later turns. Re-send it each turn from a processor
+       * to keep a single fresh copy near the latest message instead of an accumulating history.
+       *
+       * Transient takes precedence over `persist` delivery behaviors: combining them means the
+       * signal is dropped without being stored or delivered, even though the accepted result
+       * still reports `action: 'persist'`.
+       */
+      transient?: boolean;
+    });
 
 /**
  * @experimental Agent signals are experimental and may change in a future release.
@@ -90,10 +116,7 @@ export type AgentSignalDataPart = {
   transient: true;
 };
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
-export type CreatedAgentSignal = AgentSignalInput & {
+type CreatedAgentSignalBase = Omit<AgentSignalInputBase, 'id' | 'createdAt' | 'acceptedAt'> & {
   __isCreatedSignal: true;
   id: string;
   createdAt: Date;
@@ -103,8 +126,48 @@ export type CreatedAgentSignal = AgentSignalInput & {
   toDataPart: () => AgentSignalDataPart;
 };
 
+/**
+ * A signal created and validated by `createSignal`.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type CreatedStateAgentSignal = CreatedAgentSignalBase & { type: 'state'; transient?: never };
+export type CreatedNonStateAgentSignal = CreatedAgentSignalBase & {
+  type: Exclude<AgentSignalCategory, 'state'>;
+  transient?: boolean;
+};
+export type CreatedAgentSignal = CreatedStateAgentSignal | CreatedNonStateAgentSignal;
+
 export function isMastraSignalMessage(message: MastraDBMessage): message is MastraDBMessage & { role: 'signal' } {
   return message.role === 'signal';
+}
+
+/**
+ * True for a signal DB message created with `transient: true`. Save paths use this to drop the
+ * message before writing to storage — the signal still reaches the model (the prompt is projected
+ * from the live message list, not the persisted set), it is just never retained.
+ *
+ * Compatibility note: @mastra/memory intentionally copies this helper into
+ * packages/memory/src/index.ts instead of importing it. Its peer range permits older core
+ * versions that do not export this newer name, and importing it can crash published memory
+ * builds during ESM instantiation. Until v2 can tighten that peer contract, keep both sides
+ * manually in sync.
+ *
+ * TODO(v2): dedupe — remove the memory-side copy once the peer contract is tightened.
+ *
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export function isTransientSignalMessage(message: MastraDBMessage): boolean {
+  if (message.role !== 'signal') return false;
+  const metadata = message.content?.metadata;
+  if (!metadata || typeof metadata !== 'object') return false;
+  const signal = (metadata as Record<string, unknown>).signal;
+  return (
+    !!signal &&
+    typeof signal === 'object' &&
+    !Array.isArray(signal) &&
+    (signal as Record<string, unknown>).transient === true
+  );
 }
 
 function normalizeSignalType(input: Pick<AgentSignalInput, 'type' | 'tagName'>): {
@@ -488,6 +551,7 @@ function signalToDBMessage(
           ...(signal.acceptedAt ? { acceptedAt: signal.acceptedAt.toISOString() } : {}),
           ...(signal.attributes ? { attributes: signal.attributes } : {}),
           ...(signal.metadata ? { metadata: signal.metadata } : {}),
+          ...(signal.transient ? { transient: true } : {}),
         },
       },
     },
@@ -498,20 +562,43 @@ export function isCreatedAgentSignal(input: unknown): input is CreatedAgentSigna
   if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
 
   const candidate = input as Partial<CreatedAgentSignal>;
-  return candidate.__isCreatedSignal === true;
+  return (
+    candidate.__isCreatedSignal === true &&
+    typeof candidate.toDBMessage === 'function' &&
+    typeof candidate.toLLMMessage === 'function' &&
+    typeof candidate.toDataPart === 'function'
+  );
 }
 
+export function createSignal(input: Extract<AgentSignalInput, { type: 'state' }>): CreatedStateAgentSignal;
+export function createSignal(
+  input: Extract<AgentSignalInput, { type: Exclude<AgentSignalType, 'state'> }>,
+): CreatedNonStateAgentSignal;
+export function createSignal(input: AgentSignalInput): CreatedAgentSignal;
 export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
+  if (input.type === 'state' && input.transient === true) {
+    // State signals maintain cross-turn tracking (version/cacheKey/activeCopies) that is
+    // rebuilt from persisted history — a delivery-only state signal would silently break
+    // dedupe and leave tracking pointing at messages that were never stored.
+    throw new Error('state signals cannot be transient');
+  }
   const signal = normalizeSignal(input);
   const parts = contentsToSignalParts(signal.contents);
 
-  return {
+  const created = {
     ...signal,
     __isCreatedSignal: true as const,
-    toDBMessage: options => signalToDBMessage(signal, parts, options),
+    toDBMessage: (options?: { threadId?: string; resourceId?: string }) => signalToDBMessage(signal, parts, options),
     toLLMMessage: () => signalToLLMMessage(signal, parts),
     toDataPart: () => signalToDataPart(signal, parts),
   };
+
+  if (created.type === 'state') {
+    const { transient: _transient, ...stateSignal } = created;
+    return { ...stateSignal, type: created.type };
+  }
+
+  return { ...created, type: created.type };
 }
 
 /**
@@ -527,25 +614,26 @@ export function resolveDeliveryAttributes(
 ): CreatedAgentSignal {
   if (!attributes || Object.keys(attributes).length === 0) return signal;
 
-  return createSignal({
+  const input = {
     ...signal,
     attributes: { ...signal.attributes, ...attributes },
-  });
+  };
+  return createSignal(input);
 }
 
 export function signalToMessage(signal: AgentSignalInput | CreatedAgentSignal): UserModelMessage {
-  return createSignal(signal).toLLMMessage();
+  return isCreatedAgentSignal(signal) ? signal.toLLMMessage() : createSignal(signal).toLLMMessage();
 }
 
 export function signalToMastraDBMessage(
   signal: AgentSignalInput | CreatedAgentSignal,
   options?: { threadId?: string; resourceId?: string },
 ): MastraDBMessage {
-  return createSignal(signal).toDBMessage(options);
+  return isCreatedAgentSignal(signal) ? signal.toDBMessage(options) : createSignal(signal).toDBMessage(options);
 }
 
 export function signalToDataPartFormat(signal: AgentSignalInput | CreatedAgentSignal): AgentSignalDataPart {
-  return createSignal(signal).toDataPart();
+  return isCreatedAgentSignal(signal) ? signal.toDataPart() : createSignal(signal).toDataPart();
 }
 
 export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentSignal {
@@ -588,7 +676,19 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
         : undefined,
   };
 
-  return createSignal({ ...base, type, tagName, contents });
+  if (type === 'state' && signalMetadata?.transient === true) {
+    throw new Error('state signals cannot be transient');
+  }
+
+  return type === 'state'
+    ? createSignal({ ...base, type, tagName, contents })
+    : createSignal({
+        ...base,
+        type,
+        tagName,
+        contents,
+        transient: signalMetadata?.transient === true ? true : undefined,
+      });
 }
 
 export function createMessageSignal(
