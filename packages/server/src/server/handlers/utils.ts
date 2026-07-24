@@ -110,15 +110,20 @@ export function getEffectiveThreadId(
 
 /**
  * Validates that a thread belongs to the specified resourceId.
- * Throws 403 if the thread exists but belongs to a different resource.
+ * Throws 403 if the thread exists but belongs to a different resource,
+ * or if the thread has an owner but the caller's identity is unknown.
  * Threads with no resourceId are accessible to all (shared threads).
  */
 export async function validateThreadOwnership(
   thread: { resourceId?: string | null } | null | undefined,
   effectiveResourceId: string | undefined,
 ): Promise<void> {
-  if (thread && effectiveResourceId && thread.resourceId && thread.resourceId !== effectiveResourceId) {
-    throw new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' });
+  if (thread && thread.resourceId) {
+    // Thread has an explicit owner. Deny access when the caller has no identity
+    // (effectiveResourceId undefined) or their identity differs.
+    if (!effectiveResourceId || thread.resourceId !== effectiveResourceId) {
+      throw new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' });
+    }
   }
 }
 
