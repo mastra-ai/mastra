@@ -29,6 +29,7 @@ import { MessageMerger } from './merge';
 import { convertImageFilePart } from './prompt/convert-file';
 import { convertToV1Messages } from './prompt/convert-to-mastra-v1';
 import { downloadAssetsFromMessages } from './prompt/download-assets';
+import { getImageDimensions, isOversized, resizeImageIfNeeded, MAX_IMAGE_DIMENSION } from './prompt/image-resize';
 import { MessageStateManager } from './state';
 import type {
   MastraDBMessage,
@@ -670,6 +671,53 @@ export class MessageList {
 
             return message;
           });
+        }
+
+        // Resize oversized images before sending to the model.
+        // Providers (e.g. Anthropic) reject images exceeding 8000px.
+        for (let i = 0; i < messages.length; i++) {
+          const message = messages[i]!;
+          if ((message.role !== 'user' && message.role !== 'assistant') || typeof message.content === 'string') {
+            continue;
+          }
+
+          for (let j = 0; j < message.content.length; j++) {
+            const part = message.content[j]!;
+            if (part.type !== 'file') continue;
+            const filePart = part as { type: 'file'; mediaType?: string; data?: Uint8Array | string | URL };
+            if (!filePart.mediaType || !filePart.mediaType.startsWith('image/')) continue;
+            if (!filePart.data || filePart.data instanceof URL) continue;
+
+            let bytes: Uint8Array;
+            if (typeof filePart.data === 'string') {
+              try {
+                bytes = new Uint8Array(Buffer.from(filePart.data, 'base64'));
+              } catch {
+                continue;
+              }
+            } else {
+              bytes = filePart.data;
+            }
+
+            const dims = getImageDimensions(bytes);
+            if (!dims || !isOversized(dims)) continue;
+
+            const result = await resizeImageIfNeeded(bytes, filePart.mediaType, MAX_IMAGE_DIMENSION);
+            if (!result || !result.resized) {
+              this.logger?.debug?.(
+                `[image-resize] Dropping oversized image (${dims.width}x${dims.height}) — resize failed for ${filePart.mediaType}`,
+              );
+              message.content.splice(j, 1);
+              j--;
+              continue;
+            }
+
+            this.logger?.debug?.(
+              `[image-resize] Resized image from ${dims.width}x${dims.height} to ${result.newDimensions!.width}x${result.newDimensions!.height} (max ${MAX_IMAGE_DIMENSION}px)`,
+            );
+
+            (filePart as { data: Uint8Array | string | URL }).data = result.data;
+          }
         }
 
         messages = ensureGeminiCompatibleMessages(messages, this.logger);
