@@ -491,5 +491,93 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       }
       expect(maxFreeRunMs).toBeLessThan(300);
     }, 60_000);
+
+    it('serializes a contending plain stream() behind a live plain run on another instance', async () => {
+      const resourceId = `plain-serial-${Date.now()}`;
+      const threadId = `thread-${Date.now()}`;
+      const env = { RESOURCE_ID: resourceId, THREAD_ID: threadId };
+      const leaseKey = leaseKeyFor(resourceId, threadId);
+
+      // A runs long (6s) so B's contention window is unambiguous even when the
+      // pre-B lease poll below burns its full 2s timeout (the red case); B
+      // runs short.
+      const a = spawnWorker('plain-a', { ...env, RUN_MS: '6000' });
+      const b = spawnWorker('plain-b', { ...env, RUN_MS: '200' });
+      workers = [a, b];
+      await Promise.all([waitForLine(a, '"type":"ready"'), waitForLine(b, '"type":"ready"')]);
+      await new Promise(r => setTimeout(r, 300)); // let subscriptions settle
+
+      a.send({ cmd: 'stream-plain', sigId: 'plain-a' });
+      await waitFor(async () => eventsByType(a, 'run-started').length > 0, 5_000);
+
+      // Before sending B, wait until A's lease acquire has landed in Redis —
+      // the run-registered publish follows it in the same promise chain, so a
+      // held lease means B's subscription can observe A's run. On unfixed code
+      // plain runs never acquire, so this poll times out; keep it non-fatal so
+      // the test fails at the interleave assertion below, not at this probe.
+      const probe = createClient({ url: REDIS_URL });
+      await probe.connect();
+      try {
+        await waitFor(async () => (await probe.get(leaseKey)) !== null, 2_000).catch(() => {});
+        // Give B's subscription a beat to process A's run-registered event.
+        await new Promise(r => setTimeout(r, 300));
+
+        b.send({ cmd: 'stream-plain', sigId: 'plain-b' });
+        await new Promise(r => setTimeout(r, 1_000));
+
+        // A (6s run) must still be in flight, and B must not have started —
+        // this is the serialization guarantee that regressed: without a lease,
+        // B refuses to treat A's run as live and starts immediately. Assert
+        // the interleave (B started) before the liveness guard so the red
+        // failure signature names the actual regression.
+        expect(eventsByType(b, 'run-started')).toHaveLength(0);
+        expect(eventsByType(a, 'run-finished')).toHaveLength(0);
+
+        // Once A finishes, B's wait resolves and its run goes through.
+        await waitFor(async () => eventsByType(a, 'run-finished').length > 0, 15_000);
+        await waitFor(async () => eventsByType(b, 'plain-wait-resolved').length > 0, 20_000);
+        await waitFor(async () => eventsByType(b, 'run-started').length > 0, 10_000);
+        await waitFor(async () => eventsByType(b, 'run-finished').length > 0, 10_000);
+      } finally {
+        await probe.quit();
+      }
+    }, 60_000);
+
+    it('a plain stream() run holds the thread lease while live', async () => {
+      const resourceId = `plain-lease-${Date.now()}`;
+      const threadId = `thread-${Date.now()}`;
+      const env = { RESOURCE_ID: resourceId, THREAD_ID: threadId, RUN_MS: '3000' };
+      const leaseKey = leaseKeyFor(resourceId, threadId);
+
+      const a = spawnWorker('plain-holder', env);
+      workers = [a];
+      await waitForLine(a, '"type":"ready"');
+      await new Promise(r => setTimeout(r, 300)); // let subscription settle
+
+      a.send({ cmd: 'stream-plain', sigId: 'plain-hold' });
+      await waitFor(async () => eventsByType(a, 'run-started').length > 0, 5_000);
+      const runId = eventsByType(a, 'run-started')[0]?.runId as string;
+
+      const probe = createClient({ url: REDIS_URL });
+      await probe.connect();
+      try {
+        // Poll, not one-shot: the stub emits run-started before registerRun and
+        // the acquire lands inside the unawaited registered promise, so even on
+        // fixed code an immediate GET races the acquire.
+        let owner: string | null = null;
+        await waitFor(async () => {
+          owner = await probe.get(leaseKey);
+          return owner === runId;
+        }, 2_000).catch(() => {});
+        expect(owner).toBe(runId);
+
+        // After the run finishes the lease is released — release is
+        // fire-and-forget, so poll rather than asserting immediately.
+        await waitFor(async () => eventsByType(a, 'run-finished').length > 0, 10_000);
+        await waitFor(async () => (await probe.get(leaseKey)) === null, 5_000);
+      } finally {
+        await probe.quit();
+      }
+    }, 30_000);
   },
 );
