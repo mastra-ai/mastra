@@ -79,7 +79,7 @@ export interface MCPServerHTTPOptions {
   /**
    * Optional options to pass to the transport (e.g. sessionIdGenerator)
    */
-  options?: any; // Consider typing StreamableHTTPServerTransportOptions from @modelcontextprotocol/sdk if possible
+  options?: any; // Consider typing StreamableHTTPServerTransportOptions from @modelcontextprotocol/node if possible
 }
 
 // +++ MCP Registry API Spec Types +++
