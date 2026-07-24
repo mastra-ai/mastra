@@ -159,7 +159,7 @@ function validateBoardRules(rules: unknown, label: string): asserts rules is Fac
 
 export function assertFactoryRules(rules: unknown): asserts rules is FactoryRules {
   if (!isPlainObject(rules)) throw new FactoryRuleValidationError('Factory rules must be an object.');
-  assertExactKeys(rules, ['version', 'work', 'review', 'tools', 'github', 'linear'], 'Factory rules');
+  assertExactKeys(rules, ['version', 'work', 'review', 'tools', 'github', 'linear', 'supervisor'], 'Factory rules');
   boundedString(rules.version, 'Factory rule version', MAX_VERSION_LENGTH);
   validateBoardRules(rules.work, 'Factory rules.work');
   validateBoardRules(rules.review, 'Factory rules.review');
@@ -194,6 +194,19 @@ export function assertFactoryRules(rules: unknown): asserts rules is FactoryRule
       throw new FactoryRuleValidationError(`Factory rules.linear.${event}.onEvent must be a function.`);
     }
   }
+
+  if (rules.supervisor !== undefined) {
+    if (!isPlainObject(rules.supervisor)) {
+      throw new FactoryRuleValidationError('Factory rules.supervisor must be an object.');
+    }
+    assertExactKeys(rules.supervisor, ['observeIdleWithoutTransition'], 'Factory rules.supervisor');
+    if (
+      rules.supervisor.observeIdleWithoutTransition !== undefined &&
+      typeof rules.supervisor.observeIdleWithoutTransition !== 'boolean'
+    ) {
+      throw new FactoryRuleValidationError('Factory rules.supervisor.observeIdleWithoutTransition must be a boolean.');
+    }
+  }
 }
 
 function commonCommitFields(value: Record<string, unknown>): { idempotencyKey: string } {
@@ -217,6 +230,16 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         type,
         code: enumValue(value.code, REJECTION_CODES, 'Factory rejection code'),
         reason: boundedString(value.reason, 'Factory rejection reason', MAX_REASON_LENGTH),
+      };
+    }
+    case 'requestApproval': {
+      assertExactKeys(value, ['type', 'idempotencyKey', 'reason', 'summary'], 'Factory approval decision');
+      const summary = optionalBoundedString(value.summary, 'Factory approval summary', MAX_TITLE_LENGTH);
+      return {
+        type,
+        ...commonCommitFields(value),
+        reason: boundedString(value.reason, 'Factory approval reason', MAX_REASON_LENGTH),
+        ...(summary ? { summary } : {}),
       };
     }
     case 'transition': {
@@ -328,6 +351,9 @@ export function validateFactoryRuleDecisions(values: readonly unknown[], causalD
     const decision = validateFactoryRuleDecision(value, causalDepth);
     if (decision.type === 'reject') {
       throw new FactoryRuleValidationError('A rejection cannot be persisted with commit decisions.');
+    }
+    if (decision.type === 'requestApproval') {
+      throw new FactoryRuleValidationError('An approval request cannot be persisted as a deferred effect.');
     }
     decisions.push(decision);
   }

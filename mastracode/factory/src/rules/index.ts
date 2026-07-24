@@ -1,4 +1,15 @@
-export { builtInFactoryRules, defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from './defaults.js';
+export { FactoryTransitionApprovalService } from './approval-service.js';
+export type {
+  FactoryTransitionApprovalResolution,
+  FactoryTransitionApprovalServiceOptions,
+  ResolveFactoryTransitionApprovalInput,
+} from './approval-service.js';
+export {
+  builtInFactoryRules,
+  defaultFactoryRules,
+  DEFAULT_FACTORY_RULE_VERSION,
+  requireSupervisorApproval,
+} from './defaults.js';
 export {
   resolveFactoryGithubRule,
   resolveFactoryLinearRule,
@@ -38,17 +49,20 @@ export type {
   FactoryRuleJsonValue,
   FactoryRuleRejectionCode,
   FactoryRuleRejectDecision,
+  FactoryRequestApprovalDecision,
   FactoryRuleSource,
   FactoryRules,
   FactoryRulesOverrides,
   FactoryRuleStage,
   FactorySendMessageDecision,
   FactoryStageRuleContext,
+  FactorySupervisorRules,
   FactoryToolResultRuleContext,
   FactoryToolRuleLeaf,
   FactoryTransitionDecision,
   FactoryTransitionResult,
   FactoryTransitionResultAccepted,
+  FactoryTransitionResultPendingApproval,
   FactoryTransitionResultRejected,
   FactoryUpsertLinkedWorkItemDecision,
 } from './types.js';

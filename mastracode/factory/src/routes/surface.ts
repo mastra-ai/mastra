@@ -9,9 +9,11 @@ import type { FactoryIntegration, IntegrationContext } from '../integrations/bas
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import { ensureFactoryRuleSession } from '../integrations/github/factory-session.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
+import { FactoryTransitionApprovalService } from '../rules/approval-service.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryGithubEventService } from '../rules/github-service.js';
 import { FactoryLinearIssueService } from '../rules/linear-service.js';
+import type { FactoryRunLifecycleObserver } from '../rules/run-lifecycle-observer.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
@@ -77,6 +79,7 @@ export interface FactoryApiRoutesDeps {
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   rules: FactoryRules;
   factoryTransitionService?: FactoryTransitionService;
+  runLifecycleObserver?: Pick<FactoryRunLifecycleObserver, 'observe' | 'subscribeIdle'>;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
@@ -337,6 +340,9 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     ? (deps.factoryTransitionService ??
       new FactoryTransitionService({ rules: deps.rules, storage: deps.domains.workItems }))
     : undefined;
+  const approvalService = deps.factoryReady
+    ? new FactoryTransitionApprovalService({ storage: deps.domains.workItems })
+    : undefined;
   const startCoordinator = transitionService
     ? new FactoryStartCoordinator(
         deps.controller,
@@ -344,6 +350,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         transitionService,
         githubIntegration?.sourceControlStorage,
         deps.domains.memorySettings,
+        deps.runLifecycleObserver,
       )
     : undefined;
   if (transitionService && startCoordinator) {
@@ -410,6 +417,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           queueHealth: deps.domains.queueHealth,
+          approvalService: approvalService!,
           transitionService,
           startCoordinator,
         }).routes()

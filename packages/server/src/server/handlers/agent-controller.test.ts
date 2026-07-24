@@ -6,6 +6,7 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+import { MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   LIST_AGENT_CONTROLLERS_ROUTE,
@@ -265,6 +266,63 @@ describe('agent-controller routes', () => {
       } as any);
 
       expect(spy).toHaveBeenCalledWith({ content: 'hello', requestContext });
+    });
+
+    it('uses authenticated identity instead of caller-supplied message attribution', async () => {
+      const session = await getRouteSession('user-attributed');
+      const sendSpy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
+      const steerSpy = vi.spyOn(session, 'steer').mockResolvedValue(undefined);
+      const followUpSpy = vi.spyOn(session, 'followUp').mockResolvedValue(undefined);
+      const requestContext = makeRequestContext();
+      requestContext.set(MASTRA_USER_KEY, { id: 'user-1', name: 'Ada Lovelace' });
+      const spoofed = { userId: 'other', name: 'Other User', source: 'web' };
+
+      await SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-attributed',
+        message: 'hello',
+        attributes: spoofed,
+        requestContext,
+      } as any);
+      await STEER_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-attributed',
+        message: 'focus',
+        attributes: spoofed,
+        requestContext,
+      } as any);
+      await FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-attributed',
+        message: 'later',
+        attributes: spoofed,
+        requestContext,
+      } as any);
+
+      const attributes = { source: 'web', userId: 'user-1', name: 'Ada Lovelace' };
+      expect(sendSpy).toHaveBeenCalledWith({ content: 'hello', attributes, requestContext });
+      expect(steerSpy).toHaveBeenCalledWith({ content: 'focus', attributes, requestContext });
+      expect(followUpSpy).toHaveBeenCalledWith({ content: 'later', attributes, requestContext });
+    });
+
+    it('removes caller-supplied identity when no authenticated identity exists', async () => {
+      const session = await getRouteSession('local-unattributed');
+      const spy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
+      const requestContext = makeRequestContext();
+
+      await SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'local-unattributed',
+        message: 'hello',
+        attributes: { userId: 'other', name: 'Other User', source: 'web' },
+        requestContext,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ content: 'hello', attributes: { source: 'web' }, requestContext });
     });
 
     it('forwards files to session.sendMessage', async () => {

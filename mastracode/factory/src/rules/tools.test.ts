@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { defaultFactoryRules } from './defaults.js';
+import { defaultFactoryRules, requireSupervisorApproval } from './defaults.js';
 import { createFactoryTransitionTools } from './tools.js';
 import { FactoryTransitionService } from './transition-service.js';
 
@@ -141,6 +141,43 @@ describe('factory_transition_work_item', () => {
       ingress: { type: 'agent', identity: `${prepared.binding.id}:tool-call-9` },
       cause: 'The investigation is complete.',
     });
+  });
+
+  it('returns pending_approval immediately without suspending or requiring a retry', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepareBoundItem(storage);
+    const service = new FactoryTransitionService({
+      storage,
+      rules: defaultFactoryRules({
+        version: 'rules-v1',
+        overrides: {
+          work: {
+            planning: {
+              issue: {
+                onEnter: context =>
+                  requireSupervisorApproval(context, { reason: 'Supervisor approval is required for planning.' }),
+              },
+            },
+          },
+        },
+      }),
+    });
+    const context = requestContext();
+    const tools = await createFactoryTransitionTools({ requestContext: context, storage, transitionService: service });
+
+    const result = await execute(tools.factory_transition_work_item as ExecutableTool, context, {
+      stage: 'planning',
+      expectedRevision: 1,
+      rationale: 'Investigation complete.',
+    });
+
+    expect(result).toMatchObject({
+      status: 'pending_approval',
+      approvalId: expect.any(String),
+      stage: 'planning',
+      revision: 1,
+    });
+    expect(await storage.listApprovals('org-1', PROJECT_ID, ['pending'])).toHaveLength(1);
   });
 
   it('rechecks authority at execution and rejects revoked or replaced bindings', async () => {

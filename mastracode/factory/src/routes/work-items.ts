@@ -11,6 +11,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import type { FactoryTransitionApprovalService } from '../rules/approval-service';
 import type {
   FactoryStartCoordinator,
   FactoryStartPreparedResult,
@@ -27,6 +28,8 @@ import { thresholdsOrDefault } from '../storage/domains/queue-health/base.js';
 import type {
   CreateWorkItemInput,
   ExternalWorkItemSource,
+  FactoryApprovalRecord,
+  FactoryApprovalStatus,
   FactoryDeferredDecisionRecord,
   FactoryDispatchStatus,
   UpdateWorkItemInput,
@@ -51,6 +54,7 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   queueHealth: QueueHealthStorage;
   /** Governed stage-transition service. Stage moves 503 when absent. */
   transitionService?: Pick<FactoryTransitionService, 'transition' | 'ruleSetVersion'>;
+  approvalService: Pick<FactoryTransitionApprovalService, 'list' | 'resolve'>;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
 }
@@ -356,6 +360,43 @@ function decisionSummary(decision: FactoryDeferredDecisionRecord) {
   };
 }
 
+const APPROVAL_STATUSES = new Set<FactoryApprovalStatus>(['pending', 'approved', 'rejected', 'stale']);
+
+function parseApprovalStatuses(raw: string | undefined): FactoryApprovalStatus[] | null {
+  if (!raw) return ['pending'];
+  const statuses = [...new Set(raw.split(',').map(status => status.trim()))];
+  if (statuses.length === 0 || statuses.some(status => !APPROVAL_STATUSES.has(status as FactoryApprovalStatus))) {
+    return null;
+  }
+  return statuses as FactoryApprovalStatus[];
+}
+
+function parseApprovalResolution(body: unknown): { decision: 'approve' | 'reject' } | null {
+  if (!isRecord(body) || Object.keys(body).some(key => key !== 'decision')) return null;
+  return body.decision === 'approve' || body.decision === 'reject' ? { decision: body.decision } : null;
+}
+
+function approvalSummary(approval: FactoryApprovalRecord) {
+  return {
+    id: approval.id,
+    workItemId: approval.workItemId,
+    transitionId: approval.transitionId,
+    board: approval.requestedBoard,
+    stage: approval.requestedStage,
+    expectedRevision: approval.expectedRevision,
+    requestingRole:
+      typeof approval.requestingActor.role === 'string' ? approval.requestingActor.role.slice(0, 64) : null,
+    reason: approval.reason,
+    summary: approval.summary,
+    status: approval.status,
+    resolvedBy: approval.resolvedBy,
+    resolutionReason: approval.resolutionReason,
+    resolvedAt: approval.resolvedAt?.toISOString() ?? null,
+    createdAt: approval.createdAt.toISOString(),
+    updatedAt: approval.updatedAt.toISOString(),
+  };
+}
+
 export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
   /** Resolve the `(orgId, userId)` tenant or a ready-to-return error response. */
   async #resolveTenant(c: Context): Promise<{ orgId: string; userId: string } | { response: Response }> {
@@ -464,7 +505,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
   /** Build the Factory work-item routes as Mastra `apiRoutes`. */
   routes(): ApiRoute[] {
-    const { audit, workItems, queueHealth, transitionService, startCoordinator } = this.deps;
+    const { audit, workItems, queueHealth, transitionService, approvalService, startCoordinator } = this.deps;
     return [
       // ── List the org's work items for a project ─────────────────────────────
       registerApiRoute('/web/factory/projects/:id/work-items', {
@@ -479,6 +520,57 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             factoryProjectId: resolved.factoryProjectId,
           });
           return c.json({ workItems: items });
+        },
+      }),
+
+      registerApiRoute('/web/factory/projects/:id/approvals', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const statuses = parseApprovalStatuses(context.req.query('status'));
+          if (!statuses) return c.json({ error: 'invalid_approval_status' }, 400);
+          await workItems.ensureReady();
+          const approvals = await approvalService.list({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+            statuses,
+          });
+          return c.json({ approvals: approvals.map(approvalSummary) });
+        },
+      }),
+
+      registerApiRoute('/web/factory/projects/:id/approvals/:approvalId/resolve', {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const approvalId = context.req.param('approvalId');
+          if (!approvalId || !UUID_RE.test(approvalId)) return c.json({ error: 'Approval not found' }, 404);
+          const body = parseApprovalResolution(await readJson(context));
+          if (!body) return c.json({ error: 'invalid_approval_resolution' }, 400);
+          await workItems.ensureReady();
+          const result = await approvalService.resolve({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+            approvalId,
+            decision: body.decision,
+            resolvedBy: resolved.userId,
+            resolverType: 'human',
+          });
+          if (result.status === 'missing') return c.json({ error: 'Approval not found' }, 404);
+          return c.json({
+            result: {
+              status: result.status,
+              replayed: result.replayed,
+              approval: approvalSummary(result.approval),
+              item: result.item,
+            },
+          });
         },
       }),
 
@@ -682,7 +774,9 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               action:
                 result.status === 'accepted'
                   ? 'factory.work_item.stage_moved'
-                  : 'factory.work_item.transition_rejected',
+                  : result.status === 'pending_approval'
+                    ? 'factory.work_item.transition_approval_requested'
+                    : 'factory.work_item.transition_rejected',
               factoryProjectId: resolved.factoryProjectId,
               targets: [{ type: 'work_item', id: workItemId }],
               metadata: {
@@ -691,11 +785,14 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 ruleSetVersion: transitionService.ruleSetVersion,
                 ...(result.status === 'accepted'
                   ? { to: result.stage, revision: result.revision }
-                  : { code: result.code, reason: result.reason }),
+                  : result.status === 'pending_approval'
+                    ? { approvalId: result.approvalId, to: result.stage, revision: result.revision }
+                    : { code: result.code, reason: result.reason }),
               },
             },
           });
           if (result.status === 'accepted') return c.json({ result });
+          if (result.status === 'pending_approval') return c.json({ result }, 202);
           return c.json({ result }, result.code === 'stale' ? 409 : 422);
         },
       }),

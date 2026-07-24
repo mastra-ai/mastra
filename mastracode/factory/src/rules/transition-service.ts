@@ -7,6 +7,7 @@ import type {
   FactoryRuleActor,
   FactoryRuleBoard,
   FactoryRuleCausalEntry,
+  FactoryRequestApprovalDecision,
   FactoryRuleRejectionCode,
   FactoryRuleStage,
   FactoryRules,
@@ -131,9 +132,17 @@ export class FactoryTransitionService {
     if (replay) return replay as unknown as FactoryTransitionResult;
 
     const transitionId = request.ingress.transitionId ?? randomUUID();
-    const item = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
+    const item = await this.#storage.getForProject(request.orgId, request.factoryProjectId, request.workItemId);
     if (!item) {
       return this.#commitRejection(request, transitionId, 'invalid_transition', 'Work item not found.');
+    }
+    if (item.revision !== request.expectedRevision) {
+      return this.#commitRejection(
+        request,
+        transitionId,
+        'stale',
+        'The work item changed before this transition was evaluated.',
+      );
     }
 
     if (request.causalChain && request.causalChain.length > MAX_FACTORY_RULE_CAUSAL_DEPTH) {
@@ -191,11 +200,25 @@ export class FactoryTransitionService {
 
     let evaluation:
       | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
-      | { outcome: 'rejected'; code: string; reason: string };
+      | { outcome: 'rejected'; code: string; reason: string }
+      | {
+          outcome: 'pending_approval';
+          approval: {
+            idempotencyKey: string;
+            board: string;
+            actor: Record<string, unknown>;
+            ingress: Record<string, unknown>;
+            cause: string;
+            reason: string;
+            summary?: string;
+            decisions: Record<string, unknown>[];
+          };
+        };
     try {
       evaluation = await withRuleTimeout(
         (async () => {
           const decisions: FactoryCommitDecision[] = [];
+          let approval: FactoryRequestApprovalDecision | undefined;
           for (const rule of resolveFactoryStageRules(this.#rules, {
             board: request.board,
             source,
@@ -213,9 +236,28 @@ export class FactoryTransitionService {
             if (decision.type === 'reject') {
               return { outcome: 'rejected' as const, code: decision.code, reason: decision.reason };
             }
+            if (decision.type === 'requestApproval') {
+              if (request.actor.type === 'agent') approval ??= decision;
+              continue;
+            }
             decisions.push(decision);
           }
           const validated = validateFactoryRuleDecisions(decisions);
+          if (approval) {
+            return {
+              outcome: 'pending_approval' as const,
+              approval: {
+                idempotencyKey: approval.idempotencyKey,
+                board: request.board,
+                actor: request.actor,
+                ingress: request.ingress,
+                cause: request.cause,
+                reason: approval.reason,
+                ...(approval.summary ? { summary: approval.summary } : {}),
+                decisions: validated as unknown as Record<string, unknown>[],
+              },
+            };
+          }
           if (request.actor.type === 'human' && request.cause === 'board_drag' && fromStage !== request.stage) {
             const message = stageTransitionMessage(fromStage, request.stage);
             const skill = validated.find(decision => decision.type === 'invokeSkill');
@@ -264,7 +306,20 @@ export class FactoryTransitionService {
     transitionId: string,
     evaluation:
       | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
-      | { outcome: 'rejected'; code: string; reason: string },
+      | { outcome: 'rejected'; code: string; reason: string }
+      | {
+          outcome: 'pending_approval';
+          approval: {
+            idempotencyKey: string;
+            board: string;
+            actor: Record<string, unknown>;
+            ingress: Record<string, unknown>;
+            cause: string | null;
+            reason: string;
+            summary?: string;
+            decisions: Record<string, unknown>[];
+          };
+        },
   ): Promise<FactoryTransitionResult> {
     const committed = await this.#storage.commitTransition({
       orgId: request.orgId,

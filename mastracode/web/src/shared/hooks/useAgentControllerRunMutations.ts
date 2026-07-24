@@ -2,6 +2,8 @@ import type { PlanResume } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
+import { userMessageAttributes } from '../../web/ui/domains/auth/services/auth';
+import { useFactoryAuth } from './useFactoryAuth';
 import {
   createAgentControllerClient,
   requireAgentControllerSession,
@@ -33,13 +35,14 @@ export interface SendAgentControllerMessageInput {
 
 export function useSendAgentControllerMessageMutation(args: AgentControllerRunMutationArgs) {
   const { session } = createAgentControllerClient(args);
+  const auth = useFactoryAuth();
   const invalidateSession = useSessionInvalidation(args);
   return useMutation({
     mutationFn: (input: SendAgentControllerMessageInput | string) => {
       const { text, files } = typeof input === 'string' ? { text: input, files: undefined } : input;
-      return requireAgentControllerSession(session).sendMessage(
-        files?.length ? { content: text, files } : { content: text },
-      );
+      return requireAgentControllerSession(session).sendMessage(files?.length ? { content: text, files } : text, {
+        attributes: userMessageAttributes(auth.data),
+      });
     },
     onSuccess: invalidateSession,
   });
@@ -47,18 +50,22 @@ export function useSendAgentControllerMessageMutation(args: AgentControllerRunMu
 
 export function useSteerAgentControllerMutation(args: AgentControllerRunMutationArgs) {
   const { session } = createAgentControllerClient(args);
+  const auth = useFactoryAuth();
   const invalidateSession = useSessionInvalidation(args);
   return useMutation({
-    mutationFn: (text: string) => requireAgentControllerSession(session).steer(text),
+    mutationFn: (text: string) =>
+      requireAgentControllerSession(session).steer(text, { attributes: userMessageAttributes(auth.data) }),
     onSuccess: invalidateSession,
   });
 }
 
 export function useFollowUpAgentControllerMutation(args: AgentControllerRunMutationArgs) {
   const { session } = createAgentControllerClient(args);
+  const auth = useFactoryAuth();
   const invalidateSession = useSessionInvalidation(args);
   return useMutation({
-    mutationFn: (text: string) => requireAgentControllerSession(session).followUp(text),
+    mutationFn: (text: string) =>
+      requireAgentControllerSession(session).followUp(text, { attributes: userMessageAttributes(auth.data) }),
     onSuccess: invalidateSession,
   });
 }

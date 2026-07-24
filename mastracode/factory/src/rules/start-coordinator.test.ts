@@ -128,6 +128,30 @@ function startRequest(
 }
 
 describe('FactoryStartCoordinator', () => {
+  it('attaches the live run observer to the exact prepared binding', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller, session } = makeController();
+    const runLifecycleObserver = { observe: vi.fn() };
+    const coordinator = new FactoryStartCoordinator(
+      controller as never,
+      storage,
+      undefined,
+      makeSourceControl() as never,
+      undefined,
+      runLifecycleObserver as never,
+    );
+
+    const prepared = await coordinator.prepare(startRequest({ kickoffMessage: null }));
+
+    expect(runLifecycleObserver.observe).toHaveBeenCalledWith(session, {
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      threadId: prepared.threadId,
+      resourceId: prepared.resourceId,
+      sessionId: prepared.sessionId,
+    });
+  });
+
   it('commits the item session, exact binding, and durable pending start', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { controller, sendMessage } = makeController();
