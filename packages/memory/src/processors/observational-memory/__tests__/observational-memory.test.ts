@@ -7377,6 +7377,66 @@ describe('Locking Behavior', () => {
   });
 });
 
+describe('data-om-status transient flag (regression for #18869)', () => {
+  const makeCapturingWriter = () => {
+    const customCalls: any[] = [];
+    const writer = {
+      custom: async (part: any) => {
+        customCalls.push(part);
+      },
+      write: async () => {},
+      close: async () => {},
+    } as any;
+    return { writer, customCalls };
+  };
+
+  it('emits data-om-status with transient: true so the OutputWriter does not persist it', async () => {
+    const storage = createInMemoryStorage();
+    const threadId = 'om-status-transient-thread';
+    const resourceId = 'om-status-transient-resource';
+
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      observation: {
+        messageTokens: 100000,
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }) as any,
+      },
+      reflection: {
+        observationTokens: 40000,
+        model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }) as any,
+      },
+    });
+
+    const record = await storage.initializeObservationalMemory({
+      threadId,
+      resourceId,
+      scope: 'thread',
+      config: {},
+    });
+
+    const { writer, customCalls } = makeCapturingWriter();
+
+    await om.emitProgress({
+      record,
+      pendingTokens: 10,
+      threshold: 100,
+      effectiveObservationTokensThreshold: 100,
+      currentObservationTokens: 0,
+      writer,
+      stepNumber: 0,
+      threadId,
+      resourceId,
+    });
+
+    const statusParts = customCalls.filter(part => part?.type === 'data-om-status');
+    expect(statusParts).toHaveLength(1);
+    // Without transient: true the OutputWriter persists each status snapshot as a
+    // standalone assistant message (#18869). Every sibling OM marker sets this flag.
+    expect(statusParts[0].transient).toBe(true);
+  });
+});
+
 describe('Reflection with Thread Attribution', () => {
   it('should create a new record after reflection', async () => {
     const storage = createInMemoryStorage();
