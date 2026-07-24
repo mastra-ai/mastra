@@ -38,17 +38,24 @@ import { getEffectiveResourceId, validateRunOwnership } from './utils';
  * Stream chunks are cached per RUN, not per subscriber.
  *
  * Every `/stream`-family route used to attach its own caching transform keyed by
- * `runId`, so the cache was a side effect of one client's response stream. That had
- * two consequences: two concurrent consumers wrote every chunk twice, and caching
- * stopped the moment that consumer disconnected — truncating the very history
+ * `runId`, so the cache was a side effect of one client's response stream: two
+ * concurrent consumers of the same run each wrote every chunk to the cache, and
+ * caching stopped the moment a consumer disconnected — truncating the history
  * `/observe` replays on reconnect.
  *
- * The pump below subscribes once per run stream output and is not tied to any client
- * connection, so the cached history stays complete and duplicate-free. It is keyed by
- * the stream output object because `run.stream()` returns the same output for repeat
- * calls on a live run, which makes object identity mean "this run, this execution".
+ * The cached history belongs to the run, so the pump is keyed by runId, not by the
+ * stream output object. `stream()` memoizes its output for a live run, but
+ * `resumeStream()` and `timeTravelStream()` build a fresh output on every call — keying
+ * on the output would let two concurrent resume or time-travel calls for the same run
+ * each attach their own pump and double-write the cache. Keying on runId means a second
+ * concurrent consumer of the same run, through any of the three routes, does not attach
+ * a second pump, so the cached history stays single and coherent instead of interleaved.
+ *
+ * The map only tracks the currently in-flight pump: the entry is removed once it
+ * settles (the run finished or the pipe errored), so a later stream for a run whose
+ * earlier pump already completed attaches a fresh pump and keeps caching.
  */
-const runsWithCachePump = new WeakSet<object>();
+const runCachePumps = new Map<string, Promise<void>>();
 
 function attachRunCachePump({
   output,
@@ -61,24 +68,34 @@ function attachRunCachePump({
   runId: string;
   mastra: Mastra;
 }): void {
-  if (!serverCache || runsWithCachePump.has(output)) {
+  if (!serverCache || runCachePumps.has(runId)) {
     return;
   }
 
-  runsWithCachePump.add(output);
+  try {
+    const pump = output.fullStream
+      .pipeTo(
+        new WritableStream<ChunkType>({
+          write(chunk) {
+            // Fire and forget: a cache write must never stall or break the run.
+            void serverCache.listPush(runId, chunk).catch(() => {});
+          },
+        }),
+      )
+      .catch(error => {
+        mastra.getLogger()?.warn('Workflow stream cache pump stopped', { runId, error });
+      })
+      .finally(() => {
+        runCachePumps.delete(runId);
+      });
 
-  void output.fullStream
-    .pipeTo(
-      new WritableStream<ChunkType>({
-        write(chunk) {
-          // Fire and forget: a cache write must never stall or break the run.
-          void serverCache.listPush(runId, chunk).catch(() => {});
-        },
-      }),
-    )
-    .catch(error => {
-      mastra.getLogger()?.warn('Workflow stream cache pump stopped', { runId, error });
-    });
+    runCachePumps.set(runId, pump);
+  } catch (error) {
+    // Attaching must never turn a working stream into a failed request: if reading
+    // `output.fullStream` throws, the run keeps streaming to its caller, it just isn't
+    // cached for this attempt.
+    mastra.getLogger()?.warn('Failed to attach workflow stream cache pump', { runId, error });
+  }
 }
 
 export interface WorkflowContext extends Context {

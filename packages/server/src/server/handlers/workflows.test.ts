@@ -1099,6 +1099,45 @@ describe('vNext Workflow Handlers', () => {
       expect(pushed.length).toBe(firstChunks.length);
     });
 
+    it('attaches a fresh pump for a later stream once the earlier pump for the same runId has settled', async () => {
+      const serverCache = mockMastra.getServerCache();
+      const pushed: any[] = [];
+      vi.spyOn(serverCache!, 'listPush').mockImplementation(async (_key, value) => {
+        pushed.push(value);
+      });
+
+      const runId = 'test-run-cache-pump-sequential';
+
+      const first = (await STREAM_WORKFLOW_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId,
+        inputData: {},
+      } as any)) as ReadableStream;
+
+      await drain(first);
+      // Let the pump's own (separate) fullStream subscription settle so its `.finally()`
+      // removes the runId entry from the map.
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const pushedAfterFirstRun = pushed.length;
+      expect(pushedAfterFirstRun).toBeGreaterThan(0);
+
+      const second = (await STREAM_WORKFLOW_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId,
+        inputData: {},
+      } as any)) as ReadableStream;
+
+      await drain(second);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // If the map entry had not been cleared, this second stream for the same runId
+      // would be silently skipped and nothing new would reach the cache.
+      expect(pushed.length).toBeGreaterThan(pushedAfterFirstRun);
+    });
+
     // Skipped: today, a disconnecting client wipes every listener on the run's shared
     // emitter (packages/core/src/stream/RunOutput.ts:386 — `cancel()` calls
     // `self.#emitter.removeAllListeners()` with no scoping), which also kills this pump's
