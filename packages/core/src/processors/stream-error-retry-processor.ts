@@ -1,5 +1,6 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 
+import { clampDelayMs, DEFAULT_MAX_RETRY_AFTER_MS, getRetryAfterMs, waitDelay } from '../utils/retry-after';
 import type { Processor, ProcessAPIErrorArgs, ProcessAPIErrorResult } from './index';
 
 export type StreamErrorRetryMatcher = (error: unknown) => boolean;
@@ -45,7 +46,6 @@ export type StreamErrorRetryProcessorOptions = {
 };
 
 const DEFAULT_MAX_RETRIES = 1;
-const DEFAULT_MAX_RETRY_AFTER_MS = 30_000;
 const RETRYABLE_OPENAI_ERROR_CODES = [
   'rate_limit',
   'server_error',
@@ -84,53 +84,6 @@ function getObjectCause(error: unknown): unknown {
   }
 
   return error.cause;
-}
-
-function getRetryAfterHeader(error: unknown): string | undefined {
-  if (!isRecord(error) || !isRecord(error.responseHeaders)) {
-    return undefined;
-  }
-
-  for (const [key, value] of Object.entries(error.responseHeaders)) {
-    if (key.toLowerCase() === 'retry-after' && typeof value === 'string') {
-      return value;
-    }
-  }
-
-  return undefined;
-}
-
-function parseRetryAfterMs(value: string, now: number): number | undefined {
-  const normalizedValue = value.trim();
-  if (/^\d+$/.test(normalizedValue)) {
-    const seconds = Number(normalizedValue);
-    return Number.isFinite(seconds) ? seconds * 1_000 : undefined;
-  }
-
-  const retryAt = Date.parse(normalizedValue);
-  return Number.isFinite(retryAt) && retryAt > now ? retryAt - now : undefined;
-}
-
-function getRetryAfterMs(error: unknown, now = Date.now()): number | undefined {
-  const visited = new WeakSet<object>();
-  let candidate = error;
-
-  while (candidate !== undefined) {
-    if (isRecord(candidate)) {
-      if (visited.has(candidate)) return undefined;
-      visited.add(candidate);
-
-      const retryAfterHeader = getRetryAfterHeader(candidate);
-      if (retryAfterHeader !== undefined) {
-        const retryAfterMs = parseRetryAfterMs(retryAfterHeader, now);
-        if (retryAfterMs !== undefined) return retryAfterMs;
-      }
-    }
-
-    candidate = getObjectCause(candidate);
-  }
-
-  return undefined;
 }
 
 function getOpenAIErrorPayload(error: unknown): Record<string, unknown> | undefined {
@@ -305,41 +258,7 @@ export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-
   }
 }
 
-function clampDelayMs(value: number): number {
-  return Number.isFinite(value) && value > 0 ? value : 0;
-}
-
 async function resolveDelayMs(delayMs: StreamErrorRetryDelayMs, args: ProcessAPIErrorArgs): Promise<number> {
   const delay = typeof delayMs === 'function' ? await delayMs(args) : delayMs;
   return clampDelayMs(delay);
-}
-
-async function waitDelay(delayMs: number, abortSignal?: AbortSignal): Promise<void> {
-  const ms = clampDelayMs(delayMs);
-  if (ms <= 0) return;
-
-  if (!abortSignal) {
-    await new Promise<void>(resolve => setTimeout(resolve, ms));
-    return;
-  }
-
-  await new Promise<void>(resolve => {
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    const onAbort = () => {
-      if (timeout) clearTimeout(timeout);
-      abortSignal.removeEventListener('abort', onAbort);
-      resolve();
-    };
-    // Register before checking aborted to close the race window where
-    // abort fires between the check and addEventListener.
-    abortSignal.addEventListener('abort', onAbort, { once: true });
-    if (abortSignal.aborted) {
-      onAbort();
-      return;
-    }
-    timeout = setTimeout(() => {
-      abortSignal.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-  });
 }
