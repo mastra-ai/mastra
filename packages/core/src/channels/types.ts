@@ -521,16 +521,17 @@ export interface ChannelConfig {
    * from who sent the message. For example, share an SSO user's memory across Web and a
    * Feishu/Lark DM (drop the platform prefix), or scope a group chat to its `chat_id`.
    *
-   * Only affects **newly-created** threads. Once a thread exists it keeps its stored
+   * Only affects **newly-created** threads, whether creation starts from an incoming
+   * message or a tool-approval action. Once a thread exists it keeps its stored
    * `resourceId`, so this never relocates memory on an existing conversation.
    *
-   * Return `defaultResourceId` (`${platform}:${message.author.userId}`) to keep the
+   * Return `defaultResourceId` (`${platform}:${actor.userId}`) to keep the
    * built-in behavior. Not set: behavior is unchanged.
    *
    * @example
    * ```ts
-   * resolveResourceId: async ({ thread, message, defaultResourceId }) => {
-   *   if (thread.isDM) return resolveSsoUserId(message);   // shared with Web
+   * resolveResourceId: async ({ thread, actor, defaultResourceId }) => {
+   *   if (thread.isDM) return resolveSsoUserId(actor.userId); // shared with Web
    *   return thread.channelId;                             // group owns the memory
    * }
    * ```
@@ -544,7 +545,8 @@ export interface ChannelConfig {
    * thread the same id as the session it belongs to, matching how that host
    * names threads it creates itself.
    *
-   * Only affects **newly-created** threads; existing threads keep their stored id.
+   * Only affects **newly-created** threads, whether creation starts from an incoming
+   * message or a tool-approval action; existing threads keep their stored id.
    * The returned id must be unique across the memory store — on collision with an
    * existing thread, a warning is logged and a generated id is used instead.
    *
