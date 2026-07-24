@@ -32,8 +32,8 @@ const signalStyle = (label: string): CSSProperties => ({
 
 const PipelineConnector = () => (
   <div aria-hidden="true" className="relative hidden h-full items-center lg:flex">
-    <div className="w-full border-t border-dashed border-border1" />
-    <span className="signals-pipeline-connector absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full bg-positive1 shadow-[0_0_12px_currentColor]" />
+    <div className="border-border1 w-full border-t border-dashed" />
+    <span className="signals-pipeline-connector bg-positive1 absolute left-1/2 size-2.5 -translate-x-1/2 rounded-full shadow-[0_0_12px_currentColor]" />
   </div>
 );
 
@@ -44,10 +44,10 @@ export type SignalsEmptyStateProps = {
 
 export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEmptyStateProps) => {
   return (
-    <section className="min-h-full w-full bg-surface1 p-6 md:px-10 lg:px-12 xl:px-[4.375rem]">
-      <div className="max-w-260 mx-auto w-full">
+    <section className="bg-surface1 min-h-full w-full p-6 md:px-10 lg:px-12 xl:px-[4.375rem]">
+      <div className="mx-auto w-full max-w-260">
         <header>
-          <h1 className="text-header-xl font-medium tracking-tight text-neutral6">
+          <h1 className="text-header-xl text-neutral6 font-medium tracking-tight">
             Understand what drives every agent interaction
           </h1>
         </header>
@@ -58,13 +58,13 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
           role="list"
         >
           <article className="h-50 p-5" role="listitem">
-            <h2 className="text-lg font-semibold text-neutral6">Traces</h2>
-            <p className="mt-0.5 text-xs text-neutral3">Every agent interaction</p>
-            <p className="mt-5 font-mono text-[0.5625rem] tracking-[0.24em] text-neutral2 uppercase">Input</p>
+            <h2 className="text-neutral6 text-lg font-semibold">Traces</h2>
+            <p className="text-neutral3 mt-0.5 text-xs">Every agent interaction</p>
+            <p className="text-neutral2 mt-5 font-mono text-[0.5625rem] tracking-[0.24em] uppercase">Input</p>
             <div className="mt-2.5 space-y-2">
               {traceRows.map(([name, duration]) => (
                 <div
-                  className="flex items-center justify-between rounded border border-border1 bg-surface3 px-3 py-1.5 font-mono text-ui-xs"
+                  className="border-border1 bg-surface3 text-ui-xs flex items-center justify-between rounded border px-3 py-1.5 font-mono"
                   key={name}
                 >
                   <span className="text-neutral4">{name}</span>
@@ -78,19 +78,19 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
 
           <Card
             as="article"
-            className="h-50 flex flex-col items-center p-5 text-center"
+            className="flex h-50 flex-col items-center p-5 text-center"
             elevation="elevated"
             role="listitem"
           >
-            <h2 className="text-lg font-semibold text-neutral6">Mastra Engine</h2>
-            <p className="mt-0.5 text-xs text-neutral3">Clusters recurring patterns</p>
+            <h2 className="text-neutral6 text-lg font-semibold">Mastra Engine</h2>
+            <p className="text-neutral3 mt-0.5 text-xs">Clusters recurring patterns</p>
             <div aria-hidden="true" className="relative mt-5 flex size-20 items-center justify-center">
-              <span className="signals-engine-pulse absolute size-20 rounded-full border border-positive1/15" />
-              <span className="absolute size-14 rounded-full border border-positive1/25" />
-              <span className="absolute size-9 rounded-full border border-positive1/40 bg-positive1/5 shadow-[0_0_24px_var(--color-positive1)]" />
-              <CpuIcon className="relative size-4 text-positive1" />
+              <span className="signals-engine-pulse border-positive1/15 absolute size-20 rounded-full border" />
+              <span className="border-positive1/25 absolute size-14 rounded-full border" />
+              <span className="border-positive1/40 bg-positive1/5 absolute size-9 rounded-full border shadow-[0_0_24px_var(--color-positive1)]" />
+              <CpuIcon className="text-positive1 relative size-4" />
             </div>
-            <p className="mt-3 max-w-40 text-ui-xs leading-4 text-neutral2">
+            <p className="text-ui-xs text-neutral2 mt-3 max-w-40 leading-4">
               Finds relationships across conversations, tools, and workflows
             </p>
           </Card>
@@ -98,13 +98,13 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
           <PipelineConnector />
 
           <article className="h-50 p-5" role="listitem">
-            <h2 className="text-lg font-semibold text-neutral6">Signal analysis</h2>
-            <p className="mt-0.5 text-xs text-neutral3">What your users actually do</p>
-            <p className="mt-5 font-mono text-[0.5625rem] tracking-[0.24em] text-neutral2 uppercase">Output</p>
+            <h2 className="text-neutral6 text-lg font-semibold">Signal analysis</h2>
+            <p className="text-neutral3 mt-0.5 text-xs">What your users actually do</p>
+            <p className="text-neutral2 mt-5 font-mono text-[0.5625rem] tracking-[0.24em] uppercase">Output</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {signalLabels.map(label => (
                 <span
-                  className="signals-chip inline-flex items-center gap-2 rounded border border-current/25 bg-surface3 px-2.5 py-1.5 text-xs font-medium shadow-[0_0_14px_color-mix(in_oklch,currentColor_12%,transparent)]"
+                  className="signals-chip bg-surface3 inline-flex items-center gap-2 rounded border border-current/25 px-2.5 py-1.5 text-xs font-medium shadow-[0_0_14px_color-mix(in_oklch,currentColor_12%,transparent)]"
                   key={label}
                   style={signalStyle(label)}
                 >
@@ -117,7 +117,7 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
         </div>
 
         <section className="mt-10" aria-labelledby="signal-definitions-heading">
-          <h2 id="signal-definitions-heading" className="text-lg font-semibold text-neutral6">
+          <h2 id="signal-definitions-heading" className="text-neutral6 text-lg font-semibold">
             What each signal means
           </h2>
           <div aria-label="Signal definitions" className="mt-4 grid gap-3 sm:grid-cols-2" role="list">
@@ -126,35 +126,35 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
                 <h3 className="text-sm font-semibold" style={signalStyle(signal.label)}>
                   {signal.label}
                 </h3>
-                <p className="mt-1.5 text-xs leading-5 text-neutral3">{signal.description}</p>
+                <p className="text-neutral3 mt-1.5 text-xs leading-5">{signal.description}</p>
               </article>
             ))}
           </div>
         </section>
 
         <section className="mt-10" aria-label="Signal relationship preview">
-          <p className="font-mono text-[0.5625rem] tracking-[0.2em] text-neutral2 uppercase">
+          <p className="text-neutral2 font-mono text-[0.5625rem] tracking-[0.2em] uppercase">
             Grouped trace relationships will appear after traces contain at least two signal types
           </p>
-          <div aria-hidden="true" className="h-18 mt-3 grid grid-cols-3 gap-5 opacity-35">
+          <div aria-hidden="true" className="mt-3 grid h-18 grid-cols-3 gap-5 opacity-35">
             {[0, 1, 2].map(index => (
-              <div className="rounded-md border border-dashed border-border1 bg-surface2/30 p-4" key={index}>
-                <div className="h-1.5 w-16 rounded-full bg-neutral1" />
-                <div className="mt-3 h-1 w-full rounded-full bg-neutral1/60" />
-                <div className="mt-2 h-1 w-2/3 rounded-full bg-neutral1/40" />
+              <div className="border-border1 bg-surface2/30 rounded-md border border-dashed p-4" key={index}>
+                <div className="bg-neutral1 h-1.5 w-16 rounded-full" />
+                <div className="bg-neutral1/60 mt-3 h-1 w-full rounded-full" />
+                <div className="bg-neutral1/40 mt-2 h-1 w-2/3 rounded-full" />
               </div>
             ))}
           </div>
         </section>
 
-        <aside className="mt-9 flex min-h-16 flex-col gap-4 rounded-md border border-border1 bg-surface2 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+        <aside className="border-border1 bg-surface2 mt-9 flex min-h-16 flex-col gap-4 rounded-md border px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-start gap-3 sm:items-center">
             <span
               aria-hidden="true"
-              className="mt-1.5 size-2 shrink-0 rounded-full bg-warning1 shadow-[0_0_9px_currentColor] sm:mt-0"
+              className="bg-warning1 mt-1.5 size-2 shrink-0 rounded-full shadow-[0_0_9px_currentColor] sm:mt-0"
             />
-            <p className="text-xs leading-5 text-neutral3">
-              <strong className="font-semibold text-neutral5">Waiting for traces.</strong> Signals activate
+            <p className="text-neutral3 text-xs leading-5">
+              <strong className="text-neutral5 font-semibold">Waiting for traces.</strong> Signals activate
               automatically once your agents start receiving traffic.
             </p>
           </div>

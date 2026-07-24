@@ -1,6 +1,6 @@
 {
   "name": "@mastra/code-sdk",
-  "version": "0.2.0-alpha.8",
+  "version": "1.0.2-alpha.1",
   "description": "Mastra Code SDK: the agent core behind Mastra Code (everything except the TUI) — build your own UIs and surfaces on top of it",
   "type": "module",
   "publishConfig": {
@@ -47,10 +47,10 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.21.0",
-    "@ai-sdk/amazon-bedrock": "^3.0.105",
-    "@ai-sdk/anthropic": "^3.0.96",
-    "@ai-sdk/openai": "^3.0.84",
-    "@ai-sdk/openai-compatible": "^2.0.59",
+    "@ai-sdk/amazon-bedrock": "^3.0.107",
+    "@ai-sdk/anthropic": "^3.0.98",
+    "@ai-sdk/openai": "^3.0.86",
+    "@ai-sdk/openai-compatible": "^2.0.62",
     "@ast-grep/napi": "^0.42.0",
     "@aws-sdk/credential-providers": "^3.864.0",
     "@mastra/agent-browser": "workspace:*",
@@ -66,7 +66,7 @@
     "@mastra/schema-compat": "workspace:*",
     "@mastra/stagehand": "workspace:*",
     "@mastra/tavily": "workspace:*",
-    "ai": "^6.0.225",
+    "ai": "^6.0.230",
     "execa": "^9.6.1",
     "libsql": "^0.5.29",
     "posthog-node": "^5.37.0",

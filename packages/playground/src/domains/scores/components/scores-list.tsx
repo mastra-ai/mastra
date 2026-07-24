@@ -153,8 +153,8 @@ export function ScoresList({
     <div
       className={cn('grid h-full min-h-0 gap-4 items-start', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
     >
-      <div className="flex flex-col h-full min-h-0 min-w-0 gap-0">
-        <div className="flex items-center justify-end pb-2 shrink-0">
+      <div className="flex h-full min-h-0 min-w-0 flex-col gap-0">
+        <div className="flex shrink-0 items-center justify-end pb-2">
           <DropdownMenu>
             <DropdownMenu.Trigger asChild>
               <Button variant="outline" size="sm">
@@ -177,7 +177,7 @@ export function ScoresList({
           </DropdownMenu>
         </div>
 
-        <ScoresDataList columns={columns} className="flex-1 min-h-0">
+        <ScoresDataList columns={columns} className="min-h-0 flex-1">
           {header}
 
           {scores.map(score => (

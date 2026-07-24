@@ -214,6 +214,8 @@ export class InternalMastraMCPClient extends MastraBase {
   private serverConfig: MastraMCPServerDefinition;
   private transport?: Transport;
   private pendingAuthTransport?: StreamableHTTPClientTransport | SSEClientTransport;
+  private clientBaseOnClose?: () => void;
+  private clientConnectionOnClose?: () => void;
   private _authState?: MCPServerAuthState;
   private operationContextStore = new AsyncLocalStorage<RequestContext | null>();
   private exitHookUnsubscribe?: () => void;
@@ -476,6 +478,11 @@ export class InternalMastraMCPClient extends MastraBase {
     }
 
     if (shouldTrySSE) {
+      // The SDK's cleanup after a failed streamable initialize is fire-and-forget,
+      // so the streamable transport may still be attached; detach it or the SSE
+      // attempt is rejected with "Already connected to a transport".
+      await this.detachStaleClientTransport();
+
       this.log('debug', 'Falling back to deprecated HTTP+SSE transport...');
       // Fallback to SSE transport
       // The top-level fetch is used for POST requests, but eventSourceInit.fetch is needed for the SSE stream.
@@ -512,6 +519,59 @@ export class InternalMastraMCPClient extends MastraBase {
     this.closePendingAuthTransport();
     if (authProvider) {
       this._authState = 'authorized';
+    }
+  }
+
+  /**
+   * Detaches whatever transport is still attached to the underlying SDK Client.
+   *
+   * The SDK assigns its internal `_transport` before `transport.start()` and never
+   * clears it when `start()` throws, and its cleanup after a failed initialize is a
+   * fire-and-forget `void this.close()`. Either way a stale transport can remain
+   * attached, making every subsequent `client.connect()` throw "Already connected
+   * to a transport" and permanently wedging this client (issue #19862). Mastra's
+   * own `this.transport` is only assigned after a successful connect, so
+   * disconnect/forceReconnect never see the stale one. Calling this before every
+   * connect attempt restores the invariant that a connect starts from a detached
+   * SDK client.
+   */
+  private async detachStaleClientTransport(): Promise<void> {
+    const stale = this.client.transport;
+    if (!stale) {
+      return;
+    }
+    if (stale === this.pendingAuthTransport) {
+      // Keep the transport alive: finishAuth must complete the OAuth flow on it.
+      // Just sever its link to the SDK client so the next connect isn't rejected.
+      this.severClientTransportLink(stale);
+      return;
+    }
+    this.log('debug', 'Closing stale SDK client transport before connect attempt');
+    try {
+      // Close fires the SDK's onclose chain, which rejects in-flight requests and
+      // clears the SDK client's transport reference.
+      await stale.close();
+    } catch (e) {
+      this.log('debug', 'Error closing stale SDK client transport (ignored)', {
+        error: e instanceof Error ? e.message : String(e),
+      });
+    }
+    // Safety net in case close() did not fire the onclose chain.
+    this.severClientTransportLink(stale);
+  }
+
+  /**
+   * Severs the mutual references between the SDK client and a stale transport
+   * without closing it. Clearing the transport's callbacks ensures a later
+   * close() of the stale transport cannot reach into the SDK client and clear
+   * the state of a newer live connection.
+   */
+  private severClientTransportLink(stale: Transport): void {
+    stale.onclose = undefined;
+    stale.onerror = undefined;
+    stale.onmessage = undefined;
+    if (this.client.transport === stale) {
+      (this.client as unknown as { _transport?: Transport })._transport = undefined;
     }
   }
 
@@ -595,6 +655,10 @@ export class InternalMastraMCPClient extends MastraBase {
 
     this.isConnected = new Promise<boolean>(async (resolve, reject) => {
       try {
+        // A previous failed connect attempt can leave a stale transport attached
+        // to the SDK client; release it or every reconnect fails (issue #19862).
+        await this.detachStaleClientTransport();
+
         const { command, url } = this.serverConfig;
 
         if (command) {
@@ -609,24 +673,36 @@ export class InternalMastraMCPClient extends MastraBase {
 
         resolve(true);
 
-        // Set up disconnect handler to reset state.
-        const originalOnClose = this.client.onclose;
-        this.client.onclose = () => {
-          this.log('debug', `MCP server connection closed`);
-          // Close the stale transport before any reconnect so its EventSource/session
-          // can't keep retrying and leak server-side sessions (issue #16693). Clear
-          // synchronously first so a concurrent connect() sees a clean slate.
-          const staleTransport = this.transport;
-          this.transport = undefined;
-          this.isConnected = null;
-          this.serverInstructions = undefined;
-          if (staleTransport) {
-            void staleTransport.close().catch(() => {});
+        // Scope the reset to this connection so an older handler retained across
+        // reconnects cannot clear the state of a replacement connection.
+        const connectedTransport = this.transport;
+        const connectionPromise = this.isConnected;
+        if (this.client.onclose !== this.clientConnectionOnClose) {
+          this.clientBaseOnClose = this.client.onclose;
+        }
+        const connectionOnClose = () => {
+          if (this.transport === connectedTransport) {
+            this.log('debug', `MCP server connection closed`);
+            // Close the stale transport before any reconnect so its EventSource/session
+            // can't keep retrying and leak server-side sessions (issue #16693). Clear
+            // synchronously first so a concurrent connect() sees a clean slate.
+            const staleTransport = this.transport;
+            this.transport = undefined;
+            if (this.isConnected === connectionPromise) {
+              this.isConnected = null;
+            }
+            this.serverInstructions = undefined;
+            if (staleTransport) {
+              // Prevent a duplicate late close signal from this transport from
+              // reaching the SDK client after a replacement connection is attached.
+              this.severClientTransportLink(staleTransport);
+              void staleTransport.close().catch(() => {});
+            }
           }
-          if (typeof originalOnClose === 'function') {
-            originalOnClose();
-          }
+          this.clientBaseOnClose?.();
         };
+        this.clientConnectionOnClose = connectionOnClose;
+        this.client.onclose = connectionOnClose;
       } catch (e) {
         this.isConnected = null;
         reject(e);
@@ -709,12 +785,17 @@ export class InternalMastraMCPClient extends MastraBase {
     // even when there is no live transport to tear down.
     this.closePendingAuthTransport();
     if (!this.transport) {
+      // Even without a live transport, a failed connect attempt may have left a
+      // stale transport attached to the SDK client; release it so a future
+      // connect starts clean (issue #19862).
+      await this.detachStaleClientTransport();
       this.log('debug', 'Disconnect called but no transport was connected.');
       return;
     }
     this.log('debug', `Disconnecting from MCP server`);
+    const disconnectedTransport = this.transport;
     try {
-      await this.transport.close();
+      await disconnectedTransport.close();
       this.log('debug', 'Successfully disconnected from MCP server');
     } catch (e) {
       this.log('error', 'Error during MCP server disconnect', {
@@ -722,6 +803,7 @@ export class InternalMastraMCPClient extends MastraBase {
       });
       throw e;
     } finally {
+      this.severClientTransportLink(disconnectedTransport);
       this.transport = undefined;
       this.isConnected = null;
       this.serverInstructions = undefined;
@@ -761,14 +843,19 @@ export class InternalMastraMCPClient extends MastraBase {
     this.closePendingAuthTransport();
 
     // Disconnect current connection (ignore errors as connection may already be broken)
+    const disconnectedTransport = this.transport;
     try {
-      if (this.transport) {
-        await this.transport.close();
+      if (disconnectedTransport) {
+        await disconnectedTransport.close();
       }
     } catch (e) {
       this.log('debug', 'Error during force disconnect (ignored)', {
         error: e instanceof Error ? e.message : String(e),
       });
+    } finally {
+      if (disconnectedTransport) {
+        this.severClientTransportLink(disconnectedTransport);
+      }
     }
 
     // Reset connection state

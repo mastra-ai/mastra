@@ -760,8 +760,9 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
     workspace,
     browser,
     requestContextSchema,
-    // Version metadata
+    // Version options
     changeMessage,
+    autoPublish = false,
   }) => {
     try {
       const storage = mastra.getStorage();
@@ -919,17 +920,16 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       if (isCodeSource && autoVersionResult.versionCreated && !changeMessage) {
         const { versions } = await agentsStore.listVersions({ agentId: storedAgentId, perPage: 2 });
         const previousVersion = versions[1];
-        if (previousVersion) {
+        const isPublishedVersion = previousVersion?.id === existing.activeVersionId;
+        if (previousVersion && !isPublishedVersion) {
           await agentsStore.deleteVersion(previousVersion.id);
         }
       }
 
-      // Auto-publish: activate the latest version so the update is immediately
-      // visible in list views. The Agent Builder UI has no separate "Publish"
-      // button, so without this every edit after creation would create orphaned
-      // draft versions that never surface in the list.
-      // When a proper publish flow ships, this block can be removed.
-      if (autoVersionResult.versionCreated) {
+      // Publication remains opt-in so Classic Studio can save drafts without moving the active version,
+      // while Agent Builder can preserve immediate runtime updates by sending autoPublish: true.
+      // This flag is a bridge until version creation and publication move to dedicated APIs.
+      if (autoVersionResult.versionCreated && autoPublish) {
         const { versions } = await agentsStore.listVersions({ agentId: storedAgentId, perPage: 1 });
         const latestVersion = versions[0];
         if (latestVersion) {

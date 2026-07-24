@@ -1,129 +1,161 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
-import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
-import { Brain, FolderKanban, Key, Layers, Palette, Search, Server, SlidersHorizontal } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import { useState } from 'react';
-
-import { useToast } from '../../../ui';
+import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { toast } from '@mastra/playground-ui/components/Toaster';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
-import { useAgentControllerModels } from '../../../../../shared/hooks/useAgentControllerModels';
+import { useSettingsSection } from '../hooks/useSettingsSection';
 import { useAgentControllerSettings } from '../../../../../shared/hooks/useAgentControllerSettings';
-import { useSetAgentControllerStateMutation } from '../../../../../shared/hooks/useAgentControllerStateMutations';
+import { useAvailableModelsQuery } from '../../../../../shared/hooks/useAvailableModels';
+import {
+  SettingsUpdateVerificationError,
+  useUpdateAgentControllerSettingsMutation,
+} from '../../../../../shared/hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { CustomProvidersSection } from './CustomProvidersSection';
+import { SettingsHeader } from './SettingsHeader';
+import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
 import { IntakeSection } from './IntakeSection';
 import { ModelPacksSection } from './ModelPacksSection';
 import { FactorySetupSection } from './FactorySetupSection';
-import { FactoriesSection } from './FactoriesSection';
+import { SourceControlSection } from './SourceControlSection';
 import { OMSection } from './OMSection';
-import { ProvidersSection } from './ProvidersSection';
-import { BehaviorTab, GeneralTab, ModelTab } from './SettingsPanel.parts';
-
-type Tab = 'general' | 'factories' | 'model' | 'packs' | 'memory' | 'behavior' | 'providers' | 'custom-providers';
-
-interface SettingsPanelProps {
-  onClose: () => void;
-}
-
-const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
-  { id: 'general', label: 'General', icon: Palette },
-  { id: 'factories', label: 'Factories', icon: FolderKanban },
-  { id: 'model', label: 'Model', icon: Search },
-  { id: 'packs', label: 'Packs', icon: Layers },
-  { id: 'memory', label: 'Memory', icon: Brain },
-  { id: 'behavior', label: 'Behavior', icon: SlidersHorizontal },
-  { id: 'providers', label: 'API Keys', icon: Key },
-  { id: 'custom-providers', label: 'Custom', icon: Server },
-];
+import { ProviderAccessSection } from './ProviderAccessSection';
+import { BehaviorSettings, GeneralSettings, ModelSettings } from './SettingsPanel.parts';
 
 /**
- * Preferences modal. A two-pane layout (nav rail + one scrollable content pane)
- * keeps long sections — the model catalog and the provider list — reachable
- * without nested scroll fighting. Mirrors the TUI `/settings` surface: theme,
- * density, model, thinking level, auto-approve, notifications, smart editing,
- * and provider/API-key management.
+ * Shared subsection recipe: header (title + optional description + optional
+ * right-side action) above a contained card. Containment replaces hairline
+ * separators so uneven content heights still read as intentional.
  */
-export function SettingsPanel({ onClose }: SettingsPanelProps) {
-  const [tab, setTab] = useState<Tab>('general');
+function SettingsSubsection({
+  title,
+  description,
+  action,
+  children,
+}: {
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-3">
+          <Txt variant="ui-md" className="text-icon6 font-medium">
+            {title}
+          </Txt>
+          {action}
+        </div>
+        {description && (
+          <Txt variant="ui-sm" className="text-icon3">
+            {description}
+          </Txt>
+        )}
+      </div>
+      <div className="border-border1 rounded-lg border p-4">{children}</div>
+    </div>
+  );
+}
+
+function getSettingsUpdateErrorMessage(error: unknown): string {
+  if (error instanceof SettingsUpdateVerificationError) return error.message;
+  if (error instanceof Error) return `Failed to update settings: ${error.message}`;
+  return 'Failed to update settings';
+}
+
+/**
+ * Settings content pane: renders the section addressed by the settings-page
+ * URL while the page shell supplies document scrolling.
+ */
+export function SettingsPanel() {
+  const section = useSettingsSection();
   const { theme, setTheme } = useTheme();
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { isMobile } = useMainSidebar();
   const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
-  const { toast } = useToast();
+  const sessionScope = resourceEnabled && projectPath ? projectPath : undefined;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath,
+    scope: sessionScope,
     baseUrl,
-    enabled: sessionEnabled,
+    enabled: resourceEnabled,
   };
-  const modelsQuery = useAgentControllerModels(hookArgs);
+  // Session-independent: pickers (Factory default model, packs) need the
+  // catalog even before any chat session exists.
+  const modelsQuery = useAvailableModelsQuery();
   const settingsQuery = useAgentControllerSettings(hookArgs);
-  const setStateMutation = useSetAgentControllerStateMutation(hookArgs);
+  const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const models = modelsQuery.data ?? [];
   const settings = settingsQuery.data ?? null;
-  const sessionResourceId = sessionEnabled ? resourceId : undefined;
+  const sessionResourceId = resourceEnabled ? resourceId : undefined;
 
   const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
-    void setStateMutation.mutateAsync(updates).then(() => toast('Settings updated', 'success'));
+    if (!settings || updateSettingsMutation.isPending) return;
+    updateSettingsMutation.mutate(updates, {
+      onSuccess: () => toast.success('Settings updated'),
+      onError: error => toast.error(getSettingsUpdateErrorMessage(error)),
+    });
   };
 
   return (
-    <Dialog open onOpenChange={open => !open && onClose()}>
-      <DialogContent className="w-full max-w-4xl h-[80vh] grid-rows-[auto_1fr] items-stretch p-0" aria-label="Settings">
-        <DialogHeader className="px-5 pt-4 pb-2">
-          <DialogTitle>Settings</DialogTitle>
-        </DialogHeader>
-
-        <Tabs<Tab> defaultTab="general" value={tab} onValueChange={setTab} className="flex flex-col min-h-0 h-full">
-          <TabList className="px-5 shrink-0">
-            {TABS.map(({ id, label, icon: Icon }) => (
-              <Tab key={id} value={id}>
-                <Icon size={15} />
-                <span>{label}</span>
-              </Tab>
-            ))}
-          </TabList>
-
-          <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5">
-            <TabContent value="general">
-              <GeneralTab theme={theme} onThemeChange={setTheme} />
-              <FactorySetupSection />
-              <IntakeSection />
-            </TabContent>
-            <TabContent value="factories">
-              <FactoriesSection />
-            </TabContent>
-            <TabContent value="model">
-              <ModelTab settings={settings} onBehaviorChange={onBehaviorChange} />
-            </TabContent>
-            <TabContent value="packs">
-              <ModelPacksSection resourceId={sessionResourceId} models={models} />
-            </TabContent>
-            <TabContent value="memory">
-              <OMSection resourceId={sessionResourceId} models={models} />
-            </TabContent>
-            <TabContent value="behavior">
-              <BehaviorTab
-                settings={settings}
-                onBehaviorChange={onBehaviorChange}
-                permissions={permissions ?? null}
-                pendingPermissionCategory={pendingPermissionCategory}
-                setPermissionForCategory={setPermissionForCategory}
-              />
-            </TabContent>
-            <TabContent value="providers">
-              <ProvidersSection />
-            </TabContent>
-            <TabContent value="custom-providers">
-              <CustomProvidersSection />
-            </TabContent>
+    <section aria-label="Settings" className="flex flex-1 flex-col px-5 pb-5">
+      <div className="mx-auto grid w-full max-w-4xl py-3">
+        {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
+        {section === 'general' && (
+          <>
+            <GeneralSettings theme={theme} onThemeChange={setTheme} />
+            <FactorySetupSection />
+            <IntakeSection />
+          </>
+        )}
+        {section === 'source-control' && <SourceControlSection />}
+        {section === 'model' && (
+          <div className="flex flex-col gap-8">
+            <SettingsSubsection title="Defaults">
+              {/* Rows bring their own py-3; -my-3 keeps the card's effective padding even on all sides. */}
+              <div className="divide-border1/40 -my-3 divide-y">
+                <FactoryDefaultModelSection models={models} />
+                <ModelSettings
+                  settings={settings}
+                  updating={updateSettingsMutation.isPending}
+                  onBehaviorChange={onBehaviorChange}
+                />
+              </div>
+            </SettingsSubsection>
+            <SettingsSubsection title="Providers">
+              <ProviderAccessSection />
+            </SettingsSubsection>
+            <SettingsSubsection
+              title="Model packs"
+              description="A pack sets a model for each mode (build / plan / fast)."
+            >
+              <ModelPacksSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+            </SettingsSubsection>
+            <SettingsSubsection
+              title="Observational memory"
+              description="Choose the models and token thresholds used to summarize and retain conversation context."
+            >
+              <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+            </SettingsSubsection>
           </div>
-        </Tabs>
-      </DialogContent>
-    </Dialog>
+        )}
+        {section === 'behavior' && (
+          <BehaviorSettings
+            settings={settings}
+            updating={updateSettingsMutation.isPending}
+            onBehaviorChange={onBehaviorChange}
+            permissions={permissions ?? null}
+            pendingPermissionCategory={pendingPermissionCategory}
+            setPermissionForCategory={setPermissionForCategory}
+          />
+        )}
+        {section === 'custom-providers' && <CustomProvidersSection />}
+      </div>
+    </section>
   );
 }

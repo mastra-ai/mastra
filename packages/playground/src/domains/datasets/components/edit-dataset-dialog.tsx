@@ -205,7 +205,7 @@ function EditDatasetDialogForm({ onOpenChange, dataset, onSuccess }: EditDataset
           />
 
           {formState.validationError && (
-            <div className="p-3 bg-red-950/20 border border-red-900/50 rounded-md">
+            <div className="rounded-md border border-red-900/50 bg-red-950/20 p-3">
               <p className="text-sm text-red-200">{formState.validationError}</p>
             </div>
           )}

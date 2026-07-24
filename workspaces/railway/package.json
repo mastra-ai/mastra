@@ -1,6 +1,6 @@
 {
   "name": "@mastra/railway",
-  "version": "0.4.0-alpha.0",
+  "version": "0.4.0",
   "description": "Railway cloud sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",

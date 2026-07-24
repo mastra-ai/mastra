@@ -76,7 +76,7 @@ export function DatasetExperimentsList({
               {experiment.status && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="flex items-center justify-center w-10 relative bg-transparent h-full">
+                    <div className="relative flex h-full w-10 items-center justify-center bg-transparent">
                       <div
                         className={cn('w-2 h-2 rounded-full', {
                           'bg-green-600': ['success', 'completed'].includes(experiment.status),
@@ -110,7 +110,7 @@ export function DatasetExperimentsList({
               </Tooltip>
             </DataList.Cell>
             <DataList.Cell height="compact" className="min-w-0">
-              <span className="block text-ui-smd text-neutral2 truncate">{formatDate(createdAtDate)}</span>
+              <span className="text-ui-smd text-neutral2 block truncate">{formatDate(createdAtDate)}</span>
             </DataList.Cell>
           </>
         );
@@ -146,7 +146,7 @@ function EmptyDatasetExperimentsList() {
   return (
     <div className="flex h-full items-center justify-center py-12">
       <EmptyState
-        iconSlot={<Play className="w-8 h-8 text-neutral3" />}
+        iconSlot={<Play className="text-neutral3 h-8 w-8" />}
         titleSlot="No experiments yet"
         descriptionSlot="Trigger an experiment to evaluate your dataset against an agent, workflow, or scorer."
       />

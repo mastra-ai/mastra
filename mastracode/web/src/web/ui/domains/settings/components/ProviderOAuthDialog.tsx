@@ -183,7 +183,7 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete }: ProviderOA
               {flowError}
             </Txt>
           ) : (
-            <div className="flex items-center gap-2 text-icon4" role="status">
+            <div className="text-icon4 flex items-center gap-2" role="status">
               <Loader2 size={14} className="motion-safe:animate-spin motion-reduce:animate-none" />
               <Txt as="span" variant="ui-sm">
                 Waiting for authorization…

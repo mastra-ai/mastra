@@ -104,11 +104,13 @@ export function hashAdvisoryLockKey(key: string): [number, number] {
 type Queryable = Pick<Pool, 'query'> | Pick<PoolClient, 'query'>;
 
 class PgFactoryStorageOps implements FactoryStorageOps {
-  readonly #pool: Pool;
+  readonly #queryable: Queryable;
+  readonly #transactionClient?: PoolClient;
   readonly #schemas: Map<string, CollectionSchema>;
 
-  constructor(pool: Pool, schemas: Map<string, CollectionSchema>) {
-    this.#pool = pool;
+  constructor(queryable: Queryable, schemas: Map<string, CollectionSchema>, transactionClient?: PoolClient) {
+    this.#queryable = queryable;
+    this.#transactionClient = transactionClient;
     this.#schemas = schemas;
   }
 
@@ -290,7 +292,7 @@ class PgFactoryStorageOps implements FactoryStorageOps {
   }
 
   async findOne<T extends Record<string, unknown>>(collection: string, where: CollectionWhere): Promise<T | null> {
-    const rows = await this.#select<T>(this.#pool, collection, where, { limit: 1 });
+    const rows = await this.#select<T>(this.#queryable, collection, where, { limit: 1 });
     return rows[0] ?? null;
   }
 
@@ -299,7 +301,7 @@ class PgFactoryStorageOps implements FactoryStorageOps {
     where: CollectionWhere,
     opts?: CollectionListOptions,
   ): Promise<T[]> {
-    return this.#select<T>(this.#pool, collection, where, opts);
+    return this.#select<T>(this.#queryable, collection, where, opts);
   }
 
   async insertOne<T extends Record<string, unknown>>(collection: string, row: Partial<T>): Promise<T> {
@@ -320,7 +322,7 @@ class PgFactoryStorageOps implements FactoryStorageOps {
     const args = columns.map(column => this.#serialize(this.#column(schema, column), values[column]));
 
     try {
-      const result = await this.#pool.query(sql, args);
+      const result = await this.#queryable.query(sql, args);
       return this.#deserializeRow<T>(schema, result.rows[0] as Record<string, unknown>);
     } catch (error) {
       if (isUniqueViolation(error)) throw new UniqueViolationError(collection, { cause: error });
@@ -365,7 +367,7 @@ class PgFactoryStorageOps implements FactoryStorageOps {
   }
 
   async updateMany(collection: string, where: CollectionWhere, set: Record<string, unknown>): Promise<number> {
-    return this.#updateMany(this.#pool, collection, where, set);
+    return this.#updateMany(this.#queryable, collection, where, set);
   }
 
   async #updateMany(
@@ -387,7 +389,7 @@ class PgFactoryStorageOps implements FactoryStorageOps {
   async deleteMany(collection: string, where: CollectionWhere): Promise<number> {
     const schema = this.#schema(collection);
     const filter = this.#buildWhere(schema, where);
-    const result = await this.#pool.query(`DELETE FROM "${schema.name}" WHERE ${filter.sql}`, filter.args);
+    const result = await this.#queryable.query(`DELETE FROM "${schema.name}" WHERE ${filter.sql}`, filter.args);
     return result.rowCount ?? 0;
   }
 
@@ -396,26 +398,28 @@ class PgFactoryStorageOps implements FactoryStorageOps {
     where: CollectionWhere,
     fn: (row: T) => Partial<T> | null | Promise<Partial<T> | null>,
   ): Promise<T | null> {
-    const schema = this.#schema(collection);
-    const pk = primaryKeyOf(schema);
-    const client = await this.#pool.connect();
+    const run = async (client: PoolClient): Promise<T | null> => {
+      const schema = this.#schema(collection);
+      const pk = primaryKeyOf(schema);
+      const rows = await this.#select<T>(client, collection, where, { limit: 1 }, true);
+      const row = rows[0];
+      if (!row) return null;
+      const patch = await fn(row);
+      if (patch === null) return row;
+      const pkWhere = { [pk]: row[pk] as CollectionValue } as CollectionWhere;
+      await this.#updateMany(client, collection, pkWhere, patch);
+      const updated = await this.#select<T>(client, collection, pkWhere, { limit: 1 });
+      return updated[0] ?? null;
+    };
+
+    if (this.#transactionClient) return run(this.#transactionClient);
+
+    const pool = this.#queryable as Pool;
+    const client = await pool.connect();
     try {
       await client.query('BEGIN');
       try {
-        const rows = await this.#select<T>(client, collection, where, { limit: 1 }, true);
-        const row = rows[0];
-        if (!row) {
-          await client.query('COMMIT');
-          return null;
-        }
-        const patch = await fn(row);
-        let result: T | null = row;
-        if (patch !== null) {
-          const pkWhere = { [pk]: row[pk] as CollectionValue } as CollectionWhere;
-          await this.#updateMany(client, collection, pkWhere, patch);
-          const updated = await this.#select<T>(client, collection, pkWhere, { limit: 1 });
-          result = updated[0] ?? null;
-        }
+        const result = await run(client);
         await client.query('COMMIT');
         return result;
       } catch (error) {
@@ -473,6 +477,23 @@ export class PgFactoryStorage extends FactoryStorage {
 
   protected async initStorage(): Promise<void> {
     await this.#pool.query('SELECT 1');
+  }
+
+  async withTransaction<T>(fn: (ops: FactoryStorageOps) => Promise<T>): Promise<T> {
+    const client = await this.#pool.connect();
+    try {
+      await client.query('BEGIN');
+      try {
+        const result = await fn(new PgFactoryStorageOps(client, this.#schemas, client));
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      }
+    } finally {
+      client.release();
+    }
   }
 
   async ensureCollections(schemas: CollectionSchema[]): Promise<void> {
@@ -539,6 +560,14 @@ export class PgFactoryStorage extends FactoryStorage {
     // Additive evolution: add any columns missing from an existing table.
     for (const [name, spec] of Object.entries(schema.columns)) {
       await this.#pool.query(`ALTER TABLE "${schema.name}" ADD COLUMN IF NOT EXISTS ${this.#columnDdl(name, spec)}`);
+    }
+
+    // Relaxing evolution: a table created by an older schema may still say
+    // NOT NULL on a column that is now declared nullable — drop the stale
+    // constraint so inserts of null don't fail on pre-existing databases.
+    for (const [name, spec] of Object.entries(schema.columns)) {
+      if (!spec.nullable || spec.type === 'uuid-pk' || spec.primaryKey) continue;
+      await this.#pool.query(`ALTER TABLE "${schema.name}" ALTER COLUMN "${name}" DROP NOT NULL`);
     }
 
     for (const index of schema.uniqueIndexes ?? []) {

@@ -1,0 +1,16 @@
+{
+  "name": "e2e-softwarefactory",
+  "version": "0.0.1",
+  "private": true,
+  "devDependencies": {
+    "execa": "^9.6.1",
+    "get-port": "^7.2.0",
+    "tinyglobby": "^0.2.17",
+    "verdaccio": "^6.7.4",
+    "verdaccio-auth-memory": "^13.0.3",
+    "vitest": "^4.1.10"
+  },
+  "scripts": {
+    "test": "vitest run"
+  }
+}

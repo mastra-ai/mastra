@@ -3,7 +3,7 @@
  *
  * Drives the real fetch/save services + React Query stack; only the network is
  * mocked (MSW). Handlers assert request bodies so the wire contract with
- * `/web/github/repositories/:id/settings` stays pinned.
+ * `/web/github/projects/:id/settings` stays pinned.
  */
 import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -17,7 +17,7 @@ import { useRepositorySettingsQuery, useSaveRepositorySettingsMutation } from '.
 
 const ORIGIN = TEST_BASE_URL;
 const PROJECT = 'ghp_1';
-const SETTINGS_URL = `${ORIGIN}/web/github/repositories/${PROJECT}/settings`;
+const SETTINGS_URL = `${ORIGIN}/web/github/projects/${PROJECT}/settings`;
 
 describe('project settings hooks', () => {
   it('given a github project, when the query runs, then it resolves the stored setup command', async () => {
@@ -45,7 +45,7 @@ describe('project settings hooks', () => {
     const { result, client } = renderHookWithProviders(() => useSaveRepositorySettingsMutation());
 
     await act(async () => {
-      await result.current.mutateAsync({ githubProjectId: PROJECT, settings: { setupCommand: 'pnpm i' } });
+      await result.current.mutateAsync({ projectRepositoryId: PROJECT, settings: { setupCommand: 'pnpm i' } });
     });
     await waitForMutationsIdle(client);
 
@@ -59,7 +59,7 @@ describe('project settings hooks', () => {
 
     await act(async () => {
       await expect(
-        result.current.mutateAsync({ githubProjectId: PROJECT, settings: { setupCommand: 'x' } }),
+        result.current.mutateAsync({ projectRepositoryId: PROJECT, settings: { setupCommand: 'x' } }),
       ).rejects.toMatchObject({ status: 400 });
     });
     await waitForMutationsIdle(client);

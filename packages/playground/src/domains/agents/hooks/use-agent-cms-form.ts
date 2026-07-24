@@ -105,7 +105,8 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     form.reset(initialValues);
 
     const mcpClientRecord = options.dataSource.mcpClients as
-      Record<string, { tools?: Record<string, { description?: string }> }> | undefined;
+      | Record<string, { tools?: Record<string, { description?: string }> }>
+      | undefined;
     const ids = Object.keys(mcpClientRecord ?? {});
     if (ids.length === 0) return;
 

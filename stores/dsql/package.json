@@ -37,7 +37,7 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@microsoft/api-extractor": "^7.58.9",
+    "@microsoft/api-extractor": "^7.58.11",
     "@types/node": "22.20.1",
     "@types/pg": "^8.11.14",
     "@vitest/coverage-v8": "catalog:",

@@ -74,7 +74,8 @@ describeForAllEngines('AIMock loop scenario: multi-step tool loop', engine => {
 
     // The tool-result message must reference the original tool call id.
     const toolMessage = turn2Messages.find(message => (message as { role?: string }).role === 'tool') as
-      { tool_call_id?: string } | undefined;
+      | { tool_call_id?: string }
+      | undefined;
     expect(toolMessage?.tool_call_id).toBe('call_lookup_alpha');
   });
 });

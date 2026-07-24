@@ -72,7 +72,7 @@ export const AgentProfileTabs = ({
           {integrationsTabEnabled && <Tab value="integrations">Integrations</Tab>}
         </TabList>
 
-        <div className="min-h-0 overflow-y-auto h-full">
+        <div className="h-full min-h-0 overflow-y-auto">
           {modelTabEnabled && (
             <TabContent value="model" className={twoPaneTabContentClassName}>
               <Models editable={isEditable} />

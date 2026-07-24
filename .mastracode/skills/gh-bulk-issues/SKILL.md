@@ -1,7 +1,8 @@
 ---
 name: gh-bulk-issues
 description: Orchestrate parallel Mastra Code headless instances to debug and fix multiple GitHub issues simultaneously
-goal: true
+metadata:
+  goal: true
 ---
 
 # Bulk Issue Solver

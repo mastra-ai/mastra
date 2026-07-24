@@ -1,6 +1,6 @@
 {
   "name": "@mastra/koa",
-  "version": "1.6.8-alpha.8",
+  "version": "1.6.10-alpha.1",
   "description": "Mastra Koa adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -30,7 +30,7 @@
     "@mastra/server": "workspace:*"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.111",
+    "@ai-sdk/openai": "^2.0.114",
     "@internal/lint": "workspace:*",
     "@internal/server-adapter-test-utils": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",

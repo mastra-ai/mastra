@@ -215,21 +215,21 @@ export function DatasetDetailView({
   ]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden">
       {/* Header */}
-      <div className="p-4 border-b border-border1 space-y-3">
+      <div className="border-border1 space-y-3 border-b p-4">
         <div className="flex items-center justify-between">
           <div className="min-w-0">
-            <Txt variant="ui-sm" className="text-neutral5 font-medium block truncate">
+            <Txt variant="ui-sm" className="text-neutral5 block truncate font-medium">
               {datasetName}
             </Txt>
             {datasetDescription && (
-              <Txt variant="ui-xs" className="text-neutral3 block mt-0.5 truncate">
+              <Txt variant="ui-xs" className="text-neutral3 mt-0.5 block truncate">
                 {datasetDescription}
               </Txt>
             )}
             {datasetTags.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-1.5">
+              <div className="mt-1.5 flex flex-wrap gap-1">
                 {datasetTags.map(tag => (
                   <Chip key={tag} color={getTagColor(tag)} size="small">
                     {tag}
@@ -238,7 +238,7 @@ export function DatasetDetailView({
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex shrink-0 items-center gap-2">
             <Button variant="ghost" size="sm" onClick={onGenerate}>
               <Icon size="sm">
                 <Sparkles />
@@ -268,7 +268,7 @@ export function DatasetDetailView({
         </div>
         {/* Version selectors */}
         <div className="flex items-center gap-3">
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <Txt variant="ui-xs" className="text-neutral3 mb-1 block">
               Dataset version
             </Txt>
@@ -288,7 +288,7 @@ export function DatasetDetailView({
             />
           </div>
           {isAgentTarget && (
-            <div className="flex-1 min-w-0">
+            <div className="min-w-0 flex-1">
               <Txt variant="ui-xs" className="text-neutral3 mb-1 block">
                 Agent version
               </Txt>
@@ -321,20 +321,20 @@ export function DatasetDetailView({
       </div>
 
       {/* Scorers + Items + Past runs */}
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        <ScrollArea className="flex-1 min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <ScrollArea className="min-h-0 flex-1">
           {/* Scorers section (collapsible) */}
-          <div className="border-b border-border1">
+          <div className="border-border1 border-b">
             <div className="flex items-center justify-between">
               <button
                 type="button"
                 onClick={() => setScorersCollapsed(prev => !prev)}
-                className="flex-1 px-4 py-2 flex items-center gap-1 hover:bg-surface3 transition-colors"
+                className="hover:bg-surface3 flex flex-1 items-center gap-1 px-4 py-2 transition-colors"
               >
                 <Icon size="sm" className="text-neutral3">
                   {scorersCollapsed ? <ChevronRight /> : <ChevronDown />}
                 </Icon>
-                <Txt variant="ui-xs" className="text-neutral3 font-semibold uppercase tracking-wider">
+                <Txt variant="ui-xs" className="text-neutral3 font-semibold tracking-wider uppercase">
                   Scorers ({attachedScorerEntries.length})
                 </Txt>
               </button>
@@ -361,13 +361,13 @@ export function DatasetDetailView({
                   )}
                 </div>
               ) : (
-                <div className="divide-y divide-border1">
+                <div className="divide-border1 divide-y">
                   {attachedScorerEntries.map(([id, scorer]) => {
                     const name = (scorer as { scorer?: { name?: string } }).scorer?.name || id;
                     return (
                       <div
                         key={id}
-                        className="flex items-center justify-between px-4 py-1.5 hover:bg-surface3 transition-colors group"
+                        className="hover:bg-surface3 group flex items-center justify-between px-4 py-1.5 transition-colors"
                       >
                         <Txt variant="ui-xs" className="text-neutral5 truncate">
                           {name}
@@ -376,7 +376,7 @@ export function DatasetDetailView({
                           type="button"
                           onClick={() => handleDetachScorer(id)}
                           aria-label={`Detach "${name}" from this dataset`}
-                          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-neutral3 hover:text-red-500 p-0.5"
+                          className="text-neutral3 p-0.5 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-500 focus-visible:opacity-100"
                           title="Detach scorer"
                         >
                           <Icon size="sm">
@@ -391,16 +391,16 @@ export function DatasetDetailView({
           </div>
 
           {/* Items section (collapsible) */}
-          <div className="border-b border-border1">
+          <div className="border-border1 border-b">
             <button
               type="button"
               onClick={() => setItemsCollapsed(prev => !prev)}
-              className="w-full px-4 py-2 flex items-center gap-1 hover:bg-surface3 transition-colors"
+              className="hover:bg-surface3 flex w-full items-center gap-1 px-4 py-2 transition-colors"
             >
               <Icon size="sm" className="text-neutral3">
                 {itemsCollapsed ? <ChevronRight /> : <ChevronDown />}
               </Icon>
-              <Txt variant="ui-xs" className="text-neutral3 font-semibold uppercase tracking-wider">
+              <Txt variant="ui-xs" className="text-neutral3 font-semibold tracking-wider uppercase">
                 Items ({items.length})
               </Txt>
             </button>
@@ -412,7 +412,7 @@ export function DatasetDetailView({
                   </Txt>
                 </div>
               ) : (
-                <div className="divide-y divide-border1">
+                <div className="divide-border1 divide-y">
                   {items.map(item => {
                     const isExpanded = expandedItemId === item.id;
                     return (
@@ -420,13 +420,13 @@ export function DatasetDetailView({
                         <button
                           type="button"
                           onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
-                          className="w-full text-left px-4 py-2 hover:bg-surface3 transition-colors flex items-start gap-2"
+                          className="hover:bg-surface3 flex w-full items-start gap-2 px-4 py-2 text-left transition-colors"
                         >
                           <Icon size="sm" className="text-neutral3 mt-0.5 shrink-0">
                             {isExpanded ? <ChevronDown /> : <ChevronRight />}
                           </Icon>
-                          <div className="flex-1 min-w-0 flex items-center gap-2">
-                            <Txt variant="ui-xs" className="text-neutral5 block truncate flex-1">
+                          <div className="flex min-w-0 flex-1 items-center gap-2">
+                            <Txt variant="ui-xs" className="text-neutral5 block flex-1 truncate">
                               {truncateValue(item.input)}
                             </Txt>
                             {item.expectedTrajectory != null && (
@@ -455,7 +455,7 @@ export function DatasetDetailView({
             <button
               type="button"
               onClick={() => setRunsCollapsed(prev => !prev)}
-              className="w-full px-4 py-2 flex items-center gap-1 hover:bg-surface3 transition-colors"
+              className="hover:bg-surface3 flex w-full items-center gap-1 px-4 py-2 transition-colors"
             >
               <Icon size="sm" className="text-neutral3">
                 {runsCollapsed ? <ChevronRight /> : <ChevronDown />}
@@ -463,7 +463,7 @@ export function DatasetDetailView({
               <Icon size="sm" className="text-neutral3">
                 <Clock />
               </Icon>
-              <Txt variant="ui-xs" className="text-neutral3 font-semibold uppercase tracking-wider">
+              <Txt variant="ui-xs" className="text-neutral3 font-semibold tracking-wider uppercase">
                 Past Runs ({datasetExperiments.length})
               </Txt>
             </button>
@@ -475,16 +475,16 @@ export function DatasetDetailView({
                   </Txt>
                 </div>
               ) : (
-                <div className="divide-y divide-border1">
+                <div className="divide-border1 divide-y">
                   {datasetExperiments.map(exp => (
                     <button
                       key={exp.id}
                       type="button"
                       onClick={() => onViewExperiment(exp.id)}
-                      className="w-full text-left px-4 py-2 hover:bg-surface3 transition-colors flex items-center gap-2"
+                      className="hover:bg-surface3 flex w-full items-center gap-2 px-4 py-2 text-left transition-colors"
                     >
                       <ExperimentStatusDot status={exp.status} />
-                      <div className="flex-1 min-w-0">
+                      <div className="min-w-0 flex-1">
                         <Txt variant="ui-xs" className="text-neutral5 block">
                           {exp.startedAt ? formatTimestamp(exp.startedAt) : 'Unknown'}
                         </Txt>
@@ -533,7 +533,7 @@ export function DatasetDetailView({
                   placeholder="Search scorers..."
                   value={attachScorerSearch}
                   onChange={e => setAttachScorerSearch(e.target.value)}
-                  className="w-full px-3 py-1.5 text-sm rounded border border-border1 bg-surface2 text-text1 placeholder:text-neutral3 focus:outline-none focus:ring-1 focus:ring-accent1"
+                  className="border-border1 bg-surface2 text-text1 placeholder:text-neutral3 focus:ring-accent1 w-full rounded border px-3 py-1.5 text-sm focus:ring-1 focus:outline-none"
                 />
                 {unattachedScorerEntries
                   .filter(([id, scorer]) => {
@@ -547,7 +547,7 @@ export function DatasetDetailView({
                       <button
                         key={id}
                         type="button"
-                        className="w-full text-left px-3 py-2 rounded hover:bg-surface4 transition-colors"
+                        className="hover:bg-surface4 w-full rounded px-3 py-2 text-left transition-colors"
                         onClick={async () => {
                           try {
                             await handleAttachScorer(id);
@@ -656,7 +656,7 @@ function ExpandedItemEditor({
 
   if (isEditing) {
     return (
-      <div className="px-4 pb-3 pl-10 space-y-2">
+      <div className="space-y-2 px-4 pb-3 pl-10">
         <div>
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Input
@@ -715,12 +715,12 @@ function ExpandedItemEditor({
   }
 
   return (
-    <div className="px-4 pb-3 pl-10 space-y-2">
+    <div className="space-y-2 px-4 pb-3 pl-10">
       <div>
         <Txt variant="ui-xs" className="text-neutral3 font-medium">
           Input
         </Txt>
-        <pre className="text-xs text-neutral5 bg-surface1 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-48 overflow-y-auto mt-1">
+        <pre className="text-neutral5 bg-surface1 mt-1 max-h-48 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-xs wrap-break-word whitespace-pre-wrap">
           {formatValue(item.input)}
         </pre>
       </div>
@@ -729,7 +729,7 @@ function ExpandedItemEditor({
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Ground Truth
           </Txt>
-          <pre className="text-xs text-neutral5 bg-surface1 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-48 overflow-y-auto mt-1">
+          <pre className="text-neutral5 bg-surface1 mt-1 max-h-48 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-xs wrap-break-word whitespace-pre-wrap">
             {formatValue(item.groundTruth)}
           </pre>
         </div>
@@ -739,7 +739,7 @@ function ExpandedItemEditor({
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Expected Trajectory
           </Txt>
-          <pre className="text-xs text-neutral5 bg-surface1 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto mt-1">
+          <pre className="text-neutral5 bg-surface1 mt-1 max-h-48 overflow-x-auto overflow-y-auto rounded px-2 py-1.5 text-xs break-words whitespace-pre-wrap">
             {formatValue(item.expectedTrajectory)}
           </pre>
         </div>

@@ -18,7 +18,7 @@ import { useLinkComponent } from '@/lib/framework';
 function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <Txt variant="ui-xs" className="text-neutral4 uppercase tracking-wide">
+      <Txt variant="ui-xs" className="text-neutral4 tracking-wide uppercase">
         {label}
       </Txt>
       <div className="text-ui-md">{children}</div>
@@ -105,8 +105,8 @@ export default function SchedulePage() {
       </PageLayout.TopArea>
 
       {schedule ? (
-        <div className="grid gap-6 h-full overflow-hidden grid-cols-[minmax(0,20rem)_1fr]">
-          <div className="flex flex-col gap-4 border border-border1 rounded-md p-4 h-fit">
+        <div className="grid h-full grid-cols-[minmax(0,20rem)_1fr] gap-6 overflow-hidden">
+          <div className="border-border1 flex h-fit flex-col gap-4 rounded-md border p-4">
             <MetaItem label={agentId ? 'Agent' : 'Workflow'}>
               {workflowId ? (
                 <Link to={paths.workflowLink(workflowId)} className="text-accent1 hover:underline">
@@ -121,8 +121,8 @@ export default function SchedulePage() {
               )}
             </MetaItem>
             <MetaItem label="Cron">
-              <code className="font-mono text-ui-md">{schedule.cron}</code>
-              {schedule.timezone ? <span className="text-neutral4 ml-2 text-ui-sm">{schedule.timezone}</span> : null}
+              <code className="text-ui-md font-mono">{schedule.cron}</code>
+              {schedule.timezone ? <span className="text-neutral4 text-ui-sm ml-2">{schedule.timezone}</span> : null}
             </MetaItem>
             <MetaItem label="Status">
               <ScheduleStatusText status={schedule.status} />

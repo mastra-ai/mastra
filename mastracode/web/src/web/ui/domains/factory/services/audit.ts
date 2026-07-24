@@ -48,10 +48,10 @@ async function throwRequestError(res: Response): Promise<never> {
   throw new Error(message);
 }
 
-/** Fetch one page of the project's audit trail, newest-first. */
+/** Fetch one page of the Factory project's audit trail, newest-first. */
 export async function fetchAuditEvents(
   baseUrl: string,
-  githubProjectId: string,
+  factoryProjectId: string,
   options: { actions?: string[]; before?: string; limit?: number } = {},
 ): Promise<AuditEventPage> {
   const query = new URLSearchParams();
@@ -59,7 +59,7 @@ export async function fetchAuditEvents(
   if (options.before) query.set('before', options.before);
   if (options.limit) query.set('limit', String(options.limit));
   const qs = query.size > 0 ? `?${query}` : '';
-  const res = await fetch(`${baseUrl}/web/factory/repositories/${encodeURIComponent(githubProjectId)}/audit${qs}`, {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/audit${qs}`, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });

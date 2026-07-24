@@ -10,7 +10,13 @@ import type {
 import type { LibSQLVectorFilter } from './filter';
 
 type OperatorType =
-  BasicOperator | NumericOperator | ArrayOperator | ElementOperator | LogicalOperator | '$contains' | '$size';
+  | BasicOperator
+  | NumericOperator
+  | ArrayOperator
+  | ElementOperator
+  | LogicalOperator
+  | '$contains'
+  | '$size';
 
 type FilterOperator = {
   sql: string;

@@ -1,13 +1,25 @@
+import { types as t } from '@babel/core';
 import type { PluginObject } from '@babel/core';
-import * as babel from '@babel/core';
 
-export function checkConfigExport(result: { hasValidConfig: boolean }): PluginObject {
-  const t = babel.types;
+export function checkConfigExport(result: { hasValidConfig: boolean; projectType?: string }): PluginObject {
   // Track which local variable names are assigned to `new Mastra()`
   const mastraVars = new Set<string>();
 
   return {
     visitor: {
+      NewExpression(path) {
+        if (!t.isIdentifier(path.node.callee)) {
+          return;
+        }
+
+        const binding = path.scope.getBinding(path.node.callee.name);
+        if (
+          binding?.path.isImportSpecifier() &&
+          t.isIdentifier(binding.path.node.imported, { name: 'MastraFactory' })
+        ) {
+          result.projectType = 'factory';
+        }
+      },
       ExportNamedDeclaration(path) {
         const decl = path.node.declaration;
         // 1) export const mastra = new Mastra(...)

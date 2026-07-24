@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { detectProject } from '@mastra/code-sdk/utils/project';
-import { resolveCodebase } from '../../src/web/fs-routes.js';
+import { resolveCodebase } from '@mastra/factory/routes/fs';
 
 /**
  * The web project picker must derive the SAME resourceId the TUI uses, so a

@@ -1,8 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { fetchThemeFlow, getEntityLearningConfig } from '../entity-learning-api';
+import { fetchThemeFlow } from '../entity-learning-api';
 import type { TraceSignalName } from '../types';
-import { requireEntityLearningConfig } from './utils';
 
 export function useThemeFlow(
   entityId: string,
@@ -10,19 +9,10 @@ export function useThemeFlow(
   signalNames: TraceSignalName[],
   snapshotId: string | undefined,
 ) {
-  const config = getEntityLearningConfig();
-
   return useQuery({
-    queryKey: ['entity-learning', config?.projectId, entityType, entityId, 'theme-flow', signalNames, snapshotId],
-    queryFn: () =>
-      fetchThemeFlow(
-        requireEntityLearningConfig(config),
-        entityId,
-        entityType,
-        signalNames,
-        requireSnapshot(snapshotId),
-      ),
-    enabled: config !== undefined && signalNames.length >= 2 && snapshotId !== undefined,
+    queryKey: ['entity-learning', entityType, entityId, 'theme-flow', signalNames, snapshotId],
+    queryFn: () => fetchThemeFlow(entityId, entityType, signalNames, requireSnapshot(snapshotId)),
+    enabled: signalNames.length >= 2 && snapshotId !== undefined,
   });
 }
 

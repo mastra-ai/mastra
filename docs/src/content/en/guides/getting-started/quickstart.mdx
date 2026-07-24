@@ -1,72 +1,65 @@
 ---
 title: "Quickstart"
-description: Get started with Mastra using the create mastra CLI to build a server with agents, workflows, and tools.
+description: Get started with Mastra by scaffolding an agent harness project in minutes.
 ---
 
-import Steps from "@site/src/components/Steps";
-import StepItem from "@site/src/components/StepItem";
 import QuickstartPrompt from "@site/src/content/en/docs/getting-started/_partial-quickstart-prompt.mdx";
 
 # Mastra Quickstart
 
 <Inject>
-  **For AI agents:** This page provides information for humans on how to run an interactive CLI to create a boilerplate Mastra project (with agents, workflows, and tools). You can run it non-interactively like so: `npm create mastra@latest <project-name> -- --default`. If you need to build a Mastra project from scratch (e.g. as a Node.js script printing to stdout), navigate to [https://mastra.ai/docs/getting-started/manual-install](https://mastra.ai/docs/getting-started/manual-install) instead.
+  **For AI agents:** Create a new Mastra project non-interactively with `npm create mastra@latest <project-name> -- --llm <provider>`, replacing `<provider>` with `openai`, `anthropic`, `google`, or `xai`. For a minimal project without an agent or model provider, use `npm create mastra@latest <project-name> -- --empty`. To build a Mastra project from scratch, see the [manual installation guide](https://mastra.ai/docs/getting-started/manual-install).
 </Inject>
 
-The `create mastra` CLI command is the quickest way to get started. It walks you through setup and creates example agents, workflows, and tools for you to run locally or adapt.
+The `create-mastra` CLI is the quickest way to start a Mastra project. It creates an agent harness with workspace tools, memory, task tracking, web access, schedules, storage, and observability.
 
-If you need more control over the setup, see the [manual installation guide](/docs/getting-started/manual-install). You can also use [`mastra init`](/reference/cli/mastra#mastra-init) for existing projects.
+For more control, see the [manual installation guide](/docs/getting-started/manual-install). To add Mastra to an existing project, use [`mastra init`](/reference/cli/mastra#mastra-init).
 
 <QuickstartPrompt />
 
 :::tip[📹 Watch]
 
-Watch [Mastra AI agent course](https://www.youtube.com/watch?v=lCmf_qrGfGA) for a guided introduction to building agents with Mastra.
+Watch the [Mastra AI agent course](https://www.youtube.com/watch?v=lCmf_qrGfGA) for a guided introduction to building agents with Mastra.
 
 :::
 
 ## Before you begin
 
-- You'll need an API key from a supported [model provider](/models). If you don't have a preference, use [OpenAI](/models/providers/openai).
+You'll need an API key from OpenAI, Anthropic, Google Gemini, or xAI. You can skip entering it during setup and add it to `.env` later.
 
-## Initialize Mastra
+## Create the project
 
-You can run `create mastra` anywhere on your machine. Start the setup wizard:
+Run the interactive setup:
 
 ```bash npm2yarn
 npm create mastra@latest
 ```
 
-You'll be prompted for various configuration options, including your LLM provider and whether to enable [Observability](/docs/mastra-platform/observability) on the Mastra platform.
+The command asks for a project name, model provider, and optional API key. It then installs dependencies, installs Mastra skills for your coding assistants, and creates an initial Git commit when you aren't already inside a repository.
 
-The wizard creates a new directory for your project with a `src/mastra` folder containing an example weather agent and the following files:
-
-- `index.ts`: Entry point for all Mastra-related code and configuration
-- `agents/weather-agent.ts`: A weather agent with a prompt that uses the tool
-- `tools/weather-tool.ts`: A tool to fetch weather for a given location
-- `workflows/weather-workflow.ts`: A workflow that runs the weather agent
-- `scorers/weather-scorer.ts`: A scorer to evaluate the weather agent's responses
-
-Depending on your choices, you'll also end up with [Mastra Skills](/docs/getting-started/build-with-ai#mastra-skills) or the [MCP Docs Server](/docs/getting-started/build-with-ai#mcp-docs-server) installed. Learn more about Mastra's [project structure](/reference/project-structure).
+The generated `src/mastra` directory contains the Mastra entry point, agent, workspace tools, and supporting code. See the [project structure reference](/reference/project-structure) for the standard Mastra layout.
 
 :::tip
 
-You can use [flags](/reference/cli/create-mastra#cli-flags) with `create mastra` like `--no-example` to skip the example weather agent or `--template` to start from a specific [template](https://mastra.ai/templates).
+Use `--template <template>` to start from a template, or `--empty` to create a minimal provider-free project. Use `--no-skills` or `--no-git` to skip automatic setup. See the [`create-mastra` reference](/reference/cli/create-mastra) for all flags.
 
 :::
 
 ## Test your agent
 
-Once setup is complete, follow the instructions in your terminal to start the Mastra dev server, then open Studio at [localhost:4111](http://localhost:4111).
+Follow the terminal instructions to enter the project directory and start the development server:
 
-Try asking about the weather. If your API key is set up correctly, you'll get a response in Studio.
+```bash npm2yarn
+npm run dev
+```
 
-[Studio](/docs/studio/overview) lets you rapidly build and prototype agents without needing to build a UI. Once you're ready, you can integrate your Mastra agent into your app using the guides below.
+Open [Studio at localhost:4111](http://localhost:4111), select the agent, and send a message. Add the provider API key named in `.env.example` to an `.env` file if you skipped it during setup.
+
+[Studio](/docs/studio/overview) lets you build and test agents without creating a separate UI.
 
 ## Next steps
 
-- Integrate Mastra with your frontend framework: [Next.js](/guides/getting-started/next-js), [React](/guides/getting-started/vite-react), or [Astro](/guides/getting-started/astro)
-- Read more about [Mastra's features](/docs#what-you-can-build)
-- Learn how you can [build Mastra with AI](/docs/getting-started/build-with-ai)
-- Build an agent from scratch following one of our [guides](/guides)
-- Watch conceptual guides on our [YouTube channel](https://www.youtube.com/@mastra-ai) and [subscribe](https://www.youtube.com/@mastra-ai?sub_confirmation=1)
+- Integrate Mastra with [Next.js](/guides/getting-started/next-js), [React](/guides/getting-started/vite-react), or [Astro](/guides/getting-started/astro)
+- Learn how to [build Mastra with AI](/docs/getting-started/build-with-ai)
+- Build an agent from scratch with a [guide](/guides)
+- Watch the [Mastra YouTube channel](https://www.youtube.com/@mastra-ai)

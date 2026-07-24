@@ -1,0 +1,58 @@
+{
+  "name": "create-factory",
+  "version": "0.1.2-alpha.2",
+  "description": "Create a Mastra Factory project: an agent-powered software delivery environment built on Mastra. Run `npm create factory` to scaffold and get started.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "bin": {
+    "create-factory": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "tsup --silent --config tsup.config.ts",
+    "prepack": "npm run build",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint ."
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "mastracode/mastra-factory"
+  },
+  "homepage": "https://mastra.ai",
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "keywords": [
+    "mastra",
+    "software-factory",
+    "create",
+    "scaffold",
+    "cli",
+    "agents",
+    "ai"
+  ],
+  "dependencies": {
+    "@clack/prompts": "^1.7.0",
+    "commander": "^14.0.3",
+    "mastra": "workspace:*",
+    "picocolors": "^1.1.1",
+    "posthog-node": "^5.37.0",
+    "tinyexec": "^1.2.4"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@types/node": "22.20.1",
+    "eslint": "^10.4.1",
+    "tsup": "^8.5.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -825,7 +825,8 @@ export class SlackProvider implements ChannelProvider {
     // confirm which branch the runtime object satisfies, but the merge always
     // produces a valid ChannelAdapterConfig at runtime.
     const slackEntry = (Object.keys(adapterConfig).length > 0 ? { adapter, ...adapterConfig } : adapter) as
-      ChannelAdapterConfig | SlackAdapter;
+      | ChannelAdapterConfig
+      | SlackAdapter;
     const existing = agent.getChannels() as AgentChannels | undefined;
     const existingConfig = existing?.channelConfig;
     const agentChannels = new AgentChannels({

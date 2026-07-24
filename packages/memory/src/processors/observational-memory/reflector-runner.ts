@@ -176,7 +176,9 @@ const EARLY_ACTIVATION_SIZE_FLOOR_RATIO = 0.75;
  * already evaluated.
  */
 type TryActivateResult =
-  { status: 'activated' } | { status: 'no-buffer' } | { status: 'suppressed'; reason: 'composition' | 'size' };
+  | { status: 'activated' }
+  | { status: 'no-buffer' }
+  | { status: 'suppressed'; reason: 'composition' | 'size' };
 
 /**
  * Runs the Reflector agent for compressing observations.
