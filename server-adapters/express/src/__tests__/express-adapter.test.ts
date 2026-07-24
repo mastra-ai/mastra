@@ -1230,5 +1230,53 @@ describe('Express Server Adapter', () => {
       const data = await response.json();
       expect(data).toEqual({ message: 'Hello from custom route!' });
     });
+
+    it('enforces body size limits on DELETE requests with a body', async () => {
+      const customRoutes = [
+        registerApiRoute('/test-delete-body', {
+          method: 'DELETE',
+          handler: async c => {
+            const body = await c.req.json();
+            return c.json({ received: body });
+          },
+        }),
+      ];
+
+      const app = express();
+      app.use(express.json());
+      const mastra = new Mastra({});
+
+      const adapter = new MastraServer({
+        app,
+        mastra,
+        customApiRoutes: customRoutes,
+        bodyLimitOptions: {
+          maxSize: 50,
+          onError: () => ({ error: 'Body limit exceeded' }),
+        },
+      });
+
+      await adapter.init();
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+
+      const largeBody = JSON.stringify({ data: 'a'.repeat(100) });
+      const response = await fetch(`http://localhost:${port}/test-delete-body`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': String(Buffer.byteLength(largeBody)),
+        },
+        body: largeBody,
+      });
+
+      expect(response.status).toBe(413);
+      const data = await response.json();
+      expect(data).toEqual({ error: 'Body limit exceeded' });
+    });
   });
 });
