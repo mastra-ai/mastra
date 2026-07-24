@@ -57,6 +57,7 @@
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",
     "@mastra/libsql": "workspace:*",
+    "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
     "@types/express": "^5.0.6",
     "@types/koa": "^3.0.1",
