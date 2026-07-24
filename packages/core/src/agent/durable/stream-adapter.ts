@@ -5,11 +5,13 @@ import type { IMastraLogger } from '../../logger';
 import type { OutputProcessorOrWorkflow } from '../../processors';
 import { safeClose, safeEnqueue } from '../../stream/base';
 import { MastraModelOutput } from '../../stream/base/output';
+import { ChunkFrom } from '../../stream/types';
 import type {
   ChunkType,
   MastraOnFinishCallback,
   MastraOnStepFinishCallback,
   LanguageModelUsage,
+  StepStartPayload,
 } from '../../stream/types';
 import { MessageList } from '../message-list';
 import type { StructuredOutputOptions } from '../types';
@@ -496,18 +498,40 @@ export async function emitChunkEvent<OUTPUT = undefined>(
 
 /**
  * Helper to emit a step start event to pubsub.
- * The `data` payload must include `type: 'step-start'` so the stream-adapter
- * consumer recognises it as a `ChunkType` and enqueues it onto the client stream.
+ * The stream-adapter consumer enqueues this event's `data` verbatim as a
+ * stream chunk, so it must match the canonical `step-start` `ChunkType` the
+ * regular (non-durable) engine emits — `{ type, runId, from, payload }`.
+ * Chunk consumers destructure `chunk.payload` (e.g. the `@mastra/ai-sdk`
+ * chunk converter), so emitting the fields flat at the top level instead
+ * crashes every durable `stream()`/`observe()` consumer with
+ * "Cannot destructure property 'messageId' of 'chunk.payload'".
  */
 export async function emitStepStartEvent(
   pubsub: PubSub,
   runId: string,
-  data: { stepId?: string; request?: unknown; warnings?: unknown[] },
+  data: {
+    stepId?: string;
+    messageId?: string;
+    request?: StepStartPayload['request'];
+    warnings?: StepStartPayload['warnings'];
+  },
 ): Promise<void> {
+  const chunk: Extract<ChunkType, { type: 'step-start' }> = {
+    type: 'step-start',
+    runId,
+    from: ChunkFrom.AGENT,
+    payload: {
+      ...data,
+      // Mirror the regular engine's defaults (`request: request || {}`,
+      // `warnings: warnings || []` in the agentic-execution llm step).
+      request: data.request ?? {},
+      warnings: data.warnings ?? [],
+    },
+  };
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.STEP_START,
     runId,
-    data: { type: 'step-start', ...data },
+    data: chunk,
   });
 }
 
