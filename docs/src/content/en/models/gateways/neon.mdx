@@ -1,0 +1,83 @@
+---
+title: "Neon | Models"
+description: "Use frontier and open-weight models from OpenAI, Google, Meta, and Alibaba through the Neon AI Gateway."
+---
+
+# <img src="https://models.dev/logos/neon.svg" alt="Neon logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Neon
+
+Neon AI Gateway provides access to frontier and open-weight models from OpenAI, Google, Meta, and Alibaba through a single OpenAI-compatible endpoint. Authentication is handled automatically using the `NEON_AI_GATEWAY_TOKEN` environment variable. Configure `NEON_AI_GATEWAY_BASE_URL` as well.
+
+Learn more in the [Neon AI Gateway documentation](https://neon.com/docs/ai-gateway/overview).
+
+Neon updates the model catalog as availability changes. Check the [Neon model catalog](https://neon.com/docs/ai-gateway/models) before choosing a model ID. The catalog is also published as the [`neon` provider on models.dev](https://models.dev/providers/neon/).
+
+```bash title=".env"
+NEON_AI_GATEWAY_BASE_URL=your-value
+NEON_AI_GATEWAY_TOKEN=your-api-token
+```
+
+```typescript title="src/mastra/agents/my-agent.ts" {7}
+import { Agent } from "@mastra/core/agent";
+
+const agent = new Agent({
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "neon/claude-haiku-4-5"
+});
+
+// Generate a response
+const response = await agent.generate("Hello!");
+
+// Stream a response
+const stream = await agent.stream("Tell me a story");
+for await (const chunk of stream) {
+  console.log(chunk);
+}
+```
+
+:::info
+
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Neon AI Gateway documentation](https://neon.com/docs/ai-gateway/overview) for details.
+
+:::
+
+## Models
+
+See the [Neon model catalog](https://neon.com/docs/ai-gateway/models) for the current list of models, capabilities, and pricing.
+
+## Advanced configuration
+
+### Custom headers
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "custom-agent",
+  name: "custom-agent",
+  model: {
+    url: "${NEON_AI_GATEWAY_BASE_URL}/v1",
+    id: "neon/claude-haiku-4-5",
+    apiKey: process.env.NEON_AI_GATEWAY_TOKEN,
+    headers: {
+      "X-Custom-Header": "value"
+    }
+  }
+});
+```
+
+### Dynamic model selection
+
+```typescript title="src/mastra/agents/my-agent.ts"
+const agent = new Agent({
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
+  model: ({ requestContext }) => {
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "neon/qwen35-122b-a10b"
+      : "neon/claude-haiku-4-5";
+  }
+});
+```
+
+

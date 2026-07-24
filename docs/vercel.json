@@ -176,6 +176,11 @@
       "permanent": true
     },
     {
+      "source": "/models/providers/neon",
+      "destination": "/models/gateways/neon",
+      "permanent": true
+    },
+    {
       "source": "/docs/frameworks/web-frameworks/astro",
       "destination": "/guides/getting-started/astro",
       "permanent": true
@@ -1153,6 +1158,11 @@
     {
       "source": "/docs/frameworks/agentic-uis/openrouter/llms.txt",
       "destination": "/models/gateways/openrouter/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/models/providers/neon/llms.txt",
+      "destination": "/models/gateways/neon/llms.txt",
       "permanent": true
     },
     {
