@@ -9,8 +9,10 @@ import {
   MetaSchemaCompatLayer,
   applyCompatLayer,
   convertZodSchemaToAISDKSchema,
+  isZodType,
   jsonSchema,
 } from '@mastra/schema-compat';
+import type { SchemaCompatLayer } from '@mastra/schema-compat';
 import type { JSONSchema7Definition } from 'json-schema';
 import { z } from 'zod/v4';
 import { MastraFGAPermissions } from '../../auth/ee';
@@ -24,13 +26,14 @@ import { executeWithContext } from '../../observability/utils';
 import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { StandardSchemaWithJSON } from '../../schema';
-import { getNeedsApprovalFn, isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
+import { getNeedsApprovalFn, isMastraTool, isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { safeStringify } from '../../utils';
 import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
 
 import type { SuspendOptions } from '../../workflows';
 import { ToolStream } from '../stream';
+import type { Tool } from '../tool';
 import type {
   CoreTool,
   McpMetadata,
@@ -364,6 +367,41 @@ export class CoreToolBuilder extends MastraBase {
     return schema;
   };
 
+  /** Execute-time schema — must match compat-transformed LLM parameters, not the author's original constraints. */
+  private buildInputValidationSchema(
+    originalSchema: unknown,
+    schemaCompatLayers: SchemaCompatLayer[],
+  ): StandardSchemaWithJSON | undefined {
+    if (!originalSchema) {
+      return undefined;
+    }
+
+    let schema = originalSchema;
+    if (typeof schema === 'function') {
+      schema = schema();
+    }
+
+    // Zod v4 is Standard Schema too — use processZodType so Haiku string min/max match LLM parameters.
+    if (isZodType(schema)) {
+      for (const compat of schemaCompatLayers) {
+        if (compat.shouldApply()) {
+          return toStandardSchema(compat.processZodType(schema));
+        }
+      }
+      return toStandardSchema(schema);
+    }
+
+    if (isStandardSchemaWithJSON(schema)) {
+      const applicableLayer = schemaCompatLayers.find(layer => layer.shouldApply());
+      if (applicableLayer) {
+        return applicableLayer.processToCompatSchema(schema);
+      }
+      return toStandardSchema(schema);
+    }
+
+    return undefined;
+  }
+
   private getOutputSchema = () => {
     if ('outputSchema' in this.originalTool) {
       let schema = this.originalTool.outputSchema;
@@ -518,7 +556,12 @@ export class CoreToolBuilder extends MastraBase {
     };
   }
 
-  private createExecute(tool: ToolToConvert, options: ToolOptions, logType?: 'tool' | 'toolset' | 'client-tool') {
+  private createExecute(
+    tool: ToolToConvert,
+    options: ToolOptions,
+    logType?: 'tool' | 'toolset' | 'client-tool',
+    inputValidationSchema?: StandardSchemaWithJSON,
+  ) {
     // don't add memory, mastra, or tracing context to logging (tracingContext may contain sensitive observability credentials)
     const {
       logger,
@@ -546,7 +589,12 @@ export class CoreToolBuilder extends MastraBase {
     const mcpMeta =
       !isVercelTool(tool) && 'mcpMetadata' in tool ? (tool as { mcpMetadata?: McpMetadata }).mcpMetadata : undefined;
 
-    const execFunction = async (args: unknown, execOptions: MastraToolInvocationOptions, toolSpan?: AnySpan) => {
+    const execFunction = async (
+      args: unknown,
+      execOptions: MastraToolInvocationOptions,
+      toolSpan?: AnySpan,
+      inputValidatedByBuilder = false,
+    ) => {
       try {
         let result;
         let suspendData = null;
@@ -690,7 +738,19 @@ export class CoreToolBuilder extends MastraBase {
             }
           }
 
-          result = await executeWithContext({ span: toolSpan, fn: async () => tool?.execute?.(args, toolContext) });
+          result = await executeWithContext({
+            span: toolSpan,
+            fn: async () => {
+              const executeWithPrevalidatedInput =
+                inputValidatedByBuilder && isMastraTool(tool) ? (tool as Tool).executeWithPrevalidatedInput : undefined;
+
+              if (typeof executeWithPrevalidatedInput === 'function') {
+                return executeWithPrevalidatedInput.call(tool, args as any, toolContext);
+              }
+
+              return tool?.execute?.(args, toolContext);
+            },
+          });
         }
 
         if (suspendData) {
@@ -805,11 +865,14 @@ export class CoreToolBuilder extends MastraBase {
         // and returns early without using the input args.
         const isResuming = !!execOptions?.resumeData;
 
-        // Validate input parameters if schema exists
-        // Use the processed schema for validation if available, otherwise fall back to original
-        const parameters = this.getParameters();
+        const parameters = inputValidationSchema ?? this.getParameters();
+        let inputValidatedByBuilder = isResuming;
         if (!isResuming) {
-          const { data, error } = validateToolInput(parameters, args, options.name);
+          const { data, error } = validateToolInput(
+            parameters as StandardSchemaWithJSON | undefined,
+            args,
+            options.name,
+          );
           //suspendedToolRunId is only required when resumeData is provided
           const suspendedToolRunIdErrToIgnore =
             error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
@@ -820,13 +883,14 @@ export class CoreToolBuilder extends MastraBase {
           }
           // Use validated/transformed data
           args = data;
+          inputValidatedByBuilder = true;
         }
 
         // there is a small delay in stream output so we add an immediate to ensure the stream is ready
         return await new Promise((resolve, reject) => {
           setImmediate(async () => {
             try {
-              const result = await execFunction(args, execOptions!, toolSpan);
+              const result = await execFunction(args, execOptions!, toolSpan, inputValidatedByBuilder);
               resolve(result);
             } catch (err) {
               reject(err);
@@ -922,10 +986,17 @@ export class CoreToolBuilder extends MastraBase {
     }
 
     const originalSchema = this.getParameters();
+    const inputValidationSchema = this.buildInputValidationSchema(originalSchema, schemaCompatLayers);
     let processedInputSchema: Schema | undefined;
 
     if (originalSchema) {
-      if (isStandardSchemaWithJSON(originalSchema)) {
+      if (isZodType(originalSchema)) {
+        processedInputSchema = applyCompatLayer({
+          schema: originalSchema,
+          compatLayers: schemaCompatLayers,
+          mode: 'aiSdkSchema',
+        });
+      } else if (isStandardSchemaWithJSON(originalSchema)) {
         // Find the first applicable compatibility layer
         const applicableLayer = schemaCompatLayers.find(layer => layer.shouldApply());
 
@@ -1041,6 +1112,7 @@ export class CoreToolBuilder extends MastraBase {
             this.originalTool,
             { ...this.options, description: this.originalTool.description },
             this.logType,
+            inputValidationSchema,
           )
         : undefined,
     };

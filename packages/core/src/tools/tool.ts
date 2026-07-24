@@ -260,6 +260,8 @@ export class Tool<
    */
   background?: ToolBackgroundConfig;
 
+  #runExecute?: (inputData: TSchemaIn, context: any, skipInputValidation: boolean) => Promise<any>;
+
   /**
    * Creates a new Tool instance with input validation wrapper.
    *
@@ -310,7 +312,7 @@ export class Tool<
     // 2. context - Execution metadata (mastra, suspend, etc.)
     if (opts.execute) {
       const originalExecute = opts.execute;
-      this.execute = async (inputData: TSchemaIn, context?: any) => {
+      this.#runExecute = async (inputData: TSchemaIn, context: any, skipInputValidation: boolean) => {
         // When a tool is being resumed (resumeData present in context), skip input
         // validation. The original args were already validated during the initial
         // execution, and during resume the tool's execute function checks resumeData
@@ -318,7 +320,7 @@ export class Tool<
         const isResuming = !!(context?.resumeData || context?.agent?.resumeData);
 
         let data: any = inputData;
-        if (!isResuming) {
+        if (!isResuming && !skipInputValidation) {
           // Validate input if schema exists
           const validationResult = validateToolInput(this.inputSchema, inputData, this.id);
           if (validationResult.error) {
@@ -472,7 +474,22 @@ export class Tool<
 
         return outputValidation.data;
       };
+
+      this.execute = (inputData: TSchemaIn, context?: any) => this.#runExecute!(inputData, context, false);
     }
+  }
+
+  /** @internal Used by CoreToolBuilder after compat-aware input validation. */
+  executeWithPrevalidatedInput(inputData: TSchemaIn, context?: any) {
+    if (!this.#runExecute) {
+      if (typeof this.execute === 'function') {
+        return this.execute(inputData, context);
+      }
+
+      throw new Error(`Tool "${this.id}" has no execute function`);
+    }
+
+    return this.#runExecute(inputData, context, true);
   }
 }
 
