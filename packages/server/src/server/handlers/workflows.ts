@@ -933,7 +933,9 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE = createRoute({
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
 
-      void workflow.restartAllActiveWorkflowRuns();
+      void workflow.restartAllActiveWorkflowRuns().catch(error => {
+        mastra.getLogger().error('Failed to restart active workflow runs', { error, workflowId });
+      });
 
       return { message: 'All active workflow runs restarted' };
     } catch (error) {
