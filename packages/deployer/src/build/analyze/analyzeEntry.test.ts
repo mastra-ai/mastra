@@ -290,6 +290,59 @@ describe('analyzeEntry', () => {
     expect(analyzeCache.size).toBe(1);
   });
 
+  it('should preserve actual subpath metadata without adding root or subpath facades for subpath-only transitive workspace packages', async () => {
+    const root = join(import.meta.dirname, '__fixtures__', 'nested-workspace');
+    vi.spyOn(process, 'cwd').mockReturnValue(join(root, 'apps', 'mastra'));
+
+    const workspaceMap = new Map<string, WorkspacePackageInfo>([
+      [
+        '@internal/a',
+        {
+          location: `${root}/packages/a`,
+          dependencies: {
+            '@internal/shared': '1.0.0',
+          },
+          version: '1.0.0',
+        },
+      ],
+      [
+        '@internal/shared',
+        {
+          location: `${root}/packages/shared`,
+          dependencies: {},
+          version: '1.0.0',
+          exports: {
+            './value': './src/index.ts',
+          },
+        },
+      ],
+    ]);
+
+    const result = await analyzeEntry(
+      {
+        entry: `
+          import { a } from '@internal/a';
+          import { shared } from '@internal/shared/value';
+
+          export const value = a + ' ' + shared;
+        `,
+        isVirtualFile: true,
+      },
+      '',
+      {
+        shouldCheckTransitiveDependencies: true,
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap,
+        projectRoot: root,
+      },
+    );
+
+    expect(result.dependencies.get('@internal/a')?.exports).toEqual(['a']);
+    expect(result.dependencies.get('@internal/shared/value')?.exports).toEqual(['shared']);
+    expect(result.dependencies.has('@internal/shared')).toBe(false);
+  });
+
   it('should discover shared transitive workspace packages from manifests without re-analyzing packages', async () => {
     const root = join(import.meta.dirname, '__fixtures__', 'nested-workspace');
     const entryFilePath = join(root, 'apps', 'mastra', 'src', 'shared-transitive.ts');

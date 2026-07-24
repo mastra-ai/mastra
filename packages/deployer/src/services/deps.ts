@@ -16,6 +16,10 @@ interface ArchitectureOptions {
   libc?: string[];
 }
 
+interface InstallOptions extends ArchitectureOptions {
+  pnpmOverrides?: Record<string, string>;
+}
+
 const PNPM_CONFIG_KEYS_TO_COPY = new Set([
   'allowBuilds',
   'onlyBuiltDependencies',
@@ -34,7 +38,7 @@ function getTopLevelYamlKey(line: string) {
   return match?.[1];
 }
 
-export function copyPnpmWorkspaceSettings(source: string, options: ArchitectureOptions = {}) {
+export function copyPnpmWorkspaceSettings(source: string, options: InstallOptions = {}) {
   const hasArchitecture = Boolean(options.os?.length || options.cpu?.length || options.libc?.length);
   const lines = source.split(/\r?\n/);
   const blocks: string[] = [];
@@ -74,6 +78,17 @@ export function copyPnpmWorkspaceSettings(source: string, options: ArchitectureO
       architectureBlock.push(`  libc: ${JSON.stringify(options.libc)}`);
     }
     blocks.push(architectureBlock.join('\n'));
+  }
+
+  if (options.pnpmOverrides && Object.keys(options.pnpmOverrides).length > 0) {
+    blocks.push(
+      [
+        'overrides:',
+        ...Object.entries(options.pnpmOverrides).map(
+          ([key, value]) => `  ${JSON.stringify(key)}: ${JSON.stringify(value)}`,
+        ),
+      ].join('\n'),
+    );
   }
 
   return ["packages:\n  - '.'", ...blocks].join('\n\n') + '\n';
@@ -167,7 +182,7 @@ export class Deps extends MastraBase {
     return null;
   }
 
-  private async writePnpmConfig(dir: string, options: ArchitectureOptions = {}) {
+  private async writePnpmConfig(dir: string, options: InstallOptions = {}) {
     const sourceWorkspaceYamlPath = this.findPnpmWorkspaceFile(this.rootDir);
     const sourceWorkspaceYaml = sourceWorkspaceYamlPath
       ? await fsPromises.readFile(sourceWorkspaceYamlPath, 'utf-8')
@@ -230,14 +245,15 @@ export class Deps extends MastraBase {
   public async install({
     dir = this.rootDir,
     architecture,
-  }: { dir?: string; architecture?: ArchitectureOptions } = {}) {
+    pnpmOverrides,
+  }: { dir?: string; architecture?: ArchitectureOptions; pnpmOverrides?: Record<string, string> } = {}) {
     const pm = this.packageManager;
     const installCommand = this.getPackageManagerCommand(pm, 'install');
     let args: string[] = [];
 
     switch (pm) {
       case 'pnpm':
-        await this.writePnpmConfig(dir, architecture);
+        await this.writePnpmConfig(dir, { ...architecture, pnpmOverrides });
         break;
       case 'yarn':
         // similar to --ignore-workspace but for yarn

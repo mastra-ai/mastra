@@ -14,7 +14,8 @@ async function cleanupAllProcesses() {
   for (const { controller, proc } of activeProcesses) {
     try {
       controller.abort();
-      await proc.catch(() => {});
+      proc.kill('SIGKILL');
+      await Promise.race([proc.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
     } catch {}
   }
   activeProcesses.length = 0;
@@ -30,15 +31,37 @@ process.once('SIGTERM', async () => {
   process.exit(143);
 });
 
-describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
+describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
   let fixturePath: string;
 
+  let buildQueue: Promise<unknown> = Promise.resolve();
+
+  async function removeOutputDir(path: string) {
+    const outputDir = join(path, 'apps', 'custom', '.mastra', 'output');
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        await rm(outputDir, { recursive: true, force: true });
+        return;
+      } catch (err) {
+        if (attempt === 4) {
+          throw err;
+        }
+        await new Promise(resolve => setTimeout(resolve, 1_000));
+      }
+    }
+  }
+
   async function runBuild(path: string) {
-    await execa(pkgManager, ['build'], {
-      cwd: join(path, 'apps', 'custom'),
-      stdio: 'inherit',
-      env: process.env,
+    const build = buildQueue.then(async () => {
+      await removeOutputDir(path);
+      return execa(pkgManager, ['build'], {
+        cwd: join(path, 'apps', 'custom'),
+        stdio: 'inherit',
+        env: process.env,
+      });
     });
+    buildQueue = build.catch(() => {});
+    await build;
   }
 
   beforeAll(
@@ -152,6 +175,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       if (proc) {
         try {
           proc.kill('SIGKILL');
+          await Promise.race([proc.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
         } catch (err) {
           // @ts-expect-error - isCanceled is not typed
           if (!err.killed) {
@@ -294,6 +318,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       if (proc) {
         try {
           proc.kill('SIGKILL');
+          await Promise.race([proc.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
         } catch (err) {
           // @ts-expect-error - isCanceled is not typed
           if (!err.isCanceled) {
@@ -399,5 +424,85 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         }
       }
     });
+  });
+
+  describe.sequential('subpath-only externals', () => {
+    it(
+      'should build transitive workspace dependencies with subpath-only exports and externals true',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-subpath-test-${pkgManager}-`));
+        await setupMonorepo(isolatedFixturePath, pkgManager);
+
+        const corePath = join(isolatedFixturePath, 'apps', 'custom', 'node_modules', '@mastra', 'core', 'dist');
+        await mkdir(join(corePath, 'runtime-context'), { recursive: true });
+        await writeFile(
+          join(corePath, 'runtime-context', 'index.js'),
+          `export { RequestContext as RuntimeContext } from '../request-context/index.js';`,
+        );
+
+        const mastraConfigPath = join(isolatedFixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
+        const originalMastraConfig = await readFile(mastraConfigPath, 'utf-8');
+
+        const port = await getPort();
+        const controller = new AbortController();
+        let proc: ReturnType<typeof execaNode> | undefined;
+
+        try {
+          await writeFile(mastraConfigPath, originalMastraConfig.replace(/externals:\s*\[[^\]]*\]/, 'externals: true'));
+
+          await runBuild(isolatedFixturePath);
+
+          proc = execaNode('index.mjs', {
+            cwd: join(isolatedFixturePath, 'apps', 'custom', '.mastra', 'output'),
+            cancelSignal: controller.signal,
+            env: {
+              OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+              MASTRA_PORT: port.toString(),
+            },
+          });
+          activeProcesses.push({ controller, proc });
+
+          await new Promise<void>((resolve, reject) => {
+            proc!.stderr?.on('data', data => {
+              const errMsg = data?.toString();
+              if (errMsg && errMsg.includes('punycode')) {
+                return;
+              }
+              if (errMsg && errMsg.includes('falling back to an in-memory store')) {
+                return;
+              }
+              reject(new Error('failed to start subpath-only externals build: ' + errMsg));
+            });
+            proc!.stdout?.on('data', data => {
+              console.log(data?.toString());
+              if (data?.toString()?.includes(`http://localhost:${port}`)) {
+                resolve();
+              }
+            });
+          });
+
+          const res = await fetch(`http://localhost:${port}/transitive-workspace`);
+          const body = await res.json();
+          expect(res.status).toBe(200);
+          expect(body).toEqual({ value: 'a -> b -> c' });
+        } finally {
+          if (proc) {
+            try {
+              setImmediate(() => controller.abort());
+              await proc;
+            } catch (err) {
+              // @ts-expect-error - isCanceled is not typed
+              if (!err.isCanceled) {
+                console.log('failed to kill subpath-only externals build proc', err);
+              }
+            }
+          }
+
+          await writeFile(mastraConfigPath, originalMastraConfig);
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
   });
 });
