@@ -72,7 +72,7 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
     isOptional: true,
     defaultValue: 'true',
     description:
-      'Include channel-specific tools (`add_reaction`, `remove_reaction`). Set to `false` for models that do not support function calling.',
+      'Whether `getTools()` returns the channel-specific tools (`add_reaction`, `remove_reaction`). Set to `false` for models that do not support function calling. Channel tools are never added to the agent automatically — pass them explicitly via `tools: { ...channels.getTools() }`.',
   },
   {
     name: 'state',
@@ -231,6 +231,38 @@ const agent = new Agent({
   },
 ]}
 />
+
+## Channel tools
+
+Channels expose two tools — `add_reaction` and `remove_reaction` — via
+`getTools()`. They are not added to the agent automatically: replies already
+stream back to the channel without a tool, so most agents don't need them. To
+let the agent react to channel messages, construct the channels yourself and
+pass the tools explicitly:
+
+```typescript title="src/mastra/agents/reacting-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { AgentChannels } from '@mastra/core/channels'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+const channels = new AgentChannels({
+  adapters: {
+    slack: createSlackAdapter(),
+  },
+})
+
+const agent = new Agent({
+  id: 'reacting-agent',
+  name: 'Reacting Agent',
+  instructions: '...',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels,
+  tools: { ...channels.getTools() },
+})
+```
+
+Setting `tools: false` on the channel config makes `getTools()` return an
+empty object, for models that don't support function calling.
 
 ## Tool display modes
 
