@@ -7,7 +7,8 @@
   "private": true,
   "exports": {
     "./eslint": "./src/eslint.js",
-    "./prettier": "./src/prettier.js"
+    "./prettier": "./src/prettier.js",
+    "./vitest": "./src/vitest.js"
   },
   "scripts": {},
   "keywords": [],
@@ -22,7 +23,9 @@
     "eslint-plugin-testing-library": "^7.16.2",
     "eslint-plugin-unicorn": "^72.0.0",
     "globals": "^16.5.0",
-    "typescript-eslint": "^8.57.0"
+    "typescript-eslint": "^8.57.0",
+    "vitest": "catalog:",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",

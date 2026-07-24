@@ -2,8 +2,8 @@ import { defineConfig } from '@internal/lint/vitest';
 
 export default defineConfig({
   test: {
-    name: 'e2e:browser/browser-viewer',
-    globals: true,
+    name: 'unit:packages/_config',
     environment: 'node',
+    include: ['src/**/*.test.ts'],
   },
 });

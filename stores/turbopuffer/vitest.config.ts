@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from '@internal/lint/vitest';
 
 export default defineConfig({
   test: {
