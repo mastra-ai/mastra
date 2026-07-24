@@ -1,6 +1,6 @@
 import type { Mastra } from '@mastra/core';
 import { coreFeatures } from '@mastra/core/features';
-import type { MastraCompositeStore, ObservabilityStorage } from '@mastra/core/storage';
+import type { MastraCompositeStore, ObservabilityStorage, ScoresStorage } from '@mastra/core/storage';
 import { z } from 'zod/v4';
 import { HTTPException } from '../http-exception';
 import type { ServerRoute } from '../server-adapter/routes';
@@ -56,6 +56,17 @@ export async function getObservabilityStore(mastra: Mastra): Promise<Observabili
     throw new HTTPException(501, { message: 'Observability storage domain is not available' });
   }
   return observability;
+}
+
+/** Retrieves the scores storage domain or throws 501 if unavailable. */
+export async function getScoresStore(mastra: Mastra): Promise<ScoresStorage> {
+  const storage = getStorage(mastra);
+  const scores = await storage.getStore('scores');
+  if (!scores) {
+    // Same capability-gap semantics as getObservabilityStore above.
+    throw new HTTPException(501, { message: 'Scores storage domain is not available' });
+  }
+  return scores;
 }
 
 export function assertObservabilityDeltaSupported(
