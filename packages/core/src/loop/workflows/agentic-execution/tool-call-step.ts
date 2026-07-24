@@ -217,8 +217,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             toolName,
             args: transformedArgs,
             type,
-            runId: suspendedToolRunId ?? runId, // Store the runId so we can resume after page refresh
-            ...(suspendedToolRunId && suspendedToolRunId !== runId ? { parentRunId: runId } : {}),
+            // Store the OUTER (resumable) runId so clients can resume after page refresh or
+            // server restart via `resumeStream({ runId, toolCallId })`. For delegated sub-agent /
+            // workflow tools the inner suspended run is preserved separately as `delegatedRunId`
+            // — it is required to resume the delegate's own suspended stream, but it is not a
+            // valid public resume target (resuming with it fails closed). No `parentRunId` is
+            // written: readers that resume `parentRunId ?? runId` (channels) get the outer run
+            // from `runId` directly; legacy entries with `parentRunId` keep working.
+            runId,
+            ...(suspendedToolRunId && suspendedToolRunId !== runId ? { delegatedRunId: suspendedToolRunId } : {}),
             ...(type === 'suspension' ? { suspendPayload: transformedSuspendPayload } : {}),
             resumeSchema,
             ...(toolStateTransformMetadata ? { metadata: toolStateTransformMetadata } : {}),
@@ -802,7 +809,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 pendingOrSuspendedTools[inputData.toolName] ??
                 Object.values(pendingOrSuspendedTools).find((e: any) => e?.toolName === inputData.toolName);
               if (entry) {
-                suspendedToolRunId = entry.runId;
+                // Prefer the inner delegated run id — that's the run the sub-agent/workflow tool
+                // must resume. `entry.runId` is the outer resumable run; older persisted entries
+                // stored the inner run there, so it remains the fallback.
+                suspendedToolRunId = entry.delegatedRunId ?? entry.runId;
                 break;
               }
             }
@@ -820,7 +830,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   dataToolSuspendedParts.find((part: any) => part.data.toolCallId === inputData.toolCallId) ??
                   dataToolSuspendedParts.find((part: any) => part.data.toolName === inputData.toolName);
                 if (foundTool) {
-                  suspendedToolRunId = (foundTool as any).data.runId;
+                  suspendedToolRunId = (foundTool as any).data.delegatedRunId ?? (foundTool as any).data.runId;
                   break;
                 }
               }
