@@ -1,6 +1,6 @@
 import type { IMastraLogger } from '@mastra/core/logger';
-import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
-import type { GetPromptResult, Prompt } from '@modelcontextprotocol/sdk/types.js';
+import type { GetPromptResult, Prompt } from '@modelcontextprotocol/client';
+import { ProtocolErrorCode } from '@modelcontextprotocol/client';
 import type { InternalMastraMCPClient } from '../client';
 
 interface PromptClientActionsConfig {
@@ -56,7 +56,7 @@ export class PromptClientActions {
       }
     } catch (e: any) {
       // MCP Server might not support prompts, so we return an empty array
-      if (e.code === ErrorCode.MethodNotFound) {
+      if (e.code === ProtocolErrorCode.MethodNotFound) {
         return [];
       }
       this.logger.error('Error getting prompts from server', {

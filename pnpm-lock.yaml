@@ -4218,9 +4218,9 @@ importers:
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../schema-compat
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.29.0
-        version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
+      '@modelcontextprotocol/server':
+        specifier: 2.0.0-beta.5
+        version: 2.0.0-beta.5
       '@sindresorhus/slugify':
         specifier: ^2.2.1
         version: 2.2.1
@@ -4930,12 +4930,24 @@ importers:
 
   packages/mcp:
     dependencies:
+      '@modelcontextprotocol/client':
+        specifier: 2.0.0-beta.5
+        version: 2.0.0-beta.5
+      '@modelcontextprotocol/core':
+        specifier: 2.0.0-beta.5
+        version: 2.0.0-beta.5
       '@modelcontextprotocol/ext-apps':
         specifier: ^1.7.1
         version: 1.7.1(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@4.4.3)
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.29.0
-        version: 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
+      '@modelcontextprotocol/node':
+        specifier: 2.0.0-beta.5
+        version: 2.0.0-beta.5(@modelcontextprotocol/server@2.0.0-beta.5)(hono@4.12.30)
+      '@modelcontextprotocol/server':
+        specifier: 2.0.0-beta.5
+        version: 2.0.0-beta.5
+      '@modelcontextprotocol/server-legacy':
+        specifier: 2.0.0-beta.5
+        version: 2.0.0-beta.5(express@5.2.1)
       exit-hook:
         specifier: ^5.1.0
         version: 5.1.0
@@ -15016,6 +15028,14 @@ packages:
   '@mixmark-io/domino@2.2.0':
     resolution: {integrity: sha512-Y28PR25bHXUg88kCV7nivXrP2Nj2RueZ3/l/jdx6J9f8J4nsEGcgX0Qe6lt7Pa+J79+kPiJU3LguR6O/6zrLOw==}
 
+  '@modelcontextprotocol/client@2.0.0-beta.5':
+    resolution: {integrity: sha512-YuuNm5f2TMoFQRje1UqVP8TJRjijCXMz4ckvoVpx1cUXuBEmykWQ2d8R536pek6UKcXT41T5nWc4qR1JFIbEmg==}
+    engines: {node: '>=20'}
+
+  '@modelcontextprotocol/core@2.0.0-beta.5':
+    resolution: {integrity: sha512-HKbY9XTbsDy1Y6r2I55TGE3JEapM0vg96e1MUmBIF9LGjos5gjhcIrTz1yvBPLg2aFKHjwhUAQfRdrCEnPxNew==}
+    engines: {node: '>=20'}
+
   '@modelcontextprotocol/ext-apps@1.7.1':
     resolution: {integrity: sha512-J3WdG1A4JSSKnSWKyU+895dBVYBV2Utgtf7fUsUK45mlkETm53a/1DR6Pm3hUGKqLLQthZLmpxOg8VPzJi/lyg==}
     engines: {node: '>=20'}
@@ -15030,6 +15050,16 @@ packages:
       react-dom:
         optional: true
 
+  '@modelcontextprotocol/node@2.0.0-beta.5':
+    resolution: {integrity: sha512-flrOzx5qFLBM9I8IYRGfYUY02erFmxOvYQ9sEE6iSj/ZZpRYKorXWscM/qrfW9rwlcGLyymHhnP2AaDbMB1lIA==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@modelcontextprotocol/server': ^2.0.0-beta.5
+      hono: ^4.11.4
+    peerDependenciesMeta:
+      hono:
+        optional: true
+
   '@modelcontextprotocol/sdk@1.29.0':
     resolution: {integrity: sha512-zo37mZA9hJWpULgkRpowewez1y6ML5GsXJPY8FI0tBBCd77HEvza4jDqRKOXgHNn867PVGCyTdzqpz0izu5ZjQ==}
     engines: {node: '>=18'}
@@ -15039,6 +15069,20 @@ packages:
     peerDependenciesMeta:
       '@cfworker/json-schema':
         optional: true
+
+  '@modelcontextprotocol/server-legacy@2.0.0-beta.5':
+    resolution: {integrity: sha512-8BemN4avQnG6Fu660fZCqnPGpeyL7gg5kxUceZQh7JCt8oqzX1bwJkNV+cKS01LPAaPbl93INneD+mBtJWKWvQ==}
+    engines: {node: '>=20'}
+    deprecated: This package is a frozen copy of v1's SSE transport and OAuth Authorization Server helpers for migration purposes only. Use StreamableHTTP from @modelcontextprotocol/server and a dedicated OAuth server in production. Will not receive new features.
+    peerDependencies:
+      express: ^4.18.0 || ^5.0.0
+    peerDependenciesMeta:
+      express:
+        optional: true
+
+  '@modelcontextprotocol/server@2.0.0-beta.5':
+    resolution: {integrity: sha512-i1E5l75rQKsgY/AKAIspgMBH1vEL7dqiK7tHr0L+raYcb0SWOziqNGJXGIG6NY4AlXDWIKGJQGB7Nqfs3oUi5g==}
+    engines: {node: '>=20'}
 
   '@module-federation/error-codes@0.22.0':
     resolution: {integrity: sha512-xF9SjnEy7vTdx+xekjPCV5cIHOGCkdn3pIxo9vU7gEZMIw0SvAEdsy6Uh17xaCpm8V0FWvR0SZoK9Ik6jGOaug==}
@@ -37979,6 +38023,20 @@ snapshots:
 
   '@mixmark-io/domino@2.2.0': {}
 
+  '@modelcontextprotocol/client@2.0.0-beta.5':
+    dependencies:
+      '@modelcontextprotocol/core': 2.0.0-beta.5
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.0.8
+      jose: 6.2.3
+      pkce-challenge: 5.0.0
+      zod: 4.4.3
+
+  '@modelcontextprotocol/core@2.0.0-beta.5':
+    dependencies:
+      zod: 4.4.3
+
   '@modelcontextprotocol/ext-apps@1.7.1(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@3.25.76))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(zod@3.25.76)':
     dependencies:
       '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@3.25.76)
@@ -37996,6 +38054,13 @@ snapshots:
     optionalDependencies:
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
+
+  '@modelcontextprotocol/node@2.0.0-beta.5(@modelcontextprotocol/server@2.0.0-beta.5)(hono@4.12.30)':
+    dependencies:
+      '@hono/node-server': 1.19.14(hono@4.12.30)
+      '@modelcontextprotocol/server': 2.0.0-beta.5
+    optionalDependencies:
+      hono: 4.12.30
 
   '@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@3.25.76)':
     dependencies:
@@ -38044,6 +38109,23 @@ snapshots:
       '@cfworker/json-schema': 4.1.1
     transitivePeerDependencies:
       - supports-color
+
+  '@modelcontextprotocol/server-legacy@2.0.0-beta.5(express@5.2.1)':
+    dependencies:
+      '@modelcontextprotocol/core': 2.0.0-beta.5
+      content-type: 1.0.5
+      cors: 2.8.6
+      express-rate-limit: 8.5.1(express@5.2.1)
+      pkce-challenge: 5.0.0
+      raw-body: 3.0.2
+      zod: 4.4.3
+    optionalDependencies:
+      express: 5.2.1
+
+  '@modelcontextprotocol/server@2.0.0-beta.5':
+    dependencies:
+      '@modelcontextprotocol/core': 2.0.0-beta.5
+      zod: 4.4.3
 
   '@module-federation/error-codes@0.22.0': {}
 

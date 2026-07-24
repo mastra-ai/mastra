@@ -4,15 +4,15 @@ import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MCPServerBase } from '@mastra/core/mcp';
 import type { Tool } from '@mastra/core/tools';
-import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/client';
 import type {
   ElicitRequest,
   ElicitResult,
   ProgressNotification,
   Prompt,
   Resource,
-  ResourceTemplate,
-} from '@modelcontextprotocol/sdk/types.js';
+  ResourceTemplateType,
+} from '@modelcontextprotocol/client';
 import equal from 'fast-deep-equal';
 import type { OAuthClientInformationFull } from '../shared/oauth-types';
 import { UnauthorizedError } from '../shared/oauth-types';
@@ -358,8 +358,8 @@ To fix this you have three different options:
        * console.log(templates.weatherServer); // Array of resource templates
        * ```
        */
-      templates: async (): Promise<Record<string, ResourceTemplate[]>> => {
-        const allTemplates: Record<string, ResourceTemplate[]> = {};
+      templates: async (): Promise<Record<string, ResourceTemplateType[]>> => {
+        const allTemplates: Record<string, ResourceTemplateType[]> = {};
         for (const serverName of Object.keys(this.serverConfigs)) {
           try {
             const internalClient = await this.getConnectedClientForServer(serverName);

@@ -1,15 +1,15 @@
 /**
  * OAuth Types for MCP Authentication
  *
- * Re-exports and extends OAuth types from the MCP SDK for use in Mastra's
- * MCP client and server implementations.
+ * Re-exports and extends the MCP OAuth types for use in Mastra's MCP client and
+ * server implementations. The OAuth metadata shapes are identical across the
+ * MCP packages, so both sides source them from `@modelcontextprotocol/client`
+ * alongside the OAuth flow helpers below.
  *
  * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization
  */
+import type { OAuthProtectedResourceMetadata as SDKOAuthProtectedResourceMetadata } from '@modelcontextprotocol/client';
 
-import type { OAuthProtectedResourceMetadata as SDKOAuthProtectedResourceMetadata } from '@modelcontextprotocol/sdk/shared/auth.js';
-
-// Re-export all OAuth types from MCP SDK
 export type {
   OAuthMetadata,
   OAuthTokens,
@@ -21,9 +21,8 @@ export type {
   OAuthTokenRevocationRequest,
   OAuthProtectedResourceMetadata,
   AuthorizationServerMetadata,
-} from '@modelcontextprotocol/sdk/shared/auth.js';
+} from '@modelcontextprotocol/client';
 
-// Re-export OAuth client functions from MCP SDK
 export {
   auth,
   discoverOAuthProtectedResourceMetadata,
@@ -38,10 +37,10 @@ export {
   parseErrorResponse,
   UnauthorizedError,
   buildDiscoveryUrls,
-} from '@modelcontextprotocol/sdk/client/auth.js';
+} from '@modelcontextprotocol/client';
 
 // Re-export OAuthClientProvider interface
-export type { OAuthClientProvider, AuthResult } from '@modelcontextprotocol/sdk/client/auth.js';
+export type { OAuthClientProvider, AuthResult } from '@modelcontextprotocol/client';
 
 /**
  * Configuration for OAuth-protected MCP server.

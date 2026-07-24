@@ -8,13 +8,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { RequestContext } from '@mastra/core/di';
 import { toStandardSchema } from '@mastra/schema-compat';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { Client, SdkErrorCode, SdkHttpError, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
+import { McpServer } from '@modelcontextprotocol/server';
+import type { CallToolResult } from '@modelcontextprotocol/server';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { z } from 'zod/v3';
+import { z } from 'zod';
 
 import { InternalMastraMCPClient } from './client.js';
 
@@ -163,11 +162,13 @@ async function setupTestServer(withSessionManagement: boolean) {
     },
   );
 
-  mcpServer.tool(
+  mcpServer.registerTool(
     'greet',
-    'A simple greeting tool',
     {
-      name: z.string().describe('Name to greet').default('World'),
+      description: 'A simple greeting tool',
+      inputSchema: z.object({
+        name: z.string().describe('Name to greet').default('World'),
+      }),
     },
     async ({ name }): Promise<CallToolResult> => {
       return {
@@ -176,7 +177,7 @@ async function setupTestServer(withSessionManagement: boolean) {
     },
   );
 
-  mcpServer.resource('test-resource', 'resource://test', () => {
+  mcpServer.registerResource('test-resource', 'resource://test', {}, () => {
     return {
       contents: [
         {
@@ -187,7 +188,7 @@ async function setupTestServer(withSessionManagement: boolean) {
     };
   });
 
-  mcpServer.prompt('greet', 'A simple greeting prompt', () => {
+  mcpServer.registerPrompt('greet', { description: 'A simple greeting prompt' }, () => {
     return {
       description: 'A simple greeting prompt',
       messages: [
@@ -200,7 +201,7 @@ async function setupTestServer(withSessionManagement: boolean) {
   });
 
   if (withSessionManagement) {
-    const serverTransport = new StreamableHTTPServerTransport({
+    const serverTransport = new NodeStreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
     });
 
@@ -224,7 +225,7 @@ async function setupTestServer(withSessionManagement: boolean) {
   // We must close the previous connection before reconnecting.
   httpServer.on('request', async (req, res) => {
     await mcpServer.close().catch(() => {});
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     await mcpServer.connect(transport);
     await transport.handleRequest(req, res);
   });
@@ -285,7 +286,7 @@ describe('MastraMCPClient with Streamable HTTP', () => {
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: StreamableHTTPServerTransport;
+    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
   };
   let client: InternalMastraMCPClient;
@@ -405,11 +406,11 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
   // When MCP servers (e.g. FastMCP) define outputSchema on a tool but don't
   // return structuredContent in the response, the full CallToolResult envelope
   // should be returned as-is. outputSchema is attached for documentation with a
-  // no-op validator; the MCP SDK validates structuredContent via AJV.
+  // no-op validator; the MCP client validates structuredContent via AJV.
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: StreamableHTTPServerTransport;
+    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
   };
   let client: InternalMastraMCPClient;
@@ -676,7 +677,7 @@ describe('MastraMCPClient - no outputSchema', () => {
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: StreamableHTTPServerTransport;
+    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
   };
   let client: InternalMastraMCPClient;
@@ -735,11 +736,11 @@ describe('MastraMCPClient - no outputSchema', () => {
 describe('MastraMCPClient - outputSchema with structuredContent', () => {
   // When a tool has an outputSchema and returns structuredContent, the
   // structuredContent is returned directly. We don't pass outputSchema to
-  // createTool so there's no Zod stripping — the MCP SDK validates via AJV.
+  // createTool so there's no Zod stripping — the MCP client validates via AJV.
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: StreamableHTTPServerTransport;
+    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
   };
   let client: InternalMastraMCPClient;
@@ -852,7 +853,7 @@ describe('MastraMCPClient - tools without outputSchema preserve envelope', () =>
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: StreamableHTTPServerTransport;
+    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
   };
   let client: InternalMastraMCPClient;
@@ -909,7 +910,7 @@ describe('MastraMCPClient - multimodal content', () => {
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: StreamableHTTPServerTransport;
+    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
   };
   let client: InternalMastraMCPClient;
@@ -954,7 +955,7 @@ describe('MastraMCPClient - AbortSignal forwarding', () => {
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: StreamableHTTPServerTransport;
+    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
   };
   let client: InternalMastraMCPClient;
@@ -963,10 +964,14 @@ describe('MastraMCPClient - AbortSignal forwarding', () => {
     testServer = await setupTestServer(false);
 
     // Add a slow tool that takes 60s
-    testServer.mcpServer.tool('slow_tool', 'A slow tool', { input: z.string() }, async () => {
-      await new Promise(resolve => setTimeout(resolve, 60_000));
-      return { content: [{ type: 'text' as const, text: 'done' }] };
-    });
+    testServer.mcpServer.registerTool(
+      'slow_tool',
+      { description: 'A slow tool', inputSchema: z.object({ input: z.string() }) },
+      async () => {
+        await new Promise(resolve => setTimeout(resolve, 60_000));
+        return { content: [{ type: 'text' as const, text: 'done' }] };
+      },
+    );
 
     client = new InternalMastraMCPClient({
       name: 'abort-signal-test-client',
@@ -1004,7 +1009,7 @@ describe('MastraMCPClient - AbortSignal forwarding', () => {
     expect(elapsed).toBeLessThan(5_000);
   });
 
-  it('should pass abortSignal through to the MCP SDK client', async () => {
+  it('should pass abortSignal through to the MCP client', async () => {
     const sdkClient = (client as any).client as Client;
     const callToolSpy = vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
       content: [{ type: 'text', text: 'ok' }],
@@ -1019,7 +1024,6 @@ describe('MastraMCPClient - AbortSignal forwarding', () => {
 
     expect(callToolSpy).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'slow_tool' }),
-      expect.anything(),
       expect.objectContaining({ signal: abortController.signal }),
     );
   });
@@ -1029,7 +1033,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: StreamableHTTPServerTransport;
+    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
   };
   let client: InternalMastraMCPClient;
@@ -1038,11 +1042,13 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     testServer = await setupTestServer(true);
 
     // Add elicitation-enabled tools to the test server
-    testServer.mcpServer.tool(
+    testServer.mcpServer.registerTool(
       'collectUserInfo',
-      'Collects user information through elicitation',
       {
-        message: z.string().describe('Message to show to user').default('Please provide your information'),
+        description: 'Collects user information through elicitation',
+        inputSchema: z.object({
+          message: z.string().describe('Message to show to user').default('Please provide your information'),
+        }),
       },
       async ({ message }): Promise<CallToolResult> => {
         const result = await testServer.mcpServer.server.elicitInput({
@@ -1063,11 +1069,13 @@ describe('MastraMCPClient - Elicitation Tests', () => {
       },
     );
 
-    testServer.mcpServer.tool(
+    testServer.mcpServer.registerTool(
       'collectSensitiveInfo',
-      'Collects sensitive information that might be rejected',
       {
-        message: z.string().describe('Message to show to user').default('Please provide sensitive information'),
+        description: 'Collects sensitive information that might be rejected',
+        inputSchema: z.object({
+          message: z.string().describe('Message to show to user').default('Please provide sensitive information'),
+        }),
       },
       async ({ message }): Promise<CallToolResult> => {
         const result = await testServer.mcpServer.server.elicitInput({
@@ -1088,11 +1096,13 @@ describe('MastraMCPClient - Elicitation Tests', () => {
       },
     );
 
-    testServer.mcpServer.tool(
+    testServer.mcpServer.registerTool(
       'collectOptionalInfo',
-      'Collects optional information that might be cancelled',
       {
-        message: z.string().describe('Message to show to user').default('Optional information request'),
+        description: 'Collects optional information that might be cancelled',
+        inputSchema: z.object({
+          message: z.string().describe('Message to show to user').default('Optional information request'),
+        }),
       },
       async ({ message }): Promise<CallToolResult> => {
         const result = await testServer.mcpServer.server.elicitInput({
@@ -1112,10 +1122,9 @@ describe('MastraMCPClient - Elicitation Tests', () => {
       },
     );
 
-    testServer.mcpServer.tool(
+    testServer.mcpServer.registerTool(
       'workflowNeedingOptionalInput',
-      'Only elicits when the client advertised elicitation support',
-      {},
+      { description: 'Only elicits when the client advertised elicitation support' },
       async (): Promise<CallToolResult> => {
         if (!testServer.mcpServer.server.getClientCapabilities()?.elicitation) {
           return {
@@ -1372,7 +1381,7 @@ describe('MastraMCPClient - Progress Tests', () => {
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: StreamableHTTPServerTransport;
+    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
   };
   let client: InternalMastraMCPClient;
@@ -1381,18 +1390,20 @@ describe('MastraMCPClient - Progress Tests', () => {
     testServer = await setupTestServer(true);
 
     // Add a tool that emits progress notifications while running
-    testServer.mcpServer.tool(
+    testServer.mcpServer.registerTool(
       'longTask',
-      'Emits progress notifications during execution',
       {
-        count: z.number().describe('Number of notifications').default(3),
-        delayMs: z.number().describe('Delay between notifications (ms)').default(1),
+        description: 'Emits progress notifications during execution',
+        inputSchema: z.object({
+          count: z.number().describe('Number of notifications').default(3),
+          delayMs: z.number().describe('Delay between notifications (ms)').default(1),
+        }),
       },
-      async ({ count, delayMs }, extra): Promise<CallToolResult> => {
+      async ({ count, delayMs }, ctx): Promise<CallToolResult> => {
         const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
         for (let i = 1; i <= count; i++) {
-          if (extra._meta?.progressToken) {
+          if (ctx.mcpReq._meta?.progressToken) {
             await testServer.mcpServer.server.notification({
               method: 'notifications/progress',
               params: {
@@ -1400,7 +1411,7 @@ describe('MastraMCPClient - Progress Tests', () => {
                 total: count,
                 message: `Long task progress ${i}/${count}`,
                 // Use a fixed token for test assertions; server may also attach a token automatically
-                progressToken: extra._meta.progressToken,
+                progressToken: ctx.mcpReq._meta.progressToken,
               },
             });
           }
@@ -1480,7 +1491,7 @@ describe('MastraMCPClient - Custom _meta', () => {
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: StreamableHTTPServerTransport;
+    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
   };
   let client: InternalMastraMCPClient;
@@ -1488,9 +1499,13 @@ describe('MastraMCPClient - Custom _meta', () => {
   beforeEach(async () => {
     testServer = await setupTestServer(false);
 
-    testServer.mcpServer.tool('echo', 'Echoes input', { msg: z.string() }, async ({ msg }) => {
-      return { content: [{ type: 'text' as const, text: msg }] };
-    });
+    testServer.mcpServer.registerTool(
+      'echo',
+      { description: 'Echoes input', inputSchema: z.object({ msg: z.string() }) },
+      async ({ msg }) => {
+        return { content: [{ type: 'text' as const, text: msg }] };
+      },
+    );
   });
 
   afterEach(async () => {
@@ -1521,7 +1536,6 @@ describe('MastraMCPClient - Custom _meta', () => {
         name: 'echo',
         _meta: { traceId: 'trace-1', tenantId: 'org-5' },
       }),
-      expect.anything(),
       expect.anything(),
     );
   });
@@ -1596,7 +1610,7 @@ describe('MastraMCPClient - AuthProvider Tests', () => {
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: StreamableHTTPServerTransport;
+    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
   };
   let client: InternalMastraMCPClient;
@@ -1661,7 +1675,7 @@ describe('MastraMCPClient - Timeout Parameter Position Tests', () => {
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: StreamableHTTPServerTransport;
+    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
   };
   let client: InternalMastraMCPClient;
@@ -1690,7 +1704,7 @@ describe('MastraMCPClient - Timeout Parameter Position Tests', () => {
 
     await client.connect();
 
-    // Access the internal MCP SDK client to spy on listTools
+    // Access the internal MCP client to spy on listTools
     const internalClient = (client as any).client;
     const originalListTools = internalClient.listTools.bind(internalClient);
 
@@ -1713,22 +1727,18 @@ describe('MastraMCPClient - Timeout Parameter Position Tests', () => {
 });
 
 describe('MastraMCPClient - HTTP SSE Fallback Tests', () => {
-  // Helper to create StreamableHTTPError-like error (@modelcontextprotocol/sdk 1.24.0+)
-  class MockStreamableHTTPError extends Error {
-    constructor(
-      public readonly code: number,
-      message: string,
-    ) {
-      super(`Streamable HTTP error: ${message}`);
-    }
-  }
+  // The Streamable HTTP transport surfaces non-OK responses as SdkHttpError: `code` is a
+  // string SdkErrorCode and the HTTP status is carried separately, so the fallback decision
+  // has to read `status`.
+  const httpError = (status: number, message: string) =>
+    new SdkHttpError(SdkErrorCode.ClientHttpNotImplemented, `Streamable HTTP error: ${message}`, { status });
 
   it('should throw error for status code 401 without SSE fallback', async () => {
-    const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js');
+    const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/client');
     const originalStart = StreamableHTTPClientTransport.prototype.start;
 
     StreamableHTTPClientTransport.prototype.start = async function () {
-      throw new MockStreamableHTTPError(401, 'Unauthorized');
+      throw httpError(401, 'Unauthorized');
     };
 
     const httpServer = createServer((req, res) => {
@@ -1761,11 +1771,11 @@ describe('MastraMCPClient - HTTP SSE Fallback Tests', () => {
   });
 
   it('should fallback to SSE for status code 404', async () => {
-    const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js');
+    const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/client');
     const originalStart = StreamableHTTPClientTransport.prototype.start;
 
     StreamableHTTPClientTransport.prototype.start = async function () {
-      throw new MockStreamableHTTPError(404, 'Not Found');
+      throw httpError(404, 'Not Found');
     };
 
     const httpServer = createServer((req, res) => {
@@ -1793,8 +1803,10 @@ describe('MastraMCPClient - HTTP SSE Fallback Tests', () => {
     });
 
     try {
-      // Should attempt SSE fallback, then fail (server doesn't implement full SSE)
-      await expect(client.connect()).rejects.toThrow();
+      // The SSE fallback must be attempted: this stub server does not implement a usable
+      // SSE endpoint, so the connect fails with the "tried every transport" error rather
+      // than rethrowing the original Streamable HTTP 404.
+      await expect(client.connect()).rejects.toThrow('Could not connect to server with any available HTTP transport');
     } finally {
       StreamableHTTPClientTransport.prototype.start = originalStart;
       await client.disconnect().catch(() => {});
@@ -1807,7 +1819,7 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: StreamableHTTPServerTransport;
+    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
   };
 
@@ -1997,7 +2009,7 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: StreamableHTTPServerTransport;
+    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
   };
 
@@ -2013,14 +2025,18 @@ describe('MastraMCPClient - Roots Capability (Issue #8660)', () => {
       },
     );
 
-    mcpServer.tool('echo', 'Echo tool', { message: z.string() }, async ({ message }): Promise<CallToolResult> => {
-      return { content: [{ type: 'text', text: message }] };
-    });
+    mcpServer.registerTool(
+      'echo',
+      { description: 'Echo tool', inputSchema: z.object({ message: z.string() }) },
+      async ({ message }): Promise<CallToolResult> => {
+        return { content: [{ type: 'text', text: message }] };
+      },
+    );
 
     // Stateless mode: SDK 1.27+ requires a new transport per request
     httpServer.on('request', async (req, res) => {
       await mcpServer.close().catch(() => {});
-      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      const transport = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
       await mcpServer.connect(transport);
       await transport.handleRequest(req, res);
     });
@@ -2255,16 +2271,15 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
       { capabilities: { logging: {}, tools: {} } },
     );
 
-    mcpServer.tool(
+    mcpServer.registerTool(
       'ping',
-      'Simple ping tool',
-      { message: z.string().default('pong') },
+      { description: 'Simple ping tool', inputSchema: z.object({ message: z.string().default('pong') }) },
       async ({ message }): Promise<CallToolResult> => {
         return { content: [{ type: 'text', text: `Ping: ${message}` }] };
       },
     );
 
-    let serverTransport = new StreamableHTTPServerTransport({
+    let serverTransport = new NodeStreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
     });
 
@@ -2311,16 +2326,15 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
       { capabilities: { logging: {}, tools: {} } },
     );
 
-    mcpServer.tool(
+    mcpServer.registerTool(
       'ping',
-      'Simple ping tool',
-      { message: z.string().default('pong') },
+      { description: 'Simple ping tool', inputSchema: z.object({ message: z.string().default('pong') }) },
       async ({ message }): Promise<CallToolResult> => {
         return { content: [{ type: 'text', text: `Ping: ${message}` }] };
       },
     );
 
-    serverTransport = new StreamableHTTPServerTransport({
+    serverTransport = new NodeStreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
     });
 
@@ -2355,12 +2369,16 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
     );
 
     let callCount = 0;
-    mcpServer.tool('counter', 'Counts calls', {}, async (): Promise<CallToolResult> => {
-      callCount++;
-      return { content: [{ type: 'text', text: `Call #${callCount}` }] };
-    });
+    mcpServer.registerTool(
+      'counter',
+      { description: 'Counts calls', inputSchema: z.object({}) },
+      async (): Promise<CallToolResult> => {
+        callCount++;
+        return { content: [{ type: 'text', text: `Call #${callCount}` }] };
+      },
+    );
 
-    let serverTransport = new StreamableHTTPServerTransport({
+    let serverTransport = new NodeStreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
     });
 
@@ -2405,12 +2423,16 @@ describe('MastraMCPClient - Session Reconnection (Issue #7675)', () => {
     );
 
     callCount = 0; // Reset counter (simulating server restart losing state)
-    mcpServer.tool('counter', 'Counts calls', {}, async (): Promise<CallToolResult> => {
-      callCount++;
-      return { content: [{ type: 'text', text: `Call #${callCount}` }] };
-    });
+    mcpServer.registerTool(
+      'counter',
+      { description: 'Counts calls', inputSchema: z.object({}) },
+      async (): Promise<CallToolResult> => {
+        callCount++;
+        return { content: [{ type: 'text', text: `Call #${callCount}` }] };
+      },
+    );
 
-    serverTransport = new StreamableHTTPServerTransport({
+    serverTransport = new NodeStreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
     });
 
@@ -2671,7 +2693,7 @@ describe('MastraMCPClient - mcpMetadata on tools', () => {
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: StreamableHTTPServerTransport;
+    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
   };
   let client: InternalMastraMCPClient;
@@ -2743,7 +2765,7 @@ describe('MastraMCPClient fetch with requestContext', () => {
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: StreamableHTTPServerTransport;
+    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
   };
   let client: InternalMastraMCPClient;
@@ -2980,7 +3002,7 @@ describe('MastraMCPClient - requireToolApproval', () => {
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
-    serverTransport: StreamableHTTPServerTransport;
+    serverTransport: NodeStreamableHTTPServerTransport;
     baseUrl: URL;
   };
   let client: InternalMastraMCPClient;
@@ -3092,16 +3114,18 @@ describe('MastraMCPClient - requireToolApproval', () => {
   it('should forward MCP tool annotations to the requireToolApproval callback', async () => {
     testServer = await setupTestServer(false);
     // Register a tool with annotations on the test server
-    testServer.mcpServer.tool(
+    testServer.mcpServer.registerTool(
       'delete_repo',
-      'Delete a repo',
-      { repo: z.string() },
       {
-        title: 'Delete Repository',
-        readOnlyHint: false,
-        destructiveHint: true,
-        idempotentHint: false,
-        openWorldHint: false,
+        description: 'Delete a repo',
+        inputSchema: z.object({ repo: z.string() }),
+        annotations: {
+          title: 'Delete Repository',
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: false,
+          openWorldHint: false,
+        },
       },
       async (): Promise<CallToolResult> => ({ content: [{ type: 'text', text: 'ok' }] }),
     );
@@ -3136,14 +3160,16 @@ describe('MastraMCPClient - requireToolApproval', () => {
 
   it('should expose MCP tool annotations on the Mastra tool (mcp.annotations)', async () => {
     testServer = await setupTestServer(false);
-    testServer.mcpServer.tool(
+    testServer.mcpServer.registerTool(
       'list_repos',
-      'List repos',
-      { owner: z.string() },
       {
-        title: 'List Repositories',
-        readOnlyHint: true,
-        destructiveHint: false,
+        description: 'List repos',
+        inputSchema: z.object({ owner: z.string() }),
+        annotations: {
+          title: 'List Repositories',
+          readOnlyHint: true,
+          destructiveHint: false,
+        },
       },
       async (): Promise<CallToolResult> => ({ content: [{ type: 'text', text: 'ok' }] }),
     );
@@ -3194,7 +3220,7 @@ describe('MastraMCPClient - custom fetch failure modes (auth-token loop)', () =>
   //    if `throw new Error('Failed to get auth token')` is triggered inside fetch.
   //    The loop stops if I instead pass an empty token through."
   //
-  // The relevant code lives in @modelcontextprotocol/sdk's StreamableHTTPClientTransport:
+  // The relevant code lives in @modelcontextprotocol/client's StreamableHTTPClientTransport:
   //  - After connect, the SDK opens a long-lived "standalone GET SSE listener" stream.
   //  - When that stream ends or errors, _scheduleReconnection({...}, 0) fires.
   //  - Reset-to-0 means whenever the GET round-trips successfully but the server then
