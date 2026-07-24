@@ -5,12 +5,12 @@
   "type": "module",
   "description": "Browser application for MastraCode: React SPA, client data layer, Vite config, and UI tests. Consumed by the standalone mastracode/web host via link:.",
   "scripts": {
-    "dev": "vite --config src/web/vite.config.ts",
-    "build": "vite --config src/web/vite.config.ts build",
-    "typecheck": "tsc --noEmit -p src/web/ui/tsconfig.json",
-    "test": "vitest run && vitest run --config e2e/web-ui/vitest.config.ts",
+    "dev": "vite --config src/vite.config.ts",
+    "build": "vite --config src/vite.config.ts build",
+    "typecheck": "tsc --noEmit -p src/ui/tsconfig.json",
+    "test": "vitest run && vitest run --config e2e/ui/vitest.config.ts",
     "test:unit": "vitest run",
-    "test:msw": "vitest run --config e2e/web-ui/vitest.config.ts"
+    "test:msw": "vitest run --config e2e/ui/vitest.config.ts"
   },
   "dependencies": {
     "@fontsource-variable/mona-sans": "5.3.0",

@@ -18,15 +18,15 @@ network boundary is mocked, via MSW. Never `vi.mock` our own hooks, services,
 or auth gating.
 
 - Unit tests (`*.test.ts`) run in node environment via `vitest.config.ts`.
-- MSW UI tests (`*.msw.test.tsx`) run in jsdom via `e2e/web-ui/vitest.config.ts`
-  with shared handlers in `e2e/web-ui/msw-server.ts` and render helpers in
-  `e2e/web-ui/render.tsx` (real ThemeProvider + TooltipProvider +
+- MSW UI tests (`*.msw.test.tsx`) run in jsdom via `e2e/ui/vitest.config.ts`
+  with shared handlers in `e2e/ui/msw-server.ts` and render helpers in
+  `e2e/ui/render.tsx` (real ThemeProvider + TooltipProvider +
   QueryClientProvider + ApiConfigProvider stack).
 - The two suites have disjoint globs — they never cross-pick each other's files.
 - Use `waitForMutationsIdle` (double-idle assert) to avoid false passes in
   query chains with brief gaps.
 
-Source layout preserves `src/shared` and `src/web/ui` so the 200+ reciprocal
-imports between hooks, services, and components stay relative. The `src/web/ui`
+Source layout preserves `src` and `src/ui` so the 200+ reciprocal
+imports between hooks, services, and components stay relative. The `src/ui`
 tsconfig has paths workarounds for `react` and `class-variance-authority` types
 that playground-ui's d.ts files reference from the pnpm store.

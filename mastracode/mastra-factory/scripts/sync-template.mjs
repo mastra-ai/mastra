@@ -2,11 +2,11 @@
 /**
  * Produces the Mastra Factory template tree from two source roots:
  *   - `mastracode/web`          — server/deployment files (src/mastra, scripts, .env.schema)
- *   - `mastracode/factory-ui`   — browser application source (src/shared, src/web/ui, vite.config.ts)
+ *   - `mastracode/factory-ui`   — browser application source (src/api, src/hooks, src/lib, src/ui, vite.config.ts)
  *
  * The template is a single standalone project — the web host's server tree plus
- * the factory-ui app tree merged into the same established `src/shared` and
- * `src/web/ui` paths. Monorepo coupling is removed:
+ * the factory-ui app tree merged into its flattened `src/` layout. Monorepo
+ * coupling is removed:
  *   - `link:`/`workspace:` deps -> exact versions resolved from npm
  *   - `catalog:` deps           -> resolved from the monorepo pnpm-workspace.yaml catalog
  *   - monorepo tsconfig         -> standalone tsconfig
@@ -321,7 +321,7 @@ function transformPackageJson() {
     dev: 'mastra factory dev --dir src/mastra',
     'db:up': 'docker compose up -d --wait',
     'db:down': 'docker compose down',
-    check: 'tsc --noEmit && tsc --noEmit -p src/web/ui/tsconfig.json',
+    check: 'tsc --noEmit && tsc --noEmit -p src/ui/tsconfig.json',
     build: 'mastra build --dir src/mastra',
     start: 'varlock run -- mastra start',
     deploy: 'mastra deploy',
@@ -448,19 +448,19 @@ function writeTsconfig() {
       types: ['node'],
     },
     include: ['src/**/*'],
-    exclude: ['node_modules', 'src/web/ui', 'src/web/vite.config.ts', 'src/shared/**/*.tsx', 'src/shared/hooks'],
+    exclude: ['node_modules', 'src/ui', 'src/vite.config.ts', 'src/api/**/*.tsx', 'src/hooks'],
   };
   fs.writeFileSync(path.join(outDir, 'tsconfig.json'), `${JSON.stringify(tsconfig, null, 2)}\n`);
 }
 
 function stripTestingTypesFromUiTsconfig() {
-  const uiTsconfigPath = path.join(outDir, 'src/web/ui/tsconfig.json');
+  const uiTsconfigPath = path.join(outDir, 'src/ui/tsconfig.json');
   const raw = fs.readFileSync(uiTsconfigPath, 'utf8');
   // The template drops @testing-library/* deps, so the ambient types entry
-  // would fail `tsc -p src/web/ui/tsconfig.json`.
+  // would fail `tsc -p src/ui/tsconfig.json`.
   const next = raw.replace(`, "@testing-library/jest-dom"`, '');
   if (next === raw) {
-    throw new Error('sync-template: expected "@testing-library/jest-dom" in src/web/ui/tsconfig.json types');
+    throw new Error('sync-template: expected "@testing-library/jest-dom" in src/ui/tsconfig.json types');
   }
   fs.writeFileSync(uiTsconfigPath, next);
 }
@@ -596,7 +596,7 @@ if (fs.existsSync(outDir)) {
 // Copy server/deployment files from the web host (src/mastra, scripts, .env.schema).
 copyTree(webRoot, outDir);
 // Copy the browser application source from factory-ui into the same established
-// src/shared and src/web/ui paths so the 200+ reciprocal imports stay relative.
+// src and src/ui paths so the 200+ reciprocal imports stay relative.
 copyTree(path.join(factoryUiRoot, 'src'), path.join(outDir, 'src'), 'src');
 transformPackageJson();
 writeTsconfig();

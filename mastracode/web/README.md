@@ -23,7 +23,7 @@ pnpm web:dev
 - API server (`mastra factory dev`) on **:4111**, env loaded/validated by varlock from `.env` against `.env.schema` (package root).
 - Vite SPA on **:5173**, proxying `/api`, `/web`, and `/auth/` to the API server.
 
-The SPA is built and served by Vite using the config in `mastracode/factory-ui/src/web/vite.config.ts`. The host sets `MASTRACODE_ENV_DIR` (its project root for `.env`) and `MASTRACODE_OUT_DIR` (its `src/mastra/public/factory` for the SPA artifact) when invoking Vite. See [`mastracode/factory-ui/AGENTS.md`](../factory-ui/AGENTS.md) for UI build, typecheck, and test commands.
+The SPA is built and served by Vite using the config in `mastracode/factory-ui/src/vite.config.ts`. The host sets `MASTRACODE_ENV_DIR` (its project root for `.env`) and `MASTRACODE_OUT_DIR` (its `src/mastra/public/factory` for the SPA artifact) when invoking Vite. See [`mastracode/factory-ui/AGENTS.md`](../factory-ui/AGENTS.md) for UI build, typecheck, and test commands.
 
 To test the production-like, same-origin setup on port 5173 with one long-running process, build the SPA once and serve it from the Factory API server:
 
@@ -100,7 +100,7 @@ The private Web API can activate a user-invocable skill on an existing scoped Ag
 
 ## Factory metrics
 
-The **Metrics** page at `/factories/:factoryId/metrics` shows queue health for the active Factory. The Queue Health Chart contains one horizontal bar per Work stage. Each bar is segmented by item age and overlays diagonal stripes where agent work is active. Selecting a segment filters the item list below the chart. Age comes from the open `stageHistory` entry and falls back to `createdAt`. The pure `computeQueueHealth()` function in `mastracode/factory-ui/src/web/ui/domains/factory/queue-health.ts` performs the client-side aggregation.
+The **Metrics** page at `/factories/:factoryId/metrics` shows queue health for the active Factory. The Queue Health Chart contains one horizontal bar per Work stage. Each bar is segmented by item age and overlays diagonal stripes where agent work is active. Selecting a segment filters the item list below the chart. Age comes from the open `stageHistory` entry and falls back to `createdAt`. The pure `computeQueueHealth()` function in `mastracode/factory-ui/src/ui/domains/factory/queue-health.ts` performs the client-side aggregation.
 
 Queue age thresholds are server-side Factory project config in seconds. `GET /web/factory/projects/:factoryProjectId/health/thresholds` reads them from the `queue-health` storage domain. The `queue_health_settings` table keys records by `(org_id, factory_project_id)`. Defaults are `[14400, 86400, 259200]` (4h, 24h, and 72h). `saveConfig` rejects empty or non-ascending `thresholdsSeconds` values.
 

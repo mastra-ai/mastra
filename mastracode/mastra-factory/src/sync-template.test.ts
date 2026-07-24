@@ -254,7 +254,7 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     expect(pkg.scripts['dev:prod']).toBeUndefined();
     expect(pkg.scripts.prebuild).toBeUndefined();
     expect(JSON.stringify(pkg.scripts)).not.toContain('monorepo-deps');
-    expect(pkg.scripts.check).toBe('tsc --noEmit && tsc --noEmit -p src/web/ui/tsconfig.json');
+    expect(pkg.scripts.check).toBe('tsc --noEmit && tsc --noEmit -p src/ui/tsconfig.json');
     expect(pkg.scripts.build).toBe('mastra build --dir src/mastra');
     expect(pkg.scripts['build:ui']).toBeUndefined();
     expect(pkg.scripts['build:server']).toBeUndefined();
@@ -266,13 +266,13 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     expect(gitignore).not.toContain('src/mastra/public/ui/');
 
     // Factory-ui source: the browser application source is composed from the
-    // factory-ui package into the same established src/shared and src/web/ui
+    // factory-ui package into the same established src and src/ui
     // paths so reciprocal imports between hooks, services, and components
     // stay relative.
-    expect(fs.existsSync(path.join(outDir, 'src/shared'))).toBe(true);
-    expect(fs.existsSync(path.join(outDir, 'src/shared/api/config.tsx'))).toBe(true);
-    expect(fs.existsSync(path.join(outDir, 'src/web/ui'))).toBe(true);
-    expect(fs.existsSync(path.join(outDir, 'src/web/vite.config.ts'))).toBe(true);
+    expect(fs.existsSync(path.join(outDir, 'src'))).toBe(true);
+    expect(fs.existsSync(path.join(outDir, 'src/api/config.tsx'))).toBe(true);
+    expect(fs.existsSync(path.join(outDir, 'src/ui'))).toBe(true);
+    expect(fs.existsSync(path.join(outDir, 'src/vite.config.ts'))).toBe(true);
 
     // The private @internal/factory-ui package must never appear in the
     // template — it is not published and template users get editable source.

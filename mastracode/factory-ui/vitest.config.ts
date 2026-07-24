@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 /**
  * Unit tests colocated under `src/**`. The MSW UI suite lives under
- * `e2e/web-ui/` with its own explicit `--config`; its globs are disjoint from
+ * `e2e/ui/` with its own explicit `--config`; its globs are disjoint from
  * this one.
  */
 export default defineConfig({
