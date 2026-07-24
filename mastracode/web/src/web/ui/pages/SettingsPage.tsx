@@ -30,9 +30,9 @@ function SettingsPageContent() {
 
   if (!factoryId) {
     return (
-      <main className="flex min-h-dvh flex-col bg-surface2">
+      <main className="bg-surface2 flex min-h-dvh flex-col">
         {isMobile && (
-          <div className="sticky top-0 z-2 shrink-0 bg-surface2 px-3 py-2">
+          <div className="bg-surface2 sticky top-0 z-2 shrink-0 px-3 py-2">
             <SettingsHeader autoFocus placement="mobile" />
           </div>
         )}

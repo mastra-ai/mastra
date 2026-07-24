@@ -64,7 +64,7 @@ export function AgentsList({ agents, isLoading, hasSearch }: AgentsListProps) {
         return (
           <EntityList.RowWrapper key={agent.id}>
             <EntityList.RowLink colEnd={3} to={paths.agentLink(agent.id)} LinkComponent={Link}>
-              <EntityList.Cell className="min-w-0 overflow-visible text-left text-neutral4">
+              <EntityList.Cell className="text-neutral4 min-w-0 overflow-visible text-left">
                 <span
                   title={agent.name}
                   className="block max-w-full min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
@@ -81,16 +81,16 @@ export function AgentsList({ agents, isLoading, hasSearch }: AgentsListProps) {
                 </span>
               </EntityList.Cell>
             </EntityList.RowLink>
-            <EntityList.Cell className="overflow-visible justify-center py-0">
+            <EntityList.Cell className="justify-center overflow-visible py-0">
               <AgentProviderDetails agentName={agent.name} provider={agent.provider} modelId={agent.modelId} />
             </EntityList.Cell>
-            <EntityList.Cell className="overflow-visible justify-center py-0">
+            <EntityList.Cell className="justify-center overflow-visible py-0">
               <AgentWorkflowDetails agentName={agent.name} workflows={agent.workflows} />
             </EntityList.Cell>
-            <EntityList.Cell className="overflow-visible justify-center py-0">
+            <EntityList.Cell className="justify-center overflow-visible py-0">
               <AgentSubagentDetails agentName={agent.name} agents={agent.agents} />
             </EntityList.Cell>
-            <EntityList.Cell className="overflow-visible justify-center py-0">
+            <EntityList.Cell className="justify-center overflow-visible py-0">
               <AgentToolsDetails agentName={agent.name} tools={agent.tools} />
             </EntityList.Cell>
           </EntityList.RowWrapper>

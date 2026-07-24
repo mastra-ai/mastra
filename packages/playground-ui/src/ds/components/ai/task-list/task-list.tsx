@@ -42,15 +42,15 @@ export const TaskListProgress = ({ completed, total, className, ...props }: Task
       className={cn('mb-2.5 h-1 w-full rounded-full bg-surface4', className)}
       {...props}
     >
-      <div className="h-full rounded-full bg-accent6 transition-all duration-300" style={{ width: `${percentage}%` }} />
+      <div className="bg-accent6 h-full rounded-full transition-all duration-300" style={{ width: `${percentage}%` }} />
     </div>
   );
 };
 
 const icons: Record<TaskListItem['status'], ReactNode> = {
-  completed: <CheckCircle2 className="size-3.5 shrink-0 text-positive1" />,
-  in_progress: <Loader2 className="size-3.5 shrink-0 text-warning1 motion-safe:animate-spin" />,
-  pending: <Circle className="size-3.5 shrink-0 text-neutral4" />,
+  completed: <CheckCircle2 className="text-positive1 size-3.5 shrink-0" />,
+  in_progress: <Loader2 className="text-warning1 size-3.5 shrink-0 motion-safe:animate-spin" />,
+  pending: <Circle className="text-neutral4 size-3.5 shrink-0" />,
 };
 
 const statusLabels: Record<TaskListItem['status'], string> = {
@@ -120,8 +120,8 @@ export const TaskList = ({
   return (
     <TaskListContainer aria-label="Task list" data-testid="task-list" {...props}>
       <TaskListHeader>
-        <ListChecks className="size-4 shrink-0 text-accent6" />
-        <h2 className="text-ui-sm leading-ui-sm font-medium text-neutral6">{title}</h2>
+        <ListChecks className="text-accent6 size-4 shrink-0" />
+        <h2 className="text-ui-sm leading-ui-sm text-neutral6 font-medium">{title}</h2>
         <TaskListCount completed={completed} total={total} />
       </TaskListHeader>
       <TaskListProgress completed={completed} total={total} />

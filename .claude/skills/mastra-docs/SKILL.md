@@ -23,13 +23,15 @@ Start with references/STYLEGUIDE.md for all docs. Then use the guide that matche
 
 Use these tools to keep docs consistent:
 
-- prettier - Formats files and code blocks. This is the base linting layer.
+- oxfmt - Formats docs code, Markdown, config, and style files through the docs-local config.
+- prettier - Formats MDX through the docs-local custom parser so admonitions, JSX expressions, and fenced code blocks remain supported.
 - remark - Checks markdown issues like heading levels, list styles, and formatting consistency. This is the middle layer.
 - vale - Checks grammar, style, and wording. This is the top layer.
 
 Run these commands in docs/:
 
-- pnpm run format - Format files with Prettier
+- pnpm run format - Format docs files with oxfmt and docs-local Prettier for MDX.
+- pnpm run format:check - Check docs formatting with oxfmt and docs-local Prettier for MDX.
 - pnpm run lint:remark - Check markdown with Remark
 - pnpm run lint:vale:ai - Check prose with Vale using the error alert level
 - pnpm run validate - Check frontmatter values and if all sidebars are valid

@@ -64,8 +64,8 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
 
   if (isLoadingPackages) {
     return (
-      <div className="flex items-center justify-end gap-2 px-3 h-9">
-        <div className="animate-pulse h-[1.125rem] w-20 bg-surface4 rounded-full" />
+      <div className="flex h-9 items-center justify-end gap-2 px-3">
+        <div className="bg-surface4 h-[1.125rem] w-20 animate-pulse rounded-full" />
       </div>
     );
   }
@@ -86,12 +86,12 @@ export const MastraVersionFooter = ({ collapsed }: MastraVersionFooterProps) => 
         <DialogTrigger asChild>
           <button
             type="button"
-            className="flex rounded-lg p-1 hover:bg-sidebar-nav-hover transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring"
+            className="hover:bg-sidebar-nav-hover focus-visible:ring-accent1 focus-visible:shadow-focus-ring flex rounded-lg p-1 transition-colors focus-visible:ring-1 focus-visible:outline-hidden"
           >
             <span className="relative inline-flex">
               {(isLoadingUpdates || outdatedCount > 0 || deprecatedCount > 0) && (
-                <span className="absolute -right-1.5 -top-1.5 flex items-center gap-1">
-                  {isLoadingUpdates && <Spinner className="size-3 text-neutral3" />}
+                <span className="absolute -top-1.5 -right-1.5 flex items-center gap-1">
+                  {isLoadingUpdates && <Spinner className="text-neutral3 size-3" />}
                   {outdatedCount > 0 && <CountBadge count={outdatedCount} variant="warning" />}
                   {deprecatedCount > 0 && <CountBadge count={deprecatedCount} variant="error" />}
                 </span>
@@ -183,7 +183,7 @@ const PackagesModalContent = ({
 
       <DialogBody>
         {/* Status summary */}
-        <div className="flex items-center justify-between gap-3 text-sm text-neutral3 py-2">
+        <div className="text-neutral3 flex items-center justify-between gap-3 py-2 text-sm">
           {isLoadingUpdates ? (
             <span className="text-neutral3">Checking for updates...</span>
           ) : !hasUpdates ? (
@@ -213,22 +213,22 @@ const PackagesModalContent = ({
         </div>
 
         {/* Package list */}
-        <div className="max-h-64 overflow-y-auto border border-border1 rounded-md">
+        <div className="border-border1 max-h-64 overflow-y-auto rounded-md border">
           <div className="grid grid-cols-[1fr_auto_auto] text-sm">
             {packages.map((pkg, index) => (
               <div key={pkg.name} className={cn('contents', index > 0 && '[&>div]:border-t [&>div]:border-border1')}>
-                <div className="py-2 px-3 font-mono text-text1 truncate min-w-0">
+                <div className="text-text1 min-w-0 truncate px-3 py-2 font-mono">
                   <a
                     href={`https://www.npmjs.com/package/${pkg.name}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="hover:text-accent1 hover:underline inline-flex items-center gap-1 group"
+                    className="hover:text-accent1 group inline-flex items-center gap-1 hover:underline"
                   >
                     {pkg.name}
-                    <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <ExternalLink className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
                   </a>
                 </div>
-                <div className="py-2 px-3 font-mono text-neutral3 flex items-center gap-1.5">
+                <div className="text-neutral3 flex items-center gap-1.5 px-3 py-2 font-mono">
                   {pkg.isOutdated || pkg.isDeprecated ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -251,10 +251,10 @@ const PackagesModalContent = ({
                     <span>{pkg.version}</span>
                   )}
                 </div>
-                <div className="py-2 px-3 font-mono text-neutral3 flex items-center">
+                <div className="text-neutral3 flex items-center px-3 py-2 font-mono">
                   {(pkg.isOutdated || pkg.isDeprecated) && pkg.latestVersion && (
                     <>
-                      <MoveRight className="w-4 h-4 mx-2 text-neutral3" />
+                      <MoveRight className="text-neutral3 mx-2 h-4 w-4" />
                       <span className="text-accent1">{pkg.latestVersion}</span>
                     </>
                   )}
@@ -266,9 +266,9 @@ const PackagesModalContent = ({
 
         {/* Update command section */}
         {hasUpdates && updateCommand && (
-          <div className="space-y-2 pt-2 border-t border-border1">
+          <div className="border-border1 space-y-2 border-t pt-2">
             <div className="flex items-center gap-2 pt-3">
-              <Info className="w-4 h-4 text-neutral3" />
+              <Info className="text-neutral3 h-4 w-4" />
               <Txt as="span" variant="ui-sm" className="text-neutral3">
                 Use the command below to update your packages
               </Txt>

@@ -57,7 +57,7 @@ export function IntegrationToolsSection({ selectedToolIds, onSubmitTools }: Inte
             return (
               <Entity key={provider.id} onClick={() => setSelectedProvider(provider)} className="bg-surface2">
                 <div
-                  className="size-11 rounded-lg flex items-center justify-center uppercase shrink-0"
+                  className="flex size-11 shrink-0 items-center justify-center rounded-lg uppercase"
                   style={{ backgroundColor: bg, color: text }}
                 >
                   {provider.name[0]}

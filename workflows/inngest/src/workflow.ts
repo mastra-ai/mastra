@@ -486,7 +486,8 @@ export class InngestWorkflow<
                 // For suspended workflows, read existing snapshot to preserve suspendedPaths and resumeLabels
                 // which were set correctly by the handlers during execution
                 let existingSnapshot:
-                  { suspendedPaths?: Record<string, number[]>; resumeLabels?: Record<string, any> } | undefined;
+                  | { suspendedPaths?: Record<string, number[]>; resumeLabels?: Record<string, any> }
+                  | undefined;
                 if (result.status === 'suspended') {
                   existingSnapshot =
                     (await workflowsStore.loadWorkflowSnapshot({

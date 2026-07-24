@@ -52,10 +52,10 @@ export const FilterableList = ({
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col gap-3 border-r border-border1 py-6 px-6"
+      className="border-border1 flex h-full min-h-0 flex-col gap-3 border-r px-6 py-6"
       data-testid={`${testIdPrefix}-filter`}
     >
-      <div className="shrink-0 rounded-full bg-surface3" data-testid={`${testIdPrefix}-filter-search`}>
+      <div className="bg-surface3 shrink-0 rounded-full" data-testid={`${testIdPrefix}-filter-search`}>
         <InputGroup variant="outline" size="lg">
           <InputGroupAddon align="inline-start">
             <SearchIcon />
@@ -69,13 +69,13 @@ export const FilterableList = ({
         </InputGroup>
       </div>
 
-      <div className="flex shrink-0 items-center gap-2 text-ui-xs">
+      <div className="text-ui-xs flex shrink-0 items-center gap-2">
         <button
           type="button"
           onClick={onSelectAll}
           disabled={disabled}
           data-testid={`${testIdPrefix}-filter-select-all`}
-          className="text-neutral3 transition-colors hover:text-neutral6 disabled:cursor-not-allowed disabled:opacity-60"
+          className="text-neutral3 hover:text-neutral6 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
         >
           Select all
         </button>
@@ -87,7 +87,7 @@ export const FilterableList = ({
           onClick={onClearAll}
           disabled={disabled}
           data-testid={`${testIdPrefix}-filter-clear-all`}
-          className="text-neutral3 transition-colors hover:text-neutral6 disabled:cursor-not-allowed disabled:opacity-60"
+          className="text-neutral3 hover:text-neutral6 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
         >
           Clear all
         </button>
@@ -95,7 +95,7 @@ export const FilterableList = ({
 
       <ScrollArea className="min-h-0 flex-1" viewPortClassName="pr-2">
         {filteredItems.length === 0 ? (
-          <Txt variant="ui-xs" className="px-1 py-2 text-neutral3">
+          <Txt variant="ui-xs" className="text-neutral3 px-1 py-2">
             No matches
           </Txt>
         ) : (
@@ -126,7 +126,7 @@ export const FilterableList = ({
                       onCheckedChange={() => onToggle(item.id)}
                       style={checkboxStyle}
                       data-testid={`${testIdPrefix}-filter-checkbox-${item.id}`}
-                      className="h-3.5 w-3.5 shrink-0 shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5 data-[state=checked]:shadow-none"
+                      className="h-3.5 w-3.5 shrink-0 shadow-none data-[state=checked]:shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5"
                     />
                     {item.icon && <span className="flex shrink-0 items-center">{item.icon}</span>}
                     <span className="truncate">{item.label}</span>

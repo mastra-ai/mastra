@@ -90,10 +90,10 @@ export function AppSidebar() {
 
   return (
     <MainSidebar>
-      <div className="pt-2 mb-2">
+      <div className="mb-2 pt-2">
         {state === 'collapsed' ? (
-          <div className="flex flex-col gap-2 items-center">
-            <div className="relative grid place-items-center size-9">
+          <div className="flex flex-col items-center gap-2">
+            <div className="relative grid size-9 place-items-center">
               <LogoWithoutText
                 className={cn(
                   'h-[1.5rem] w-[1.5rem] shrink-0 transition-opacity duration-150',
@@ -109,10 +109,10 @@ export function AppSidebar() {
             {isUserAuthenticated && <AuthStatus />}
           </div>
         ) : isUserAuthenticated ? (
-          <span className="flex items-center justify-between pl-3 pr-2">
-            <span className="flex items-center gap-2 flex-1 min-w-0">
+          <span className="flex items-center justify-between pr-2 pl-3">
+            <span className="flex min-w-0 flex-1 items-center gap-2">
               <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-              <span className="font-display text-sm font-semibold tracking-tight whitespace-nowrap truncate">
+              <span className="font-display truncate text-sm font-semibold tracking-tight whitespace-nowrap">
                 Mastra Studio
               </span>
               {!isMobile && <MainSidebar.Trigger />}
@@ -120,9 +120,9 @@ export function AppSidebar() {
             <AuthStatus />
           </span>
         ) : (
-          <span className="flex items-center gap-2 pl-3 pr-2">
+          <span className="flex items-center gap-2 pr-2 pl-3">
             <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-            <span className="font-display text-sm font-semibold tracking-tight whitespace-nowrap truncate">
+            <span className="font-display truncate text-sm font-semibold tracking-tight whitespace-nowrap">
               Mastra Studio
             </span>
             {!isMobile && <MainSidebar.Trigger />}
@@ -146,14 +146,14 @@ export function AppSidebar() {
                 type="button"
                 onClick={openNavigationCommand}
                 aria-label="Search and navigate"
-                className="border border-border1 bg-surface3 text-neutral5 hover:bg-surface4 hover:text-neutral6 active:bg-surface5 [&_svg]:text-neutral4 [&:hover_svg]:text-neutral5"
+                className="border-border1 bg-surface3 text-neutral5 hover:bg-surface4 hover:text-neutral6 active:bg-surface5 [&_svg]:text-neutral4 [&:hover_svg]:text-neutral5 border"
               >
                 <Search />
                 <MainSidebar.NavLabel state={state}>Search</MainSidebar.NavLabel>
                 {state !== 'collapsed' && (
                   <kbd
                     aria-hidden="true"
-                    className="ml-auto rounded border border-border1 bg-surface4 px-1.5 py-0.5 font-mono text-[10px] leading-none text-neutral3"
+                    className="border-border1 bg-surface4 text-neutral3 ml-auto rounded border px-1.5 py-0.5 font-mono text-[10px] leading-none"
                   >
                     {commandShortcutLabel}
                   </kbd>
@@ -228,7 +228,7 @@ export function AppSidebar() {
         )}
         {state !== 'collapsed' && (
           <>
-            <hr className="mx-6 my-2 h-px border-0 bg-border1" />
+            <hr className="bg-border1 mx-6 my-2 h-px border-0" />
             <MastraVersionFooter collapsed={false} />
           </>
         )}

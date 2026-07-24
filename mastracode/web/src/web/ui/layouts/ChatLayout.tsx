@@ -74,7 +74,7 @@ export function ChatLayout({
             size="icon-md"
             variant="ghost"
             tooltip="Open workspace files"
-            className="absolute right-2 top-2 z-10 hidden rounded-md lg:inline-flex"
+            className="absolute top-2 right-2 z-10 hidden rounded-md lg:inline-flex"
             onClick={onRightPanelOpen}
             aria-label="Open workspace files"
             aria-expanded="false"
@@ -136,7 +136,7 @@ function DesktopRightPanelFrame({
                   size="icon-md"
                   variant="ghost"
                   tooltip="Close workspace files"
-                  className="absolute right-2 top-2 z-10 rounded-md"
+                  className="absolute top-2 right-2 z-10 rounded-md"
                   onClick={onRightPanelClose}
                   aria-label="Close workspace files"
                   aria-expanded="true"

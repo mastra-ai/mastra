@@ -247,7 +247,9 @@ export type ExtractSchemaFromStep<
 export type VariableReference<
   TStep extends Step<string, any, any> = Step<string, any, any>,
   TVarPath extends PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '' | '.' =
-    PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '' | '.',
+    | PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>>
+    | ''
+    | '.',
 > =
   | {
       step: TStep;

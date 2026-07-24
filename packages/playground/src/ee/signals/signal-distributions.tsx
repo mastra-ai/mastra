@@ -26,7 +26,7 @@ function SignalDistributionRow({
 }) {
   const content = (
     <>
-      <span className="flex min-w-0 items-center gap-2 text-neutral5">
+      <span className="text-neutral5 flex min-w-0 items-center gap-2">
         <span
           aria-hidden="true"
           className="size-2 shrink-0 rounded-[2px]"
@@ -36,7 +36,7 @@ function SignalDistributionRow({
           {node.label}
         </span>
       </span>
-      <span className="shrink-0 font-mono text-neutral3">
+      <span className="text-neutral3 shrink-0 font-mono">
         {node.traceCount} · {Math.round(node.stageShare * 100)}%
       </span>
     </>
@@ -47,7 +47,7 @@ function SignalDistributionRow({
       <li title={node.description ? `${node.label}\n${node.description}` : node.label}>
         <button
           aria-label={`View theme details for ${node.label}`}
-          className="flex w-full min-w-0 items-center justify-between gap-3 rounded-xs text-left text-xs outline-hidden hover:bg-surface3 focus-visible:ring-1 focus-visible:ring-border2"
+          className="hover:bg-surface3 focus-visible:ring-border2 flex w-full min-w-0 items-center justify-between gap-3 rounded-xs text-left text-xs outline-hidden focus-visible:ring-1"
           onClick={() => onViewThemeDetails({ signalName, themeId: node.themeId, label: node.label })}
           type="button"
         >
@@ -79,15 +79,15 @@ function NoiseDistributionRow({
     <li>
       <button
         aria-label={`View Noise details for ${signalLabel}`}
-        className="flex w-full min-w-0 items-center justify-between gap-3 rounded-xs text-left text-xs outline-hidden hover:bg-surface3 focus-visible:ring-1 focus-visible:ring-border2"
+        className="hover:bg-surface3 focus-visible:ring-border2 flex w-full min-w-0 items-center justify-between gap-3 rounded-xs text-left text-xs outline-hidden focus-visible:ring-1"
         onClick={() => onViewNoiseDetails(signalName)}
         type="button"
       >
-        <span className="flex min-w-0 items-center gap-2 text-neutral5">
+        <span className="text-neutral5 flex min-w-0 items-center gap-2">
           <span aria-hidden="true" className="size-2 shrink-0 rounded-[2px]" style={{ backgroundColor: color }} />
           <span>Noise</span>
         </span>
-        <span className="shrink-0 font-mono text-neutral3">
+        <span className="text-neutral3 shrink-0 font-mono">
           {traceCount} · {Math.round(stageShare * 100)}%
         </span>
       </button>
@@ -123,7 +123,7 @@ function SignalDistribution({
 
   return (
     <Card aria-label={`${label} distribution`} as="article" className={cardClassName} elevation="elevated">
-      <CardHeader className="flex flex-row items-center justify-between border-b border-border1 px-4 py-3">
+      <CardHeader className="border-border1 flex flex-row items-center justify-between border-b px-4 py-3">
         <h3 className="font-mono text-xs font-semibold tracking-wider" style={{ color }}>
           {label.toUpperCase()}
         </h3>
@@ -132,7 +132,7 @@ function SignalDistribution({
             {...dragHandleProps}
             aria-disabled={disabled}
             aria-label={`Reorder ${label}`}
-            className="cursor-grab rounded-xs p-1 text-neutral3 group-hover:text-neutral5 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50"
+            className="text-neutral3 group-hover:text-neutral5 cursor-grab rounded-xs p-1 active:cursor-grabbing aria-disabled:cursor-wait aria-disabled:opacity-50"
             title={`Drag the ${label} card to reorder`}
           >
             <GripVertical aria-hidden="true" className="size-4" />
@@ -140,10 +140,10 @@ function SignalDistribution({
         </div>
       </CardHeader>
       <CardContent className="space-y-4 p-4">
-        <p className="font-mono text-[10px] tracking-wider text-neutral3">{traceLabel(traceCount)}</p>
+        <p className="text-neutral3 font-mono text-[10px] tracking-wider">{traceLabel(traceCount)}</p>
         <div
           aria-label={`${label} stacked distribution`}
-          className="flex h-1.5 overflow-hidden rounded-xs bg-surface4"
+          className="bg-surface4 flex h-1.5 overflow-hidden rounded-xs"
           data-testid="distribution-stack"
         >
           {nodes.map((node, index) => (
@@ -172,7 +172,7 @@ function SignalDistribution({
               />
             ))
           ) : (
-            <li className="text-xs text-neutral3">No themes detected</li>
+            <li className="text-neutral3 text-xs">No themes detected</li>
           )}
           <NoiseDistributionRow
             color={color}
