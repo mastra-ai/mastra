@@ -56,6 +56,23 @@ After generating embeddings, you need to store them in a database that supports 
     <h3>Using VoyageAI with MongoDB</h3>
 
     MongoDB works seamlessly with VoyageAI's embedding models, which are optimized for retrieval tasks. For complete examples and specialized models, see the [VoyageAI embeddings documentation](/models/embeddings#voyageai) and [MongoDB vector reference](/reference/vectors/mongodb).
+
+    <h3>Hybrid Search (Vector + Full-Text)</h3>
+
+    MongoDB supports hybrid search that fuses vector similarity with BM25 full-text search using server-side `$rankFusion` (requires MongoDB >= 8.1). This is useful when you want to combine semantic and keyword-based retrieval:
+
+    ```ts
+    await store.createSearchIndex({ indexName: 'myCollection', fields: ['text'] })
+    const results = await store.hybridQuery({
+      indexName: 'myCollection',
+      queryVector: embedding,
+      query: 'search terms',
+      paths: ['text'],
+      topK: 10,
+    })
+    ```
+
+    See the [MongoDB vector reference](/reference/vectors/mongodb) for details on `createSearchIndex()`, `textQuery()`, and `hybridQuery()`.
   </TabItem>
 
   <TabItem value="pg-vector" label="PgVector">
