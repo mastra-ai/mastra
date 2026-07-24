@@ -56,6 +56,19 @@ export interface NativeSandboxConfig {
    * The command and its args are appended after these.
    */
   bwrapArgs?: string[];
+
+  /**
+   * Restrict the sandbox's working directory to read-only access.
+   * Spawned processes can read but not write files in the working directory.
+   * Enforced at the OS level (seatbelt profile / bwrap --ro-bind); ignored when isolation is 'none'.
+   * Exceptions:
+   * - Paths listed in `readWritePaths` and mounted filesystem targets remain writable.
+   * - Providing custom `bwrapArgs` or `seatbeltProfilePath` replaces the generated
+   *   sandbox policy and may bypass this read-only restriction entirely.
+   *
+   * @default false
+   */
+  readOnly?: boolean;
 }
 
 /**

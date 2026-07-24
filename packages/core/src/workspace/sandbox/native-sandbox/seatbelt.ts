@@ -15,6 +15,8 @@
  * https://github.com/anthropic-experimental/sandbox-runtime
  */
 
+import { realpathSync } from 'node:fs';
+
 import type { NativeSandboxConfig } from './types';
 
 /**
@@ -41,15 +43,23 @@ function escapePath(pathStr: string): string {
   return JSON.stringify(pathStr);
 }
 
+function canonicalizePath(pathStr: string): string {
+  try {
+    return realpathSync(pathStr);
+  } catch {
+    return pathStr;
+  }
+}
+
 /**
  * Generate a seatbelt profile for the given configuration.
  *
  * The profile:
  * - Allows all file reads (can't restrict with subpath on macOS)
- * - Restricts file writes to workspace and temp directories
+ * - Restricts file writes to temp directories, configured writable paths, and the workspace unless read-only
  * - Blocks network unless explicitly allowed
  *
- * @param workspacePath - The workspace directory to allow write access to
+ * @param workspacePath - The workspace directory to sandbox
  * @param config - Additional sandbox configuration
  * @returns The generated SBPL profile content
  */
@@ -124,17 +134,28 @@ export function generateSeatbeltProfile(workspacePath: string, config: NativeSan
   // File write access - restrict to workspace and temp
   lines.push('; File write access (restricted to workspace and temp)');
 
-  // Workspace
-  lines.push(`(allow file-write* (subpath ${escapePath(workspacePath)}))`);
+  const canonicalWorkspacePath = canonicalizePath(workspacePath);
 
-  // Temp directories (needed for many operations)
-  lines.push('(allow file-write* (subpath "/private/tmp"))');
-  lines.push('(allow file-write* (subpath "/var/folders"))');
-  lines.push('(allow file-write* (subpath "/private/var/folders"))');
+  // Workspace
+  if (!config.readOnly) {
+    lines.push(`(allow file-write* (subpath ${escapePath(canonicalWorkspacePath)}))`);
+  }
+
+  // Temp directories (needed for many operations). When the workspace is read-only,
+  // exclude it from these broad allows so temp-backed workspaces remain protected.
+  for (const tempPath of ['/private/tmp', '/var/folders', '/private/var/folders']) {
+    if (config.readOnly) {
+      lines.push(
+        `(allow file-write* (require-all (subpath ${escapePath(tempPath)}) (require-not (subpath ${escapePath(canonicalWorkspacePath)}))))`,
+      );
+    } else {
+      lines.push(`(allow file-write* (subpath ${escapePath(tempPath)}))`);
+    }
+  }
 
   // Custom read-write paths
   for (const p of config.readWritePaths ?? []) {
-    lines.push(`(allow file-write* (subpath ${escapePath(p)}))`);
+    lines.push(`(allow file-write* (subpath ${escapePath(canonicalizePath(p))}))`);
   }
   lines.push('');
 
