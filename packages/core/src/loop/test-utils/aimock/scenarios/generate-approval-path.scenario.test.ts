@@ -6,8 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { createSharedAgent } from '../aimock-scenario';
-import { useLoopScenarioAimock } from '../aimock-scenario';
+import { createSharedAgent, useLoopScenarioAimock } from '../aimock-scenario';
 import { createTool } from '../../../../tools';
 import { MockMemory } from '../../../../memory';
 

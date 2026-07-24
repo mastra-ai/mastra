@@ -6,10 +6,10 @@
  * Verifies spans by querying the Jaeger API.
  */
 
-import type {ChildProcess} from 'child_process';
-import {spawn} from 'child_process';
-import {dirname, resolve} from 'path';
-import {fileURLToPath} from 'url';
+import type {ChildProcess} from 'node:child_process';
+import {spawn} from 'node:child_process';
+import {dirname, resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {describe, it, expect, beforeAll, afterAll} from 'vitest';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

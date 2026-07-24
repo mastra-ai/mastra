@@ -15,12 +15,12 @@ import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { fastembed } from '@mastra/fastembed';
 import { Memory } from '@mastra/memory';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import crypto from 'crypto';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { spawnSync } from 'child_process';
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 
 function buildLegacyGroupId(threadId: string | null, dateHeader: string, content: string): string {
   return crypto
