@@ -1134,6 +1134,144 @@ describe('om-tools', () => {
       expect(result.text).toContain('export function main()');
     });
 
+    it('should continue an oversized part from charOffset', async () => {
+      const fullText = Array.from({ length: 120 }, (_, index) => `segment-${index.toString().padStart(3, '0')}`).join(
+        ' ',
+      );
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-large-part',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: fullText }],
+            },
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+          },
+        ],
+      });
+
+      const firstChunk = await recallPart({
+        memory: memory as any,
+        threadId,
+        cursor: 'msg-large-part',
+        partIndex: 0,
+        maxTokens: 12,
+      });
+
+      expect(firstChunk.truncated).toBe(true);
+      expect(firstChunk.charOffset).toBe(0);
+      expect(firstChunk.nextCharOffset).toBeGreaterThan(0);
+      expect(firstChunk.note).toContain('charOffset=');
+      expect(firstChunk.text).not.toContain('To continue');
+
+      const secondChunk = await recallPart({
+        memory: memory as any,
+        threadId,
+        cursor: 'msg-large-part',
+        partIndex: 0,
+        charOffset: firstChunk.nextCharOffset,
+        maxTokens: 12,
+      });
+
+      expect(secondChunk.charOffset).toBe(firstChunk.nextCharOffset);
+      expect(secondChunk.text).not.toBe(firstChunk.text);
+      expect(fullText).toContain(firstChunk.text);
+      expect(fullText).toContain(secondChunk.text);
+    });
+
+    it('should reproduce the original oversized part when chunks are concatenated', async () => {
+      const fullText = Array.from({ length: 45 }, (_, index) => `chunk-${index.toString().padStart(3, '0')}`).join(' ');
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-exact-chunks',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: fullText }],
+            },
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+          },
+        ],
+      });
+
+      const chunks: string[] = [];
+      let nextCharOffset: number | undefined = 0;
+
+      while (nextCharOffset !== undefined) {
+        const charOffset: number = nextCharOffset;
+        const result = await recallPart({
+          memory: memory as any,
+          threadId,
+          cursor: 'msg-exact-chunks',
+          partIndex: 0,
+          charOffset,
+          maxTokens: 10,
+        });
+
+        if (result.nextCharOffset !== undefined) {
+          expect(result.nextCharOffset).toBeGreaterThan(charOffset);
+        }
+        chunks.push(result.text);
+        nextCharOffset = result.nextCharOffset;
+      }
+
+      expect(chunks.join('')).toBe(fullText);
+    });
+
+    it('should truncate an oversized part using the default token budget', async () => {
+      const fullText = Array.from(
+        { length: 1500 },
+        (_, index) => `default-budget-segment-${index.toString().padStart(4, '0')}`,
+      ).join(' ');
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-default-budget',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: fullText }],
+            },
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+          },
+        ],
+      });
+
+      const chunks: string[] = [];
+      let nextCharOffset: number | undefined = 0;
+
+      while (nextCharOffset !== undefined) {
+        const charOffset: number = nextCharOffset;
+        const result = await recallPart({
+          memory: memory as any,
+          threadId,
+          cursor: 'msg-default-budget',
+          partIndex: 0,
+          charOffset,
+        });
+
+        if (result.nextCharOffset !== undefined) {
+          expect(result.truncated).toBe(true);
+          expect(result.nextCharOffset).toBeGreaterThan(charOffset);
+          expect(result.note).toContain(`charOffset=${result.nextCharOffset}`);
+        }
+        chunks.push(result.text);
+        nextCharOffset = result.nextCharOffset;
+      }
+
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.join('')).toBe(fullText);
+    });
+
     it('should fall forward to the first part of the next visible message when partIndex overflows', async () => {
       await memory.saveMessages({
         messages: [
@@ -1178,6 +1316,68 @@ describe('om-tools', () => {
         'Part index 1 not found in message msg-single; showing partIndex 0 from next message msg-next-visible.',
       );
       expect(result.text).toContain('This is the next visible message');
+    });
+
+    it('should continue a truncated fall-forward part via charOffset', async () => {
+      const nextText = Array.from({ length: 200 }, (_, i) => `next-line ${i}`).join('\n');
+      await memory.saveMessages({
+        messages: [
+          {
+            id: 'msg-ff-source',
+            threadId,
+            resourceId,
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Only part here' }],
+            },
+            createdAt: new Date('2024-01-01T10:02:00Z'),
+          },
+          {
+            id: 'msg-ff-next',
+            threadId,
+            resourceId,
+            role: 'user',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: nextText }],
+            },
+            createdAt: new Date('2024-01-01T10:03:00Z'),
+          },
+        ],
+      });
+
+      const chunks: string[] = [];
+      let nextCharOffset: number | undefined = 0;
+
+      while (nextCharOffset !== undefined) {
+        const charOffset: number = nextCharOffset;
+        const result = await recallPart({
+          memory: memory as any,
+          threadId,
+          resourceId,
+          cursor: 'msg-ff-source',
+          partIndex: 1,
+          charOffset,
+          maxTokens: 50,
+        });
+
+        expect(result.messageId).toBe('msg-ff-next');
+        if (result.nextCharOffset !== undefined) {
+          expect(result.truncated).toBe(true);
+          expect(result.nextCharOffset).toBeGreaterThan(charOffset);
+          expect(result.note).toContain('cursor="msg-ff-source" partIndex=1');
+          expect(result.note).toContain(`charOffset=${result.nextCharOffset}`);
+          expect(result.text).not.toContain('To continue');
+        }
+        chunks.push(result.text);
+        nextCharOffset = result.nextCharOffset;
+      }
+
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks.join('')).toBe(
+        `Part index 1 not found in message msg-ff-source; showing partIndex 0 from next message msg-ff-next.\n\n${nextText}`,
+      );
     });
 
     it('should skip data-only messages when falling forward to the next visible message', async () => {
