@@ -173,14 +173,18 @@
     "@mastra/vercel": "1.3.0"
   },
   "changesets": [
+    "automated-provider-registry-20260723-184130",
     "board-card-thread-actions",
+    "chilly-points-sink",
     "common-turtles-cheer",
     "cyan-aliens-care",
     "eager-walls-sneeze",
     "factory-github-uninstall-hydration",
     "factory-lock-timeout",
+    "fix-studio-google-vertex-provider-connected",
     "fix-subagent-approval-parent-run",
     "frank-olives-pick",
+    "fresh-peas-dream",
     "green-birds-knock",
     "hot-melons-wave",
     "libsql-om-write-lock",
@@ -190,6 +194,7 @@
     "neat-signs-tan",
     "petite-sites-wish",
     "sdk-anthropic-oauth-timeout",
-    "silly-boxes-film"
+    "silly-boxes-film",
+    "tidy-pugs-shave"
   ]
 }
