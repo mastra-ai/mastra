@@ -2,6 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { defaultFactoryRules } from '../../../rules/defaults.js';
 import type { IntegrationContext } from '../../base.js';
 
 import { createPlatformStorageForTests } from '../test-utils.js';
@@ -481,6 +482,71 @@ describe('PlatformLinearIntegration', () => {
     );
     expect(integration.diagnostics()).toEqual({ mode: 'platform', endpointHost: 'platform.example.com' });
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
+  });
+
+  it('attaches Linear rules to fetched Platform issues', async () => {
+    const seed = await createPlatformStorageForTests();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/workspaces')) return json({ workspaces: [workspace] });
+      if (url.includes('/workspaces/workspace-1/projects?')) {
+        return json({ projects: [project], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      if (url.includes('/workspaces/workspace-1/issues?')) {
+        return json({ issues: [issue], pageInfo: { hasNextPage: false, endCursor: null } });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const projectRecord = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Acme app' },
+    });
+    await seed.intake.saveConfig({
+      orgId: 'org-1',
+      userId: 'user-1',
+      config: { linear: { enabled: true, sourceIds: [project1SourceId] } },
+    });
+    const onEvent = vi.fn();
+    const context = {
+      auth: fakeAuth(),
+      storage: {
+        generic: seed.integrations.forIntegration('linear'),
+        sourceControl: seed.sourceControl.forIntegration('linear'),
+        projects: seed.projects,
+        intake: seed.intake,
+      },
+      rules: {
+        config: defaultFactoryRules({
+          version: 'test-rules',
+          overrides: { linear: { issueObserved: { onEvent } } },
+        }),
+        workItems: seed.workItems,
+      },
+      stateSigner: {},
+      baseUrl: 'https://factory.example',
+    } as unknown as IntegrationContext;
+    integration.initialize?.({
+      storage: context.storage.generic,
+      projects: context.storage.projects,
+      auth: context.auth,
+    });
+    const app = new Hono();
+    for (const route of integration.routes(context)) {
+      if ('handler' in route) app.on(route.method, route.path, route.handler as never);
+    }
+
+    const response = await app.request(`/web/linear/issues?factoryProjectId=${projectRecord.id}`);
+
+    expect(response.status).toBe(200);
+    expect(onEvent).toHaveBeenCalledOnce();
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'issueObserved',
+        issue: expect.objectContaining({ id: 'issue-1', identifier: 'ENG-42' }),
+      }),
+    );
   });
 
   it('defaults the Platform base URL and requires MASTRA_PLATFORM_SECRET_KEY', () => {

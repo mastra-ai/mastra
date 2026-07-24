@@ -753,6 +753,8 @@ export class MastraFactory {
               factoryStorage: storage,
               integrationStorage,
               sourceControlStorage,
+              rules,
+              factoryReady,
               domains,
             },
             integration.id,
