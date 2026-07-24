@@ -45,7 +45,7 @@ overrides:
   client-js-e2e-tests-zod-v3>zod: ^3.24.0
   client-js-e2e-tests-zod-v4>zod: ^4.3.6
   better-auth: ^1.6.13
-  js-yaml: ^3.15.0
+  js-yaml: ^5.2.2
   glob@<=10.5.0: 10.5.0
   '@mastra/memory>image-size': 1.2.1
   body-parser@<=2.2.1: 2.3.0
@@ -4531,7 +4531,7 @@ importers:
         version: 8.0.4
       '@hono/node-ws':
         specifier: ^1.3.0
-        version: 1.3.1(@hono/node-server@1.19.14(hono@4.12.30))(bufferutil@4.1.0)(hono@4.12.30)
+        version: 1.3.1(@hono/node-server@2.0.10(hono@4.12.30))(bufferutil@4.1.0)(hono@4.12.30)
       '@mastra/server':
         specifier: workspace:*
         version: link:../server
@@ -4603,8 +4603,8 @@ importers:
         version: 8.21.0(bufferutil@4.1.0)
     devDependencies:
       '@hono/node-server':
-        specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.30)
+        specifier: ^2.0.0
+        version: 2.0.10(hono@4.12.30)
       '@hono/standard-validator':
         specifier: ^0.3.0
         version: 0.3.0(@standard-schema/spec@1.1.0)(hono@4.12.30)
@@ -4691,8 +4691,8 @@ importers:
         version: link:../schema-compat
     devDependencies:
       '@hono/node-server':
-        specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.30)
+        specifier: ^2.0.0
+        version: 2.0.10(hono@4.12.30)
       '@internal/ai-sdk-v4':
         specifier: workspace:*
         version: link:../_vendored/ai_v4
@@ -4929,8 +4929,8 @@ importers:
         version: 3.1.3
     devDependencies:
       '@hono/node-server':
-        specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.30)
+        specifier: ^2.0.0
+        version: 2.0.10(hono@4.12.30)
       '@internal/ai-sdk-v5':
         specifier: workspace:*
         version: link:../_vendored/ai_v5
@@ -5023,8 +5023,8 @@ importers:
         version: 4.4.3
     devDependencies:
       '@hono/node-server':
-        specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.30)
+        specifier: ^2.0.0
+        version: 2.0.10(hono@4.12.30)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -5078,8 +5078,8 @@ importers:
         version: 4.4.3
     devDependencies:
       '@hono/node-server':
-        specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.30)
+        specifier: ^2.0.0
+        version: 2.0.10(hono@4.12.30)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -6182,7 +6182,7 @@ importers:
     dependencies:
       '@hono/node-ws':
         specifier: ^1.3.0
-        version: 1.3.1(@hono/node-server@1.19.14(hono@4.12.30))(bufferutil@4.1.0)(hono@4.12.30)
+        version: 1.3.1(@hono/node-server@2.0.10(hono@4.12.30))(bufferutil@4.1.0)(hono@4.12.30)
       '@mastra/server':
         specifier: workspace:*
         version: link:../../packages/server
@@ -6197,8 +6197,8 @@ importers:
         specifier: ^2.0.114
         version: 2.0.114(zod@4.4.3)
       '@hono/node-server':
-        specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.30)
+        specifier: ^2.0.0
+        version: 2.0.10(hono@4.12.30)
       '@hono/swagger-ui':
         specifier: ^0.5.3
         version: 0.5.3(hono@4.12.30)
@@ -8573,8 +8573,8 @@ importers:
         specifier: ^1.3.24
         version: 1.3.24(zod@4.4.3)
       '@hono/node-server':
-        specifier: ^1.19.14
-        version: 1.19.14(hono@4.12.30)
+        specifier: ^2.0.0
+        version: 2.0.10(hono@4.12.30)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -24690,8 +24690,8 @@ packages:
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
-  js-yaml@3.15.0:
-    resolution: {integrity: sha512-ttBQIIQPDeLjpPOohtUdXuXUVoA2uIB6fEH9HyJ7234s5mBJ5wTx20njxplLZQgLaOfpmPQA7X2t5AX6tIPbog==}
+  js-yaml@5.2.2:
+    resolution: {integrity: sha512-dayzUzKkJ1MkuUtZglSebU43utNXH0OWQByK9rKOOuYIO8M5TV1y+n8ALMdG0rdzBnfNkOmZEqrURepb0ejqBw==}
     hasBin: true
 
   jsbn@0.1.1:
@@ -33547,7 +33547,7 @@ snapshots:
   '@changesets/parse@0.4.3':
     dependencies:
       '@changesets/types': 6.1.0
-      js-yaml: 3.15.0
+      js-yaml: 5.2.2
 
   '@changesets/pre@2.0.2':
     dependencies:
@@ -34317,7 +34317,7 @@ snapshots:
 
   '@datadog/wasm-js-rewriter@5.0.1':
     dependencies:
-      js-yaml: 3.15.0
+      js-yaml: 5.2.2
       lru-cache: 7.18.3
       module-details-from-path: 1.0.4
       node-gyp-build: 4.8.4
@@ -34777,7 +34777,7 @@ snapshots:
       '@types/react-router-config': 5.0.11
       combine-promises: 1.2.0
       fs-extra: 11.3.5
-      js-yaml: 3.15.0
+      js-yaml: 5.2.2
       lodash: 4.18.1
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
@@ -35436,7 +35436,7 @@ snapshots:
       '@docusaurus/utils-common': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       fs-extra: 11.3.5
       joi: 17.13.4
-      js-yaml: 3.15.0
+      js-yaml: 5.2.2
       lodash: 4.18.1
       tslib: 2.8.1
     transitivePeerDependencies:
@@ -35470,7 +35470,7 @@ snapshots:
       globby: 11.1.0
       gray-matter: 4.0.3
       jiti: 1.21.7
-      js-yaml: 3.15.0
+      js-yaml: 5.2.2
       lodash: 4.18.1
       micromatch: 4.0.8
       p-queue: 6.6.2
@@ -35511,7 +35511,7 @@ snapshots:
       globby: 11.1.0
       gray-matter: 4.0.3
       jiti: 1.21.7
-      js-yaml: 3.15.0
+      js-yaml: 5.2.2
       lodash: 4.18.1
       micromatch: 4.0.8
       p-queue: 6.6.2
@@ -36621,7 +36621,7 @@ snapshots:
     dependencies:
       '@jsdevtools/ono': 7.1.3
       '@types/json-schema': 7.0.15
-      js-yaml: 3.15.0
+      js-yaml: 5.2.2
 
   '@hey-api/openapi-ts@0.97.3(magicast@0.5.3)(typescript@6.0.3)':
     dependencies:
@@ -36666,9 +36666,9 @@ snapshots:
     dependencies:
       hono: 4.12.30
 
-  '@hono/node-ws@1.3.1(@hono/node-server@1.19.14(hono@4.12.30))(bufferutil@4.1.0)(hono@4.12.30)':
+  '@hono/node-ws@1.3.1(@hono/node-server@2.0.10(hono@4.12.30))(bufferutil@4.1.0)(hono@4.12.30)':
     dependencies:
-      '@hono/node-server': 1.19.14(hono@4.12.30)
+      '@hono/node-server': 2.0.10(hono@4.12.30)
       hono: 4.12.30
       ws: 8.21.0(bufferutil@4.1.0)
     transitivePeerDependencies:
@@ -37635,7 +37635,7 @@ snapshots:
   '@manypkg/tools@2.1.1':
     dependencies:
       jju: 1.4.0
-      js-yaml: 3.15.0
+      js-yaml: 5.2.2
       tinyglobby: 0.2.17
 
   '@marijn/find-cluster-break@1.0.2': {}
@@ -38349,7 +38349,7 @@ snapshots:
       eckles: 1.4.1
       form-data: 4.0.6
       https-proxy-agent: 5.0.1
-      js-yaml: 3.15.0
+      js-yaml: 5.2.2
       lodash: 4.18.1
       njwt: 2.0.1
       node-fetch: 2.7.0(encoding@0.1.13)
@@ -43114,7 +43114,7 @@ snapshots:
     dependencies:
       '@verdaccio/core': 8.1.2
       debug: 4.4.3
-      js-yaml: 3.15.0
+      js-yaml: 5.2.2
       lodash: 4.18.1
     transitivePeerDependencies:
       - supports-color
@@ -45217,7 +45217,7 @@ snapshots:
   cosmiconfig@8.3.6(typescript@6.0.3):
     dependencies:
       import-fresh: 3.3.1
-      js-yaml: 3.15.0
+      js-yaml: 5.2.2
       parse-json: 5.2.0
       path-type: 4.0.0
     optionalDependencies:
@@ -47630,7 +47630,7 @@ snapshots:
 
   gray-matter@4.0.3:
     dependencies:
-      js-yaml: 3.15.0
+      js-yaml: 5.2.2
       kind-of: 6.0.3
       section-matter: 1.0.0
       strip-bom-string: 1.0.0
@@ -48606,10 +48606,9 @@ snapshots:
 
   js-tokens@4.0.0: {}
 
-  js-yaml@3.15.0:
+  js-yaml@5.2.2:
     dependencies:
-      argparse: 1.0.10
-      esprima: 4.0.1
+      argparse: 2.0.1
 
   jsbn@0.1.1: {}
 
@@ -52355,7 +52354,7 @@ snapshots:
   read-yaml-file@1.1.0:
     dependencies:
       graceful-fs: 4.2.11
-      js-yaml: 3.15.0
+      js-yaml: 5.2.2
       pify: 4.0.1
       strip-bom: 3.0.0
 
