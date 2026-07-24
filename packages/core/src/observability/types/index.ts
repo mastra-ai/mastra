@@ -5,3 +5,4 @@ export * from './logging';
 export * from './metrics';
 export * from './scores';
 export * from './feedback';
+export * from './workspace-activity';

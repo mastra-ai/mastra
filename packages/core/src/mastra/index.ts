@@ -2987,6 +2987,14 @@ export class Mastra<
         details: { status: 400, workspaceId: key || workspace.id },
       });
     }
+    // Always register this Mastra with the workspace so filesystem/sandbox
+    // providers get auto-instrumented when observability is configured. Called
+    // before the registry dedup check so a Workspace instance surfaced via a
+    // second path (e.g. agent-owned + explicit addWorkspace) is still wired to
+    // Mastra. The call is idempotent — Workspace.__registerMastra short-circuits
+    // re-registration with the same Mastra.
+    workspace.__registerMastra?.(this);
+
     const workspaceKey = key || workspace.id;
     if (this.#workspaces[workspaceKey]) {
       return;

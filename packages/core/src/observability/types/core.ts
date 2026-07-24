@@ -29,6 +29,7 @@ import type {
   TracingContext,
   TracingEvent,
 } from './tracing';
+import type { WorkspaceActivityEvent } from './workspace-activity';
 
 // ============================================================================
 // ObservabilityContext
@@ -160,10 +161,22 @@ export interface ObservabilityEventBus<TEvent> {
  * Union of all observability event types.
  * Used by the unified ObservabilityBus that handles all signals.
  */
-export type ObservabilityEvent = TracingEvent | LogEvent | MetricEvent | ScoreEvent | FeedbackEvent;
+export type ObservabilityEvent =
+  | TracingEvent
+  | LogEvent
+  | MetricEvent
+  | ScoreEvent
+  | FeedbackEvent
+  | WorkspaceActivityEvent;
 
 /** Signal whose event was dropped by the observability exporter pipeline. */
-export type ObservabilityDropSignal = 'tracing' | 'log' | 'metric' | 'score' | 'feedback';
+export type ObservabilityDropSignal =
+  | 'tracing'
+  | 'log'
+  | 'metric'
+  | 'score'
+  | 'feedback'
+  | 'workspace_activity';
 
 /** Reason an observability event was dropped by the exporter pipeline. */
 export type ObservabilityDropReason = 'unsupported-storage' | 'retry-exhausted';
@@ -278,6 +291,18 @@ export interface ObservabilityInstance {
    * @param span - Optional span to derive metric tags from
    */
   getMetricsContext?(span?: AnySpan): MetricsContext;
+
+  /**
+   * Emit a workspace activity event through the bus.
+   *
+   * Used by workspace observability wrappers (see `packages/core/src/workspace/observability.ts`)
+   * to publish `sandbox_output` and `filesystem_change` events. Callers are
+   * responsible for constructing well-formed events; the bus routes them to
+   * every registered handler that implements `onWorkspaceActivityEvent`.
+   *
+   * Optional: no-op when workspace activity is not wired for this instance.
+   */
+  emitWorkspaceActivityEvent?(event: WorkspaceActivityEvent): void;
 
   /**
    * Register an additional exporter to this instance at runtime.
@@ -575,6 +600,13 @@ export interface ObservabilityEvents {
 
   /** Handle feedback events */
   onFeedbackEvent?(event: FeedbackEvent): void | Promise<void>;
+
+  /**
+   * Handle workspace activity events (sandbox stdout/stderr chunks and
+   * filesystem mutation metadata). Emitted when a workspace registered on
+   * a `Mastra` with observability configured is used.
+   */
+  onWorkspaceActivityEvent?(event: WorkspaceActivityEvent): void | Promise<void>;
 
   /** Handle exporter pipeline droppedEvent */
   onDroppedEvent?(event: ObservabilityDropEvent): void | Promise<void>;

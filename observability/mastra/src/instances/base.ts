@@ -29,6 +29,7 @@ import type {
   ObservabilityEvent,
   ModelGenerationAttributes,
   UsageStats,
+  WorkspaceActivityEvent,
 } from '@mastra/core/observability';
 import { getNestedValue, setNestedValue } from '@mastra/core/utils';
 import { ObservabilityBus } from '../bus';
@@ -475,6 +476,16 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * for any validation needed.
    */
   __receiveExternalEvent(event: ObservabilityEvent): void {
+    this.emitObservabilityEvent(event);
+  }
+
+  /**
+   * Emit a workspace activity event through the bus. Called by workspace
+   * observability wrappers to publish `sandbox_output` and `filesystem_change`
+   * events. The bus routes to every handler that implements
+   * `onWorkspaceActivityEvent`.
+   */
+  emitWorkspaceActivityEvent(event: WorkspaceActivityEvent): void {
     this.emitObservabilityEvent(event);
   }
 

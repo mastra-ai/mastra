@@ -338,6 +338,72 @@ describe('ObservabilityBus', () => {
     });
   });
 
+  describe('workspace activity event routing', () => {
+    it('should route sandbox_output events to onWorkspaceActivityEvent', () => {
+      const onWorkspaceActivityEvent = vi.fn();
+      const exporter = createMockExporter({ onWorkspaceActivityEvent });
+      bus.registerExporter(exporter);
+
+      const event = {
+        type: 'sandbox_output' as const,
+        output: {
+          eventId: 'wa-1',
+          timestamp: new Date(),
+          workspaceId: 'ws-1',
+          sandboxId: 'sb-1',
+          source: 'exec' as const,
+          stream: 'stdout' as const,
+          chunk: 'hello',
+          truncated: false,
+        },
+      };
+      bus.emit(event);
+
+      expect(onWorkspaceActivityEvent).toHaveBeenCalledWith(event);
+    });
+
+    it('should route filesystem_change events to onWorkspaceActivityEvent', () => {
+      const onWorkspaceActivityEvent = vi.fn();
+      const exporter = createMockExporter({ onWorkspaceActivityEvent });
+      bus.registerExporter(exporter);
+
+      const event = {
+        type: 'filesystem_change' as const,
+        change: {
+          eventId: 'wa-2',
+          timestamp: new Date(),
+          workspaceId: 'ws-1',
+          path: '/foo.txt',
+          operation: 'write' as const,
+          bytes: 5,
+        },
+      };
+      bus.emit(event);
+
+      expect(onWorkspaceActivityEvent).toHaveBeenCalledWith(event);
+    });
+
+    it('should not fail when exporter has no onWorkspaceActivityEvent handler', () => {
+      const exporter = createMockExporter({ onWorkspaceActivityEvent: undefined });
+      bus.registerExporter(exporter);
+
+      expect(() =>
+        bus.emit({
+          type: 'sandbox_output' as const,
+          output: {
+            eventId: 'wa-3',
+            timestamp: new Date(),
+            workspaceId: 'ws-1',
+            source: 'exec' as const,
+            stream: 'stdout' as const,
+            chunk: 'hi',
+            truncated: false,
+          },
+        }),
+      ).not.toThrow();
+    });
+  });
+
   describe('drop event routing', () => {
     it('should route drop events to exporters and bridge', () => {
       const exporterDrop = vi.fn();

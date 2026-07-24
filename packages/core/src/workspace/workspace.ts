@@ -34,6 +34,7 @@ import * as path from 'node:path';
 import pMap, { pMapSkip } from 'p-map';
 import type { MastraBrowser } from '../browser';
 import type { IMastraLogger } from '../logger';
+import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
 import type { MastraVector } from '../vector';
 
@@ -46,6 +47,8 @@ import type { ReaddirEntry } from './glob';
 import { callLifecycle } from './lifecycle';
 import { findProjectRoot, isLSPAvailable, LSPManager } from './lsp';
 import type { LSPConfig } from './lsp/types';
+import type { WorkspaceInstrumentation, WorkspaceProviderWrapCache } from './observability';
+import { createWorkspaceInstrumentation } from './observability';
 import type { WorkspaceSandbox, OnMountHook } from './sandbox';
 import { LocalSandbox } from './sandbox/local-sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
@@ -584,6 +587,16 @@ export class Workspace<
   private _skills?: WorkspaceSkills;
   private _lsp?: LSPManager;
   private _logger?: IMastraLogger;
+  /** Parent Mastra instance — set by `__registerMastra`. Drives auto-instrumentation. */
+  #mastra?: Mastra;
+  /** Instrumentation helper lazily built on first accessor use after registration. */
+  #instrumentation?: WorkspaceInstrumentation;
+  /**
+   * Memoizes wrapped provider Proxies by their raw provider identity.
+   * Entries carry the `ObservabilityInstance` the Proxy closed over so a
+   * re-registration against a different instance rebuilds the wrapper.
+   */
+  readonly #providerWrapCache: WorkspaceProviderWrapCache = new WeakMap();
 
   constructor(config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>) {
     this.id = config.id ?? this.generateId();
@@ -765,7 +778,8 @@ export class Workspace<
   get filesystem(): [TMounts] extends [Record<string, WorkspaceFilesystem>]
     ? CompositeFilesystem<TMounts>
     : TFilesystem {
-    return this._fs as any;
+    if (!this._fs) return this._fs as any;
+    return this.#applyFilesystemInstrumentation(this._fs) as any;
   }
 
   /**
@@ -774,7 +788,42 @@ export class Workspace<
    * Returns the concrete type you passed to the constructor.
    */
   get sandbox(): TSandbox {
-    return this._sandbox as any;
+    if (!this._sandbox) return this._sandbox as any;
+    return this.#applySandboxInstrumentation(this._sandbox) as any;
+  }
+
+  /**
+   * Return `fs` wrapped with observability instrumentation when this workspace
+   * is registered on a `Mastra` that has observability configured. Otherwise
+   * return `fs` unchanged. Memoized per raw provider.
+   */
+  #applyFilesystemInstrumentation(fs: WorkspaceFilesystem): WorkspaceFilesystem {
+    const instrumentation = this.#getInstrumentation();
+    if (!instrumentation) return fs;
+    return instrumentation.wrapFilesystem(fs);
+  }
+
+  /**
+   * Return `sandbox` wrapped with observability instrumentation when this
+   * workspace is registered on a `Mastra` that has observability configured.
+   * Otherwise return `sandbox` unchanged. Memoized per raw provider.
+   */
+  #applySandboxInstrumentation(sandbox: WorkspaceSandbox): WorkspaceSandbox {
+    const instrumentation = this.#getInstrumentation();
+    if (!instrumentation) return sandbox;
+    return instrumentation.wrapSandbox(sandbox);
+  }
+
+  #getInstrumentation(): WorkspaceInstrumentation | undefined {
+    if (!this.#mastra) return undefined;
+    if (!this.#instrumentation) {
+      this.#instrumentation = createWorkspaceInstrumentation(
+        this.#mastra,
+        { workspaceId: this.id, workspaceName: this.name },
+        this.#providerWrapCache,
+      );
+    }
+    return this.#instrumentation;
   }
 
   /**
@@ -840,13 +889,16 @@ export class Workspace<
   }: {
     requestContext: RequestContext;
   }): Promise<WorkspaceFilesystem | undefined> {
-    if (!this._filesystemResolver) return this._fs;
+    if (!this._filesystemResolver) {
+      return this._fs ? this.#applyFilesystemInstrumentation(this._fs) : undefined;
+    }
     let pending = this._filesystemRequestCache.get(requestContext);
     if (!pending) {
       pending = Promise.resolve(this._filesystemResolver({ requestContext }));
       this._filesystemRequestCache.set(requestContext, pending);
     }
-    return pending;
+    const resolved = await pending;
+    return this.#applyFilesystemInstrumentation(resolved);
   }
 
   /**
@@ -876,7 +928,9 @@ export class Workspace<
    * are memoized by `sandboxCacheKey` when set, else per RequestContext instance.
    */
   async resolveSandbox({ requestContext }: { requestContext: RequestContext }): Promise<WorkspaceSandbox | undefined> {
-    if (!this._sandboxResolver) return this._sandbox;
+    if (!this._sandboxResolver) {
+      return this._sandbox ? this.#applySandboxInstrumentation(this._sandbox) : undefined;
+    }
 
     const cacheKey = this._sandboxCacheKey?.({ requestContext });
     if (cacheKey != null) {
@@ -890,7 +944,8 @@ export class Workspace<
           }
         });
       }
-      return keyed;
+      const resolved = await keyed;
+      return this.#applySandboxInstrumentation(resolved);
     }
 
     let pending = this._sandboxRequestCache.get(requestContext);
@@ -903,7 +958,8 @@ export class Workspace<
         }
       });
     }
-    return pending;
+    const resolved = await pending;
+    return this.#applySandboxInstrumentation(resolved);
   }
 
   /**
@@ -1566,5 +1622,32 @@ export class Workspace<
     if (this._sandbox instanceof MastraSandbox) {
       this._sandbox.__setLogger(logger);
     }
+  }
+
+  /**
+   * Register the parent Mastra instance. Called by `Mastra.addWorkspace` and
+   * by `Agent.__registerMastra` when a workspace is agent-owned. Enables
+   * observability auto-instrumentation: after registration, `filesystem` /
+   * `sandbox` / `resolveFilesystem` / `resolveSandbox` return `Proxy`-wrapped
+   * providers when the Mastra has observability configured, otherwise raw.
+   *
+   * Idempotent: re-registering with the same Mastra is a no-op; re-registering
+   * with a different Mastra swaps the instrumentation.
+   *
+   * @internal
+   */
+  __registerMastra(mastra: Mastra): void {
+    if (this.#mastra === mastra) return;
+    this.#mastra = mastra;
+    // Reset the derived instrumentation helper so the next accessor call
+    // rebuilds it against the new Mastra's observability. Provider wrap cache
+    // is intentionally kept — same raw provider maps to the same wrapper.
+    this.#instrumentation = undefined;
+
+    // Fan out to provider primitives that opt into Mastra registration.
+    const fsWithHook = this._fs as { __registerMastra?: (m: Mastra) => void } | undefined;
+    fsWithHook?.__registerMastra?.(mastra);
+    const sbWithHook = this._sandbox as { __registerMastra?: (m: Mastra) => void } | undefined;
+    sbWithHook?.__registerMastra?.(mastra);
   }
 }

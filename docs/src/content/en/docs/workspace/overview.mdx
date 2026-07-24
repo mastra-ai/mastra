@@ -95,6 +95,12 @@ For manual cleanup, use [`mastra.removeWorkspace()`](/reference/core/removeWorks
 
 Static providers are owned by the workspace. Resolver-backed providers are owned by your application because the workspace creates them at request time. See [dynamic sandbox lifecycle ownership](/docs/workspace/sandbox#lifecycle-ownership) for the resolver cleanup model.
 
+## Observability
+
+When a workspace is registered on a `Mastra` instance that has `observability` configured, its filesystem and sandbox providers are automatically instrumented. Every method call emits a span, a duration metric, and a structured log. Mutating filesystem operations (`writeFile`, `appendFile`, `deleteFile`, `copyFile`, `moveFile`, `mkdir`, `rmdir`) emit a `filesystem_change` event on the workspace-activity channel, and sandbox stdout/stderr is emitted as `sandbox_output` events (chunks larger than 16 KB are truncated with a `truncated: true` flag). File contents are never included in these events.
+
+Workspaces created standalone (without a `Mastra` parent) are not instrumented, and when `observability` is not configured on Mastra the raw provider is returned unchanged so there is zero overhead.
+
 ## Configuration patterns
 
 Workspaces support several configuration patterns depending on what capabilities your agent needs. The two main building blocks are `filesystem` (file tools) and `sandbox` (command execution), with `mounts` as the way to bridge cloud storage into sandboxes.

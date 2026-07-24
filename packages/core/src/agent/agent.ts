@@ -3236,6 +3236,10 @@ export class Agent<
     // Propagate logger to workspace if it's a direct instance (not a factory function)
     if (this.#workspace && typeof this.#workspace !== 'function') {
       this.#workspace.__setLogger(this.logger);
+      // Register Mastra with the workspace so filesystem/sandbox providers
+      // get auto-instrumented when observability is configured on the
+      // parent Mastra. Idempotent when Mastra also owns this workspace.
+      this.#workspace.__registerMastra?.(mastra);
     }
     // Mastra will be passed to the LLM when it's created in getLLM()
 
