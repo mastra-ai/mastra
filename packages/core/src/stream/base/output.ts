@@ -911,7 +911,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               };
 
               try {
-                if (self.processorRunner && !self.#options.isLLMExecutionStep) {
+                if (
+                  self.processorRunner &&
+                  !self.#options.isLLMExecutionStep &&
+                  chunk.payload.stepResult?.reason !== 'error' &&
+                  self.#error === undefined
+                ) {
                   // Run output processors when NOT in LLM execution step context
                   // (i.e., when this is the final MastraModelOutput for the agent)
 

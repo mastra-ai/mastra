@@ -23,6 +23,14 @@ import { Workspace, LocalFilesystem } from '../workspace';
 import { MessageList } from './message-list/index';
 import { Agent } from './index';
 
+async function spyOnMemoryStorageSaveMessages(mockMemory: MockMemory) {
+  const storage = await mockMemory.storage.getStore('memory');
+  if (!storage) {
+    throw new Error('Memory storage is not available');
+  }
+  return vi.spyOn(storage, 'saveMessages');
+}
+
 config();
 
 function agentTests({ version }: { version: 'v1' | 'v2' }) {
@@ -3534,12 +3542,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
 
     it('should not save any message if interrupted before any part is emitted', async () => {
       const mockMemory = new MockMemory();
-      let saveCallCount = 0;
-
-      mockMemory.saveMessages = async function (...args) {
-        saveCallCount++;
-        return MockMemory.prototype.saveMessages.apply(this, args);
-      };
+      const saveMessagesSpy = await spyOnMemoryStorageSaveMessages(mockMemory);
 
       const agent = new Agent({
         id: 'immediate-interrupt-agent-generate',
@@ -3572,12 +3575,8 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
         resourceId: 'resource-3-generate',
       });
 
-      // TODO: output processors in v2 still run when the model throws an error! that doesn't seem right.
-      // it means in v2 our message history processor saves the input message.
-      if (version === `v1`) {
-        expect(result.messages.length).toBe(0);
-        expect(saveCallCount).toBe(0);
-      }
+      expect(result.messages.length).toBe(0);
+      expect(saveMessagesSpy).not.toHaveBeenCalled();
     });
 
     it('should save thread but not messages if error occurs during LLM generation', async () => {
@@ -3589,7 +3588,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       // v1 (legacy): Does not use memory processors, so the old behavior applies where
       // threads are not saved until the request completes successfully.
       const mockMemory = new MockMemory();
-      const saveMessagesSpy = vi.spyOn(mockMemory, 'saveMessages');
+      const saveMessagesSpy = await spyOnMemoryStorageSaveMessages(mockMemory);
 
       let errorModel: MockLanguageModelV1 | MockLanguageModelV2;
       if (version === 'v1') {
