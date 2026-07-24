@@ -15,6 +15,8 @@ import { requestContextDemoAgent } from './request-context-demo-agent';
 export { dynamicToolsAgent } from './dynamic-tools-agent.js';
 export { slackDemoAgent } from './slack-agent.js';
 export { billingAgent, balanceAgent } from './billing-agent.js';
+export { guardrailsInputDemoAgent, guardrailsStreamingDemoAgent } from './guardrails-demo-agent.js';
+export { guardrailsComparisonAgents } from './guardrails-comparison-agents.js';
 const memory = new Memory();
 
 /**

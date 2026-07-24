@@ -386,6 +386,12 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Guardrails',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'guardrails/index', label: 'Guardrails' }],
+    },
+    {
+      type: 'category',
       label: 'Mastra platform',
       collapsed: true,
       items: [{ type: 'doc', id: 'mastra-platform/api', label: 'API Reference' }],

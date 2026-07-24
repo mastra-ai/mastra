@@ -1,6 +1,7 @@
 import type { ModelMessage, ToolChoice } from '@internal/ai-sdk-v5';
 import type { ActorSignal } from '../auth/ee';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
+import type { GuardrailsConfig } from '../guardrails';
 import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
@@ -514,6 +515,8 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    */
   abortSignal?: LoopConfig<OUTPUT>['abortSignal'];
 
+  /** Guardrails to use for this execution (overrides agent's default) */
+  guardrails?: GuardrailsConfig;
   /** Input processors to use for this execution (overrides agent's default) */
   inputProcessors?: InputProcessorOrWorkflow[];
   /** Output processors to use for this execution (overrides agent's default) */

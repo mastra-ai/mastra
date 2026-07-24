@@ -12,6 +12,7 @@ import type { AgentChannels } from '../channels/agent-channels';
 import type { ChannelConfig } from '../channels/types';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { PubSub } from '../events/pubsub';
+import type { GuardrailsConfig } from '../guardrails';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -830,6 +831,10 @@ interface AgentConfigBase<
    */
   workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
   /**
+   * Guardrail policies that compile to input/output processors for safety, privacy, moderation, and cost controls.
+   */
+  guardrails?: DynamicArgument<GuardrailsConfig | undefined, TRequestContext>;
+  /**
    * Input processors that can modify or validate messages before they are processed by the agent.
    * These can be individual processors (implementing `processInput` or `processInputStep`) or
    * processor workflows (created with `createWorkflow` using `ProcessorStepSchema`).
@@ -1014,6 +1019,8 @@ export type AgentGenerateOptions<
    * @default false
    */
   savePerStep?: boolean;
+  /** Guardrails to use for this generation call (overrides agent's default) */
+  guardrails?: GuardrailsConfig;
   /** Input processors to use for this generation call (overrides agent's default) */
   inputProcessors?: InputProcessorOrWorkflow[];
   /** Output processors to use for this generation call (overrides agent's default) */
@@ -1114,6 +1121,8 @@ export type AgentStreamOptions<
    * @default false
    */
   savePerStep?: boolean;
+  /** Guardrails to use for this stream call (overrides agent's default) */
+  guardrails?: GuardrailsConfig;
   /** Input processors to use for this generation call (overrides agent's default) */
   inputProcessors?: InputProcessorOrWorkflow[];
   /** tracing options for starting new traces */

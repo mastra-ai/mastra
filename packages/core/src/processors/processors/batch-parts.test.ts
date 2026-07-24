@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ChunkType } from '../../stream';
 import { ChunkFrom } from '../../stream/types';
-import { BatchPartsProcessor } from './batch-parts';
+import { BATCH_PARTS_GUARDRAIL_CONTEXT_KEY, BatchPartsProcessor } from './batch-parts';
 import type { BatchPartsState } from './batch-parts';
 
 describe('BatchPartsProcessor', () => {
@@ -777,6 +777,130 @@ describe('BatchPartsProcessor', () => {
 
       // Should emit the object part immediately, not accumulate it
       expect(result2).toEqual(objectChunk);
+    });
+  });
+
+  describe('semantic stream windowing', () => {
+    const textChunk = (text: string): ChunkType => ({
+      type: 'text-delta',
+      payload: { text, id: 'text-1' },
+      runId: '1',
+      from: ChunkFrom.AGENT,
+    });
+
+    const runPart = (processor: BatchPartsProcessor, part: ChunkType, state: BatchPartsState) =>
+      processor.processOutputStream({
+        part,
+        streamParts: [part],
+        state,
+        abort: () => {
+          throw new Error('abort');
+        },
+      });
+
+    it('flushes each text chunk when checkEvery is chunk', async () => {
+      processor = new BatchPartsProcessor({ checkEvery: 'chunk' });
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
+
+      const result = await runPart(processor, textChunk('Hello'), state);
+
+      expect(result).toMatchObject({ type: 'text-delta', payload: { text: 'Hello', id: 'text-1' } });
+    });
+
+    it('flushes at sentence boundaries across chunks and keeps unfinished text buffered', async () => {
+      processor = new BatchPartsProcessor({ checkEvery: 'sentence' });
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
+
+      expect(await runPart(processor, textChunk('Hello'), state)).toBeNull();
+      expect(await runPart(processor, textChunk(' world'), state)).toBeNull();
+      const result = await runPart(processor, textChunk('. Next'), state);
+
+      expect(result).toMatchObject({ type: 'text-delta', payload: { text: 'Hello world.', id: 'text-1' } });
+      expect(state.batch).toHaveLength(1);
+      expect(state.batch[0]).toMatchObject({ type: 'text-delta', payload: { text: ' Next', id: 'text-1' } });
+
+      const second = await runPart(processor, textChunk(' sentence.'), state);
+      expect(second).toMatchObject({ type: 'text-delta', payload: { text: ' Next sentence.', id: 'text-1' } });
+    });
+
+    it('does not split decimal numbers as sentence boundaries', async () => {
+      processor = new BatchPartsProcessor({ checkEvery: 'sentence' });
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
+
+      expect(await runPart(processor, textChunk('The value is 3.14'), state)).toBeNull();
+      const result = await runPart(processor, textChunk(' today.'), state);
+
+      expect(result).toMatchObject({ type: 'text-delta', payload: { text: 'The value is 3.14 today.', id: 'text-1' } });
+    });
+
+    it('flushes markdown sections and fenced code blocks safely', async () => {
+      processor = new BatchPartsProcessor({ checkEvery: 'section' });
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
+
+      const markdown = '## Setup\n\nInstall the package.';
+      const markdownResult = await runPart(processor, textChunk(markdown), state);
+      expect(markdownResult).toMatchObject({ type: 'text-delta', payload: { text: markdown, id: 'text-1' } });
+
+      const codeState: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
+      expect(await runPart(processor, textChunk('```ts\nconst x = 1;\n'), codeState)).toBeNull();
+      const codeResult = await runPart(processor, textChunk('```'), codeState);
+      expect(codeResult).toMatchObject({
+        type: 'text-delta',
+        payload: { text: '```ts\nconst x = 1;\n```', id: 'text-1' },
+      });
+    });
+
+    it('flushes JSON-ish output only after the top-level structure is balanced', async () => {
+      processor = new BatchPartsProcessor({ checkEvery: 'section' });
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
+
+      expect(await runPart(processor, textChunk('{"items":[{"value":"}"}'), state)).toBeNull();
+      const result = await runPart(processor, textChunk(']} trailing'), state);
+
+      expect(result).toMatchObject({
+        type: 'text-delta',
+        payload: { text: '{"items":[{"value":"}"}]}', id: 'text-1' },
+      });
+      expect(state.batch[0]).toMatchObject({ type: 'text-delta', payload: { text: ' trailing', id: 'text-1' } });
+    });
+
+    it('flushes completed markdown before the next heading', async () => {
+      processor = new BatchPartsProcessor({ checkEvery: 'section' });
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
+
+      const result = await runPart(processor, textChunk('## Setup\nInstall the package.\n## Usage\nRun it'), state);
+
+      expect(result).toMatchObject({
+        type: 'text-delta',
+        payload: { text: '## Setup\nInstall the package.', id: 'text-1' },
+      });
+      expect(state.batch[0]).toMatchObject({
+        type: 'text-delta',
+        payload: { text: '\n## Usage\nRun it', id: 'text-1' },
+      });
+    });
+
+    it('uses max segment fallback to avoid buffering indefinitely', async () => {
+      processor = new BatchPartsProcessor({ checkEvery: 'sentence', maxSegmentChars: 10 });
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
+
+      const result = await runPart(processor, textChunk('abcdefghij'), state);
+
+      expect(result).toMatchObject({ type: 'text-delta', payload: { text: 'abcdefghij', id: 'text-1' } });
+    });
+
+    it('attaches lookback as guardrail context without duplicating emitted text', async () => {
+      processor = new BatchPartsProcessor({ checkEvery: 'sentence', lookback: 'short' });
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
+
+      const first = await runPart(processor, textChunk('First sentence.'), state);
+      const second = await runPart(processor, textChunk(' Second sentence.'), state);
+
+      expect(first).toMatchObject({ type: 'text-delta', payload: { text: 'First sentence.', id: 'text-1' } });
+      expect(second).toMatchObject({ type: 'text-delta', payload: { text: ' Second sentence.', id: 'text-1' } });
+      expect((second as any)?.[BATCH_PARTS_GUARDRAIL_CONTEXT_KEY]).toBe('First sentence. Second sentence.');
+      expect(second?.metadata).toBeUndefined();
+      expect(JSON.stringify(second)).not.toContain('First sentence. Second sentence.');
     });
   });
 });

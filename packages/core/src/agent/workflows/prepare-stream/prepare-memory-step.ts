@@ -123,6 +123,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
             ...observabilityContext,
             messageList,
             inputProcessorOverrides: options.inputProcessors,
+            guardrailOverrides: options.guardrails,
             processorStates,
           }));
         }
@@ -209,6 +210,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
           ...observabilityContext,
           messageList,
           inputProcessorOverrides: options.inputProcessors,
+          guardrailOverrides: options.guardrails,
           processorStates,
         }));
       }

@@ -782,6 +782,18 @@ function createStepFromProcessor<TProcessorId extends string>(
       const abort = (reason?: string, options?: { retry?: boolean; metadata?: unknown }): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
       };
+      const invokeOnViolation = async (error: TripWire): Promise<void> => {
+        if (!processor.onViolation) return;
+        try {
+          await processor.onViolation({
+            processorId: error.processorId || processor.id,
+            message: error.message,
+            detail: error.options?.metadata,
+          });
+        } catch {
+          // Ignore callback errors so violation handlers do not change processor control flow.
+        }
+      };
       const initialMessageId = messageId;
       let currentMessageId = messageId;
       const rotateCurrentResponseMessageId = rotateResponseMessageId
@@ -1080,6 +1092,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         } catch (error) {
           // TripWire errors should end span but bubble up to halt the workflow
           if (error instanceof TripWire) {
+            await invokeOnViolation(error);
             processorSpan?.end({ output: { tripwire: error.message } });
           } else {
             processorSpan?.error({ error: error as Error, endSpan: true });
@@ -1292,6 +1305,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               } catch (error) {
                 // End span with error (keep reference to prevent re-creation)
                 if (error instanceof TripWire) {
+                  await invokeOnViolation(error);
                   processorSpan?.end({ output: { tripwire: error.message } });
                 } else {
                   processorSpan?.error({ error: error as Error, endSpan: true });
