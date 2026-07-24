@@ -78,6 +78,7 @@ import type {
   Processor,
 } from '../processors/index';
 import { ProcessorStepSchema, isProcessorWorkflow } from '../processors/index';
+import { PrefillErrorHandler } from '../processors/prefill-error-handler';
 import { SkillsProcessor } from '../processors/processors/skills';
 import { WorkspaceInstructionsProcessor } from '../processors/processors/workspace-instructions';
 import type { ProcessorState } from '../processors/runner';
@@ -1562,13 +1563,7 @@ export class Agent<
     // Resolve processors - overrides replace user-configured but auto-derived (memory, skills) are kept
     const inputProcessors = await this.listResolvedInputProcessors(requestContext, inputProcessorOverrides);
     const outputProcessors = await this.listResolvedOutputProcessors(requestContext, outputProcessorOverrides);
-    const errorProcessors =
-      errorProcessorOverrides ??
-      (this.#errorProcessors
-        ? typeof this.#errorProcessors === 'function'
-          ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
-          : this.#errorProcessors
-        : []);
+    const errorProcessors = await this.resolveErrorProcessors(requestContext, errorProcessorOverrides);
 
     return new ProcessorRunner({
       inputProcessors,
@@ -1827,10 +1822,36 @@ export class Agent<
    * Returns the error processors for this agent, resolving function-based processors if necessary.
    */
   public async listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]> {
-    if (!this.#errorProcessors) return [];
-    return typeof this.#errorProcessors === 'function'
-      ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
-      : this.#errorProcessors;
+    return this.resolveErrorProcessors(requestContext);
+  }
+
+  /**
+   * Resolves error processors from agent configuration, always including built-in
+   * error handlers (like PrefillErrorHandler) unless the user already configured them.
+   * @internal
+   */
+  private async resolveErrorProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: ErrorProcessorOrWorkflow[],
+  ): Promise<ErrorProcessorOrWorkflow[]> {
+    const configuredProcessors = configuredProcessorOverrides
+      ? configuredProcessorOverrides
+      : this.#errorProcessors
+        ? typeof this.#errorProcessors === 'function'
+          ? await this.#errorProcessors({
+              requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
+            })
+          : this.#errorProcessors
+        : [];
+
+    // Add PrefillErrorHandler by default if not already configured
+    const hasPrefillHandler = configuredProcessors.some(p => p.id === 'prefill-error-handler');
+
+    if (hasPrefillHandler) {
+      return configuredProcessors;
+    }
+
+    return [...configuredProcessors, new PrefillErrorHandler()];
   }
 
   /**
@@ -1958,14 +1979,8 @@ export class Agent<
       outputProcessorIds = processors.map(p => p.id).filter(Boolean);
     }
 
-    let errorProcessorIds: string[] = [];
-    if (this.#errorProcessors) {
-      const processors =
-        typeof this.#errorProcessors === 'function'
-          ? await this.#errorProcessors({ requestContext: ctx as RequestContext<TRequestContext> })
-          : this.#errorProcessors;
-      errorProcessorIds = processors.map(p => p.id).filter(Boolean);
-    }
+    const errorProcessors = await this.resolveErrorProcessors(ctx);
+    const errorProcessorIds = errorProcessors.map(p => p.id).filter(Boolean);
 
     return { inputProcessorIds, outputProcessorIds, errorProcessorIds };
   }
@@ -7016,13 +7031,7 @@ export class Agent<
       }: {
         requestContext: RequestContext;
         overrides?: ErrorProcessorOrWorkflow[];
-      }) =>
-        overrides ??
-        (this.#errorProcessors
-          ? typeof this.#errorProcessors === 'function'
-            ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
-            : this.#errorProcessors
-          : []),
+      }) => this.resolveErrorProcessors(requestContext, overrides),
       llm,
     };
 

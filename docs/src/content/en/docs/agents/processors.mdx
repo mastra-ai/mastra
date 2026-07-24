@@ -97,7 +97,11 @@ Processors are configured on the agent through three arrays:
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
-import { PrefillErrorHandler, TokenLimiter, ModerationProcessor } from '@mastra/core/processors'
+import {
+  TokenLimiter,
+  ModerationProcessor,
+  StreamErrorRetryProcessor,
+} from '@mastra/core/processors'
 
 const agent = new Agent({
   id: 'support-agent',
@@ -109,7 +113,7 @@ const agent = new Agent({
     new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_NANO__' }),
   ],
   outputProcessors: [new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_NANO__' })],
-  errorProcessors: [new PrefillErrorHandler()],
+  errorProcessors: [new StreamErrorRetryProcessor()],
 })
 ```
 
@@ -958,7 +962,7 @@ export class ContextLengthHandler implements Processor {
 }
 ```
 
-Mastra includes a built-in [`PrefillErrorHandler`](/reference/processors/prefill-error-handler) that automatically handles the Anthropic "assistant message prefill" error. This processor is auto-injected and requires no configuration.
+Mastra includes a built-in [`PrefillErrorHandler`](/reference/processors/prefill-error-handler) that automatically handles the Anthropic "assistant message prefill" error. This processor is included by default for all agents and requires no configuration — you do not need to add it to `errorProcessors` manually.
 
 ## Related documentation
 
