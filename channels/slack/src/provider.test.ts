@@ -1,6 +1,16 @@
 import { describe, it, expect } from 'vitest';
 
-import { stripTrailingSlash } from './provider';
+import { SlackProvider, stripTrailingSlash } from './provider';
+
+describe('connect object form', () => {
+  it('requires a name when connecting without an agent id', async () => {
+    const provider = new SlackProvider();
+    await expect(
+      // @ts-expect-error deliberately omitting the required name to exercise the runtime guard
+      provider.connect({ id: 'controller-1' }),
+    ).rejects.toThrow(/"name" is required/);
+  });
+});
 
 describe('stripTrailingSlash', () => {
   it('removes a single trailing slash', () => {

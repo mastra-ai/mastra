@@ -59,13 +59,29 @@ export function ChatSessionConfigProvider({
   // (behavior settings, tool permissions) stay functional.
   const resourceId = userScoped ? threadId : (storedSession?.sessionId ?? sessionId ?? ensureQuery.data?.resourceId);
   const projectPath = undefined;
+
+  // A `?resourceId=` query param overrides the resolved factory resource so the
+  // whole chat session (transcript, messages, connection, thread switch) binds
+  // to a thread that lives under a different resource — e.g. a Slack channel
+  // session keyed `channel:slack:...`. This only applies to the non-user-scoped
+  // branch; user-scoped sessions derive identity from their stored session.
+  //
+  // Read once from the entry URL rather than via the router's `useSearchParams`:
+  // this is a deep-link entry param that the session binds to at mount and does
+  // not re-read on in-app navigation, and this config provider otherwise has no
+  // added router dependency.
+  const resourceOverride = userScoped
+    ? null
+    : new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('resourceId');
   const sessionEnabled = userScoped
     ? Boolean(storedSession) && !resolvingSession
-    : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
+    : resourceOverride
+      ? Boolean(resourceOverride)
+      : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
   const value = {
-    resourceId: resourceId ?? '',
+    resourceId: resourceOverride ?? resourceId ?? '',
     sessionEnabled,
-    resourceEnabled: userScoped ? Boolean(resourceId) : ensureQuery.isSuccess,
+    resourceEnabled: userScoped ? Boolean(resourceId) : resourceOverride ? true : ensureQuery.isSuccess,
     projectPath,
     factorySessionState:
       factory && repository

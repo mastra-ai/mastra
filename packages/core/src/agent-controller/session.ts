@@ -1,5 +1,5 @@
 import type { Agent } from '../agent';
-import type { MastraDBMessage } from '../agent/message-list/state/types';
+import type { MastraDBMessage, MastraProviderMetadata } from '../agent/message-list/state/types';
 import { createSignal } from '../agent/signals';
 import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type {
@@ -3014,6 +3014,13 @@ export class Session<TState = unknown> {
           tracingContext?: TracingContext;
           tracingOptions?: TracingOptions;
           requestContext?: RequestContext;
+          /**
+           * Provider options attached to the resulting prompt turn. Surfaces as
+           * `providerOptions` on the `UserModelMessage` sent to the model and as
+           * `content.providerMetadata` on the persisted DB message (see
+           * {@link AgentSignalInput.providerOptions}).
+           */
+          providerOptions?: MastraProviderMetadata;
         },
     options?: {
       tracingContext?: TracingContext;
@@ -3049,7 +3056,9 @@ export class Session<TState = unknown> {
     // run to fully idle before starting a new run.
     const submittedAbortRequested = this.run.isAbortRequested();
     const signal = createSignal(
-      'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
+      'content' in input
+        ? { type: 'user', tagName: 'user', contents: input.content, providerOptions: input.providerOptions }
+        : input,
     );
     const accepted = Promise.resolve().then(async () => {
       if (!this.thread.getId()) {

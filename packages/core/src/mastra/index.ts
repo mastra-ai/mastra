@@ -1673,6 +1673,23 @@ export class Mastra<
     for (const [key, agentController] of Object.entries(agentControllerEntries)) {
       this.#harnesses[key] = agentController;
       agentController.__registerMastra(this);
+
+      // Set up AgentControllerChannels for manual adapter configurations,
+      // mirroring the agent channels wiring in `addAgent`.
+      const controllerChannels = agentController.getChannels();
+      if (controllerChannels) {
+        controllerChannels.__setLogger(this.#logger);
+        const channelRoutes = controllerChannels.getWebhookRoutes();
+        if (channelRoutes.length > 0) {
+          this.#server = {
+            ...this.#server,
+            apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
+          };
+        }
+        controllerChannels.initialize(this).catch(err => {
+          this.#logger?.error(`Failed to initialize channels for agent controller ${key}:`, err);
+        });
+      }
     }
 
     // `registerHook` adds to a module-level emitter that never drops handlers on
@@ -2004,16 +2021,40 @@ export class Mastra<
   }
 
   /**
-   * Returns the `AgentChannels` instances for all registered agents.
-   * Keys are agent IDs.
+   * Returns the `AgentChannels` instances for all registered agents and
+   * agent controllers. Keys are agent / agent controller registration keys.
+   * A controller's channels — also attached to its mode agents — are
+   * reported once, under the controller's key.
    */
   public getChannels(): Record<string, AgentChannels> {
     const result: Record<string, AgentChannels> = {};
+    // Collect controller channels first so mode agents carrying a
+    // controller's channels instance aren't double-reported under agent
+    // keys. (Identity match rather than `instanceof AgentControllerChannels`:
+    // a value import of that class from here recreates the module cycle
+    // documented at the top of this file.)
+    const controllerEntries: Array<[string, AgentChannels]> = [];
+    const controllerOwned = new Set<AgentChannels>();
+    for (const [controllerKey, controller] of Object.entries(this.#harnesses ?? {})) {
+      const controllerChannels = controller.getChannels();
+      if (controllerChannels) {
+        controllerEntries.push([controllerKey, controllerChannels]);
+        controllerOwned.add(controllerChannels);
+      }
+    }
     for (const [agentKey, agent] of Object.entries(this.#agents ?? {})) {
       const agentChannels = agent.getChannels();
-      if (agentChannels instanceof AgentChannels) {
+      if (agentChannels instanceof AgentChannels && !controllerOwned.has(agentChannels)) {
         result[agentKey] = agentChannels;
       }
+    }
+    for (const [controllerKey, controllerChannels] of controllerEntries) {
+      if (result[controllerKey]) {
+        this.#logger?.warn(
+          `Channels key collision: an agent and an agent controller are both registered under '${controllerKey}'; reporting the controller's channels.`,
+        );
+      }
+      result[controllerKey] = controllerChannels;
     }
     return result;
   }

@@ -196,6 +196,41 @@ describe('SlackManifestClient', () => {
     });
   });
 
+  describe('appExists', () => {
+    it('returns true when the manifest export succeeds', async () => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ ok: true, token: 'rt', refresh_token: 'rrt' }))
+        .mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+      await expect(client.appExists('A123')).resolves.toBe(true);
+      expect(mockFetch.mock.calls[1]?.[0]).toContain('apps.manifest.export');
+    });
+
+    it('returns false when Slack reports the app no longer exists', async () => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ ok: true, token: 'rt', refresh_token: 'rrt' }))
+        .mockResolvedValueOnce(jsonResponse({ ok: false, error: 'app_not_found' }));
+
+      await expect(client.appExists('A123')).resolves.toBe(false);
+    });
+
+    it('returns false for a malformed app id', async () => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ ok: true, token: 'rt', refresh_token: 'rrt' }))
+        .mockResolvedValueOnce(jsonResponse({ ok: false, error: 'invalid_app_id' }));
+
+      await expect(client.appExists('bad')).resolves.toBe(false);
+    });
+
+    it('re-throws on a transient error so callers do not treat it as "app gone"', async () => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ ok: true, token: 'rt', refresh_token: 'rrt' }))
+        .mockResolvedValueOnce(jsonResponse({ ok: false, error: 'ratelimited' }));
+
+      await expect(client.appExists('A123')).rejects.toThrow('ratelimited');
+    });
+  });
+
   describe('updateApp', () => {
     it('rotates tokens then updates the manifest', async () => {
       mockFetch

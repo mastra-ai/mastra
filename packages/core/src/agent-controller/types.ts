@@ -2,6 +2,7 @@ import type { Agent } from '../agent';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
+import type { ChannelConfig } from '../channels/types';
 import type { PubSub } from '../events/pubsub';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import type { LoopOptions } from '../loop/types';
@@ -247,6 +248,19 @@ export interface AgentControllerConfig<TState = {}> {
 
   /** Shared backing agent that each mode forks and decorates on the controller. */
   agent?: Agent<any, any, any, any>;
+
+  /**
+   * Chat channel adapters (Slack, Discord, ...) that run this controller
+   * inside messaging threads. Inbound platform messages route into a
+   * controller `Session` (one durable session per chat thread) and the
+   * streamed output renders back to the platform through the channels
+   * output processor (native streaming, tool cards, typing status).
+   * Tool approvals resolve through the session's approval gate.
+   *
+   * V1 expects manually constructed adapters and a long-lived server
+   * (controller sessions are in-memory and don't survive restarts).
+   */
+  channels?: ChannelConfig;
 
   /** Default mode to enter when a thread has no persisted mode. */
   defaultModeId?: string;

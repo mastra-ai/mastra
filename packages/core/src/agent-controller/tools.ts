@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 
 import { Agent } from '../agent';
 import type { ToolsInput, ToolsetsInput } from '../agent/types';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../channels/output-processor';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
@@ -258,6 +259,11 @@ Use this tool when:
               resourceId: forkedThread.resourceId,
             });
           }
+          // The fork runs on the channel-bearing parent agent instance, so the
+          // ChatChannelOutputProcessor is attached. Clear the inherited render
+          // key so the subagent's stream never renders back to the chat
+          // platform — without this the fork would post to Slack.
+          subagentRequestContext.delete(CHAT_CHANNEL_RENDER_CONTEXT_KEY);
         }
 
         // Inherit the parent's toolsets with the fork request context so tools that
@@ -348,11 +354,17 @@ Use this tool when:
 
         // Build a request context for the subagent that inherits sandbox paths
         // and controller state but strips threadId/resourceId so the subagent
-        // doesn't trigger OM enrichment on the parent's memory thread.
+        // doesn't trigger OM enrichment on the parent's memory thread. This
+        // subagent runs on a fresh Agent with no channels, so no output
+        // processor attaches and it never renders to the chat platform.
         if (context?.requestContext) {
           subagentRequestContext = new RequestContext(context.requestContext.entries());
           if (controllerCtx) {
-            subagentRequestContext.set('controller', { ...controllerCtx, threadId: null, resourceId: '' });
+            subagentRequestContext.set('controller', {
+              ...controllerCtx,
+              threadId: null,
+              resourceId: '',
+            });
           }
         }
       }

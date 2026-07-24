@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig, searchForWorkspaceRoot } from 'vite';
+import { defineConfig, loadEnv, searchForWorkspaceRoot } from 'vite';
 import type { Plugin } from 'vite';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -23,6 +23,12 @@ const fsAllow = [searchForWorkspaceRoot(here), monaSansPackageRoot];
  */
 const apiTarget = process.env.MASTRACODE_API_TARGET ?? 'http://localhost:4111';
 const uiPort = Number(process.env.MASTRACODE_UI_PORT ?? 5173);
+// Bind the dev server to IPv4 loopback explicitly. Vite's default `localhost`
+// bind resolves to `::1` (IPv6) only on modern macOS/Node, which leaves the UI
+// unreachable over `127.0.0.1` — a cloudflared tunnel pointed at
+// `http://127.0.0.1:5173` gets connection-refused. Overridable so the dev
+// runner can expose the server on all interfaces when needed.
+const uiHost = process.env.MASTRACODE_UI_HOST ?? '127.0.0.1';
 
 /**
  * Dev-only injection of `window.__MASTRACODE_CONFIG__` into index.html.
@@ -60,56 +66,73 @@ function runtimeConfigPlugin(): Plugin {
  * Hosting the SPA separately (static host / CDN, cross-origin via
  * MASTRACODE_ALLOWED_ORIGINS) remains possible.
  */
-export default defineConfig({
-  root: resolve(here, 'ui'),
-  envDir: resolve(here, '../..'),
-  plugins: [react(), tailwindcss(), runtimeConfigPlugin()],
-  resolve: {
-    // Monorepo packages arrive via `link:` and would otherwise resolve their
-    // own react copy from the monorepo store — force a single copy from here.
-    dedupe: ['react', 'react-dom', '@tanstack/react-query'],
-  },
-  build: {
-    outDir: resolve(here, '../mastra/public/factory'),
-    emptyOutDir: true,
-  },
-  server: {
-    port: uiPort,
-    fs: {
-      // Linked font files resolve outside the workspace; expose only that
-      // package instead of pnpm's entire global store.
-      allow: fsAllow,
+export default defineConfig(({ mode }) => {
+  // `web:dev` only wraps the API server in `varlock run`, so the package-root
+  // `.env` never reaches this Vite process's `process.env` — load it here.
+  const env = { ...loadEnv(mode, resolve(here, '../..'), ''), ...process.env };
+  const publicUrl = env.MASTRACODE_PUBLIC_URL;
+  const channelsPublicUrl = env.MASTRACODE_CHANNELS_PUBLIC_URL;
+  const allowedHosts = publicUrl ? [new URL(publicUrl).host] : [];
+  if (channelsPublicUrl) allowedHosts.push(new URL(channelsPublicUrl).host);
+
+  return {
+    root: resolve(here, 'ui'),
+    envDir: resolve(here, '../..'),
+    plugins: [react(), tailwindcss(), runtimeConfigPlugin()],
+    resolve: {
+      // Monorepo packages arrive via `link:` and would otherwise resolve their
+      // own react copy from the monorepo store — force a single copy from here.
+      dedupe: ['react', 'react-dom', '@tanstack/react-query'],
     },
-    // OAuth callback URLs (WorkOS/GitHub/Linear) are registered against the
-    // configured UI origin ahead of time. Silently hopping to a free port
-    // would keep the UI working while every OAuth redirect breaks — fail
-    // instead so the port stays consistent with MASTRACODE_PUBLIC_URL.
-    strictPort: true,
-    proxy: {
-      '/api': {
-        target: apiTarget,
-        changeOrigin: true,
-      },
-      // Web surface routes (fs/config/github) live under `/web/*` on the API
-      // server after the `/api/web` → `/web` path migration. Proxy them so the
-      // configured dev UI server can reach the configured API server.
-      '/web': {
-        target: apiTarget,
-        changeOrigin: true,
-      },
-      // Optional WorkOS auth routes live on the API server too; proxy them so
-      // the configured dev UI server can reach login/callback/logout/me on the
-      // configured API server.
-      //
-      // Match only the `/auth/<route>` paths — NOT a bare `/auth` prefix.
-      // A plain `'/auth'` key prefix-matches Vite module requests like
-      // `/auth.ts` (the client auth module) and wrongly proxies them to the
-      // API server, which 401s / ECONNREFUSEs. The trailing-slash regex keeps
-      // module imports on Vite while still forwarding real auth routes.
-      '^/auth/': {
-        target: apiTarget,
-        changeOrigin: true,
-      },
+    build: {
+      outDir: resolve(here, '../mastra/public/factory'),
+      emptyOutDir: true,
     },
-  },
+    server: {
+      host: uiHost,
+      port: uiPort,
+      fs: {
+        // Linked font files resolve outside the workspace; expose only that
+        // package instead of pnpm's entire global store.
+        allow: fsAllow,
+      },
+      // OAuth callback URLs (WorkOS/GitHub/Linear) are registered against the
+      // configured UI origin ahead of time. Silently hopping to a free port
+      // would keep the UI working while every OAuth redirect breaks — fail
+      // instead so the port stays consistent with MASTRACODE_PUBLIC_URL.
+      strictPort: true,
+      proxy: {
+        // needed for SlackProvider event endpoints
+        '/slack': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
+        '/api': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
+        // Web surface routes (fs/config/github) live under `/web/*` on the API
+        // server after the `/api/web` → `/web` path migration. Proxy them so the
+        // configured dev UI server can reach the configured API server.
+        '/web': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
+        // Optional WorkOS auth routes live on the API server too; proxy them so
+        // the configured dev UI server can reach login/callback/logout/me on the
+        // configured API server.
+        //
+        // Match only the `/auth/<route>` paths — NOT a bare `/auth` prefix.
+        // A plain `'/auth'` key prefix-matches Vite module requests like
+        // `/auth.ts` (the client auth module) and wrongly proxies them to the
+        // API server, which 401s / ECONNREFUSEs. The trailing-slash regex keeps
+        // module imports on Vite while still forwarding real auth routes.
+        '^/auth/': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
+      },
+      allowedHosts,
+    },
+  };
 });

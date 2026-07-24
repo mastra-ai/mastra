@@ -20,6 +20,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
+import { ConsoleLogger, type LogLevelType } from '@mastra/core/logger';
 import { LocalSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
@@ -31,6 +32,7 @@ import { MastraFactory } from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
+import { createAgentControllerSlackChannels } from '../web/channels/slack/slack.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -228,8 +230,18 @@ export const factory = new MastraFactory({
 // carrying the controller (via `agentControllers`), storage, and the assembled
 // `server` config (middleware + apiRoutes + cors).
 const prepared = await factory.prepare();
+
+// Slack channels are optional: chat's Slack adapter validates `signingSecret`
+// at construction, so only wire channels when the Slack app env is configured.
+// Set LOG_LEVEL=debug locally for verbose channel logs.
+const mcAgentController = prepared.agentControllers?.['code'];
+if (mcAgentController && process.env.SLACK_APP_SIGNING_SECRET) {
+  mcAgentController.setChannels(createAgentControllerSlackChannels({ getMastra: () => mcAgentController.getMastra() }));
+}
+
 export const mastra = new Mastra({
   ...prepared,
+  logger: new ConsoleLogger({ level: (process.env.LOG_LEVEL as LogLevelType) ?? 'info' }),
 });
 
 // Post-construct boot: initialize the controller (which now inherits this

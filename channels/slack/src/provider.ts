@@ -7,8 +7,10 @@ import {
   type ChannelConnectResult,
   type ChannelAdapterConfig,
   AgentChannels,
+  AgentControllerChannels,
   resolveWaitUntil,
 } from '@mastra/core/channels';
+import type { AgentController } from '@mastra/core/agent-controller';
 import type { ApiRoute, ContextWithMastra } from '@mastra/core/server';
 import { type ChannelsStorage, type ChannelInstallation } from '@mastra/core/storage';
 import { createSlackAdapter, type SlackAdapter } from '@chat-adapter/slack';
@@ -23,6 +25,7 @@ import {
   type SlackInstallation,
   type SlackPendingInstallation,
   type SlackConfigTokens,
+  type SlackOwnerType,
   type StoredSlashCommand,
 } from './schemas';
 import type { SlackProviderConfig, SlashCommandConfig, SlackConnectOptions, SlackAdapterChannelConfig } from './types';
@@ -435,6 +438,7 @@ export class SlackProvider implements ChannelProvider {
       webhookId: installation.webhookId,
       configHash: installation.configHash,
       data: {
+        ownerType: installation.ownerType,
         appId: installation.appId,
         clientId: installation.clientId,
         clientSecret: installation.clientSecret,
@@ -484,6 +488,7 @@ export class SlackProvider implements ChannelProvider {
       webhookId: pending.webhookId,
       configHash: pending.configHash,
       data: {
+        ownerType: pending.ownerType,
         appId: pending.appId,
         clientId: pending.clientId,
         clientSecret: pending.clientSecret,
@@ -640,7 +645,7 @@ export class SlackProvider implements ChannelProvider {
         }
 
         console.log(
-          `[Slack] ✓ Agent "${installation.agentId}" connected to workspace "${installation.teamName ?? installation.teamId}"`,
+          `[Slack] ✓ App "${installation.name ?? installation.agentId}" (${installation.appId}) connected to workspace "${installation.teamName ?? installation.teamId}"`,
         );
       } catch (err) {
         console.error(`[Slack] Failed to restore installation "${installationEncrypted.id}":`, err);
@@ -653,8 +658,11 @@ export class SlackProvider implements ChannelProvider {
    * Creates and injects AgentChannels into the Agent if needed.
    */
   async #activateAdapter(installation: SlackInstallation): Promise<void> {
-    // Resolve display name: override > agent name > agentId
-    const agent = this.#mastra?.getAgentById(installation.agentId);
+    const isController = installation.ownerType === 'agentController';
+    const controller = isController ? this.#resolveAgentController(installation.agentId) : undefined;
+    const agent = isController ? undefined : this.#resolveAgent(installation.agentId);
+
+    // Resolve display name: override > agent name > owner id
     const displayName = installation.name || agent?.name || installation.agentId;
 
     const adapter = createSlackAdapter({
@@ -672,8 +680,13 @@ export class SlackProvider implements ChannelProvider {
       this.#slashCommands.set(installation.webhookId, installation.slashCommands);
     }
 
-    // Create/get AgentChannels and register the adapter
-    if (agent && this.#mastra) {
+    // Create/get channels and register the adapter. Controllers route inbound
+    // messages into controller sessions via AgentControllerChannels; plain
+    // agents route into the agent via AgentChannels.
+    if (controller && this.#mastra) {
+      const controllerChannels = this.#createAgentControllerChannels(controller, adapter);
+      await controllerChannels.initialize(this.#mastra);
+    } else if (agent && this.#mastra) {
       const agentChannels = this.#createAgentChannels(agent, adapter);
       await agentChannels.initialize(this.#mastra);
     }
@@ -684,7 +697,10 @@ export class SlackProvider implements ChannelProvider {
    * If it has, update the Slack app manifest to match the current agent state.
    */
   async #checkConfigDrift(installation: SlackInstallation, baseUrl: string): Promise<void> {
-    const agent = this.#mastra?.getAgentById(installation.agentId);
+    // Controller-owned installs don't derive manifest config from an agent yet;
+    // skip drift checks for them.
+    if (installation.ownerType === 'agentController') return;
+    const agent = this.#resolveAgent(installation.agentId);
     if (!agent) return;
 
     // Resolve current values: stored overrides (from connect()) > code-defined > defaults
@@ -721,7 +737,9 @@ export class SlackProvider implements ChannelProvider {
       const updated: SlackInstallation = { ...installation, configHash: currentHash };
       await this.#saveInstallation(this.#encryptInstallation(updated));
 
-      console.log(`[Slack] ✓ Manifest updated for "${installation.agentId}" (app: ${installation.appId})`);
+      console.log(
+        `[Slack] ✓ Manifest updated for app "${installation.name ?? installation.agentId}" (${installation.appId})`,
+      );
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       const isAppGone = errMsg.includes('app_not_found') || errMsg.includes('no_permission');
@@ -758,7 +776,15 @@ export class SlackProvider implements ChannelProvider {
    */
   #forwardedChannelOptions() {
     const { handlers, inlineMedia, inlineLinks, state, threadContext, tools, chatOptions } = this.#channelConfig;
-    const candidate = { handlers, inlineMedia, inlineLinks, state, threadContext, tools, chatOptions };
+    const candidate = {
+      handlers,
+      inlineMedia,
+      inlineLinks,
+      state,
+      threadContext,
+      tools,
+      chatOptions,
+    };
     return Object.fromEntries(Object.entries(candidate).filter(([, value]) => value !== undefined));
   }
 
@@ -840,6 +866,76 @@ export class SlackProvider implements ChannelProvider {
   }
 
   /**
+   * Controller-parallel of {@link #createAgentChannels}: build a fresh
+   * {@link AgentControllerChannels} that preserves any config the controller
+   * already had (including other adapters) and layers this Slack adapter on,
+   * then swap it onto the controller via `setChannels`. Mirrors the agent path
+   * — a superset merge, not a mutation of the live instance.
+   *
+   * The swap discards the old instance's in-memory `autoApproveResourceIds`
+   * tracking. That's fine: the set is refreshed on every inbound message, and
+   * Slack renders approval buttons anyway so it stays empty here.
+   */
+  #createAgentControllerChannels(controller: AgentController<any>, adapter: SlackAdapter): AgentControllerChannels {
+    const adapterConfig = this.#resolveSlackAdapterConfig();
+    const slackEntry = (Object.keys(adapterConfig).length > 0 ? { adapter, ...adapterConfig } : adapter) as
+      ChannelAdapterConfig | SlackAdapter;
+    const existing = controller.getChannels() as AgentControllerChannels | null;
+    const existingConfig = existing?.channelConfig;
+    const controllerChannels = new AgentControllerChannels({
+      ...existingConfig,
+      ...this.#forwardedChannelOptions(),
+      adapters: { ...existingConfig?.adapters, slack: slackEntry },
+      userName: controller.id,
+    });
+    controller.setChannels(controllerChannels);
+    return controllerChannels;
+  }
+
+  /**
+   * Resolve the live channels instance that should handle an incoming webhook
+   * for this installation, branching on `ownerType`. Reuses an existing
+   * instance when it already carries the current adapter (e.g. from startup
+   * activation), otherwise builds a fresh one and initializes it. Returns null
+   * when the owner (agent or controller) can't be resolved.
+   */
+  async #resolveChannelsForInstallation(
+    installation: SlackInstallation,
+    currentAdapter: SlackAdapter,
+  ): Promise<AgentChannels | null> {
+    if (!this.#mastra) {
+      console.error('[Slack] Mastra not attached');
+      return null;
+    }
+
+    if (installation.ownerType === 'agentController') {
+      const controller = this.#resolveAgentController(installation.agentId);
+      if (!controller) {
+        console.error(`[Slack] Agent controller "${installation.agentId}" not found`);
+        return null;
+      }
+      let channels = controller.getChannels();
+      if (!channels || channels.adapters.slack !== currentAdapter) {
+        channels = this.#createAgentControllerChannels(controller, currentAdapter);
+        await channels.initialize(this.#mastra);
+      }
+      return channels;
+    }
+
+    const agent = this.#resolveAgent(installation.agentId);
+    if (!agent) {
+      console.error(`[Slack] Agent "${installation.agentId}" not found`);
+      return null;
+    }
+    let channels = agent.getChannels();
+    if (!channels || channels.adapters.slack !== currentAdapter) {
+      channels = this.#createAgentChannels(agent, currentAdapter);
+      await channels.initialize(this.#mastra);
+    }
+    return channels;
+  }
+
+  /**
    * Auto-initialize on first route hit.
    * Delegates to initialize() which handles idempotency.
    */
@@ -916,7 +1012,26 @@ export class SlackProvider implements ChannelProvider {
    *
    * @returns OAuth connect result with authorization URL for user redirect
    */
-  async connect(agentId: string, options?: SlackConnectOptions): Promise<ChannelConnectResult> {
+  async connect(agentId: string, options?: SlackConnectOptions): Promise<ChannelConnectResult>;
+  /**
+   * Connect to Slack by creating a new Slack app for an arbitrary connection id
+   * (no registered agent required — e.g. an AgentController or custom owner).
+   * Since there is no agent to derive a display name from, `name` is required.
+   *
+   * @returns OAuth connect result with authorization URL for user redirect
+   */
+  async connect(options: SlackConnectOptions & { id: string; name: string }): Promise<ChannelConnectResult>;
+  async connect(
+    agentIdOrOptions: string | (SlackConnectOptions & { id: string; name: string }),
+    maybeOptions?: SlackConnectOptions,
+  ): Promise<ChannelConnectResult> {
+    const isAgentIdForm = typeof agentIdOrOptions === 'string';
+    const agentId = isAgentIdForm ? agentIdOrOptions : agentIdOrOptions.id;
+    const options = isAgentIdForm ? maybeOptions : agentIdOrOptions;
+    if (!isAgentIdForm && !agentIdOrOptions.name) {
+      throw new Error('connect({ id, name }): "name" is required when connecting without an agent id');
+    }
+
     const client = this.#requireManifestClient();
 
     const baseUrl = this.#getBaseUrl();
@@ -926,9 +1041,20 @@ export class SlackProvider implements ChannelProvider {
       );
     }
 
+    // In the agentId form, the agent must exist. In the options form the id may
+    // belong to a registered agent or an AgentController — resolve which one so
+    // the installation records who owns it.
     const agent = this.#resolveAgent(agentId);
-    if (!agent) {
+    if (isAgentIdForm && !agent) {
       throw new Error(`Agent "${agentId}" not found`);
+    }
+    let ownerType: SlackOwnerType = 'agent';
+    if (!isAgentIdForm && !agent) {
+      const controller = this.#resolveAgentController(agentId);
+      if (!controller) {
+        throw new Error(`No agent or agent controller found with id "${agentId}"`);
+      }
+      ownerType = 'agentController';
     }
 
     // If there's already a pending installation, return its authorization URL
@@ -939,18 +1065,37 @@ export class SlackProvider implements ChannelProvider {
       try {
         const pending = this.#parsePendingInstallation(existingRecord);
         const decrypted = this.#decryptPendingInstallation(pending);
-        // Update redirectUrl if the caller provided one (e.g., different browser tab)
-        if (options?.redirectUrl && decrypted.redirectUrl !== options.redirectUrl) {
-          await this.#savePendingInstallation(
-            this.#encryptPendingInstallation({ ...decrypted, redirectUrl: options.redirectUrl }),
-          );
+
+        // The stored Slack app may have been deleted out-of-band (e.g. removed
+        // from the Slack admin UI). Reusing its authorizationUrl would hand the
+        // caller a dead link (`Invalid client_id`). Probe existence first and,
+        // if the app is gone, drop the pending record and create a fresh app.
+        let appStillExists = true;
+        try {
+          appStillExists = await client.appExists(decrypted.appId);
+        } catch (err) {
+          // Couldn't reach Slack — don't destroy a possibly-valid pending
+          // record on a transient error; reuse it as before.
+          console.warn(`[Slack] Could not verify existing app for "${agentId}", reusing pending installation:`, err);
         }
-        console.log(`[Slack] Reusing existing pending installation for "${agentId}"`);
-        return {
-          type: 'oauth' as const,
-          installationId: decrypted.id,
-          authorizationUrl: decrypted.authorizationUrl,
-        };
+
+        if (!appStillExists) {
+          console.warn(`[Slack] Stored app for "${agentId}" no longer exists on Slack, creating a fresh installation`);
+          await storage.deleteInstallation(existingRecord.id);
+        } else {
+          // Update redirectUrl if the caller provided one (e.g., different browser tab)
+          if (options?.redirectUrl && decrypted.redirectUrl !== options.redirectUrl) {
+            await this.#savePendingInstallation(
+              this.#encryptPendingInstallation({ ...decrypted, redirectUrl: options.redirectUrl }),
+            );
+          }
+          console.log(`[Slack] Reusing existing pending installation for "${agentId}"`);
+          return {
+            type: 'oauth' as const,
+            installationId: decrypted.id,
+            authorizationUrl: decrypted.authorizationUrl,
+          };
+        }
       } catch {
         // Corrupt pending record — delete it and create a fresh one
         console.warn(`[Slack] Corrupt pending installation for "${agentId}", replacing it`);
@@ -969,8 +1114,8 @@ export class SlackProvider implements ChannelProvider {
     const webhookId = crypto.randomUUID();
 
     // Build manifest using the manifest builder (includes proper default scopes)
-    const appName = config.name ?? agent.name ?? agentId;
-    const appDescription = config.description || agent.getDescription() || 'AI assistant powered by Mastra';
+    const appName = config.name ?? agent?.name ?? agentId;
+    const appDescription = config.description || agent?.getDescription() || 'AI assistant powered by Mastra';
     const normalizedCommands = this.#normalizeCommands(config.slashCommands);
     let manifest = buildManifest({
       name: appName,
@@ -1030,6 +1175,7 @@ export class SlackProvider implements ChannelProvider {
     const pendingInstallation = this.#encryptPendingInstallation({
       id: installationId,
       agentId,
+      ownerType,
       webhookId,
       appId: appCredentials.appId,
       clientId: appCredentials.clientId,
@@ -1290,6 +1436,7 @@ export class SlackProvider implements ChannelProvider {
       const installation: SlackInstallation = {
         id: pending.id,
         agentId: pending.agentId,
+        ownerType: pending.ownerType ?? 'agent',
         webhookId: pending.webhookId,
         appId: pending.appId,
         clientId: pending.clientId,
@@ -1309,8 +1456,15 @@ export class SlackProvider implements ChannelProvider {
       const encryptedInstallation = this.#encryptInstallation(installation);
       await this.#saveInstallation(encryptedInstallation);
 
-      // Create SlackAdapter for this installation
-      const agent = this.#mastra?.getAgentById(pending.agentId);
+      // Create SlackAdapter for this installation. The owner's name (agent
+      // name) is only a display fallback; controllers use their id.
+      let agent;
+      try {
+        agent = installation.ownerType === 'agent' ? this.#mastra?.getAgentById(pending.agentId) : undefined;
+      } catch {
+        // Ignore errors — agent may not exist
+      }
+
       const displayName = installation.name || agent?.name || pending.agentId;
       const adapter = createSlackAdapter({
         ...this.#forwardedAdapterOptions(),
@@ -1332,7 +1486,9 @@ export class SlackProvider implements ChannelProvider {
       }
 
       const teamName = tokenData.team?.name ?? '';
-      console.log(`[Slack] ✓ Agent "${pending.agentId}" installed to team "${teamName}"`);
+      console.log(
+        `[Slack] ✓ App "${installation.name ?? installation.agentId}" (${installation.appId}) installed to workspace "${teamName || installation.teamId}"`,
+      );
 
       // Redirect back to the page the user came from, or the configured redirect path
       const successUrl = pending.redirectUrl ?? this.#channelConfig.redirectPath ?? '/';
@@ -1404,20 +1560,13 @@ export class SlackProvider implements ChannelProvider {
       }
     }
 
-    // Resolve agent and delegate to AgentChannels
-    const agent = this.#resolveAgent(installation.agentId);
-    if (!agent) {
-      console.error(`[Slack] Agent "${installation.agentId}" not found`);
-      return c.json({ ok: true });
-    }
-
     if (!this.#mastra) {
       console.error('[Slack] Mastra not attached');
       return c.json({ ok: true });
     }
 
     // Resolve the current adapter for this installation
-    const displayName = installation.name || agent.name || installation.agentId;
+    const displayName = installation.name || installation.agentId;
     const currentAdapter =
       this.#adapters.get(installation.id) ??
       createSlackAdapter({
@@ -1428,15 +1577,13 @@ export class SlackProvider implements ChannelProvider {
         userName: displayName,
       });
 
-    // Reuse existing AgentChannels if it has the same adapter (e.g., from startup activation).
-    // Replace it if the adapter changed (disconnect + reconnect creates a new one).
-    let agentChannels = agent.getChannels();
-    if (!agentChannels || agentChannels.adapters.slack !== currentAdapter) {
-      agentChannels = this.#createAgentChannels(agent, currentAdapter);
-      await agentChannels.initialize(this.#mastra);
+    // Resolve the channels instance (agent or controller) for this installation.
+    const agentChannels = await this.#resolveChannelsForInstallation(installation, currentAdapter);
+    if (!agentChannels) {
+      return c.json({ ok: true });
     }
 
-    // Delegate event handling to AgentChannels
+    // Delegate event handling to the resolved channels
     // Reconstruct the request with the raw body we already read
     const delegateRequest = new Request(c.req.url, {
       method: c.req.method,
@@ -1505,6 +1652,19 @@ export class SlackProvider implements ChannelProvider {
       return c.json({ response_type: 'ephemeral', text: `Unknown command: ${command}` });
     }
 
+    // Slash commands run a one-shot agent.generate(). Controller-owned
+    // installations don't have that surface: controller sessions are keyed
+    // per chat thread, and Slack slash-command payloads carry no thread_ts,
+    // so a command can't be mapped to a specific thread's session. Route
+    // controller traffic through @-mentions/messages instead. Session-scoped
+    // command support (e.g. mode switching) is a follow-up.
+    if (installation.ownerType === 'agentController') {
+      return c.json({
+        response_type: 'ephemeral',
+        text: 'Slash commands are not supported for this app yet. Mention the bot in a thread to start a session.',
+      });
+    }
+
     const agent = this.#resolveAgent(installation.agentId);
     if (!agent) {
       return c.json({ response_type: 'ephemeral', text: 'Agent not available' });
@@ -1558,6 +1718,15 @@ export class SlackProvider implements ChannelProvider {
       return this.#mastra?.getAgentById(agentId);
     } catch {
       // Agent not found - return undefined
+      return undefined;
+    }
+  }
+
+  #resolveAgentController(controllerId: string) {
+    try {
+      return this.#mastra?.getAgentControllerById(controllerId);
+    } catch {
+      // Controller not found - return undefined
       return undefined;
     }
   }

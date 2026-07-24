@@ -1,0 +1,114 @@
+---
+title: "Channels | AgentController"
+description: "Run an AgentController inside messaging platforms like Slack and Discord, with one durable session per chat thread."
+packages:
+  - "@mastra/core"
+---
+
+# Channels
+
+Channels connect an AgentController to messaging platforms like Slack, Discord, and Telegram, so a controller-backed session runs inside a chat thread. Inbound platform messages route into a controller [`Session`](/docs/agent-controller/session), and the agent's streamed output renders back to the platform with native streaming, tool approval cards, and typing status.
+
+AgentController channels build on the same channel layer as [agent channels](/docs/capabilities/channels/overview): the same adapters, the same configuration shape, and the same rendering pipeline. The difference is what receives the message. On an agent, the message goes straight into the agent loop. On an AgentController, the message goes into a durable session that tracks the active mode, model, permission grants, and state across the whole conversation.
+
+## Configure a controller
+
+Pass a `channels` configuration to the AgentController constructor. It accepts the same shape as the [`Agent` channels option](/docs/capabilities/channels/overview#configure-an-agent):
+
+```typescript title="src/mastra/agent-controller.ts"
+import { Agent } from '@mastra/core/agent'
+import { AgentController } from '@mastra/core/agent-controller'
+import { createSlackAdapter } from '@chat-adapter/slack'
+import { LibSQLStore } from '@mastra/libsql'
+
+const agent = new Agent({
+  id: 'assistant',
+  name: 'assistant',
+  instructions: 'Help the user plan and complete tasks.',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+})
+
+export const agentController = new AgentController({
+  id: 'my-agent',
+  agent,
+  storage: new LibSQLStore({ url: 'file:./data.db' }),
+  modes: [
+    {
+      id: 'plan',
+      name: 'Plan',
+      metadata: { default: true },
+      instructions: 'Reason about changes before making them.',
+    },
+    { id: 'build', name: 'Build', instructions: 'Implement the approved plan.' },
+  ],
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+  },
+})
+```
+
+Register the controller on the Mastra instance. Mastra registers the webhook routes and initializes the channel layer:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+import { agentController } from './agent-controller'
+
+export const mastra = new Mastra({
+  agentControllers: { agentController },
+  storage: new LibSQLStore({
+    url: process.env.DATABASE_URL,
+  }),
+})
+```
+
+## Webhook routes
+
+Controller channel webhooks follow the same pattern as agent channels, under an `agent-controllers` path:
+
+```text
+/api/agent-controllers/<CONTROLLER_ID>/channels/<PLATFORM>/webhook
+```
+
+For example, a Slack adapter on a controller with the `my-agent` ID uses:
+
+```text
+/api/agent-controllers/my-agent/channels/slack/webhook
+```
+
+Point the platform's webhook, event, or interactions URL to this path. See [Webhook routes](/docs/capabilities/channels/overview#webhook-routes) for local tunneling and platform setup.
+
+## One session per chat thread
+
+Each chat thread maps to one durable controller session. The first message in a Slack or Discord thread creates a Mastra thread and a controller session keyed to it; every later message in that chat thread reuses both. The session carries the active mode, model, permission grants, and state for the life of the conversation, just like a session driven from a terminal or web UI.
+
+By default the session key derives from the platform and the external thread ID (`channel:slack:<THREAD_ID>`). Pass `resolveResourceId` in the channels configuration to control the mapping yourself.
+
+Avoid mapping multiple active chat threads to one session. A session works on one Mastra thread at a time, and a message arriving from a different chat thread rebinds the session to that thread, which cancels any run still in flight on the previous one.
+
+## Tool approvals
+
+Tools that require approval render as interactive cards with Approve and Deny buttons, the same as [agent channel tool approvals](/docs/capabilities/channels/overview#tool-approval). The controller run pauses at the session's approval gate until a user acts on the card, then resumes and streams the continuation back to the thread.
+
+Two behaviors follow from routing approvals through the session:
+
+- A new message in the thread while an approval is pending declines that approval, the same as sending a new message in a terminal session. The new message supersedes the pending ask.
+- On adapters that can't render approval buttons (`toolDisplay: 'text'`), tools run without approval prompts so runs can't stall on a card nobody can act on.
+
+See [Tool approvals and permissions](/docs/agent-controller/tool-approvals) for policies, categories, and session grants.
+
+## Limits
+
+- Adapters can be constructed manually as shown above. The managed connect flow (`mastra.channels.slack.connect(...)`) also supports controller-owned installations — call it with an options object (`connect({ id, name })`) to connect a controller that has no registered agent. Adapters without controller support must still be constructed manually.
+- Controller sessions are in-memory objects, so channels-backed controllers need a long-lived server. Serverless deployment isn't supported for controller channels; agent channels support it as described in [Serverless deployment](/docs/capabilities/channels/overview#serverless-deployment).
+- Pending tool approvals don't survive a server restart. An approval card acted on after a restart is ignored as stale.
+- Mode switching from chat (for example, a `/mode` slash command) isn't available yet.
+
+## Related
+
+- [Channels overview](/docs/capabilities/channels/overview)
+- [Session](/docs/agent-controller/session)
+- [Tool approvals and permissions](/docs/agent-controller/tool-approvals)
+- [Channels reference](/reference/agents/channels)
