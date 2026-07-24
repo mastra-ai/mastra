@@ -1393,6 +1393,119 @@ describe('Supervisor Pattern - IsTaskComplete scorers', () => {
     expect(isTaskCompleteEvents[0].payload.passed).toBe(true);
   });
 
+  it('should resolve the model answer as final text and not persist the completion report when the check passes', async () => {
+    const answer = 'Both accounts are healthy. Nothing needs attention.';
+    const passingScorer = {
+      id: 'always-complete',
+      name: 'Always Complete',
+      run: vi.fn().mockResolvedValue({ score: 1, reason: 'Task is complete' }),
+    };
+
+    const memory = new MockMemory();
+    const agent = new Agent({
+      id: 'final-text-agent',
+      name: 'Final Text Agent',
+      instructions: 'Do the task.',
+      model: new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: answer },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      }),
+      // Memory contributes output processors, which is what re-derives the
+      // final text from the last response message after the stream finishes.
+      memory,
+    });
+
+    const stream = await agent.stream('Do the task.', {
+      maxSteps: 4,
+      isTaskComplete: { scorers: [passingScorer as any] },
+      memory: { resource: 'res-1', thread: 'thread-1' },
+    });
+    for await (const _chunk of stream.fullStream) {
+      // consume
+    }
+
+    // The resolved text and last step text are the model's answer, not the
+    // internal completion-check report.
+    expect(await stream.text).toBe(answer);
+    const steps = await stream.steps;
+    expect(steps.at(-1)?.text).toBe(answer);
+
+    // The report is not persisted to the thread either.
+    const recalled = await memory.recall({ threadId: 'thread-1' });
+    const persistedTexts = recalled.messages.map(m =>
+      typeof m.content === 'string' ? m.content : (m.content?.parts ?? []).map((p: any) => p.text ?? '').join(''),
+    );
+    expect(persistedTexts.join('\n')).not.toContain('Completion Check Results');
+  });
+
+  it('should resolve the last model answer as final text when the check keeps failing until maxSteps', async () => {
+    let call = 0;
+    const answers = ['Attempt one.', 'Attempt two.'];
+    const failingScorer = {
+      id: 'never-complete',
+      name: 'Never Complete',
+      run: vi.fn().mockResolvedValue({ score: 0, reason: 'Not complete' }),
+    };
+
+    const agent = new Agent({
+      id: 'failing-final-text-agent',
+      name: 'Failing Final Text Agent',
+      instructions: 'Do the task.',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          const text = answers[Math.min(call++, answers.length - 1)]!;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              // Distinct timestamps per turn: identical createdAt values make the
+              // message sort order (and adjacent-assistant merging) nondeterministic.
+              {
+                type: 'response-metadata',
+                id: `id-${call}`,
+                modelId: 'mock-model-id',
+                timestamp: new Date(call * 1000),
+              },
+              { type: 'text-start', id: `text-${call}` },
+              { type: 'text-delta', id: `text-${call}`, delta: text },
+              { type: 'text-end', id: `text-${call}` },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+            ]),
+          };
+        },
+      }),
+      memory: new MockMemory(),
+    });
+
+    const stream = await agent.stream('Do the task.', {
+      maxSteps: 2,
+      isTaskComplete: { scorers: [failingScorer as any] },
+      memory: { resource: 'res-2', thread: 'thread-2' },
+    });
+    for await (const _chunk of stream.fullStream) {
+      // consume
+    }
+
+    // The run ends at maxSteps with the failing feedback as the newest response
+    // message — the resolved text must still be model output, not the report.
+    // Mock timestamps make attempt-message ordering (and adjacent-assistant
+    // merging) nondeterministic, so assert on the tail instead of equality.
+    const finalText = await stream.text;
+    expect(finalText).not.toContain('Completion Check Results');
+    expect(finalText.endsWith('Attempt two.')).toBe(true);
+  });
+
   it('should continue iterating when isTaskComplete scorer fails and stop when it passes', async () => {
     let scorerCallCount = 0;
     // Scorer fails on first call, passes on second
