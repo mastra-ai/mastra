@@ -24,6 +24,6 @@ Registering the controller on a `Mastra` instance exposes a webhook route per ad
 
 Controller channels attach to the backing agent instance (via `setChannels`, propagated to every backing agent including per-mode agents) rather than being stamped onto each run's request context. Only agents explicitly given channels attach the channel output processor, so child runs such as observational-memory observers and forked subagents no longer render to the chat platform.
 
-Channel tools (`send_message`, `add_reaction`, and friends) are no longer auto-injected into an agent's resolved toolset. If you want your agent to act on a channel run — send a message, add a reaction — pass the chat tools to your agent explicitly. `AgentChannels.getTools()` is now `@deprecated` but remains functional. An agent with channels that resolves a toolset containing no channel tools logs a one-time warning pointing at this migration.
+Channel tools (`add_reaction`, `remove_reaction`) are no longer auto-injected into an agent's resolved toolset. Replies are unaffected — they stream back to the channel without a tool. If you want your agent to react to channel messages, pass the tools explicitly via `tools: { ...channels.getTools() }`.
 
 Inbound channel messages routed into a controller session keep their platform metadata: the message's `providerOptions` (author name, user ID, message ID, and so on under `mastra.channels.<PLATFORM>`) are stamped onto the persisted user message as `content.providerMetadata`, matching the plain agent channel path.

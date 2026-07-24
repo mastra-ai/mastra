@@ -72,7 +72,7 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
     isOptional: true,
     defaultValue: 'true',
     description:
-      "Controls whether the channel exposes channel-specific tools (`add_reaction`, `remove_reaction`) via the deprecated `AgentChannels.getTools()`. Channel tools are no longer auto-injected into the agent's resolved toolset — to let the agent send messages or add reactions on a channel run, pass the chat tools to your agent explicitly. Set to `false` to disable the channel tools entirely, e.g. for models that do not support function calling.",
+      'Controls whether the channel exposes channel-specific tools (`add_reaction`, `remove_reaction`) via `AgentChannels.getTools()`. Channel tools are never added to the agent automatically — pass them explicitly via `tools: { ...channels.getTools() }` if the agent should react to channel messages. Set to `false` to disable the channel tools entirely, e.g. for models that do not support function calling.',
   },
   {
     name: 'state',
