@@ -227,6 +227,78 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
       expect(result.messages.every(m => new Date(m.createdAt) >= yesterday)).toBe(true);
     });
 
+    it('should filter by shallow scalar metadata with AND semantics before pagination', async () => {
+      const metadataThread = createSampleThread();
+      await memoryStorage.saveThread({ thread: metadataThread });
+      const now = Date.now();
+      const message = (content: string, metadata: Record<string, unknown>, offset: number) =>
+        createSampleMessageV2({
+          threadId: metadataThread.id,
+          resourceId: metadataThread.resourceId,
+          content: { content, metadata },
+          createdAt: new Date(now + offset),
+        });
+      const metadataMessages = [
+        message('match 1', { tag: 'alpha', score: 1, active: true, cleared: null }, 1),
+        message('type mismatch', { tag: 'alpha', score: '1', active: true, cleared: null }, 2),
+        message('missing null', { tag: 'alpha', score: 1, active: true }, 3),
+        message('match 2', { tag: 'alpha', score: 1, active: true, cleared: null }, 4),
+      ];
+      await memoryStorage.saveMessages({ messages: metadataMessages });
+
+      const result = await memoryStorage.listMessages({
+        threadId: metadataThread.id,
+        filter: { metadata: { tag: 'alpha', score: 1, active: true, cleared: null } },
+        perPage: 1,
+        page: 0,
+      });
+
+      expect(result.total).toBe(2);
+      expect(result.messages).toHaveLength(1);
+      expect(result.hasMore).toBe(true);
+      expect(result.messages.map((m: any) => m.content.content)).toEqual(['match 1']);
+    });
+
+    it('should treat an empty metadata filter as a no-op', async () => {
+      const result = await memoryStorage.listMessages({ threadId: thread.id, filter: { metadata: {} } });
+      expect(result.total).toBe(5);
+    });
+
+    it.each([{ 'bad-key': true }, { nested: {} }, { score: Number.NaN }])(
+      'should reject invalid metadata filters before listing messages',
+      async metadata => {
+        await expect(
+          memoryStorage.listMessages({ threadId: thread.id, filter: { metadata: metadata as any } }),
+        ).rejects.toBeInstanceOf(TypeError);
+      },
+    );
+
+    it('should keep include/context augmentation unfiltered and out of pagination metadata', async () => {
+      const includeThread = createSampleThread();
+      await memoryStorage.saveThread({ thread: includeThread });
+
+      const includeMessages = ['beta', 'alpha'].map((tag, index) =>
+        createSampleMessageV2({
+          threadId: includeThread.id,
+          resourceId: includeThread.resourceId,
+          content: { content: tag, metadata: { tag } },
+          createdAt: new Date(Date.now() + index),
+        }),
+      );
+      await memoryStorage.saveMessages({ messages: includeMessages });
+
+      const result = await memoryStorage.listMessages({
+        threadId: includeThread.id,
+        filter: { metadata: { tag: 'alpha' } },
+        perPage: 1,
+        include: [{ id: includeMessages[1]!.id, withPreviousMessages: 1 }],
+      });
+
+      expect(result.total).toBe(1);
+      expect(result.hasMore).toBe(false);
+      expect(result.messages.map((m: any) => m.content.content)).toEqual(['beta', 'alpha']);
+    });
+
     it('should include specific messages with previous context', async () => {
       const result = await memoryStorage.listMessages({
         threadId: thread.id,
@@ -415,7 +487,7 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         page: 0,
       });
 
-      // Pagination gets first 3 (1,2,3) + include adds remaining (4,5)
+      // Pagination gets first 3 (1,2,3) + include adds remaining (4,5).
       expect(result.messages).toHaveLength(5);
       expect(result.total).toBe(5);
       expect(result.hasMore).toBe(false);
@@ -892,6 +964,34 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.messages.map((m: any) => m.content.content)).toEqual(
           expect.arrayContaining(['New Message 1', 'New Message 2']),
         );
+      });
+
+      it('should filter by metadata before pagination when querying by resourceId', async () => {
+        const resourceThread = createSampleThread();
+        await memoryStorage.saveThread({ thread: resourceThread });
+        const now = Date.now();
+        await memoryStorage.saveMessages({
+          messages: ['alpha', 'beta', 'alpha'].map((tag, index) =>
+            createSampleMessageV2({
+              threadId: resourceThread.id,
+              resourceId: resourceThread.resourceId,
+              content: { content: `${tag} ${index}`, metadata: { tag, score: 1 } },
+              createdAt: new Date(now + index),
+            }),
+          ),
+        });
+
+        const result = await memoryStorage.listMessagesByResourceId({
+          resourceId: resourceThread.resourceId,
+          filter: { metadata: { tag: 'alpha', score: 1 } },
+          perPage: 1,
+          page: 1,
+        });
+
+        expect(result.total).toBe(2);
+        expect(result.messages).toHaveLength(1);
+        expect(result.hasMore).toBe(false);
+        expect((result.messages[0]!.content as any).content).toBe('alpha 2');
       });
 
       it('should filter by dateRange.start across multiple threads for the same resource', async () => {

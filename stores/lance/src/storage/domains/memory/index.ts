@@ -8,10 +8,12 @@ import {
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
+  storageMessageMatchesMetadataFilter,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
   TABLE_SCHEMAS,
+  validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
@@ -329,6 +331,7 @@ export class StoreMemoryLance extends MemoryStorage {
     const perPage = normalizePerPage(perPageInput, 40);
     // When perPage is false (get all), ignore page offset
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     try {
       if (page < 0) {
@@ -397,12 +400,17 @@ export class StoreMemoryLance extends MemoryStorage {
         };
       }
 
-      // Get total count
-      const total = await table.countRows(whereClause);
-
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
       const query = table.query().where(whereClause);
       let allRecords = await query.toArray();
+
+      if (metadataFilter) {
+        allRecords = allRecords.filter((row: any) =>
+          storageMessageMatchesMetadataFilter(this.normalizeMessage(row).content, metadataFilter),
+        );
+      }
+
+      const total = allRecords.length;
 
       // Sort records
       allRecords.sort((a, b) => {
@@ -435,6 +443,8 @@ export class StoreMemoryLance extends MemoryStorage {
         };
       }
 
+      const primaryPageCount = messages.length;
+
       // Step 2: Add included messages with context (if any), excluding duplicates
       const messageIds = new Set(messages.map(m => m.id));
       if (include && include.length > 0) {
@@ -454,13 +464,13 @@ export class StoreMemoryLance extends MemoryStorage {
       // Sort all messages (paginated + included) for final output
       finalMessages = this._sortMessages(finalMessages, field, direction);
 
-      // Calculate hasMore based on pagination window
-      // If all thread messages have been returned (through pagination or include), hasMore = false
-      // Otherwise, check if there are more pages in the pagination window
-      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
-      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const fetchedAll = perPageInput === false || allThreadMessagesReturned;
-      const hasMore = !fetchedAll && offset + perPage < total;
+      const returnedThreadMessageIds = new Set(
+        finalMessages.filter(message => message.threadId === threadId).map(message => message.id),
+      );
+      const hasMore =
+        perPageInput !== false &&
+        (metadataFilter || returnedThreadMessageIds.size < total) &&
+        offset + primaryPageCount < total;
 
       return {
         messages: finalMessages,

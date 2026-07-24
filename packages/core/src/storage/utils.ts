@@ -2,7 +2,7 @@ import type { ScoreRowData } from '../evals/types';
 import { TABLE_SCHEMAS, TABLE_SCORERS } from './constants';
 import type { TABLE_NAMES } from './constants';
 import type { Duration } from './retention';
-import type { StorageColumn } from './types';
+import type { StorageColumn, StorageMetadataFilter } from './types';
 
 /**
  * Canonical store names for type safety.
@@ -92,6 +92,58 @@ export function safelyParseJSON(input: any): any {
   }
   // For anything else (number, boolean, etc.), return empty object
   return {};
+}
+
+const SAFE_METADATA_KEY_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+const MAX_METADATA_KEY_LENGTH = 128;
+const DISALLOWED_METADATA_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+
+export function validateStorageMetadataFilter(
+  metadata: StorageMetadataFilter | undefined,
+): StorageMetadataFilter | undefined {
+  if (metadata === undefined) return undefined;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    throw new TypeError('Metadata filter must be an object.');
+  }
+
+  const entries = Object.entries(metadata);
+  for (const [key, value] of entries) {
+    if (
+      key.length > MAX_METADATA_KEY_LENGTH ||
+      !SAFE_METADATA_KEY_PATTERN.test(key) ||
+      DISALLOWED_METADATA_KEYS.has(key)
+    ) {
+      throw new TypeError(`Invalid metadata filter key "${key}".`);
+    }
+    if (
+      value !== null &&
+      typeof value !== 'string' &&
+      typeof value !== 'boolean' &&
+      !(typeof value === 'number' && Number.isFinite(value))
+    ) {
+      throw new TypeError(
+        `Invalid metadata filter value for key "${key}". Values must be string, finite number, boolean, or null.`,
+      );
+    }
+  }
+
+  return entries.length > 0 ? metadata : undefined;
+}
+
+export function storageMessageMatchesMetadataFilter(
+  content: unknown,
+  filter: StorageMetadataFilter | undefined,
+): boolean {
+  if (!filter) return true;
+  const parsedContent = typeof content === 'string' ? safelyParseJSON(content) : content;
+  if (!parsedContent || typeof parsedContent !== 'object' || Array.isArray(parsedContent)) return false;
+  const metadata = (parsedContent as { metadata?: unknown }).metadata;
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return false;
+
+  const metadataRecord = metadata as Record<string, unknown>;
+  return Object.entries(filter).every(
+    ([key, expected]) => Object.prototype.hasOwnProperty.call(metadataRecord, key) && metadataRecord[key] === expected,
+  );
 }
 
 /**
