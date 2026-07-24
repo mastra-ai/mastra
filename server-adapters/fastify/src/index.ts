@@ -708,7 +708,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     };
 
     // Add body limit if configured
-    const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
+    const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
     const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
 
     const config = shouldApplyBodyLimit && maxSize ? { bodyLimit: maxSize } : undefined;
