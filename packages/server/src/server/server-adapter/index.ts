@@ -763,7 +763,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     if (!editor?.hasEnabledBuilderConfig?.()) return;
 
     try {
-      const { isEEEnabled } = await import('@mastra/core/auth/ee');
+      const { isEEEnabled, captureEEEvent, getEETelemetryFallbackDistinctId, getSafeLicenseSummary } =
+        await import('@mastra/core/auth/ee');
       if (!isEEEnabled()) {
         throw new Error(
           '[mastra/auth-ee] Agent Builder is configured but no valid EE license was found.\n' +
@@ -771,6 +772,18 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
             'Set the MASTRA_EE_LICENSE environment variable with your license key.\n' +
             'Learn more: https://github.com/mastra-ai/mastra/blob/main/ee/LICENSE',
         );
+      }
+
+      try {
+        const license = getSafeLicenseSummary();
+        captureEEEvent('ee_feature_used', license.anonymousId || getEETelemetryFallbackDistinctId(), {
+          feature: 'builder',
+          license_valid: license.valid,
+          license_hash: license.licenseHash,
+          is_dev_environment: license.isDevEnvironment,
+        });
+      } catch {
+        // Telemetry must never affect server startup.
       }
     } catch (err) {
       if (err instanceof Error && err.message.startsWith('[mastra/auth-ee]')) {
