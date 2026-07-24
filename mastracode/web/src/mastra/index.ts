@@ -236,12 +236,14 @@ if (mcAgentController) {
 // in the entry file (see module docs). `prepare()` returns the constructor args
 // carrying the controller (via `agentControllers`), storage, and the assembled
 // `server` config (middleware + apiRoutes + cors). The Slack channels are
-// layered onto the controller above via `setChannels`, and the debug logger is
-// set here so channel rendering rides the same deployed instance while the
-// factory keeps owning the rest of the config.
+// layered onto the controller above via `setChannels`, and the logger is set
+// here so channel rendering rides the same deployed instance while the
+// factory keeps owning the rest of the config. Set LOG_LEVEL=debug locally for
+// verbose channel logs; the default stays info so production doesn't leak
+// runtime details.
 export const mastra: Mastra = new Mastra({
   ...preparedArgs,
-  logger: new ConsoleLogger({ level: (process.env.LOG_LEVEL as LogLevelType) ?? 'debug' }),
+  logger: new ConsoleLogger({ level: (process.env.LOG_LEVEL as LogLevelType) ?? 'info' }),
 });
 
 // Post-construct boot: initialize the controller (which now inherits this
