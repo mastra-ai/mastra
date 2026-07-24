@@ -508,6 +508,163 @@ describe('Agent Handlers', () => {
       expect(result['agent-b'].provider).toBe('openai.chat');
       expect(result['agent-b'].modelId).toBe('gpt-4o');
     });
+
+    it('omits the builder agent from list results', async () => {
+      // Mirror the documented user pattern: register under a config key
+      // (`builderAgent`) that differs from the agent's internal id
+      // (`builder-agent`). This pins the regression where the filter
+      // checked the map key instead of `agent.id`.
+      const builderAgent = makeMockAgent({
+        id: 'builder-agent',
+        name: 'Agent Builder',
+        description: 'system builder',
+      });
+      const userAgent = makeMockAgent({ name: 'user-agent' });
+      const mastraWithBuilder = makeMastraMock({
+        agents: {
+          builderAgent,
+          'user-agent': userAgent,
+        },
+      });
+
+      const result = await LIST_AGENTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithBuilder }),
+        requestContext,
+      });
+
+      expect(result['builder-agent']).toBeUndefined();
+      expect(result['builderAgent']).toBeUndefined();
+      expect(result['user-agent']).toBeDefined();
+    });
+
+    it('hides stored agents marked private from non-owners', async () => {
+      const mastraWithStored: any = makeMastraMock({ agents: {} });
+      const storedAgents = [
+        {
+          id: 'public-agent',
+          name: 'public-agent',
+          description: 'public',
+          instructions: 'public',
+          visibility: 'public',
+          authorId: 'alice',
+        },
+        {
+          id: 'private-owned',
+          name: 'private-owned',
+          description: 'private owned',
+          instructions: 'private',
+          visibility: 'private',
+          authorId: 'alice',
+        },
+        {
+          id: 'private-other',
+          name: 'private-other',
+          description: 'private other',
+          instructions: 'private',
+          visibility: 'private',
+          authorId: 'bob',
+        },
+        {
+          id: 'legacy-no-visibility',
+          name: 'legacy-no-visibility',
+          description: 'legacy',
+          instructions: 'legacy',
+        },
+      ];
+      vi.spyOn(mastraWithStored, 'getEditor').mockReturnValue({
+        agent: {
+          list: vi.fn().mockResolvedValue({ agents: storedAgents }),
+          getById: vi.fn().mockImplementation(async (id: string) => {
+            const found = storedAgents.find(a => a.id === id);
+            if (!found) return null;
+            const agent = makeMockAgent({ name: found.name, instructions: found.instructions });
+            (agent as any).id = found.id;
+            (agent as any).source = 'stored';
+            return agent;
+          }),
+          applyStoredOverrides: vi.fn().mockImplementation(async (agent: any) => agent),
+        },
+      } as any);
+
+      const aliceContext = new RequestContext();
+      aliceContext.set('user', { id: 'alice' });
+      const resultAsAlice = await LIST_AGENTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithStored }),
+        requestContext: aliceContext,
+      });
+      expect(resultAsAlice['public-agent']).toBeDefined();
+      expect(resultAsAlice['private-owned']).toBeDefined();
+      expect(resultAsAlice['private-other']).toBeUndefined();
+      expect(resultAsAlice['legacy-no-visibility']).toBeDefined();
+
+      const bobContext = new RequestContext();
+      bobContext.set('user', { id: 'bob' });
+      const resultAsBob = await LIST_AGENTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithStored }),
+        requestContext: bobContext,
+      });
+      expect(resultAsBob['public-agent']).toBeDefined();
+      expect(resultAsBob['private-owned']).toBeUndefined();
+      expect(resultAsBob['private-other']).toBeDefined();
+      expect(resultAsBob['legacy-no-visibility']).toBeDefined();
+
+      const resultAnon = await LIST_AGENTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithStored }),
+        requestContext: new RequestContext(),
+      });
+      expect(resultAnon['public-agent']).toBeDefined();
+      expect(resultAnon['private-owned']).toBeUndefined();
+      expect(resultAnon['private-other']).toBeUndefined();
+      expect(resultAnon['legacy-no-visibility']).toBeDefined();
+    });
+
+    it('hides stored agents carrying the builder-agent id from the list response', async () => {
+      const mastraWithStored: any = makeMastraMock({ agents: {} });
+      const storedAgents = [
+        {
+          id: 'builder-agent',
+          name: 'builder-agent',
+          description: 'mirrored builder',
+          instructions: 'mirror',
+          visibility: 'public',
+          authorId: 'alice',
+        },
+        {
+          id: 'regular-stored',
+          name: 'regular-stored',
+          description: 'regular',
+          instructions: 'regular',
+          visibility: 'public',
+          authorId: 'alice',
+        },
+      ];
+      const getById = vi.fn().mockImplementation(async (id: string) => {
+        const found = storedAgents.find(a => a.id === id);
+        if (!found) return null;
+        const agent = makeMockAgent({ name: found.name, instructions: found.instructions });
+        (agent as any).id = found.id;
+        (agent as any).source = 'stored';
+        return agent;
+      });
+      vi.spyOn(mastraWithStored, 'getEditor').mockReturnValue({
+        agent: {
+          list: vi.fn().mockResolvedValue({ agents: storedAgents }),
+          getById,
+          applyStoredOverrides: vi.fn().mockImplementation(async (agent: any) => agent),
+        },
+      } as any);
+
+      const result = await LIST_AGENTS_ROUTE.handler({
+        ...createTestServerContext({ mastra: mastraWithStored }),
+        requestContext: new RequestContext(),
+      });
+
+      expect(result['builder-agent']).toBeUndefined();
+      expect(result['regular-stored']).toBeDefined();
+      // Guard against future regressions: the skip must happen before getById
+      // is invoked for the builder id so we don't needlessly hit storage.
+      expect(getById).not.toHaveBeenCalledWith('builder-agent', expect.anything());
+    });
   });
 
   describe('getAgentByIdHandler', () => {

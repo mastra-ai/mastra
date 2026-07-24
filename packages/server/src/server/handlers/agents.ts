@@ -1148,6 +1148,17 @@ async function formatAgent({
 // Route Definitions (new pattern - handlers defined inline with createRoute)
 // ============================================================================
 
+/**
+ * The Agent Builder agent is identified by its canonical, hard-coded id from
+ * `createBuilderAgent()` in @mastra/editor/ee. It must never appear in
+ * /agents list responses since it is a system agent for the editor UI.
+ */
+const BUILDER_AGENT_ID = 'builder-agent';
+
+function isBuilderAgentId(id: string): boolean {
+  return id === BUILDER_AGENT_ID;
+}
+
 export const LIST_AGENTS_ROUTE = createRoute({
   method: 'GET',
   path: '/agents',
@@ -1167,6 +1178,15 @@ export const LIST_AGENTS_ROUTE = createRoute({
 
       const isPartial = partial === 'true';
 
+      // Identify the calling user (used below to scope private stored agents
+      // to their owner). When no user is present (unauthenticated callers),
+      // private agents are hidden entirely.
+      const callingUser = requestContext?.get('user');
+      const callingUserId =
+        callingUser && typeof callingUser === 'object' && 'id' in callingUser
+          ? String((callingUser as { id: unknown }).id)
+          : undefined;
+
       // Apply stored config overrides to code-defined agents before serializing
       const editor = mastra.getEditor?.();
       const logger = mastra.getLogger();
@@ -1174,8 +1194,9 @@ export const LIST_AGENTS_ROUTE = createRoute({
       // failure (e.g. an unhandled throw from a user-supplied dynamic config
       // callback) cannot reject the entire response. Failing agents are logged
       // and skipped, matching the existing stored-agent loop below.
+      const codeAgentEntries = Object.entries(codeAgents).filter(([, agent]) => !isBuilderAgentId(agent.id));
       const serializedCodeAgentsMap = await Promise.allSettled(
-        Object.entries(codeAgents).map(async ([id, agent]) => {
+        codeAgentEntries.map(async ([id, agent]) => {
           let mergedAgent = agent;
           if (editor) {
             try {
@@ -1195,7 +1216,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
           const { id, ...rest } = settled.value;
           serializedAgents[id] = { id, ...rest };
         } else {
-          const agentId = Object.keys(codeAgents)[i];
+          const agentId = codeAgentEntries[i]?.[0];
           logger.warn('Failed to serialize agent', { agentId, error: settled.reason });
         }
       }
@@ -1229,6 +1250,21 @@ export const LIST_AGENTS_ROUTE = createRoute({
             // and trying to hydrate them as standalone would fail model validation.
             if (codeAgentIds.has(storedAgentConfig.id)) continue;
             try {
+              // Never surface the system Agent Builder agent via the list endpoint,
+              // even if a stored record carries its canonical id (e.g. via migration,
+              // public mirror, or accidental save). The per-agent endpoints still
+              // resolve `builder-agent` so the Agent Builder UI keeps working.
+              if (isBuilderAgentId(storedAgentConfig.id)) continue;
+
+              // Hide private stored agents from callers other than their author.
+              // Agents without explicit visibility are treated as public for
+              // backwards-compatibility with legacy records.
+              if (storedAgentConfig.visibility === 'private') {
+                if (!callingUserId || storedAgentConfig.authorId !== callingUserId) {
+                  continue;
+                }
+              }
+
               const agent = await editor?.agent.getById(storedAgentConfig.id, { status: 'draft' });
               if (!agent) continue;
 
