@@ -34,6 +34,14 @@ import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import { handleError } from './error';
 import { getEffectiveResourceId, validateRunOwnership } from './utils';
 
+/**
+ * Statuses a run cannot come back from. Streaming one of these runIds again would
+ * start a fresh execution under the same runId and overwrite its stored snapshot —
+ * the in-memory de-dupe that protects concurrent streams only covers runs still held
+ * in the workflow's run map, and a finished run has already been dropped from it.
+ */
+const TERMINAL_RUN_STATUSES = ['success', 'failed', 'canceled', 'tripwire'];
+
 export interface WorkflowContext extends Context {
   workflowId?: string;
   runId?: string;
@@ -403,6 +411,18 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
       }
+
+      const existingRun = await workflow.getWorkflowRunById(runId);
+
+      if (existingRun && TERMINAL_RUN_STATUSES.includes(existingRun.status)) {
+        throw new HTTPException(409, {
+          message:
+            `Workflow run ${runId} already finished with status "${existingRun.status}". ` +
+            `Use /observe to read its stream back, /resume-stream to continue a suspended run, ` +
+            `or stream a new runId.`,
+        });
+      }
+
       const serverCache = mastra.getServerCache();
 
       const run = await workflow.createRun({ runId, resourceId: effectiveResourceId });
