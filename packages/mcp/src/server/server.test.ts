@@ -2914,7 +2914,7 @@ describe('MCPServer with Tool Output Schema', () => {
         timestamp: { type: 'string' },
       },
     });
-    // MCP SDK validates output; Mastra schema is documentation-only (always passes).
+    // The MCP client validates output; Mastra schema is documentation-only (always passes).
     expect(tool.outputSchema?.['~standard'].validate({ not: 'valid' })).toEqual({ value: { not: 'valid' } });
   });
 

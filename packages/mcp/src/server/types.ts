@@ -46,7 +46,7 @@ export type MCPServerResources = {
 };
 
 /**
- * Extends the MCP SDK Prompt type with an optional version field.
+ * Extends the MCP Prompt type with an optional version field.
  *
  * The MCP protocol does not include `version` on prompts, so this field is
  * only used server-side for internal prompt lookup and is not sent over the wire.
@@ -120,7 +120,7 @@ export type ElicitationActions = {
 export type MCPRequestHandlerExtra = MCPServerContext;
 
 /**
- * Re-exported MCP SDK types for resource handling.
+ * Re-exported MCP types for resource handling.
  *
  * - `Resource`: Represents a data resource exposed by the server
  * - `ResourceTemplate`: URI template for dynamic resource generation

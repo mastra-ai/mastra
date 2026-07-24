@@ -3,7 +3,7 @@
  * This test verifies that MCP tool annotations (annotations, _meta) are properly
  * supported in Mastra tools and exposed via the MCP protocol.
  *
- * The MCP SDK ToolSchema supports:
+ * The MCP ToolSchema supports:
  * - annotations: { title, readOnlyHint, destructiveHint, idempotentHint, openWorldHint }
  * - _meta: arbitrary metadata passthrough
  *

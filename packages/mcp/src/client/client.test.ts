@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { RequestContext } from '@mastra/core/di';
 import { toStandardSchema } from '@mastra/schema-compat';
-import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { Client, SdkErrorCode, SdkHttpError, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { NodeStreamableHTTPServerTransport } from '@modelcontextprotocol/node';
 import { McpServer } from '@modelcontextprotocol/server';
 import type { CallToolResult } from '@modelcontextprotocol/server';
@@ -406,7 +406,7 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
   // When MCP servers (e.g. FastMCP) define outputSchema on a tool but don't
   // return structuredContent in the response, the full CallToolResult envelope
   // should be returned as-is. outputSchema is attached for documentation with a
-  // no-op validator; the MCP SDK validates structuredContent via AJV.
+  // no-op validator; the MCP client validates structuredContent via AJV.
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
@@ -736,7 +736,7 @@ describe('MastraMCPClient - no outputSchema', () => {
 describe('MastraMCPClient - outputSchema with structuredContent', () => {
   // When a tool has an outputSchema and returns structuredContent, the
   // structuredContent is returned directly. We don't pass outputSchema to
-  // createTool so there's no Zod stripping — the MCP SDK validates via AJV.
+  // createTool so there's no Zod stripping — the MCP client validates via AJV.
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
@@ -1009,7 +1009,7 @@ describe('MastraMCPClient - AbortSignal forwarding', () => {
     expect(elapsed).toBeLessThan(5_000);
   });
 
-  it('should pass abortSignal through to the MCP SDK client', async () => {
+  it('should pass abortSignal through to the MCP client', async () => {
     const sdkClient = (client as any).client as Client;
     const callToolSpy = vi.spyOn(sdkClient, 'callTool').mockResolvedValue({
       content: [{ type: 'text', text: 'ok' }],
@@ -1704,7 +1704,7 @@ describe('MastraMCPClient - Timeout Parameter Position Tests', () => {
 
     await client.connect();
 
-    // Access the internal MCP SDK client to spy on listTools
+    // Access the internal MCP client to spy on listTools
     const internalClient = (client as any).client;
     const originalListTools = internalClient.listTools.bind(internalClient);
 
@@ -1727,22 +1727,18 @@ describe('MastraMCPClient - Timeout Parameter Position Tests', () => {
 });
 
 describe('MastraMCPClient - HTTP SSE Fallback Tests', () => {
-  // Helper to create StreamableHTTPError-like error (@modelcontextprotocol/sdk 1.24.0+)
-  class MockStreamableHTTPError extends Error {
-    constructor(
-      public readonly code: number,
-      message: string,
-    ) {
-      super(`Streamable HTTP error: ${message}`);
-    }
-  }
+  // The Streamable HTTP transport surfaces non-OK responses as SdkHttpError: `code` is a
+  // string SdkErrorCode and the HTTP status is carried separately, so the fallback decision
+  // has to read `status`.
+  const httpError = (status: number, message: string) =>
+    new SdkHttpError(SdkErrorCode.ClientHttpNotImplemented, `Streamable HTTP error: ${message}`, { status });
 
   it('should throw error for status code 401 without SSE fallback', async () => {
     const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/client');
     const originalStart = StreamableHTTPClientTransport.prototype.start;
 
     StreamableHTTPClientTransport.prototype.start = async function () {
-      throw new MockStreamableHTTPError(401, 'Unauthorized');
+      throw httpError(401, 'Unauthorized');
     };
 
     const httpServer = createServer((req, res) => {
@@ -1779,7 +1775,7 @@ describe('MastraMCPClient - HTTP SSE Fallback Tests', () => {
     const originalStart = StreamableHTTPClientTransport.prototype.start;
 
     StreamableHTTPClientTransport.prototype.start = async function () {
-      throw new MockStreamableHTTPError(404, 'Not Found');
+      throw httpError(404, 'Not Found');
     };
 
     const httpServer = createServer((req, res) => {
@@ -1807,8 +1803,10 @@ describe('MastraMCPClient - HTTP SSE Fallback Tests', () => {
     });
 
     try {
-      // Should attempt SSE fallback, then fail (server doesn't implement full SSE)
-      await expect(client.connect()).rejects.toThrow();
+      // The SSE fallback must be attempted: this stub server does not implement a usable
+      // SSE endpoint, so the connect fails with the "tried every transport" error rather
+      // than rethrowing the original Streamable HTTP 404.
+      await expect(client.connect()).rejects.toThrow('Could not connect to server with any available HTTP transport');
     } finally {
       StreamableHTTPClientTransport.prototype.start = originalStart;
       await client.disconnect().catch(() => {});
@@ -3222,7 +3220,7 @@ describe('MastraMCPClient - custom fetch failure modes (auth-token loop)', () =>
   //    if `throw new Error('Failed to get auth token')` is triggered inside fetch.
   //    The loop stops if I instead pass an empty token through."
   //
-  // The relevant code lives in @modelcontextprotocol/sdk's StreamableHTTPClientTransport:
+  // The relevant code lives in @modelcontextprotocol/client's StreamableHTTPClientTransport:
   //  - After connect, the SDK opens a long-lived "standalone GET SSE listener" stream.
   //  - When that stream ends or errors, _scheduleReconnection({...}, 0) fires.
   //  - Reset-to-0 means whenever the GET round-trips successfully but the server then

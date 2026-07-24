@@ -4,7 +4,7 @@ import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { MCPServerBase } from '@mastra/core/mcp';
 import type { Tool } from '@mastra/core/tools';
-import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/server';
+import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/client';
 import type {
   ElicitRequest,
   ElicitResult,
@@ -12,7 +12,7 @@ import type {
   Prompt,
   Resource,
   ResourceTemplateType,
-} from '@modelcontextprotocol/server';
+} from '@modelcontextprotocol/client';
 import equal from 'fast-deep-equal';
 import type { OAuthClientInformationFull } from '../shared/oauth-types';
 import { UnauthorizedError } from '../shared/oauth-types';

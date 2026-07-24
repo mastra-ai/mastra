@@ -15,7 +15,7 @@ import type {
 // FetchLike is used internally when wrapping MastraFetchLike for transport compatibility
 export type { FetchLike } from '@modelcontextprotocol/client';
 // Re-export so consumers of @mastra/mcp can type their requireToolApproval callbacks
-// without having to add @modelcontextprotocol/sdk as a direct dependency.
+// without having to add @modelcontextprotocol/client as a direct dependency.
 export type { ToolAnnotations } from '@modelcontextprotocol/client';
 /**
  * Extended fetch function type that receives the current request context as a third argument.
@@ -51,7 +51,7 @@ export type MastraFetchLike = (
   requestContext?: RequestContext | null,
 ) => Promise<Response>;
 
-// Re-export MCP SDK LoggingLevel for convenience
+// Re-export the MCP LoggingLevel for convenience
 export type { LoggingLevel } from '@modelcontextprotocol/client';
 
 /**
@@ -242,18 +242,18 @@ export type BaseServerOptions = {
    */
   onToolError?: 'throw' | 'return';
   /**
-   * Optional custom JSON Schema validator forwarded to the underlying MCP SDK
+   * Optional custom JSON Schema validator forwarded to the underlying MCP
    * client. Use this to opt into a non-default validator implementation.
    *
    * Pass `CfWorkerJsonSchemaValidator` (from
-   * `@modelcontextprotocol/sdk/validation/cfworker`) when running in
+   * `@modelcontextprotocol/client/validators/cf-worker`) when running in
    * Cloudflare Workers / V8 isolates: the default `AjvJsonSchemaValidator`
    * compiles validators with `new Function(...)`, which workerd refuses to
    * evaluate when a tool advertises an `outputSchema`.
    *
    * @example
    * ```typescript
-   * import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker';
+   * import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/client/validators/cf-worker';
    *
    * const mcp = new MCPClient({
    *   servers: {

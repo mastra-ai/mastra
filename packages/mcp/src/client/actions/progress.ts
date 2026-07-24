@@ -1,5 +1,5 @@
 import type { IMastraLogger } from '@mastra/core/logger';
-import type { ProgressNotification } from '@modelcontextprotocol/server';
+import type { ProgressNotification } from '@modelcontextprotocol/client';
 import type { InternalMastraMCPClient } from '../client';
 
 interface ProgressClientActionsConfig {

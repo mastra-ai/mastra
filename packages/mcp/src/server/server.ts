@@ -58,9 +58,15 @@ import type {
   AppResources,
 } from './types';
 
+/**
+ * Flattens the MCP `ServerContext` into the shape Mastra tools receive as `extra`.
+ *
+ * MCP 2.0 nests per-request plumbing under `ctx.mcpReq` and transport details under
+ * `ctx.http`, while Mastra tools have always read `signal`, `requestId`, `authInfo`,
+ * `sendNotification`, `sendRequest`, and `_meta` off the top level. Both the nested and
+ * flattened members are kept so tools written against either shape keep working.
+ */
 const toMCPRequestHandlerExtra = (ctx: ServerContext): MCPRequestHandlerExtra => {
-  if (!ctx.mcpReq) return ctx as MCPRequestHandlerExtra;
-
   return {
     ...ctx,
     signal: ctx.mcpReq.signal,
@@ -238,11 +244,11 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Gets the underlying MCP SDK Server instance.
+   * Gets the underlying MCP Server instance.
    *
    * This provides access to the low-level server instance for advanced use cases.
    *
-   * @returns The Server instance from @modelcontextprotocol/sdk
+   * @returns The Server instance from @modelcontextprotocol/server
    */
   public getServer(): Server {
     return this.server;
@@ -326,11 +332,10 @@ export class MCPServer extends MCPServerBase {
       appResources?: AppResources;
       /**
        * Optional custom JSON Schema validator forwarded to the underlying MCP
-       * SDK server. Use this to opt into a non-default validator
-       * implementation.
+       * server. Use this to opt into a non-default validator implementation.
        *
        * Pass `CfWorkerJsonSchemaValidator` (from
-       * `@modelcontextprotocol/sdk/validation/cfworker`) when running in
+       * `@modelcontextprotocol/server/validators/cf-worker`) when running in
        * Cloudflare Workers / V8 isolates: the default
        * `AjvJsonSchemaValidator` compiles validators with `new Function(...)`,
        * which workerd refuses to evaluate when a registered tool has an
@@ -339,7 +344,7 @@ export class MCPServer extends MCPServerBase {
        * @example
        * ```typescript
        * import { MCPServer } from '@mastra/mcp';
-       * import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker';
+       * import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/server/validators/cf-worker';
        *
        * const server = new MCPServer({
        *   name: 'My Server',

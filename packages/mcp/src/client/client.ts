@@ -10,6 +10,7 @@ import { toStandardSchema } from '@mastra/schema-compat';
 import type { JSONSchema7, StandardSchemaWithJSON } from '@mastra/schema-compat';
 import {
   Client,
+  SdkHttpError,
   SSEClientTransport,
   StreamableHTTPClientTransport,
   DEFAULT_REQUEST_TIMEOUT_MSEC,
@@ -460,9 +461,13 @@ export class InternalMastraMCPClient extends MastraBase {
           throw error;
         }
 
-        // @modelcontextprotocol/sdk 1.24.0+ throws StreamableHTTPError with 'code' property
-        // Older @modelcontextprotocol/sdk: fallback to SSE (legacy behavior)
-        const status = error?.code;
+        // The Streamable HTTP transport reports non-OK responses as SdkHttpError, which
+        // carries the HTTP status on `status` (`code` is a string SdkErrorCode, not a
+        // status). Servers that only speak the deprecated HTTP+SSE transport answer the
+        // initial POST with 400/404/405, which is the signal to retry over SSE; any other
+        // status is a real failure. Non-HTTP failures (network, timeout) keep the legacy
+        // behavior of attempting the SSE fallback.
+        const status = error instanceof SdkHttpError ? error.status : undefined;
         if (status !== undefined && !SSE_FALLBACK_STATUS_CODES.includes(status)) {
           throw error;
         }
@@ -922,7 +927,7 @@ export class InternalMastraMCPClient extends MastraBase {
   }
 
   /**
-   * Wraps the output schema with a validator that always succeeds. The MCP SDK validates
+   * Wraps the output schema with a validator that always succeeds. The MCP client validates
    * structuredContent via AJV; the JSON schema is surfaced here for documentation only.
    */
   private convertOutputSchema(

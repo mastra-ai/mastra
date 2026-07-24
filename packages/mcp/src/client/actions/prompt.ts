@@ -1,6 +1,6 @@
 import type { IMastraLogger } from '@mastra/core/logger';
-import type { GetPromptResult, Prompt } from '@modelcontextprotocol/server';
-import { ProtocolErrorCode } from '@modelcontextprotocol/server';
+import type { GetPromptResult, Prompt } from '@modelcontextprotocol/client';
+import { ProtocolErrorCode } from '@modelcontextprotocol/client';
 import type { InternalMastraMCPClient } from '../client';
 
 interface PromptClientActionsConfig {
