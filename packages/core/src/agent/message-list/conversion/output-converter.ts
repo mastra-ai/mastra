@@ -429,6 +429,73 @@ function restoreAssistantFileProviderMetadata(
   });
 }
 
+function restoreToolProviderMetadata(
+  modelMessages: AIV5Type.ModelMessage[],
+  uiMessages: AIV5Type.UIMessage[],
+): AIV5Type.ModelMessage[] {
+  const toolMetadata = new Map<string, { providerMetadata?: AIV5Type.ProviderMetadata; providerExecuted?: boolean }>();
+
+  for (const msg of uiMessages) {
+    if (msg.role !== 'assistant') continue;
+
+    for (const part of msg.parts) {
+      if (!AIV5.isToolUIPart(part)) continue;
+      const uiToolPart = part as typeof part & {
+        callProviderMetadata?: AIV5Type.ProviderMetadata;
+        providerMetadata?: AIV5Type.ProviderMetadata;
+      };
+      const callProviderMetadata = 'callProviderMetadata' in uiToolPart ? uiToolPart.callProviderMetadata : undefined;
+      const providerMetadata = callProviderMetadata ?? uiToolPart.providerMetadata;
+
+      if (!providerMetadata && part.providerExecuted === undefined) continue;
+
+      const existing = toolMetadata.get(part.toolCallId);
+      toolMetadata.set(part.toolCallId, {
+        providerMetadata: providerMetadata ?? existing?.providerMetadata,
+        providerExecuted: part.providerExecuted ?? existing?.providerExecuted,
+      });
+    }
+  }
+
+  if (toolMetadata.size === 0) return modelMessages;
+
+  return modelMessages.map(msg => {
+    if (typeof msg.content === 'string') return msg;
+
+    let modified = false;
+    const content = msg.content.map(part => {
+      if (part.type !== 'tool-call' && part.type !== 'tool-result') return part;
+
+      const partWithMetadata = part as typeof part & {
+        providerExecuted?: boolean;
+        providerOptions?: AIV5Type.ProviderMetadata;
+      };
+      const metadata = toolMetadata.get(part.toolCallId);
+      if (!metadata) return part;
+
+      const nextPart = { ...partWithMetadata };
+
+      if (!partWithMetadata.providerOptions && metadata.providerMetadata) {
+        nextPart.providerOptions = metadata.providerMetadata;
+        modified = true;
+      }
+
+      if (
+        part.type === 'tool-call' &&
+        partWithMetadata.providerExecuted === undefined &&
+        metadata.providerExecuted !== undefined
+      ) {
+        nextPart.providerExecuted = metadata.providerExecuted;
+        modified = true;
+      }
+
+      return nextPart;
+    });
+
+    return modified ? ({ ...msg, content } as AIV5Type.ModelMessage) : msg;
+  });
+}
+
 /**
  * Converts AIV5 UI messages to AIV5 Model messages.
  * Handles sanitization, step-start insertion, provider options restoration, and Anthropic compatibility.
@@ -475,7 +542,8 @@ export function aiV5UIMessagesToAIV5ModelMessages(
   }
 
   const withFileMetadata = restoreAssistantFileProviderMetadata(converted, preprocessed);
-  const withMcpContentOutputs = applyMcpContentToolResultOutputs(withFileMetadata, dbMessages);
+  const withToolMetadata = restoreToolProviderMetadata(withFileMetadata, preprocessed);
+  const withMcpContentOutputs = applyMcpContentToolResultOutputs(withToolMetadata, dbMessages);
 
   // Add input field to tool-result parts for Anthropic API compatibility (fixes issue #11376)
   const anthropicCompat = ensureAnthropicCompatibleMessages(withMcpContentOutputs, dbMessages);

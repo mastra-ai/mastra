@@ -89,4 +89,50 @@ describe('aiV5UIMessagesToAIV5ModelMessages — message-level providerOptions', 
     const toolMsg = llmPrompt.find((m: any) => m.role === 'tool');
     expect(toolMsg?.providerOptions).toBeUndefined();
   });
+
+  it('preserves provider-executed tool metadata from DB history in llmPrompt', async () => {
+    const messageList = new MessageList();
+    const providerMetadata = {
+      anthropic: { itemId: 'srvtoolu_01MkPKoctHhE9KDNjDvEHnSD' },
+    };
+
+    messageList.add({ role: 'user', content: 'Search the latest USD/CNY exchange rate' }, 'memory');
+
+    const assistantWithProviderTool: MastraDBMessage = {
+      id: 'asst-provider-tool-history',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'srvtoolu_01MkPKoctHhE9KDNjDvEHnSD',
+              toolName: 'webSearch_20250305',
+              args: { query: 'latest USD/CNY rate' },
+              result: { results: ['7.12'] },
+            },
+            providerExecuted: true,
+            providerMetadata,
+          },
+        ],
+      },
+    };
+    messageList.add(assistantWithProviderTool, 'memory');
+    messageList.add({ role: 'user', content: 'Continue the conversation' }, 'input');
+
+    const llmPrompt = await messageList.get.all.aiV5.llmPrompt();
+    const assistantMsg = llmPrompt.find((m: any) => m.role === 'assistant');
+    const toolMsg = llmPrompt.find((m: any) => m.role === 'tool');
+    const toolCall = (assistantMsg?.content as any[] | undefined)?.find(part => part.type === 'tool-call');
+    const inlineToolResult = (assistantMsg?.content as any[] | undefined)?.find(part => part.type === 'tool-result');
+    const toolMessageResult = (toolMsg?.content as any[] | undefined)?.find(part => part.type === 'tool-result');
+    const toolResult = inlineToolResult ?? toolMessageResult;
+
+    expect(toolCall?.providerExecuted).toBe(true);
+    expect(toolCall?.providerOptions).toEqual(expect.objectContaining(providerMetadata));
+    expect(toolResult?.providerOptions).toEqual(expect.objectContaining(providerMetadata));
+  });
 });
