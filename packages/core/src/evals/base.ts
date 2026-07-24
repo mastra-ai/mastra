@@ -261,7 +261,8 @@ type GenerateReasonContext<TAccumulated extends Record<string, any>, TInput, TRu
   score: TAccumulated extends Record<'generateScoreStepResult', infer TScore> ? TScore : never;
 };
 
-export type ScorerJudgeStepName = 'preprocess' | 'analyze' | 'generateScore' | 'generateReason';
+export type ScorerStepName = 'preprocess' | 'analyze' | 'generateScore' | 'generateReason';
+export type ScorerJudgeStepName = ScorerStepName;
 
 export interface ScorerJudgeUsage {
   inputTokens?: number;
@@ -294,7 +295,22 @@ export interface ScorerJudgeExecutionSuccess extends ScorerJudgeExecutionBase {
   cost?: ScorerJudgeCost;
 }
 
-export type ScorerJudgeExecution = ScorerJudgeExecutionSuccess;
+export interface ScorerJudgeErrorSummary {
+  name: string;
+  message: string;
+  code?: string;
+}
+
+export interface ScorerJudgeExecutionFailure extends ScorerJudgeExecutionBase {
+  status: 'failed';
+  output?: JSONValue;
+  rawOutput?: string;
+  usage?: ScorerJudgeUsage;
+  finishReason?: string;
+  error: ScorerJudgeErrorSummary;
+}
+
+export type ScorerJudgeExecution = ScorerJudgeExecutionSuccess | ScorerJudgeExecutionFailure;
 
 export interface ScorerJudgeStepResult {
   executions: ScorerJudgeExecution[];
@@ -325,6 +341,50 @@ export type ScorerRunResult<
 
   judge?: ScorerJudgeResults;
 } & { runId: string };
+
+export type ScorerRunResultSnapshot<TResult extends ScorerRunResult = ScorerRunResult> = Omit<TResult, 'score'> &
+  Partial<Pick<TResult, 'score'>>;
+
+export interface ScorerRunErrorOptions<TResult extends ScorerRunResult = ScorerRunResult> {
+  scorerId: string;
+  steps: ScorerStepName[];
+  failedStep: ScorerStepName;
+  completedSteps: ScorerStepName[];
+  result?: ScorerRunResultSnapshot<TResult>;
+  cause: unknown;
+}
+
+export class ScorerRunError<TResult extends ScorerRunResult = ScorerRunResult> extends MastraError {
+  public readonly failedStep: ScorerStepName;
+  public readonly completedSteps: ScorerStepName[];
+  public readonly result?: ScorerRunResultSnapshot<TResult>;
+
+  constructor(options: ScorerRunErrorOptions<TResult>) {
+    const cause = getErrorFromUnknown(options.cause, {
+      fallbackMessage: 'Scorer workflow failed',
+    });
+
+    super(
+      {
+        id: 'MASTR_SCORER_FAILED_TO_RUN_WORKFLOW_FAILED',
+        domain: ErrorDomain.SCORER,
+        category: ErrorCategory.USER,
+        text: `Scorer Run Failed: ${cause.message}`,
+        details: {
+          scorerId: options.scorerId,
+          steps: options.steps.join(', '),
+          failedStep: options.failedStep,
+          completedSteps: options.completedSteps.join(', '),
+        },
+      },
+      cause,
+    );
+
+    this.failedStep = options.failedStep;
+    this.completedSteps = options.completedSteps;
+    this.result = options.result;
+  }
+}
 
 const jsonValueSchema: z.ZodType<JSONValue> = z.lazy(() =>
   z.union([
@@ -365,8 +425,32 @@ const scorerJudgeExecutionSuccessSchema = z.object({
     .optional(),
 });
 
+const scorerJudgeExecutionFailureSchema = z.object({
+  status: z.literal('failed'),
+  prompt: z.string(),
+  output: jsonValueSchema.optional(),
+  rawOutput: z.string().optional(),
+  judgeModelId: z.string(),
+  judgeProvider: z.string().optional(),
+  usage: scorerJudgeUsageSchema.optional(),
+  attemptCount: z.number().int().positive(),
+  modelCallCount: z.number().int().nonnegative(),
+  durationMs: z.number().int().nonnegative(),
+  finishReason: z.string().optional(),
+  error: z.object({
+    name: z.string(),
+    message: z.string(),
+    code: z.string().optional(),
+  }),
+});
+
+const scorerJudgeExecutionSchema = z.discriminatedUnion('status', [
+  scorerJudgeExecutionSuccessSchema,
+  scorerJudgeExecutionFailureSchema,
+]);
+
 const scorerJudgeStepResultSchema = z.object({
-  executions: z.array(scorerJudgeExecutionSuccessSchema),
+  executions: z.array(scorerJudgeExecutionSchema),
 });
 
 const scorerJudgeResultsSchema = z.object({
