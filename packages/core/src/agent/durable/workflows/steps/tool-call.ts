@@ -144,6 +144,7 @@ async function processChunkThroughOutputProcessors(
       inputProcessors: [],
       outputProcessors: registryEntry.outputProcessors,
       logger,
+      agent: registryEntry.agent,
       agentName,
       processorStates: registryEntry.processorStates,
     });
@@ -1144,7 +1145,7 @@ export function createDurableToolCallStep() {
             // Run through output processors (tripwire/blocking/redaction)
             const processed = await processChunkThroughOutputProcessors(
               resultChunk,
-              registryEntry,
+              globalRunRegistry.get(runId) ?? registryEntry,
               pubsub,
               runId,
               initData.agentId,
@@ -1193,7 +1194,7 @@ export function createDurableToolCallStep() {
             // Run through output processors (tripwire/blocking/redaction)
             const processed = await processChunkThroughOutputProcessors(
               errorChunk,
-              registryEntry,
+              globalRunRegistry.get(runId) ?? registryEntry,
               pubsub,
               runId,
               initData.agentId,

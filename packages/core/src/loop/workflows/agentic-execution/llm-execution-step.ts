@@ -49,6 +49,7 @@ import type { Workspace } from '../../../workspace/workspace';
 import type { RunScopeContext } from '../../run-scope-access';
 import { readScoped, writeScoped } from '../../run-scope-access';
 import {
+  AGENT_KEY,
   AGENT_BACKGROUND_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_KEY,
   DRAIN_PENDING_SIGNALS_KEY,
@@ -73,6 +74,7 @@ import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { buildMessagesFromChunks } from './build-messages-from-chunks';
 import type { CollectedChunk } from './build-messages-from-chunks';
+import { processSignalInput } from './process-signal-input';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 
@@ -982,6 +984,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // Resolve run-scoped state from either the Mastra-managed RunScope or
       // the legacy `_internal` bag (back-compat for tests).
       const scopeCtx: RunScopeContext = { mastra, runId, _internal };
+      const owningAgent = readScoped(scopeCtx, AGENT_KEY, 'agent');
 
       // Insert a step-start boundary between loop iterations so that
       // consecutive tool-only turns are not collapsed into a single block
@@ -1057,10 +1060,19 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // so each becomes its own turn.
             const preRunSignals =
               readScoped(scopeCtx, DRAIN_PENDING_SIGNALS_KEY, 'drainPendingSignals')?.(runId, 'pre-run') ?? [];
-            if (preRunSignals.length > 0) {
+            const approvedSignals = await processSignalInput({
+              signals: preRunSignals,
+              inputProcessors,
+              logger,
+              agentId,
+              agent: owningAgent,
+              processorStates,
+              requestContext,
+            });
+            if (approvedSignals.length > 0) {
               currentMessageId = rotateLoopResponseMessageId();
             }
-            for (const preRunSignal of preRunSignals) {
+            for (const preRunSignal of approvedSignals) {
               const signalForTranscript = messageList.addSignal(preRunSignal);
               safeEnqueue(controller, signalForTranscript.toDataPart());
             }
@@ -1102,6 +1114,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               inputProcessors: inputStepProcessors,
               outputProcessors: [],
               logger: logger || new ConsoleLogger({ level: 'error' }),
+              agent: owningAgent,
               agentName: agentId || 'unknown',
               processorStates,
             });
@@ -1320,6 +1333,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             inputProcessors: getRequestInputProcessors({ inputProcessors, llmRequestInputProcessors }),
             outputProcessors: [],
             logger: logger || new ConsoleLogger({ level: 'error' }),
+            agent: owningAgent,
             agentName: agentId || 'unknown',
             processorStates,
           });
@@ -1492,6 +1506,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             messageId: currentStep.messageId,
             options: {
               runId,
+              agent: owningAgent,
               toolCallStreaming,
               includeRawChunks,
               structuredOutput: currentStep.structuredOutput,
@@ -1679,6 +1694,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 outputProcessors: outputProcessors || [],
                 errorProcessors: errorProcessors || [],
                 logger: logger || new ConsoleLogger({ level: 'error' }),
+                agent: owningAgent,
                 agentName: agentId || 'unknown',
                 processorStates,
               });
@@ -1826,6 +1842,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           outputProcessors: outputProcessors || [],
           errorProcessors: errorProcessors || [],
           logger: logger || new ConsoleLogger({ level: 'error' }),
+          agent: owningAgent,
           agentName: agentId || 'unknown',
           processorStates,
         });
@@ -1959,6 +1976,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           inputProcessors: [],
           outputProcessors,
           logger: logger || new ConsoleLogger({ level: 'error' }),
+          agent: owningAgent,
           agentName: agentId || 'unknown',
           processorStates,
         });

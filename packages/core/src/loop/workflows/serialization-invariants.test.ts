@@ -3,6 +3,7 @@ import { z } from 'zod/v4';
 import { encode } from '../../events/codec';
 import { createRunScope } from '../../mastra/run-scope';
 import {
+  AGENT_KEY,
   BACKGROUND_TASK_MANAGER_KEY,
   DRAIN_PENDING_SIGNALS_KEY,
   MEMORY_KEY,
@@ -30,6 +31,7 @@ import { llmIterationOutputSchema, llmIterationStepResultSchema, toolCallOutputS
 describe('agentic-execution / agentic-loop serialization invariants', () => {
   describe('step output schemas do not advertise non-serializable handles', () => {
     const forbiddenKeys = [
+      'agent',
       'saveQueueManager',
       'backgroundTaskManager',
       'memory',
@@ -111,19 +113,22 @@ describe('agentic-execution / agentic-loop serialization invariants', () => {
   });
 
   describe('runScope carries the values that must stay off the wire', () => {
-    it('SaveQueueManager / BackgroundTaskManager / Memory / TransportRef live on runScope', () => {
+    it('Agent / SaveQueueManager / BackgroundTaskManager / Memory / TransportRef live on runScope', () => {
       const scope = createRunScope();
+      const agent = { id: 'agent', generate: () => {} };
       const saveQueueManager = { flushMessages: () => {} };
       const backgroundTaskManager = { run: () => {} };
       const memory = { rememberMessages: () => [] };
       const transportRef = { current: null };
 
+      scope.set(AGENT_KEY, agent as any);
       scope.set(SAVE_QUEUE_MANAGER_KEY, saveQueueManager as any);
       scope.set(BACKGROUND_TASK_MANAGER_KEY, backgroundTaskManager as any);
       scope.set(MEMORY_KEY, memory as any);
       scope.set(TRANSPORT_REF_KEY, transportRef as any);
 
       // Live references preserved with their method closures intact.
+      expect(scope.getOrThrow(AGENT_KEY)).toBe(agent);
       expect(scope.getOrThrow(SAVE_QUEUE_MANAGER_KEY)).toBe(saveQueueManager);
       expect(scope.getOrThrow(BACKGROUND_TASK_MANAGER_KEY)).toBe(backgroundTaskManager);
       expect(scope.getOrThrow(MEMORY_KEY)).toBe(memory);

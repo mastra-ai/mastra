@@ -11,6 +11,7 @@ import type {
   MastraOnStepFinishCallback,
   LanguageModelUsage,
 } from '../../stream/types';
+import type { Agent } from '../agent';
 import { MessageList } from '../message-list';
 import type { StructuredOutputOptions } from '../types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from './constants';
@@ -98,6 +99,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   /** Output processors to run in MastraModelOutput's stream pipeline */
   outputProcessors?: OutputProcessorOrWorkflow[];
+  /** Owning base agent exposed to output processors. */
+  agent?: Agent<any, any, any, any>;
   /**
    * Optional external MessageList to use instead of creating a fresh empty one.
    * When provided (e.g. the registry's live MessageList), MastraModelOutput can
@@ -148,6 +151,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     closeOnSuspend = false,
     structuredOutput,
     outputProcessors,
+    agent,
     messageList: externalMessageList,
   } = options;
 
@@ -468,6 +472,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       isLLMExecutionStep: true,
       resolveFinalPromises: true,
       outputProcessors,
+      agent,
     },
   });
 

@@ -20,6 +20,7 @@ import type { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
+import { createProcessorWorkflowRequestContext } from './agent-context';
 import { isProcessorWorkflow } from './is-processor-workflow';
 import { createProcessorSendSignal } from './send-signal';
 import {
@@ -510,6 +511,10 @@ export class ProcessorRunner {
   ): Promise<ProcessorStepOutput> {
     // Create a run and start the workflow
     const run = await workflow.createRun();
+    const workflowRequestContext = (workflow as ProcessorWorkflow & { __processorAgentBound?: boolean })
+      .__processorAgentBound
+      ? requestContext
+      : createProcessorWorkflowRequestContext(requestContext, this.agent);
     const result = await run.start({
       // Cast to allow processorStates/abortSignal - passed through to workflow processor steps
       // but not part of the official ProcessorStepOutput schema
@@ -519,10 +524,9 @@ export class ProcessorRunner {
         processorStates: this.processorStates,
         // Pass abortSignal so processors can cancel in-flight work
         abortSignal,
-        agent: this.agent,
       } as ProcessorStepOutput,
       ...observabilityContext,
-      requestContext,
+      requestContext: workflowRequestContext,
       outputWriter: writer ? chunk => writer.custom(chunk) : undefined,
     });
 

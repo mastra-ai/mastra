@@ -1167,6 +1167,7 @@ export class DurableAgent<
       closeOnSuspend: (options as any)?.[CLOSE_ON_SUSPEND] === true,
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
+      agent: registryEntry.agent,
       messageList,
     });
 
@@ -1456,6 +1457,7 @@ export class DurableAgent<
       closeOnSuspend: (resolvedOptions as any)[CLOSE_ON_SUSPEND] === true,
       structuredOutput: entry.structuredOutput as any,
       outputProcessors: entry.outputProcessors,
+      agent: globalEntry?.agent ?? entry.agent,
       messageList: globalEntry?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
 
@@ -1853,9 +1855,10 @@ export class DurableAgent<
     //    states, etc.) are left undefined — the workflow's own
     //    `resolveRuntimeDependencies` will fall back to the persisted step
     //    input to reconstruct them, so we only need the fields that the
-    //    terminal `.map(...)` step and stream adapter read from the registry:
-    //    saveQueueManager + memory + agentSpan + abortController.
+    //    terminal `.map(...)` step, stream adapter, and processor runners read
+    //    from the registry.
     const registryEntry: any = {
+      agent: this.#wrappedAgent,
       model,
       memory,
       saveQueueManager,
@@ -1927,6 +1930,8 @@ export class DurableAgent<
       // suspends again should stay observable so a later resume/recover can
       // pick it up. Callers wanting to close on suspend can call `cleanup()`
       // from `onSuspended`.
+      outputProcessors,
+      agent: this.#wrappedAgent,
       messageList,
     });
 
@@ -2203,6 +2208,7 @@ export class DurableAgent<
       closeOnSuspend: true,
       structuredOutput: registryEntry.structuredOutput as any,
       outputProcessors: registryEntry.outputProcessors,
+      agent: registryEntry.agent,
       messageList,
     });
 
@@ -2599,6 +2605,7 @@ export class DurableAgent<
       onSuspended: options?.onSuspended,
       structuredOutput: this.#runRegistry.get(runId)?.structuredOutput as any,
       outputProcessors: this.#runRegistry.get(runId)?.outputProcessors,
+      agent: globalRunRegistry.get(runId)?.agent ?? this.#runRegistry.get(runId)?.agent,
       messageList: globalRunRegistry.get(runId)?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
 

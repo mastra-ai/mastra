@@ -15,6 +15,7 @@
  */
 
 import type { IdGenerator, ToolSet } from '@internal/ai-sdk-v5';
+import type { Agent } from '../agent/agent';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { CreatedAgentSignal } from '../agent/signals';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
@@ -26,6 +27,7 @@ import type { Workspace } from '../workspace/workspace';
 
 // --- Identity / clock injectors --------------------------------------------
 
+export const AGENT_KEY = createRunScopeKey<Agent<any, any, any, any>>('loop:agent');
 export const NOW_KEY = createRunScopeKey<() => number>('loop:now');
 export const GENERATE_ID_KEY = createRunScopeKey<IdGenerator>('loop:generateId');
 export const CURRENT_DATE_KEY = createRunScopeKey<() => Date>('loop:currentDate');

@@ -13,6 +13,7 @@
  *    scope.
  */
 import { describe, expect, it, vi } from 'vitest';
+import { AGENT_KEY } from '../../loop/run-scope-keys';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { Agent } from '../agent';
@@ -61,6 +62,9 @@ describe('agentic-loop RunScope leak vectors', () => {
     // (e.g. if __createRunScope ever silently became a no-op).
     const liveBeforeDrain = runIds.filter(id => mastra.__getRunScope(id) !== undefined).length;
     expect(liveBeforeDrain).toBeGreaterThan(0);
+    for (const runId of runIds) {
+      expect(mastra.__getRunScope(runId)?.get(AGENT_KEY)).toBe(agent);
+    }
 
     // Drain every stream concurrently to exercise overlapping in-flight runs.
     await Promise.all(
