@@ -1,4 +1,4 @@
-import type { Adapter, CardElement, ChatConfig, Message, StateAdapter, StreamChunk, Thread } from 'chat';
+import type { Adapter, Author, CardElement, ChatConfig, Message, StateAdapter, StreamChunk, Thread } from 'chat';
 
 import type { Mastra } from '../mastra';
 import type { ApiRoute, CorsOptions } from '../server/types';
@@ -308,11 +308,13 @@ export type ChannelHandlerConfig = ChannelHandler | false | undefined;
 export interface ResolveResourceIdContext {
   /** Platform name (e.g. 'slack', 'discord'). */
   platform: string;
-  /** The channel thread the message arrived on. Use `thread.isDM` to tell DMs from group/channel threads. */
+  /** The channel thread the event arrived on. Use `thread.isDM` to tell DMs from group/channel threads. */
   thread: Thread;
-  /** The incoming message. `message.author.userId` is the actor/sender, not necessarily the memory owner. */
-  message: Message;
-  /** The built-in default: `${platform}:${message.author.userId}`. Return this to keep current behavior. */
+  /** The user who triggered thread creation: the message author, or the button clicker when the thread is created from an action (e.g. a tool-approval click). Not necessarily the memory owner. */
+  actor: Author;
+  /** The incoming message. Absent when the thread is created from a button click rather than a message. */
+  message?: Message;
+  /** The built-in default: `${platform}:${actor.userId}`. Return this to keep current behavior. */
   defaultResourceId: string;
 }
 
@@ -330,10 +332,12 @@ export type ResolveResourceId = (ctx: ResolveResourceIdContext) => string | Prom
 export interface ResolveThreadIdContext {
   /** Platform name (e.g. 'slack', 'discord'). */
   platform: string;
-  /** The channel thread the message arrived on. Use `thread.isDM` to tell DMs from group/channel threads. */
+  /** The channel thread the event arrived on. Use `thread.isDM` to tell DMs from group/channel threads. */
   thread: Thread;
-  /** The incoming message. */
-  message: Message;
+  /** The user who triggered thread creation: the message author, or the button clicker when the thread is created from an action. */
+  actor: Author;
+  /** The incoming message. Absent when the thread is created from a button click rather than a message. */
+  message?: Message;
   /** The resolved memory resourceId the new thread will belong to (after `resolveResourceId`). */
   resourceId: string;
   /** The built-in default: a random UUID. Return this to keep current behavior. */

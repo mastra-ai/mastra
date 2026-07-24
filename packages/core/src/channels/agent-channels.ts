@@ -1,4 +1,4 @@
-import type { Chat, Adapter, ChatConfig, Message, StateAdapter, Thread } from 'chat';
+import type { Chat, Adapter, Author, ChatConfig, Message, StateAdapter, Thread } from 'chat';
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
@@ -321,11 +321,15 @@ export class AgentChannels {
           if (!adapter) throw new Error(`No adapter for platform "${platform}"`);
 
           const externalThreadId = this.resolveExternalThreadId({ platform, chatThread, messageId });
+          // An approval click can be the event that creates the thread (e.g. a
+          // storage miss, or the click racing thread creation). Resolve the
+          // owner and thread id through the same hooks as the message path so
+          // the thread gets the same identity a message would have minted.
           const mastraThread = await this.getOrCreateThread({
             externalThreadId,
             channelId: chatThread.channelId,
             platform,
-            resourceId: `${platform}:${event.user.userId}`,
+            ...this.threadCreationResolvers({ platform, chatThread, actor: event.user }),
             mastra,
           });
 
@@ -853,22 +857,11 @@ export class AgentChannels {
     // each Slack thread (including top-level DM, DM thread reply, channel mention, and
     // channel thread reply) gets its own mastra thread.
     const externalThreadId = chatThread.id;
-    const defaultResourceId = `${platform}:${message.author.userId}`;
     const mastraThread = await this.getOrCreateThread({
       externalThreadId,
       channelId: chatThread.channelId,
       platform,
-      // Lazily resolved: the hook only runs when we're actually creating a new
-      // thread, never when reusing an existing one (which keeps its stored owner).
-      resourceId: this.resolveResourceId
-        ? () => this.resolveResourceId!({ platform, thread: chatThread, message, defaultResourceId })
-        : defaultResourceId,
-      // Same laziness for the thread id hook; it runs after the resourceId
-      // resolves so hosts can align the two (e.g. thread id = session id).
-      threadId: this.resolveThreadId
-        ? (resourceId: string, defaultThreadId: string) =>
-            this.resolveThreadId!({ platform, thread: chatThread, message, resourceId, defaultThreadId })
-        : undefined,
+      ...this.threadCreationResolvers({ platform, chatThread, actor: message.author, message }),
       mastra,
     });
 
@@ -1309,6 +1302,45 @@ export class AgentChannels {
       }
       yield chunk;
     }
+  }
+
+  /**
+   * Build the lazy `resourceId`/`threadId` arguments for {@link getOrCreateThread}.
+   *
+   * Single choke point for owner and thread-id resolution: every path that can
+   * create a channel thread (incoming messages and tool-approval clicks) must
+   * run the `resolveResourceId`/`resolveThreadId` hooks identically, so a
+   * thread gets the same identity no matter which event minted it. Both hooks
+   * are resolved lazily — they only run when a new thread is actually created,
+   * never when an existing one is reused (which keeps its stored owner and id).
+   * `message` is absent when the creating event is a button click.
+   */
+  private threadCreationResolvers({
+    platform,
+    chatThread,
+    actor,
+    message,
+  }: {
+    platform: string;
+    chatThread: Thread;
+    actor: Author;
+    message?: Message;
+  }): {
+    resourceId: string | (() => string | Promise<string>);
+    threadId?: (resolvedResourceId: string, defaultThreadId: string) => string | Promise<string>;
+  } {
+    const defaultResourceId = `${platform}:${actor.userId}`;
+    return {
+      resourceId: this.resolveResourceId
+        ? () => this.resolveResourceId!({ platform, thread: chatThread, actor, message, defaultResourceId })
+        : defaultResourceId,
+      // The thread id hook runs after the resourceId resolves so hosts can
+      // align the two (e.g. thread id = session id).
+      threadId: this.resolveThreadId
+        ? (resourceId: string, defaultThreadId: string) =>
+            this.resolveThreadId!({ platform, thread: chatThread, actor, message, resourceId, defaultThreadId })
+        : undefined,
+    };
   }
 
   /**
