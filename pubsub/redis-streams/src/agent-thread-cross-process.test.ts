@@ -32,6 +32,11 @@ function leaseKeyFor(resourceId: string, threadId: string): string {
   return `mastra:topic:lease:${resourceId}${AGENT_THREAD_KEY_SEPARATOR}${threadId}`;
 }
 
+function threadStreamKeyFor(resourceId: string, threadId: string): string {
+  const key = `${resourceId}${AGENT_THREAD_KEY_SEPARATOR}${threadId}`;
+  return `mastra:topic:agent.thread-stream.${encodeURIComponent(key)}`;
+}
+
 interface Worker extends ManagedProcess {
   proc: ChildProcess;
   send: (msg: Record<string, unknown>) => void;
@@ -131,6 +136,155 @@ describe.skipIf(!process.env.REDIS_URL && !process.env.CI && process.env.SKIP_RE
       workers = [];
       await flushRedis(REDIS_URL).catch(() => {});
     });
+
+    it('converts persisted-signal finish chunks across processes', async () => {
+      const resourceId = `persisted-${Date.now()}`;
+      const threadId = `thread-${Date.now()}`;
+      const env = { RESOURCE_ID: resourceId, THREAD_ID: threadId };
+      const subscriber = spawnWorker('persisted-subscriber', env);
+      const producer = spawnWorker('persisted-producer', env);
+      workers = [subscriber, producer];
+
+      await Promise.all([waitForLine(subscriber, '"type":"ready"'), waitForLine(producer, '"type":"ready"')]);
+      subscriber.send({ cmd: 'collect-default', mode: 'converted' });
+      producer.send({ cmd: 'persist', text: 'persist without waking' });
+
+      await waitFor(
+        async () =>
+          eventsByType(subscriber, 'subscription-result').length + eventsByType(subscriber, 'command-error').length > 0,
+        5_000,
+      );
+      expect(eventsByType(subscriber, 'command-error')).toHaveLength(0);
+      const parts = eventsByType(subscriber, 'subscription-result')[0]?.parts as any[];
+      expect(parts.map(part => part?.type)).toEqual(['start', 'data-user-message', 'finish']);
+      expect(parts.at(-1)?.totalUsage).toEqual({ inputTokens: 0, outputTokens: 0, totalTokens: 0 });
+    }, 15_000);
+
+    it('replays completed runs identically on origin and peer', async () => {
+      const resourceId = `replay-${Date.now()}`;
+      const threadId = `thread-${Date.now()}`;
+      const env = { RESOURCE_ID: resourceId, THREAD_ID: threadId, RUN_MS: '100' };
+      const origin = spawnWorker('replay-origin', env);
+      workers = [origin];
+      await waitForLine(origin, '"type":"ready"');
+      origin.send({ cmd: 'persist', text: 'retained replay' });
+      await waitForLine(origin, '"type":"persisted"');
+      await new Promise(r => setTimeout(r, 300));
+
+      const redis = createClient({ url: REDIS_URL });
+      await redis.connect();
+      try {
+        const streamKey = threadStreamKeyFor(resourceId, threadId);
+        const groupsBefore = await redis.xInfoGroups(streamKey);
+        origin.send({ cmd: 'collect-fresh' });
+        await waitForLine(origin, '"type":"fresh-subscription-created"');
+        await waitFor(async () => (await redis.xInfoGroups(streamKey)).length > groupsBefore.length, 5_000);
+
+        const peer = spawnWorker('replay-peer', env);
+        workers.push(peer);
+        await waitForLine(peer, '"type":"ready"');
+        peer.send({ cmd: 'collect-default' });
+
+        await waitFor(
+          async () =>
+            eventsByType(origin, 'subscription-result').length + eventsByType(origin, 'command-error').length > 0,
+          5_000,
+        );
+        await waitFor(
+          async () => eventsByType(peer, 'subscription-result').length + eventsByType(peer, 'command-error').length > 0,
+          5_000,
+        );
+        expect(eventsByType(origin, 'command-error')).toHaveLength(0);
+        expect(eventsByType(peer, 'command-error')).toHaveLength(0);
+        const originParts = eventsByType(origin, 'subscription-result')[0]?.parts as any[];
+        const peerParts = eventsByType(peer, 'subscription-result')[0]?.parts as any[];
+        expect(originParts).toEqual(peerParts);
+        expect(originParts.map(part => part.type)).toEqual(['start', 'data-user-message', 'finish']);
+
+        origin.send({ cmd: 'send', sigId: 'after-replay' });
+        await waitFor(
+          async () => eventsByType(origin, 'owner-stream-resolved').some(event => event.sigId === 'after-replay'),
+          5_000,
+        );
+        expect(
+          eventsByType(origin, 'owner-stream-resolved').find(event => event.sigId === 'after-replay'),
+        ).toMatchObject({
+          defined: true,
+        });
+      } finally {
+        await redis.quit();
+      }
+    }, 20_000);
+
+    it('ignores ghost registrations before waking a new run', async () => {
+      const resourceId = `ghost-${Date.now()}`;
+      const threadId = `thread-${Date.now()}`;
+      const env = {
+        RESOURCE_ID: resourceId,
+        THREAD_ID: threadId,
+        RUN_MS: '100',
+        MASTRA_AGENT_THREAD_LEASE_TTL_MS: '600',
+      };
+      const publisher = spawnWorker('ghost-publisher', env);
+      workers = [publisher];
+      await waitForLine(publisher, '"type":"ready"');
+      publisher.send({ cmd: 'publish-ghost', runId: 'ghost-run', streamId: 'ghost-stream' });
+      await waitForLine(publisher, '"type":"ghost-published"');
+      await killWorker(publisher);
+
+      const sender = spawnWorker('ghost-sender', env);
+      workers.push(sender);
+      await waitForLine(sender, '"type":"ready"');
+      await new Promise(r => setTimeout(r, 300));
+      sender.send({ cmd: 'active-run' });
+      await waitForLine(sender, '"type":"active-run"');
+      expect(eventsByType(sender, 'active-run').at(-1)?.runId).toBeNull();
+
+      sender.send({ cmd: 'send-after-thread-wait', sigId: 'after-ghost' });
+      await waitFor(async () => eventsByType(sender, 'thread-wait-resolved').length > 0, 2_500);
+      await waitFor(async () => eventsByType(sender, 'owner-stream-resolved').length > 0, 2_500);
+      expect(eventsByType(sender, 'owner-stream-resolved')[0]).toMatchObject({ sigId: 'after-ghost', defined: true });
+    }, 10_000);
+
+    it('routes follower abort requests to the lease owner', async () => {
+      const resourceId = `abort-${Date.now()}`;
+      const threadId = `thread-${Date.now()}`;
+      const env = {
+        RESOURCE_ID: resourceId,
+        THREAD_ID: threadId,
+        RUN_MS: '10000',
+        MASTRA_AGENT_THREAD_LEASE_TTL_MS: '3000',
+      };
+      const owner = spawnWorker('abort-owner', env);
+      workers = [owner];
+      await waitForLine(owner, '"type":"ready"');
+      owner.send({ cmd: 'send', sigId: 'abortable' });
+      await waitForLine(owner, '"type":"run-started"');
+      const runId = eventsByType(owner, 'run-started')[0]?.runId;
+
+      const follower = spawnWorker('abort-follower', env);
+      workers.push(follower);
+      await waitForLine(follower, '"type":"ready"');
+      await waitFor(async () => {
+        follower.send({ cmd: 'active-run' });
+        await new Promise(r => setTimeout(r, 50));
+        return eventsByType(follower, 'active-run').some(event => event.runId === runId);
+      }, 3_000);
+
+      follower.send({ cmd: 'abort-active' });
+      await waitForLine(follower, '"type":"abort-result"');
+      expect(eventsByType(follower, 'abort-result').at(-1)).toMatchObject({ runId, aborted: true });
+      await waitFor(async () => eventsByType(owner, 'owner-abort-fired').some(event => event.runId === runId), 3_000);
+      await waitFor(async () => eventsByType(owner, 'run-finished').some(event => event.runId === runId), 3_000);
+
+      const redis = createClient({ url: REDIS_URL });
+      await redis.connect();
+      try {
+        await waitFor(async () => (await redis.get(leaseKeyFor(resourceId, threadId))) === null, 3_000);
+      } finally {
+        await redis.quit();
+      }
+    }, 15_000);
 
     it('serializes rapid-fire signals through one lease winner with no dropped signals', async () => {
       const resourceId = `rapid-${Date.now()}`;

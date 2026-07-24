@@ -167,7 +167,7 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
         type: 'finish',
         finishReason: normalizeFinishReason(chunk.payload.stepResult.reason) as FinishReason,
         ...(includeRawFinishReason ? { rawFinishReason: chunk.payload.stepResult.reason } : {}),
-        totalUsage: normalizeUsage(chunk.payload.output.usage),
+        totalUsage: normalizeUsage(chunk.payload.output?.usage ?? (chunk.payload as any).usage),
       };
     }
     case 'reasoning-start':

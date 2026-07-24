@@ -21,8 +21,9 @@ import { randomUUID } from 'node:crypto';
 import { createInterface } from 'node:readline';
 
 import type { Agent } from '@mastra/core/agent';
-// AgentThreadStreamRuntime isn't part of the public surface yet; we reach into
-// the source directly via the workspace path. This worker is test infra only.
+// These helpers aren't part of the public test surface; this fixture reaches
+// into workspace source so the child process exercises the real implementations.
+import { convertMastraChunkToAISDKBase } from '../../../client-sdks/ai-sdk/src/helpers';
 import { AgentThreadStreamRuntime } from '../../../packages/core/src/agent/thread-stream-runtime';
 
 import { RedisStreamsPubSub } from '../src/index';
@@ -31,6 +32,12 @@ const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6381';
 const RESOURCE_ID = process.env.RESOURCE_ID ?? 'rapid-fire-resource';
 const THREAD_ID = process.env.THREAD_ID ?? 'rapid-fire-thread';
 const WORKER_ID = process.env.WORKER_ID ?? 'worker';
+const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
+
+function threadTopic() {
+  const key = `${RESOURCE_ID}${AGENT_THREAD_KEY_SEPARATOR}${THREAD_ID}`;
+  return `agent.thread-stream.${encodeURIComponent(key)}`;
+}
 
 function emit(event: Record<string, unknown>) {
   process.stdout.write(`${JSON.stringify(event)}\n`);
@@ -47,6 +54,7 @@ function makeStubAgent(runMs: number, runtime: AgentThreadStreamRuntime, pubsub:
   const agent: any = {
     id: `${WORKER_ID}-agent`,
     name: `${WORKER_ID} Stub Agent`,
+    getMemory: async () => ({ saveMessages: async () => {} }),
     stream: async (input: any, options: any) => {
       // The signal carrying the user message exposes its sigId as contents.
       const sigId: string = typeof input === 'string' ? input : (input?.contents ?? input?.text ?? '');
@@ -78,23 +86,54 @@ function makeStubAgent(runMs: number, runtime: AgentThreadStreamRuntime, pubsub:
         _waitUntilFinished: () => finished,
       };
 
-      // Real Agent.stream registers the run with the runtime so completion
-      // watchers fire and pending signals drain. The stub mirrors that.
-      void runtime.registerRun(
-        agent as any,
-        output as any,
+      // Real Agent.stream prepares the abort controller before registering the
+      // run. Mirror that boundary so follower abort requests reach a real owner.
+      const preparedOptions = runtime.prepareRunOptions(
         {
+          ...(options ?? {}),
           runId,
           memory: { resource: RESOURCE_ID, thread: THREAD_ID },
-          ...(options ?? {}),
         } as any,
         pubsub,
       );
+      preparedOptions.abortSignal?.addEventListener(
+        'abort',
+        () => {
+          emit({ type: 'owner-abort-fired', sigId, runId });
+          runEnds.get(sigId)?.();
+        },
+        { once: true },
+      );
+
+      // Real Agent.stream registers the run with the runtime so completion
+      // watchers fire and pending signals drain. The stub mirrors that.
+      void runtime.registerRun(agent as any, output as any, preparedOptions as any, pubsub);
 
       return output;
     },
   };
   return agent as Agent;
+}
+
+async function collectRun(subscription: any, convert: boolean) {
+  const parts: unknown[] = [];
+  const iterator = subscription.stream[Symbol.asyncIterator]();
+  while (true) {
+    const next = await iterator.next();
+    if (next.done) throw new Error('subscription ended before a terminal part');
+    const part = next.value as any;
+    parts.push(
+      convert
+        ? convertMastraChunkToAISDKBase({
+            chunk: part,
+            normalizeWarnings: warnings => warnings ?? [],
+            normalizeUsage: usage => usage,
+            normalizeFinishReason: reason => reason,
+          })
+        : part,
+    );
+    if (part.type === 'finish' || part.type === 'error' || part.type === 'abort') return parts;
+  }
 }
 
 async function main() {
@@ -107,7 +146,11 @@ async function main() {
 
   // Keep a thread subscription open so this worker receives signal-enqueued
   // events from other workers and updates its local activeThreadRunIds map.
-  await runtime.subscribeToThread(agent as any, { resourceId: RESOURCE_ID, threadId: THREAD_ID }, pubsub);
+  const defaultSubscription = await runtime.subscribeToThread(
+    agent as any,
+    { resourceId: RESOURCE_ID, threadId: THREAD_ID },
+    pubsub,
+  );
 
   emit({ type: 'ready' });
 
@@ -159,10 +202,89 @@ async function main() {
     }
 
     if (cmd.cmd === 'exit') {
+      defaultSubscription.unsubscribe();
       try {
         await pubsub.close();
       } catch {}
       process.exit(0);
+    }
+
+    if (cmd.cmd === 'persist') {
+      try {
+        const result = runtime.sendSignal(
+          agent as any,
+          { type: 'user-message', contents: cmd.text ?? 'persisted signal' },
+          {
+            resourceId: RESOURCE_ID,
+            threadId: THREAD_ID,
+            ifIdle: { behavior: 'persist' as const },
+          },
+          pubsub,
+        );
+        const accepted = await result.accepted;
+        await result.persisted;
+        await pubsub.flush();
+        emit({ type: 'persisted', runId: 'runId' in accepted ? accepted.runId : undefined });
+      } catch (err) {
+        emit({ type: 'command-error', cmd: cmd.cmd, error: String(err) });
+      }
+      return;
+    }
+
+    if (cmd.cmd === 'collect-default' || cmd.cmd === 'collect-fresh') {
+      const fresh = cmd.cmd === 'collect-fresh';
+      const subscription = fresh
+        ? await runtime.subscribeToThread(agent as any, { resourceId: RESOURCE_ID, threadId: THREAD_ID }, pubsub)
+        : defaultSubscription;
+      if (fresh) emit({ type: 'fresh-subscription-created' });
+      try {
+        const parts = await collectRun(subscription, cmd.mode === 'converted');
+        emit({ type: 'subscription-result', source: fresh ? 'fresh' : 'default', parts });
+      } catch (err) {
+        emit({ type: 'command-error', cmd: cmd.cmd, error: String(err) });
+      } finally {
+        if (fresh) subscription.unsubscribe();
+      }
+      return;
+    }
+
+    if (cmd.cmd === 'publish-ghost') {
+      const runId = cmd.runId ?? 'ghost-run';
+      const streamId = cmd.streamId ?? 'ghost-stream';
+      await pubsub.publish(threadTopic(), {
+        type: 'run-registered',
+        runId,
+        data: { type: 'run-registered', runId, streamId, streamSeq: 1 },
+      });
+      await pubsub.flush();
+      emit({ type: 'ghost-published', runId, streamId });
+      return;
+    }
+
+    if (cmd.cmd === 'send-after-thread-wait') {
+      try {
+        await runtime.waitForCrossAgentThreadRun(
+          agent as any,
+          { memory: { resource: RESOURCE_ID, thread: THREAD_ID } },
+          pubsub,
+        );
+        emit({ type: 'thread-wait-resolved' });
+        await fireSignal(cmd.sigId);
+      } catch (err) {
+        emit({ type: 'command-error', cmd: cmd.cmd, error: String(err) });
+      }
+      return;
+    }
+
+    if (cmd.cmd === 'abort-active') {
+      const runId = defaultSubscription.activeRunId();
+      emit({ type: 'abort-result', runId, aborted: defaultSubscription.abort() });
+      return;
+    }
+
+    if (cmd.cmd === 'active-run') {
+      emit({ type: 'active-run', runId: defaultSubscription.activeRunId() });
+      return;
     }
 
     if (cmd.cmd === 'send' || cmd.cmd === 'send-and-exit') {

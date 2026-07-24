@@ -229,3 +229,37 @@ describe('durable step-start with missing payload', () => {
     expect((convertMastraChunkToAISDKv6({ chunk }) as any).type).toBe('start-step');
   });
 });
+
+describe('finish usage conversion', () => {
+  const usage = { inputTokens: 1, outputTokens: 2, totalTokens: 3 };
+
+  it('converts canonical output usage', () => {
+    const chunk = {
+      type: 'finish',
+      runId: 'run-1',
+      from: ChunkFrom.AGENT,
+      payload: { stepResult: { reason: 'stop' }, output: { usage } },
+    } as any;
+
+    expect(convertMastraChunkToAISDKv5({ chunk })).toMatchObject({
+      type: 'finish',
+      finishReason: 'stop',
+      totalUsage: usage,
+    });
+  });
+
+  it('converts legacy top-level usage retained by durable transports', () => {
+    const chunk = {
+      type: 'finish',
+      runId: 'run-1',
+      from: ChunkFrom.AGENT,
+      payload: { stepResult: { reason: 'stop' }, usage },
+    } as any;
+
+    expect(convertMastraChunkToAISDKv5({ chunk })).toMatchObject({
+      type: 'finish',
+      finishReason: 'stop',
+      totalUsage: usage,
+    });
+  });
+});
