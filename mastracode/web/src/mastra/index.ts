@@ -228,7 +228,9 @@ export const factory = new MastraFactory({
 const preparedArgs = await factory.prepare();
 
 const mcAgentController = preparedArgs.agentControllers?.['code'];
-if (mcAgentController) {
+// Slack channels are optional: chat's Slack adapter validates `signingSecret`
+// at construction, so only wire channels when the Slack app env is configured.
+if (mcAgentController && process.env.SLACK_APP_SIGNING_SECRET) {
   mcAgentController.setChannels(createAgentControllerSlackChannels({ getMastra: () => mcAgentController.getMastra() }));
 }
 

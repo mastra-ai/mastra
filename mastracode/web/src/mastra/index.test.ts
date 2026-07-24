@@ -117,5 +117,27 @@ describe('platform entry (src/mastra/index.ts)', () => {
       const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
       expect(paths).toContain('/auth/linear/connect');
     });
+
+    it('skips Slack channel wiring when the Slack app env is unset', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      // chat's Slack adapter throws at construction without a signingSecret,
+      // so an unconfigured env must skip channels instead of crashing boot.
+      vi.stubEnv('SLACK_APP_SIGNING_SECRET', '');
+      const mod = await import('./index.js');
+      const controller = mod.mastra.getAgentController('code');
+      expect(controller?.getChannels()).toBeNull();
+    });
+
+    it(
+      'wires Slack channels onto the controller when the Slack app env is configured',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        vi.stubEnv('SLACK_APP_SIGNING_SECRET', 'test-signing-secret');
+        const mod = await import('./index.js');
+        const controller = mod.mastra.getAgentController('code');
+        expect(controller?.getChannels()).not.toBeNull();
+      },
+    );
   });
 });
