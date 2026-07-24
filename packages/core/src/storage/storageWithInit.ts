@@ -2,6 +2,9 @@ import type { IMastraLogger } from '../logger';
 import type { MastraCompositeStore } from './base';
 
 const isAugmentedSymbol = Symbol('isAugmented');
+const initIndependentMethods = new Set<PropertyKey>(
+  ['__registerMastra', '__setLogger', '__setRawConfig'] satisfies (keyof MastraCompositeStore)[],
+);
 
 export function augmentWithInit(storage: MastraCompositeStore): MastraCompositeStore {
   let hasInitialized: null | Promise<void> = null;
@@ -55,7 +58,7 @@ export function augmentWithInit(storage: MastraCompositeStore): MastraCompositeS
     return storage;
   }
 
-  // override al functions to wait until init is complete
+  // Override storage operations to wait until init is complete.
   const proxy = new Proxy(storage, {
     get(target, prop) {
       // Handle the isAugmentedSymbol specifically
@@ -72,7 +75,12 @@ export function augmentWithInit(storage: MastraCompositeStore): MastraCompositeS
           };
         }
 
-        // All other functions wait for init
+        // Internal housekeeping methods are synchronous and do not access the database.
+        if (initIndependentMethods.has(prop)) {
+          return (...args: unknown[]) => Reflect.apply(value, target, args);
+        }
+
+        // Database-facing functions wait for init.
         return async (...args: unknown[]) => {
           await ensureInit();
 
