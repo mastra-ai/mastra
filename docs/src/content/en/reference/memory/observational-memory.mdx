@@ -98,9 +98,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
   },
   {
     name: 'retrieval',
-    type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource' }",
+    type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource'; instructions?: string }",
     description:
-      "Enable retrieval-mode observation groups as durable pointers to raw message history. `true` enables cross-thread browsing by default. `{ vector: true }` also enables semantic search using Memory's vector store and embedder. `{ scope: 'thread' }` restricts the recall tool to the current thread only. Default scope is `'resource'`.",
+      "Enable retrieval-mode observation groups as durable pointers to raw message history. `true` enables cross-thread browsing by default. `{ vector: true }` also enables semantic search using Memory's vector store and embedder. `{ scope: 'thread' }` restricts the recall tool to the current thread only. Default scope is `'resource'`. `{ instructions: '...' }` appends application-specific recall guidance after Mastra's built-in retrieval instructions.",
     isOptional: true,
     defaultValue: 'false',
   },
@@ -1041,6 +1041,8 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
 ## Recall tool
 
 When `retrieval` is set (any truthy value), a `recall` tool is registered so the agent can page through raw messages behind observation group ranges. By default (scope `'resource'`), the tool supports listing threads (`mode: "threads"`), browsing other threads (`threadId`), and cross-thread search. With `retrieval: { vector: true }`, semantic search is available (`mode: "search"`). Set `scope: 'thread'` to restrict the tool to the current thread only. The tool is automatically added to the agent's tool list — no manual registration is needed.
+
+Mastra also injects scope-aware usage instructions into the agent's context. For resource scope with `vector: true`, these cover routing between `search`, `threads`, and `messages`, including fallback to thread discovery when search results are unsuitable. Without `vector: true`, the instructions only cover `threads` and `messages` browsing, so the agent isn't steered toward a search mode that isn't configured. Resource-scoped instructions are injected even before any observation group exists, so the agent can browse other threads from the first message. Use `retrieval: { instructions: '...' }` to append application-specific guidance after the built-in instructions.
 
 ### Parameters
 
