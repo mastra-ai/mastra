@@ -3136,14 +3136,16 @@ Notes:
     if (hasObservationalMemory) return null;
 
     const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: RuntimeMemoryConfig } | undefined;
-    const runtimeObservationalMemory = normalizeObservationalMemoryConfig(
-      runtimeMemory?.memoryConfig?.observationalMemory,
-    );
-    const threadConfig = runtimeObservationalMemory
-      ? this.getMergedThreadConfig({
-          ...runtimeMemory?.memoryConfig,
-          observationalMemory: runtimeObservationalMemory,
-        } as MemoryConfigInternal)
+    // Merge in the per-call config whenever it explicitly carries an
+    // `observationalMemory` override, keyed on presence rather than truthiness.
+    // A per-call `observationalMemory: false` normalizes to `undefined`, so
+    // branching on the normalized value would drop the override and fall back
+    // to the instance config — silently ignoring an explicit per-call disable
+    // when OM is enabled on the instance (#18943).
+    const runtimeMemoryConfig = runtimeMemory?.memoryConfig;
+    const hasRuntimeOMOverride = !!runtimeMemoryConfig && 'observationalMemory' in runtimeMemoryConfig;
+    const threadConfig = hasRuntimeOMOverride
+      ? this.getMergedThreadConfig(runtimeMemoryConfig as MemoryConfigInternal)
       : this.threadConfig;
 
     const effectiveConfig = normalizeObservationalMemoryConfig(threadConfig.observationalMemory);
