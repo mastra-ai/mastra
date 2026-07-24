@@ -1,4 +1,4 @@
-import type { Adapter, CardElement, ChatConfig, Message, StateAdapter, StreamChunk, Thread } from 'chat';
+import type { Adapter, Author, CardElement, ChatConfig, Message, StateAdapter, StreamChunk, Thread } from 'chat';
 
 import type { Mastra } from '../mastra';
 import type { ApiRoute, CorsOptions } from '../server/types';
@@ -313,11 +313,13 @@ export type ChannelHandlerConfig = ChannelHandler | false | undefined;
 export interface ResolveResourceIdContext {
   /** Platform name (e.g. 'slack', 'discord'). */
   platform: string;
-  /** The channel thread the message arrived on. Use `thread.isDM` to tell DMs from group/channel threads. */
+  /** The channel thread the event arrived on. Use `thread.isDM` to tell DMs from group/channel threads. */
   thread: Thread;
-  /** The incoming message. `message.author.userId` is the actor/sender, not necessarily the memory owner. */
-  message: Message;
-  /** The built-in default: `${platform}:${message.author.userId}`. Return this to keep current behavior. */
+  /** The user who triggered thread creation: the message author, or the button clicker when the thread is created from an action (e.g. a tool-approval click). Not necessarily the memory owner. */
+  actor: Author;
+  /** The incoming message. Absent when the thread is created from a button click rather than a message. */
+  message?: Message;
+  /** The built-in default: `${platform}:${actor.userId}`. Return this to keep current behavior. */
   defaultResourceId: string;
 }
 
@@ -335,10 +337,12 @@ export type ResolveResourceId = (ctx: ResolveResourceIdContext) => string | Prom
 export interface ResolveThreadIdContext {
   /** Platform name (e.g. 'slack', 'discord'). */
   platform: string;
-  /** The channel thread the message arrived on. Use `thread.isDM` to tell DMs from group/channel threads. */
+  /** The channel thread the event arrived on. Use `thread.isDM` to tell DMs from group/channel threads. */
   thread: Thread;
-  /** The incoming message. */
-  message: Message;
+  /** The user who triggered thread creation: the message author, or the button clicker when the thread is created from an action. */
+  actor: Author;
+  /** The incoming message. Absent when the thread is created from a button click rather than a message. */
+  message?: Message;
   /** The resolved memory resourceId the new thread will belong to (after `resolveResourceId`). */
   resourceId: string;
   /** The built-in default: a random UUID. Return this to keep current behavior. */
@@ -522,16 +526,17 @@ export interface ChannelConfig {
    * from who sent the message. For example, share an SSO user's memory across Web and a
    * Feishu/Lark DM (drop the platform prefix), or scope a group chat to its `chat_id`.
    *
-   * Only affects **newly-created** threads. Once a thread exists it keeps its stored
+   * Only affects **newly-created** threads, whether creation starts from an incoming
+   * message or a tool-approval action. Once a thread exists it keeps its stored
    * `resourceId`, so this never relocates memory on an existing conversation.
    *
-   * Return `defaultResourceId` (`${platform}:${message.author.userId}`) to keep the
+   * Return `defaultResourceId` (`${platform}:${actor.userId}`) to keep the
    * built-in behavior. Not set: behavior is unchanged.
    *
    * @example
    * ```ts
-   * resolveResourceId: async ({ thread, message, defaultResourceId }) => {
-   *   if (thread.isDM) return resolveSsoUserId(message);   // shared with Web
+   * resolveResourceId: async ({ thread, actor, defaultResourceId }) => {
+   *   if (thread.isDM) return resolveSsoUserId(actor.userId); // shared with Web
    *   return thread.channelId;                             // group owns the memory
    * }
    * ```
@@ -545,7 +550,8 @@ export interface ChannelConfig {
    * thread the same id as the session it belongs to, matching how that host
    * names threads it creates itself.
    *
-   * Only affects **newly-created** threads; existing threads keep their stored id.
+   * Only affects **newly-created** threads, whether creation starts from an incoming
+   * message or a tool-approval action; existing threads keep their stored id.
    * The returned id must be unique across the memory store — on collision with an
    * existing thread, a warning is logged and a generated id is used instead.
    *

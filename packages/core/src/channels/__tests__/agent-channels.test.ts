@@ -1,3 +1,4 @@
+import { Chat } from 'chat';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
@@ -526,6 +527,7 @@ describe('AgentChannels', () => {
         expect.objectContaining({
           platform: 'discord',
           thread: chatThread,
+          actor: message.author,
           message,
           defaultResourceId: 'discord:user-1',
         }),
@@ -738,6 +740,7 @@ describe('AgentChannels', () => {
         expect.objectContaining({
           platform: 'discord',
           thread: chatThread,
+          actor: message.author,
           message,
           resourceId: 'session-abc',
           defaultThreadId: expect.any(String),
@@ -862,6 +865,172 @@ describe('AgentChannels', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('tool-approval action thread creation', () => {
+    function makeMastra() {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      return {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+    }
+
+    const channelMetadata = {
+      channel_platform: 'discord',
+      channel_externalThreadId: 'channel-1:thread-1',
+      channel_externalChannelId: 'channel-1',
+    };
+
+    /** Initialize channels while capturing the internally registered onAction handler. */
+    async function initWithActionHandler(channels: AgentChannels, mockMastra: any) {
+      const handlers: Array<(event: any) => Promise<void>> = [];
+      const spy = vi.spyOn(Chat.prototype, 'onAction').mockImplementation(function (this: any, handler: any) {
+        handlers.push(handler);
+        return this;
+      });
+      try {
+        await channels.initialize(mockMastra);
+      } finally {
+        spy.mockRestore();
+      }
+      return handlers[0]!;
+    }
+
+    function makeActionEvent(channels: AgentChannels, overrides: Record<string, unknown> = {}) {
+      const chatThread = {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter: channels.adapters.discord,
+        post: vi.fn().mockResolvedValue(undefined),
+      } as any;
+      return {
+        actionId: 'tool_approve:tc-1',
+        thread: chatThread,
+        messageId: 'card-msg-1',
+        user: { userId: 'clicker-1', userName: 'clicker' },
+        adapter: channels.adapters.discord,
+        ...overrides,
+      };
+    }
+
+    it('runs resolveResourceId and resolveThreadId when the click creates the thread', async () => {
+      const resolveResourceId = vi.fn(async () => 'sso-user-42');
+      const resolveThreadId = vi.fn(async ({ resourceId }: any) => `thread-for-${resourceId}`);
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveResourceId,
+        resolveThreadId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      const onAction = await initWithActionHandler(channels, mockMastra);
+
+      const event = makeActionEvent(channels);
+      await onAction(event);
+
+      expect(resolveResourceId).toHaveBeenCalledWith({
+        platform: 'discord',
+        thread: event.thread,
+        actor: event.user,
+        message: undefined,
+        defaultResourceId: 'discord:clicker-1',
+      });
+      expect(resolveThreadId).toHaveBeenCalledWith(
+        expect.objectContaining({
+          platform: 'discord',
+          thread: event.thread,
+          actor: event.user,
+          message: undefined,
+          resourceId: 'sso-user-42',
+        }),
+      );
+
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      const { threads } = await memoryStore.listThreads({ filter: { metadata: channelMetadata }, perPage: 10 });
+      expect(threads).toHaveLength(1);
+      expect(threads[0]!.resourceId).toBe('sso-user-42');
+      expect(threads[0]!.id).toBe('thread-for-sso-user-42');
+    });
+
+    it('does not run the hooks when the click reuses an existing thread (keeps stored owner)', async () => {
+      const resolveResourceId = vi.fn(async () => 'should-not-be-used');
+      const resolveThreadId = vi.fn(async () => 'should-not-be-used');
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveResourceId,
+        resolveThreadId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      const onAction = await initWithActionHandler(channels, mockMastra);
+
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      await memoryStore.saveThread({
+        thread: {
+          id: 'pre-existing',
+          title: 'discord conversation',
+          resourceId: 'original-owner',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: channelMetadata,
+        },
+      });
+
+      await onAction(makeActionEvent(channels));
+
+      expect(resolveResourceId).not.toHaveBeenCalled();
+      expect(resolveThreadId).not.toHaveBeenCalled();
+      const { threads } = await memoryStore.listThreads({ filter: { metadata: channelMetadata }, perPage: 10 });
+      expect(threads).toHaveLength(1);
+      expect(threads[0]).toMatchObject({ id: 'pre-existing', resourceId: 'original-owner' });
+    });
+
+    it('defaults to `${platform}:${clicker.userId}` when no resolver is configured', async () => {
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      const onAction = await initWithActionHandler(channels, mockMastra);
+
+      await onAction(makeActionEvent(channels));
+
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      const { threads } = await memoryStore.listThreads({ filter: { metadata: channelMetadata }, perPage: 10 });
+      expect(threads).toHaveLength(1);
+      expect(threads[0]!.resourceId).toBe('discord:clicker-1');
+    });
+
+    it('does not save a default-owned thread when resource resolution fails', async () => {
+      const resolveResourceId = vi.fn(async () => {
+        throw new Error('SSO unavailable');
+      });
+      const resolveThreadId = vi.fn(async () => 'should-not-be-used');
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveResourceId,
+        resolveThreadId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      const onAction = await initWithActionHandler(channels, mockMastra);
+      const event = makeActionEvent(channels);
+
+      await onAction(event);
+
+      expect(resolveThreadId).not.toHaveBeenCalled();
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      const { threads } = await memoryStore.listThreads({ filter: { metadata: channelMetadata }, perPage: 10 });
+      expect(threads).toHaveLength(0);
+      expect(event.thread.post).toHaveBeenCalledWith('❌ Error: SSO unavailable');
     });
   });
 });

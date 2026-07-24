@@ -110,7 +110,7 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
     type: '(ctx: ResolveResourceIdContext) => string | Promise<string>',
     isOptional: true,
     description:
-      'Decide which `resourceId` owns resource-level memory for a channel thread, separately from who sent the message. Runs only when a new thread is created; reused threads keep their stored owner and never call the hook. Return `ctx.defaultResourceId` (`${platform}:${message.author.userId}`) to keep the built-in behavior.',
+      'Decide which `resourceId` owns resource-level memory for a channel thread, separately from who triggered it. Runs only when a new thread is created, whether from an incoming message or a tool-approval click; reused threads keep their stored owner and never call the hook. Return `ctx.defaultResourceId` (`${platform}:${actor.userId}`) to keep the built-in behavior.',
   },
   {
     name: 'resolveThreadId',
@@ -389,9 +389,9 @@ type ChannelHandler = (
 
 ## Resource ID resolution
 
-By default a channel thread's memory `resourceId` is `${platform}:${message.author.userId}`. The sender owns the memory, scoped per platform. For apps with a shared identity, such as single sign-on (SSO), this splits memory: the same user gets `feishu:user_123` in a Feishu DM but `user_123` on the web.
+By default a channel thread's memory `resourceId` is `${platform}:${actor.userId}`. The sender owns the memory, scoped per platform. For apps with a shared identity, such as single sign-on (SSO), this splits memory: the same user gets `feishu:user_123` in a Feishu DM but `user_123` on the web.
 
-Pass `resolveResourceId` to decide memory ownership separately from the sender. It runs only when a new thread is created. Reused threads keep their stored `resourceId` and never call the hook, so existing conversations don't depend on the resolver being available. Return `ctx.defaultResourceId` to fall back to the built-in behavior.
+Pass `resolveResourceId` to decide memory ownership separately from the sender. It runs only when a new thread is created, and covers every event that can create one: an incoming message or a tool-approval click. Reused threads keep their stored `resourceId` and never call the hook, so existing conversations don't depend on the resolver being available. Return `ctx.defaultResourceId` to fall back to the built-in behavior.
 
 ```typescript title="src/mastra/agents/sso-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -406,10 +406,10 @@ const agent = new Agent({
     adapters: {
       slack: createSlackAdapter(),
     },
-    resolveResourceId: async ({ thread, message }) => {
+    resolveResourceId: async ({ thread, actor }) => {
       // DM: share resource-level memory with the web app by using the bare SSO id
       if (thread.isDM) {
-        return await resolveSsoUserId(message)
+        return await resolveSsoUserId(actor.userId)
       }
       // Group chat: the conversation owns the memory; the sender stays the actor
       return thread.channelId
@@ -431,18 +431,24 @@ The `ResolveResourceIdContext` passed to the function:
     name: 'thread',
     type: 'Thread',
     description:
-      'The channel thread the message arrived on. Use `thread.isDM` to tell DMs apart from group/channel threads.',
+      'The channel thread the event arrived on. Use `thread.isDM` to tell DMs apart from group/channel threads.',
+  },
+  {
+    name: 'actor',
+    type: 'Author',
+    description:
+      'The user who triggered thread creation: the message author, or the button clicker when the thread is created from a tool-approval click. Not necessarily the memory owner.',
   },
   {
     name: 'message',
     type: 'Message',
-    description: 'The incoming message. `message.author.userId` is the actor/sender, not necessarily the memory owner.',
+    isOptional: true,
+    description: 'The incoming message. Absent when the thread is created from a button click rather than a message.',
   },
   {
     name: 'defaultResourceId',
     type: 'string',
-    description:
-      'The built-in default (`${platform}:${message.author.userId}`). Return this to keep the current behavior.',
+    description: 'The built-in default (`${platform}:${actor.userId}`). Return this to keep the current behavior.',
   },
 ]}
 />
@@ -490,12 +496,19 @@ The `ResolveThreadIdContext` passed to the function:
     name: 'thread',
     type: 'Thread',
     description:
-      'The channel thread the message arrived on. Use `thread.isDM` to tell DMs apart from group/channel threads.',
+      'The channel thread the event arrived on. Use `thread.isDM` to tell DMs apart from group/channel threads.',
+  },
+  {
+    name: 'actor',
+    type: 'Author',
+    description:
+      'The user who triggered thread creation: the message author, or the button clicker when the thread is created from a tool-approval click.',
   },
   {
     name: 'message',
     type: 'Message',
-    description: 'The incoming message.',
+    isOptional: true,
+    description: 'The incoming message. Absent when the thread is created from a button click rather than a message.',
   },
   {
     name: 'resourceId',
