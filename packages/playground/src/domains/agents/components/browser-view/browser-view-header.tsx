@@ -66,7 +66,7 @@ export function BrowserViewHeader({
       )}
     >
       {/* URL display */}
-      <div className="mr-3 min-w-0 flex-1">
+      <div className="flex-1 min-w-0 mr-3">
         <span className={cn('text-sm text-neutral4 truncate block', !url && 'text-neutral3 italic')}>
           {url || 'No URL'}
         </span>
@@ -82,7 +82,7 @@ export function BrowserViewHeader({
         {onTuck && (
           <button
             onClick={onTuck}
-            className="hover:bg-surface3 text-neutral3 hover:text-neutral6 rounded p-1 transition-colors"
+            className="p-1 rounded hover:bg-surface3 text-neutral3 hover:text-neutral6 transition-colors"
             title="Minimize to pill"
           >
             <Minus className="h-4 w-4" />
@@ -93,7 +93,7 @@ export function BrowserViewHeader({
         {onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
-            className="hover:bg-surface3 text-neutral3 hover:text-neutral6 rounded p-1 transition-colors"
+            className="p-1 rounded hover:bg-surface3 text-neutral3 hover:text-neutral6 transition-colors"
             title={isCollapsed ? 'Expand browser view' : 'Minimize browser view'}
           >
             {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
@@ -104,7 +104,7 @@ export function BrowserViewHeader({
         {onClose && (
           <button
             onClick={onClose}
-            className="hover:bg-surface3 text-neutral3 hover:text-neutral6 rounded p-1 transition-colors"
+            className="p-1 rounded hover:bg-surface3 text-neutral3 hover:text-neutral6 transition-colors"
             title="Close browser session"
           >
             <X className="h-4 w-4" />

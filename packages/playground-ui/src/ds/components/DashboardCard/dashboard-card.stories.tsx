@@ -10,8 +10,8 @@ const SURFACES: { token: string; label: string; className: string }[] = [
 
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: React.ReactNode }) {
   return (
-    <div className={`border-border1 rounded-2xl border p-6 ${className}`}>
-      <p className="text-ui-xs text-neutral3 mb-4 tracking-wide uppercase">{label}</p>
+    <div className={`rounded-2xl border border-border1 p-6 ${className}`}>
+      <p className="mb-4 text-ui-xs tracking-wide text-neutral3 uppercase">{label}</p>
       {children}
     </div>
   );
@@ -25,7 +25,7 @@ const meta: Meta<typeof DashboardCard> = {
   },
   decorators: [
     Story => (
-      <div className="border-border1 bg-surface2 rounded-2xl border p-6">
+      <div className="rounded-2xl border border-border1 bg-surface2 p-6">
         <Story />
       </div>
     ),

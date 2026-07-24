@@ -70,13 +70,13 @@ export function MCPClientFormSidebar({
   };
 
   return (
-    <div className="flex h-full flex-col">
-      <ScrollArea className="min-h-0 flex-1">
+    <div className="h-full flex flex-col">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="flex flex-col gap-6 p-4">
           <SectionHeader title="Identity" subtitle="Define the MCP client name and description." />
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mcp-client-name" className="text-neutral5 text-xs">
+            <Label htmlFor="mcp-client-name" className="text-xs text-neutral5">
               Name <span className="text-accent2">*</span>
             </Label>
             <Input
@@ -87,11 +87,11 @@ export function MCPClientFormSidebar({
               {...register('name')}
               error={!!errors.name}
             />
-            {errors.name && <span className="text-accent2 text-xs">{errors.name.message}</span>}
+            {errors.name && <span className="text-xs text-accent2">{errors.name.message}</span>}
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mcp-client-description" className="text-neutral5 text-xs">
+            <Label htmlFor="mcp-client-description" className="text-xs text-neutral5">
               Description
             </Label>
             <Textarea
@@ -125,7 +125,7 @@ export function MCPClientFormSidebar({
           <SectionHeader title="Server Configuration" subtitle="Configure the MCP server connection details." />
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="mcp-server-name" className="text-neutral5 text-xs">
+            <Label htmlFor="mcp-server-name" className="text-xs text-neutral5">
               Server Name <span className="text-accent2">*</span>
             </Label>
             <Input
@@ -136,11 +136,11 @@ export function MCPClientFormSidebar({
               {...register('serverName')}
               error={!!errors.serverName}
             />
-            {errors.serverName && <span className="text-accent2 text-xs">{errors.serverName.message}</span>}
+            {errors.serverName && <span className="text-xs text-accent2">{errors.serverName.message}</span>}
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-xs">Server Type</Label>
+            <Label className="text-xs text-neutral5">Server Type</Label>
             <Controller
               name="serverType"
               control={control}
@@ -161,7 +161,7 @@ export function MCPClientFormSidebar({
           {serverType === 'http' && (
             <>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-url" className="text-neutral5 text-xs">
+                <Label htmlFor="mcp-url" className="text-xs text-neutral5">
                   URL <span className="text-accent2">*</span>
                 </Label>
                 <Input
@@ -172,11 +172,11 @@ export function MCPClientFormSidebar({
                   {...register('url')}
                   error={!!errors.url}
                 />
-                {errors.url && <span className="text-accent2 text-xs">{errors.url.message}</span>}
+                {errors.url && <span className="text-xs text-accent2">{errors.url.message}</span>}
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-timeout" className="text-neutral5 text-xs">
+                <Label htmlFor="mcp-timeout" className="text-xs text-neutral5">
                   Timeout (ms)
                 </Label>
                 <Input
@@ -194,7 +194,7 @@ export function MCPClientFormSidebar({
           {serverType === 'stdio' && (
             <>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-command" className="text-neutral5 text-xs">
+                <Label htmlFor="mcp-command" className="text-xs text-neutral5">
                   Command <span className="text-accent2">*</span>
                 </Label>
                 <Input
@@ -205,11 +205,11 @@ export function MCPClientFormSidebar({
                   {...register('command')}
                   error={!!errors.command}
                 />
-                {errors.command && <span className="text-accent2 text-xs">{errors.command.message}</span>}
+                {errors.command && <span className="text-xs text-accent2">{errors.command.message}</span>}
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="mcp-args" className="text-neutral5 text-xs">
+                <Label htmlFor="mcp-args" className="text-xs text-neutral5">
                   Arguments (one per line)
                 </Label>
                 <Textarea
@@ -222,10 +222,10 @@ export function MCPClientFormSidebar({
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label className="text-neutral5 text-xs">Environment Variables</Label>
+                <Label className="text-xs text-neutral5">Environment Variables</Label>
                 <div className="flex flex-col gap-2">
                   {env.map((_, index) => (
-                    <div key={index} className="flex items-center gap-2">
+                    <div key={index} className="flex gap-2 items-center">
                       <Input
                         placeholder="KEY"
                         className={`${SOLID_FIELD} flex-1`}
@@ -247,7 +247,7 @@ export function MCPClientFormSidebar({
                   ))}
                   {!readOnly && (
                     <Button variant="outline" size="sm" onClick={addEnvVar} className="w-fit">
-                      <PlusIcon className="mr-1 h-3 w-3" />
+                      <PlusIcon className="h-3 w-3 mr-1" />
                       Add variable
                     </Button>
                   )}
@@ -259,7 +259,7 @@ export function MCPClientFormSidebar({
       </ScrollArea>
 
       {(showSubmit ?? !readOnly) && (
-        <div className="flex shrink-0 flex-col gap-2 p-4">
+        <div className="shrink-0 p-4 flex flex-col gap-2">
           {!readOnly &&
             (() => {
               const isDisabled = serverType !== 'http' || !url.trim() || isTryingConnect;

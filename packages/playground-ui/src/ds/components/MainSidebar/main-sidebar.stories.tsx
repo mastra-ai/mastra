@@ -64,16 +64,16 @@ const StoryLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(({ href, chi
 
 const HelperCopy = () => (
   <>
-    <p className="text-ui-md text-neutral5 font-medium">Main content area</p>
-    <p className="text-ui-sm text-neutral4 mt-2 max-w-[40ch]">
+    <p className="text-ui-md font-medium text-neutral5">Main content area</p>
+    <p className="mt-2 max-w-[40ch] text-ui-sm text-neutral4">
       Hover the sidebar edge to reveal the handle. Drag to resize, click to toggle, or hit{' '}
-      <kbd className="bg-surface5 text-neutral4 rounded px-1 font-mono text-[0.65rem]">⌘B</kbd>.
+      <kbd className="rounded bg-surface5 px-1 font-mono text-[0.65rem] text-neutral4">⌘B</kbd>.
     </p>
   </>
 );
 
 const DefaultFrame = ({ children }: { children: React.ReactNode }) => (
-  <div className="border-border1 bg-surface1 flex h-125 w-210 rounded-lg border">
+  <div className="h-125 w-210 flex rounded-lg border border-border1 bg-surface1">
     {children}
     <div className="min-w-0 flex-1 p-6">
       <HelperCopy />
@@ -82,19 +82,19 @@ const DefaultFrame = ({ children }: { children: React.ReactNode }) => (
 );
 
 const StudioFrame = ({ children }: { children: React.ReactNode }) => (
-  <div className="bg-surface1 flex h-180 w-270 overflow-hidden">
+  <div className="h-180 w-270 flex overflow-hidden bg-surface1">
     {children}
     <main className="flex min-w-0 flex-1 flex-col">
       <header className="mx-2 mt-1.5 flex h-12 shrink-0 items-center justify-between px-3">
         <div className="min-w-0">
-          <p className="text-ui-lg text-neutral6 truncate font-semibold">Traces</p>
-          <p className="text-ui-xs text-neutral4 truncate">Observability / Traces</p>
+          <p className="truncate text-ui-lg font-semibold text-neutral6">Traces</p>
+          <p className="truncate text-ui-xs text-neutral4">Observability / Traces</p>
         </div>
-        <span className="border-border1 bg-surface3 text-ui-xs text-neutral5 rounded-md border px-2.5 py-1 font-medium">
+        <span className="rounded-md border border-border1 bg-surface3 px-2.5 py-1 text-ui-xs font-medium text-neutral5">
           Live
         </span>
       </header>
-      <section className="rounded-studio-frame border-border1 bg-surface2 shadow-main-frame mx-1.5 mb-1.5 ml-0 min-h-0 flex-1 overflow-y-auto border [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:mx-2 lg:mb-2 lg:ml-0">
+      <section className="mx-1.5 mb-1.5 ml-0 min-h-0 flex-1 overflow-y-auto rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:mx-2 lg:mb-2 lg:ml-0">
         <div className="grid min-h-full grid-rows-[auto_minmax(0,1fr)] gap-4 p-5">
           <div className="grid grid-cols-3 gap-3">
             {[
@@ -102,47 +102,47 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
               ['p95 latency', '428ms'],
               ['Error rate', '0.8%'],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-studio-panel border-border1 bg-surface3 border p-4">
-                <p className="text-ui-xs text-neutral3 font-medium uppercase">{label}</p>
-                <p className="text-neutral6 mt-2 text-2xl font-semibold">{value}</p>
+              <div key={label} className="rounded-studio-panel border border-border1 bg-surface3 p-4">
+                <p className="text-ui-xs font-medium text-neutral3 uppercase">{label}</p>
+                <p className="mt-2 text-2xl font-semibold text-neutral6">{value}</p>
               </div>
             ))}
           </div>
           <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_280px] gap-4">
-            <div className="rounded-studio-panel border-border1 bg-surface3 min-h-0 border p-4">
+            <div className="min-h-0 rounded-studio-panel border border-border1 bg-surface3 p-4">
               <div className="mb-4 flex items-center justify-between">
-                <p className="text-ui-md text-neutral6 font-semibold">Recent spans</p>
+                <p className="text-ui-md font-semibold text-neutral6">Recent spans</p>
                 <p className="text-ui-xs text-neutral4">Updated now</p>
               </div>
               <div className="grid gap-2">
                 {['agent.generate', 'tool.weather.lookup', 'workflow.evaluate', 'llm.call'].map((name, index) => (
                   <div
                     key={name}
-                    className="border-border1 bg-surface2 grid grid-cols-[minmax(0,1fr)_80px_64px] items-center gap-3 rounded-md border px-3 py-2"
+                    className="grid grid-cols-[minmax(0,1fr)_80px_64px] items-center gap-3 rounded-md border border-border1 bg-surface2 px-3 py-2"
                   >
-                    <span className="text-ui-sm text-neutral6 truncate">{name}</span>
-                    <span className="text-ui-xs text-neutral4 text-right">
+                    <span className="truncate text-ui-sm text-neutral6">{name}</span>
+                    <span className="text-right text-ui-xs text-neutral4">
                       {index === 1 ? '91ms' : `${220 + index * 56}ms`}
                     </span>
-                    <span className="text-ui-xs text-accent1 text-right font-medium">ok</span>
+                    <span className="text-right text-ui-xs font-medium text-accent1">ok</span>
                   </div>
                 ))}
               </div>
             </div>
-            <aside className="rounded-studio-panel border-border1 bg-surface3 min-h-0 border p-4">
-              <p className="text-ui-md text-neutral6 font-semibold">Trace detail</p>
-              <dl className="text-ui-sm mt-4 grid gap-3">
+            <aside className="min-h-0 rounded-studio-panel border border-border1 bg-surface3 p-4">
+              <p className="text-ui-md font-semibold text-neutral6">Trace detail</p>
+              <dl className="mt-4 grid gap-3 text-ui-sm">
                 <div>
                   <dt className="text-neutral3">Service</dt>
-                  <dd className="text-neutral6 mt-1">studio</dd>
+                  <dd className="mt-1 text-neutral6">studio</dd>
                 </div>
                 <div>
                   <dt className="text-neutral3">Environment</dt>
-                  <dd className="text-neutral6 mt-1">development</dd>
+                  <dd className="mt-1 text-neutral6">development</dd>
                 </div>
                 <div>
                   <dt className="text-neutral3">Status</dt>
-                  <dd className="text-neutral6 mt-1">Completed</dd>
+                  <dd className="mt-1 text-neutral6">Completed</dd>
                 </div>
               </dl>
             </aside>
@@ -154,15 +154,15 @@ const StudioFrame = ({ children }: { children: React.ReactNode }) => (
 );
 
 const MobileFrame = ({ children }: { children: React.ReactNode }) => (
-  <div className="bg-surface1 flex h-screen w-screen flex-col overflow-hidden">
-    <header className="border-border1 flex h-12 shrink-0 items-center gap-3 border-b px-3">
+  <div className="flex h-screen w-screen flex-col overflow-hidden bg-surface1">
+    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border1 px-3">
       <MainSidebar.MobileTrigger />
-      <span className="text-neutral6 text-sm font-medium">Mastra Studio</span>
+      <span className="text-sm font-medium text-neutral6">Mastra Studio</span>
     </header>
     {children}
     <div className="min-w-0 flex-1 p-4">
-      <p className="text-ui-md text-neutral5 font-medium">Mobile viewport</p>
-      <p className="text-ui-sm text-neutral4 mt-2 max-w-[34ch]">
+      <p className="text-ui-md font-medium text-neutral5">Mobile viewport</p>
+      <p className="mt-2 max-w-[34ch] text-ui-sm text-neutral4">
         Switch viewports in the toolbar. The sidebar auto-detects via <code>matchMedia</code> against the iframe
         viewport — no manual prop needed.
       </p>
@@ -241,18 +241,18 @@ const StudioSidebarBody = () => {
                 </div>
               )}
             </div>
-            <span className="border-border1 bg-surface4 size-6 rounded-full border" aria-label="Signed in" />
+            <span className="size-6 rounded-full border border-border1 bg-surface4" aria-label="Signed in" />
           </div>
         ) : (
           <span className="flex items-center justify-between pr-2 pl-3">
             <span className="flex min-w-0 flex-1 items-center gap-2">
               <LogoWithoutText className="size-[1.5rem] shrink-0" />
-              <span className="font-display truncate text-sm font-semibold tracking-tight whitespace-nowrap">
+              <span className="truncate font-display text-sm font-semibold tracking-tight whitespace-nowrap">
                 Mastra Studio
               </span>
               {!isMobile && <MainSidebar.Trigger />}
             </span>
-            <span className="border-border1 bg-surface4 size-7 rounded-full border" aria-label="Signed in" />
+            <span className="size-7 rounded-full border border-border1 bg-surface4" aria-label="Signed in" />
           </span>
         )}
       </div>
@@ -263,14 +263,14 @@ const StudioSidebarBody = () => {
             <button
               type="button"
               aria-label="Search and navigate"
-              className="border-border1 bg-surface3 text-neutral5 hover:bg-surface4 hover:text-neutral6 active:bg-surface5 [&_svg]:text-neutral4 [&:hover_svg]:text-neutral5 border"
+              className="border border-border1 bg-surface3 text-neutral5 hover:bg-surface4 hover:text-neutral6 active:bg-surface5 [&_svg]:text-neutral4 [&:hover_svg]:text-neutral5"
             >
               <Search />
               <MainSidebar.NavLabel state={state}>Search</MainSidebar.NavLabel>
               {state !== 'collapsed' && (
                 <kbd
                   aria-hidden="true"
-                  className="border-border1 bg-surface4 text-neutral3 ml-auto rounded border px-1.5 py-0.5 font-mono text-[10px] leading-none"
+                  className="ml-auto rounded border border-border1 bg-surface4 px-1.5 py-0.5 font-mono text-[10px] leading-none text-neutral3"
                 >
                   ⌘K
                 </kbd>
@@ -303,8 +303,8 @@ const StudioSidebarBody = () => {
         </MainSidebar.NavList>
         {state !== 'collapsed' && (
           <>
-            <hr className="bg-border1 mx-6 my-2 h-px border-0" />
-            <span className="bg-sidebar-nav-active text-ui-xs dark:text-neutral6 ml-3 inline-flex h-5 items-center rounded-full px-2.5 font-sans leading-none font-semibold text-black/80">
+            <hr className="mx-6 my-2 h-px border-0 bg-border1" />
+            <span className="ml-3 inline-flex h-5 items-center rounded-full bg-sidebar-nav-active px-2.5 font-sans text-ui-xs leading-none font-semibold text-black/80 dark:text-neutral6">
               v0.0.0
             </span>
           </>
@@ -329,7 +329,7 @@ type Story = StoryObj<typeof MainSidebar>;
 export const Default: Story = {
   render: () => (
     <DefaultFrame>
-      <MainSidebar className="border-border1 bg-surface2 border-r">
+      <MainSidebar className="border-r border-border1 bg-surface2">
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavList>
@@ -350,7 +350,7 @@ export const Default: Story = {
 export const WithSections: Story = {
   render: () => (
     <DefaultFrame>
-      <MainSidebar className="border-border1 bg-surface2 border-r">
+      <MainSidebar className="border-r border-border1 bg-surface2">
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavHeader>Main</MainSidebar.NavHeader>
@@ -390,7 +390,7 @@ export const WithNestedItems: Story = {
   },
   render: () => (
     <DefaultFrame>
-      <MainSidebar className="border-border1 bg-surface2 border-r">
+      <MainSidebar className="border-r border-border1 bg-surface2">
         <MainSidebar.Nav>
           <MainSidebar.Sections
             sections={[
@@ -440,7 +440,7 @@ export const WithNestedItems: Story = {
 export const WithBottom: Story = {
   render: () => (
     <DefaultFrame>
-      <MainSidebar className="border-border1 bg-surface2 border-r">
+      <MainSidebar className="border-r border-border1 bg-surface2">
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavList>
@@ -487,7 +487,7 @@ export const FullSidebar: Story = {
 /* ------------------------------------------------------------------------- */
 
 const SidebarBody = () => (
-  <MainSidebar className="border-border1 bg-surface2 border-r">
+  <MainSidebar className="border-r border-border1 bg-surface2">
     <MainSidebar.Nav>
       <MainSidebar.NavSection>
         <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>
@@ -579,7 +579,7 @@ export const Floating: Story = {
   },
   render: () => (
     <DefaultFrame>
-      <MainSidebar className="border-border1/30 bg-surface2 m-1 rounded-2xl border shadow-xl">
+      <MainSidebar className="m-1 rounded-2xl border border-border1/30 bg-surface2 shadow-xl">
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>
@@ -603,11 +603,11 @@ export const Floating: Story = {
 /* ------------------------------------------------------------------------- */
 
 const ParityFrame = ({ children }: { children: React.ReactNode }) => (
-  <div className="border-border1 bg-surface1 flex h-125 w-210 gap-4 rounded-lg border p-3">{children}</div>
+  <div className="h-125 w-210 flex gap-4 rounded-lg border border-border1 bg-surface1 p-3">{children}</div>
 );
 
 const ParityBody = () => (
-  <MainSidebar className="border-border1 bg-surface2 rounded-md border">
+  <MainSidebar className="rounded-md border border-border1 bg-surface2">
     <MainSidebar.Nav>
       <MainSidebar.NavSection>
         <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>
@@ -674,7 +674,7 @@ export const AsChild: Story = {
       const [supportOpen, setSupportOpen] = useState(false);
 
       return (
-        <MainSidebar className="border-border1 bg-surface2 border-r">
+        <MainSidebar className="border-r border-border1 bg-surface2">
           <MainSidebar.Nav>
             <MainSidebar.NavSection>
               <MainSidebar.NavHeader>Navigation</MainSidebar.NavHeader>
@@ -752,7 +752,7 @@ export const Mobile: Story = {
   },
   render: () => (
     <MobileFrame>
-      <MainSidebar className="border-border1 bg-surface2 border-r">
+      <MainSidebar className="border-r border-border1 bg-surface2">
         <MainSidebar.Nav>
           <MainSidebar.NavSection>
             <MainSidebar.NavHeader>Workspace</MainSidebar.NavHeader>

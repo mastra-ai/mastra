@@ -72,7 +72,7 @@ function UserLandControls() {
                 return (
                   <div
                     key={column.id}
-                    className="border-border1 bg-surface2 text-ui-sm text-neutral5 rounded-md border px-2.5 py-1.5"
+                    className="rounded-md border border-border1 bg-surface2 px-2.5 py-1.5 text-ui-sm text-neutral5"
                   >
                     {checkbox}
                   </div>
@@ -86,13 +86,13 @@ function UserLandControls() {
                     <div
                       ref={dragProvided.innerRef}
                       {...dragProvided.draggableProps}
-                      className="border-border1 bg-surface2 text-ui-sm text-neutral5 flex items-center gap-2 rounded-md border px-2.5 py-1.5"
+                      className="flex items-center gap-2 rounded-md border border-border1 bg-surface2 px-2.5 py-1.5 text-ui-sm text-neutral5"
                     >
                       {checkbox}
                       <button
                         type="button"
                         {...dragProvided.dragHandleProps}
-                        className="text-neutral3 focus-visible:ring-neutral5 rounded-sm outline-hidden focus-visible:ring-1"
+                        className="rounded-sm text-neutral3 outline-hidden focus-visible:ring-1 focus-visible:ring-neutral5"
                         aria-label={`Reorder ${column.label}`}
                       >
                         <GripVertical className="size-3.5" aria-hidden="true" />
@@ -132,7 +132,7 @@ export const ClickableCurves: Story = {
         <Sankey data={data} columns={columns}>
           <SankeyChart onCurveClick={setSelection} />
         </Sankey>
-        <div className="border-border1 bg-surface2 text-ui-sm text-neutral4 rounded-md border p-3">
+        <div className="rounded-md border border-border1 bg-surface2 p-3 text-ui-sm text-neutral4">
           {selection
             ? `${selection.source.column.label}: ${selection.source.value} → ${selection.target.column.label}: ${selection.target.value} (${selection.records.length} records)`
             : 'Select a curve to inspect its records.'}

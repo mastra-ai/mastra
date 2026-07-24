@@ -60,7 +60,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
   if (!server)
     return (
       <MainContentContent>
-        <Txt as="h1" variant="header-md" className="text-neutral3 py-20 text-center font-medium">
+        <Txt as="h1" variant="header-md" className="text-neutral3 font-medium py-20 text-center">
           Server not found
         </Txt>
       </MainContentContent>
@@ -70,16 +70,16 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
 
   return (
     <MainContentContent isDivided={true}>
-      <div className="mx-auto w-full max-w-2xl px-8 py-12">
-        <Txt as="h1" variant="header-md" className="text-neutral6 pb-4 font-medium">
+      <div className="px-8 py-12 mx-auto max-w-2xl w-full">
+        <Txt as="h1" variant="header-md" className="text-neutral6 font-medium pb-4">
           {server.name}
         </Txt>
 
         <div className="flex items-center gap-1 pb-6">
-          <Badge icon={<FolderIcon className="text-neutral6" />} className="text-neutral4! rounded-r-sm">
+          <Badge icon={<FolderIcon className="text-neutral6" />} className="rounded-r-sm text-neutral4!">
             Version
           </Badge>
-          <Badge className="text-neutral4! rounded-l-sm">{server.version_detail.version}</Badge>
+          <Badge className="rounded-l-sm text-neutral4!">{server.version_detail.version}</Badge>
         </div>
 
         <Txt className="text-neutral3 pb-4">
@@ -89,15 +89,15 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
 
         <div className="flex flex-col gap-4">
           {/* HTTP Stream */}
-          <div className="border-border1 bg-surface3 rounded-lg border p-4">
-            <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">HTTP</span>}>
+          <div className="rounded-lg border border-border1 bg-surface3 p-4">
+            <Badge icon={<span className="font-mono w-6 text-accent1 font-medium mr-1">HTTP</span>}>
               Regular HTTP Endpoint
             </Badge>
 
             <Txt className="text-neutral3 pt-1 pb-2">Use for stateless HTTP transport with streamable responses.</Txt>
 
             <div className="flex items-start gap-2">
-              <Txt className="bg-surface4 rounded-lg px-2 py-1">{httpStreamUrl}</Txt>
+              <Txt className="px-2 py-1 bg-surface4 rounded-lg">{httpStreamUrl}</Txt>
               <div className="pt-1">
                 <CopyButton tooltip="Copy HTTP Stream URL" content={httpStreamUrl} />
               </div>
@@ -105,15 +105,15 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
           </div>
 
           {/* SSE */}
-          <div className="border-border1 bg-surface3 rounded-lg border p-4">
-            <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">SSE</span>}>
+          <div className="rounded-lg border border-border1 bg-surface3 p-4">
+            <Badge icon={<span className="font-mono w-6 text-accent1 font-medium mr-1">SSE</span>}>
               Server-Sent Events
             </Badge>
 
             <Txt className="text-neutral3 pt-1 pb-2">Use for real-time communication via SSE.</Txt>
 
             <div className="flex items-start gap-2">
-              <Txt className="bg-surface4 rounded-lg px-2 py-1">{sseUrl}</Txt>
+              <Txt className="px-2 py-1 bg-surface4 rounded-lg">{sseUrl}</Txt>
               <div className="pt-1">
                 <CopyButton tooltip="Copy SSE URL" content={sseUrl} />
               </div>
@@ -121,13 +121,13 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
           </div>
 
           {/* Command Line */}
-          <div className="border-border1 bg-surface3 rounded-lg border p-4">
-            <Badge icon={<span className="text-accent1 mr-1 w-6 font-mono font-medium">CLI</span>}>Command Line</Badge>
+          <div className="rounded-lg border border-border1 bg-surface3 p-4">
+            <Badge icon={<span className="font-mono w-6 text-accent1 font-medium mr-1">CLI</span>}>Command Line</Badge>
 
             <Txt className="text-neutral3 pt-1 pb-2">Use for local command-line access via npx and mcp-remote.</Txt>
 
             <div className="flex items-start gap-2">
-              <Txt className="bg-surface4 rounded-lg px-2 py-1">{commandLineConfig}</Txt>
+              <Txt className="px-2 py-1 bg-surface4 rounded-lg">{commandLineConfig}</Txt>
               <div className="pt-1">
                 <CopyButton tooltip="Copy Command Line Config" content={commandLineConfig} />
               </div>
@@ -136,7 +136,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
         </div>
       </div>
 
-      <div className="border-border1 h-full overflow-y-scroll border-l">
+      <div className="h-full overflow-y-scroll border-l border-border1">
         <McpToolList server={server} />
       </div>
     </MainContentContent>
@@ -151,8 +151,8 @@ const McpToolList = ({ server }: { server: ServerInfo }) => {
   const toolsKeyArray = Object.keys(tools);
 
   return (
-    <div className="overflow-y-scroll p-5">
-      <div className="text-neutral6 flex items-center gap-2">
+    <div className="p-5 overflow-y-scroll">
+      <div className="text-neutral6 flex gap-2 items-center">
         <Icon size="lg" className="bg-surface4 rounded-md p-1">
           <McpServerIcon />
         </Icon>
@@ -201,7 +201,7 @@ const ToolEntry = ({ tool, serverId }: { tool: McpToolInfo; serverId: string }) 
             <Link ref={linkRef} href={paths.mcpServerToolLink(serverId, tool.id)}>
               {tool.id}
             </Link>
-            {isAppTool && <Badge className="py-0 text-[10px]">App</Badge>}
+            {isAppTool && <Badge className="text-[10px] py-0">App</Badge>}
           </span>
         </EntityName>
         <EntityDescription>{tool.description}</EntityDescription>

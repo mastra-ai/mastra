@@ -135,9 +135,9 @@ export function DataDetailsPanelCodeSection({
           )}
         </ButtonsGroup>
       </div>
-      <div className="border-border1 bg-surface3 text-ui-sm text-neutral4 max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border p-3 break-all dark:border-white/10 dark:bg-black/20">
+      <div className="max-h-[30vh] overflow-hidden overflow-y-auto rounded-lg border border-border1 bg-surface3 p-3 text-ui-sm break-all text-neutral4 dark:border-white/10 dark:bg-black/20">
         {usePlainTextView ? (
-          <div className="text-neutral4 font-mono break-all">
+          <div className="font-mono break-all text-neutral4">
             <pre className="text-wrap">{finalCodeStr}</pre>
           </div>
         ) : (

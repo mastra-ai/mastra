@@ -393,18 +393,18 @@ export function ObservationRenderer({
       </div>
 
       {showCurrentTask && parsed.currentTask && (
-        <div className="border-border mt-2 border-t pt-2">
-          <div className="text-muted-foreground mb-1 text-[10px] font-medium tracking-wide uppercase">Current Task</div>
-          <div className="text-foreground text-xs whitespace-pre-wrap">{parsed.currentTask}</div>
+        <div className="mt-2 pt-2 border-t border-border">
+          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Current Task</div>
+          <div className="text-xs text-foreground whitespace-pre-wrap">{parsed.currentTask}</div>
         </div>
       )}
 
       {showSuggestedResponse && parsed.suggestedResponse && (
-        <div className="border-border mt-2 border-t pt-2">
-          <div className="text-muted-foreground mb-1 text-[10px] font-medium tracking-wide uppercase">
+        <div className="mt-2 pt-2 border-t border-border">
+          <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
             Suggested Response
           </div>
-          <div className="text-foreground/80 text-xs whitespace-pre-wrap italic">{parsed.suggestedResponse}</div>
+          <div className="text-xs text-foreground/80 italic whitespace-pre-wrap">{parsed.suggestedResponse}</div>
         </div>
       )}
     </div>

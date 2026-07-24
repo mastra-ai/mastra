@@ -66,7 +66,7 @@ export const WorkflowBadge = ({
 
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{suspendPayload}</pre>
+      <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
     ) : (
       <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
     );
@@ -100,7 +100,7 @@ export const WorkflowBadge = ({
 
       {suspendPayloadSlot !== undefined && suspendPayload && (
         <div>
-          <p className="pb-2 font-medium">Workflow suspend payload</p>
+          <p className="font-medium pb-2">Workflow suspend payload</p>
           {suspendPayloadSlot}
         </div>
       )}
@@ -139,7 +139,7 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
         )}
       </div>
 
-      <div className="h-[60vh] w-full overflow-hidden rounded-md">
+      <div className="rounded-md overflow-hidden h-[60vh] w-full">
         <WorkflowSelectedStepProvider>
           <WorkflowStepDetailProvider>
             <WorkflowGraph workflowId={workflowId} workflow={workflow!} />

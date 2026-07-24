@@ -53,7 +53,7 @@ function AgentSession() {
   }
 
   if (!agent) {
-    return <div className="py-4 text-center">Agent not found</div>;
+    return <div className="text-center py-4">Agent not found</div>;
   }
 
   const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
@@ -83,7 +83,7 @@ function AgentSession() {
                     <ActivatedSkillsProvider>
                       <MainContentLayout>
                         <SessionHeader />
-                        <div className="relative grid h-full overflow-y-auto pt-6">
+                        <div className="grid overflow-y-auto relative h-full pt-6">
                           <AgentChat
                             key={actualThreadId}
                             agentId={agentId!}
@@ -117,7 +117,7 @@ export default AgentSession;
 const AgentSessionLoadingSkeleton = () => (
   <MainContentLayout>
     <SessionHeader />
-    <div className="relative grid h-full overflow-y-auto pt-6" data-testid="agent-session-skeleton" aria-busy="true">
+    <div className="grid overflow-y-auto relative h-full pt-6" data-testid="agent-session-skeleton" aria-busy="true">
       <AgentChatLoadingSkeleton />
     </div>
   </MainContentLayout>

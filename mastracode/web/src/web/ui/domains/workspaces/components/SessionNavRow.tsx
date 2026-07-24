@@ -50,20 +50,20 @@ export function SessionNavRow({
           <GitBranch />
           <MainSidebar.NavLabel>{name}</MainSidebar.NavLabel>
           {loading ? (
-            <Spinner size="sm" aria-label={`Opening ${name}`} className="text-icon3 ml-auto shrink-0" />
+            <Spinner size="sm" aria-label={`Opening ${name}`} className="ml-auto shrink-0 text-icon3" />
           ) : status === 'running' ? (
             <span
               role="status"
               aria-label={`Agent working in ${name}`}
               title="Agent working"
-              className="bg-accent1 ml-auto size-2 shrink-0 animate-pulse rounded-full group-hover/session:opacity-0"
+              className="ml-auto size-2 shrink-0 animate-pulse rounded-full bg-accent1 group-hover/session:opacity-0"
             />
           ) : status === 'attention' ? (
             <span
               role="status"
               aria-label={`Agent finished in ${name}`}
               title="Agent finished — open to dismiss"
-              className="bg-accent1 ml-auto size-2 shrink-0 rounded-full group-hover/session:opacity-0"
+              className="ml-auto size-2 shrink-0 rounded-full bg-accent1 group-hover/session:opacity-0"
             />
           ) : null}
         </button>
@@ -79,7 +79,7 @@ export function SessionNavRow({
                   size="icon-sm"
                   aria-label={`Session actions for ${name}`}
                   disabled={disabled}
-                  className="opacity-0 group-focus-within/session:opacity-100 group-hover/session:opacity-100 data-[popup-open]:opacity-100"
+                  className="opacity-0 group-hover/session:opacity-100 group-focus-within/session:opacity-100 data-[popup-open]:opacity-100"
                 >
                   <MoreHorizontal />
                 </Button>

@@ -17,6 +17,10 @@
       "dependsOn": [],
       "cache": false
     },
+    "//#format:prettier": {
+      "dependsOn": [],
+      "cache": false
+    },
     "typecheck": {
       "dependsOn": ["^build"]
     },
@@ -30,10 +34,6 @@
     },
     "validate:package": {
       "dependsOn": []
-    },
-    "//#format:oxfmt": {
-      "dependsOn": [],
-      "cache": false
     }
   }
 }

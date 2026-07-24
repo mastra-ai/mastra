@@ -3,7 +3,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
 
 export const NoAgentsInfo = () => (
-  <div className="flex h-full items-center justify-center">
+  <div className="flex h-full items-center justify-center ">
     <EmptyState
       iconSlot={<CircleSlashIcon />}
       titleSlot="No Agents yet"

@@ -41,12 +41,12 @@ export function DateRangeBoundaryPickers({ positions, value, min, max, onSelect 
       </div>
 
       <div
-        className="bg-border2 absolute top-11 h-4 w-px -translate-x-1/2 transition-[left] duration-150 ease-out motion-reduce:transition-none sm:top-8"
+        className="absolute top-11 h-4 w-px -translate-x-1/2 bg-border2 transition-[left] duration-150 ease-out motion-reduce:transition-none sm:top-8"
         style={{ left: `${positions.from}%` }}
         aria-hidden="true"
       />
       <div
-        className="bg-border2 absolute top-11 h-4 w-px -translate-x-1/2 transition-[left] duration-150 ease-out motion-reduce:transition-none sm:top-8"
+        className="absolute top-11 h-4 w-px -translate-x-1/2 bg-border2 transition-[left] duration-150 ease-out motion-reduce:transition-none sm:top-8"
         style={{ left: `${positions.to}%` }}
         aria-hidden="true"
       />

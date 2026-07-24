@@ -180,7 +180,7 @@ function PermissionsSection({
       <Txt variant="ui-lg" className="text-icon6 font-medium">
         Tool permissions
       </Txt>
-      <Txt variant="ui-sm" as="p" className="text-icon3 mt-1 mb-2">
+      <Txt variant="ui-sm" as="p" className="mt-1 mb-2 text-icon3">
         Choose how each tool category is approved. “Allow” runs without asking, “Ask” prompts you, “Deny” blocks it.
         Turning on “Auto-approve tools” above sets every category to Allow.
       </Txt>
@@ -303,11 +303,11 @@ function ModelPicker({
 
       {open && (
         <div
-          className="border-border1/60 bg-surface3 shadow-dialog absolute z-50 mt-1 w-full rounded-lg border"
+          className="absolute z-50 mt-1 w-full rounded-lg border border-border1/60 bg-surface3 shadow-dialog"
           role="dialog"
           aria-label="Choose a model"
         >
-          <div className="border-border1/40 border-b p-2">
+          <div className="p-2 border-b border-border1/40">
             <Input
               ref={inputRef}
               placeholder="Search models or providers…"
@@ -340,7 +340,7 @@ function ModelPicker({
                   onMouseEnter={() => setActive(i)}
                   onClick={() => choose(m)}
                 >
-                  <span className="flex min-w-0 flex-col gap-0.5">
+                  <span className="flex flex-col gap-0.5 min-w-0">
                     <Txt variant="ui-md" className="text-icon6 truncate">
                       {m.modelName}
                     </Txt>
@@ -364,7 +364,7 @@ function ModelPicker({
 }
 
 function FieldRowGroup({ children }: { children: React.ReactNode }) {
-  return <div className="divide-border1/40 divide-y">{children}</div>;
+  return <div className="divide-y divide-border1/40">{children}</div>;
 }
 
 function FieldRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {

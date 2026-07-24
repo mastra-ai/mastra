@@ -40,7 +40,7 @@ export function ProcessStepListItem({ stepId, step, isActive, position }: Proces
           >
             {formatStepTitle(stepId)}
           </h4>
-          {step.description && <p className="text-ui-md text-neutral2 -mt-0.5">{step.description}</p>}
+          {step.description && <p className="-mt-0.5 text-ui-md text-neutral2">{step.description}</p>}
         </div>
       </div>
       <div

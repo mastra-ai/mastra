@@ -88,8 +88,8 @@ export function ScheduleTriggersList({
           <span
             className={
               isLinked
-                ? 'text-accent1 text-ui-sm font-mono whitespace-nowrap'
-                : 'text-neutral3 text-ui-sm font-mono whitespace-nowrap'
+                ? 'text-accent1 font-mono text-ui-sm whitespace-nowrap'
+                : 'text-neutral3 font-mono text-ui-sm whitespace-nowrap'
             }
           >
             {t.runId}
@@ -103,14 +103,14 @@ export function ScheduleTriggersList({
             <DataList.Cell height="compact">
               <span className="inline-flex items-center gap-2">
                 {isPublishFailure ? (
-                  <span className="text-ui-sm text-accent2 inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm text-accent2">
                     <AlertTriangleIcon size={14} />
                     publish failed
                   </span>
                 ) : t.run ? (
                   <WorkflowRunStatusInline status={t.run.status} />
                 ) : (
-                  <span className="text-ui-sm text-neutral3 inline-flex items-center gap-1.5 whitespace-nowrap">
+                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm text-neutral3">
                     pending
                   </span>
                 )}

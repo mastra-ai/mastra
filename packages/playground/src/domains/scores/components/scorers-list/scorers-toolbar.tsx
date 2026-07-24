@@ -82,10 +82,10 @@ export function ScorersToolbar({
   }, [onReset, debouncedSearch]);
 
   return (
-    <div className="flex w-full max-w-[40rem] items-center gap-2">
+    <div className="flex items-center gap-2 w-full max-w-[40rem]">
       {/* Search + source filter fused into one pill (ButtonsGroup spacing="close").
           `size="default"` to match the other list searches (e.g. /agents). */}
-      <ButtonsGroup spacing="close" className="min-w-0 flex-1">
+      <ButtonsGroup spacing="close" className="flex-1 min-w-0">
         <InputGroup variant="outline" size="default">
           <InputGroupAddon align="inline-start">
             <SearchIcon />

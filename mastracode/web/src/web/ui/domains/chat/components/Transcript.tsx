@@ -110,15 +110,15 @@ function SkillActivationCard({ activation }: { activation: SkillActivation }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <Collapsible open={expanded} onOpenChange={setExpanded} className="max-w-full min-w-64">
+    <Collapsible open={expanded} onOpenChange={setExpanded} className="min-w-64 max-w-full">
       <CollapsibleTrigger
-        className="focus-visible:ring-accent1 w-full rounded-md text-left focus-visible:ring-2 focus-visible:outline-none"
+        className="w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1"
         aria-label={`${expanded ? 'Hide' : 'Show'} ${activation.name} skill contents`}
       >
         <span className="flex items-center gap-2">
-          <span className="text-icon3 flex items-center gap-1.5">
+          <span className="flex items-center gap-1.5 text-icon3">
             <BookOpen size={14} aria-hidden="true" />
-            <Txt as="span" variant="ui-xs" className="tracking-wide uppercase">
+            <Txt as="span" variant="ui-xs" className="uppercase tracking-wide">
               Skill
             </Txt>
           </span>
@@ -128,14 +128,14 @@ function SkillActivationCard({ activation }: { activation: SkillActivation }) {
           <ChevronDown
             size={13}
             aria-hidden="true"
-            className={`text-icon3 ml-auto shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
+            className={`ml-auto shrink-0 text-icon3 transition-transform ${expanded ? 'rotate-180' : ''}`}
           />
         </span>
         {activation.arguments && (
-          <span className="text-ui-xs text-icon3 mt-1 block truncate">{activation.arguments}</span>
+          <span className="mt-1 block truncate text-ui-xs text-icon3">{activation.arguments}</span>
         )}
       </CollapsibleTrigger>
-      <CollapsibleContent className="border-border1 mt-2 max-h-96 overflow-y-auto border-t pt-2">
+      <CollapsibleContent className="mt-2 max-h-96 overflow-y-auto border-t border-border1 pt-2">
         <div className="prose text-ui-sm">
           <Markdown>{activation.content}</Markdown>
         </div>
@@ -150,7 +150,7 @@ function SkillActivationCard({ activation }: { activation: SkillActivation }) {
 
 /** Quiet status indicator: muted spinner while running, red cross on failure, nothing on success. */
 function ToolStatusIcon({ status }: { status: ToolCall['status'] }) {
-  if (status === 'running') return <Spinner size="sm" aria-label="Running" className="text-icon3 size-3.5" />;
+  if (status === 'running') return <Spinner size="sm" aria-label="Running" className="size-3.5 text-icon3" />;
   if (status === 'error') return <X size={14} role="img" aria-label="Failed" className="text-error" />;
   return null;
 }
@@ -158,9 +158,9 @@ function ToolStatusIcon({ status }: { status: ToolCall['status'] }) {
 /** Label + copy header for a section inside a tool card body. */
 function ToolSection({ label, copyText, children }: { label: string; copyText: string; children: ReactNode }) {
   return (
-    <div className="flex max-w-full min-w-0 flex-col gap-1">
+    <div className="flex min-w-0 max-w-full flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
-        <Txt as="span" variant="ui-xs" className="text-icon3 tracking-wide uppercase">
+        <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
           {label}
         </Txt>
         <CopyButton content={copyText} size="sm" variant="ghost" />
@@ -177,24 +177,24 @@ function DiffView({ oldText, newText, path }: { oldText: string; newText: string
   const added = newText.split('\n');
   return (
     <div
-      className="border-border1 bg-surface1 max-w-full min-w-0 overflow-x-auto rounded-xl border font-mono text-xs leading-normal"
+      className="min-w-0 max-w-full overflow-x-auto rounded-xl border border-border1 bg-surface1 font-mono text-xs leading-normal"
       role="group"
       aria-label="File change"
     >
       {removed.map((line, i) => (
-        <div key={`r${i}`} className="bg-error/10 flex whitespace-pre">
-          <span className="text-error w-5 shrink-0 text-center opacity-70 select-none">-</span>
+        <div key={`r${i}`} className="flex whitespace-pre bg-error/10">
+          <span className="w-5 shrink-0 select-none text-center text-error opacity-70">-</span>
           <span
-            className="text-icon6 [&_span]:font-inherit [&_span]:leading-inherit flex-1 pr-2.5 [&_span]:text-inherit dark:[&_span]:![background-color:var(--shiki-dark-bg)] dark:[&_span]:![color:var(--shiki-dark)]"
+            className="flex-1 pr-2.5 text-icon6 [&_span]:font-inherit [&_span]:text-inherit [&_span]:leading-inherit dark:[&_span]:![color:var(--shiki-dark)] dark:[&_span]:![background-color:var(--shiki-dark-bg)]"
             dangerouslySetInnerHTML={{ __html: highlightCode(line, lang) || '&nbsp;' }}
           />
         </div>
       ))}
       {added.map((line, i) => (
-        <div key={`a${i}`} className="bg-accent1/10 flex whitespace-pre">
-          <span className="text-accent1 w-5 shrink-0 text-center opacity-70 select-none">+</span>
+        <div key={`a${i}`} className="flex whitespace-pre bg-accent1/10">
+          <span className="w-5 shrink-0 select-none text-center text-accent1 opacity-70">+</span>
           <span
-            className="text-icon6 [&_span]:font-inherit [&_span]:leading-inherit flex-1 pr-2.5 [&_span]:text-inherit dark:[&_span]:![background-color:var(--shiki-dark-bg)] dark:[&_span]:![color:var(--shiki-dark)]"
+            className="flex-1 pr-2.5 text-icon6 [&_span]:font-inherit [&_span]:text-inherit [&_span]:leading-inherit dark:[&_span]:![color:var(--shiki-dark)] dark:[&_span]:![background-color:var(--shiki-dark-bg)]"
             dangerouslySetInnerHTML={{ __html: highlightCode(line, lang) || '&nbsp;' }}
           />
         </div>
@@ -244,7 +244,7 @@ function ToolCard({ tool }: { tool: ToolCall }) {
     <Collapsible
       open={expanded}
       onOpenChange={setExpanded}
-      className="max-w-full min-w-0"
+      className="min-w-0 max-w-full"
       role="group"
       aria-label={`Tool: ${tool.toolName}`}
     >
@@ -254,7 +254,7 @@ function ToolCard({ tool }: { tool: ToolCall }) {
         via `[&>svg]:rotate-90` on open. Nesting keeps the chevron controlled
         here.
       */}
-      <CollapsibleTrigger className="hover:bg-surface2 active:bg-surface4 w-full rounded-lg text-left transition-colors">
+      <CollapsibleTrigger className="w-full rounded-lg text-left transition-colors hover:bg-surface2 active:bg-surface4">
         <span className="flex w-full items-center gap-2 px-2 py-1.5">
           <ChevronDown
             size={13}
@@ -270,12 +270,12 @@ function ToolCard({ tool }: { tool: ToolCall }) {
             {tool.toolName}
           </Txt>
           {edit?.path && (
-            <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 truncate">
+            <Txt as="span" variant="ui-xs" font="mono" className="truncate text-icon3">
               {edit.path}
             </Txt>
           )}
           {!edit && argsPreview && (
-            <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 truncate">
+            <Txt as="span" variant="ui-xs" font="mono" className="truncate text-icon3">
               {truncate(argsPreview, 72)}
             </Txt>
           )}
@@ -284,8 +284,8 @@ function ToolCard({ tool }: { tool: ToolCall }) {
           </span>
         </span>
       </CollapsibleTrigger>
-      <CollapsibleContent className="max-w-full min-w-0">
-        <div className="border-border1 bg-surface2 mt-1 flex max-w-full min-w-0 flex-col gap-2 rounded-2xl border p-2">
+      <CollapsibleContent className="min-w-0 max-w-full">
+        <div className="mt-1 flex min-w-0 max-w-full flex-col gap-2 rounded-2xl border border-border1 bg-surface2 p-2">
           {edit ? (
             edit.new_string !== undefined ? (
               <ToolSection label={edit.path ?? 'Change'} copyText={edit.new_string}>
@@ -304,7 +304,7 @@ function ToolCard({ tool }: { tool: ToolCall }) {
           ) : null}
           {tool.output && (
             <ToolSection label="Output" copyText={tool.output}>
-              <pre className="bg-surface1 text-icon3 m-0 max-h-72 max-w-full overflow-auto rounded-xl px-3 py-2 font-mono text-xs leading-normal whitespace-pre">
+              <pre className="m-0 max-h-72 max-w-full overflow-auto whitespace-pre rounded-xl bg-surface1 px-3 py-2 font-mono text-xs leading-normal text-icon3">
                 {tool.output}
               </pre>
             </ToolSection>
@@ -332,7 +332,7 @@ function ApprovalCard({
   return (
     <div className={promptCardApproval} role="group" aria-label={`Tool approval for ${prompt.toolName}`}>
       <div className={promptTitle}>
-        Approve <code className="bg-surface5 rounded px-1.5 py-px font-mono text-xs">{prompt.toolName}</code>?
+        Approve <code className="rounded bg-surface5 px-1.5 py-px font-mono text-xs">{prompt.toolName}</code>?
       </div>
       <pre className={resultBlock}>{truncate(stringify(prompt.args), 400)}</pre>
       <div className={promptActions}>
@@ -418,7 +418,7 @@ function SuspensionCard({
       <div className={promptCardSuspension} role="group" aria-label="Plan approval">
         <div className={promptTitle}>Plan: {payload.plan?.title ?? payload.title ?? 'Proposed plan'}</div>
         {payload.plan?.summary && (
-          <div className="text-ui-smd text-icon5 font-mono leading-relaxed break-words whitespace-pre-wrap">
+          <div className="whitespace-pre-wrap break-words font-mono text-ui-smd leading-relaxed text-icon5">
             {payload.plan.summary}
           </div>
         )}
@@ -450,7 +450,7 @@ function SuspensionCard({
     return (
       <div className={promptCardSuspension} role="group" aria-label="Access request">
         <div className={promptTitle}>Grant access to {payload.requestedPath ?? 'a path'}?</div>
-        {payload.reason && <div className="text-icon3 mt-0.5 text-xs">Reason: {payload.reason}</div>}
+        {payload.reason && <div className="mt-0.5 text-xs text-icon3">Reason: {payload.reason}</div>}
         <div className={promptActions}>
           <Button
             variant="primary"
@@ -543,7 +543,7 @@ function AskUserCard({
 
 function SubagentCard({ entry }: { entry: SubagentEntry }) {
   return (
-    <div className="border-border1 border-l-accent5 bg-surface2 my-2 rounded-lg border border-l-4 px-3 py-2 shadow-sm">
+    <div className="my-2 rounded-lg border border-l-4 border-border1 border-l-accent5 bg-surface2 px-3 py-2 shadow-sm">
       <div className="flex items-center gap-2">
         <Badge variant={entry.done ? 'success' : 'info'}>subagent: {entry.agentType}</Badge>
         <Txt variant="ui-xs" className="text-icon3">
@@ -607,12 +607,12 @@ function NotificationRow({
     <Collapsible
       open={expanded}
       onOpenChange={setExpanded}
-      className="max-w-full min-w-0"
+      className="min-w-0 max-w-full"
       data-notification-state={state}
       role="group"
       aria-label={`Notification: ${label}`}
     >
-      <CollapsibleTrigger className="hover:bg-surface2 active:bg-surface4 w-full rounded-lg text-left transition-colors">
+      <CollapsibleTrigger className="w-full rounded-lg text-left transition-colors hover:bg-surface2 active:bg-surface4">
         <span className="flex w-full items-center gap-2 px-2 py-1.5">
           <ChevronDown
             size={13}
@@ -622,16 +622,16 @@ function NotificationRow({
             )}
           />
           <span className="flex shrink-0 items-center">{icon}</span>
-          <Txt as="span" variant="ui-smd" className="text-icon5 shrink-0">
+          <Txt as="span" variant="ui-smd" className="shrink-0 text-icon5">
             {label}
           </Txt>
-          <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 truncate">
+          <Txt as="span" variant="ui-xs" font="mono" className="truncate text-icon3">
             {truncate(message, 72)}
           </Txt>
         </span>
       </CollapsibleTrigger>
-      <CollapsibleContent className="max-w-full min-w-0">
-        <div className="border-border1 bg-surface2 mt-1 flex max-w-full min-w-0 flex-col gap-2 rounded-2xl border p-2">
+      <CollapsibleContent className="min-w-0 max-w-full">
+        <div className="mt-1 flex min-w-0 max-w-full flex-col gap-2 rounded-2xl border border-border1 bg-surface2 p-2">
           <Txt variant="ui-sm">{message}</Txt>
           {url && (
             <a
@@ -639,7 +639,7 @@ function NotificationRow({
               target="_blank"
               rel="noreferrer"
               aria-label={`Open notification target: ${message}`}
-              className="text-ui-xs text-icon3 hover:text-icon5 flex w-fit items-center gap-1"
+              className="flex w-fit items-center gap-1 text-ui-xs text-icon3 hover:text-icon5"
             >
               Open on GitHub
               <ExternalLink size={12} aria-hidden />
@@ -682,12 +682,12 @@ function SignalRow({ kind, label, message }: { kind: string; label: string; mess
     <Collapsible
       open={expanded}
       onOpenChange={setExpanded}
-      className="max-w-full min-w-0"
+      className="min-w-0 max-w-full"
       data-signal-kind={kind}
       role="group"
       aria-label={`Signal: ${label}`}
     >
-      <CollapsibleTrigger className="hover:bg-surface2 active:bg-surface4 w-full rounded-lg text-left transition-colors">
+      <CollapsibleTrigger className="w-full rounded-lg text-left transition-colors hover:bg-surface2 active:bg-surface4">
         <span className="flex w-full items-center gap-2 px-2 py-1.5">
           <ChevronDown
             size={13}
@@ -705,17 +705,17 @@ function SignalRow({ kind, label, message }: { kind: string; label: string; mess
               <Info size={13} className="text-icon3" />
             )}
           </span>
-          <Txt as="span" variant="ui-smd" className="text-icon5 shrink-0">
+          <Txt as="span" variant="ui-smd" className="shrink-0 text-icon5">
             {label}
           </Txt>
-          <Txt as="span" variant="ui-xs" font="mono" className="text-icon3 truncate">
+          <Txt as="span" variant="ui-xs" font="mono" className="truncate text-icon3">
             {truncate(message, 72)}
           </Txt>
         </span>
       </CollapsibleTrigger>
-      <CollapsibleContent className="max-w-full min-w-0">
-        <div className="border-border1 bg-surface2 mt-1 max-w-full min-w-0 rounded-2xl border p-2">
-          <Txt variant="ui-sm" className="break-words whitespace-pre-wrap">
+      <CollapsibleContent className="min-w-0 max-w-full">
+        <div className="mt-1 min-w-0 max-w-full rounded-2xl border border-border1 bg-surface2 p-2">
+          <Txt variant="ui-sm" className="whitespace-pre-wrap break-words">
             {message}
           </Txt>
         </div>
@@ -858,7 +858,7 @@ function MessageBubble({
     User: ({ children }) => (
       <div className="my-3 flex w-full flex-col items-end">
         <div
-          className={`text-text1 max-w-[70%] rounded-xl px-4 py-2 break-words ${
+          className={`max-w-[70%] break-words rounded-xl px-4 py-2 text-text1 ${
             entry.steer ? 'bg-warning1/10' : 'bg-surface3'
           }`}
         >
@@ -888,13 +888,13 @@ function MessageBubble({
         <div className="prose my-3">
           <Markdown>{part.text}</Markdown>
           {entry.streaming && part === lastTextPart && (
-            <span className="bg-accent1 ml-0.5 inline-block h-[1em] w-0.5 animate-pulse align-text-bottom" />
+            <span className="ml-0.5 inline-block h-[1em] w-0.5 animate-pulse bg-accent1 align-text-bottom" />
           )}
         </div>
       );
     },
     Reasoning: (part: ReasoningPart) => (
-      <div className="border-border1 text-ui-sm text-icon3 my-1.5 border-l-2 pl-2.5 italic [&_p]:my-0.5">
+      <div className="my-1.5 border-l-2 border-border1 pl-2.5 text-ui-sm italic text-icon3 [&_p]:my-0.5">
         <Markdown>{part.reasoning}</Markdown>
       </div>
     ),
@@ -965,7 +965,7 @@ function FileAttachment({ part }: { part: FilePart }) {
   if (part.mimeType?.startsWith('image/')) {
     const src = part.data.startsWith('data:') ? part.data : `data:${part.mimeType};base64,${part.data}`;
     return (
-      <img src={src} alt="Attached image" className="border-border1 my-1.5 max-h-80 max-w-full rounded-md border" />
+      <img src={src} alt="Attached image" className="my-1.5 max-h-80 max-w-full rounded-md border border-border1" />
     );
   }
   return <pre className={resultBlock}>{stringify(part)}</pre>;

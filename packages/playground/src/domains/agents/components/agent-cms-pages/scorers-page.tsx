@@ -217,7 +217,7 @@ function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnl
   return (
     <div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`sampling-type-${scorerId}`} className="text-neutral4 text-xs">
+        <Label htmlFor={`sampling-type-${scorerId}`} className="text-xs text-neutral4">
           Sampling
         </Label>
         <RadioGroup
@@ -242,8 +242,8 @@ function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnl
         </RadioGroup>
 
         {samplingType === 'ratio' && (
-          <div className="mt-2 flex flex-col gap-1.5">
-            <Label htmlFor={`rate-${scorerId}`} className="text-neutral4 text-xs">
+          <div className="flex flex-col gap-1.5 mt-2">
+            <Label htmlFor={`rate-${scorerId}`} className="text-xs text-neutral4">
               Sample Rate (0-1)
             </Label>
             <Input

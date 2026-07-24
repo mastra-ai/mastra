@@ -46,7 +46,7 @@ export default function AgentBuilderSkillsEdit() {
 }
 
 const AgentBuilderSkillEditSkeleton = () => (
-  <div className="flex h-screen w-screen items-center justify-center">
+  <div className="h-screen w-screen flex items-center justify-center">
     <Spinner />
   </div>
 );
@@ -138,7 +138,7 @@ const AgentBuilderSkillEditReady = ({ id, initialUserMessage }: ReadyProps) => {
         <AutosaveIndicator status={autosave.status} lastError={autosave.lastError} onRetry={autosave.retry} />
       }
       primaryAction={
-        <div className="hidden items-center gap-2 lg:flex">
+        <div className="hidden lg:flex items-center gap-2">
           <VisibilitySelectConnected skillId={id} />
         </div>
       }

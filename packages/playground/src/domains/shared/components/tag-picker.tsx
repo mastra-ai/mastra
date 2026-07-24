@@ -37,15 +37,15 @@ export function TagPicker({
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-1">
+    <div className="flex items-center gap-1 flex-wrap">
       {tags.map(tag => (
         <span
           key={tag}
-          className="bg-accent1/10 text-accent1 inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-medium"
+          className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-accent1/10 text-accent1 text-[10px] font-medium"
         >
           {tag}
           <button type="button" onClick={() => removeTag(tag)} className="hover:text-accent1/70">
-            <X className="h-2.5 w-2.5" />
+            <X className="w-2.5 h-2.5" />
           </button>
         </span>
       ))}
@@ -53,9 +53,9 @@ export function TagPicker({
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="text-neutral3 hover:text-neutral5 hover:bg-surface3 inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] transition-colors"
+            className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[10px] text-neutral3 hover:text-neutral5 hover:bg-surface3 transition-colors"
           >
-            <Plus className="h-3 w-3" />
+            <Plus className="w-3 h-3" />
             tag
           </button>
         </PopoverTrigger>
@@ -66,16 +66,16 @@ export function TagPicker({
             onChange={e => setSearch(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search or create tag..."
-            className="mb-1 h-7 text-xs"
+            className="h-7 text-xs mb-1"
             autoFocus
           />
-          <div className="max-h-32 space-y-0.5 overflow-y-auto">
+          <div className="max-h-32 overflow-y-auto space-y-0.5">
             {filtered.map(tag => (
               <button
                 key={tag}
                 type="button"
                 onClick={() => addTag(tag)}
-                className="hover:bg-surface3 text-neutral4 w-full rounded px-2 py-1 text-left text-xs"
+                className="w-full text-left px-2 py-1 text-xs rounded hover:bg-surface3 text-neutral4"
               >
                 {tag}
               </button>
@@ -84,7 +84,7 @@ export function TagPicker({
               <button
                 type="button"
                 onClick={() => addTag(search.trim())}
-                className="hover:bg-surface3 text-accent1 w-full rounded px-2 py-1 text-left text-xs"
+                className="w-full text-left px-2 py-1 text-xs rounded hover:bg-surface3 text-accent1"
               >
                 Create &quot;{search.trim()}&quot;
               </button>

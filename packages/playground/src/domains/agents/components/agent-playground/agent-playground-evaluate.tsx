@@ -352,7 +352,7 @@ export function AgentPlaygroundEvaluate({
     if (!detailView) return null;
 
     const backButton = (label: string, onClick: () => void) => (
-      <div className="border-border1 flex items-center gap-2 border-b px-4 py-2">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-border1">
         <Button variant="ghost" size="sm" onClick={onClick}>
           <ChevronLeft className="size-4" />
           {label}
@@ -458,7 +458,7 @@ export function AgentPlaygroundEvaluate({
           <Column withLeftSeparator>
             {backButton('Back to Experiments', () => setDetailView(null))}
             <Column.Content>
-              <div className="text-neutral3 p-4">Experiment not found</div>
+              <div className="p-4 text-neutral3">Experiment not found</div>
             </Column.Content>
           </Column>
         );
@@ -492,7 +492,7 @@ export function AgentPlaygroundEvaluate({
       return (
         <div className="flex h-full items-center justify-center py-20">
           <EmptyState
-            iconSlot={<FlaskConical className="text-neutral3 size-10" />}
+            iconSlot={<FlaskConical className="size-10 text-neutral3" />}
             titleSlot="No Experiments Yet"
             descriptionSlot="Run experiments against your datasets to see results here."
           />
@@ -564,7 +564,7 @@ export function AgentPlaygroundEvaluate({
       return (
         <div className="flex h-full items-center justify-center py-20">
           <EmptyState
-            iconSlot={<Database className="text-neutral3 size-10" />}
+            iconSlot={<Database className="size-10 text-neutral3" />}
             titleSlot="No Datasets"
             descriptionSlot="Create or attach a dataset to begin testing your agent."
           />
@@ -594,7 +594,7 @@ export function AgentPlaygroundEvaluate({
               featured={isFeatured}
               onClick={() => setDetailView({ type: 'dataset', id: ds.id })}
             >
-              <DataList.Cell height="compact" className="text-neutral4 min-w-0">
+              <DataList.Cell height="compact" className="min-w-0 text-neutral4">
                 <span className="block truncate">{ds.name}</span>
               </DataList.Cell>
               <DataList.Cell height="compact">
@@ -647,7 +647,7 @@ export function AgentPlaygroundEvaluate({
       return (
         <div className="flex h-full items-center justify-center py-20">
           <EmptyState
-            iconSlot={<GaugeIcon className="text-neutral3 size-10" />}
+            iconSlot={<GaugeIcon className="size-10 text-neutral3" />}
             titleSlot="No Scorers Attached"
             descriptionSlot="Attach or create a scorer to evaluate your agent's performance."
           />
@@ -676,14 +676,14 @@ export function AgentPlaygroundEvaluate({
 
           return (
             <DataList.RowButton key={id} featured={isFeatured} onClick={() => setDetailView({ type: 'scorer', id })}>
-              <DataList.Cell height="compact" className="text-neutral4 min-w-0">
+              <DataList.Cell height="compact" className="min-w-0 text-neutral4">
                 <span className="block truncate">{name}</span>
               </DataList.Cell>
               <DataList.Cell height="compact">
                 <Badge variant={source === 'code' ? 'default' : 'success'}>{source}</Badge>
               </DataList.Cell>
               <DataList.Cell height="compact" className="min-w-0">
-                <span className="block max-w-[200px] truncate">
+                <span className="block truncate max-w-[200px]">
                   {description || <span className="text-neutral2">—</span>}
                 </span>
               </DataList.Cell>
@@ -753,7 +753,7 @@ export function AgentPlaygroundEvaluate({
                   <button
                     key={ds.id}
                     type="button"
-                    className="hover:bg-surface3 flex w-full items-center justify-between rounded-md px-3 py-2 text-left transition-colors"
+                    className="w-full text-left px-3 py-2 hover:bg-surface3 rounded-md transition-colors flex items-center justify-between"
                     onClick={async () => {
                       try {
                         await updateDataset.mutateAsync({
@@ -784,7 +784,7 @@ export function AgentPlaygroundEvaluate({
               {unattachedDatasets.filter(
                 ds => !attachDatasetSearch || ds.name.toLowerCase().includes(attachDatasetSearch.toLowerCase()),
               ).length === 0 && (
-                <Txt variant="ui-sm" className="text-neutral3 block py-4 text-center">
+                <Txt variant="ui-sm" className="text-neutral3 text-center py-4 block">
                   No datasets available to attach
                 </Txt>
               )}
@@ -820,7 +820,7 @@ export function AgentPlaygroundEvaluate({
                   <button
                     key={id}
                     type="button"
-                    className="hover:bg-surface3 flex w-full items-center justify-between rounded-md px-3 py-2 text-left transition-colors"
+                    className="w-full text-left px-3 py-2 hover:bg-surface3 rounded-md transition-colors flex items-center justify-between"
                     onClick={async () => {
                       try {
                         await attachScorer(id, scorer);
@@ -848,7 +848,7 @@ export function AgentPlaygroundEvaluate({
                 const name = scorer.scorer?.name || id;
                 return name.toLowerCase().includes(attachScorerSearch.toLowerCase());
               }).length === 0 && (
-                <Txt variant="ui-sm" className="text-neutral3 block py-4 text-center">
+                <Txt variant="ui-sm" className="text-neutral3 text-center py-4 block">
                   No scorers available to attach
                 </Txt>
               )}
@@ -867,9 +867,9 @@ export function AgentPlaygroundEvaluate({
         defaultTab="experiments"
         value={activeTab}
         onValueChange={handleTabChange}
-        className="flex h-full flex-col overflow-hidden"
+        className="flex flex-col h-full overflow-hidden"
       >
-        <div className="border-border1 flex items-center justify-between border-b">
+        <div className="flex items-center justify-between border-b border-border1">
           <TabList className="border-b-0">
             <Tab value="experiments">Experiments</Tab>
             <Tab value="datasets">Datasets</Tab>
@@ -882,12 +882,12 @@ export function AgentPlaygroundEvaluate({
               <>
                 {unattachedDatasets.length > 0 && (
                   <Button variant="ghost" size="sm" onClick={() => setShowAttachDialog(true)}>
-                    <Paperclip className="mr-1 size-3.5" />
+                    <Paperclip className="size-3.5 mr-1" />
                     Attach
                   </Button>
                 )}
                 <Button variant="ghost" size="sm" onClick={() => setShowCreateDialog(true)}>
-                  <Plus className="mr-1 size-3.5" />
+                  <Plus className="size-3.5 mr-1" />
                   Create
                 </Button>
               </>
@@ -896,12 +896,12 @@ export function AgentPlaygroundEvaluate({
               <>
                 {unattachedScorers.length > 0 && (
                   <Button variant="ghost" size="sm" onClick={() => setShowAttachScorerDialog(true)}>
-                    <Paperclip className="mr-1 size-3.5" />
+                    <Paperclip className="size-3.5 mr-1" />
                     Attach
                   </Button>
                 )}
                 <Button variant="ghost" size="sm" onClick={() => setDetailView({ type: 'new-scorer' })}>
-                  <Plus className="mr-1 size-3.5" />
+                  <Plus className="size-3.5 mr-1" />
                   New
                 </Button>
               </>
@@ -910,7 +910,7 @@ export function AgentPlaygroundEvaluate({
         </div>
 
         {/* Search bar below tabs */}
-        <div className="border-border1 border-b py-2">
+        <div className="py-2 border-b border-border1">
           {activeTab === 'experiments' && (
             <InputGroup variant="outline">
               <InputGroupAddon align="inline-start">

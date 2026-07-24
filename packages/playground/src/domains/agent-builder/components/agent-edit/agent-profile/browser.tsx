@@ -35,7 +35,7 @@ export const Browser = ({ editable = true }: BrowserProps) => {
         </div>
 
         <div className="flex flex-col gap-2">
-          <Txt variant="header-sm" className="text-neutral6 font-semibold">
+          <Txt variant="header-sm" className="font-semibold text-neutral6">
             Browser access
           </Txt>
           <Txt variant="ui-md" className="text-neutral3">
@@ -53,7 +53,7 @@ export const Browser = ({ editable = true }: BrowserProps) => {
             data-testid={TOGGLE_ID}
             style={switchStyle}
           />
-          <label htmlFor={TOGGLE_ID} className="text-ui-md text-neutral6 cursor-pointer font-medium">
+          <label htmlFor={TOGGLE_ID} className="cursor-pointer text-ui-md font-medium text-neutral6">
             Enable browser
           </label>
           <StatusBadge variant={browserEnabled ? 'success' : 'neutral'} size="sm" withDot>

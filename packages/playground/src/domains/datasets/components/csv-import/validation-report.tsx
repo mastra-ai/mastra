@@ -20,7 +20,7 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
   if (invalidCount === 0) {
     return (
       <div className={cn('flex items-center gap-2 text-sm text-success', className)}>
-        <CheckCircleIcon className="h-4 w-4" />
+        <CheckCircleIcon className="w-4 h-4" />
         All {totalRows} row{totalRows !== 1 ? 's' : ''} valid
       </div>
     );
@@ -29,15 +29,15 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
   return (
     <div className={cn('space-y-3', className)}>
       {/* Summary warning */}
-      <div className="text-warning flex items-center gap-2 text-sm">
-        <AlertTriangleIcon className="h-4 w-4" />
+      <div className="flex items-center gap-2 text-sm text-warning">
+        <AlertTriangleIcon className="w-4 h-4" />
         {invalidCount} of {totalRows} rows will be skipped (validation failed)
       </div>
 
-      {validCount > 0 && <div className="text-muted-foreground text-sm">{validCount} rows will be imported</div>}
+      {validCount > 0 && <div className="text-sm text-muted-foreground">{validCount} rows will be imported</div>}
 
       {/* Failing rows table */}
-      <div className="max-h-48 overflow-y-auto rounded-md border">
+      <div className="max-h-48 overflow-y-auto border rounded-md">
         <table className="w-full text-xs">
           <thead className="bg-muted sticky top-0">
             <tr>
@@ -52,7 +52,7 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
             ))}
             {invalidCount > invalidRows.length && (
               <tr>
-                <td colSpan={3} className="text-muted-foreground px-2 py-1 italic">
+                <td colSpan={3} className="px-2 py-1 text-muted-foreground italic">
                   ... and {invalidCount - invalidRows.length} more
                 </td>
               </tr>
@@ -73,14 +73,14 @@ function ValidationRow({ row }: { row: RowValidationResult }) {
 
   return (
     <tr className="border-t">
-      <td className="text-muted-foreground px-2 py-1">{row.rowNumber}</td>
+      <td className="px-2 py-1 text-muted-foreground">{row.rowNumber}</td>
       <td className="px-2 py-1">
-        <code className="bg-muted rounded px-1 text-xs">
+        <code className="text-xs bg-muted px-1 rounded">
           {row.field}
           {errorPath !== '/' ? errorPath : ''}
         </code>
       </td>
-      <td className="text-destructive px-2 py-1">{errorMessage}</td>
+      <td className="px-2 py-1 text-destructive">{errorMessage}</td>
     </tr>
   );
 }

@@ -31,15 +31,15 @@ export function WorkspaceFileViewer({ filePath, file, isLoading, error }: Worksp
 
   return (
     <section
-      className="border-border1 bg-surface1 flex h-full min-w-0 flex-col border-l"
+      className="flex h-full min-w-0 flex-col border-l border-border1 bg-surface1"
       aria-label="Workspace file viewer"
     >
-      <div className="border-border1 flex items-center justify-between gap-2 border-b px-3 py-2 pl-10 lg:pl-3">
+      <div className="flex items-center justify-between gap-2 border-b border-border1 px-3 py-2 pl-10 lg:pl-3">
         <div className="min-w-0">
-          <Txt variant="ui-sm" className="text-icon6 truncate font-medium">
+          <Txt variant="ui-sm" className="truncate font-medium text-icon6">
             {file?.name ?? filePath ?? 'Select a file'}
           </Txt>
-          <Txt variant="ui-xs" className="text-icon3 truncate">
+          <Txt variant="ui-xs" className="truncate text-icon3">
             {file?.path ?? filePath ?? 'No file selected'}
           </Txt>
         </div>
@@ -53,7 +53,7 @@ export function WorkspaceFileViewer({ filePath, file, isLoading, error }: Worksp
       </div>
 
       {file ? (
-        <div className="border-border1 text-icon3 flex gap-3 border-b px-3 py-2 text-xs">
+        <div className="flex gap-3 border-b border-border1 px-3 py-2 text-xs text-icon3">
           <span>{formatBytes(file.size)}</span>
           <span>{new Date(file.updatedAt).toLocaleString()}</span>
           {file.truncated ? <span>Truncated</span> : null}
@@ -69,7 +69,7 @@ export function WorkspaceFileViewer({ filePath, file, isLoading, error }: Worksp
         ) : null}
         {file?.contentType === 'text' && isMarkdown ? <Markdown className="max-w-none">{content}</Markdown> : null}
         {file?.contentType === 'text' && !isMarkdown ? (
-          <pre className="border-border1 bg-surface2 text-icon6 m-0 overflow-x-auto rounded-md border p-3 font-mono text-xs leading-relaxed">
+          <pre className="m-0 overflow-x-auto rounded-md border border-border1 bg-surface2 p-3 font-mono text-xs leading-relaxed text-icon6">
             <code dangerouslySetInnerHTML={{ __html: highlightCode(content, language) }} />
           </pre>
         ) : null}

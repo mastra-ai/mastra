@@ -59,15 +59,15 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
 
       {linked.length > 0 && (
         <div className="flex flex-col gap-2">
-          <Txt as="h3" variant="ui-sm" className="text-icon5 font-medium">
+          <Txt as="h3" variant="ui-sm" className="font-medium text-icon5">
             Linked repositories
           </Txt>
           {linked.map(repo => (
-            <div key={repo.projectRepositoryId} className="bg-surface3 flex items-center gap-3 rounded-xl px-3 py-2">
-              <GithubIcon size={16} className="text-icon3 shrink-0" />
+            <div key={repo.projectRepositoryId} className="flex items-center gap-3 rounded-xl bg-surface3 px-3 py-2">
+              <GithubIcon size={16} className="shrink-0 text-icon3" />
               <span className="min-w-0 flex-1">
-                <span className="text-ui-sm text-icon6 block truncate font-medium">{repo.slug}</span>
-                {repo.gitBranch && <span className="text-ui-xs text-icon3 block truncate">{repo.gitBranch}</span>}
+                <span className="block truncate text-ui-sm font-medium text-icon6">{repo.slug}</span>
+                {repo.gitBranch && <span className="block truncate text-ui-xs text-icon3">{repo.gitBranch}</span>}
               </span>
               <Button
                 variant="ghost"
@@ -105,10 +105,10 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
         )
       ) : (
         <>
-          <div className="border-border1 bg-surface1 flex items-center gap-2 rounded-lg border px-3 py-2">
-            <SearchIcon size={15} className="text-icon2 shrink-0" />
+          <div className="flex items-center gap-2 rounded-lg border border-border1 bg-surface1 px-3 py-2">
+            <SearchIcon size={15} className="shrink-0 text-icon2" />
             <input
-              className="text-ui-sm text-icon6 placeholder:text-icon2 min-w-0 flex-1 bg-transparent focus:outline-none"
+              className="min-w-0 flex-1 bg-transparent text-ui-sm text-icon6 placeholder:text-icon2 focus:outline-none"
               type="text"
               placeholder="Filter repositories…"
               value={query}
@@ -117,7 +117,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
           </div>
 
           {error && (
-            <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg m-0">
+            <Txt as="p" variant="ui-sm" className="m-0 text-notice-destructive-fg">
               {error.message}
             </Txt>
           )}
@@ -126,7 +126,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
             {reposQuery.isPending ? (
               <SkeletonRows label="Loading repositories" rows={3} rowClassName="h-12 w-full rounded-xl" />
             ) : available.length === 0 ? (
-              <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
+              <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
                 {repos.length > 0 ? 'All available repositories are linked.' : 'No repositories found.'}
               </Txt>
             ) : (
@@ -134,17 +134,17 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                 <button
                   type="button"
                   key={repo.id}
-                  className="bg-surface3 hover:bg-surface4 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex w-full items-center gap-3 rounded-xl bg-surface3 px-3 py-2 text-left hover:bg-surface4 disabled:cursor-not-allowed disabled:opacity-50"
                   title={repo.fullName}
                   disabled={busyRepoId !== null}
                   onClick={() => linkRepository.mutate({ factoryProjectId, repo })}
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="text-ui-sm text-icon6 flex items-center gap-1.5 font-medium">
-                      <FolderIcon size={14} className="text-icon3 shrink-0" />
+                    <span className="flex items-center gap-1.5 text-ui-sm font-medium text-icon6">
+                      <FolderIcon size={14} className="shrink-0 text-icon3" />
                       <span className="truncate">{repo.fullName}</span>
                     </span>
-                    <span className="text-ui-xs text-icon3 block truncate">
+                    <span className="block truncate text-ui-xs text-icon3">
                       {repo.private ? 'private' : 'public'} · {repo.defaultBranch}
                     </span>
                   </span>

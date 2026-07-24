@@ -151,7 +151,7 @@ export function DatasetsList({
                         {tag}
                       </Chip>
                     ))}
-                    {tags.length > 2 && <span className="text-neutral2 shrink-0 text-[10px]">+{tags.length - 2}</span>}
+                    {tags.length > 2 && <span className="shrink-0 text-[10px] text-neutral2">+{tags.length - 2}</span>}
                   </div>
                 ) : (
                   <span className="text-neutral2">—</span>
@@ -183,7 +183,7 @@ export function DatasetsList({
                 to={`${paths.datasetLink(ds.id)}?tab=experiments`}
                 variant="ghost"
                 size="sm"
-                className="h-full w-full rounded-lg p-0!"
+                className="w-full  rounded-lg h-full p-0!"
               >
                 <Chip color={experimentsChipColor}>
                   {ds.experimentCount} ({ds.successPct ?? 0}%)
@@ -197,7 +197,7 @@ export function DatasetsList({
                 to={`${paths.datasetLink(ds.id)}?tab=review`}
                 variant="ghost"
                 size="sm"
-                className="h-full w-full rounded-lg p-0!"
+                className="w-full  rounded-lg h-full p-0!"
               >
                 {review.needsReview > 0 ? (
                   <Chip color="yellow">{review.needsReview} pending</Chip>

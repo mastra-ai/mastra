@@ -102,7 +102,7 @@ const COMPONENTS: Components = {
     </a>
   ),
   blockquote: ({ children, ...props }) => (
-    <blockquote className="border-neutral6 border-l-2 pl-4" {...props}>
+    <blockquote className="border-l-2 border-neutral6 pl-4" {...props}>
       {children}
     </blockquote>
   ),
@@ -140,13 +140,13 @@ const COMPONENTS: Components = {
     </li>
   ),
   table: ({ children, ...props }) => (
-    <table className="border-neutral6/20 w-full border-collapse overflow-y-auto rounded-md border" {...props}>
+    <table className="w-full border-collapse overflow-y-auto rounded-md border border-neutral6/20" {...props}>
       {children}
     </table>
   ),
   th: ({ children, ...props }) => (
     <th
-      className="border-neutral6/20 border px-4 py-2 text-left font-bold [[align=center]]:text-center [[align=right]]:text-right"
+      className="border border-neutral6/20 px-4 py-2 text-left font-bold [[align=center]]:text-center [[align=right]]:text-right"
       {...props}
     >
       {children}
@@ -154,14 +154,14 @@ const COMPONENTS: Components = {
   ),
   td: ({ children, ...props }) => (
     <td
-      className="border-neutral6/20 border px-4 py-2 text-left [[align=center]]:text-center [[align=right]]:text-right"
+      className="border border-neutral6/20 px-4 py-2 text-left [[align=center]]:text-center [[align=right]]:text-right"
       {...props}
     >
       {children}
     </td>
   ),
   tr: ({ children, ...props }) => (
-    <tr className="even:bg-surface4 m-0 border-t p-0" {...props}>
+    <tr className="m-0 border-t p-0 even:bg-surface4" {...props}>
       {children}
     </tr>
   ),

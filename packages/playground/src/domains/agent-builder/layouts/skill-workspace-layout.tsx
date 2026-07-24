@@ -40,7 +40,7 @@ export const SkillWorkspaceLayout = ({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Header */}
-      <div className="bg-surface1 flex min-w-0 items-center gap-2 px-3 py-2 md:px-6 md:py-3">
+      <div className="flex min-w-0 items-center gap-2 bg-surface1 px-3 py-2 md:px-6 md:py-3">
         <Button
           size="icon-sm"
           variant="ghost"
@@ -52,7 +52,7 @@ export const SkillWorkspaceLayout = ({
           <ArrowLeftIcon />
         </Button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="text-ui-md text-neutral6 min-w-0 truncate">{title}</div>
+          <div className="min-w-0 truncate text-ui-md text-neutral6">{title}</div>
           {rightAside && <div className="shrink-0">{rightAside}</div>}
         </div>
         {primaryAction && <div className="shrink-0">{primaryAction}</div>}
@@ -62,11 +62,11 @@ export const SkillWorkspaceLayout = ({
       {/* Mobile tabs — only when there's a configure side to switch to.
        *  Mirrors the agent-builder pill-style segmented switch for visual parity. */}
       {showForm && (
-        <div className="px-4 pt-4 pb-2 md:hidden">
+        <div className="md:hidden px-4 pt-4 pb-2">
           <div
             role="tablist"
             aria-label="Workspace view"
-            className="border-border1 bg-surface3 relative mx-auto flex h-9 w-full max-w-sm items-center rounded-full border p-0.5"
+            className="relative mx-auto flex h-9 w-full max-w-sm items-center rounded-full border border-border1 bg-surface3 p-0.5"
           >
             <span
               aria-hidden="true"
@@ -127,7 +127,7 @@ export const SkillWorkspaceLayout = ({
           )}
         >
           <div className="flex h-full min-h-0 flex-col px-4 pt-4 pb-6 md:px-10">
-            <div className="flex min-h-0 w-full flex-1 flex-col md:mx-auto md:max-w-[80ch]">{chat}</div>
+            <div className="flex min-h-0 flex-1 flex-col md:max-w-[80ch] md:mx-auto w-full">{chat}</div>
           </div>
         </div>
         {showForm && (
@@ -154,7 +154,7 @@ export const SkillWorkspaceLayout = ({
             >
               <div className="min-h-0 flex-1 overflow-hidden">{form}</div>
               {deleteAction && (
-                <div className="border-border1 border-t px-4 pt-4 pb-4 md:px-6" data-testid="skill-edit-delete-action">
+                <div className="border-t border-border1 px-4 pb-4 pt-4 md:px-6" data-testid="skill-edit-delete-action">
                   {deleteAction}
                 </div>
               )}

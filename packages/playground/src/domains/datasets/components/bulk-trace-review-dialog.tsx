@@ -133,7 +133,7 @@ export function BulkTraceReviewDialog({
       </SideDialog.Top>
 
       <SideDialog.Content>
-        <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Button
               tooltip="Previous item"

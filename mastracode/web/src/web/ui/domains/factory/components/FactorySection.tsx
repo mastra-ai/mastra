@@ -21,7 +21,7 @@ export function FactorySection({ children }: { children?: ReactNode }) {
   return (
     <nav className="flex flex-col gap-2" aria-label="Factory">
       <div className="flex items-center justify-between px-1">
-        <Txt as="span" variant="ui-xs" className="text-icon3 tracking-wide uppercase">
+        <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
           Factory
         </Txt>
       </div>

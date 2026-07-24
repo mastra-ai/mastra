@@ -96,7 +96,7 @@ function AgentEvaluate() {
   }
 
   if (!codeAgent) {
-    return <div className="py-4 text-center">Agent not found</div>;
+    return <div className="text-center py-4">Agent not found</div>;
   }
 
   return (

@@ -104,16 +104,16 @@ const AgentMetadataModelListItem = ({
   const [enabled, setEnabled] = useState(() => modelConfig.enabled);
 
   return (
-    <div className="bg-surface1 hover:bg-surface4/50 rounded-lg transition-colors">
+    <div className="rounded-lg bg-surface1 hover:bg-surface4/50 transition-colors">
       <div className="flex items-center gap-2 p-2">
         {showDragHandle && (
-          <div {...dragHandleProps} className="text-neutral3 shrink-0 cursor-grab active:cursor-grabbing">
+          <div {...dragHandleProps} className="text-neutral3 cursor-grab active:cursor-grabbing shrink-0">
             <Icon>
               <GripVertical />
             </Icon>
           </div>
         )}
-        <div className="min-w-0 flex-1">
+        <div className="flex-1 min-w-0">
           <AgentMetadataModelSwitcher
             defaultProvider={modelConfig.model.provider}
             defaultModel={modelConfig.model.modelId}

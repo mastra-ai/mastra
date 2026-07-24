@@ -90,14 +90,14 @@ function FlowCard({
           />
         </Sankey>
       </CardContent>
-      <CardFooter className="border-border1 bg-surface2 flex flex-wrap justify-between gap-3 border-t px-4 py-3">
-        <div className="text-neutral3 flex flex-wrap items-center gap-x-5 gap-y-1 font-mono text-[10px] tracking-wider">
+      <CardFooter className="flex flex-wrap justify-between gap-3 border-t border-border1 bg-surface2 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1 font-mono text-[10px] tracking-wider text-neutral3">
           <span>RIBBON WIDTH = TRACE COUNT</span>
           <span>HOVER OR FOCUS TO ISOLATE FLOW</span>
         </div>
         <ul
           aria-label="Signal stage legend"
-          className="text-neutral3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs"
+          className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral3"
           data-alignment="right"
         >
           {stages.map(stage => (
@@ -284,36 +284,36 @@ export function SankeySignals({
   return (
     <main className="min-w-0 space-y-5 p-4 lg:p-6">
       <header className="max-w-3xl" data-testid="signals-page-header">
-        <div className="text-neutral4 flex items-center gap-2 font-mono text-xs font-semibold tracking-widest">
-          <span aria-hidden="true" className="bg-accent1 size-2 rounded-full" />
+        <div className="flex items-center gap-2 font-mono text-xs font-semibold tracking-widest text-neutral4">
+          <span aria-hidden="true" className="size-2 rounded-full bg-accent1" />
           SIGNALS
         </div>
-        <h1 className="text-neutral6 mt-2 text-xl font-semibold sm:text-2xl">
+        <h1 className="mt-2 text-xl font-semibold text-neutral6 sm:text-2xl">
           Understand what drives every agent interaction
         </h1>
-        <p className="text-neutral3 mt-1.5 text-sm leading-5">
+        <p className="mt-1.5 text-sm leading-5 text-neutral3">
           Signals group recurring patterns across traces so you can see how goals, outcomes, behaviors, and sentiment
           connect.
         </p>
-        <p className="text-neutral4 mt-2 font-mono text-xs">
+        <p className="mt-2 font-mono text-xs text-neutral4">
           {entityId} · Snapshot {flow.snapshot.ordinal} of {flow.snapshot.total} ·{' '}
           {formatSnapshotWindow(flow.snapshot.startedAt, flow.snapshot.endedAt)}
         </p>
         <ul aria-label="Signal analysis metrics" className="mt-3 flex flex-wrap gap-2">
-          <li className="border-border1 bg-surface2 text-neutral4 rounded-md border px-3 py-1.5 text-xs">
+          <li className="rounded-md border border-border1 bg-surface2 px-3 py-1.5 text-xs text-neutral4">
             {traceLabel(flow.snapshot.traceCount)} analyzed
           </li>
-          <li className="border-border1 bg-surface2 text-neutral4 rounded-md border px-3 py-1.5 text-xs">
+          <li className="rounded-md border border-border1 bg-surface2 px-3 py-1.5 text-xs text-neutral4">
             {themeCount} themes
           </li>
-          <li className="border-border1 bg-surface2 text-neutral4 rounded-md border px-3 py-1.5 text-xs">
+          <li className="rounded-md border border-border1 bg-surface2 px-3 py-1.5 text-xs text-neutral4">
             {flow.stages.length} signal types
           </li>
         </ul>
       </header>
       {drillIn ? (
-        <nav aria-label="Active theme drill-in" className="text-neutral4 flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-neutral6 text-base font-semibold">{drillIn.label}</span>
+        <nav aria-label="Active theme drill-in" className="flex flex-wrap items-center gap-2 text-sm text-neutral4">
+          <span className="text-base font-semibold text-neutral6">{drillIn.label}</span>
           <Button
             aria-label={`View theme details for ${drillIn.label}`}
             onClick={() => {
@@ -332,14 +332,14 @@ export function SankeySignals({
         </nav>
       ) : null}
       {drillIn && !drillInAvailable ? (
-        <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
+        <section className="rounded-lg border border-border1 bg-surface2 p-6 text-sm text-neutral3">
           This drill-in is unavailable for snapshots with more than 2,000 traces. Use the clear filter action above or
           choose another snapshot.
         </section>
       ) : drillIn && pathsQuery.isPending ? (
         <SignalsFrameLoadingSkeleton />
       ) : isDrilledEmpty ? (
-        <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
+        <section className="rounded-lg border border-border1 bg-surface2 p-6 text-sm text-neutral3">
           This theme is not present in the selected snapshot. Use the clear filter action above to return to the full
           flow.
         </section>
@@ -364,7 +364,7 @@ export function SankeySignals({
       {drillIn && (!drillInAvailable || pathsQuery.isPending || isDrilledEmpty) ? null : (
         <>
           {perspectiveMutation.isPending ? (
-            <p className="text-neutral3 font-mono text-xs" role="status">
+            <p className="font-mono text-xs text-neutral3" role="status">
               Reloading snapshots for new signal perspective…
             </p>
           ) : null}

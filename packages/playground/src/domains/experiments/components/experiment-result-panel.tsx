@@ -97,7 +97,7 @@ export function ExperimentResultPanel({
 
       {!collapsed && (
         <DataPanel.Content>
-          <div className="mb-6 grid gap-4">
+          <div className="grid gap-4 mb-6">
             <DataKeysAndValues>
               <DataKeysAndValues.Key>Item Id</DataKeysAndValues.Key>
               <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy Item Id to clipboard" copyValue={result.itemId}>
@@ -148,10 +148,10 @@ export function ExperimentResultPanel({
                   Review
                 </DataPanel.SectionHeading>
                 {(result.status || tags.length > 0) && (
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap gap-2 items-center">
                     {result.status && (
                       <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                        className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                           result.status === 'needs-review'
                             ? 'bg-orange-500/10 text-orange-400'
                             : result.status === 'complete'
@@ -163,7 +163,7 @@ export function ExperimentResultPanel({
                       </span>
                     )}
                     {tags.map(tag => (
-                      <span key={tag} className="bg-surface4 text-neutral4 rounded px-2 py-0.5 text-xs">
+                      <span key={tag} className="text-xs px-2 py-0.5 rounded bg-surface4 text-neutral4">
                         {tag}
                       </span>
                     ))}

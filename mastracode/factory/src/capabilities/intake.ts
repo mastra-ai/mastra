@@ -107,8 +107,7 @@ export interface CreatedIntakeComment {
  * warn log.
  */
 export type IntakeIssueTargetState =
-  | { kind: 'byType'; stateType: 'unstarted' | 'started' | 'completed' | 'canceled' }
-  | { kind: 'byName'; name: string };
+  { kind: 'byType'; stateType: 'unstarted' | 'started' | 'completed' | 'canceled' } | { kind: 'byName'; name: string };
 
 export interface UpdateIntakeIssueInput extends GetIntakeIssueInput {
   state: IntakeIssueTargetState;

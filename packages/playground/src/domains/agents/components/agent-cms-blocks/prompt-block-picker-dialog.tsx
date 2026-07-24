@@ -55,29 +55,29 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
         </DialogHeader>
         <DialogBody>
           <div className="flex flex-col gap-3">
-            <div className="border-border1 bg-surface2 flex items-center gap-2 rounded-md border px-3 py-2">
-              <Search className="text-neutral3 h-4 w-4" />
+            <div className="flex items-center gap-2 rounded-md border border-border1 bg-surface2 px-3 py-2">
+              <Search className="h-4 w-4 text-neutral3" />
               <input
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search prompt blocks..."
-                className="text-ui-sm text-neutral6 placeholder:text-neutral3 flex-1 bg-transparent outline-hidden"
+                className="flex-1 bg-transparent text-ui-sm text-neutral6 placeholder:text-neutral3 outline-hidden"
               />
             </div>
 
             {isLoading ? (
-              <div className="text-neutral3 flex flex-col items-center justify-center gap-2 py-8">
+              <div className="flex flex-col items-center justify-center gap-2 py-8 text-neutral3">
                 <Spinner className="h-6 w-6" />
                 <Txt variant="ui-sm">Loading prompt blocks...</Txt>
               </div>
             ) : filtered.length === 0 ? (
-              <div className="text-neutral3 flex flex-col items-center justify-center gap-2 py-8">
+              <div className="flex flex-col items-center justify-center gap-2 py-8 text-neutral3">
                 <FileText className="h-8 w-8" />
                 <Txt variant="ui-sm">{search ? 'No matching prompt blocks' : 'No prompt blocks available'}</Txt>
               </div>
             ) : (
-              <div className="max-h-dropdown-max-height flex flex-col gap-1 overflow-y-auto">
+              <div className="flex flex-col gap-1 max-h-dropdown-max-height overflow-y-auto">
                 {filtered.map(block => (
                   <button
                     key={block.id}

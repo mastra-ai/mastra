@@ -22,7 +22,7 @@ function isCodeBasedScorer(score?: ScoreRowData): boolean {
 function buildDialogTitle(sectionTitle: string, icon: React.ReactNode, score: ScoreRowData) {
   return (
     <>
-      <span className="text-neutral2 flex items-center gap-1.5 tracking-widest uppercase [&>svg]:size-3.5">
+      <span className="flex items-center gap-1.5 text-neutral2 uppercase tracking-widest [&>svg]:size-3.5">
         {icon}
         {sectionTitle}
       </span>
@@ -101,7 +101,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreData
             )}
           </DataKeysAndValues>
 
-          <div className="mt-6 mb-6 flex justify-end">
+          <div className="mt-6 mb-6 flex justify-end ">
             <Button size="sm" onClick={() => setDatasetDialogOpen(true)}>
               <Icon>
                 <SaveIcon />
@@ -119,9 +119,9 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreData
             >
               <GaugeIcon />
               <span className="">Score:</span>
-              <b className="text-neutral3 font-mono">{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</b>
+              <b className="font-mono text-neutral3">{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</b>
             </div>
-            <div className="text-ui-smd mt-2 font-mono">
+            <div className="text-ui-smd font-mono mt-2">
               {score.reason ||
                 (isCodeBased ? 'N/A — code-based scorer does not generate a reason' : 'N/A — step not configured')}
             </div>

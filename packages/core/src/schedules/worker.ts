@@ -199,13 +199,7 @@ export class AgentScheduleWorker extends MastraWorker {
 
 /** Outcome union written to the schedule trigger row for an agent-schedule fire. */
 export type ScheduleTriggerOutcome =
-  | 'succeeded'
-  | 'delivered'
-  | 'persisted'
-  | 'discarded'
-  | 'skipped'
-  | 'aborted'
-  | 'failed';
+  'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped' | 'aborted' | 'failed';
 
 /**
  * Best-effort delete of the schedule row. Self-clean is best-effort —

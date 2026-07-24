@@ -91,7 +91,7 @@ export function MCPClientToolPreview({
 }
 
 function EmptyState({ children }: { children: React.ReactNode }) {
-  return <div className="flex h-full items-center justify-center p-8 text-center">{children}</div>;
+  return <div className="flex items-center justify-center h-full p-8 text-center">{children}</div>;
 }
 
 function ToolList({
@@ -108,8 +108,8 @@ function ToolList({
   const selectedCount = Object.keys(selectedTools).length;
 
   return (
-    <div className="overflow-y-auto p-5">
-      <div className="text-neutral6 flex items-center gap-2">
+    <div className="p-5 overflow-y-auto">
+      <div className="text-neutral6 flex gap-2 items-center">
         <Icon size="lg" className="bg-surface4 rounded-md p-1">
           <McpServerIcon />
         </Icon>

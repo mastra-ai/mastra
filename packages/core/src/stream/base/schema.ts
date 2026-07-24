@@ -11,11 +11,7 @@ export type PartialSchemaOutput<OUTPUT = undefined> = OUTPUT extends undefined ?
  * @deprecated Use StandardSchemaWithJSON from '../../schema' instead
  */
 export type OutputSchema<OBJECT = any> =
-  | z4.ZodType<OBJECT, any>
-  | z3.Schema<OBJECT, z3.ZodTypeDef, any>
-  | Schema<OBJECT>
-  | JSONSchema7
-  | undefined;
+  z4.ZodType<OBJECT, any> | z3.Schema<OBJECT, z3.ZodTypeDef, any> | Schema<OBJECT> | JSONSchema7 | undefined;
 
 /**
  * @deprecated Use StandardSchemaWithJSON from '../../schema' instead

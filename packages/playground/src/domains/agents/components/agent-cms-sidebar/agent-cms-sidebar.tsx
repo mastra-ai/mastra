@@ -43,8 +43,8 @@ export function AgentCmsSidebar({ basePath, currentPath, versionId }: AgentCmsSi
   }, [isCodeAgentOverride, editorConfig, features]);
 
   return (
-    <div className="flex h-full flex-col">
-      <ScrollArea className="min-h-0 flex-1">
+    <div className="h-full flex flex-col">
+      <ScrollArea className="flex-1 min-h-0">
         <nav className="py-4">
           <ul className="flex flex-col gap-0">
             {sections.map((section, index) => (
@@ -104,12 +104,12 @@ const SidebarLink = ({
         )}
       >
         {done ? (
-          <div className="bg-accent1 flex size-6 shrink-0 items-center justify-center rounded-full">
+          <div className="size-6 rounded-full bg-accent1 flex items-center justify-center shrink-0">
             <Check className="size-3.5 text-white" />
           </div>
         ) : (
           <Txt
-            className="border-neutral2 text-neutral2 flex size-6 shrink-0 items-center justify-center rounded-full border font-mono"
+            className="size-6 rounded-full border border-neutral2 flex items-center justify-center text-neutral2 font-mono shrink-0"
             variant="ui-sm"
           >
             {index + 1}
@@ -127,7 +127,7 @@ const SidebarLink = ({
         </div>
       </Link>
 
-      {!isLast && <div className="bg-surface3 ml-6 inline-block h-2 w-0.5" />}
+      {!isLast && <div className="bg-surface3 w-0.5 h-2 inline-block ml-6" />}
     </li>
   );
 };

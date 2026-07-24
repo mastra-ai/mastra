@@ -94,7 +94,7 @@ export function WorkflowNestedNode({
         )}
       >
         {hasSpecialBadge && (
-          <div className="flex flex-wrap gap-1.5 px-3 pt-2 pb-1">
+          <div className="px-3 pt-2 pb-1 flex gap-1.5 flex-wrap">
             {canSuspend && (
               <Badge icon={<BADGE_ICONS.suspend className="text-current" style={{ color: BADGE_COLORS.suspend }} />}>
                 SUSPEND/RESUME
@@ -133,7 +133,7 @@ export function WorkflowNestedNode({
 
           <Txt
             variant="ui-lg"
-            className="text-neutral6 inline-flex w-full items-center justify-between gap-1 font-medium"
+            className="text-neutral6 font-medium inline-flex items-center gap-1 justify-between w-full"
           >
             {label} {step?.startedAt && <Clock startedAt={step.startedAt} endedAt={step.endedAt} />}
           </Txt>
@@ -146,8 +146,8 @@ export function WorkflowNestedNode({
         )}
 
         {isForEachNode && step?.foreachProgress && (
-          <div className="flex items-center gap-2 px-3 pb-2">
-            <div className="bg-surface1 h-1.5 flex-1 overflow-hidden rounded-full">
+          <div className="px-3 pb-2 flex items-center gap-2">
+            <div className="flex-1 h-1.5 bg-surface1 rounded-full overflow-hidden">
               <div
                 className={cn(
                   'h-full rounded-full transition-all duration-300',

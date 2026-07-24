@@ -194,10 +194,10 @@ const InlineBlockContent = ({
 
   return (
     <>
-      <div className="group hover:bg-surface2/50 relative rounded-md transition-colors duration-150">
+      <div className="relative group rounded-md transition-colors duration-150 hover:bg-surface2/50">
         {/* Left gutter — drag handle (visible on hover/focus-within) */}
         {!readOnly && (
-          <div className="absolute top-1 -left-8 flex flex-col items-center opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
+          <div className="absolute -left-8 top-1 flex flex-col items-center transition-opacity duration-150 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
             <div {...dragHandleProps} className="text-neutral3 hover:text-neutral6 cursor-grab active:cursor-grabbing">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -213,7 +213,7 @@ const InlineBlockContent = ({
 
         {/* Right toolbar — conditions + save as ref + delete (visible on hover/focus-within) */}
         {!readOnly && (
-          <div className="absolute top-1 right-0 z-10 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-focus-within:opacity-100 group-hover:opacity-100">
+          <div className="absolute right-0 top-1 z-10 flex items-center gap-0.5 transition-opacity duration-150 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
             <DisplayConditionsDialog
               entityName={`Block ${index + 1}`}
               schema={schema}

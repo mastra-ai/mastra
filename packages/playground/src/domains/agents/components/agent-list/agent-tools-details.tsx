@@ -56,7 +56,7 @@ export function AgentToolsDetails({ agentName, tools }: AgentToolsDetailsProps) 
           >
             {toolEntries.map(([toolKey, tool]) => (
               <li key={toolKey} className="grid gap-1">
-                <span className="overflow-wrap-anywhere text-ui-sm text-neutral5 font-medium">
+                <span className="overflow-wrap-anywhere text-ui-sm font-medium text-neutral5">
                   {tool.id || toolKey}
                 </span>
                 {tool.description ? (

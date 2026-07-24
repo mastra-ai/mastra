@@ -698,8 +698,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
           const agentControllerContext = requestContext?.get('controller') as
-            | AgentControllerRequestContext<{ projectPath?: string }>
-            | undefined;
+            AgentControllerRequestContext<{ projectPath?: string }> | undefined;
           const state = agentControllerContext?.getState();
           return getStaticallyLoadedInstructionPaths(state?.projectPath ?? project.rootPath);
         },

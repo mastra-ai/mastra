@@ -53,7 +53,7 @@ export function HorizontalBars({
             </div>
           ))}
         </div>
-        <span className="text-ui-sm text-neutral2 shrink-0 pr-2">Total</span>
+        <span className="shrink-0 pr-2 text-ui-sm text-neutral2">Total</span>
       </div>
       <div className="grid gap-3.5">
         {sorted.map(d => {
@@ -120,11 +120,11 @@ export function HorizontalBars({
                     </div>
                   </TooltipContent>
                 </Tooltip>
-                <span className="text-ui-sm text-neutral4 pointer-events-none absolute inset-y-0 left-2.5 z-10 flex items-center truncate">
+                <span className="pointer-events-none absolute inset-y-0 left-2.5 z-10 flex items-center truncate text-ui-sm text-neutral4">
                   {d.name}
                 </span>
               </div>
-              <span className="text-ui-md text-neutral4 shrink-0 pr-3 tabular-nums">{fmt(total)}</span>
+              <span className="shrink-0 pr-3 text-ui-md text-neutral4 tabular-nums">{fmt(total)}</span>
             </>
           );
 
@@ -133,14 +133,14 @@ export function HorizontalBars({
               <LinkComponent
                 key={d.name}
                 href={d.href}
-                className="hover:bg-surface3 focus-visible:bg-surface3 flex h-6 cursor-pointer items-center gap-14 rounded transition-colors outline-none"
+                className="flex h-6 cursor-pointer items-center gap-14 rounded transition-colors outline-none hover:bg-surface3 focus-visible:bg-surface3"
               >
                 {rowBody}
               </LinkComponent>
             );
           }
           return (
-            <div key={d.name} className="flex h-6 items-center gap-14">
+            <div key={d.name} className="flex h-6 items-center gap-14 ">
               {rowBody}
             </div>
           );

@@ -48,9 +48,9 @@ export function AgentProviderDetails({ agentName, provider, modelId }: AgentProv
             <span aria-hidden="true">
               <ProviderLogo providerId={provider} className="dark:invert" />
             </span>
-            <span className="overflow-wrap-anywhere min-w-0">{provider}</span>
+            <span className="min-w-0 overflow-wrap-anywhere">{provider}</span>
           </TextAndIcon>
-          <span className="overflow-wrap-anywhere text-ui-sm text-neutral5 min-w-0">
+          <span className="min-w-0 overflow-wrap-anywhere text-ui-sm text-neutral5">
             {modelId || 'No model configured'}
           </span>
         </div>

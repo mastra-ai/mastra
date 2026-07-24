@@ -117,7 +117,7 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
         {...props}
       />
       {rightSlot && (
-        <div data-slot="command-input-right-slot" className="text-neutral3 ml-2 flex shrink-0 items-center">
+        <div data-slot="command-input-right-slot" className="ml-2 flex shrink-0 items-center text-neutral3">
           {rightSlot}
         </div>
       )}
@@ -169,7 +169,7 @@ const CommandEmpty = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Empty>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Empty>
 >((props, ref) => (
-  <CommandPrimitive.Empty ref={ref} className="text-ui-smd text-neutral3 py-6 text-center" {...props} />
+  <CommandPrimitive.Empty ref={ref} className="py-6 text-center text-ui-smd text-neutral3" {...props} />
 ));
 CommandEmpty.displayName = CommandPrimitive.Empty.displayName;
 

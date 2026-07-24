@@ -82,7 +82,7 @@ function VariablesRequestContextForm({
 
 function ModeSwitcher({ mode, onModeChange }: { mode: InputMode; onModeChange: (mode: InputMode) => void }) {
   return (
-    <div className="border-border1 flex items-center gap-1 rounded-md border p-0.5">
+    <div className="flex items-center gap-1 rounded-md border border-border1 p-0.5">
       <button
         type="button"
         aria-pressed={mode === 'form'}

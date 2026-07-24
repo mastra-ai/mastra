@@ -35,7 +35,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
     return (
       <div className={cn('grid gap-y-4', className)}>
         {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="bg-surface3 h-16 animate-pulse rounded-lg" />
+          <div key={index} className="h-16 bg-surface3 animate-pulse rounded-lg" />
         ))}
       </div>
     );
@@ -63,7 +63,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
               {template.imageURL && (
                 <div className={cn('overflow-hidden')}>
                   <div
-                    className="thumb transition-scale h-full w-full bg-cover duration-150"
+                    className="w-full h-full bg-cover thumb transition-scale duration-150"
                     style={{
                       backgroundImage: `url(${template.imageURL})`,
                     }}
@@ -75,7 +75,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
               >
                 <h2 className="text-ui-lg text-neutral5">{template.title}</h2>
                 <p className="text-ui-md text-neutral4 transition-colors duration-500">{template.description}</p>
-                <div className="text-neutral3 text-ui-md mt-3 hidden flex-wrap items-center gap-4 2xl:flex">
+                <div className="hidden 2xl:flex text-neutral3 text-ui-md flex-wrap items-center gap-4 mt-3">
                   {hasMetaInfo && (
                     <ul
                       className={cn(
@@ -111,7 +111,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                     </ul>
                   )}
                   {hasMetaInfo && template.supportedProviders && <small>|</small>}
-                  <div className="text-neutral3 flex items-center gap-4">
+                  <div className="flex items-center text-neutral3 gap-4">
                     {template.supportedProviders.map(provider => (
                       <span key={provider} className="">
                         {provider}
@@ -127,7 +127,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
               target="_blank"
               rel="noopener noreferrer"
             >
-              <span className="bg-surface1 group-hover:bg-surface2 text-neutral3 group-hover:text-neutral5 flex items-center gap-2 rounded px-2 py-1 transition-colors">
+              <span className="flex items-center gap-2 px-2 py-1 rounded bg-surface1 group-hover:bg-surface2 text-neutral3 transition-colors group-hover:text-neutral5">
                 <GithubIcon /> {getRepoName(template.githubUrl)}
               </span>
             </a>

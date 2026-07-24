@@ -63,20 +63,20 @@ const BackgroundTaskMetadata = ({
     argSlot = <CodeEditor data={formattedArgs} />;
   } catch {
     argSlot = (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{args as unknown as string}</pre>
+      <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{args as unknown as string}</pre>
     );
   }
 
   const resultSlot =
     typeof result === 'string' ? (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{result}</pre>
+      <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{result}</pre>
     ) : (
       <CodeEditor data={result} />
     );
 
   const suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{suspendPayload}</pre>
+      <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
     ) : (
       <CodeEditor data={suspendPayload as Record<string, unknown> | Record<string, unknown>[] | undefined} />
     );

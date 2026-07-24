@@ -10,7 +10,7 @@ export const FieldWrapper: React.FC<FieldWrapperProps> = ({ label, children, id,
   return (
     <div className="pb-4 last:pb-0">
       {!isDisabled && (
-        <Txt as="label" variant="ui-sm" className="text-neutral3 block pb-1" htmlFor={id}>
+        <Txt as="label" variant="ui-sm" className="text-neutral3 pb-1 block" htmlFor={id}>
           {label}
           {field.required && <span className="text-accent2"> *</span>}
         </Txt>

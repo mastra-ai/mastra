@@ -111,7 +111,7 @@ export const ImageEntry = ({ src }: ImageEntryProps) => {
   return (
     <>
       <button onClick={() => setOpen(true)} type="button" className={ctaClassName}>
-        <img src={src} className="aspect-ratio max-h-[140px] max-w-[320px] object-cover" alt="Preview" />
+        <img src={src} className="object-cover aspect-ratio max-h-[140px] max-w-[320px]" alt="Preview" />
       </button>
       <ImagePreviewDialog src={src} open={open} onOpenChange={setOpen} />
     </>
@@ -168,7 +168,7 @@ interface TxtPreviewDialogProps {
 export const TxtPreviewDialog = ({ data, open, onOpenChange }: TxtPreviewDialogProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[80vh] max-w-4xl">
+      <DialogContent className="max-w-4xl h-[80vh]">
         <DialogHeader>
           <DialogTitle>Text preview</DialogTitle>
           <DialogDescription>Preview of the text file</DialogDescription>

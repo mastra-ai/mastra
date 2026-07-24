@@ -71,13 +71,13 @@ function WorkspaceViewerPanelInner({
   };
 
   return (
-    <div className="bg-surface1 relative flex h-full w-full min-w-0" data-testid="workspace-viewer-panel">
+    <div className="relative flex h-full w-full min-w-0 bg-surface1" data-testid="workspace-viewer-panel">
       {viewerOpen ? (
         <div className="relative h-full min-w-0 flex-1 overflow-hidden">
           <Button
             size="icon-sm"
             variant="ghost"
-            className="absolute top-2 left-2 z-10 lg:hidden"
+            className="absolute left-2 top-2 z-10 lg:hidden"
             onClick={() => setViewerOpen(false)}
             aria-label="Back to workspace files"
           >
@@ -93,7 +93,7 @@ function WorkspaceViewerPanelInner({
       ) : null}
       {viewerOpen ? (
         <div
-          className="bg-border1 hover:bg-accent1 hidden w-1 cursor-col-resize lg:block"
+          className="hidden w-1 cursor-col-resize bg-border1 hover:bg-accent1 lg:block"
           role="separator"
           aria-orientation="vertical"
           aria-label="Resize workspace file browser"

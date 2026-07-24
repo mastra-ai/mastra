@@ -17,7 +17,7 @@ export function DataKeysAndValuesValueWithTooltip({
     <dd className={cn(dataKeysAndValuesValueStyles, className)}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <div tabIndex={0} className="hover:text-neutral4 inline cursor-help truncate">
+          <div tabIndex={0} className="inline cursor-help truncate hover:text-neutral4">
             {children}
           </div>
         </TooltipTrigger>

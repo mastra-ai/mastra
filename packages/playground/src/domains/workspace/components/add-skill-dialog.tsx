@@ -190,16 +190,16 @@ export function AddSkillDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="flex h-[80vh] max-w-4xl flex-col">
+      <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Add Skill</DialogTitle>
           <DialogDescription>Search and install skills from the community registry</DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="flex max-h-none flex-1 flex-col gap-4 overflow-hidden">
+        <DialogBody className="flex-1 flex flex-col gap-4 overflow-hidden max-h-none">
           {/* Search Input */}
           <div className="relative">
-            <Search className="text-neutral3 absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral3" />
             <Input
               placeholder="Search skills..."
               value={searchQuery}
@@ -208,24 +208,24 @@ export function AddSkillDialog({
             />
           </div>
 
-          <div className="flex min-h-0 flex-1 gap-4">
+          <div className="flex flex-1 gap-4 min-h-0">
             {/* Skills List */}
-            <div className="flex min-h-0 w-1/2 flex-col">
-              <div className="text-neutral4 mb-2 text-xs font-medium tracking-wide uppercase">
+            <div className="w-1/2 flex flex-col min-h-0">
+              <div className="text-xs font-medium text-neutral4 uppercase tracking-wide mb-2">
                 {hasSearchResults ? 'Search Results' : 'Popular Skills'}
               </div>
-              <ScrollArea className="border-border1 flex-1 rounded-lg border">
+              <ScrollArea className="flex-1 border border-border1 rounded-lg">
                 {isLoadingPopular || isSearching ? (
                   <div className="flex items-center justify-center py-8">
-                    <Loader2 className="text-neutral3 h-6 w-6 animate-spin" />
+                    <Loader2 className="h-6 w-6 animate-spin text-neutral3" />
                   </div>
                 ) : displaySkills.length === 0 ? (
-                  <div className="text-neutral4 flex flex-col items-center justify-center py-8">
-                    <Package className="mb-2 h-8 w-8" />
+                  <div className="flex flex-col items-center justify-center py-8 text-neutral4">
+                    <Package className="h-8 w-8 mb-2" />
                     <p className="text-sm">{hasSearchResults ? 'No skills found' : 'No skills available'}</p>
                   </div>
                 ) : (
-                  <div className="space-y-1 p-2">
+                  <div className="p-2 space-y-1">
                     {displaySkills.map(skill => {
                       const skillUniqueId = getSkillUniqueId(skill);
                       const installedId = getInstalledSkillId(skill);
@@ -247,17 +247,17 @@ export function AddSkillDialog({
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
-                                <span className="text-neutral6 truncate text-sm font-medium">{skill.name}</span>
+                                <span className="font-medium text-sm text-neutral6 truncate">{skill.name}</span>
                                 {isInstalled && (
-                                  <span className="bg-accent1/20 text-accent1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium">
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-accent1/20 text-accent1">
                                     <Check className="h-2.5 w-2.5" />
                                     Installed
                                   </span>
                                 )}
                               </div>
-                              <div className="text-neutral4 truncate text-xs">{skill.topSource}</div>
+                              <div className="text-xs text-neutral4 truncate">{skill.topSource}</div>
                             </div>
-                            <div className="text-neutral3 flex shrink-0 items-center gap-1 text-xs">
+                            <div className="flex items-center gap-1 text-xs text-neutral3 shrink-0">
                               <Download className="h-3 w-3" />
                               <span>{skill.installs.toLocaleString()}</span>
                             </div>
@@ -271,25 +271,25 @@ export function AddSkillDialog({
             </div>
 
             {/* Preview Panel */}
-            <div className="flex min-h-0 w-1/2 flex-col">
-              <div className="text-neutral4 mb-2 text-xs font-medium tracking-wide uppercase">Preview</div>
-              <div className="border-border1 flex flex-1 flex-col overflow-hidden rounded-lg border">
+            <div className="w-1/2 flex flex-col min-h-0">
+              <div className="text-xs font-medium text-neutral4 uppercase tracking-wide mb-2">Preview</div>
+              <div className="flex-1 border border-border1 rounded-lg overflow-hidden flex flex-col">
                 {!selectedSkill ? (
-                  <div className="text-neutral4 flex h-full flex-col items-center justify-center">
-                    <Package className="mb-2 h-8 w-8" />
+                  <div className="flex flex-col items-center justify-center h-full text-neutral4">
+                    <Package className="h-8 w-8 mb-2" />
                     <p className="text-sm">Select a skill to preview</p>
                   </div>
                 ) : (
                   <>
                     {/* Skill Header */}
-                    <div className="border-border1 bg-surface3 border-b p-4">
+                    <div className="p-4 border-b border-border1 bg-surface3">
                       <div className="flex items-start gap-3">
-                        <div className="bg-surface5 rounded-lg p-2">
-                          <SkillIcon className="text-neutral4 h-5 w-5" />
+                        <div className="p-2 rounded-lg bg-surface5">
+                          <SkillIcon className="h-5 w-5 text-neutral4" />
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <h3 className="text-neutral6 truncate font-semibold">{selectedSkill.name}</h3>
-                          <div className="text-neutral4 mt-1 flex items-center gap-3 text-xs">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-neutral6 truncate">{selectedSkill.name}</h3>
+                          <div className="flex items-center gap-3 mt-1 text-xs text-neutral4">
                             <span className="flex items-center gap-1">
                               <Github className="h-3 w-3" />
                               {selectedSkill.topSource}
@@ -316,8 +316,8 @@ export function AddSkillDialog({
 
                     {/* Skill Content */}
                     {isLoadingPreview ? (
-                      <div className="flex flex-1 items-center justify-center">
-                        <Loader2 className="text-neutral3 h-6 w-6 animate-spin" />
+                      <div className="flex-1 flex items-center justify-center">
+                        <Loader2 className="h-6 w-6 animate-spin text-neutral3" />
                       </div>
                     ) : previewContent ? (
                       <ScrollArea className="flex-1">
@@ -326,15 +326,15 @@ export function AddSkillDialog({
                         </div>
                       </ScrollArea>
                     ) : (
-                      <div className="text-neutral4 flex flex-1 flex-col items-center justify-center">
-                        <Package className="mb-2 h-8 w-8" />
+                      <div className="flex-1 flex flex-col items-center justify-center text-neutral4">
+                        <Package className="h-8 w-8 mb-2" />
                         <p className="text-sm">Preview unavailable</p>
                         {skillsUrl && (
                           <a
                             href={skillsUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-accent1 mt-2 flex items-center gap-1 text-xs hover:underline"
+                            className="text-xs mt-2 text-accent1 hover:underline flex items-center gap-1"
                           >
                             View on skills.sh <ExternalLink className="h-3 w-3" />
                           </a>
@@ -349,19 +349,19 @@ export function AddSkillDialog({
 
           {/* Install Actions */}
           {selectedSkill && (
-            <div className="border-border1 flex flex-col gap-3 border-t pt-4">
+            <div className="flex flex-col gap-3 pt-4 border-t border-border1">
               {/* Mount picker - only shown when multiple writable mounts exist */}
               {writableMounts && writableMounts.length > 1 && (
-                <div className="bg-surface3 border-border1 flex items-center gap-3 rounded-lg border p-3">
-                  <Folder className="text-icon4 h-4 w-4 shrink-0" />
-                  <label htmlFor="mount-select" className="text-icon5 text-sm font-medium whitespace-nowrap">
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-surface3 border border-border1">
+                  <Folder className="h-4 w-4 text-icon4 shrink-0" />
+                  <label htmlFor="mount-select" className="text-sm text-icon5 whitespace-nowrap font-medium">
                     Install to
                   </label>
                   <select
                     id="mount-select"
                     value={selectedMount ?? ''}
                     onChange={e => setSelectedMount(e.target.value)}
-                    className="border-border1 bg-surface2 text-icon6 flex-1 rounded-md border px-3 py-1.5 text-sm"
+                    className="flex-1 text-sm px-3 py-1.5 rounded-md border border-border1 bg-surface2 text-icon6"
                   >
                     {writableMounts.map(m => {
                       const name = m.displayName ?? m.name ?? m.provider ?? 'unknown';
@@ -383,7 +383,7 @@ export function AddSkillDialog({
                   (() => {
                     const skillPath = installedSkillPaths[selectedSkill.name]!;
                     const mount = writableMounts.find(m => skillPath.startsWith(m.path + '/') || skillPath === m.path);
-                    return mount ? <span className="text-icon4 text-xs">Installed at {mount.path}</span> : null;
+                    return mount ? <span className="text-xs text-icon4">Installed at {mount.path}</span> : null;
                   })()}
                 <Button variant="default" onClick={() => handleOpenChange(false)}>
                   Cancel
@@ -396,17 +396,17 @@ export function AddSkillDialog({
                 >
                   {isInstalling ? (
                     <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                       Installing...
                     </>
                   ) : isSelectedSkillInstalled ? (
                     <>
-                      <Check className="mr-2 h-4 w-4" />
+                      <Check className="h-4 w-4 mr-2" />
                       Already Installed
                     </>
                   ) : (
                     <>
-                      <Download className="mr-2 h-4 w-4" />
+                      <Download className="h-4 w-4 mr-2" />
                       Install
                     </>
                   )}

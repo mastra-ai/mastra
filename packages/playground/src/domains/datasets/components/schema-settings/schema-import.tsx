@@ -158,11 +158,11 @@ export function SchemaImport({ schemaType, onImport }: SchemaImportProps) {
       )}
 
       <Button size="sm" variant="outline" onClick={handleImport} disabled={!canImport()}>
-        <Download className="h-4 w-4" />
+        <Download className="w-4 h-4" />
         Import
       </Button>
 
-      {showNoSchemaWarning && <span className="text-neutral3 text-xs">No {schemaType} schema</span>}
+      {showNoSchemaWarning && <span className="text-xs text-neutral3">No {schemaType} schema</span>}
     </div>
   );
 }

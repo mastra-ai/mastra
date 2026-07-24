@@ -121,7 +121,7 @@ const AskUserInput = ({
   if (result || isAnswered) {
     return (
       <AskUserContainer data-testid="ask-user" {...props}>
-        <p className="text-neutral6 mb-2 font-medium">{payload.question}</p>
+        <p className="mb-2 font-medium text-neutral6">{payload.question}</p>
         {result ? <AskUserOutput result={result} /> : <Badge variant="success">Answered</Badge>}
       </AskUserContainer>
     );
@@ -142,7 +142,7 @@ const AskUserInput = ({
   if (options.length === 0) {
     return (
       <AskUserContainer data-testid="ask-user" {...props}>
-        <label className="text-neutral6 mb-2 block font-medium" htmlFor={inputId}>
+        <label className="mb-2 block font-medium text-neutral6" htmlFor={inputId}>
           {payload.question}
         </label>
         <div className="flex items-center gap-2">

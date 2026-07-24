@@ -32,7 +32,7 @@ export function CSVPreviewTable({ headers, data, maxRows = 5 }: CSVPreviewTableP
         <DataList
           columns={columns}
           variant="lined"
-          className="border-border1 max-h-80 rounded-lg border"
+          className="max-h-80 rounded-lg border border-border1"
           mask={{ left: false }}
           stickyHeaderBackground="tinted"
         >
@@ -54,7 +54,7 @@ export function CSVPreviewTable({ headers, data, maxRows = 5 }: CSVPreviewTableP
                       <DataList.RowHeaderCell
                         key={`${index}-${header}`}
                         height="compact"
-                        className="text-ui-sm max-w-[14rem]"
+                        className="max-w-[14rem] text-ui-sm"
                       >
                         {value}
                       </DataList.RowHeaderCell>
@@ -62,7 +62,7 @@ export function CSVPreviewTable({ headers, data, maxRows = 5 }: CSVPreviewTableP
                   }
 
                   return (
-                    <DataList.Cell key={`${index}-${header}`} height="compact" className="text-ui-sm max-w-[12rem]">
+                    <DataList.Cell key={`${index}-${header}`} height="compact" className="max-w-[12rem] text-ui-sm">
                       <span className="block truncate">{value}</span>
                     </DataList.Cell>
                   );
@@ -74,7 +74,7 @@ export function CSVPreviewTable({ headers, data, maxRows = 5 }: CSVPreviewTableP
       ) : null}
 
       {/* Row count indicator */}
-      <div className="text-neutral4 text-xs">
+      <div className="text-xs text-neutral4">
         {displayData.length < totalRows
           ? `Showing ${displayData.length} of ${totalRows} rows`
           : `${totalRows} row${totalRows !== 1 ? 's' : ''}`}

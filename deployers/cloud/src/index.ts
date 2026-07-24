@@ -53,8 +53,7 @@ export class CloudDeployer extends Deployer {
   }
   async writePackageJson(outputDirectory: string, dependencies: Map<string, string>) {
     const versions = (await readJSON(join(dirname(fileURLToPath(import.meta.url)), '../versions.json'))) as
-      | Record<string, string>
-      | undefined;
+      Record<string, string> | undefined;
     for (const [pkgName, version] of Object.entries(versions || {})) {
       dependencies.set(pkgName, version);
     }

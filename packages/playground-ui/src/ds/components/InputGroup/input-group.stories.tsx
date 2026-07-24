@@ -275,7 +275,7 @@ export const NumberWithStepper: Story = {
 export const OnDifferentSurfaces: Story = {
   render: () => (
     <div className="flex w-96 flex-col gap-4">
-      <div className="border-border1 bg-surface1 rounded-lg border p-4">
+      <div className="rounded-lg border border-border1 bg-surface1 p-4">
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
@@ -283,7 +283,7 @@ export const OnDifferentSurfaces: Story = {
           <InputGroupInput placeholder="On bg-surface1" />
         </InputGroup>
       </div>
-      <div className="border-border1 bg-surface2 rounded-lg border p-4">
+      <div className="rounded-lg border border-border1 bg-surface2 p-4">
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
@@ -291,7 +291,7 @@ export const OnDifferentSurfaces: Story = {
           <InputGroupInput placeholder="On bg-surface2" />
         </InputGroup>
       </div>
-      <div className="border-border1 bg-surface3 rounded-lg border p-4">
+      <div className="rounded-lg border border-border1 bg-surface3 p-4">
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />
@@ -299,7 +299,7 @@ export const OnDifferentSurfaces: Story = {
           <InputGroupInput placeholder="On bg-surface3" />
         </InputGroup>
       </div>
-      <div className="border-border1 bg-surface4 rounded-lg border p-4">
+      <div className="rounded-lg border border-border1 bg-surface4 p-4">
         <InputGroup>
           <InputGroupAddon>
             <SearchIcon />

@@ -23,7 +23,7 @@ export function TranscriptPanel() {
     <>
       <div className={panelClassName} ref={threadRef}>
         {loadMore.isLoading && (
-          <div className="text-icon3 flex w-full justify-center py-2" aria-live="polite">
+          <div className="flex w-full justify-center py-2 text-icon3" aria-live="polite">
             <Loader2 size={16} className="animate-spin" />
             <span className="sr-only">Loading older messages</span>
           </div>

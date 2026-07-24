@@ -493,8 +493,7 @@ export class MastraFactory {
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
-      | GithubIntegration
-      | undefined;
+      GithubIntegration | undefined;
     const workItemsReady = storage.isDomainReady('work-items');
     const transitionService = workItemsReady
       ? new FactoryTransitionService({ rules, storage: workItemsStorage })

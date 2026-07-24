@@ -56,7 +56,7 @@ export function ScoresDataListInputCell({ input }: ScoresDataListInputCellProps)
   const display = input != null ? JSON.stringify(input) : '-';
   return (
     <DataListCell height="compact">
-      <span className="text-ui-smd text-neutral3 block max-w-full min-w-0 truncate font-mono" title={display}>
+      <span className="block max-w-full min-w-0 truncate font-mono text-ui-smd text-neutral3" title={display}>
         {display}
       </span>
     </DataListCell>
@@ -75,7 +75,7 @@ export function ScoresDataListEntityCell({ entityId }: ScoresDataListEntityCellP
   const display = entityId || '-';
   return (
     <DataListCell height="compact">
-      <span className="text-ui-smd block max-w-full min-w-0 truncate" title={display}>
+      <span className="block max-w-full min-w-0 truncate text-ui-smd" title={display}>
         {display}
       </span>
     </DataListCell>
@@ -94,7 +94,7 @@ export function ScoresDataListScoreCell({ score }: ScoresDataListScoreCellProps)
   const display = score == null ? '-' : typeof score === 'object' ? JSON.stringify(score) : String(score);
   return (
     <DataListCell height="compact">
-      <span className="text-ui-smd text-neutral3 block max-w-full min-w-0 truncate font-mono" title={display}>
+      <span className="block max-w-full min-w-0 truncate font-mono text-ui-smd text-neutral3" title={display}>
         {display}
       </span>
     </DataListCell>

@@ -45,9 +45,9 @@ export const EditTopBar = ({
           <AgentBuilderTitle isLoading={isLoading} />
         </Crumb>
       </Breadcrumb>
-      <div className="flex shrink-0 items-center gap-2 justify-self-end">
-        {rightAside && <div className="mr-1 shrink-0">{rightAside}</div>}
-        {primaryAction && <div className="flex shrink-0">{primaryAction}</div>}
+      <div className="justify-self-end flex items-center gap-2 shrink-0">
+        {rightAside && <div className="shrink-0 mr-1">{rightAside}</div>}
+        {primaryAction && <div className="shrink-0 flex">{primaryAction}</div>}
         {mobileExtra && <div className="shrink-0 lg:hidden">{mobileExtra}</div>}
         {mode && onModeToggle && (
           <Button
@@ -55,7 +55,7 @@ export const EditTopBar = ({
             size="sm"
             onClick={onModeToggle}
             disabled={modeToggleDisabled}
-            className="hidden shrink-0 lg:inline-flex"
+            className="hidden lg:inline-flex shrink-0"
             data-testid="agent-builder-mode-toggle"
             aria-label={toggleLabel}
           >

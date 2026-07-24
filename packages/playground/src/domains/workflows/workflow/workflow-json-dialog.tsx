@@ -33,7 +33,7 @@ export const WorkflowJsonDialog = ({
   data,
   triggerLabel,
   title,
-  triggerIcon = <Braces className="text-neutral3 shrink-0" />,
+  triggerIcon = <Braces className="shrink-0 text-neutral3" />,
   trigger,
   variant = 'default',
   size = 'md',

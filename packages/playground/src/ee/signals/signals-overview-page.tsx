@@ -26,7 +26,7 @@ function AgentSelector({
 }) {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-3 px-4 pt-4 lg:px-6 lg:pt-6">
-      <label className="text-neutral4 text-xs font-medium" htmlFor="signals-agent-selector">
+      <label className="text-xs font-medium text-neutral4" htmlFor="signals-agent-selector">
         Agent
       </label>
       <Select value={selectedEntityId} onValueChange={onEntityChange}>
@@ -81,16 +81,16 @@ export function SignalsOverviewPage() {
         />
       ) : (
         <section
-          className="border-border1 bg-surface2 m-4 rounded-lg border p-6 lg:m-6"
+          className="m-4 rounded-lg border border-border1 bg-surface2 p-6 lg:m-6"
           aria-labelledby="signals-data-heading"
         >
-          <h1 className="text-neutral6 text-lg font-semibold" id="signals-data-heading">
+          <h1 className="text-lg font-semibold text-neutral6" id="signals-data-heading">
             Not enough signal data yet
           </h1>
-          <p className="text-neutral3 mt-2 text-sm">
+          <p className="mt-2 text-sm text-neutral3">
             At least two signal types are needed to show how themes connect across traces.
           </p>
-          <p className="text-neutral4 mt-4 text-xs">
+          <p className="mt-4 text-xs text-neutral4">
             Available signals: {signalNames.length > 0 ? signalNames.map(formatSignalName).join(', ') : 'None'}
           </p>
         </section>

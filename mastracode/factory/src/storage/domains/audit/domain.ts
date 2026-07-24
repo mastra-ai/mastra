@@ -178,8 +178,7 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
   }): Promise<void> {
     try {
       const context = requestContext.get('controller') as
-        | AgentControllerRequestContext<FactorySessionState>
-        | undefined;
+        AgentControllerRequestContext<FactorySessionState> | undefined;
       const tenant = this.#agentTenant?.(requestContext);
       const orgId = tenant?.orgId;
       const userId = tenant?.userId;

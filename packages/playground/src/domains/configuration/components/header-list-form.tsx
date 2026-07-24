@@ -22,7 +22,7 @@ export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader }: HeaderL
         Headers
       </Txt>
 
-      <div className="space-y-6">
+      <div className=" space-y-6">
         {headers.length > 0 && (
           <ul className="space-y-4">
             {headers.map((header, index) => (
@@ -33,7 +33,7 @@ export const HeaderListForm = ({ headers, onAddHeader, onRemoveHeader }: HeaderL
           </ul>
         )}
 
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 justify-between">
           {headers.length === 0 && <Txt className="text-neutral3">No header yet</Txt>}
           <Button
             type="button"
@@ -61,7 +61,7 @@ const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps
   const valueId = useId();
 
   return (
-    <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-4">
+    <div className="grid grid-cols-[1fr_1fr_auto] gap-4 items-end">
       <TextFieldBlock
         id={nameId}
         name={`headers.${index}.name`}

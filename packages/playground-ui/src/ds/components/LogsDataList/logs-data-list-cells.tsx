@@ -66,7 +66,7 @@ export function LogsDataListEntityCell({ entityType, entityName }: LogsDataListE
   return (
     <DataListCell height="compact" className="flex min-w-0 items-center gap-2">
       <EntityTypeIcon entityType={type} />
-      {entityName ? <span className="text-ui-smd min-w-0 truncate">{entityName}</span> : '-'}
+      {entityName ? <span className="min-w-0 truncate text-ui-smd">{entityName}</span> : '-'}
     </DataListCell>
   );
 }
@@ -81,7 +81,7 @@ export interface LogsDataListMessageCellProps {
 
 export function LogsDataListMessageCell({ message }: LogsDataListMessageCellProps) {
   return (
-    <DataListCell height="compact" className="text-ui-smd text-neutral4 min-w-0 truncate font-mono">
+    <DataListCell height="compact" className="min-w-0 truncate font-mono text-ui-smd text-neutral4">
       {message}
     </DataListCell>
   );

@@ -80,7 +80,7 @@ export default function AgentBuilderSkillsPage() {
       return (
         <div className="flex items-center justify-center pt-16">
           <EmptyState
-            iconSlot={<SparklesIcon className="text-neutral3 h-8 w-8" />}
+            iconSlot={<SparklesIcon className="h-8 w-8 text-neutral3" />}
             titleSlot="No skills yet"
             descriptionSlot="Create your first skill to give agents new capabilities."
             actionSlot={
@@ -120,7 +120,7 @@ export default function AgentBuilderSkillsPage() {
               <PageHeader.Description>Skills you've created.</PageHeader.Description>
             </PageHeader>
             {skills.length > 0 && canWriteSkills && (
-              <div className="flex w-full shrink-0 flex-col items-stretch gap-2 md:w-auto md:flex-row md:items-center">
+              <div className="w-full shrink-0 flex flex-col items-stretch gap-2 md:w-auto md:flex-row md:items-center">
                 {enabledRegistry && (
                   <Button
                     variant="default"

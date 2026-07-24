@@ -34,11 +34,11 @@ function DatasetItemContent({ item }: { item: DatasetItem }) {
   return (
     <>
       <div className="mb-4">
-        <h3 className="flex items-center gap-2 text-lg font-medium">
-          <FileInputIcon className="h-5 w-5" /> Dataset Item
+        <h3 className="text-lg font-medium flex items-center gap-2">
+          <FileInputIcon className="w-5 h-5" /> Dataset Item
         </h3>
         <TextAndIcon>
-          <HashIcon className="h-4 w-4" /> {item.id}
+          <HashIcon className="w-4 h-4" /> {item.id}
         </TextAndIcon>
       </div>
 

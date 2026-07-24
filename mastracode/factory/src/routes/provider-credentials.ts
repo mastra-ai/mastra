@@ -46,8 +46,7 @@ export const WEB_OAUTH_FLOW_KINDS: Readonly<Record<string, LoginSessionKind>> = 
 };
 
 export type CredentialContext =
-  | { mode: 'local' }
-  | { mode: 'tenant'; storage: ModelCredentialsStorage; orgId: string; userId: string };
+  { mode: 'local' } | { mode: 'tenant'; storage: ModelCredentialsStorage; orgId: string; userId: string };
 
 /**
  * The tenant credentials domain, when registered and ready. `undefined` means

@@ -27,7 +27,7 @@ export function DatasetItemsLayout({ listSlot, detailPanelSlot, versionsPanelSlo
         'grid-cols-[1fr_auto]': showVersions,
       })}
     >
-      <div className="grid max-w-full content-start gap-8 overflow-y-auto">{listSlot}</div>
+      <div className="grid gap-8 content-start max-w-full overflow-y-auto">{listSlot}</div>
       {showDetail && detailPanelSlot}
       {showVersions && versionsPanelSlot}
     </div>

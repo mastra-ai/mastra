@@ -166,7 +166,7 @@ export interface DataListIdCellProps {
 
 export function DataListIdCell({ id }: DataListIdCellProps) {
   return (
-    <DataListCell height="compact" className="text-ui-smd text-neutral3 font-mono">
+    <DataListCell height="compact" className="font-mono text-ui-smd text-neutral3">
       {getShortId(id)}
     </DataListCell>
   );
@@ -267,7 +267,7 @@ export interface DataListTimeCellProps {
 export function DataListTimeCell({ timestamp }: DataListTimeCellProps) {
   const date = toDate(timestamp);
   return (
-    <DataListCell height="compact" className="text-ui-smd text-neutral3 flex font-mono">
+    <DataListCell height="compact" className="flex font-mono text-ui-smd text-neutral3">
       {date ? (
         <>
           {format(date, 'HH:mm:ss')}

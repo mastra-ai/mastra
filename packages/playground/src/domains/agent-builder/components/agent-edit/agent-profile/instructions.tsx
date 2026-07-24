@@ -27,7 +27,7 @@ export const Instructions = ({ editable = true, fallbackPrompt }: InstructionsPr
         editable={editable}
         placeholder="You are a helpful assistant that…"
         showCopyButton={false}
-        className="min-h-0 w-full rounded-none border-0 bg-transparent p-0 [&_.cm-editor]:h-full [&_.cm-line]:leading-relaxed [&_.cm-scroller]:overflow-y-auto [&_.cm-scroller]:!font-sans"
+        className="min-h-0 w-full border-0 bg-transparent p-0 rounded-none [&_.cm-editor]:h-full [&_.cm-scroller]:overflow-y-auto [&_.cm-scroller]:!font-sans [&_.cm-line]:leading-relaxed"
       />
     </div>
   );

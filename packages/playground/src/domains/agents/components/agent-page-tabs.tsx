@@ -25,7 +25,7 @@ function DocsLink({ href, children }: { href: string; children: React.ReactNode 
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-inherit underline hover:text-white"
+      className="inline-flex items-center gap-1 underline text-inherit hover:text-white"
     >
       {children}
       <ExternalLink className="size-3" />
@@ -55,7 +55,7 @@ function AgentTab({
         {label}
       </Txt>
       {badge !== undefined && badge > 0 && (
-        <span className="bg-accent1 ml-1 min-w-[18px] rounded-full px-1.5 py-0 text-center text-xs leading-[18px] font-medium text-white">
+        <span className="ml-1 bg-accent1 text-white text-xs font-medium rounded-full px-1.5 py-0 min-w-[18px] text-center leading-[18px]">
           {badge}
         </span>
       )}
@@ -128,7 +128,7 @@ export function AgentPageTabs({
         value={activeTab}
         defaultTab={activeTab}
         onValueChange={handleTabChange}
-        className="min-w-0 flex-1 max-lg:flex-auto"
+        className="flex-1 min-w-0 max-lg:flex-auto"
       >
         <TabList variant="pill-ghost">
           <AgentTab value="chat" icon={<MessageSquare />} label="Chat" />

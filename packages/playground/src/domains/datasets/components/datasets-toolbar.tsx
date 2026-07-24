@@ -43,7 +43,7 @@ export function DatasetsToolbar({
 }: DatasetsToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="max-w-120 min-w-64 flex-1">
+      <div className="min-w-64 max-w-120 flex-1">
         <ListSearch
           label="Search datasets"
           placeholder="Filter by dataset name"

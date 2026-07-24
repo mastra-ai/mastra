@@ -105,38 +105,38 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
         )}
       >
         {/* Thumbnail preview */}
-        <div className="bg-surface3 border-border1 relative h-14 w-24 shrink-0 overflow-hidden rounded-md border">
+        <div className="relative shrink-0 w-24 h-14 bg-surface3 rounded-md overflow-hidden border border-border1">
           {hasFrame ? (
-            <img ref={imgRef} alt="Browser preview" className="h-full w-full object-cover" />
+            <img ref={imgRef} alt="Browser preview" className="w-full h-full object-cover" />
           ) : (
-            <div className="flex h-full w-full items-center justify-center">
-              <Monitor className="text-neutral3 h-5 w-5" />
+            <div className="flex items-center justify-center w-full h-full">
+              <Monitor className="h-5 w-5 text-neutral3" />
             </div>
           )}
           {/* Live indicator dot */}
-          {isLive && <div className="bg-success absolute top-1 right-1 h-2 w-2 animate-pulse rounded-full" />}
+          {isLive && <div className="absolute top-1 right-1 w-2 h-2 bg-success rounded-full animate-pulse" />}
         </div>
 
         {/* Info section */}
-        <div className="min-w-0 flex-1 text-left">
+        <div className="flex-1 min-w-0 text-left">
           <div className="flex items-center gap-2">
-            <span className="text-neutral6 truncate text-sm font-medium">{agentName}&apos;s browser</span>
+            <span className="text-sm font-medium text-neutral6 truncate">{agentName}&apos;s browser</span>
             <StatusBadge variant={isLive ? 'success' : 'neutral'} size="sm" withDot pulse={isLive}>
               {isLive ? 'Live' : 'Idle'}
             </StatusBadge>
           </div>
-          <p className="text-neutral4 mt-0.5 truncate text-xs">{displayUrl}</p>
+          <p className="text-xs text-neutral4 truncate mt-0.5">{displayUrl}</p>
         </div>
 
         {/* Expand/collapse indicator */}
-        <div className="text-neutral4 group-hover:text-neutral5 shrink-0 transition-colors">
+        <div className="shrink-0 text-neutral4 group-hover:text-neutral5 transition-colors">
           {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
         </div>
       </button>
 
       {/* Expanded content */}
       {isExpanded && (
-        <div className="border-border1 border-t">
+        <div className="border-t border-border1">
           {/* Interactive screencast */}
           <div className="p-3">
             <div className="relative">
@@ -167,9 +167,9 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
 
           {/* Browser actions (scrollable, max height) */}
           {toolCalls.length > 0 && (
-            <div ref={actionsRef} className="border-border1 max-h-40 overflow-y-auto border-t">
+            <div ref={actionsRef} className="border-t border-border1 max-h-40 overflow-y-auto">
               <div className="px-3 py-2">
-                <h4 className="text-neutral4 mb-2 text-xs font-medium">Browser Actions</h4>
+                <h4 className="text-xs font-medium text-neutral4 mb-2">Browser Actions</h4>
                 <div className="space-y-1">
                   {toolCalls.slice(-5).map(entry => (
                     <BrowserToolCallItem key={entry.toolCallId} entry={entry} />

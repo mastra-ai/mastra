@@ -70,7 +70,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
   return (
     <form onSubmit={handleSubmit} className="flex w-full flex-col gap-5">
       {mode === 'sign-up' ? (
-        <label className="text-neutral5 flex flex-col gap-2 text-sm font-medium">
+        <label className="flex flex-col gap-2 text-sm font-medium text-neutral5">
           Name
           <Input
             type="text"
@@ -83,7 +83,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
           />
         </label>
       ) : null}
-      <label className="text-neutral5 flex flex-col gap-2 text-sm font-medium">
+      <label className="flex flex-col gap-2 text-sm font-medium text-neutral5">
         Email
         <Input
           type="email"
@@ -95,7 +95,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
           onChange={e => setEmail(e.target.value)}
         />
       </label>
-      <label className="text-neutral5 flex flex-col gap-2 text-sm font-medium">
+      <label className="flex flex-col gap-2 text-sm font-medium text-neutral5">
         Password
         <Input
           type="password"
@@ -129,7 +129,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
           {mode === 'sign-up' ? 'Have an account? Sign in' : 'New here? Sign up'}
         </Button>
       ) : (
-        <Txt as="p" variant="ui-sm" className="text-neutral3 text-center">
+        <Txt as="p" variant="ui-sm" className="text-center text-neutral3">
           Account creation is managed by your administrator.
         </Txt>
       )}
@@ -162,7 +162,7 @@ export function SignInPage() {
   }
 
   return (
-    <main className="factory-signin-theme bg-surface1 font-mona-sans text-neutral6 min-h-dvh">
+    <main className="factory-signin-theme min-h-dvh bg-surface1 font-mona-sans text-neutral6">
       <div className="mx-auto grid min-h-dvh w-full max-w-7xl grid-cols-1 px-6 sm:px-10 lg:grid-cols-[minmax(380px,0.82fr)_minmax(540px,1.18fr)]">
         <section className="relative z-3 flex max-w-xl flex-col justify-center py-11 lg:py-17">
           <h1 className="max-w-xl text-[clamp(2.625rem,5.3vw,4.25rem)] leading-[1.1] font-[520] tracking-[0.015em] text-balance [font-stretch:112%]">
@@ -171,7 +171,7 @@ export function SignInPage() {
           <Txt
             as="p"
             variant="ui-lg"
-            className="text-neutral3 mt-6 max-w-lg text-[clamp(1.0625rem,1.65vw,1.375rem)] leading-[1.36] tracking-[0.015em]"
+            className="mt-6 max-w-lg text-[clamp(1.0625rem,1.65vw,1.375rem)] leading-[1.36] tracking-[0.015em] text-neutral3"
           >
             Turn a repository into a working factory. Agents pick up scoped work, collaborate, and ship changes you can
             review.
@@ -182,7 +182,7 @@ export function SignInPage() {
               <>
                 <div className="mb-6">
                   <h2 className="font-display text-2xl font-medium">Welcome back</h2>
-                  <Txt as="p" variant="ui-md" className="text-neutral3 mt-2 leading-6">
+                  <Txt as="p" variant="ui-md" className="mt-2 leading-6 text-neutral3">
                     Sign in to continue building with your team.
                   </Txt>
                 </div>

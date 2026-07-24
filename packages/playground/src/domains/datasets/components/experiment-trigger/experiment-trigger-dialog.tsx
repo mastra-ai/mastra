@@ -52,7 +52,7 @@ function RequestContextForm({
   }, [requestContextSchema]);
 
   if (!zodSchema) {
-    return <p className="text-destructive text-sm">Failed to parse request context schema</p>;
+    return <p className="text-sm text-destructive">Failed to parse request context schema</p>;
   }
 
   return (
@@ -206,7 +206,7 @@ export function ExperimentTriggerDialog({
           <Button variant="primary" onClick={handleRun} disabled={!canRun || isRunning}>
             {isRunning ? (
               <>
-                <Spinner className="h-4 w-4" />
+                <Spinner className="w-4 h-4" />
                 Running...
               </>
             ) : (

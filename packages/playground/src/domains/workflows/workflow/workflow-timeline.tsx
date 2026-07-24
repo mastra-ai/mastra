@@ -186,11 +186,11 @@ const WorkflowTimelineRow = ({
       <Txt
         as="span"
         variant="ui-sm"
-        className="text-neutral6 block max-w-full min-w-0 justify-self-stretch overflow-hidden text-left text-ellipsis whitespace-nowrap"
+        className="block min-w-0 max-w-full justify-self-stretch overflow-hidden text-ellipsis whitespace-nowrap text-left text-neutral6"
       >
         {titleCase(row.stepId)}
       </Txt>
-      <div className="bg-surface4 relative h-2 min-w-0 rounded">
+      <div className="relative h-2 min-w-0 rounded bg-surface4">
         <div
           data-testid="workflow-timeline-bar"
           data-offset={String(row.offsetPct)}
@@ -217,7 +217,7 @@ const WorkflowTimelineRow = ({
           <SquareArrowOutUpRight />
         </Button>
       </div>
-      <Txt as="span" variant="ui-sm" className="text-neutral3 w-20 justify-self-end text-right tabular-nums">
+      <Txt as="span" variant="ui-sm" className="w-20 justify-self-end text-right text-neutral3 tabular-nums">
         {formatTimelineDuration(row.durationMs)}
       </Txt>
     </div>
@@ -274,7 +274,7 @@ export function WorkflowTimeline() {
           } as CSSProperties
         }
       >
-        <div className="rounded-studio-panel border-border1/50 bg-surface3 pointer-events-auto flex max-h-64 w-full min-w-0 flex-col gap-3 overflow-hidden border p-4 shadow-lg">
+        <div className="pointer-events-auto flex max-h-64 w-full min-w-0 flex-col gap-3 overflow-hidden rounded-studio-panel border border-border1/50 bg-surface3 p-4 shadow-lg">
           <div className="flex shrink-0 items-center justify-between gap-3">
             <Txt as="p" variant="ui-md" className="text-neutral3">
               Timeline
@@ -284,7 +284,7 @@ export function WorkflowTimeline() {
               aria-label={isCollapsed ? 'Expand timeline' : 'Collapse timeline'}
               aria-expanded={!isCollapsed}
               onClick={() => setIsCollapsed(collapsed => !collapsed)}
-              className="text-neutral3 hover:bg-surface4 hover:text-neutral6 rounded-md p-1 transition-colors"
+              className="rounded-md p-1 text-neutral3 transition-colors hover:bg-surface4 hover:text-neutral6"
             >
               <ChevronDown className={cn('h-4 w-4 transition-transform', isCollapsed && '-rotate-90')} />
             </button>

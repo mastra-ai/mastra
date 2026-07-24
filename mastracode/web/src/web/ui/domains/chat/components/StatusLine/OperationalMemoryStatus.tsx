@@ -44,7 +44,7 @@ export function OperationalMemoryStatus() {
               render={
                 <span
                   aria-label="Message window until next observation"
-                  className="focus-visible:ring-accent1 mr-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-sm outline-hidden focus-visible:ring-2"
+                  className="mr-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-sm outline-hidden focus-visible:ring-2 focus-visible:ring-accent1"
                   tabIndex={0}
                 >
                   <MessageSquareText aria-hidden size={13} className="text-icon2" />

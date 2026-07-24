@@ -131,15 +131,15 @@ export const FileTreeBadge = ({
   return (
     <div className="mb-4" data-testid="file-tree-badge">
       {/* Header row */}
-      <div className="flex flex-wrap items-center gap-2">
-        <button onClick={() => setIsCollapsed(s => !s)} className="flex min-w-0 items-center gap-2" type="button">
+      <div className="flex items-center gap-2 flex-wrap">
+        <button onClick={() => setIsCollapsed(s => !s)} className="flex items-center gap-2 min-w-0" type="button">
           <Icon>
             <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
           </Icon>
           <Badge icon={<FolderTree className="text-accent6" size={16} />}>
-            List Files <span className="text-neutral6 ml-1 font-normal">{path}</span>
+            List Files <span className="text-neutral6 font-normal ml-1">{path}</span>
             {argsDisplay.length > 0 && (
-              <span className="text-neutral4 ml-1 font-normal">({argsDisplay.join(', ')})</span>
+              <span className="text-neutral4 font-normal ml-1">({argsDisplay.join(', ')})</span>
             )}
           </Badge>
         </button>
@@ -148,7 +148,7 @@ export const FileTreeBadge = ({
         {wsMeta?.filesystem && (
           <Link
             href={wsMeta.id ? `/workspaces/${wsMeta.id}?path=${encodeURIComponent(path)}` : '/workspaces'}
-            className="text-neutral6 bg-surface3 border-border1 hover:bg-surface4 hover:border-border2 flex items-center gap-1.5 rounded border px-1.5 py-0.5 text-xs transition-colors"
+            className="flex items-center gap-1.5 text-xs text-neutral6 px-1.5 py-0.5 rounded bg-surface3 border border-border1 hover:bg-surface4 hover:border-border2 transition-colors"
           >
             <HardDrive className="size-3" />
             <span>{wsMeta.name || wsMeta.filesystem.name}</span>
@@ -164,9 +164,9 @@ export const FileTreeBadge = ({
         <div className="pt-2">
           {/* Approval UI - styled like ToolBadge/BadgeWrapper when awaiting approval */}
           {toolApprovalMetadata && !toolCalled && (
-            <div className="bg-surface2 flex flex-col gap-4 rounded-lg p-4">
+            <div className="p-4 rounded-lg bg-surface2 flex flex-col gap-4">
               <div>
-                <p className="pb-2 font-medium">Tool arguments</p>
+                <p className="font-medium pb-2">Tool arguments</p>
                 <CodeEditor data={parsedArgs as Record<string, unknown>} data-testid="tool-args" />
               </div>
               <ToolApprovalButtons
@@ -181,9 +181,9 @@ export const FileTreeBadge = ({
 
           {/* Tree output panel - custom UI after tool has been called */}
           {toolCalled && treeOutput && (
-            <div className="border-border1 bg-surface2 overflow-hidden rounded-md border">
+            <div className="rounded-md border border-border1 bg-surface2 overflow-hidden">
               {/* Panel header with summary and copy button */}
-              <div className="border-border1 bg-surface3 flex items-center justify-between border-b px-3 py-1.5">
+              <div className="flex items-center justify-between px-3 py-1.5 border-b border-border1 bg-surface3">
                 {summary && <span className="text-neutral6 text-xs">{summary}</span>}
                 <Button variant="default" size="icon-sm" tooltip="Copy tree" onClick={onCopy} disabled={!treeOutput}>
                   <span className="grid">
@@ -204,7 +204,7 @@ export const FileTreeBadge = ({
               </div>
 
               {/* Tree content */}
-              <pre className="text-mastra-el-6 max-h-dropdown-max-height overflow-x-auto overflow-y-auto p-3 font-mono text-xs whitespace-pre">
+              <pre className="p-3 text-xs font-mono text-mastra-el-6 overflow-x-auto whitespace-pre max-h-dropdown-max-height overflow-y-auto">
                 {treeOutput}
               </pre>
             </div>
@@ -212,8 +212,8 @@ export const FileTreeBadge = ({
 
           {/* Loading state */}
           {toolCalled && !hasResult && (
-            <div className="border-border1 bg-surface2 rounded-md border px-3 py-2">
-              <span className="text-neutral6 text-xs">Loading...</span>
+            <div className="rounded-md border border-border1 bg-surface2 px-3 py-2">
+              <span className="text-xs text-neutral6">Loading...</span>
             </div>
           )}
         </div>

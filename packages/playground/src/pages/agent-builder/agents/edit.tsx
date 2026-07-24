@@ -252,7 +252,7 @@ const ProfileSlot = () => {
   // Both buttons are already accessible from the mobile 3-dots menu, so we
   // hide them in the profile panel on mobile to avoid duplication.
   const heroActions = (
-    <div className="hidden items-center gap-2 lg:flex" data-testid="agent-builder-hero-actions-desktop">
+    <div className="hidden lg:flex items-center gap-2" data-testid="agent-builder-hero-actions-desktop">
       {capabilities?.enabled && (
         <span style={{ viewTransitionName: 'agent-visibility-select' }}>
           <VisibilitySelect agentId={agentId} />
@@ -326,7 +326,7 @@ const ProfileSlot = () => {
 };
 
 const AgentBuilderAgentEditSkeleton = () => (
-  <div className="flex h-screen w-screen items-center justify-center">
+  <div className="h-screen w-screen flex items-center justify-center">
     <Spinner />
   </div>
 );

@@ -60,7 +60,7 @@ export const AgentImpactWarnings = ({ agentId, variant, enabled = true }: AgentI
             ))}
           </ul>
           {overflow > 0 && (
-            <p data-testid="agent-impact-dependents-more" className="text-icon-3 mt-1">
+            <p data-testid="agent-impact-dependents-more" className="mt-1 text-icon-3">
               and {overflow} more
             </p>
           )}

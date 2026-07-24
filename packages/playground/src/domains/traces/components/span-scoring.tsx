@@ -70,7 +70,7 @@ export function SpanScoring({
   }
 
   return (
-    <div className="grid grid-cols-[3fr_1fr] items-start gap-4">
+    <div className="grid grid-cols-[3fr_1fr] gap-4 items-start">
       <div className="grid gap-2">
         <SelectFieldBlock
           name="select-scorer"

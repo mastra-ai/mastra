@@ -25,8 +25,7 @@ export interface StartFactoryRunWorkItem {
 }
 
 export type FactoryRunInvocation =
-  | { type: 'prompt'; prompt: string }
-  | { type: 'skill'; skillName: string; arguments: string };
+  { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
 
 const factoryRunMutationKey = (resourceId: string, projectId: string | undefined) =>
   ['factory', 'start-run', resourceId, projectId] as const;

@@ -1096,12 +1096,10 @@ export function setupLLMRecording(options: LLMRecorderOptions): LLMRecorderInsta
       // Build metadata for the recording file
       const now = new Date().toISOString();
       const vitestWorker = (globalThis as Record<string, unknown>).__vitest_worker__ as
-        | { filepath?: string }
-        | undefined;
+        { filepath?: string } | undefined;
 
       const vitestState = (globalThis as Record<string, unknown>).__vitest_worker__ as
-        | { currentTestName?: string; current?: { fullTestName?: string } }
-        | undefined;
+        { currentTestName?: string; current?: { fullTestName?: string } } | undefined;
 
       const firstRequestBody = recordings[0]?.request.body as Record<string, unknown> | undefined;
       const inferredModel = typeof firstRequestBody?.model === 'string' ? firstRequestBody.model : undefined;

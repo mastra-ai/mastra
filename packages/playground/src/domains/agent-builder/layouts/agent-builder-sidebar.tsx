@@ -76,10 +76,10 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
   return (
     <MainSidebar className="h-full">
       {!forceExpanded && (
-        <div className="mb-4 pt-3">
+        <div className="pt-3 mb-4">
           {state === 'collapsed' ? (
-            <div className="flex flex-col items-center gap-3">
-              <div className="relative grid size-9 place-items-center">
+            <div className="flex flex-col gap-3 items-center">
+              <div className="relative grid place-items-center size-9">
                 <Link
                   href="/agents"
                   aria-label="Back to Mastra Studio"
@@ -96,29 +96,29 @@ export function AgentBuilderSidebar({ forceExpanded = false }: AgentBuilderSideb
               {isUserAuthenticated && <AuthStatus />}
             </div>
           ) : isUserAuthenticated ? (
-            <span className="flex items-center justify-between pr-2 pl-3">
-              <span className="flex min-w-0 flex-1 items-center gap-2">
+            <span className="flex items-center justify-between pl-3 pr-2">
+              <span className="flex items-center gap-2 flex-1 min-w-0">
                 <Link
                   href="/agents"
                   aria-label="Back to Mastra Studio"
-                  className="flex min-w-0 items-center gap-2 rounded-sm hover:opacity-80"
+                  className="flex items-center gap-2 rounded-sm hover:opacity-80 min-w-0"
                 >
                   <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-                  <span className="font-display truncate text-sm whitespace-nowrap">Mastra Studio</span>
+                  <span className="font-display text-sm whitespace-nowrap truncate">Mastra Studio</span>
                 </Link>
                 {!isMobile && <MainSidebar.Trigger />}
               </span>
               <AuthStatus />
             </span>
           ) : (
-            <span className="flex items-center gap-2 pr-2 pl-3">
+            <span className="flex items-center gap-2 pl-3 pr-2">
               <Link
                 href="/agents"
                 aria-label="Back to Mastra Studio"
-                className="flex min-w-0 items-center gap-2 rounded-sm hover:opacity-80"
+                className="flex items-center gap-2 rounded-sm hover:opacity-80 min-w-0"
               >
                 <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-                <span className="font-display truncate text-sm whitespace-nowrap">Mastra Studio</span>
+                <span className="font-display text-sm whitespace-nowrap truncate">Mastra Studio</span>
               </Link>
               {!isMobile && <MainSidebar.Trigger />}
             </span>

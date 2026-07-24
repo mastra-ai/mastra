@@ -26,7 +26,7 @@ export function AgentChatShell({
       leftSlot={leftSlot}
       browserOverlay={browserOverlay}
     >
-      <div className="grid h-full min-h-0 grid-rows-[auto_1fr]">
+      <div className="grid grid-rows-[auto_1fr] h-full min-h-0">
         <AgentViewHeader agentId={agentId} view={view} />
         {children}
       </div>

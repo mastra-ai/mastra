@@ -78,7 +78,7 @@ function MemoryConfigValue({ value, badge }: { value: MemoryConfigItemValue; bad
     return <span className={cn('text-xs font-medium px-2 py-0.5 rounded', badgeColors[badge])}>{value}</span>;
   }
 
-  return <span className="text-neutral3 text-xs">{value}</span>;
+  return <span className="text-xs text-neutral3">{value}</span>;
 }
 
 export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
@@ -191,35 +191,35 @@ export const AgentMemoryConfig = ({ agentId }: AgentMemoryConfigProps) => {
   if (!config || configSections.length === 0) {
     return (
       <div className="p-4">
-        <h3 className="text-neutral5 mb-3 text-sm font-medium">Memory Configuration</h3>
-        <p className="text-neutral3 text-xs">No memory configuration available</p>
+        <h3 className="text-sm font-medium text-neutral5 mb-3">Memory Configuration</h3>
+        <p className="text-xs text-neutral3">No memory configuration available</p>
       </div>
     );
   }
 
   return (
     <div className="p-4">
-      <h3 className="text-neutral5 mb-3 text-sm font-medium">Memory Configuration</h3>
+      <h3 className="text-sm font-medium text-neutral5 mb-3">Memory Configuration</h3>
       <div className="space-y-2">
         {configSections.map(section => (
-          <div key={section.title} className="border-border1 bg-surface3 rounded-lg border">
+          <div key={section.title} className="border border-border1 rounded-lg bg-surface3">
             <button
               type="button"
               onClick={() => toggleSection(section.title)}
-              className="hover:bg-surface4 flex w-full items-center justify-between rounded-t-lg px-3 py-2 transition-colors"
+              className="w-full px-3 py-2 flex items-center justify-between hover:bg-surface4 transition-colors rounded-t-lg"
             >
-              <span className="text-neutral5 text-xs font-medium">{section.title}</span>
+              <span className="text-xs font-medium text-neutral5">{section.title}</span>
               {expandedSections.has(section.title) ? (
-                <ChevronDown className="text-neutral3 h-3 w-3" />
+                <ChevronDown className="w-3 h-3 text-neutral3" />
               ) : (
-                <ChevronRight className="text-neutral3 h-3 w-3" />
+                <ChevronRight className="w-3 h-3 text-neutral3" />
               )}
             </button>
             {expandedSections.has(section.title) && (
-              <div className="space-y-1 px-3 pb-2">
+              <div className="px-3 pb-2 space-y-1">
                 {section.items.map(item => (
                   <div key={`${section.title}-${item.label}`} className="flex items-center justify-between py-1">
-                    <span className="text-neutral3 text-xs">{item.label}</span>
+                    <span className="text-xs text-neutral3">{item.label}</span>
                     <MemoryConfigValue value={item.value ?? ''} badge={item.badge} />
                   </div>
                 ))}

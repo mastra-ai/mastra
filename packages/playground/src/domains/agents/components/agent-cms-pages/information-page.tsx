@@ -24,7 +24,7 @@ export function InformationPage() {
         <SectionHeader title="Identity" subtitle="Define your agent's name, description, and model." />
 
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="agent-name" className="text-neutral5 text-xs">
+          <Label htmlFor="agent-name" className="text-xs text-neutral5">
             Name <span className="text-accent2">*</span>
           </Label>
           <Input
@@ -35,11 +35,11 @@ export function InformationPage() {
             error={!!errors.name}
             disabled={readOnly}
           />
-          {errors.name && <span className="text-accent2 text-xs">{errors.name.message}</span>}
+          {errors.name && <span className="text-xs text-accent2">{errors.name.message}</span>}
         </div>
 
         <div className="flex flex-col gap-1.5 pb-8">
-          <Label htmlFor="agent-description" className="text-neutral5 text-xs">
+          <Label htmlFor="agent-description" className="text-xs text-neutral5">
             Description
           </Label>
           <Textarea
@@ -50,15 +50,15 @@ export function InformationPage() {
             error={!!errors.description}
             disabled={readOnly}
           />
-          {errors.description && <span className="text-accent2 text-xs">{errors.description.message}</span>}
+          {errors.description && <span className="text-xs text-accent2">{errors.description.message}</span>}
         </div>
 
-        <div className="border-border1 border-t pt-8">
+        <div className="border-t border-border1 pt-8">
           <SubSectionRoot>
             <SubSectionHeader title="Model Configuration" />
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
-                <Label className="text-neutral5 text-xs">
+                <Label className="text-xs text-neutral5">
                   Provider <span className="text-accent2">*</span>
                 </Label>
                 <Controller
@@ -71,12 +71,12 @@ export function InformationPage() {
                   )}
                 />
                 {errors.model?.provider && (
-                  <span className="text-accent2 text-xs">{errors.model.provider.message}</span>
+                  <span className="text-xs text-accent2">{errors.model.provider.message}</span>
                 )}
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <Label className="text-neutral5 text-xs">
+                <Label className="text-xs text-neutral5">
                   Model <span className="text-accent2">*</span>
                 </Label>
                 <Controller
@@ -92,7 +92,7 @@ export function InformationPage() {
                     </div>
                   )}
                 />
-                {errors.model?.name && <span className="text-accent2 text-xs">{errors.model.name.message}</span>}
+                {errors.model?.name && <span className="text-xs text-accent2">{errors.model.name.message}</span>}
               </div>
             </div>
           </SubSectionRoot>

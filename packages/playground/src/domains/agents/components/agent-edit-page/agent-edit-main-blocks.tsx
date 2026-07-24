@@ -15,7 +15,7 @@ export function AgentEditMainContentBlocks({ form, readOnly: _readOnly = false }
   const schema = form.watch('variables');
 
   return (
-    <div className="grid h-full grid-rows-[auto_1fr] gap-6 px-4 pb-4">
+    <div className="grid grid-rows-[auto_1fr] gap-6 h-full px-4 pb-4">
       <SectionHeader title="Instruction blocks" subtitle="Add instruction blocks to your agent." icon={<Blocks />} />
 
       <div className="h-full overflow-y-auto">

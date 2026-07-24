@@ -1353,8 +1353,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     resourceId?: string;
   } {
     const memoryContext = args.requestContext?.get('MastraMemory') as
-      | { thread?: { id?: string }; resourceId?: string }
-      | undefined;
+      { thread?: { id?: string }; resourceId?: string } | undefined;
     return { threadId: memoryContext?.thread?.id, resourceId: memoryContext?.resourceId };
   }
 

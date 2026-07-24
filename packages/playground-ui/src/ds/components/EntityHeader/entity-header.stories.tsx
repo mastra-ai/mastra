@@ -31,9 +31,9 @@ export const Loading: Story = {
 
 export const WithChildren: Story = {
   render: () => (
-    <div className="bg-surface3 w-100 rounded-lg">
+    <div className="w-100 rounded-lg bg-surface3">
       <EntityHeader icon={<Workflow />} title="Data Processing Pipeline">
-        <p className="text-neutral3 text-sm">Processes incoming data and transforms it for analysis</p>
+        <p className="text-sm text-neutral3">Processes incoming data and transforms it for analysis</p>
       </EntityHeader>
     </div>
   ),
@@ -41,7 +41,7 @@ export const WithChildren: Story = {
 
 export const WithBadge: Story = {
   render: () => (
-    <div className="bg-surface3 w-100 rounded-lg">
+    <div className="w-100 rounded-lg bg-surface3">
       <EntityHeader icon={<Database />} title="Production Database">
         <div className="flex gap-2">
           <Badge variant="success">Active</Badge>
@@ -54,7 +54,7 @@ export const WithBadge: Story = {
 
 export const LongTitle: Story = {
   render: () => (
-    <div className="w-dropdown-max-height bg-surface3 rounded-lg">
+    <div className="w-dropdown-max-height rounded-lg bg-surface3">
       <EntityHeader
         icon={<Settings />}
         title="This is a very long title that should be truncated when it exceeds the available width"
@@ -65,11 +65,11 @@ export const LongTitle: Story = {
 
 export const WithRichContent: Story = {
   render: () => (
-    <div className="bg-surface3 w-[450px] rounded-lg">
+    <div className="w-[450px] rounded-lg bg-surface3">
       <EntityHeader icon={<Bot />} title="AI Assistant">
         <div className="space-y-2">
-          <p className="text-neutral3 text-sm">An intelligent assistant for customer support tasks</p>
-          <div className="text-neutral3 flex items-center gap-4 text-xs">
+          <p className="text-sm text-neutral3">An intelligent assistant for customer support tasks</p>
+          <div className="flex items-center gap-4 text-xs text-neutral3">
             <span>Model: GPT-4</span>
             <span>Temperature: 0.7</span>
             <span>Max Tokens: 4096</span>

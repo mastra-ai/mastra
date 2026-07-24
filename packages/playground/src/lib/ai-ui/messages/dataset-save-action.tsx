@@ -101,7 +101,7 @@ function DatasetSaveDialog({
           <DialogTitle>Save to Dataset</DialogTitle>
           <DialogDescription>Save as a dataset item for evaluation.</DialogDescription>
         </DialogHeader>
-        <DialogBody className="space-y-4 py-1">
+        <DialogBody className="py-1 space-y-4">
           <div className="grid gap-2">
             <Label htmlFor="ds-target">Dataset</Label>
             <Select
@@ -114,7 +114,7 @@ function DatasetSaveDialog({
               </SelectTrigger>
               <SelectContent>
                 {datasets.length === 0 ? (
-                  <div className="text-neutral4 px-2 py-4 text-center text-sm">No datasets available</div>
+                  <div className="px-2 py-4 text-sm text-neutral4 text-center">No datasets available</div>
                 ) : (
                   datasets.map(dataset => (
                     <SelectItem key={dataset.id} value={dataset.id}>
@@ -132,7 +132,7 @@ function DatasetSaveDialog({
               value={input}
               onChange={onInputChange}
               showCopyButton={false}
-              className="max-h-[240px] min-h-[120px]"
+              className="min-h-[120px] max-h-[240px]"
             />
           </div>
 
@@ -142,7 +142,7 @@ function DatasetSaveDialog({
               value={groundTruth}
               onChange={setGroundTruth}
               showCopyButton={false}
-              className="max-h-[160px] min-h-[80px]"
+              className="min-h-[80px] max-h-[160px]"
             />
           </div>
         </DialogBody>
@@ -198,7 +198,7 @@ function DatasetSaveActionInner({ messageText }: DatasetSaveActionProps) {
         variant="default"
         size="icon-md"
         tooltip="Save to dataset"
-        className="text-neutral3 hover:text-neutral6 bg-transparent"
+        className="bg-transparent text-neutral3 hover:text-neutral6"
         onClick={handleClick}
       >
         <DatabaseIcon className="h-4 w-4" />
@@ -268,7 +268,7 @@ function SaveFullConversationInner() {
         type="button"
         onClick={handleClick}
         disabled={isFetching}
-        className="text-neutral3 hover:text-neutral5 text-ui-xs leading-ui-xs mx-auto flex cursor-pointer items-center gap-1.5 py-3 transition-colors disabled:opacity-50"
+        className="flex items-center gap-1.5 text-neutral3 hover:text-neutral5 transition-colors mx-auto py-3 text-ui-xs leading-ui-xs cursor-pointer disabled:opacity-50"
       >
         {isFetching ? <Spinner className="h-3.5 w-3.5" /> : <DatabaseIcon className="h-3.5 w-3.5" />}
         Save full conversation to dataset

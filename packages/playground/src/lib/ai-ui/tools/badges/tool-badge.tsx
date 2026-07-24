@@ -44,19 +44,19 @@ export const ToolBadge = ({
     const { __mastraMetadata: _, _background, ...formattedArgs } = typeof args === 'object' ? args : JSON.parse(args);
     argSlot = <JsonCodeBlock value={formattedArgs} testId="tool-args" />;
   } catch {
-    argSlot = <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{args as string}</pre>;
+    argSlot = <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{args as string}</pre>;
   }
 
   let resultSlot =
     typeof result === 'string' ? (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{result}</pre>
+      <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{result}</pre>
     ) : (
       <JsonCodeBlock value={result} testId="tool-result" />
     );
 
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
-      <pre className="bg-surface4 overflow-x-auto rounded-md p-4 whitespace-pre">{suspendPayload}</pre>
+      <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
     ) : (
       <CodeEditor data={suspendPayload} data-testid="tool-suspend-payload" />
     );
@@ -93,28 +93,28 @@ export const ToolBadge = ({
       <div className="space-y-4">
         {withoutArgs ? null : (
           <div>
-            <p className="pb-2 font-medium">Tool arguments</p>
+            <p className="font-medium pb-2">Tool arguments</p>
             {argSlot}
           </div>
         )}
 
         {suspendPayloadSlot !== undefined && suspendPayload && (
           <div>
-            <p className="pb-2 font-medium">Tool suspend payload</p>
+            <p className="font-medium pb-2">Tool suspend payload</p>
             {suspendPayloadSlot}
           </div>
         )}
 
         {resultSlot !== undefined && result && (
           <div>
-            <p className="pb-2 font-medium">Tool result</p>
+            <p className="font-medium pb-2">Tool result</p>
             {resultSlot}
           </div>
         )}
 
         {toolOutput.length > 0 && (
           <div>
-            <p className="pb-2 font-medium">Tool output</p>
+            <p className="font-medium pb-2">Tool output</p>
 
             <div className="h-40 overflow-y-auto">
               <CodeEditor data={toolOutput} data-testid="tool-output" />

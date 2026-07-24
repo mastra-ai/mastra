@@ -43,7 +43,7 @@ export const AgentProfileDetails = ({ disabled = false, className, mode = 'defau
         aria-label="Agent name"
         disabled={disabled}
         data-testid="agent-configure-name"
-        className="text-ui-lg text-neutral6 placeholder:text-neutral2 hover:bg-surface4 focus:bg-surface4 w-full max-w-sm rounded-lg px-3 py-1.5 font-semibold focus:outline-none disabled:cursor-not-allowed"
+        className="w-full max-w-sm rounded-lg px-3 py-1.5 text-ui-lg font-semibold text-neutral6 placeholder:text-neutral2 hover:bg-surface4 focus:bg-surface4 focus:outline-none disabled:cursor-not-allowed"
         style={{ viewTransitionName: 'agent-name' }}
       />
       <textarea
@@ -54,7 +54,7 @@ export const AgentProfileDetails = ({ disabled = false, className, mode = 'defau
         disabled={disabled}
         data-testid="agent-configure-description"
         rows={2}
-        className="text-ui-md text-neutral6 placeholder:text-neutral2 hover:bg-surface4 focus:bg-surface4 field-sizing-content w-full resize-none rounded-lg px-3 py-2 focus:outline-none disabled:cursor-not-allowed"
+        className="w-full resize-none field-sizing-content rounded-lg px-3 py-2 text-ui-md text-neutral6 placeholder:text-neutral2 hover:bg-surface4 focus:bg-surface4 focus:outline-none disabled:cursor-not-allowed"
         style={{ viewTransitionName: 'agent-description' }}
       />
     </div>

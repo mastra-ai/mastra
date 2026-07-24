@@ -64,8 +64,7 @@ describeForAllEngines('AIMock loop scenario: toolsets override', engine => {
     expect(requests).toHaveLength(2);
     const turn2Messages = requests[1]?.body?.messages ?? [];
     const toolMessage = turn2Messages.find(message => (message as { role?: string }).role === 'tool') as
-      | { tool_call_id?: string; content?: unknown }
-      | undefined;
+      { tool_call_id?: string; content?: unknown } | undefined;
     expect(toolMessage?.tool_call_id).toBe('call_ts');
     expect(JSON.stringify(toolMessage?.content)).toMatch(/toolset/i);
 
@@ -115,8 +114,7 @@ describeForAllEngines('AIMock loop scenario: toolsets override', engine => {
 
     const turn2Messages = requests[1]?.body?.messages ?? [];
     const toolMessage = turn2Messages.find(message => (message as { role?: string }).role === 'tool') as
-      | { content?: unknown }
-      | undefined;
+      { content?: unknown } | undefined;
     // The tool result should come from the toolset version.
     expect(JSON.stringify(toolMessage?.content)).toMatch(/toolset/i);
   });

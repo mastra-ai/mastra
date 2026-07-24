@@ -76,7 +76,7 @@ export interface WorkflowTriggerProps {
 function DebugModeSwitch() {
   const { debugMode, setDebugMode } = useContext(WorkflowRunContext);
   return (
-    <label className="flex shrink-0 cursor-pointer items-center gap-2">
+    <label className="flex shrink-0 items-center gap-2 cursor-pointer">
       <Switch checked={debugMode} onCheckedChange={setDebugMode} aria-label="Debug" />
       <Txt variant="ui-xs" className="text-neutral3 whitespace-nowrap">
         Debug
@@ -149,10 +149,10 @@ function InitialWorkflowHeader({ workflow, workflowId }: { workflow: GetWorkflow
 
   return (
     <div className="flex w-full items-center gap-2 px-5">
-      <Icon className="text-neutral4 shrink-0">
+      <Icon className="shrink-0 text-neutral4">
         <WorkflowIcon />
       </Icon>
-      <Txt as="span" variant="ui-md" className="text-neutral5 truncate font-semibold">
+      <Txt as="span" variant="ui-md" className="text-neutral5 font-semibold truncate">
         {workflow.name ?? workflowId}
       </Txt>
       <CopyButton content={workflow.name ?? workflowId} variant="ghost" className="shrink-0" />
@@ -184,18 +184,18 @@ function RunWorkflowHeader({
         </span>
       )}
       <div className="min-w-0 flex-1">
-        <Txt as="span" variant="ui-md" className="text-neutral5 block truncate font-semibold">
+        <Txt as="span" variant="ui-md" className="block truncate font-semibold text-neutral5">
           {formatRunStatus(status)}
         </Txt>
-        <Txt as="span" variant="ui-xs" className="text-neutral3 block truncate" title={runId}>
+        <Txt as="span" variant="ui-xs" className="block truncate text-neutral3" title={runId}>
           {runId}
         </Txt>
       </div>
       <div className="shrink-0 text-right">
-        <Txt as="span" variant="ui-xs" className="text-neutral5 block font-medium">
+        <Txt as="span" variant="ui-xs" className="block font-medium text-neutral5">
           {formatRunDuration(runDuration)}
         </Txt>
-        <Txt as="span" variant="ui-xs" className="text-neutral3 block">
+        <Txt as="span" variant="ui-xs" className="block text-neutral3">
           {formatRelativeTime(timestamp)}
         </Txt>
       </div>
@@ -302,7 +302,7 @@ export function WorkflowTrigger({
 
   if (isLoading) {
     return (
-      <ScrollArea className="h-[calc(100vh-126px)] px-4 pt-2 pb-4 text-xs">
+      <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs">
         <div className="space-y-4">
           <Skeleton className="h-10" />
           <Skeleton className="h-10" />
@@ -329,12 +329,12 @@ export function WorkflowTrigger({
   );
 
   return (
-    <div className="h-full overflow-y-auto pt-3">
-      <div className={`border-border1/50 border-b`}>
+    <div className="h-full pt-3 overflow-y-auto">
+      <div className={`border-b border-border1/50`}>
         {isSuspendedSteps && isStreamingWorkflow && (
-          <div className="bg-surface5 border-border1 -mt-5 flex items-center gap-2 border-b px-5 py-2">
+          <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mt-5 border-b border-border1">
             <Icon>
-              <Loader2 className="text-neutral6 animate-spin" />
+              <Loader2 className="animate-spin text-neutral6" />
             </Icon>
             <Txt>Resuming workflow</Txt>
           </div>
@@ -370,7 +370,7 @@ export function WorkflowTrigger({
         )}
 
         {!canExecuteWorkflow && (
-          <Txt variant="ui-sm" className="text-neutral3 px-5 py-2">
+          <Txt variant="ui-sm" className="text-neutral3 py-2 px-5">
             You don't have permission to execute workflows.
           </Txt>
         )}
@@ -401,13 +401,13 @@ export function WorkflowTrigger({
         )}
 
         {isPausedDebug && (
-          <div className="px-5 pt-3 pb-4">
+          <div className="px-5 pb-4 pt-3">
             <WorkflowDebugStepControls isStreaming={isStreamingWorkflow} />
           </div>
         )}
 
         {(streamResultToUse?.status === 'running' || isSuspendedSteps || isPausedDebug) && (
-          <div data-testid="workflow-cancel-action" className="px-5 pt-3 pb-4">
+          <div data-testid="workflow-cancel-action" className="px-5 pb-4 pt-3">
             <WorkflowCancelButton
               status={isSuspendedSteps ? 'suspended' : streamResultToUse?.status}
               cancelMessage={cancelResponse?.message ?? null}

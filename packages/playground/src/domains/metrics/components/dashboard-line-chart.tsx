@@ -22,7 +22,7 @@ export function DashboardLineChart({
 }) {
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-end gap-4">
+      <div className="flex flex-wrap items-end gap-4 mb-4">
         {series.map(s => {
           const aggregated = s.aggregate?.(data);
           return (

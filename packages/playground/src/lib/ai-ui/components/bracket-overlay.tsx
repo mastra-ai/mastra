@@ -214,7 +214,7 @@ function HighlightBlock({ highlight, visible }: { highlight: HighlightPosition; 
 
   return (
     <div
-      className="absolute right-0 left-0 transition-opacity duration-200"
+      className="absolute left-0 right-0 transition-opacity duration-200"
       style={{
         top: highlight.top,
         height: highlight.height,

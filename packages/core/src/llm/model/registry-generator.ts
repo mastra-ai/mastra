@@ -210,7 +210,7 @@ export function generateTypesContent(models: Record<string, string[]>): string {
       const needsQuotes = !/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(provider);
       const providerKey = needsQuotes ? `'${provider}'` : provider;
 
-      // Format array based on the repository printWidth of 120.
+      // Format array based on length (prettier printWidth: 120)
       const singleLine = `  readonly ${providerKey}: readonly [${modelsList.join(', ')}];`;
 
       // If single line exceeds 120 chars, format as multi-line

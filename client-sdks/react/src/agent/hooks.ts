@@ -333,8 +333,7 @@ export const useChat = ({
   }, [propsRequestContext]);
 
   type SignalContentPart =
-    | { type: 'text'; text: string }
-    | { type: 'file'; data: string; mediaType: string; filename?: string };
+    { type: 'text'; text: string } | { type: 'file'; data: string; mediaType: string; filename?: string };
   type UserMessageSignalContents = string | SignalContentPart[];
 
   const normalizeSignalFileData = (data: string | URL | ArrayBuffer | Uint8Array) => {

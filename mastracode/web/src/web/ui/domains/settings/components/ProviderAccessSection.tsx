@@ -202,7 +202,7 @@ export function ProviderAccessSection() {
 
         <TabContent value="api-key" className="flex flex-col gap-3">
           <div className="relative">
-            <Search size={14} className="text-icon3 pointer-events-none absolute top-1/2 left-3 -translate-y-1/2" />
+            <Search size={14} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-icon3" />
             <Input
               type="text"
               placeholder="Search providers to add an API key…"

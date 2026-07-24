@@ -25,7 +25,7 @@ export function GithubPatBlock() {
   const statusQuery = useGithubPatStatusQuery();
 
   return (
-    <div className="border-border1 flex flex-col gap-4 border-t pt-4">
+    <div className="flex flex-col gap-4 border-t border-border1 pt-4">
       <div className="flex flex-col">
         <Txt variant="ui-md" className="font-medium">
           GitHub CLI tokens
@@ -88,7 +88,7 @@ function TokenRow({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-4">
-        <div className="flex min-w-0 flex-col">
+        <div className="min-w-0 flex flex-col">
           <div className="flex items-center gap-2">
             <Txt variant="ui-sm" className="font-medium">
               {title}

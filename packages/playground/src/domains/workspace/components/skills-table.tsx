@@ -79,12 +79,12 @@ export function SkillsTable({
       )}
 
       {hasUndiscoveredAgentSkills && (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+        <div className="flex items-start gap-3 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+          <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
           <div className="text-sm">
             <p className="font-medium text-amber-500">Skills installed but not discovered</p>
             <p className="text-neutral4 mt-1">
-              You have skills in <code className="bg-surface4 rounded px-1 py-0.5 text-xs">.agents/skills</code> that
+              You have skills in <code className="px-1 py-0.5 rounded bg-surface4 text-xs">.agents/skills</code> that
               aren&apos;t being discovered. Add this path to your workspace skills configuration to see them.
             </p>
           </div>
@@ -114,7 +114,7 @@ export function SkillsTable({
 
             const rowContent = (
               <>
-                <DataList.Cell className="text-neutral6 font-medium">{skill.name}</DataList.Cell>
+                <DataList.Cell className="font-medium text-neutral6">{skill.name}</DataList.Cell>
                 <DataList.MonoCell height="default">{skill.path}</DataList.MonoCell>
                 <DataList.Cell className="min-w-0">
                   <span className="block truncate">{skill.description || '—'}</span>
@@ -136,7 +136,7 @@ export function SkillsTable({
                   {rowContent}
                 </DataList.RowButton>
                 <DataList.Cell className="py-0">
-                  <div className="flex w-full items-center justify-end gap-1 pr-3 pl-2">
+                  <div className="flex items-center justify-end gap-1 pl-2 w-full pr-3">
                     {isDownloaded(skill) && (
                       <>
                         {onUpdateSkill && (
@@ -173,12 +173,12 @@ interface SkillsNotConfiguredProps {
 function SkillsNotConfigured({ onAddSkill }: SkillsNotConfiguredProps) {
   return (
     <div className="grid place-items-center py-16">
-      <div className="flex max-w-md flex-col items-center text-center">
-        <div className="bg-surface4 mb-4 rounded-full p-4">
-          <SkillIcon className="text-neutral3 h-8 w-8" />
+      <div className="flex flex-col items-center text-center max-w-md">
+        <div className="p-4 rounded-full bg-surface4 mb-4">
+          <SkillIcon className="h-8 w-8 text-neutral3" />
         </div>
-        <h2 className="text-neutral6 mb-2 text-lg font-medium">Skills Not Configured</h2>
-        <p className="text-neutral4 mb-6 text-sm">
+        <h2 className="text-lg font-medium text-neutral6 mb-2">Skills Not Configured</h2>
+        <p className="text-sm text-neutral4 mb-6">
           No skills are configured in the workspace. Add SKILL.md files to your skills directory to discover and manage
           agent skills.
         </p>

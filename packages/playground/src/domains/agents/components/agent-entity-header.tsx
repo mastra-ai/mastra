@@ -18,14 +18,14 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
 
   return (
     <TooltipProvider>
-      <div className="min-w-0 overflow-x-hidden p-3">
+      <div className="p-3 min-w-0 overflow-x-hidden">
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               type="button"
               onClick={handleCopy}
               aria-label="Copy Agent ID for use in code"
-              className="group/agent-title text-neutral6 flex max-w-full min-w-0 cursor-pointer items-center gap-2"
+              className="group/agent-title text-neutral6 flex min-w-0 max-w-full cursor-pointer items-center gap-2"
               data-testid="agent-entity-header-copy-id"
             >
               <span className="flex size-7 shrink-0 items-center justify-center">
@@ -41,9 +41,9 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
                 </Txt>
               )}
               {isCopied ? (
-                <Check className="text-neutral3 h-4 w-4 shrink-0" />
+                <Check className="h-4 w-4 shrink-0 text-neutral3" />
               ) : (
-                <CopyIcon className="text-neutral3 h-4 w-4 shrink-0 opacity-0 transition-opacity group-hover/agent-title:opacity-100 group-focus-visible/agent-title:opacity-100" />
+                <CopyIcon className="h-4 w-4 shrink-0 text-neutral3 opacity-0 transition-opacity group-hover/agent-title:opacity-100 group-focus-visible/agent-title:opacity-100" />
               )}
             </button>
           </TooltipTrigger>

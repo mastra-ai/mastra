@@ -25,10 +25,10 @@ export function UserGithubConnectionRow() {
 
   if (status.userConnected) {
     return (
-      <div className="border-border1 flex items-center gap-2 border-t pt-4">
-        <GithubIcon size={16} className="text-icon3 shrink-0" />
+      <div className="flex items-center gap-2 border-t border-border1 pt-4">
+        <GithubIcon size={16} className="shrink-0 text-icon3" />
         <Txt variant="ui-sm">
-          Connected as <span className="text-icon6 font-medium">@{status.userGithubUsername ?? 'unknown'}</span> —
+          Connected as <span className="font-medium text-icon6">@{status.userGithubUsername ?? 'unknown'}</span> —
           issues and PRs you create are authored as you.
         </Txt>
       </div>
@@ -38,7 +38,7 @@ export function UserGithubConnectionRow() {
   if (status.userConnected !== false) return undefined;
 
   return (
-    <div className="border-border1 flex items-center justify-between gap-4 border-t pt-4">
+    <div className="flex items-center justify-between gap-4 border-t border-border1 pt-4">
       <Txt variant="ui-sm" className="min-w-0">
         Connect your GitHub account so issues and PRs you create are authored as you.
       </Txt>

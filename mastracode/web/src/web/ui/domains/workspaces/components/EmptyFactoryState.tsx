@@ -138,7 +138,7 @@ export function EmptyFactoryState() {
   const stepIndex = steps.indexOf(step);
 
   return (
-    <main className="factory-signin-theme bg-surface1 font-mona-sans text-neutral6 min-h-dvh">
+    <main className="factory-signin-theme min-h-dvh bg-surface1 font-mona-sans text-neutral6">
       <div className="grid min-h-dvh w-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(480px,42%)]">
         <section className="relative z-3 flex flex-col justify-center px-6 py-12 sm:px-10 lg:px-16 lg:py-17 xl:px-20">
           <div className="w-full max-w-2xl">
@@ -161,7 +161,7 @@ export function EmptyFactoryState() {
               <Txt
                 as="p"
                 variant="ui-lg"
-                className="text-neutral3 mt-6 max-w-lg text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.4] tracking-[0.01em]"
+                className="mt-6 max-w-lg text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.4] tracking-[0.01em] text-neutral3"
               >
                 {STEP_META[step].description}
               </Txt>
@@ -169,7 +169,7 @@ export function EmptyFactoryState() {
 
             <div
               key={step}
-              className="animate-in fade-in slide-in-from-bottom-2 mt-11 w-full duration-300 motion-reduce:animate-none"
+              className="mt-11 w-full animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none"
             >
               {step === 'initial' && <InitialFactoryStep onContinue={() => goTo('vcs')} />}
               {step === 'vcs' && (

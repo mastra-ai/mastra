@@ -198,7 +198,7 @@ export const CustomContent: Story = {
               <FolderGit2 className="text-accent6" />
             </Tree.Icon>
             <Tree.Label>packages</Tree.Label>
-            <span className="text-neutral3 ml-auto text-[10px]">12 items</span>
+            <span className="ml-auto text-[10px] text-neutral3">12 items</span>
           </Tree.FolderTrigger>
           <Tree.FolderContent>
             <Tree.File>
@@ -206,14 +206,14 @@ export const CustomContent: Story = {
                 <FileCode className="text-neutral3" />
               </Tree.Icon>
               <Tree.Label>core</Tree.Label>
-              <span className="text-neutral3 ml-auto text-[10px]">v2.1.0</span>
+              <span className="ml-auto text-[10px] text-neutral3">v2.1.0</span>
             </Tree.File>
             <Tree.File>
               <Tree.Icon>
                 <FileCode className="text-neutral3" />
               </Tree.Icon>
               <Tree.Label>cli</Tree.Label>
-              <span className="text-neutral3 ml-auto text-[10px]">v1.0.3</span>
+              <span className="ml-auto text-[10px] text-neutral3">v1.0.3</span>
             </Tree.File>
           </Tree.FolderContent>
         </Tree.Folder>

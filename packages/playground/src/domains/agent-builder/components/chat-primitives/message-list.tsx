@@ -81,7 +81,7 @@ export const MessageList = ({
   return (
     <div
       ref={scrollRef}
-      className="min-h-0 flex-1 overflow-y-auto px-6 py-6"
+      className="flex-1 min-h-0 overflow-y-auto py-6 px-6"
       style={{ viewTransitionName: 'agent-builder-messages' }}
     >
       {showSkeleton ? (

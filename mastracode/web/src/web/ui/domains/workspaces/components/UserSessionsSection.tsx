@@ -137,7 +137,7 @@ export function UserSessionsSection() {
   return (
     <section className="flex flex-col gap-2" aria-label="User sessions">
       <div className="flex items-center justify-between px-1">
-        <Txt as="span" variant="ui-xs" className="text-icon3 tracking-wide uppercase">
+        <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
           User Sessions
         </Txt>
         <Button
@@ -173,7 +173,7 @@ export function UserSessionsSection() {
           })}
         </MainSidebar.NavList>
         {sessions.length === 0 && (
-          <Txt as="p" variant="ui-xs" className="text-icon3 m-0 px-2 py-1">
+          <Txt as="p" variant="ui-xs" className="m-0 px-2 py-1 text-icon3">
             No sessions yet
           </Txt>
         )}
@@ -219,7 +219,7 @@ export function UserSessionsSection() {
               <DialogTitle>Delete session?</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-4 px-5 pb-4">
-              <Txt as="p" variant="ui-sm" className="text-icon4 m-0">
+              <Txt as="p" variant="ui-sm" className="m-0 text-icon4">
                 This deletes the <span className="text-icon6">{sessionLabel(confirmDelete)}</span> session, its checkout
                 with any uncommitted changes, and its conversation. This can’t be undone.
               </Txt>

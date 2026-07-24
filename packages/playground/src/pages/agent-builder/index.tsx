@@ -8,7 +8,7 @@ export const AgentBuilderRoot = () => {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="h-screen flex items-center justify-center">
         <Spinner />
       </div>
     );

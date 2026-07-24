@@ -69,13 +69,12 @@ jobs:
       - name: Generate model documentation
         run: pnpx tsx packages/core/scripts/generate-model-docs.ts
 
-      - name: Format generated files
+      - name: Format generated files with Prettier
         run: |
-          pnpm oxfmt packages/core/src/llm/model/provider-registry.json
-          pnpm oxfmt packages/core/src/llm/model/provider-types.generated.d.ts
-          pnpm oxfmt packages/core/src/llm/model/capabilities/
-          cd docs
-          pnpm oxfmt 'src/content/en/models/**/*.{ts,js}' --ignore-path /dev/null --no-error-on-unmatched-pattern
+          pnpm prettier --write packages/core/src/llm/model/provider-registry.json
+          pnpm prettier --write packages/core/src/llm/model/provider-types.generated.d.ts
+          pnpm prettier --write packages/core/src/llm/model/capabilities/
+          pnpm prettier --write docs/src/content/en/models/**/*.{mdx,ts,js}
       - name: Check for changes
         id: git-check
         run: |

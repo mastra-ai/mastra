@@ -76,7 +76,7 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
         return (
           <EntityList.RowLink key={scorer.id} to={paths.scorerLink(scorer.id)} LinkComponent={Link}>
             <EntityList.NameCell>
-              <span className="flex max-w-full min-w-0 items-center gap-1.5">
+              <span className="flex min-w-0 max-w-full items-center gap-1.5">
                 <span className="min-w-0 truncate">{name}</span>
                 {isTrajectory && (
                   <Chip size="small" color="purple" className="shrink-0">

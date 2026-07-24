@@ -66,7 +66,7 @@ export const AgentStepContainer = ({
   ) : null;
 
   return (
-    <div className="border-border1 relative h-full min-h-0 w-full overflow-hidden rounded-3xl border p-4">
+    <div className="relative w-full h-full min-h-0 border border-border1 rounded-3xl overflow-hidden p-4">
       <div
         aria-hidden
         className={cn('agent-step-banner pointer-events-none', isStreaming && 'agent-step-banner-rotating')}
@@ -81,9 +81,9 @@ export const AgentStepContainer = ({
       >
         {panelOverlay}
         {title && (
-          <div className="border-border1 border-b px-6 pt-6 pb-4" data-testid="agent-step-title-section">
-            <h2 className="text-neutral6 pb-1 text-3xl font-semibold">{title}</h2>
-            {description && <div className="text-neutral3 w-1/2">{description}</div>}
+          <div className="border-b border-border1 px-6 pt-6 pb-4" data-testid="agent-step-title-section">
+            <h2 className="text-3xl font-semibold text-neutral6 pb-1">{title}</h2>
+            {description && <div className="w-1/2 text-neutral3">{description}</div>}
           </div>
         )}
         <div className={cn('min-h-0 overflow-y-auto', contentClassName)} data-testid="agent-step-content">
@@ -91,7 +91,7 @@ export const AgentStepContainer = ({
         </div>
         {showLastStepCtas ? (
           <div
-            className="border-border1 flex shrink-0 items-center justify-center gap-2 border-t pt-6 pb-6"
+            className="flex justify-center items-center gap-2 shrink-0 border-t border-border1 pt-6 pb-6"
             data-testid="agent-step-footer"
           >
             {backButton}
@@ -108,7 +108,7 @@ export const AgentStepContainer = ({
           </div>
         ) : (
           <div
-            className="border-border1 flex shrink-0 items-center justify-center gap-2 border-t pt-6 pb-6"
+            className="flex justify-center items-center gap-2 shrink-0 border-t border-border1 pt-6 pb-6"
             data-testid="agent-step-footer"
           >
             {backButton}

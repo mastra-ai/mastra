@@ -75,8 +75,8 @@ export const WithAction: Story = {
         to="/agents/my-agent"
         isCurrent
         action={
-          <button className="hover:bg-surface2 rounded p-1">
-            <ChevronDown className="text-neutral3 size-4" />
+          <button className="rounded p-1 hover:bg-surface2">
+            <ChevronDown className="size-4 text-neutral3" />
           </button>
         }
       >

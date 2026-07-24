@@ -49,7 +49,7 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
   };
 
   return (
-    <div className="border-border1 bg-surface2 rounded-md border">
+    <div className="rounded-md border border-border1 bg-surface2">
       <Controller
         name="agents"
         control={control}
@@ -83,9 +83,9 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
           return (
             <>
               <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-                <div className="bg-surface3 flex items-center justify-between p-3">
-                  <CollapsibleTrigger className="flex w-full items-center gap-1">
-                    <ChevronRight className="text-neutral3 h-4 w-4" />
+                <div className="flex items-center justify-between p-3 bg-surface3">
+                  <CollapsibleTrigger className="flex items-center gap-1 w-full">
+                    <ChevronRight className="h-4 w-4 text-neutral3" />
                     <SectionTitle icon={<AgentIcon className="text-accent1" />}>
                       Sub-Agents{count > 0 && <span className="text-neutral3 font-normal">({count})</span>}
                     </SectionTitle>
@@ -93,7 +93,7 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
                 </div>
 
                 <CollapsibleContent>
-                  <div className="border-border1 border-t p-3">
+                  <div className="p-3 border-t border-border1">
                     <div className="flex flex-col gap-2">
                       <Combobox
                         multiple
@@ -107,7 +107,7 @@ export function AgentsSection({ control, error, currentAgentId, readOnly = false
                         error={error}
                       />
                       {selectedOptions.length > 0 && (
-                        <div className="mt-2 flex flex-col gap-3">
+                        <div className="flex flex-col gap-3 mt-2">
                           {selectedOptions.map(agent => (
                             <EntityAccordionItem
                               key={agent.value}

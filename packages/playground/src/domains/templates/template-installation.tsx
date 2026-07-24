@@ -69,18 +69,18 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
   }));
 
   return (
-    <Container className="text-neutral3 mb-8 content-center space-y-6">
+    <Container className="space-y-6 text-neutral3 mb-8 content-center">
       {/* Header */}
       <div className="text-center">
-        <h3 className="text-neutral5 text-lg font-semibold">{getPhaseMessage()}</h3>
+        <h3 className="text-lg font-semibold text-neutral5">{getPhaseMessage()}</h3>
         {(streamResult?.runId || runId) && (
-          <div className="text-ui-sm text-neutral3 mt-2">Run ID: {streamResult?.runId ?? runId}</div>
+          <div className="mt-2 text-ui-sm text-neutral3">Run ID: {streamResult?.runId ?? runId}</div>
         )}
       </div>
 
       {/* Progress Bar */}
       {hasSteps && totalSteps > 0 && !['error'].includes(phase) && (
-        <div className="mx-auto w-full max-w-[30rem] px-6">
+        <div className="max-w-[30rem] w-full mx-auto px-6">
           <ProcessStepProgressBar steps={steps} />
         </div>
       )}
@@ -103,7 +103,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
 
       {/* Simple loading state for initialization */}
       {!hasSteps && phase === 'initializing' && (
-        <div className="text-neutral3 grid justify-items-center gap-4 text-center text-sm">
+        <div className="text-center text-sm text-neutral3 grid gap-4 justify-items-center">
           <Spinner />
           <p>This may take some time...</p>
         </div>

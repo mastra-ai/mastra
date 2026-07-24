@@ -7,7 +7,7 @@ export interface AgentProfileProps {
 export const AgentProfile = ({ children }: AgentProfileProps) => {
   return (
     <div
-      className="border-border1 bg-surface3 grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden rounded-3xl border"
+      className="grid grid-rows-[auto_1fr] border border-border1 bg-surface3 rounded-3xl h-full min-h-0 overflow-hidden"
       data-testid="agent-profile"
     >
       {children}

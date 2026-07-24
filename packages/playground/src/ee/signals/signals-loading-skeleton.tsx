@@ -2,7 +2,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 
 function DistributionSkeleton() {
   return (
-    <div className="border-border1 bg-surface2 space-y-3 rounded-lg border p-4">
+    <div className="space-y-3 rounded-lg border border-border1 bg-surface2 p-4">
       <Skeleton className="h-3 w-20" />
       <Skeleton className="h-2 w-full" />
       <Skeleton className="h-3 w-4/5" />

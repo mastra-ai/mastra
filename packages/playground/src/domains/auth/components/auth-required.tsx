@@ -59,8 +59,8 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
         <div className="flex flex-col items-center space-y-6 text-center">
           <LogoWithoutText className="h-16 w-16 opacity-50" />
           <div className="space-y-2">
-            <h2 className="text-neutral6 text-xl font-semibold">Authentication Required</h2>
-            <p className="text-neutral3 max-w-sm">
+            <h2 className="text-xl font-semibold text-neutral6">Authentication Required</h2>
+            <p className="max-w-sm text-neutral3">
               This page requires authentication, but no login method is configured. Please contact your administrator.
             </p>
           </div>
@@ -83,13 +83,13 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
       <div className="flex flex-col items-center space-y-6 text-center">
         <LogoWithoutText className="h-16 w-16 opacity-50" />
         <div className="space-y-2">
-          <h2 className="text-neutral6 text-xl font-semibold">Sign in to continue</h2>
-          <p className="text-neutral3 max-w-sm">You need to sign in to access this page.</p>
+          <h2 className="text-xl font-semibold text-neutral6">Sign in to continue</h2>
+          <p className="max-w-sm text-neutral3">You need to sign in to access this page.</p>
         </div>
         {capabilities.login.description && (
-          <div className="border-border1 bg-surface2 flex items-start gap-2.5 rounded-md border p-3 text-left">
-            <Lock className="text-neutral4 mt-0.5 h-4 w-4 shrink-0" />
-            <p className="text-neutral3 max-w-sm text-sm">{capabilities.login.description}</p>
+          <div className="flex items-start gap-2.5 rounded-md border border-border1 bg-surface2 p-3 text-left">
+            <Lock className="mt-0.5 h-4 w-4 shrink-0 text-neutral4" />
+            <p className="max-w-sm text-sm text-neutral3">{capabilities.login.description}</p>
           </div>
         )}
         <LoginButton config={capabilities.login} redirectUri={redirectUri} loginUrl={loginUrl} />

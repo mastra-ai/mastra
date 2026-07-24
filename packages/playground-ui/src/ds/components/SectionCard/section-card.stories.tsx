@@ -10,8 +10,8 @@ const SURFACES: { token: string; label: string; className: string }[] = [
 
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: React.ReactNode }) {
   return (
-    <div className={`border-border1 rounded-2xl border p-6 ${className}`}>
-      <p className="text-ui-xs text-neutral3 mb-4 tracking-wide uppercase">{label}</p>
+    <div className={`rounded-2xl border border-border1 p-6 ${className}`}>
+      <p className="mb-4 text-ui-xs tracking-wide text-neutral3 uppercase">{label}</p>
       {children}
     </div>
   );
@@ -25,7 +25,7 @@ const meta: Meta<typeof SectionCard> = {
   },
   decorators: [
     Story => (
-      <div className="border-border1 bg-surface2 rounded-2xl border p-6">
+      <div className="rounded-2xl border border-border1 bg-surface2 p-6">
         <Story />
       </div>
     ),
@@ -49,7 +49,7 @@ export const WithAction: Story = {
       title="Activity Over Time"
       description="Track request volume, cost, and latency over time"
       action={
-        <div className="text-ui-sm text-neutral3 flex gap-2">
+        <div className="flex gap-2 text-ui-sm text-neutral3">
           <span>Cost</span>
           <span>Requests</span>
           <span>Tokens</span>
@@ -57,7 +57,7 @@ export const WithAction: Story = {
         </div>
       }
     >
-      <div className="bg-surface3 h-40 rounded-md" />
+      <div className="h-40 rounded-md bg-surface3" />
     </SectionCard>
   ),
 };
@@ -76,12 +76,12 @@ export const Danger: Story = {
 
 export const FillHeight: Story = {
   render: () => (
-    <div className="grid h-105 grid-cols-2 gap-4">
+    <div className="h-105 grid grid-cols-2 gap-4">
       <SectionCard fillHeight title="Left" description="Stretches to grid row height">
-        <div className="bg-surface3 h-full rounded-md" />
+        <div className="h-full rounded-md bg-surface3" />
       </SectionCard>
       <SectionCard fillHeight title="Right" description="Same height as sibling">
-        <div className="bg-surface3 h-full rounded-md" />
+        <div className="h-full rounded-md bg-surface3" />
       </SectionCard>
     </div>
   ),

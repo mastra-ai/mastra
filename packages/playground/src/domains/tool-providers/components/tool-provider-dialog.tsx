@@ -77,8 +77,8 @@ export function ToolProviderDialog({ provider, onClose, selectedToolIds, onSubmi
         )}
       </SideDialog.Header>
 
-      <div className="grid h-full grid-cols-[220px_1fr] overflow-hidden">
-        <div className="border-border1 overflow-hidden border-r">
+      <div className="grid grid-cols-[220px_1fr] h-full overflow-hidden">
+        <div className="border-r border-border1 overflow-hidden">
           {provider && (
             <ToolkitList
               providerId={provider.id}

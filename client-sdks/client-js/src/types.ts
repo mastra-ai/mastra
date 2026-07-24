@@ -459,13 +459,15 @@ export type ResponsesStreamEvent =
   | ResponsesCompletedEvent;
 
 type WithoutMethods<T> = {
-  [K in keyof T as T[K] extends (...args: any[]) => any
-    ? never
-    : T[K] extends { (): any }
+  [
+    K in keyof T as T[K] extends (...args: any[]) => any
       ? never
-      : T[K] extends undefined | ((...args: any[]) => any)
+      : T[K] extends { (): any }
         ? never
-        : K]: T[K];
+        : T[K] extends undefined | ((...args: any[]) => any)
+          ? never
+          : K
+  ]: T[K];
 };
 
 export type NetworkStreamParams<OUTPUT = undefined> = {
@@ -1243,8 +1245,7 @@ export interface StoredAgentSkillConfig {
  * Can reference a stored workspace by ID or provide inline workspace config.
  */
 export type StoredWorkspaceRef =
-  | { type: 'id'; workspaceId: string }
-  | { type: 'inline'; config: Record<string, unknown> };
+  { type: 'id'; workspaceId: string } | { type: 'inline'; config: Record<string, unknown> };
 
 export interface StoredBrowserConfig {
   provider: string;
@@ -2536,11 +2537,7 @@ export type ToolProviderHealthResponse = GeneratedResponse<'GET /tool-providers/
  * Distinct from ProcessorPhase which uses the short/unprefixed form for processor endpoints.
  */
 export type ProcessorProviderPhase =
-  | 'processInput'
-  | 'processInputStep'
-  | 'processOutputStream'
-  | 'processOutputResult'
-  | 'processOutputStep';
+  'processInput' | 'processInputStep' | 'processOutputStream' | 'processOutputResult' | 'processOutputStep';
 
 export interface ProcessorProviderInfo {
   id: string;
@@ -3003,13 +3000,7 @@ export interface DeletePromptBlockVersionResponse {
 }
 
 export type BackgroundTaskStatus =
-  | 'pending'
-  | 'running'
-  | 'suspended'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-  | 'timed_out';
+  'pending' | 'running' | 'suspended' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
 
 export type BackgroundTaskDateColumn = 'createdAt' | 'startedAt' | 'completedAt';
 
@@ -3115,14 +3106,7 @@ export interface WorkflowSchedule {
 export type ScheduleResponse = AgentSchedule | WorkflowSchedule;
 
 export type ScheduleTriggerOutcome =
-  | 'published'
-  | 'succeeded'
-  | 'delivered'
-  | 'persisted'
-  | 'discarded'
-  | 'skipped'
-  | 'aborted'
-  | 'failed';
+  'published' | 'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped' | 'aborted' | 'failed';
 
 export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain' | 'manual';
 

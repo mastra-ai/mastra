@@ -53,7 +53,7 @@ function ConfigBadge({ icon: Icon, tooltip, enabled, value }: ConfigBadgeProps) 
         >
           <Icon className="h-3 w-3 shrink-0" />
           {value !== undefined && (
-            <Txt as="span" variant="ui-xs" className="leading-none font-medium tabular-nums">
+            <Txt as="span" variant="ui-xs" className="font-medium tabular-nums leading-none">
               {value}
             </Txt>
           )}
@@ -232,16 +232,16 @@ function MemorySidebarBody({ agentId, threadId, threads, onDelete }: MemorySideb
               className="group/memory-card w-full shrink-0 cursor-pointer bg-transparent px-3 py-2.5 text-left"
             >
               <span className="flex items-center justify-between gap-2">
-                <span className="text-neutral6 flex min-w-0 items-center gap-1.5">
+                <span className="flex min-w-0 items-center gap-1.5 text-neutral6">
                   <MemoryIcon className="h-4 w-4 shrink-0" />
                   <Txt as="span" variant="ui-sm" className="font-medium">
                     Memory
                   </Txt>
                 </span>
                 {showMemory ? (
-                  <ChevronDown className="text-neutral3 h-4 w-4 shrink-0" />
+                  <ChevronDown className="h-4 w-4 shrink-0 text-neutral3" />
                 ) : (
-                  <ChevronUp className="text-neutral3 h-4 w-4 shrink-0" />
+                  <ChevronUp className="h-4 w-4 shrink-0 text-neutral3" />
                 )}
               </span>
 
@@ -291,7 +291,7 @@ function MemorySidebarBody({ agentId, threadId, threads, onDelete }: MemorySideb
               ) : null}
 
               {observationPercent !== undefined ? (
-                <span className="bg-surface5 mt-2 block h-1 w-full overflow-hidden rounded-full">
+                <span className="mt-2 block h-1 w-full overflow-hidden rounded-full bg-surface5">
                   <span
                     className={cn(
                       'block h-full rounded-full transition-all duration-normal',
@@ -304,7 +304,7 @@ function MemorySidebarBody({ agentId, threadId, threads, onDelete }: MemorySideb
             </button>
 
             {showMemory && (
-              <div className="memory-card-content border-border1 min-h-0 flex-1 overflow-y-auto border-t">
+              <div className="memory-card-content min-h-0 flex-1 overflow-y-auto border-t border-border1">
                 <AgentMemory agentId={agentId} threadId={threadId} memoryType={memoryType} />
               </div>
             )}

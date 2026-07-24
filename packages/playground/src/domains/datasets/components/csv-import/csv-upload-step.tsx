@@ -106,7 +106,7 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
         {isParsing ? (
           <>
             <Spinner />
-            <span className="text-neutral4 text-sm">Parsing CSV...</span>
+            <span className="text-sm text-neutral4">Parsing CSV...</span>
           </>
         ) : (
           <>
@@ -114,15 +114,15 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
               <Upload className="h-8 w-8" />
             </Icon>
             <div className="flex flex-col items-center gap-1">
-              <span className="text-neutral1 text-sm font-medium">Click to upload or drag and drop</span>
-              <span className="text-neutral4 text-xs">CSV files only</span>
+              <span className="text-sm font-medium text-neutral1">Click to upload or drag and drop</span>
+              <span className="text-xs text-neutral4">CSV files only</span>
             </div>
           </>
         )}
       </div>
 
       {/* Error message */}
-      {error && <div className="text-accent2 text-sm">{error}</div>}
+      {error && <div className="text-sm text-accent2">{error}</div>}
     </div>
   );
 }

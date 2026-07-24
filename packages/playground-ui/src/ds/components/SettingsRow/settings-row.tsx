@@ -24,7 +24,7 @@ export function SettingsRow({ label, description, htmlFor, className, children }
         ) : (
           <p className="text-sm font-medium">{label}</p>
         )}
-        {description && <p className="text-neutral3 text-sm">{description}</p>}
+        {description && <p className="text-sm text-neutral3">{description}</p>}
       </div>
       {children}
     </div>

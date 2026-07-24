@@ -46,7 +46,7 @@ export const NotificationSignalNotice = ({ signal }: NotificationSignalNoticePro
               {pendingLabel ? <Badge size="xs">{pendingLabel}</Badge> : null}
             </div>
           ) : null}
-          {hasText ? <Notice.Message className="break-words whitespace-pre-wrap">{text}</Notice.Message> : null}
+          {hasText ? <Notice.Message className="whitespace-pre-wrap break-words">{text}</Notice.Message> : null}
         </div>
       ) : null}
     </Notice>

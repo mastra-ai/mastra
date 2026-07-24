@@ -223,7 +223,7 @@ DropdownMenuItem.displayName = 'DropdownMenuItem';
 const DropdownMenuCheckboxItem = React.forwardRef<HTMLDivElement, MenuPrimitive.CheckboxItem.Props>(
   ({ className, children, checked, ...props }, ref) => (
     <MenuPrimitive.CheckboxItem ref={ref} className={cn(itemClass, 'w-full', className)} checked={checked} {...props}>
-      <div className="border-border2 flex size-4 items-center justify-center rounded-sm border">
+      <div className="flex size-4 items-center justify-center rounded-sm border border-border2">
         <MenuPrimitive.CheckboxItemIndicator>
           <CheckIcon />
         </MenuPrimitive.CheckboxItemIndicator>

@@ -57,7 +57,7 @@ function NewWorkflowRunButton({ workflowId, onClick }: { workflowId: string; onC
   const { Link, paths } = useLinkComponent();
 
   return (
-    <div className="border-border1/50 flex-none border-b px-4 py-4">
+    <div className="flex-none border-b border-border1/50 px-4 py-4">
       <Button
         as={Link}
         href={`${paths.workflowLink(workflowId)}/graph`}
@@ -78,7 +78,7 @@ function WorkflowInformationTopSection({ children, newRunButton }: { children: R
   return (
     <section
       data-testid="workflow-information-top-section"
-      className="rounded-studio-panel border-border1/50 bg-surface3 flex max-h-[50%] min-w-0 flex-none flex-col overflow-hidden border"
+      className="flex max-h-[50%] min-w-0 flex-none flex-col overflow-hidden rounded-studio-panel border border-border1/50 bg-surface3"
     >
       {newRunButton}
       <ScrollArea
@@ -103,7 +103,7 @@ function RunWorkflowSidebar({ runId, observeWorkflowStream, ...props }: RunWorkf
 
 function RecentWorkflowRunsSection({ workflowId, activeRunId }: { workflowId: string; activeRunId?: string }) {
   return (
-    <section className="rounded-studio-panel border-border1/50 bg-surface3 min-h-0 min-w-0 flex-1 overflow-hidden border">
+    <section className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-studio-panel border border-border1/50 bg-surface3">
       <ScrollArea className="h-full w-full" viewPortClassName="h-full" mask={{ top: false }}>
         <WorkflowRecentRuns workflowId={workflowId} runId={activeRunId} />
       </ScrollArea>

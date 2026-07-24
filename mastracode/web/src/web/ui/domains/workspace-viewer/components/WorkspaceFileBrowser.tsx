@@ -147,7 +147,7 @@ function WorkspaceTreeItem({
     <Tree.File id={`${root}/${node.path}`}>
       <Tree.Icon>{getFileIcon(node.name)}</Tree.Icon>
       <Tree.Label>{node.name}</Tree.Label>
-      <span className="text-icon3 ml-auto shrink-0 text-xs">{formatBytes(node.size)}</span>
+      <span className="ml-auto shrink-0 text-xs text-icon3">{formatBytes(node.size)}</span>
     </Tree.File>
   );
 }
@@ -183,11 +183,11 @@ export function WorkspaceFileBrowser({
   };
 
   return (
-    <aside className="bg-surface1 flex h-full w-full min-w-0 flex-col" aria-label="Workspace files">
+    <aside className="flex h-full w-full min-w-0 flex-col bg-surface1" aria-label="Workspace files">
       <div className="flex items-center justify-between gap-2 px-3 py-2 pl-4 lg:pr-12">
         <div className="flex min-w-0 items-center gap-2">
-          <NotepadText size={15} className="text-icon4 shrink-0" />
-          <Txt variant="ui-sm" className="text-icon6 truncate font-medium">
+          <NotepadText size={15} className="shrink-0 text-icon4" />
+          <Txt variant="ui-sm" className="truncate font-medium text-icon6">
             Files
           </Txt>
         </div>
@@ -222,10 +222,10 @@ export function WorkspaceFileBrowser({
                 </Tree.FolderTrigger>
                 {isSelectedRoot ? (
                   <Tree.FolderContent>
-                    {isLoading ? <Txt className="text-icon3 px-2 py-3">Loading files…</Txt> : null}
-                    {error ? <Txt className="text-icon4 px-2 py-3">Unable to load files.</Txt> : null}
+                    {isLoading ? <Txt className="px-2 py-3 text-icon3">Loading files…</Txt> : null}
+                    {error ? <Txt className="px-2 py-3 text-icon4">Unable to load files.</Txt> : null}
                     {!isLoading && !error && nodes.length === 0 ? (
-                      <Txt className="text-icon3 px-2 py-3" variant="ui-sm">
+                      <Txt className="px-2 py-3 text-icon3" variant="ui-sm">
                         {emptyStateCopy(path)}
                       </Txt>
                     ) : null}

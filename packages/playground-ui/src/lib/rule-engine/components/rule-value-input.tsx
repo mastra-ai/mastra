@@ -87,11 +87,11 @@ const BooleanValueInput: React.FC<BaseInputProps> = ({ value, onChange, classNam
 
   return (
     <div className={cn('relative', className)}>
-      <Icon size="sm" className="text-neutral3 pointer-events-none absolute top-1/2 left-2 z-10 -translate-y-1/2">
+      <Icon size="sm" className="pointer-events-none absolute top-1/2 left-2 z-10 -translate-y-1/2 text-neutral3">
         <ToggleLeft />
       </Icon>
       <Select value={stringValue} onValueChange={handleChange}>
-        <SelectTrigger className="bg-surface4 min-w-35 pl-7" size="sm">
+        <SelectTrigger className="min-w-35 bg-surface4 pl-7" size="sm">
           <SelectValue placeholder="Select value" />
         </SelectTrigger>
         <SelectContent>
@@ -124,7 +124,7 @@ const NumberValueInput: React.FC<BaseInputProps> = ({ value, onChange, placehold
 
   return (
     <div className={cn('relative', className)}>
-      <Icon size="sm" className="text-neutral3 pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
+      <Icon size="sm" className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-neutral3">
         <Hash />
       </Icon>
       <Input
@@ -132,7 +132,7 @@ const NumberValueInput: React.FC<BaseInputProps> = ({ value, onChange, placehold
         value={displayValue}
         onChange={handleChange}
         placeholder={placeholder || 'Enter number'}
-        className="bg-surface4 min-w-35 pl-7"
+        className="min-w-35 bg-surface4 pl-7"
         size="sm"
       />
     </div>
@@ -154,14 +154,14 @@ const TextValueInput: React.FC<BaseInputProps> = ({ value, onChange, placeholder
 
   return (
     <div className={cn('relative', className)}>
-      <Icon size="sm" className="text-neutral3 pointer-events-none absolute top-1/2 left-2 -translate-y-1/2">
+      <Icon size="sm" className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-neutral3">
         <Type />
       </Icon>
       <Input
         value={displayValue}
         onChange={handleChange}
         placeholder={placeholder || 'Enter value'}
-        className="bg-surface4 min-w-35 pl-7"
+        className="min-w-35 bg-surface4 pl-7"
         size="sm"
       />
     </div>

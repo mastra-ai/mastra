@@ -45,7 +45,6 @@ catalog:
   vitest: 4.1.10
   zod: ^4.4.3
   tsx: ^4.23.1
-  oxfmt: 0.59.0
 
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch

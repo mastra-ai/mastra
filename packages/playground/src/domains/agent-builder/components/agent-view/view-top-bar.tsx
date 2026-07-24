@@ -44,8 +44,8 @@ export const ViewTopBar = ({
           <AgentBuilderTitle isLoading={false} />
         </Crumb>
       </Breadcrumb>
-      <div className="flex shrink-0 items-center gap-2 justify-self-end">
-        {ownerActions && <div className="hidden shrink-0 items-center gap-2 lg:flex">{ownerActions}</div>}
+      <div className="justify-self-end flex items-center gap-2 shrink-0">
+        {ownerActions && <div className="shrink-0 hidden lg:flex items-center gap-2">{ownerActions}</div>}
         {mobileMenu && <div className="shrink-0 lg:hidden">{mobileMenu}</div>}
         {mode && onModeToggle && (
           <Button
@@ -53,7 +53,7 @@ export const ViewTopBar = ({
             size="sm"
             onClick={onModeToggle}
             disabled={modeToggleDisabled}
-            className="hidden shrink-0 lg:inline-flex"
+            className="hidden lg:inline-flex shrink-0"
             data-testid="agent-builder-mode-toggle"
             aria-label={toggleLabel}
           >

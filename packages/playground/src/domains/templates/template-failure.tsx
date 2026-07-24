@@ -39,12 +39,12 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
   const { icon, title } = getIconAndTitle();
 
   return (
-    <Container className="text-neutral3 mb-8 content-center space-y-4">
+    <Container className="space-y-4 text-neutral3 mb-8 content-center">
       {/* Main Error Display */}
       <div className={cn('grid items-center justify-items-center gap-4 content-center', '[&>svg]:w-8 [&>svg]:h-8')}>
         {icon}
-        <div className="space-y-2 text-center">
-          <p className="text-ui-md text-neutral5 font-medium">{title}</p>
+        <div className="text-center space-y-2">
+          <p className="text-ui-md font-medium text-neutral5">{title}</p>
           <p className="text-ui-md text-neutral3">{getUserFriendlyMessage()}</p>
         </div>
       </div>
@@ -52,16 +52,16 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
       {/* Validation Errors */}
       {validationErrors && validationErrors.length > 0 && (
         <details className="text-xs">
-          <summary className="text-neutral3 hover:text-neutral4 cursor-pointer text-center select-none">
+          <summary className="cursor-pointer text-neutral3 hover:text-neutral4 select-none text-center">
             Show Validation Issues ({validationErrors.length})
           </summary>
-          <div className="mt-4 max-h-60 space-y-2 overflow-auto rounded bg-gray-100 p-3 text-left text-xs dark:bg-gray-800">
+          <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded text-xs overflow-auto max-h-60 text-left space-y-2">
             {validationErrors.map((error, index) => (
               <div key={index} className="border-l-2 border-red-400 pl-2">
                 <div className="font-medium text-red-600 dark:text-red-400">
                   {error.type === 'typescript' ? '🔴 TypeScript Error' : '⚠️ Lint Error'}
                 </div>
-                <div className="mt-1 font-mono text-xs wrap-break-word whitespace-pre-wrap text-gray-700 dark:text-gray-300">
+                <div className="text-xs font-mono text-gray-700 dark:text-gray-300 mt-1 whitespace-pre-wrap wrap-break-word">
                   {error.message}
                 </div>
               </div>
@@ -73,11 +73,11 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
       {/* General Error Details */}
       {errorString && !isValidationError && (
         <details className="text-xs">
-          <summary className="text-neutral3 hover:text-neutral4 cursor-pointer text-center select-none">
+          <summary className="cursor-pointer text-neutral3 hover:text-neutral4 select-none text-center">
             Show Details
           </summary>
-          <div className="mt-4 max-h-60 overflow-auto rounded bg-gray-100 p-3 text-left font-mono text-xs dark:bg-gray-800">
-            <div className="wrap-break-word whitespace-pre-wrap">{errorString}</div>
+          <div className="mt-4 p-3 bg-gray-100 dark:bg-gray-800 rounded text-xs font-mono overflow-auto max-h-60 text-left">
+            <div className="whitespace-pre-wrap wrap-break-word">{errorString}</div>
           </div>
         </details>
       )}

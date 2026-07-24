@@ -38,7 +38,7 @@ function AgentReview() {
   }
 
   if (!codeAgent) {
-    return <div className="py-4 text-center">Agent not found</div>;
+    return <div className="text-center py-4">Agent not found</div>;
   }
 
   const handleCreateScorer = (items: Array<{ input: unknown; output: unknown }>) => {

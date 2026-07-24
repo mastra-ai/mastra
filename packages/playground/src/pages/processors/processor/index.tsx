@@ -36,7 +36,7 @@ export function Processor() {
   if (isLoading) {
     return (
       <div className="p-6">
-        <Skeleton className="mb-4 h-8 w-48" />
+        <Skeleton className="h-8 w-48 mb-4" />
         <Skeleton className="h-32 w-full" />
       </div>
     );

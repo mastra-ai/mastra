@@ -24,7 +24,7 @@ export function PromptBlockEditMain({ form, formResetKey = 0 }: PromptBlockEditM
   };
 
   return (
-    <div className="flex h-full flex-col gap-3 px-4">
+    <div className="flex flex-col gap-3 h-full px-4">
       <div className="flex items-center justify-between">
         <SectionHeader
           title="Content"
@@ -41,7 +41,7 @@ export function PromptBlockEditMain({ form, formResetKey = 0 }: PromptBlockEditM
         name="content"
         control={control}
         render={({ field }) => (
-          <div className="flex flex-1 flex-col">
+          <div className="flex-1 flex flex-col">
             <CodeEditor
               key={formResetKey}
               value={field.value ?? ''}
@@ -51,7 +51,7 @@ export function PromptBlockEditMain({ form, formResetKey = 0 }: PromptBlockEditM
               placeholder="Enter prompt block content..."
               highlightVariables
               schema={schema}
-              className="min-h-[200px] flex-1"
+              className="flex-1 min-h-[200px]"
             />
           </div>
         )}

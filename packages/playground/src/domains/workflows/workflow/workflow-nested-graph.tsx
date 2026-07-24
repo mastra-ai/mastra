@@ -34,7 +34,7 @@ export function WorkflowNestedGraph({ stepGraph, open, workflowName }: WorkflowN
   }, [open]);
 
   return (
-    <div className="bg-surface1 relative h-full w-full">
+    <div className="w-full h-full relative bg-surface1">
       {isMounted ? (
         <ReactFlow
           nodes={nodes}
@@ -53,7 +53,7 @@ export function WorkflowNestedGraph({ stepGraph, open, workflowName }: WorkflowN
           <Background variant={BackgroundVariant.Lines} gap={12} size={0.5} />
         </ReactFlow>
       ) : (
-        <div className="flex h-full w-full items-center justify-center">
+        <div className="w-full h-full flex items-center justify-center">
           <Spinner />
         </div>
       )}

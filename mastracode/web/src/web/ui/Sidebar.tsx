@@ -28,24 +28,24 @@ function useSettingsOpen() {
  */
 function AlphaBadge() {
   return (
-    <span className="relative bg-[var(--alpha-green)]/10 px-[0.1875rem] text-[0.625rem]/[0.875rem] font-medium tracking-wide text-[var(--alpha-green)] uppercase [--alpha-green:oklch(48%_0.17_142)] dark:[--alpha-green:#7aff78]">
+    <span className="relative bg-[var(--alpha-green)]/10 px-[0.1875rem] font-medium text-[0.625rem]/[0.875rem] text-[var(--alpha-green)] uppercase tracking-wide [--alpha-green:oklch(48%_0.17_142)] dark:[--alpha-green:#7aff78]">
       Alpha
-      <span className="absolute inset-x-[-0.1875rem] -top-px block transform-gpu text-[var(--alpha-green)]/40">
+      <span className="-top-px absolute inset-x-[-0.1875rem] block transform-gpu text-[var(--alpha-green)]/40">
         <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">
           <line x1="0" x2="100%" y1="0.5" y2="0.5" />
         </svg>
       </span>
-      <span className="absolute inset-x-[-0.1875rem] -bottom-px block transform-gpu text-[var(--alpha-green)]/40">
+      <span className="-bottom-px absolute inset-x-[-0.1875rem] block transform-gpu text-[var(--alpha-green)]/40">
         <svg aria-hidden="true" height="1" stroke="currentColor" strokeDasharray="3.3 1" width="100%">
           <line x1="0" x2="100%" y1="0.5" y2="0.5" />
         </svg>
       </span>
-      <span className="absolute inset-y-[-0.1875rem] -left-px block transform-gpu text-[var(--alpha-green)]/40">
+      <span className="-left-px absolute inset-y-[-0.1875rem] block transform-gpu text-[var(--alpha-green)]/40">
         <svg aria-hidden="true" height="100%" stroke="currentColor" strokeDasharray="3.3 1" width="1">
           <line x1="0.5" x2="0.5" y1="0" y2="100%" />
         </svg>
       </span>
-      <span className="absolute inset-y-[-0.1875rem] -right-px block transform-gpu text-[var(--alpha-green)]/40">
+      <span className="-right-px absolute inset-y-[-0.1875rem] block transform-gpu text-[var(--alpha-green)]/40">
         <svg aria-hidden="true" height="100%" stroke="currentColor" strokeDasharray="3.3 1" width="1">
           <line x1="0.5" x2="0.5" y1="0" y2="100%" />
         </svg>
@@ -65,7 +65,7 @@ export function Sidebar() {
     <MainSidebar className="h-full">
       <MainSidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
         <div className="mt-1 mb-2 flex items-center justify-between gap-2 px-3 pt-1">
-          <LogoWithoutText aria-label="Mastra" role="img" className="text-icon6 h-4 w-auto" />
+          <LogoWithoutText aria-label="Mastra" role="img" className="h-4 w-auto text-icon6" />
           <AlphaBadge />
         </div>
         {settingsOpen ? (

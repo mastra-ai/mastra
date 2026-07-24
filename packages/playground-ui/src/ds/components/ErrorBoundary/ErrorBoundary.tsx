@@ -195,10 +195,10 @@ function DefaultErrorFallback({
         </div>
         {stack ? (
           <details className={cn('w-full text-left', isInline ? 'mt-1' : 'mt-2')}>
-            <summary className="text-ui-sm text-neutral3 hover:text-neutral4 cursor-pointer">
+            <summary className="cursor-pointer text-ui-sm text-neutral3 hover:text-neutral4">
               Show error details
             </summary>
-            <pre className="bg-surface3 text-ui-xs text-neutral4 mt-2 max-h-64 overflow-auto rounded-md p-3 break-words whitespace-pre-wrap">
+            <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-surface3 p-3 text-ui-xs break-words whitespace-pre-wrap text-neutral4">
               {stack}
             </pre>
           </details>

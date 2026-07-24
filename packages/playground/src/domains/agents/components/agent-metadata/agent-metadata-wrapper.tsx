@@ -3,5 +3,5 @@ export interface AgentMetadataWrapperProps {
 }
 
 export const AgentMetadataWrapper = ({ children }: AgentMetadataWrapperProps) => {
-  return <div className="h-full overflow-y-auto px-5 py-2">{children}</div>;
+  return <div className="py-2 overflow-y-auto h-full px-5">{children}</div>;
 };

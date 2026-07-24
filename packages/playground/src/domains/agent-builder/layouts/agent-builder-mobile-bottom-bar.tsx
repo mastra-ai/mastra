@@ -61,7 +61,7 @@ export function AgentBuilderMobileBottomBar() {
   return (
     <nav
       aria-label="Primary"
-      className="border-border1 bg-surface1/95 fixed inset-x-0 bottom-0 z-40 border-t pb-[env(safe-area-inset-bottom)] backdrop-blur-sm md:hidden"
+      className="md:hidden fixed inset-x-0 bottom-0 z-40 border-t border-border1 bg-surface1/95 backdrop-blur-sm pb-[env(safe-area-inset-bottom)]"
     >
       <ul className="grid" style={{ gridTemplateColumns: `repeat(${links.length}, minmax(0, 1fr))` }}>
         {links.map(link => {
@@ -71,7 +71,7 @@ export function AgentBuilderMobileBottomBar() {
               <Link
                 href={link.url}
                 aria-current={isActive ? 'page' : undefined}
-                className={`duration-normal ease-out-custom relative flex flex-col items-center justify-center gap-1 py-2 text-[11px] transition-colors ${
+                className={`relative flex flex-col items-center justify-center gap-1 py-2 text-[11px] transition-colors duration-normal ease-out-custom ${
                   isActive
                     ? 'text-icon6 before:absolute before:inset-x-0 before:-top-px before:h-0.5 before:bg-current'
                     : 'text-icon3 hover:text-icon6'

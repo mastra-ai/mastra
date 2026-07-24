@@ -31,7 +31,7 @@ export const BadgeWrapper = ({
 
   return (
     <div className="mb-4" data-testid={dataTestId}>
-      <div className="flex flex-row items-center justify-between gap-2">
+      <div className="flex flex-row gap-2 items-center justify-between">
         <button
           onClick={collapsible ? () => setIsCollapsed(s => !s) : undefined}
           className="flex items-center gap-2 disabled:cursor-not-allowed"
@@ -48,7 +48,7 @@ export const BadgeWrapper = ({
 
       {!isCollapsed && (
         <div className="pt-2">
-          <div className="bg-surface2 flex flex-col gap-4 rounded-lg p-4">{children}</div>
+          <div className="p-4 rounded-lg bg-surface2 flex flex-col gap-4">{children}</div>
         </div>
       )}
     </div>

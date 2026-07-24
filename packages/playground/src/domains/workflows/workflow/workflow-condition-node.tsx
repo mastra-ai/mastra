@@ -76,7 +76,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
             }
           }}
         >
-          <CollapsibleTrigger className="flex w-full items-center justify-between px-3 py-2">
+          <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2">
             <Badge
               icon={
                 IconComponent ? (
@@ -136,7 +136,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                         >
                           {tokens.map((line, i) => (
                             <div key={i} {...getLineProps({ line })}>
-                              <span className="text-neutral3 mr-2 inline-block">{i + 1}</span>
+                              <span className="inline-block mr-2 text-neutral3">{i + 1}</span>
                               {line.map((token, key) => (
                                 <span key={key} {...getTokenProps({ token })} />
                               ))}
@@ -161,7 +161,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                             >
                               {({ className, style, tokens, getLineProps, getTokenProps }) => (
                                 <pre
-                                  className={`${className} relative mt-2 w-full overflow-x-auto rounded-lg p-3 font-mono text-sm dark:bg-zinc-800`}
+                                  className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full rounded-lg mt-2 dark:bg-zinc-800`}
                                   style={{
                                     ...style,
                                     backgroundColor: '#121212',
@@ -170,7 +170,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                                 >
                                   {tokens.map((line, i) => (
                                     <div key={i} {...getLineProps({ line })}>
-                                      <span className="text-neutral3 mr-2 inline-block">{i + 1}</span>
+                                      <span className="inline-block mr-2 text-neutral3">{i + 1}</span>
                                       {line.map((token, key) => (
                                         <span key={key} {...getTokenProps({ token })} />
                                       ))}
@@ -190,7 +190,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                       <div className="flex items-center gap-1">
                         {conjBadge}
 
-                        <Txt variant="ui-xs" className="text-neutral3 flex-1">
+                        <Txt variant="ui-xs" className=" text-neutral3 flex-1">
                           {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}{' '}
                           {Object.entries(condition.query).map(([key, value]) => `${key} ${String(value)}`)}
                         </Txt>

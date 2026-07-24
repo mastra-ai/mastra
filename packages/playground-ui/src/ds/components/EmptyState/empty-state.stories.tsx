@@ -16,7 +16,7 @@ type Story = StoryObj<typeof EmptyState>;
 
 export const Default: Story = {
   args: {
-    iconSlot: <Inbox className="text-neutral3 h-auto w-[126px]" />,
+    iconSlot: <Inbox className="h-auto w-[126px] text-neutral3" />,
     titleSlot: 'No items yet',
     descriptionSlot: 'Get started by creating your first item.',
     actionSlot: <Button>Create Item</Button>,
@@ -25,7 +25,7 @@ export const Default: Story = {
 
 export const NoResults: Story = {
   args: {
-    iconSlot: <Search className="text-neutral3 h-auto w-[126px]" />,
+    iconSlot: <Search className="h-auto w-[126px] text-neutral3" />,
     titleSlot: 'No results found',
     descriptionSlot: 'Try adjusting your search or filters to find what you are looking for.',
     actionSlot: <Button variant="outline">Clear filters</Button>,
@@ -34,7 +34,7 @@ export const NoResults: Story = {
 
 export const NoFiles: Story = {
   args: {
-    iconSlot: <FileX className="text-neutral3 h-auto w-[126px]" />,
+    iconSlot: <FileX className="h-auto w-[126px] text-neutral3" />,
     titleSlot: 'No files',
     descriptionSlot: 'Upload your first file to get started.',
     actionSlot: <Button>Upload File</Button>,
@@ -43,7 +43,7 @@ export const NoFiles: Story = {
 
 export const NoTeamMembers: Story = {
   args: {
-    iconSlot: <Users className="text-neutral3 h-auto w-[126px]" />,
+    iconSlot: <Users className="h-auto w-[126px] text-neutral3" />,
     titleSlot: 'No team members',
     descriptionSlot: 'Invite your team members to collaborate on this project.',
     actionSlot: <Button>Invite Members</Button>,
@@ -52,7 +52,7 @@ export const NoTeamMembers: Story = {
 
 export const WithoutAction: Story = {
   args: {
-    iconSlot: <Inbox className="text-neutral3 h-auto w-[126px]" />,
+    iconSlot: <Inbox className="h-auto w-[126px] text-neutral3" />,
     titleSlot: 'All caught up!',
     descriptionSlot: 'You have no pending notifications.',
     actionSlot: null,
@@ -62,7 +62,7 @@ export const WithoutAction: Story = {
 export const CustomHeading: Story = {
   args: {
     as: 'h1',
-    iconSlot: <Inbox className="text-neutral3 h-auto w-[126px]" />,
+    iconSlot: <Inbox className="h-auto w-[126px] text-neutral3" />,
     titleSlot: 'Welcome to the App',
     descriptionSlot: 'This is your dashboard. Start by exploring the features.',
     actionSlot: <Button>Get Started</Button>,

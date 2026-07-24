@@ -40,7 +40,7 @@ export function TemplateForm({
 }: TemplateFormProps) {
   return (
     <Container>
-      <div className="mx-auto my-4 grid max-w-[40rem] gap-8 p-4 lg:p-8">
+      <div className="max-w-[40rem] my-4 p-4 lg:p-8 mx-auto gap-8 grid">
         <h2
           className={cn(
             'text-neutral4 text-header-sm font-semibold flex items-center gap-2',
@@ -62,7 +62,7 @@ export function TemplateForm({
         {selectedProvider && Object.entries(variables || {}).length > 0 && (
           <>
             <h3 className="text-neutral3 text-ui-md">Set required Environmental Variables</h3>
-            <div className="grid grid-cols-[1fr_1fr] items-start gap-4">
+            <div className="grid grid-cols-[1fr_1fr] gap-4 items-start">
               {isLoadingEnvVars ? (
                 <div
                   className={cn(
@@ -98,8 +98,8 @@ export function TemplateForm({
                 ))
               )}
             </div>
-            <div className="border-border1 relative mt-3.5 border-t pt-12">
-              <div className="bg-surface2 text-ui-sm text-neutral3 absolute top-0 left-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-4 items-center justify-center rounded-full">
+            <div className="border-t border-border1 pt-12 mt-3.5 relative">
+              <div className="absolute w-8 h-8 rounded-full bg-surface2 top-0 left-1/2 -translate-x-1/2 -translate-y-4 text-ui-sm text-neutral3 flex items-center justify-center">
                 And
               </div>
 
@@ -133,7 +133,7 @@ export function TemplateForm({
           >
             {isInstalling ? (
               <>
-                <Spinner className="h-4 w-4" /> Installing...
+                <Spinner className="w-4 h-4" /> Installing...
               </>
             ) : (
               <>

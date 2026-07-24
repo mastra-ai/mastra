@@ -15,7 +15,7 @@ import '@fontsource-variable/mona-sans/standard.css';
  */
 export function FactorySetupShell({ topLeft, children }: { topLeft?: ReactNode; children: ReactNode }) {
   return (
-    <main className="factory-signin-theme bg-surface1 font-mona-sans text-neutral6 min-h-dvh">
+    <main className="factory-signin-theme min-h-dvh bg-surface1 font-mona-sans text-neutral6">
       <div className="grid min-h-dvh w-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(480px,42%)]">
         <section className="relative z-3 flex flex-col justify-center px-6 py-12 sm:px-10 lg:px-16 lg:py-17 xl:px-20">
           {topLeft && <div className="absolute top-6 left-6 z-10 sm:top-8 sm:left-8 lg:left-16">{topLeft}</div>}
@@ -42,7 +42,7 @@ function Header({ title, description, children }: { title: ReactNode; descriptio
         <Txt
           as="p"
           variant="ui-lg"
-          className="text-neutral3 mt-6 max-w-lg text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.4] tracking-[0.01em]"
+          className="mt-6 max-w-lg text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.4] tracking-[0.01em] text-neutral3"
         >
           {description}
         </Txt>
@@ -73,7 +73,7 @@ function Step({ stepKey, children }: { stepKey: string; children: ReactNode }) {
   return (
     <div
       key={stepKey}
-      className="animate-in fade-in slide-in-from-bottom-2 mt-11 w-full duration-300 motion-reduce:animate-none"
+      className="mt-11 w-full animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none"
     >
       {children}
     </div>

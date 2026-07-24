@@ -44,14 +44,14 @@ export function ScorerEditSidebar({
   const watchedProvider = useWatch({ control, name: 'model.provider' });
 
   return (
-    <div className="flex h-full flex-col">
-      <ScrollArea className="min-h-0 flex-1">
+    <div className="h-full flex flex-col">
+      <ScrollArea className="flex-1 min-h-0">
         <div className="flex flex-col gap-6 p-4">
           <SectionHeader title="Configuration" subtitle="Define your scorer's name, type, and settings." />
 
           {/* Name */}
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="scorer-name" className="text-neutral5 text-xs">
+            <Label htmlFor="scorer-name" className="text-xs text-neutral5">
               Name <span className="text-accent2">*</span>
             </Label>
             <Input
@@ -61,12 +61,12 @@ export function ScorerEditSidebar({
               {...register('name')}
               error={!!errors.name}
             />
-            {errors.name && <span className="text-accent2 text-xs">{errors.name.message}</span>}
+            {errors.name && <span className="text-xs text-accent2">{errors.name.message}</span>}
           </div>
 
           {/* Description */}
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="scorer-description" className="text-neutral5 text-xs">
+            <Label htmlFor="scorer-description" className="text-xs text-neutral5">
               Description <span className="text-accent2">*</span>
             </Label>
             <Textarea
@@ -76,12 +76,12 @@ export function ScorerEditSidebar({
               {...register('description')}
               error={!!errors.description}
             />
-            {errors.description && <span className="text-accent2 text-xs">{errors.description.message}</span>}
+            {errors.description && <span className="text-xs text-accent2">{errors.description.message}</span>}
           </div>
 
           {/* Provider */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-xs">
+            <Label className="text-xs text-neutral5">
               Provider <span className="text-accent2">*</span>
             </Label>
             <Controller
@@ -91,12 +91,12 @@ export function ScorerEditSidebar({
                 <LLMProviders value={field.value} onValueChange={field.onChange} container={formRef} />
               )}
             />
-            {errors.model?.provider && <span className="text-accent2 text-xs">{errors.model.provider.message}</span>}
+            {errors.model?.provider && <span className="text-xs text-accent2">{errors.model.provider.message}</span>}
           </div>
 
           {/* Model */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-xs">
+            <Label className="text-xs text-neutral5">
               Model <span className="text-accent2">*</span>
             </Label>
             <Controller
@@ -111,13 +111,13 @@ export function ScorerEditSidebar({
                 />
               )}
             />
-            {errors.model?.name && <span className="text-accent2 text-xs">{errors.model.name.message}</span>}
+            {errors.model?.name && <span className="text-xs text-accent2">{errors.model.name.message}</span>}
           </div>
 
           {/* Score Range */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-xs">Score Range</Label>
-            <div className="flex items-center gap-2">
+            <Label className="text-xs text-neutral5">Score Range</Label>
+            <div className="flex gap-2 items-center">
               <Controller
                 name="scoreRange.min"
                 control={control}
@@ -131,7 +131,7 @@ export function ScorerEditSidebar({
                   />
                 )}
               />
-              <span className="text-neutral3 text-xs">to</span>
+              <span className="text-xs text-neutral3">to</span>
               <Controller
                 name="scoreRange.max"
                 control={control}
@@ -150,7 +150,7 @@ export function ScorerEditSidebar({
 
           {/* Default Sampling */}
           <div className="flex flex-col gap-1.5">
-            <Label className="text-neutral5 text-xs">Default Sampling</Label>
+            <Label className="text-xs text-neutral5">Default Sampling</Label>
             <Controller
               name="defaultSampling.type"
               control={control}
@@ -158,13 +158,13 @@ export function ScorerEditSidebar({
                 <RadioGroup value={field.value ?? 'none'} onValueChange={field.onChange}>
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="none" id="sampling-none" />
-                    <Label htmlFor="sampling-none" className="text-neutral5 text-xs">
+                    <Label htmlFor="sampling-none" className="text-xs text-neutral5">
                       None
                     </Label>
                   </div>
                   <div className="flex items-center gap-2">
                     <RadioGroupItem value="ratio" id="sampling-ratio" />
-                    <Label htmlFor="sampling-ratio" className="text-neutral5 text-xs">
+                    <Label htmlFor="sampling-ratio" className="text-xs text-neutral5">
                       Ratio
                     </Label>
                   </div>

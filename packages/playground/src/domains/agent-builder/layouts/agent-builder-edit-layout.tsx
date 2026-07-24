@@ -39,7 +39,7 @@ export const AgentBuilderEditLayout = ({
   const applyMobileChatHide = hideMobileChat && !isCentered;
 
   return (
-    <div className="grid h-full grid-rows-[auto_1fr]">
+    <div className="h-full grid grid-rows-[auto_1fr]">
       {topBar}
       <div
         className={cn(
@@ -56,8 +56,8 @@ export const AgentBuilderEditLayout = ({
           data-testid="agent-builder-panel-chat"
           style={{ viewTransitionName: 'agent-builder-chat-panel' }}
         >
-          <div className="grid h-full min-h-0 w-full min-w-0 grid-rows-[1fr_auto] overflow-hidden md:mx-auto md:max-w-[80ch]">
-            <div className="h-full min-h-0 min-w-0 overflow-hidden">{chat}</div>
+          <div className="min-h-0 min-w-0 h-full overflow-hidden md:max-w-[80ch] md:mx-auto w-full grid grid-rows-[1fr_auto]">
+            <div className="min-h-0 min-w-0 h-full overflow-hidden">{chat}</div>
             {chatFooter ? (
               <div data-testid="agent-builder-chat-footer" className="w-full pt-3 lg:hidden">
                 {chatFooter}

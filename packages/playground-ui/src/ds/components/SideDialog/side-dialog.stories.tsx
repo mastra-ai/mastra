@@ -39,7 +39,7 @@ const items = [
 const NESTED_LEVEL_OPEN_DELAY_MS = 220;
 
 const Field = ({ label, value }: { label: string; value: string }) => (
-  <div className="text-ui-md flex justify-between gap-4">
+  <div className="flex justify-between gap-4 text-ui-md">
     <span className="text-neutral3">{label}</span>
     <span className="text-neutral5">{value}</span>
   </div>
@@ -427,8 +427,8 @@ const ConfirmationDialogDemo = () => {
       >
         <SideDialog.Content>
           <div className="flex h-full flex-col items-center justify-center text-center">
-            <h3 className="text-ui-lg text-neutral6 mb-2 font-medium">Confirm deletion?</h3>
-            <p className="text-ui-md text-neutral3 mb-6">
+            <h3 className="mb-2 text-ui-lg font-medium text-neutral6">Confirm deletion?</h3>
+            <p className="mb-6 text-ui-md text-neutral3">
               This action cannot be undone. The agent will be permanently deleted.
             </p>
             <div className="flex gap-2">

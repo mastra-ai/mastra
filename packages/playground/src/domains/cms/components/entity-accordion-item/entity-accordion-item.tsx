@@ -41,12 +41,12 @@ export function EntityAccordionItem({
   const [isRulesOpen, setIsRulesOpen] = useState(ruleCount > 0);
 
   return (
-    <div className="border-border1 overflow-hidden rounded-md border">
-      <div className="bg-surface2 flex flex-col gap-2 p-3">
+    <div className="rounded-md border border-border1 overflow-hidden">
+      <div className="bg-surface2 p-3 flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Icon size="sm">{icon}</Icon>
-            <span className="text-neutral6 text-xs font-medium">{name}</span>
+            <span className="text-xs font-medium text-neutral6">{name}</span>
           </div>
           {onRemove && (
             <Button tooltip={`Remove ${name}`} onClick={onRemove} variant="ghost" size="icon-sm">
@@ -60,15 +60,15 @@ export function EntityAccordionItem({
           value={description}
           onChange={onDescriptionChange ? e => onDescriptionChange(e.target.value) : undefined}
           placeholder="Custom description for this entity..."
-          className="bg-surface3 min-h-[40px] border-dashed px-2 py-1 text-xs"
+          className="min-h-[40px] text-xs bg-surface3 border-dashed px-2 py-1"
           size="sm"
           disabled={isReadOnly}
         />
       </div>
 
       {showRulesSection && (
-        <Collapsible open={isRulesOpen} onOpenChange={setIsRulesOpen} className="border-border1 bg-surface2 border-t">
-          <CollapsibleTrigger className="flex w-full items-center gap-2 px-3 py-2">
+        <Collapsible open={isRulesOpen} onOpenChange={setIsRulesOpen} className="border-t border-border1 bg-surface2">
+          <CollapsibleTrigger className="flex items-center gap-2 w-full px-3 py-2">
             <Icon>
               <ChevronRight
                 className={cn('text-neutral3 transition-transform', {

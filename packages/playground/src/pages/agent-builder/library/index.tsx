@@ -74,7 +74,7 @@ export default function AgentBuilderLibraryPage() {
         return (
           <div className="flex items-center justify-center pt-16">
             <EmptyState
-              iconSlot={<LibraryIcon className="text-neutral3 h-8 w-8" />}
+              iconSlot={<LibraryIcon className="h-8 w-8 text-neutral3" />}
               titleSlot="No public agents yet"
               descriptionSlot="Mark an agent as Public to share it with the team library."
             />
@@ -98,7 +98,7 @@ export default function AgentBuilderLibraryPage() {
       return (
         <div className="flex items-center justify-center pt-16">
           <EmptyState
-            iconSlot={<SparklesIcon className="text-neutral3 h-8 w-8" />}
+            iconSlot={<SparklesIcon className="h-8 w-8 text-neutral3" />}
             titleSlot="No public skills yet"
             descriptionSlot="Mark a skill as Public to share it with the team library."
           />
@@ -131,7 +131,7 @@ export default function AgentBuilderLibraryPage() {
           </div>
           <div className="flex items-center gap-4">
             {features.skills && (
-              <div className="border-border1 flex overflow-hidden rounded-lg border">
+              <div className="flex rounded-lg border border-border1 overflow-hidden">
                 <button
                   onClick={() => setTab('agents')}
                   className={`px-3 py-1.5 text-xs font-medium transition-colors ${
@@ -150,7 +150,7 @@ export default function AgentBuilderLibraryPage() {
                 </button>
               </div>
             )}
-            <div className="max-w-120 flex-1">
+            <div className="flex-1 max-w-120">
               <ListSearch onSearch={setSearch} label="Filter library" placeholder="Filter by name or description" />
             </div>
           </div>

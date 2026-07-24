@@ -16,7 +16,7 @@ const ComposerTxtAttachment = ({ file }: { file: File }) => {
   const { isLoading, text } = useLoadBrowserFile(file);
 
   return (
-    <div className="flex h-full w-full items-center justify-center">
+    <div className="flex items-center justify-center h-full w-full">
       {isLoading ? <Spinner /> : <TxtEntry data={text} />}
     </div>
   );
@@ -44,7 +44,7 @@ const ComposerPdfAttachment = ({ attachment }: { attachment: ComposerAttachment 
   }, [attachment]);
 
   return (
-    <div className="flex h-full w-full items-center justify-center">
+    <div className="flex items-center justify-center h-full w-full">
       {state.isLoading ? (
         <Spinner />
       ) : (
@@ -78,7 +78,7 @@ const AttachmentThumbnail = ({ attachment }: { attachment: ComposerAttachment })
       <TooltipProvider>
         <Tooltip>
           <TooltipTrigger asChild>
-            <div className="bg-surface3 border-border1 size-16 overflow-hidden rounded-lg border">
+            <div className="overflow-hidden size-16 rounded-lg bg-surface3 border border-border1 ">
               {attachment.kind === 'image' ? (
                 <ImageAttachmentThumbnail attachment={attachment} />
               ) : attachment.kind === 'pdf' ? (
@@ -104,7 +104,7 @@ const AttachmentThumbnail = ({ attachment }: { attachment: ComposerAttachment })
         type="button"
         tooltip="Remove file"
         onClick={() => remove(attachment.id)}
-        className="text-neutral3 hover:text-neutral6 bg-surface1 hover:bg-surface2 absolute -top-2 -right-2"
+        className="absolute -right-2 -top-2 text-neutral3 hover:text-neutral6 bg-surface1 hover:bg-surface2"
       >
         <Icon>
           <X />
@@ -120,8 +120,8 @@ export const ComposerAttachments = () => {
   if (attachments.length === 0) return null;
 
   return (
-    <div className="absolute inset-x-0 bottom-full px-2" data-attachments-row>
-      <div className="mx-auto w-full max-w-3xl overflow-x-auto">
+    <div className="absolute bottom-full inset-x-0 px-2" data-attachments-row>
+      <div className="max-w-3xl w-full mx-auto overflow-x-auto">
         <div className="flex flex-row items-center gap-4 px-3 pt-3 pb-1">
           {attachments.map(att => (
             <AttachmentThumbnail key={att.id} attachment={att} />

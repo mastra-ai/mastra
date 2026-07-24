@@ -2,8 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { format } from 'oxfmt';
-import type { FormatConfig } from 'oxfmt';
+import prettier from 'prettier';
 import type ts from 'typescript';
 import type * as z4 from 'zod/v4/core';
 import { printNode, zodToTs } from 'zod-to-ts';
@@ -14,18 +13,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const OUTPUT_PATH = path.join(__dirname, '../../../client-sdks/client-js/src/route-types.generated.ts');
-
-const OXFMT_CONFIG = {
-  arrowParens: 'avoid',
-  bracketSpacing: true,
-  endOfLine: 'lf',
-  printWidth: 120,
-  semi: true,
-  singleQuote: true,
-  tabWidth: 2,
-  trailingComma: 'all',
-  useTabs: false,
-} satisfies FormatConfig;
 
 type RouteSchemaKind = 'PathParams' | 'QueryParams' | 'Body' | 'Response' | 'Request';
 
@@ -382,17 +369,12 @@ export type ClientResponseKind<P extends ClientPath, M extends ClientMethod<P>> 
 }
 
 async function formatGeneratedFileContent(fileContent: string): Promise<string> {
-  const result = await format(OUTPUT_PATH, fileContent, OXFMT_CONFIG);
+  const prettierConfig = await prettier.resolveConfig(OUTPUT_PATH);
 
-  if (result.errors.length > 0) {
-    throw new Error(
-      result.errors
-        .map(error => [error.message, error.codeframe, error.helpMessage].filter(Boolean).join('\n'))
-        .join('\n\n'),
-    );
-  }
-
-  return result.code;
+  return prettier.format(fileContent, {
+    ...prettierConfig,
+    filepath: OUTPUT_PATH,
+  });
 }
 
 // Pass 1: convert everything once purely to count nested schema instance reuse.

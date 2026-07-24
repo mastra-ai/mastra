@@ -36,50 +36,50 @@ export function NoiseDetailPanel({ entityId, entityType, snapshotId, signalName,
       variant="floating"
     >
       <DrawerContent>
-        <DrawerHeader className="border-border1 border-b">
+        <DrawerHeader className="border-b border-border1">
           <DrawerTitle>Noise</DrawerTitle>
           <DrawerDescription className="sr-only">Noise details for the {signalName} signal</DrawerDescription>
         </DrawerHeader>
         <DrawerBody className="grid content-start gap-6 overflow-y-auto p-6">
           <section aria-labelledby="noise-summary-heading">
-            <h2 id="noise-summary-heading" className="text-neutral3 font-mono text-xs tracking-wider uppercase">
+            <h2 id="noise-summary-heading" className="font-mono text-xs tracking-wider text-neutral3 uppercase">
               Summary
             </h2>
-            <p className="text-neutral5 mt-3 text-sm">
+            <p className="mt-3 text-sm text-neutral5">
               Noise contains signal summaries that did not consistently match a recurring theme in this snapshot.
             </p>
-            {noiseQuery.isPending && <p className="text-neutral3 mt-4 text-sm">Loading noise details…</p>}
+            {noiseQuery.isPending && <p className="mt-4 text-sm text-neutral3">Loading noise details…</p>}
             {noiseQuery.isError && <p className="mt-4 text-sm text-red-500">Unable to load noise details.</p>}
             {noiseQuery.data && (
               <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
                 <div>
                   <dt className="text-neutral3">Traces</dt>
-                  <dd className="text-neutral5 mt-1 font-mono">{noiseQuery.data.noise.traceCount}</dd>
+                  <dd className="mt-1 font-mono text-neutral5">{noiseQuery.data.noise.traceCount}</dd>
                 </div>
                 <div>
                   <dt className="text-neutral3">Stage share</dt>
-                  <dd className="text-neutral5 mt-1 font-mono">{Math.round(noiseQuery.data.noise.coverage * 100)}%</dd>
+                  <dd className="mt-1 font-mono text-neutral5">{Math.round(noiseQuery.data.noise.coverage * 100)}%</dd>
                 </div>
               </dl>
             )}
           </section>
 
           <section aria-labelledby="noise-examples-heading">
-            <h2 id="noise-examples-heading" className="text-neutral3 font-mono text-xs tracking-wider uppercase">
+            <h2 id="noise-examples-heading" className="font-mono text-xs tracking-wider text-neutral3 uppercase">
               Example summaries
             </h2>
-            {examplesQuery.isPending && <p className="text-neutral3 mt-3 text-sm">Loading examples…</p>}
+            {examplesQuery.isPending && <p className="mt-3 text-sm text-neutral3">Loading examples…</p>}
             {examplesQuery.isError && <p className="mt-3 text-sm text-red-500">Unable to load examples.</p>}
             {examplesQuery.data && (
               <>
                 {examplesQuery.data.examples.length === 0 ? (
-                  <p className="text-neutral3 mt-3 text-sm">No noise examples in this snapshot.</p>
+                  <p className="mt-3 text-sm text-neutral3">No noise examples in this snapshot.</p>
                 ) : (
                   <ul className="mt-3 space-y-3">
                     {examplesQuery.data.examples.map(example => (
                       <li
                         key={example.traceId}
-                        className="border-border1 bg-surface3 text-neutral5 rounded-md border p-3 text-sm"
+                        className="rounded-md border border-border1 bg-surface3 p-3 text-sm text-neutral5"
                       >
                         {example.signalText}
                       </li>

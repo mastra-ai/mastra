@@ -180,14 +180,14 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
             tooltip="Model settings"
             data-testid="composer-model-settings-trigger"
           >
-            <Sliders className="text-neutral3 hover:text-neutral6 h-5 w-5" />
+            <Sliders className="h-5 w-5 text-neutral3 hover:text-neutral6" />
           </Button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-80 p-4">
           {isLoading || isMemoryLoading ? (
             <Skeleton className="h-40 w-full" data-testid="composer-model-settings-skeleton" />
           ) : (
-            <section className="@container space-y-5">
+            <section className="space-y-5 @container">
               <Entry label="Chat Method">
                 <RadioGroup
                   value={radioValue}
@@ -284,10 +284,10 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
 
               {showSamplingBanner && (
                 <div
-                  className="text-neutral3 bg-surface3 flex items-center gap-2 rounded px-3 py-2 text-xs"
+                  className="flex items-center gap-2 text-xs text-neutral3 bg-surface3 rounded px-3 py-2"
                   data-testid="sampling-restriction-banner"
                 >
-                  <Info className="h-3.5 w-3.5 shrink-0" />
+                  <Info className="w-3.5 h-3.5 shrink-0" />
                   <span>
                     {settings?.modelSettings?.temperature !== undefined
                       ? 'Claude 4.5+ models only accept Temperature OR Top P. Clear Temperature to use Top P.'
@@ -297,7 +297,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
               )}
 
               <Entry label="Temperature">
-                <div className="flex flex-row items-center justify-between gap-2">
+                <div className="flex flex-row justify-between items-center gap-2">
                   <Slider
                     value={[settings?.modelSettings?.temperature ?? -0.1]}
                     max={1}
@@ -322,7 +322,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
               </Entry>
 
               <Entry label="Top P">
-                <div className="flex flex-row items-center justify-between gap-2">
+                <div className="flex flex-row justify-between items-center gap-2">
                   <Slider
                     disabled={!canEditSettings}
                     onValueChange={value =>

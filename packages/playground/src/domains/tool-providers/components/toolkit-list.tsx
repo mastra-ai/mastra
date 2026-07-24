@@ -57,7 +57,7 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
         >
           Selected
           {selectedCount > 0 && (
-            <span className="text-ui-xs bg-surface3 min-w-[1.25rem] rounded-full px-1.5 py-0.5 text-center tabular-nums">
+            <span className="text-ui-xs tabular-nums bg-surface3 rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center">
               {selectedCount}
             </span>
           )}

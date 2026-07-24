@@ -51,7 +51,7 @@ export const LLMModels = ({
   }, [filteredModels]);
 
   if (providersLoading) {
-    return <Skeleton className="h-8 w-full" />;
+    return <Skeleton className="w-full h-8" />;
   }
 
   return (

@@ -134,26 +134,26 @@ function TrajectoryStepsSection({ traceId }: { traceId: string }) {
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className="flex items-center gap-1.5 text-xs font-medium text-purple-400 hover:text-purple-300">
+      <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-purple-400 font-medium hover:text-purple-300">
         <ChevronRight className="h-3 w-3 shrink-0" />
         Trajectory Steps
       </CollapsibleTrigger>
       <CollapsibleContent>
         {isLoading ? (
-          <div className="mt-1 flex items-center gap-2 px-3 py-2">
+          <div className="flex items-center gap-2 mt-1 px-3 py-2">
             <Spinner className="h-3 w-3" />
             <Txt variant="ui-xs" className="text-neutral3">
               Loading trajectory...
             </Txt>
           </div>
         ) : isError ? (
-          <Txt variant="ui-xs" className="mt-1 px-3 py-2 text-red-400">
+          <Txt variant="ui-xs" className="text-red-400 mt-1 px-3 py-2">
             Failed to load trajectory steps
           </Txt>
         ) : trajectory?.steps && trajectory.steps.length > 0 ? (
           <div className="mt-1 space-y-1">
             {trajectory.steps.map((step: Record<string, unknown>, i: number) => (
-              <div key={i} className="bg-surface1 flex items-center gap-2 rounded px-3 py-1.5 text-xs">
+              <div key={i} className="flex items-center gap-2 px-3 py-1.5 bg-surface1 rounded text-xs">
                 <Chip size="small" color="purple">
                   {String(step.stepType || 'step')}
                 </Chip>
@@ -199,7 +199,7 @@ function ResultOutputSection({
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Response
           </Txt>
-          <div className="text-neutral5 bg-surface1 max-h-48 overflow-y-auto rounded px-3 py-2 text-sm wrap-break-word whitespace-pre-wrap">
+          <div className="text-sm text-neutral5 bg-surface1 rounded px-3 py-2 whitespace-pre-wrap wrap-break-word max-h-48 overflow-y-auto">
             {parsed.text}
           </div>
         </div>
@@ -211,7 +211,7 @@ function ResultOutputSection({
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Structured Output
           </Txt>
-          <pre className="text-neutral4 bg-surface1 max-h-48 overflow-x-auto overflow-y-auto rounded px-3 py-2 text-xs wrap-break-word whitespace-pre-wrap">
+          <pre className="text-xs text-neutral4 bg-surface1 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-48 overflow-y-auto">
             {JSON.stringify(parsed.object, null, 2)}
           </pre>
         </div>
@@ -226,12 +226,12 @@ function ResultOutputSection({
           <div className="space-y-1">
             {parsed.toolCalls.map((call, i) => (
               <Collapsible key={i}>
-                <CollapsibleTrigger className="text-neutral4 hover:text-neutral5 bg-surface1 flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs">
+                <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-neutral4 hover:text-neutral5 w-full text-left px-2 py-1 rounded bg-surface1">
                   <ChevronRight className="h-3 w-3 shrink-0" />
                   <span className="font-mono font-medium">{call.toolName}</span>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <pre className="text-neutral4 bg-surface2 mt-1 ml-4 max-h-32 overflow-x-auto overflow-y-auto rounded px-3 py-2 text-xs wrap-break-word whitespace-pre-wrap">
+                  <pre className="text-xs text-neutral4 bg-surface2 rounded px-3 py-2 ml-4 mt-1 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-32 overflow-y-auto">
                     {JSON.stringify(call.args, null, 2)}
                   </pre>
                 </CollapsibleContent>
@@ -250,12 +250,12 @@ function ResultOutputSection({
           <div className="space-y-1">
             {parsed.toolResults.map((result, i) => (
               <Collapsible key={i}>
-                <CollapsibleTrigger className="text-neutral4 hover:text-neutral5 bg-surface1 flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-xs">
+                <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-neutral4 hover:text-neutral5 w-full text-left px-2 py-1 rounded bg-surface1">
                   <ChevronRight className="h-3 w-3 shrink-0" />
                   <span className="font-mono">Result {i + 1}</span>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
-                  <pre className="text-neutral4 bg-surface2 mt-1 ml-4 max-h-32 overflow-x-auto overflow-y-auto rounded px-3 py-2 text-xs wrap-break-word whitespace-pre-wrap">
+                  <pre className="text-xs text-neutral4 bg-surface2 rounded px-3 py-2 ml-4 mt-1 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-32 overflow-y-auto">
                     {JSON.stringify(result, null, 2)}
                   </pre>
                 </CollapsibleContent>
@@ -284,7 +284,7 @@ function ResultOutputSection({
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Trace
           </Txt>
-          <Txt variant="ui-xs" className="text-neutral2 truncate font-mono">
+          <Txt variant="ui-xs" className="text-neutral2 font-mono truncate">
             {effectiveTraceId}
           </Txt>
           <CopyButton content={effectiveTraceId} tooltip="Copy trace ID" size="sm" />
@@ -292,7 +292,7 @@ function ResultOutputSection({
             <button
               type="button"
               onClick={() => onViewTrace(effectiveTraceId)}
-              className="text-accent1 hover:text-accent2 flex cursor-pointer items-center gap-1 text-xs transition-colors"
+              className="flex items-center gap-1 text-xs text-accent1 hover:text-accent2 transition-colors cursor-pointer"
             >
               <ExternalLink className="h-3 w-3" />
               View Trace
@@ -307,7 +307,7 @@ function ResultOutputSection({
           <Txt variant="ui-xs" className="text-neutral3 font-medium">
             Output
           </Txt>
-          <pre className="text-neutral4 bg-surface1 max-h-48 overflow-x-auto overflow-y-auto rounded px-3 py-2 text-xs wrap-break-word whitespace-pre-wrap">
+          <pre className="text-xs text-neutral4 bg-surface1 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-48 overflow-y-auto">
             {formatResultValue(output)}
           </pre>
         </div>
@@ -382,13 +382,13 @@ export function ExperimentResultsPanel({
   const selectedResults = results?.filter(r => selectedIds.has(r.id)) || [];
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="border-border1 flex items-center gap-2 border-b px-4 py-3">
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border1">
         <button
           type="button"
           onClick={onBack}
-          className="text-neutral3 hover:text-neutral5 flex cursor-pointer items-center gap-1 transition-colors"
+          className="flex items-center gap-1 text-neutral3 hover:text-neutral5 transition-colors cursor-pointer"
         >
           <Icon size="sm">
             <ArrowLeft />
@@ -409,7 +409,7 @@ export function ExperimentResultsPanel({
                   {' · '}
                   <button
                     type="button"
-                    className="hover:text-neutral5 cursor-pointer underline transition-colors"
+                    className="underline hover:text-neutral5 transition-colors cursor-pointer"
                     onClick={() =>
                       navigate(`/agents/${agentId}/editor?version=${encodeURIComponent(experiment.agentVersion!)}`)
                     }
@@ -426,7 +426,7 @@ export function ExperimentResultsPanel({
 
       {/* Selection action bar */}
       {selectedIds.size > 0 && (
-        <div className="bg-surface3 border-border1 flex items-center gap-2 border-b px-4 py-2">
+        <div className="flex items-center gap-2 px-4 py-2 bg-surface3 border-b border-border1">
           <Txt variant="ui-xs" className="text-neutral5 font-medium">
             {selectedIds.size} selected
           </Txt>
@@ -495,7 +495,7 @@ export function ExperimentResultsPanel({
 
       {/* Quick filter bar */}
       {results && results.length > 0 && selectedIds.size === 0 && (
-        <div className="border-border1 flex items-center gap-2 border-b px-4 py-2">
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-border1">
           <Button variant="ghost" size="sm" onClick={selectAllFailed}>
             Select all failures
           </Button>
@@ -503,7 +503,7 @@ export function ExperimentResultsPanel({
       )}
 
       {/* Results */}
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea className="flex-1 min-h-0">
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
             <Spinner className="h-5 w-5" />
@@ -533,7 +533,7 @@ export function ExperimentResultsPanel({
                       {result.itemId.slice(0, 8)}
                     </Txt>
                     {itemScores.length > 0 && (
-                      <div className="ml-auto flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-2 ml-auto flex-wrap">
                         {itemScores
                           .filter(s => s.entityType !== 'TRAJECTORY')
                           .map(s => (
@@ -555,7 +555,7 @@ export function ExperimentResultsPanel({
                   {/* Trajectory Score Details */}
                   {itemScores.some(s => s.entityType === 'TRAJECTORY') && (
                     <Collapsible>
-                      <CollapsibleTrigger className="flex items-center gap-1.5 text-xs font-medium text-purple-400 hover:text-purple-300">
+                      <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-purple-400 font-medium hover:text-purple-300">
                         <ChevronRight className="h-3 w-3 shrink-0" />
                         Trajectory Score Details
                       </CollapsibleTrigger>
@@ -564,13 +564,13 @@ export function ExperimentResultsPanel({
                           {itemScores
                             .filter(s => s.entityType === 'TRAJECTORY')
                             .map(s => (
-                              <div key={s.scorerId} className="bg-surface1 space-y-1 rounded px-3 py-2">
-                                <Txt variant="ui-xs" className="font-medium text-purple-400">
+                              <div key={s.scorerId} className="bg-surface1 rounded px-3 py-2 space-y-1">
+                                <Txt variant="ui-xs" className="text-purple-400 font-medium">
                                   {s.scorerId}
                                 </Txt>
-                                {s.reason && <p className="text-neutral4 text-xs">{s.reason}</p>}
+                                {s.reason && <p className="text-xs text-neutral4">{s.reason}</p>}
                                 {s.preprocessStepResult && (
-                                  <pre className="text-neutral3 max-h-48 overflow-x-auto overflow-y-auto text-xs break-words whitespace-pre-wrap">
+                                  <pre className="text-xs text-neutral3 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
                                     {JSON.stringify(s.preprocessStepResult, null, 2)}
                                   </pre>
                                 )}
@@ -588,12 +588,12 @@ export function ExperimentResultsPanel({
 
                   {/* Input */}
                   <Collapsible>
-                    <CollapsibleTrigger className="text-neutral3 hover:text-neutral5 flex items-center gap-1.5 text-xs font-medium">
+                    <CollapsibleTrigger className="flex items-center gap-1.5 text-xs text-neutral3 font-medium hover:text-neutral5">
                       <ChevronRight className="h-3 w-3 shrink-0" />
                       Input
                     </CollapsibleTrigger>
                     <CollapsibleContent>
-                      <pre className="text-neutral4 bg-surface1 mt-1 max-h-32 overflow-x-auto overflow-y-auto rounded px-3 py-2 text-xs wrap-break-word whitespace-pre-wrap">
+                      <pre className="text-xs text-neutral4 bg-surface1 rounded px-3 py-2 mt-1 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-32 overflow-y-auto">
                         {formatResultValue(result.input)}
                       </pre>
                     </CollapsibleContent>
@@ -603,10 +603,10 @@ export function ExperimentResultsPanel({
                   {hasError ? (
                     <div className="space-y-2">
                       <div className="space-y-1">
-                        <Txt variant="ui-xs" className="font-medium text-red-400">
+                        <Txt variant="ui-xs" className="text-red-400 font-medium">
                           Error
                         </Txt>
-                        <pre className="bg-surface1 max-h-32 overflow-x-auto overflow-y-auto rounded px-3 py-2 text-xs wrap-break-word whitespace-pre-wrap text-red-300">
+                        <pre className="text-xs text-red-300 bg-surface1 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-32 overflow-y-auto">
                           {formatResultValue(result.error)}
                         </pre>
                       </div>
@@ -615,14 +615,14 @@ export function ExperimentResultsPanel({
                           <Txt variant="ui-xs" className="text-neutral3 font-medium">
                             Trace
                           </Txt>
-                          <Txt variant="ui-xs" className="text-neutral2 truncate font-mono">
+                          <Txt variant="ui-xs" className="text-neutral2 font-mono truncate">
                             {result.traceId}
                           </Txt>
                           <CopyButton content={result.traceId} tooltip="Copy trace ID" size="sm" />
                           <button
                             type="button"
                             onClick={() => navigate(`/traces/${result.traceId}`)}
-                            className="text-accent1 hover:text-accent2 flex cursor-pointer items-center gap-1 text-xs transition-colors"
+                            className="flex items-center gap-1 text-xs text-accent1 hover:text-accent2 transition-colors cursor-pointer"
                           >
                             <ExternalLink className="h-3 w-3" />
                             View Trace
@@ -648,7 +648,7 @@ export function ExperimentResultsPanel({
                 </div>
               )}
               {!hasNextPage && results.length > 0 && (
-                <div className="py-2 text-center">
+                <div className="text-center py-2">
                   <Txt variant="ui-xs" className="text-neutral2">
                     All results loaded
                   </Txt>

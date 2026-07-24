@@ -28,11 +28,9 @@ function createMockToolProvider(
 ): ToolProvider {
   return {
     info: { id, name: `${id} provider`, description: `Provider ${id}` },
-    listToolkits: vi.fn(
-      async (): Promise<ToolProviderListResult<ToolProviderToolkit>> => ({
-        data: toolkits,
-      }),
-    ),
+    listToolkits: vi.fn(async (): Promise<ToolProviderListResult<ToolProviderToolkit>> => ({
+      data: toolkits,
+    })),
     listTools: vi.fn(
       async (options?: ListToolProviderToolsOptions): Promise<ToolProviderListResult<ToolProviderToolInfo>> => {
         let tools = Object.entries(toolMap).map(([slug, t]) => ({

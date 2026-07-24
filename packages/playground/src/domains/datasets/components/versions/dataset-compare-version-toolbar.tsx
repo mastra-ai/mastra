@@ -32,7 +32,7 @@ export function DatasetCompareVersionToolbar({
   }));
 
   return (
-    <Column.Toolbar className="grid w-full grid-cols-[1fr_1fr_1fr_10rem] gap-4">
+    <Column.Toolbar className="grid grid-cols-[1fr_1fr_1fr_10rem] gap-4 w-full">
       <div />
       <SelectFieldBlock
         label="Version A"

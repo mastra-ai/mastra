@@ -109,19 +109,19 @@ const ProgressBar = ({
   const tokenTextColor = isProcessing ? 'text-blue-600' : 'text-neutral3';
 
   return (
-    <div className="min-w-0 flex-1">
+    <div className="flex-1 min-w-0">
       {/* Label above bar - fixed height to prevent layout shift */}
-      <div className="mb-1 flex h-4 items-center gap-1">
-        <span className="text-neutral4 text-[9px] font-normal tracking-wider uppercase">{label}</span>
+      <div className="flex items-center gap-1 mb-1 h-4">
+        <span className="text-[9px] text-neutral4 uppercase tracking-wider font-normal">{label}</span>
         <Tooltip>
           <TooltipTrigger asChild>
             <button type="button" className="inline-flex items-center justify-center">
-              <Info className="text-neutral4 hover:text-neutral3 h-2.5 w-2.5 cursor-help" />
+              <Info className="w-2.5 h-2.5 text-neutral4 hover:text-neutral3 cursor-help" />
             </button>
           </TooltipTrigger>
-          <TooltipContent side="top" className="bg-surface3 border-border1 text-foreground max-w-xs border">
-            <div className="space-y-1.5 text-xs">
-              <div className="text-neutral5 font-medium">
+          <TooltipContent side="top" className="max-w-xs bg-surface3 border border-border1 text-foreground">
+            <div className="text-xs space-y-1.5">
+              <div className="font-medium text-neutral5">
                 {label === 'Messages' ? 'Observer' : 'Reflector'} Settings
               </div>
               <div className="space-y-0.5">
@@ -132,7 +132,7 @@ const ProgressBar = ({
                 {modelRouting?.length ? (
                   <div>
                     <span className="text-neutral4">Routing:</span>
-                    <div className="mt-0.5 space-y-0.5 pl-2">
+                    <div className="mt-0.5 pl-2 space-y-0.5">
                       {modelRouting.map(route => (
                         <div key={`${route.upTo}-${route.model}`} className="text-neutral5">
                           ≤{formatTokens(route.upTo)} → {route.model}
@@ -160,7 +160,7 @@ const ProgressBar = ({
 
       <div className="flex items-stretch">
         {/* Progress bar with percentage inside */}
-        <div className={`relative h-5 flex-1 ${containerBg} overflow-hidden rounded-l`}>
+        <div className={`relative flex-1 h-5 ${containerBg} rounded-l overflow-hidden`}>
           <div className={`h-full ${fillColor} transition-all`} style={{ width: `${percentage}%` }} />
           <span
             className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-[10px] font-medium ${textColor} pointer-events-none`}
@@ -185,16 +185,16 @@ const ProgressBar = ({
 
         {/* Token count connected to bar */}
         <span
-          className={`text-[10px] ${tokenTextColor} font-mono whitespace-nowrap tabular-nums ${tokenBg} -ml-px flex items-center gap-1 rounded-r px-1.5`}
+          className={`text-[10px] ${tokenTextColor} tabular-nums whitespace-nowrap font-mono ${tokenBg} px-1.5 flex items-center gap-1 rounded-r -ml-px`}
         >
           {formatTokens(value)}
           <span className={isProcessing ? 'text-blue-500' : 'text-neutral4'}>/{formatTokens(max)}</span>
           {isAdaptive && totalBudget && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="cursor-help text-amber-400">({formatTokens(baseThreshold)})</span>
+                <span className="text-amber-400 cursor-help">({formatTokens(baseThreshold)})</span>
               </TooltipTrigger>
-              <TooltipContent side="top" className="bg-surface3 border-border1 text-foreground max-w-xs border">
+              <TooltipContent side="top" className="max-w-xs bg-surface3 border border-border1 text-foreground">
                 <div className="text-xs">
                   <span className="text-amber-400">{formatTokens(baseThreshold)}</span>
                   <span className="text-neutral4"> is the configured threshold. </span>
@@ -212,20 +212,20 @@ const ProgressBar = ({
 };
 
 const ObservationalMemoryHeader = () => (
-  <div className="mb-3 flex items-center gap-2">
-    <Brain className="h-4 w-4 text-purple-400" />
-    <h3 className="text-neutral5 text-sm font-medium">Observational Memory</h3>
+  <div className="flex items-center gap-2 mb-3">
+    <Brain className="w-4 h-4 text-purple-400" />
+    <h3 className="text-sm font-medium text-neutral5">Observational Memory</h3>
   </div>
 );
 
 const ObservationalMemoryDisabled = () => (
   <div className="p-4">
-    <div className="mb-3 flex items-center gap-2">
-      <Brain className="text-neutral3 h-4 w-4" />
-      <h3 className="text-neutral5 text-sm font-medium">Observational Memory</h3>
+    <div className="flex items-center gap-2 mb-3">
+      <Brain className="w-4 h-4 text-neutral3" />
+      <h3 className="text-sm font-medium text-neutral5">Observational Memory</h3>
     </div>
-    <div className="bg-surface3 border-border1 rounded-lg border p-4">
-      <p className="text-neutral3 mb-3 text-sm">
+    <div className="bg-surface3 border border-border1 rounded-lg p-4">
+      <p className="text-sm text-neutral3 mb-3">
         Observational Memory is not enabled for this agent. Enable it to automatically extract and maintain observations
         from conversations.
       </p>
@@ -233,10 +233,10 @@ const ObservationalMemoryDisabled = () => (
         href="https://mastra.ai/en/docs/memory/observational-memory"
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-2 text-sm text-blue-400 transition-colors hover:text-blue-300"
+        className="inline-flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors"
       >
         Learn about Observational Memory
-        <ExternalLink className="h-3 w-3" />
+        <ExternalLink className="w-3 h-3" />
       </a>
     </div>
   </div>
@@ -273,7 +273,7 @@ function ObservationalMemoryProgressBars({
 }) {
   return (
     <TooltipProvider delayDuration={0}>
-      <div className="mb-3 flex gap-3">
+      <div className="flex gap-3 mb-3">
         <ProgressBar
           value={pendingMessageTokens}
           max={messageTokensThreshold}
@@ -471,7 +471,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   }
 
   return (
-    <div className="w-full min-w-0 overflow-hidden p-4">
+    <div className="p-4 overflow-hidden min-w-0 w-full">
       <ObservationalMemoryHeader />
       <ObservationalMemoryProgressBars
         pendingMessageTokens={pendingMessageTokens}

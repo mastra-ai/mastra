@@ -25,7 +25,7 @@ export function SnapshotTimeline({
   return (
     <section
       aria-label="Snapshot timeline"
-      className="border-border1 bg-surface2 flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2.5 sm:px-4"
+      className="flex flex-wrap items-center gap-3 rounded-lg border border-border1 bg-surface2 px-3 py-2.5 sm:px-4"
     >
       {snapshots.length > 1 ? (
         <>
@@ -52,7 +52,7 @@ export function SnapshotTimeline({
       ) : null}
       <p
         aria-live="polite"
-        className="text-neutral4 w-full text-left font-mono text-xs tabular-nums md:ml-auto md:w-auto md:min-w-72 md:text-right"
+        className="w-full text-left font-mono text-xs tabular-nums text-neutral4 md:ml-auto md:w-auto md:min-w-72 md:text-right"
       >
         Snapshot {snapshot.ordinal}/{snapshot.total} · {formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)} ·{' '}
         {traceLabel(snapshot.traceCount)}

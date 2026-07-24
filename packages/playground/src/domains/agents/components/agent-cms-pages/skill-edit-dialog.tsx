@@ -90,8 +90,7 @@ export function SkillEditDialog({
 
   const builderDefaultWorkspaceId = useMemo(() => {
     const ws = (builderSettings?.configuration?.agent as Record<string, unknown> | undefined)?.workspace as
-      | { type: string; workspaceId?: string }
-      | undefined;
+      { type: string; workspaceId?: string } | undefined;
     return ws?.type === 'id' ? ws.workspaceId : undefined;
   }, [builderSettings]);
 
@@ -254,7 +253,7 @@ export function SkillEditDialog({
       className="h-full"
     >
       <SideDialog.Top>
-        <span className="flex flex-1 items-center gap-2">
+        <span className="flex-1 flex items-center gap-2">
           {dialogTitle}
           {isViewMode && skill?.visibility === 'private' && (
             <Tooltip>
@@ -269,7 +268,7 @@ export function SkillEditDialog({
             </Tooltip>
           )}
         </span>
-        <div className="mr-6 flex items-center gap-2">
+        <div className="flex items-center gap-2 mr-6">
           {isViewMode && isOwner && (
             <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
               <Pencil className="h-3.5 w-3.5" /> Edit
@@ -346,10 +345,10 @@ export function SkillEditDialog({
 
             {/* Form section — revealed after agent populates or user expands */}
             {showForm ? (
-              <div className="border-border1 border-t pt-4">
+              <div className="border-t border-border1 pt-4">
                 <button
                   onClick={() => setShowForm(false)}
-                  className="text-neutral3 hover:text-neutral5 mb-3 flex items-center gap-1.5 text-xs transition-colors"
+                  className="flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors mb-3"
                 >
                   <ChevronDown className="h-3 w-3" />
                   Hide skill details
@@ -357,7 +356,7 @@ export function SkillEditDialog({
 
                 {isAdmin && (!hasFilesystem || !workspaceId) && (
                   <div className="mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-xs text-yellow-600">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                     <span>
                       {!workspaceId
                         ? 'No workspace available. The skill will be saved to the database only.'
@@ -393,7 +392,7 @@ export function SkillEditDialog({
                           }
                           setMode('advanced');
                         }}
-                        className="text-neutral3 hover:text-neutral5 mt-3 flex items-center gap-1.5 text-xs transition-colors"
+                        className="mt-3 flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors"
                       >
                         <Settings2 className="h-3.5 w-3.5" />
                         Advanced mode
@@ -413,7 +412,7 @@ export function SkillEditDialog({
                           }
                           setMode('simple');
                         }}
-                        className="text-neutral3 hover:text-neutral5 mb-3 flex items-center gap-1.5 text-xs transition-colors"
+                        className="mb-3 flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors"
                       >
                         <Pencil className="h-3.5 w-3.5" />
                         Simple mode
@@ -432,10 +431,10 @@ export function SkillEditDialog({
                 )}
               </div>
             ) : (
-              <div className="border-border1 border-t pt-3">
+              <div className="border-t border-border1 pt-3">
                 <button
                   onClick={() => setShowForm(true)}
-                  className="text-neutral3 hover:text-neutral5 flex items-center gap-1.5 text-xs transition-colors"
+                  className="flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors"
                 >
                   <ChevronRight className="h-3 w-3" />
                   {hasFields ? 'Show skill details' : 'or fill in manually'}

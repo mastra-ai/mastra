@@ -139,8 +139,8 @@ export function CodeDiff({ codeA, codeB }: CodeDiffProps) {
   }, [codeA, codeB, theme]);
 
   return (
-    <div className="border-border1 bg-surface3 relative overflow-auto rounded-xl border dark:border-white/10 dark:bg-black/20">
-      <div className="bg-border1 absolute top-0 left-1/2 z-10 h-full w-px dark:bg-white/10" />
+    <div className="relative overflow-auto rounded-xl border border-border1 bg-surface3 dark:border-white/10 dark:bg-black/20">
+      <div className="absolute top-0 left-1/2 z-10 h-full w-px bg-border1 dark:bg-white/10" />
       <div
         ref={containerRef}
         className="[&_.cm-editor]:bg-transparent [&_.cm-editor]:p-6 [&_.cm-gutters]:bg-transparent [&_.cm-mergeViewEditor]:flex-1"

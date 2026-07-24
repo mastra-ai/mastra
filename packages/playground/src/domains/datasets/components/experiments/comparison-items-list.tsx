@@ -63,10 +63,10 @@ export function ComparisonItemsList({
                             baselineScore != null && contenderScore != null ? contenderScore - baselineScore : null;
 
                           return (
-                            <ItemList.Cell key={scorerId} className="flex items-center justify-center gap-5 font-mono">
+                            <ItemList.Cell key={scorerId} className="flex items-center gap-5 justify-center font-mono">
                               {delta != null ? (
                                 <>
-                                  <span className="text-neutral2 flex min-w-24 items-center">
+                                  <span className="flex items-center text-neutral2 min-w-24">
                                     {baselineScore?.toFixed(2)} → {contenderScore?.toFixed(2)}
                                   </span>
                                   <ScoreDelta delta={delta} />

@@ -52,7 +52,7 @@ export const LLMProviders = ({
         <div className="relative shrink-0">
           <ProviderLogo providerId={provider.id} size={16} />
           <div
-            className={`absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full ${
+            className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
               provider.connected ? 'bg-accent1' : 'bg-accent2'
             }`}
             title={provider.connected ? 'Connected' : 'Not connected'}
@@ -81,7 +81,7 @@ export const LLMProviders = ({
   };
 
   if (providersLoading) {
-    return <Skeleton className="h-8 w-full" />;
+    return <Skeleton className="w-full h-8" />;
   }
 
   // Find the matching provider, handling gateway prefix fallback

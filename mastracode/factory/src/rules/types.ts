@@ -22,12 +22,7 @@ export const FACTORY_LINEAR_EVENTS = ['issueObserved'] as const;
 export type FactoryLinearEventName = (typeof FACTORY_LINEAR_EVENTS)[number];
 
 export type FactoryRuleJsonValue =
-  | null
-  | boolean
-  | number
-  | string
-  | FactoryRuleJsonValue[]
-  | { [key: string]: FactoryRuleJsonValue };
+  null | boolean | number | string | FactoryRuleJsonValue[] | { [key: string]: FactoryRuleJsonValue };
 
 export interface FactoryRuleItemContext {
   id: string;

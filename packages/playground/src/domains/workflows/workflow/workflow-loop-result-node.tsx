@@ -22,8 +22,8 @@ export function WorkflowLoopResultNode({ data }: NodeProps<LoopResultNode>) {
     >
       <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />
       <div className="p-2">
-        <div className="bg-surface5 flex items-center gap-1.5 rounded-sm p-2 text-sm">
-          {result ? <CircleCheck className="h-4 w-4 text-current" /> : <CircleX className="h-4 w-4 text-current" />}
+        <div className="text-sm bg-surface5 flex items-center gap-1.5 rounded-sm  p-2">
+          {result ? <CircleCheck className="text-current w-4 h-4" /> : <CircleX className="text-current w-4 h-4" />}
           <Txt variant="ui-xs" className="text-neutral6 capitalize">
             {String(result)}
           </Txt>

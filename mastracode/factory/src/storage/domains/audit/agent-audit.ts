@@ -70,8 +70,7 @@ export async function observeAgentGitAction({
     const command = stripHeredocBodies(rawCommand);
 
     const controller = toolContext.context.get('controller') as
-      | AgentControllerRequestContext<FactorySessionState>
-      | undefined;
+      AgentControllerRequestContext<FactorySessionState> | undefined;
     const worktreePath = controller?.scope;
 
     if (GIT_COMMIT_RE.test(command)) {

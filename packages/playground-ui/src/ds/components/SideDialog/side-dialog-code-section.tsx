@@ -119,9 +119,9 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
         </ButtonsGroup>
       </Section.Header>
       {codeStr && (
-        <div className="border-border1 bg-surface3 text-ui-md text-neutral4 max-h-[30vh] overflow-hidden overflow-y-auto rounded-xl border p-4 break-all dark:border-white/10 dark:bg-black/20">
+        <div className="max-h-[30vh] overflow-hidden overflow-y-auto rounded-xl border border-border1 bg-surface3 p-4 text-ui-md break-all text-neutral4 dark:border-white/10 dark:bg-black/20">
           {simplified ? (
-            <div className="text-neutral4 px-2 font-mono break-all">
+            <div className="px-2 font-mono break-all text-neutral4">
               <pre className="text-wrap">{codeStr}</pre>
             </div>
           ) : (

@@ -149,7 +149,7 @@ export function DatasetItemsToolbar({
         <div className="flex gap-5">
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="text-neutral3 flex items-center gap-2 text-sm">
+              <div className="text-sm text-neutral3 flex items-center gap-2">
                 <Chip
                   size="large"
                   color={
@@ -195,7 +195,7 @@ export function DatasetItemsToolbar({
   }
 
   return (
-    <div className="flex w-full items-center justify-between gap-4">
+    <div className="flex items-center justify-between gap-4 w-full">
       <SearchFieldBlock
         name="search-items"
         label="Search"
@@ -244,7 +244,7 @@ export function DatasetItemsToolbar({
 
         {!isItemPanelOpen && !isVersionsPanelOpen && (
           <Button onClick={onVersionsClick} aria-label="View versions">
-            <History className="h-4 w-4" />
+            <History className="w-4 h-4" />
             Versions
           </Button>
         )}

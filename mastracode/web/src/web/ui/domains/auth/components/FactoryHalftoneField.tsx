@@ -233,7 +233,7 @@ export function FactoryHalftoneField({ variant = 'panel' }: { variant?: 'panel' 
       <div
         ref={containerRef}
         aria-hidden="true"
-        className="factory-halftone-field pointer-events-none absolute inset-0 overflow-hidden [mask-image:radial-gradient(135%_135%_at_50%_42%,rgba(0,0,0,0.08)_0%,rgba(0,0,0,0.25)_30%,rgba(0,0,0,0.55)_48%,black_64%)] opacity-70"
+        className="factory-halftone-field pointer-events-none absolute inset-0 overflow-hidden opacity-70 [mask-image:radial-gradient(135%_135%_at_50%_42%,rgba(0,0,0,0.08)_0%,rgba(0,0,0,0.25)_30%,rgba(0,0,0,0.55)_48%,black_64%)]"
       >
         <canvas ref={canvasRef} className="absolute inset-0 size-full" aria-hidden="true" />
       </div>
@@ -252,7 +252,7 @@ export function FactoryHalftoneField({ variant = 'panel' }: { variant?: 'panel' 
         <span className="factory-stage-label">Ship</span>
       </div>
       <canvas ref={canvasRef} className="absolute inset-0 size-full cursor-crosshair" aria-hidden="true" />
-      <span className="factory-visual-hint text-ui-xs text-neutral2 pointer-events-none absolute right-0 bottom-8 hidden items-center gap-2 lg:inline-flex">
+      <span className="factory-visual-hint pointer-events-none absolute right-0 bottom-8 hidden items-center gap-2 text-ui-xs text-neutral2 lg:inline-flex">
         Move across the factory
       </span>
     </div>

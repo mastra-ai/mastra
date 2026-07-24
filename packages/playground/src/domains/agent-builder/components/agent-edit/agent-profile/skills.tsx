@@ -49,7 +49,7 @@ interface SkillItemProps {
 const SkillItem = ({ skill, editable, onToggle, isChecked }: SkillItemProps) => {
   return (
     <label
-      className="hover:bg-surface2 flex cursor-pointer items-start gap-3 px-6 py-4 transition-colors"
+      className="flex cursor-pointer items-start gap-3 px-6 py-4 transition-colors hover:bg-surface2"
       aria-disabled={!editable}
     >
       <div className="mt-0.5">
@@ -60,11 +60,11 @@ const SkillItem = ({ skill, editable, onToggle, isChecked }: SkillItemProps) => 
         />
       </div>
       <div className="flex min-w-0 flex-col">
-        <Txt variant="ui-sm" className="text-neutral6 font-medium">
+        <Txt variant="ui-sm" className="font-medium text-neutral6">
           {skill.name}
         </Txt>
         {skill.description && (
-          <Txt variant="ui-xs" className="text-neutral3 mt-0.5 truncate" title={skill.description}>
+          <Txt variant="ui-xs" className="mt-0.5 truncate text-neutral3" title={skill.description}>
             {skill.description}
           </Txt>
         )}

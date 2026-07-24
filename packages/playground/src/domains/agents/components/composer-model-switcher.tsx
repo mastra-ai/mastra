@@ -57,17 +57,17 @@ export const ComposerModelSwitcher = () => {
           : 'Locked by admin';
     return (
       <div
-        className="border-border1 bg-surface3 text-ui-xs text-neutral6 flex items-center gap-1.5 rounded-md border px-2 py-1"
+        className="flex items-center gap-1.5 rounded-md border border-border1 bg-surface3 px-2 py-1 text-ui-xs text-neutral6"
         data-testid="composer-model-locked"
       >
-        <Lock className="text-neutral3 h-3.5 w-3.5 shrink-0" />
+        <Lock className="h-3.5 w-3.5 shrink-0 text-neutral3" />
         <span className="truncate">{lockedLabel}</span>
       </div>
     );
   }
 
   return (
-    <div className="inline-flex max-w-full items-stretch">
+    <div className="inline-flex items-stretch max-w-full">
       <LLMProviders
         value={currentModelProvider}
         onValueChange={handleProviderSelect}
@@ -80,7 +80,7 @@ export const ComposerModelSwitcher = () => {
           '@max-md:px-2 @max-md:[&>span>span]:hidden @max-md:[&>svg]:hidden',
         )}
       />
-      <div className="bg-border1 w-px self-stretch" aria-hidden />
+      <div className="w-px self-stretch bg-border1" aria-hidden />
       <LLMModels
         llmId={currentModelProvider}
         value={selectedModel}
@@ -127,13 +127,13 @@ export const ComposerModelWarning = () => {
     <div className="flex flex-col gap-1 px-3 pb-1.5">
       {stale && (
         <div
-          className="text-accent6 flex max-w-full min-w-0 items-start gap-1 text-xs"
+          className="flex items-start gap-1 text-accent6 text-xs min-w-0 max-w-full"
           data-testid="composer-model-stale-warning"
           role="alert"
         >
-          <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
+          <TriangleAlert className="w-3 h-3 shrink-0 mt-0.5" />
           <span className="min-w-0 break-words">
-            <code className="bg-accent6Dark text-accent6 rounded px-1 py-0.5 break-all">
+            <code className="px-1 py-0.5 bg-accent6Dark rounded text-accent6 break-all">
               {provider}/{selectedModel}
             </code>{' '}
             is no longer allowed by admin policy. Pick a different model.
@@ -141,10 +141,10 @@ export const ComposerModelWarning = () => {
         </div>
       )}
       {showProviderWarning && (
-        <div className="text-accent6 flex max-w-full min-w-0 items-start gap-1 text-xs">
-          <TriangleAlert className="mt-0.5 h-3 w-3 shrink-0" />
+        <div className="flex items-start gap-1 text-accent6 text-xs min-w-0 max-w-full">
+          <TriangleAlert className="w-3 h-3 shrink-0 mt-0.5" />
           <span className="min-w-0 break-words">
-            Set <code className="bg-accent6Dark text-accent6 rounded px-1 py-0.5 break-all">{envVar}</code> to use this
+            Set <code className="px-1 py-0.5 bg-accent6Dark rounded text-accent6 break-all">{envVar}</code> to use this
             provider
           </span>
         </div>

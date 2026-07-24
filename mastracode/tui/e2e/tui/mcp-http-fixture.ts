@@ -33,8 +33,7 @@ export type McpHttpFixture = {
 };
 
 export type McpHttpFixtureRequestGateResult =
-  | { status: number; body: string; headers?: Record<string, string> }
-  | undefined;
+  { status: number; body: string; headers?: Record<string, string> } | undefined;
 
 export type McpHttpFixtureOptions = {
   beforeRequest?: () => McpHttpFixtureRequestGateResult | Promise<McpHttpFixtureRequestGateResult>;

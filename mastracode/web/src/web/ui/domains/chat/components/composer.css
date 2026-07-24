@@ -37,7 +37,7 @@
   --composer-spotlight-x: 50%;
   --composer-spotlight-y: 50%;
 
-  @apply ring-border2/40 isolate border-0 ring-1 ring-inset;
+  @apply isolate border-0 ring-1 ring-inset ring-border2/40;
 }
 
 .composer-spotlight:focus-within {

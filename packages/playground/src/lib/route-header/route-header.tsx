@@ -64,7 +64,7 @@ export function RouteHeader() {
             variant="ghost"
             size="sm"
             aria-label={docs.label ?? 'Documentation'}
-            className="max-w-[14rem] min-w-0"
+            className="min-w-0 max-w-[14rem]"
           >
             <DocsIcon />
             <span className="min-w-0 truncate">{docs.label ?? 'Documentation'}</span>

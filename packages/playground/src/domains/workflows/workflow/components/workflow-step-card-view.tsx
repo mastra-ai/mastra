@@ -13,8 +13,8 @@ const WorkflowForEachProgress = ({ foreachProgress }: Pick<WorkflowStepCardViewP
   }
 
   return (
-    <div className="flex items-center gap-2 px-3 pb-2">
-      <div className="bg-surface1 h-1.5 flex-1 overflow-hidden rounded-full">
+    <div className="px-3 pb-2 flex items-center gap-2">
+      <div className="flex-1 h-1.5 bg-surface1 rounded-full overflow-hidden">
         <div
           className={cn(
             'h-full rounded-full transition-all duration-300',
@@ -100,7 +100,7 @@ export const WorkflowStepCardView = ({
         <WorkflowCardBadges indicators={indicators} className="shrink-0" />
         <WorkflowCardStatusIcon displayStatus={displayStatus} hasStep={hasStep} />
         <div className="min-w-0 flex-1">
-          <Txt variant="ui-sm" className="text-neutral6 block truncate font-medium" title={label}>
+          <Txt variant="ui-sm" className="block truncate text-neutral6 font-medium" title={label}>
             {label}
           </Txt>
         </div>

@@ -48,10 +48,10 @@ export function PromptsList({ promptBlocks, isLoading, search = '' }: PromptsLis
             <EntityList.NameCell>{name}</EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
             <EntityList.TextCell className="text-center">
-              {(block.hasDraft || !block.activeVersionId) && <CheckIcon className="mx-auto size-4" />}
+              {(block.hasDraft || !block.activeVersionId) && <CheckIcon className="size-4 mx-auto" />}
             </EntityList.TextCell>
             <EntityList.TextCell className="text-center">
-              {block.activeVersionId && <CheckIcon className="mx-auto size-4" />}
+              {block.activeVersionId && <CheckIcon className="size-4 mx-auto" />}
             </EntityList.TextCell>
           </EntityList.RowLink>
         );

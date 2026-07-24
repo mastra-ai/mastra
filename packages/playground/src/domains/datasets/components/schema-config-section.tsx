@@ -171,12 +171,12 @@ export function SchemaConfigSection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className="text-neutral4 hover:text-neutral5 flex w-full items-center gap-2 py-2 text-sm font-medium">
-        <ChevronRight className="h-4 w-4" />
+      <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium text-neutral4 hover:text-neutral5 w-full py-2">
+        <ChevronRight className="w-4 h-4" />
         Schema Configuration (Optional)
       </CollapsibleTrigger>
 
-      <CollapsibleContent className="space-y-4 pt-4">
+      <CollapsibleContent className="pt-4 space-y-4">
         {/* JSON Schema info notification */}
         <Notice variant="info" title="JSON Schema Format">
           <Notice.Message>
@@ -185,7 +185,7 @@ export function SchemaConfigSection({
               href="https://json-schema.org/"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-accent5Lighter underline"
+              className="underline hover:text-accent5Lighter"
             >
               JSON Schema
             </a>{' '}
@@ -195,7 +195,7 @@ export function SchemaConfigSection({
 
         {/* Source selector */}
         <div className="space-y-2">
-          <label className="text-neutral4 text-sm font-medium">Import From</label>
+          <label className="text-sm font-medium text-neutral4">Import From</label>
           <div className="flex items-center gap-2">
             <Select value={sourceType} onValueChange={v => handleSourceChange(v as SourceType)} disabled={disabled}>
               <SelectTrigger size="sm" className="w-40">
@@ -237,7 +237,7 @@ export function SchemaConfigSection({
 
             {/* Loading indicator for workflow schema */}
             {sourceType === 'workflow' && selectedWorkflow && workflowSchemaLoading && (
-              <span className="text-neutral3 text-xs">Loading schema...</span>
+              <span className="text-xs text-neutral3">Loading schema...</span>
             )}
 
             {/* Scorer target type picker */}
@@ -260,7 +260,7 @@ export function SchemaConfigSection({
 
           {/* Helper text for scorer */}
           {sourceType === 'scorer' && (
-            <p className="text-neutral3 text-xs">
+            <p className="text-xs text-neutral3">
               {scorerTargetType === 'agent'
                 ? 'For calibrating agent-type scorers'
                 : 'For calibrating custom scorers (input/output as any)'}
