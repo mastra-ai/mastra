@@ -1,0 +1,4 @@
+{
+  "extends": ["../../.oxlintrc.json"],
+  "ignorePatterns": ["template-out/**", "dist/**"]
+}

@@ -26,7 +26,8 @@
     "build:cli": "tsup --silent --config tsup.config.ts",
     "pretest": "pnpm turbo build --filter @mastra/mcp-docs-server",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "keywords": [],
   "author": "",

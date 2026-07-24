@@ -242,7 +242,7 @@ importers:
         specifier: 'catalog:'
         version: 0.59.0
       oxlint:
-        specifier: ^1.74.0
+        specifier: ^1.75.0
         version: 1.75.0
       path-to-regexp:
         specifier: ^8.4.2
@@ -3314,6 +3314,9 @@ importers:
       eslint-plugin-import-x:
         specifier: ^4.17.1
         version: 4.17.1(@typescript-eslint/utils@8.59.2(eslint@10.7.0(jiti@2.7.0))(typescript@6.0.3))(eslint@10.7.0(jiti@2.7.0))
+      eslint-plugin-oxlint:
+        specifier: ^1.75.0
+        version: 1.75.0(oxlint@1.75.0)
       eslint-plugin-react:
         specifier: ^7.37.5
         version: 7.37.5(eslint@10.7.0(jiti@2.7.0))
@@ -23172,6 +23175,11 @@ packages:
         optional: true
       eslint-import-resolver-node:
         optional: true
+
+  eslint-plugin-oxlint@1.75.0:
+    resolution: {integrity: sha512-L/r6kWnv+riXQ3He3Y1/OkViVZ2AqAWjZbIOCCU894ihJ4W0Oa/d0AK0yGWhQuA1AtKZJe+/KX4Yv/FTS1cHTQ==}
+    peerDependencies:
+      oxlint: ~1.75.0
 
   eslint-plugin-react-hooks@7.1.1:
     resolution: {integrity: sha512-f2I7Gw6JbvCexzIInuSbZpfdQ44D7iqdWX01FKLvrPgqxoE7oMj8clOfto8U6vYiz4yd5oKu39rRSVOe1zRu0g==}
@@ -46851,6 +46859,11 @@ snapshots:
       '@typescript-eslint/utils': 8.59.2(eslint@10.7.0(jiti@2.7.0))(typescript@6.0.3)
     transitivePeerDependencies:
       - supports-color
+
+  eslint-plugin-oxlint@1.75.0(oxlint@1.75.0):
+    dependencies:
+      jsonc-parser: 3.3.1
+      oxlint: 1.75.0
 
   eslint-plugin-react-hooks@7.1.1(eslint@10.7.0(jiti@2.7.0)):
     dependencies:

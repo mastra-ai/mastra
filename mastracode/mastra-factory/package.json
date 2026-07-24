@@ -16,7 +16,8 @@
     "prepack": "npm run build",
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "engines": {
     "node": ">=22.13.0"

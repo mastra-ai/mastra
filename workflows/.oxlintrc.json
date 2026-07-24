@@ -1,0 +1,4 @@
+{
+  "extends": ["../.oxlintrc.json"],
+  "ignorePatterns": ["inngest/**/vitest.perf.config.ts", "temporal/**/vitest.perf.config.ts"]
+}

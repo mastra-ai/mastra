@@ -29,7 +29,8 @@
     "./styles.css": "./dist/react.css"
   },
   "scripts": {
-    "lint": "eslint .",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
     "build": "echo 'Use turbo to run build'",
     "build:js": "tsup --config tsup.config.ts",
     "build:css": "tailwindcss -i src/ui/index.css -o dist/react.css",

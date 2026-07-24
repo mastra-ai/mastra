@@ -26,7 +26,8 @@
     "build:lib": "tsup --silent --config tsup.config.ts",
     "build": "api-extractor run --local",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "keywords": [],
   "author": "",

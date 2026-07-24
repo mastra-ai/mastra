@@ -32,16 +32,15 @@
     "explorations/**",
     "e2e-tests/**",
     "templates/**",
-    "ee/**",
-    "packages/playground/**",
-    "packages/codemod/src/test/__fixtures__/**"
+    "ee/**"
   ],
   "rules": {
     "no-restricted-globals": ["error", "global"],
     "no-unexpected-multiline": "error",
     "no-warning-comments": ["error", { "terms": ["FIXME"], "location": "anywhere" }],
     "import/no-duplicates": ["error", { "prefer-inline": false }],
-    "unicorn/prefer-node-protocol": "error"
+    "unicorn/prefer-node-protocol": "error",
+    "react/jsx-key": "warn"
   },
   "overrides": [
     {
@@ -49,23 +48,6 @@
       "rules": {
         "no-console": ["error", { "allow": ["warn", "error", "info", "table", "time", "timeEnd", "dir"] }],
         "no-debugger": "error"
-      }
-    },
-    {
-      "files": ["packages/playground-ui/**"],
-      "rules": {
-        "react/only-export-components": ["warn", { "allowConstantExport": true }],
-        "react/rules-of-hooks": "error",
-        "react/exhaustive-deps": "warn",
-        "typescript/no-non-null-assertion": "error"
-      }
-    },
-    {
-      "files": ["packages/playground-ui/**/*.stories.tsx"],
-      "rules": {
-        "no-console": "off",
-        "no-unused-vars": "off",
-        "react/rules-of-hooks": "off"
       }
     },
     {

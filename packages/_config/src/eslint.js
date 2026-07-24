@@ -1,5 +1,10 @@
 // File mostly copied from https://github.com/epicweb-dev/config/blob/main/eslint.js
+import { fileURLToPath } from 'node:url';
+
+import oxlint from 'eslint-plugin-oxlint';
 import globals from 'globals';
+
+const rootOxlintConfig = fileURLToPath(new URL('../../../.oxlintrc.json', import.meta.url));
 
 const ERROR = 'error';
 const WARN = 'warn';
@@ -321,4 +326,12 @@ export const createConfig = async ({ e18e = false } = {}) =>
           },
         }
       : null,
+
+    // Oxlint runs first, so ESLint only needs to handle unsupported and type-aware rules.
+    ...oxlint.buildFromOxlintConfigFile(rootOxlintConfig),
+    {
+      linterOptions: {
+        reportUnusedDisableDirectives: 'off',
+      },
+    },
   ].filter(Boolean);

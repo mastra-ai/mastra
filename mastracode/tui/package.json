@@ -83,7 +83,8 @@
     "render-smoke:server": "node scripts/render-smoke-server.mjs",
     "render-smoke:uninstall": "node scripts/uninstall-render-smoke-settings.mjs",
     "test": "vitest",
-    "lint": "eslint .",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
     "e2e:list": "tsx e2e-list.ts",
     "e2e:smoke": "vitest run --config e2e/vitest.shards.config.ts",
     "e2e:test": "MC_E2E_VITEST_SCENARIOS=all vitest run --config e2e/vitest.shards.config.ts"

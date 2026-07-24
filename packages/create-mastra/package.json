@@ -14,7 +14,8 @@
   ],
   "scripts": {
     "build": "rollup -c",
-    "lint": "eslint .",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
     "clean": "rm -rf dist && rm -rf node_modules",
     "test": "vitest run",
     "test:watch": "vitest watch"

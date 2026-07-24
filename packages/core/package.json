@@ -837,7 +837,8 @@
   "scripts": {
     "check": "tsc --noEmit",
     "typecheck": "tsc --noEmit -p tsconfig.build.json",
-    "lint": "eslint .",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
     "build:lib": "tsup --silent --config tsup.config.ts --no-dts",
     "build:patch-commonjs": "node ../../scripts/commonjs-tsc-fixer.js",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",

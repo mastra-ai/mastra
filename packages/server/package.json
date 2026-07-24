@@ -105,7 +105,8 @@
     "check:permissions": "tsx scripts/check-permissions.ts",
     "check:core-imports": "tsx scripts/check-core-imports.ts",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "keywords": [],
   "author": "",

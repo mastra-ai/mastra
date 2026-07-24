@@ -30,7 +30,8 @@
     "test:watch": "vitest watch",
     "clean": "rm -rf dist && rm -rf node_modules",
     "typecheck": "tsc --noEmit --incremental",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "keywords": [
     "mastra",
