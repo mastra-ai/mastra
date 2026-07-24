@@ -3,4 +3,4 @@
 '@mastra/core': patch
 ---
 
-Fixed thread subscriptions retaining processed events in persistent PubSub backends (#20154).
+Thread subscriptions no longer retain events after they have been processed.
