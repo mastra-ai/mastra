@@ -166,7 +166,7 @@ export type ObservabilityEvent = TracingEvent | LogEvent | MetricEvent | ScoreEv
 export type ObservabilityDropSignal = 'tracing' | 'log' | 'metric' | 'score' | 'feedback';
 
 /** Reason an observability event was dropped by the exporter pipeline. */
-export type ObservabilityDropReason = 'unsupported-storage' | 'retry-exhausted';
+export type ObservabilityDropReason = 'unsupported-storage' | 'retry-exhausted' | 'auth-cooldown';
 
 /** Sanitized error details for observability drop events. */
 export interface ObservabilityDropError {

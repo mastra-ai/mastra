@@ -263,7 +263,7 @@ export class DefaultExporter extends BaseExporter {
     }
   }
 
-  private sanitizeDropError(error: unknown): ObservabilityDropEvent['error'] {
+  protected override sanitizeDropError(error: unknown): ObservabilityDropEvent['error'] {
     if (error instanceof MastraError) {
       return {
         id: error.id,
@@ -279,7 +279,7 @@ export class DefaultExporter extends BaseExporter {
     return { message: String(error) };
   }
 
-  private emitDrop(
+  protected override emitDrop(
     signal: ObservabilityDropSignal,
     reason: ObservabilityDropReason,
     count: number,

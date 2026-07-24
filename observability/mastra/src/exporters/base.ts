@@ -7,6 +7,7 @@
  * - Graceful shutdown lifecycle
  */
 
+import { MastraError } from '@mastra/core/error';
 import { ConsoleLogger, LogLevel } from '@mastra/core/logger';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type {
@@ -14,6 +15,9 @@ import type {
   ObservabilityExporter,
   InitExporterOptions,
   CustomSpanFormatter,
+  ObservabilityDropEvent,
+  ObservabilityDropReason,
+  ObservabilityDropSignal,
 } from '@mastra/core/observability';
 
 /**
@@ -94,9 +98,67 @@ export abstract class BaseExporter implements ObservabilityExporter {
   /** Whether this exporter is disabled */
   #disabled: boolean = false;
 
+  /** Callback used to publish ObservabilityDropEvent to the bus (set via init). */
+  #emitDropEvent?: (event: ObservabilityDropEvent) => void;
+
   /** Public getter for disabled state */
   get isDisabled(): boolean {
     return this.#disabled;
+  }
+
+  /**
+   * Capture the optional `emitDropEvent` callback from {@link InitExporterOptions}.
+   * Subclasses that override `init` should call this (or `super.init(options)`)
+   * so that {@link emitDrop} can forward drop events to the observability bus.
+   */
+  protected captureDropEventEmitter(options: InitExporterOptions): void {
+    this.#emitDropEvent = options.emitDropEvent;
+  }
+
+  /**
+   * Sanitize an error before including it in an {@link ObservabilityDropEvent}.
+   */
+  protected sanitizeDropError(error: unknown): ObservabilityDropEvent['error'] {
+    if (error instanceof MastraError) {
+      return {
+        id: error.id,
+        domain: String(error.domain),
+        message: error.message,
+      };
+    }
+
+    if (error instanceof Error) {
+      return { message: error.message };
+    }
+
+    return { message: String(error) };
+  }
+
+  /**
+   * Emit a structured drop event for `count` events of `signal` that the
+   * exporter pipeline could not deliver. No-op when `count` is 0 or when no
+   * `emitDropEvent` callback was captured.
+   */
+  protected emitDrop(
+    signal: ObservabilityDropSignal,
+    reason: ObservabilityDropReason,
+    count: number,
+    error?: unknown,
+  ): void {
+    if (count === 0) return;
+    if (!this.#emitDropEvent) return;
+
+    const dropEvent: ObservabilityDropEvent = {
+      type: 'drop',
+      signal,
+      reason,
+      count,
+      timestamp: new Date(),
+      exporterName: this.name,
+      ...(error === undefined ? {} : { error: this.sanitizeDropError(error) }),
+    };
+
+    this.#emitDropEvent(dropEvent);
   }
 
   /**
@@ -108,6 +170,16 @@ export abstract class BaseExporter implements ObservabilityExporter {
     const logLevel = this.resolveLogLevel(config.logLevel);
     // Use constructor name as fallback since this.name isn't set yet (subclass initializes it)
     this.logger = config.logger ?? new ConsoleLogger({ level: logLevel, name: this.constructor.name });
+  }
+
+  /**
+   * Default initialization hook. Captures the optional `emitDropEvent`
+   * callback so {@link emitDrop} can publish drop events to the bus.
+   * Subclasses that override `init` should call `super.init(options)` (or
+   * {@link captureDropEventEmitter}) to preserve this behavior.
+   */
+  async init(options: InitExporterOptions): Promise<void> {
+    this.captureDropEventEmitter(options);
   }
 
   /**
@@ -218,11 +290,6 @@ export abstract class BaseExporter implements ObservabilityExporter {
    * This method is called by exportTracingEvent after checking if the exporter is disabled.
    */
   protected abstract _exportTracingEvent(event: TracingEvent): Promise<void>;
-
-  /**
-   * Optional initialization hook called after Mastra is fully configured
-   */
-  init?(_options: InitExporterOptions): void;
 
   /**
    * Optional method to add scores to traces
