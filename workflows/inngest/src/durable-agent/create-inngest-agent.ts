@@ -53,10 +53,12 @@ import { CachingPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
 import type { Workflow } from '@mastra/core/workflows';
 import type { Inngest } from 'inngest';
 
+import { buildDurableResumeFields, buildDurableTriggerFields } from '../durable-event-signals';
 import { InngestPubSub } from '../pubsub';
 import type { InngestWorkflow } from '../workflow';
 import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
@@ -261,6 +263,23 @@ export interface InngestAgentStreamResult<OUTPUT = undefined> {
 export interface InngestAgentResumeOptions<OUTPUT = undefined> {
   threadId?: string;
   resourceId?: string;
+  /**
+   * Per-call actor signal forwarded to FGA checks and tool execution for the
+   * resumed segment. `actor` is a per-call trust signal, not something
+   * rehydrated from the suspended workflow's snapshot — callers that need it
+   * on resume (e.g. a trusted background system re-approving a suspended tool
+   * call) must re-supply it here, matching the core execution engine's resume
+   * contract.
+   */
+  actor?: AgentExecutionOptions<OUTPUT>['actor'];
+  /**
+   * Fresh request-context values to merge into the resumed run, layered over
+   * whatever was persisted in the suspended run's snapshot (fresh values win
+   * on key collision). Use this to refresh context that may have changed
+   * since the run suspended (e.g. a rotated token), without having to
+   * reconstruct the entire original context.
+   */
+  requestContext?: RequestContext;
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
@@ -596,7 +615,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         inputData: workflowInput,
         runId,
         resourceId: workflowInput.state?.resourceId,
-        requestContext: workflowInput.requestContextEntries ?? {},
+        ...buildDurableTriggerFields({
+          requestContext: workflowInput.requestContextEntries,
+          actor: workflowInput.options?.actor,
+        }),
         tracingOptions,
       },
     });
@@ -989,7 +1011,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
               initialState: snapshot?.value ?? {},
               runId,
               resourceId: resumeOptions?.resourceId,
-              requestContext: snapshot?.requestContext ?? {},
+              ...buildDurableResumeFields({
+                persistedRequestContext: snapshot?.requestContext,
+                requestContext: resumeOptions?.requestContext,
+                actor: resumeOptions?.actor,
+              }),
               stepResults: snapshot?.context,
               resume: {
                 steps,
