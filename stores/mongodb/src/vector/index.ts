@@ -66,6 +66,14 @@ export interface MongoDBCreateIndexParams extends CreateIndexParams {
    * Defaults to `${indexName}_vector_index`.
    */
   searchIndexName?: string;
+  /**
+   * Opt-in to write operations (`upsert`, `updateVector`, `deleteVector`,
+   * `deleteVectors`) on a bring-your-own collection. Defaults to `false`:
+   * a BYO index is **read-only** — the store never mutates the caller's
+   * operational documents unless explicitly allowed. Ignored for managed
+   * collections (which the store owns and can always write to).
+   */
+  allowWrites?: boolean;
 }
 
 export interface MongoDBVectorConfig {
@@ -103,6 +111,13 @@ interface IndexTarget {
   searchIndexName: string;
   /** True when the collection is caller-owned (bring-your-own) and must never be dropped. */
   isByo: boolean;
+  /**
+   * True when write operations (upsert/updateVector/deleteVector/deleteVectors) are permitted
+   * on a BYO collection. Captured at createIndex time (`allowWrites` param) and persisted so
+   * the write policy survives a process restart. Always true for managed collections.
+   * Defaults to false for BYO: the store never mutates caller-owned documents by default.
+   */
+  allowWrites: boolean;
   /**
    * Atlas full-text (BM25) search index name used by textQuery/hybridQuery. Set by
    * createSearchIndex (or defaulted to `${collectionName}_search_index`).
@@ -233,10 +248,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // written partially (e.g. a pre-registry managed index, or a legacy partial upsert). Fall
       // back to the managed defaults for any missing field rather than returning undefined, which
       // would break every downstream op (query/describeIndex/deleteIndex) with a null collection.
+      const isByo = persisted.isByo ?? false;
       const target: IndexTarget = {
         collectionName: persisted.collectionName ?? indexName,
         searchIndexName: persisted.searchIndexName ?? `${indexName}_vector_index`,
-        isByo: persisted.isByo ?? false,
+        isByo,
+        // Fail closed: a BYO entry missing the write policy (e.g. written by an older
+        // version of this store) is treated as read-only. Managed is always writable.
+        allowWrites: isByo ? (persisted.allowWrites ?? false) : true,
         textSearchIndexName: persisted.textSearchIndexName,
       };
       this.indexTargets.set(indexName, target);
@@ -247,7 +266,58 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       collectionName: indexName,
       searchIndexName: `${indexName}_vector_index`,
       isByo: false,
+      allowWrites: true,
     };
+  }
+
+  /**
+   * Reject metadata containing circular references BEFORE it reaches the driver.
+   *
+   * bson@7.x's iterative `calculateObjectSize` (used by `bulkWrite`) has no cycle
+   * detection and spins forever on circular input — it does not throw, it hangs the
+   * process at 100% CPU (reproduced standalone against bson 7.3.1). A pre-flight
+   * check converts that hang into a clear USER error. Shared references (DAGs) are
+   * legal BSON and are allowed; only true ancestor cycles are rejected.
+   */
+  private assertNoCircularReferences(value: unknown, operation: string): void {
+    const inPath = new WeakSet<object>();
+    const visit = (node: unknown): void => {
+      if (node === null || typeof node !== 'object') return;
+      if (inPath.has(node as object)) {
+        throw new MastraError({
+          id: createVectorErrorId('MONGODB', operation, 'CIRCULAR_METADATA'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: 'Metadata contains a circular reference and cannot be serialized to BSON.',
+        });
+      }
+      inPath.add(node as object);
+      for (const child of Array.isArray(node) ? node : Object.values(node as object)) {
+        visit(child);
+      }
+      inPath.delete(node as object);
+    };
+    visit(value);
+  }
+
+  /**
+   * Guard for write operations. A bring-your-own collection is READ-ONLY by default:
+   * the caller owns those documents, and Mastra must never mutate or delete them
+   * unless the caller explicitly opted in via `createIndex({ ..., allowWrites: true })`.
+   * Managed collections (store-owned) are always writable. See mastra-ai/mastra#19802
+   * for the design discussion.
+   */
+  private async assertWritable(indexName: string, operation: string): Promise<void> {
+    const target = await this.resolveIndexTarget(indexName);
+    if (target.isByo && !target.allowWrites) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', operation, 'READ_ONLY_INDEX'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, collectionName: target.collectionName },
+        text: `Index "${indexName}" targets the bring-your-own collection "${target.collectionName}", which is read-only by default — Mastra does not modify or delete caller-owned operational documents. To allow writes, opt in explicitly: createIndex({ indexName: "${indexName}", collectionName: "${target.collectionName}", allowWrites: true, ... }).`,
+      });
+    }
   }
 
   /**
@@ -309,8 +379,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     if (!this.rankFusionSupport) {
       const info = (await this.db.admin().buildInfo()) as { version?: string };
       const version = info.version ?? 'unknown';
-      const [maj = 0, min = 0] = (info.version ?? '0.0').split('.').map(Number);
-      const ok = maj > 8 || (maj === 8 && min >= 0);
+      const [maj = 0] = (info.version ?? '0.0').split('.').map(Number);
+      const ok = maj >= 8;
       this.rankFusionSupport = { ok, version };
     }
     if (!this.rankFusionSupport.ok) {
@@ -427,6 +497,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     filterFields,
     collectionName,
     searchIndexName,
+    allowWrites,
   }: MongoDBCreateIndexParams): Promise<void> {
     let mongoMetric;
     try {
@@ -457,6 +528,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     const targetCollection = collectionName ?? indexName;
     const targetSearchIndex = searchIndexName ?? `${indexName}_vector_index`;
     const isByo = collectionName !== undefined;
+    // Write policy: managed collections are always writable (the store owns them).
+    // BYO collections are read-only unless the caller explicitly opts in — Mastra
+    // must not mutate or delete caller-owned operational documents by default.
+    const writable = isByo ? (allowWrites ?? false) : true;
 
     let collection;
     try {
@@ -515,6 +590,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         collectionName: targetCollection,
         searchIndexName: targetSearchIndex,
         isByo,
+        allowWrites: writable,
         textSearchIndexName,
         dimension,
         metric,
@@ -523,6 +599,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         collectionName: targetCollection,
         searchIndexName: targetSearchIndex,
         isByo,
+        allowWrites: writable,
         textSearchIndexName,
       });
 
@@ -705,6 +782,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         collectionName: target.collectionName,
         searchIndexName: target.searchIndexName,
         isByo: target.isByo,
+        allowWrites: target.allowWrites,
         textSearchIndexName: name,
       });
       this.indexTargets.set(indexName, { ...target, textSearchIndexName: name });
@@ -981,6 +1059,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     validateUpsertInput('MONGODB', vectors, metadata, ids);
     validateVectorValues('MONGODB', vectors);
 
+    // Outside the try: these USER errors must not be re-wrapped as THIRD_PARTY.
+    await this.assertWritable(indexName, 'UPSERT');
+    // Circular metadata makes bson's calculateObjectSize spin forever inside bulkWrite;
+    // fail fast with a clear error instead of hanging the process.
+    if (metadata) this.assertNoCircularReferences(metadata, 'UPSERT');
+
     try {
       const { collectionName } = await this.resolveIndexTarget(indexName);
       const collection = await this.getCollection(collectionName);
@@ -1187,17 +1271,14 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     try {
       const names = new Set<string>();
 
-      // (a) Registered logical index names (includes BYO).
+      // (a) Registered logical index names (includes BYO). One read serves both purposes:
+      // the logical names to return, and the physical collection names of registered
+      // (esp. BYO) indexes so step (b) does not re-list them under their physical name.
       const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
-      const registered = await registry.find({}, { projection: { _id: 1 } }).toArray();
+      const registered = await registry.find({}, { projection: { _id: 1, collectionName: 1 } }).toArray();
       const registeredCollections = new Set<string>();
       for (const doc of registered) {
         names.add(doc._id);
-      }
-      // Also collect the physical collection names of registered (esp. BYO) indexes so we
-      // don't re-list them under their physical name in step (b).
-      const registeredFull = await registry.find({}).toArray();
-      for (const doc of registeredFull) {
         if (doc.collectionName) registeredCollections.add(doc.collectionName);
       }
 
@@ -1388,6 +1469,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       });
     }
 
+    await this.assertWritable(indexName, 'UPDATE_VECTOR');
+    if (update.metadata) this.assertNoCircularReferences(update.metadata, 'UPDATE_VECTOR');
+
     try {
       if (!update.vector && !update.metadata) {
         throw new Error('No updates provided');
@@ -1488,6 +1572,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * @throws Will throw an error if the deletion operation fails.
    */
   async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
+    // Outside the try: the read-only USER error must not be re-wrapped as THIRD_PARTY.
+    await this.assertWritable(indexName, 'DELETE_VECTOR');
     try {
       const { collectionName } = await this.resolveIndexTarget(indexName);
       const collection = await this.getCollection(collectionName, true);
@@ -1530,6 +1616,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         text: 'Cannot provide both filter and ids - they are mutually exclusive',
       });
     }
+
+    await this.assertWritable(indexName, 'DELETE_VECTORS');
 
     try {
       const { collectionName } = await this.resolveIndexTarget(indexName);
@@ -1760,6 +1848,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * collections. Managed collections store string `_id`s; BYO operational collections commonly
    * use native ObjectId `_id`s. The incoming `id` is always a string (the QueryResult contract),
    * so match it as-is AND, when it is a valid 24-hex ObjectId, also as `new ObjectId(id)`.
+   *
+   * Known (accepted) ambiguity: if a collection contains BOTH the string form and the ObjectId
+   * form of the same 24-hex id, a single-doc operation (`deleteOne`/`findOneAndUpdate`) matches
+   * whichever the server finds first. `_id` values are unique per BSON type but not across
+   * types; in practice a collection keys on one type, so this dual-form collision does not
+   * occur outside deliberately mixed test data.
    */
   private buildIdMatch(id: string): any {
     if (typeof id === 'string' && ObjectId.isValid(id) && /^[0-9a-fA-F]{24}$/.test(id)) {

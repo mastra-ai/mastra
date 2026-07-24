@@ -136,6 +136,14 @@ Creates a new vector index (collection) in MongoDB.
     description:
       'Name for the Atlas vectorSearch index created on the collection. Defaults to `${indexName}_vector_index`.',
   },
+  {
+    name: 'allowWrites',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Opt-in to write operations (`upsert`, `updateVector`, `deleteVector`, `deleteVectors`) on a bring-your-own collection. By default a BYO index is read-only: the store never modifies or deletes caller-owned operational documents. Ignored for managed collections, which are always writable. The policy is persisted with the index registration and survives restarts.',
+  },
 ]}
 />
 
@@ -169,7 +177,7 @@ Waits for an index to become ready after creation. Useful when you need to ensur
 
 ### `upsert()`
 
-Adds or updates vectors and their metadata in the collection.
+Adds or updates vectors and their metadata in the collection. On a bring-your-own index this requires `allowWrites: true` at `createIndex()` time — BYO collections are read-only by default.
 
 <PropertiesTable
   content={[
@@ -559,6 +567,8 @@ Returns: `Promise<string[]>`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
+> **Bring-your-own collections are read-only by default.** `upsert()`, `updateVector()`, `deleteVector()`, and `deleteVectors()` throw a USER-category error on a BYO index unless it was created with `allowWrites: true`. See [Indexing an existing collection](#indexing-an-existing-collection).
+
 <PropertiesTable
   content={[
   {
@@ -727,6 +737,7 @@ await store.createSearchIndex({ indexName: 'precedents', fields: ['note'] })
 
 - The collection must already exist and contain documents with an `embedding` field (or the custom `embeddingFieldPath` you configured)
 - The collection is never created or dropped when using `collectionName`
+- **A BYO index is read-only by default.** `upsert()`, `updateVector()`, `deleteVector()`, and `deleteVectors()` throw a clear error rather than mutating caller-owned operational documents. To let the store write embeddings into (or delete documents from) your collection, opt in explicitly with `createIndex({ ..., allowWrites: true })`. The policy is persisted and survives restarts; entries written by older versions without the flag are treated as read-only (fail closed).
 - Use `metadataMode: 'document'` when querying to retrieve the full source document as `metadata`
 - In `'document'` mode the embedding is omitted from `metadata` by default; pass `includeVector: true` to retain it (and also expose it as a top-level `vector`)
 - **Filtering in `'document'` mode operates on root document fields**, not a nested `metadata.` subdocument. `filter: { lane: 'fraud' }` matches the top-level `lane` field of your operational documents (in the default `'field'` mode, bare fields are rewritten to `metadata.<field>` for managed collections). Both the pushdown and `$match` fallback paths honor this.

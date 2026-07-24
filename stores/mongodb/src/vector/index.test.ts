@@ -975,6 +975,12 @@ describe('MongoDBVector filterFields (#18587)', () => {
     const searchCol = 'fraud_reports';
     const idxName = 'fraud_precedents';
     const searchIdx = 'fraud_vec_idx';
+    // Native ObjectId _ids: a real operational collection keys on ObjectId, not strings.
+    // Inserting explicit string _ids would be legal MongoDB, but it would not exercise the
+    // id-coercion path (QueryResult.id is a string) that BYO users actually hit.
+    const oidA = new ObjectId();
+    const oidB = new ObjectId();
+    const oidC = new ObjectId();
     let searchVector: MongoDBVector;
 
     beforeAll(async () => {
@@ -990,9 +996,9 @@ describe('MongoDBVector filterFields (#18587)', () => {
       await col.deleteMany({});
       // Non-collinear vectors: avoid ties under cosine similarity
       await col.insertMany([
-        { _id: 'a', embedding: [1, 0, 0, 0], amount: 100, note: 'wire transfer to shell company' },
-        { _id: 'b', embedding: [0, 1, 0, 0], amount: 5000, note: 'invoice from offshore entity shell company' },
-        { _id: 'c', embedding: [0, 0, 1, 0], amount: 200, note: 'legitimate payment to vendor' },
+        { _id: oidA as any, embedding: [1, 0, 0, 0], amount: 100, note: 'wire transfer to shell company' },
+        { _id: oidB as any, embedding: [0, 1, 0, 0], amount: 5000, note: 'invoice from offshore entity shell company' },
+        { _id: oidC as any, embedding: [0, 0, 1, 0], amount: 200, note: 'legitimate payment to vendor' },
       ]);
       await searchVector.createIndex({
         indexName: idxName,
@@ -1096,8 +1102,9 @@ describe('MongoDBVector filterFields (#18587)', () => {
 
       const res = await queryHybrid();
       expect(res.length).toBeGreaterThan(0);
-      // 'b' matches both vector (exact match to [0,1,0,0]) and text (contains "offshore entity")
-      expect(res[0].id).toBe('b');
+      // 'b' matches both vector (exact match to [0,1,0,0]) and text (contains "offshore entity").
+      // The ObjectId _id must surface as its hex string (the QueryResult.id contract).
+      expect(res[0].id).toBe(oidB.toHexString());
       // Every fused hit must carry a positive RRF score. This guards the $rankFusion score
       // source: using $meta:'searchScore' (the text-branch score) leaves vector-only hits
       // with no score, which this assertion would catch; $meta:'score' scores every hit.
@@ -1223,6 +1230,177 @@ describe('MongoDBVector filterFields (#18587)', () => {
       expect(dropSearchIndex).toHaveBeenCalledWith('txn_vec_idx');
       expect(drop).not.toHaveBeenCalled();
       expect(deleteRegistryEntry).toHaveBeenCalledWith('precedents');
+    });
+  });
+
+  // ─── BYO write guard: read-only by default, writes are opt-in ────────────────────────
+  describe('BYO write guard (unit)', () => {
+    const makeVector = () => new MongoDBVector({ id: 'test', uri: 'mongodb://localhost:27017', dbName: 'test_db' });
+
+    const byoTarget = (allowWrites: boolean) => ({
+      collectionName: 'ops_txns',
+      searchIndexName: 'ops_vec',
+      isByo: true,
+      allowWrites,
+    });
+
+    it('upsert refuses a read-only BYO index with a USER-category error', async () => {
+      const v = makeVector();
+      (v as any).indexTargets.set('idx', byoTarget(false));
+      const bulkWrite = vi.fn();
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ bulkWrite });
+
+      await expect(v.upsert({ indexName: 'idx', vectors: [[1, 0, 0, 0]] })).rejects.toThrow(/read-only/i);
+      expect(bulkWrite).not.toHaveBeenCalled();
+    });
+
+    it('updateVector refuses a read-only BYO index', async () => {
+      const v = makeVector();
+      (v as any).indexTargets.set('idx', byoTarget(false));
+      const findOneAndUpdate = vi.fn();
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ findOneAndUpdate });
+
+      await expect(v.updateVector({ indexName: 'idx', id: 'a', update: { metadata: { x: 1 } } })).rejects.toThrow(
+        /read-only/i,
+      );
+      expect(findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it('deleteVector refuses a read-only BYO index', async () => {
+      const v = makeVector();
+      (v as any).indexTargets.set('idx', byoTarget(false));
+      const deleteOne = vi.fn();
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ deleteOne });
+
+      await expect(v.deleteVector({ indexName: 'idx', id: 'a' })).rejects.toThrow(/read-only/i);
+      expect(deleteOne).not.toHaveBeenCalled();
+    });
+
+    it('deleteVectors refuses a read-only BYO index (both ids and filter forms)', async () => {
+      const v = makeVector();
+      (v as any).indexTargets.set('idx', byoTarget(false));
+      const deleteMany = vi.fn();
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ deleteMany });
+
+      await expect(v.deleteVectors({ indexName: 'idx', ids: ['a'] })).rejects.toThrow(/read-only/i);
+      await expect(v.deleteVectors({ indexName: 'idx', filter: { lane: 'fraud' } })).rejects.toThrow(/read-only/i);
+      expect(deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('allows writes on a BYO index that opted in via allowWrites', async () => {
+      const v = makeVector();
+      (v as any).indexTargets.set('idx', byoTarget(true));
+      const deleteOne = vi.fn().mockResolvedValue({ deletedCount: 1 });
+      const findOneAndUpdate = vi.fn().mockResolvedValue({});
+      const deleteMany = vi.fn().mockResolvedValue({ deletedCount: 1 });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ deleteOne, findOneAndUpdate, deleteMany });
+
+      await v.deleteVector({ indexName: 'idx', id: 'a' });
+      await v.updateVector({ indexName: 'idx', id: 'a', update: { metadata: { x: 1 } } });
+      await v.deleteVectors({ indexName: 'idx', ids: ['a'] });
+
+      expect(deleteOne).toHaveBeenCalledTimes(1);
+      expect(findOneAndUpdate).toHaveBeenCalledTimes(1);
+      expect(deleteMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('managed indexes are always writable (no guard)', async () => {
+      const v = makeVector();
+      // No in-memory target, no registry entry → managed default (writable).
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
+      const deleteOne = vi.fn().mockResolvedValue({ deletedCount: 1 });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ deleteOne });
+
+      await v.deleteVector({ indexName: 'managed_idx', id: 'a' });
+      expect(deleteOne).toHaveBeenCalledTimes(1);
+    });
+
+    it('fails closed: a hydrated BYO registry entry WITHOUT allowWrites is read-only (restart durability)', async () => {
+      const v = makeVector();
+      // Fresh process: in-memory map empty; registry entry predates the write policy
+      // (no allowWrites field). The guard must treat it as read-only, not writable.
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue({
+        _id: 'precedents',
+        indexName: 'precedents',
+        collectionName: 'transactions',
+        searchIndexName: 'txn_vec_idx',
+        isByo: true,
+      });
+      const deleteOne = vi.fn();
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ deleteOne });
+
+      await expect(v.deleteVector({ indexName: 'precedents', id: 'a' })).rejects.toThrow(/read-only/i);
+      expect(deleteOne).not.toHaveBeenCalled();
+    });
+
+    it('createIndex persists the write policy (allowWrites: true) to the durable registry', async () => {
+      const v = makeVector();
+      const createSearchIndex = vi.fn().mockResolvedValue(undefined);
+      (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
+      const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+
+      await v.createIndex({ indexName: 'idx', dimension: 4, collectionName: 'ops_col', allowWrites: true });
+
+      const persisted = writeRegistryEntry.mock.calls[0][1] as any;
+      expect(persisted.isByo).toBe(true);
+      expect(persisted.allowWrites).toBe(true);
+    });
+
+    it('upsert rejects circular metadata fast instead of hanging in bson calculateObjectSize', async () => {
+      const v = makeVector();
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
+      const bulkWrite = vi.fn();
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ bulkWrite });
+      const circular: any = { name: 'test' };
+      circular.self = circular;
+
+      // bson@7.x's iterative calculateObjectSize has no cycle detection and spins forever
+      // on circular input (reproduced standalone against 7.3.1); the pre-flight guard must
+      // reject BEFORE bulkWrite is reached.
+      await expect(v.upsert({ indexName: 'idx', vectors: [[1, 0, 0, 0]], metadata: [circular] })).rejects.toThrow(
+        /circular/i,
+      );
+      expect(bulkWrite).not.toHaveBeenCalled();
+    });
+
+    it('updateVector rejects circular metadata fast', async () => {
+      const v = makeVector();
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
+      const findOneAndUpdate = vi.fn();
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ findOneAndUpdate });
+      const circular: any = { name: 'test' };
+      circular.nested = { deeper: circular };
+
+      await expect(v.updateVector({ indexName: 'idx', id: 'a', update: { metadata: circular } })).rejects.toThrow(
+        /circular/i,
+      );
+      expect(findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it('shared (non-circular DAG) references in metadata are still allowed', async () => {
+      const v = makeVector();
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
+      // Shared subobject referenced twice — legal BSON, must NOT be rejected.
+      const shared = { unit: 'usd' };
+      const meta = { a: shared, b: shared };
+      expect(() => (v as any).assertNoCircularReferences(meta, 'UPSERT')).not.toThrow();
+    });
+
+    it('createIndex defaults BYO to read-only (allowWrites omitted → false)', async () => {
+      const v = makeVector();
+      const createSearchIndex = vi.fn().mockResolvedValue(undefined);
+      (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
+      const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+
+      await v.createIndex({ indexName: 'idx', dimension: 4, collectionName: 'ops_col' });
+
+      const persisted = writeRegistryEntry.mock.calls[0][1] as any;
+      expect(persisted.isByo).toBe(true);
+      expect(persisted.allowWrites).toBe(false);
     });
   });
 
@@ -1766,7 +1944,15 @@ describe('MongoDBVector BYO ObjectId _ids (round4-fix2)', () => {
       { _id: oidA, embedding: [1, 0, 0, 0], amount: 100, lane: 'clean' },
       { _id: oidB, embedding: [0, 1, 0, 0], amount: 5000, lane: 'fraud' },
     ] as any);
-    await store.createIndex({ indexName: idxName, dimension: 4, collectionName: opsCol, searchIndexName: searchIdx });
+    // allowWrites: this suite exercises deleteVector/updateVector against the BYO
+    // collection, which is read-only by default.
+    await store.createIndex({
+      indexName: idxName,
+      dimension: 4,
+      collectionName: opsCol,
+      searchIndexName: searchIdx,
+      allowWrites: true,
+    });
     await store.waitForIndexReady({ indexName: idxName, timeoutMs: 60000 });
   }, 500000);
 
