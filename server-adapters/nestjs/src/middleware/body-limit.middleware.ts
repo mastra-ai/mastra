@@ -31,7 +31,7 @@ export class BodyLimitMiddleware implements NestMiddleware {
 
   use(req: Request, res: Response, next: NextFunction): void {
     // Only check body size for methods that typically have bodies
-    if (!['POST', 'PUT', 'PATCH'].includes(req.method)) {
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
       next();
       return;
     }

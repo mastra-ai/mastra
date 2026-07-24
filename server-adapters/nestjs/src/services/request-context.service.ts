@@ -62,7 +62,7 @@ export class RequestContextService {
     const context = new RequestContext();
 
     try {
-      if (this.request.method === 'POST' || this.request.method === 'PUT' || this.request.method === 'PATCH') {
+      if (this.request.method === 'POST' || this.request.method === 'PUT' || this.request.method === 'PATCH' || this.request.method === 'DELETE') {
         if (this.request.body?.requestContext) {
           this.mergeContext(context, this.request.body.requestContext);
         }

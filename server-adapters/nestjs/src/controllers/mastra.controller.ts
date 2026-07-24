@@ -144,7 +144,7 @@ export class MastraController {
    */
   private async parseBody(req: Request, route: ServerRoute): Promise<unknown> {
     // Only parse body for methods that typically have bodies
-    if (!['POST', 'PUT', 'PATCH'].includes(req.method)) {
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
       return undefined;
     }
 
