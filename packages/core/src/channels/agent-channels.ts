@@ -43,6 +43,7 @@ import type {
   ChannelHandlers,
   PostableMessage,
   ResolveResourceId,
+  ResolveThreadId,
   StreamingConfig,
   ThreadHistoryMessage,
   ToolDisplay,
@@ -86,6 +87,8 @@ export class AgentChannels {
   private toolsEnabled: boolean;
   /** Optional hook to resolve the memory resourceId (owner) for newly-created channel threads. */
   private resolveResourceId: ResolveResourceId | undefined;
+  /** Optional hook to resolve the internal thread id for newly-created channel threads. */
+  private resolveThreadId: ResolveThreadId | undefined;
   /**
    * The original `ChannelConfig` passed to the constructor.
    *
@@ -150,6 +153,7 @@ export class AgentChannels {
     this.inlineLinkRules = normalizeInlineLinks(config.inlineLinks);
     this.toolsEnabled = config.tools !== false;
     this.resolveResourceId = config.resolveResourceId;
+    this.resolveThreadId = config.resolveThreadId;
     this.channelConfig = config;
     this.channelToolNames = new Set(Object.keys(this.getTools()));
   }
@@ -1010,6 +1014,12 @@ export class AgentChannels {
       // Lazily resolved: the hook only runs when we're actually creating a new
       // thread, never when reusing an existing one (which keeps its stored owner).
       resourceId: this.resolveChannelResourceId({ platform, chatThread, message, defaultResourceId }),
+      // Same laziness for the thread id hook; it runs after the resourceId
+      // resolves so hosts can align the two (e.g. thread id = session id).
+      threadId: this.resolveThreadId
+        ? (resourceId: string, defaultThreadId: string) =>
+            this.resolveThreadId!({ platform, thread: chatThread, message, resourceId, defaultThreadId })
+        : undefined,
       mastra,
     });
 
@@ -1431,6 +1441,7 @@ export class AgentChannels {
     channelId,
     platform,
     resourceId,
+    threadId,
     mastra,
   }: {
     externalThreadId: string;
@@ -1442,6 +1453,12 @@ export class AgentChannels {
      * existing thread is reused.
      */
     resourceId: string | (() => string | Promise<string>);
+    /**
+     * The id for a newly-created thread, resolved lazily after the owner —
+     * never called when an existing thread is reused (which keeps its id).
+     * Omitted: a random UUID.
+     */
+    threadId?: (resolvedResourceId: string, defaultThreadId: string) => string | Promise<string>;
     mastra: Mastra;
   }): Promise<StorageThreadType> {
     const storage = mastra.getStorage();
@@ -1472,10 +1489,25 @@ export class AgentChannels {
     }
 
     const resolvedResourceId = typeof resourceId === 'function' ? await resourceId() : resourceId;
+    const defaultThreadId = crypto.randomUUID();
+    let resolvedThreadId = threadId ? await threadId(resolvedResourceId, defaultThreadId) : defaultThreadId;
+
+    // saveThread upserts by id, so a resolver id that already belongs to another
+    // thread would overwrite it. Fall back to the generated id instead.
+    if (resolvedThreadId && resolvedThreadId !== defaultThreadId) {
+      const existing = await memoryStore.getThreadById({ threadId: resolvedThreadId }).catch(() => null);
+      if (existing) {
+        this.log(
+          'warn',
+          `resolveThreadId returned "${resolvedThreadId}" which already belongs to an existing thread; using a generated id instead`,
+        );
+        resolvedThreadId = defaultThreadId;
+      }
+    }
 
     return memoryStore.saveThread({
       thread: {
-        id: crypto.randomUUID(),
+        id: resolvedThreadId || defaultThreadId,
         title: `${platform} conversation`,
         resourceId: resolvedResourceId,
         createdAt: new Date(),
