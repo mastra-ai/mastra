@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { File, FileCode, FileJson, FileText, Folder, FolderOpen, Image, NotepadText, RefreshCw } from 'lucide-react';
+import { File, FileCode, FileJson, FileText, Folder, FolderOpen, Image, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -154,6 +154,7 @@ function WorkspaceTreeItem({
 
 interface WorkspaceFileBrowserProps {
   renderedPaths: RenderedWorkspacePath[];
+  title?: string;
   selectedPath: RenderedWorkspacePath;
   selectedFilePath?: string;
   listing?: WorkspaceRenderedListing;
@@ -166,6 +167,7 @@ interface WorkspaceFileBrowserProps {
 
 export function WorkspaceFileBrowser({
   renderedPaths,
+  title,
   selectedPath,
   selectedFilePath,
   listing,
@@ -177,23 +179,30 @@ export function WorkspaceFileBrowser({
 }: WorkspaceFileBrowserProps) {
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const nodes = buildTree(listing?.entries ?? []);
+  const heading = title ?? 'Workspace files';
 
   const setFolderOpen = (path: string, open: boolean) => {
     setOpenFolders(previous => ({ ...previous, [path]: open }));
   };
 
   return (
-    <aside className="flex h-full w-full min-w-0 flex-col bg-surface1" aria-label="Workspace files">
-      <div className="flex items-center justify-between gap-2 px-3 py-2 pl-4 lg:pr-12">
-        <div className="flex min-w-0 items-center gap-2">
-          <NotepadText size={15} className="shrink-0 text-icon4" />
-          <Txt variant="ui-sm" className="truncate font-medium text-icon6">
-            Files
-          </Txt>
-        </div>
-        <Button size="sm" variant="ghost" onClick={onRefresh} aria-label="Refresh workspace files">
-          <RefreshCw size={14} />
-        </Button>
+    <aside
+      className="relative flex max-h-full min-h-0 w-full min-w-0 flex-col overflow-hidden rounded-xl bg-surface3"
+      aria-label={heading}
+    >
+      <Button
+        size="icon-md"
+        variant="ghost"
+        onClick={onRefresh}
+        aria-label="Refresh workspace files"
+        className="absolute right-2 top-2 z-10 rounded-md"
+      >
+        <RefreshCw size={14} />
+      </Button>
+      <div className="flex min-h-12 items-center px-3 pr-12">
+        <Txt as="h2" variant="ui-sm" className="m-0 truncate font-medium text-icon5">
+          {heading}
+        </Txt>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2">

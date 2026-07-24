@@ -37,6 +37,10 @@ export function useWorkspaceRenderedListing(workspacePath: string | undefined, r
   return useQuery<WorkspaceRenderedListing>({
     queryKey: queryKeys.workspaceRenderedList(workspacePath, renderedRoot),
     enabled: Boolean(workspacePath && renderedRoot),
+    // Controller mutation and run-completion events invalidate this query.
+    // Reuse that fresh result across observers and refresh when the tab returns.
+    staleTime: Infinity,
+    refetchOnWindowFocus: 'always',
     queryFn: () =>
       client.get<WorkspaceRenderedListing>(
         `/web/workspace/rendered/list?workspacePath=${encodeURIComponent(workspacePath ?? '')}&root=${encodeURIComponent(renderedRoot ?? '')}`,

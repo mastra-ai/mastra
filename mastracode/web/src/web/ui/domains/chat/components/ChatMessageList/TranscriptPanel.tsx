@@ -9,7 +9,7 @@ import { EmptyThreadState } from './EmptyThreadState';
 import { WorkingIndicator } from './WorkingIndicator';
 
 const transcriptScrollClass =
-  'flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:min-w-0 [&>*]:max-w-[80ch]';
+  'flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-3 pb-2 pt-6 transition-[padding-right] duration-220 ease-[cubic-bezier(0.32,0.72,0,1)] md:px-5 lg:in-data-[panel-open=true]:pr-[calc(var(--chat-right-panel-width)+0.5rem)] motion-reduce:transition-none in-data-[panel-gesture=active]:transition-none [&>*]:mx-auto [&>*]:w-full [&>*]:min-w-0 [&>*]:max-w-[80ch]';
 
 export function TranscriptPanel() {
   const { transcript, showWorkingIndicator, loadMore } = useChatTranscript();

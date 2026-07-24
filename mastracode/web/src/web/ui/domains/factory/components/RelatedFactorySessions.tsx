@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Link2 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router';
+import type { ReactNode } from 'react';
 
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../../shared/hooks/useWorkspaces';
 import { useWorkItemsQuery } from '../../../../../shared/hooks/useWorkItems';
@@ -26,24 +27,55 @@ function sessionTitle(item: WorkItem): string {
   return item.title;
 }
 
-export function FactorySessionHeader() {
+function FactorySessionHeaderFrame({ children }: { children: ReactNode }) {
+  return (
+    <header role="region" className="border-b border-border1 px-3 py-2.5 md:px-5" aria-label="Factory session">
+      {children}
+    </header>
+  );
+}
+
+function FactorySessionHeaderActions({ actions }: { actions?: ReactNode }) {
+  if (!actions) return null;
+  return (
+    <FactorySessionHeaderFrame>
+      <div className="flex min-h-8 items-center justify-end">{actions}</div>
+    </FactorySessionHeaderFrame>
+  );
+}
+
+export function FactorySessionHeader({ actions }: { actions?: ReactNode }) {
   const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId: string; threadId: string }>();
+
+  if (!threadId || !factoryId || !sessionId) return <FactorySessionHeaderActions actions={actions} />;
+
+  return (
+    <ResolvedFactorySessionHeader actions={actions} factoryId={factoryId} sessionId={sessionId} threadId={threadId} />
+  );
+}
+
+function ResolvedFactorySessionHeader({
+  actions,
+  factoryId,
+  sessionId,
+  threadId,
+}: {
+  actions?: ReactNode;
+  factoryId: string;
+  sessionId: string;
+  threadId: string;
+}) {
   const navigate = useNavigate();
   const sessionQuery = useUserSessionQuery(sessionId);
   const projectRepositoryId = sessionQuery.data?.projectRepositoryId;
   const items = useWorkItemsQuery(factoryId);
   const workspaces = useWorkspacesQuery(projectRepositoryId);
 
-  if (!threadId || !factoryId || !sessionId) return null;
-
   const allItems = items.data ?? [];
-  const activeProjectPath = sessionId;
   const currentItem = allItems.find(item =>
-    Object.values(item.sessions).some(
-      session => session.threadId === threadId && (!activeProjectPath || session.sessionId === activeProjectPath),
-    ),
+    Object.values(item.sessions).some(session => session.threadId === threadId && session.sessionId === sessionId),
   );
-  if (!currentItem) return null;
+  if (!currentItem) return <FactorySessionHeaderActions actions={actions} />;
 
   const relatedItems = relatedWorkItems(currentItem, allItems);
   const livePaths = new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId));
@@ -57,7 +89,7 @@ export function FactorySessionHeader() {
   };
 
   return (
-    <header role="region" className="border-b border-border1 px-3 py-2.5 md:px-5" aria-label="Factory session">
+    <FactorySessionHeaderFrame>
       <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <nav className="flex min-w-0 items-center gap-2 text-ui-sm" aria-label="Factory session breadcrumb">
           <Link to={sectionPath} className="shrink-0 font-medium text-icon4 hover:text-icon6 hover:underline">
@@ -68,7 +100,7 @@ export function FactorySessionHeader() {
           </span>
           <span className="truncate text-icon6">{sessionTitle(currentItem)}</span>
         </nav>
-        {destinations.length > 0 ? (
+        {destinations.length > 0 || actions ? (
           <div className="flex shrink-0 flex-wrap items-center gap-1">
             {destinations.map(({ item, session }) => {
               const label = relationshipLabel(item);
@@ -99,9 +131,10 @@ export function FactorySessionHeader() {
                 </Button>
               );
             })}
+            {actions}
           </div>
         ) : null}
       </div>
-    </header>
+    </FactorySessionHeaderFrame>
   );
 }

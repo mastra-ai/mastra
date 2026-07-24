@@ -45,6 +45,7 @@ function defaultRange(today: string): DateRangeValue {
 }
 
 const THROUGHPUT_SERIES = [{ dataKey: 'done', label: 'Completed work', color: 'var(--chart-2)' }];
+const METRICS_PALETTE = ['var(--chart-1)', 'var(--chart-4)', 'var(--chart-3)', 'var(--chart-2)'] as const;
 
 const SOURCE_LABELS: Record<string, string> = {
   'github:issue': 'GitHub issues',
@@ -172,11 +173,7 @@ function useAgentsRunningCount(): number {
 
 function MetricsLoading() {
   return (
-    <div className="grid gap-5 border-t border-border1 pt-7" aria-label="Loading Factory metrics">
-      <div className="flex items-center justify-between gap-4">
-        <Skeleton className="h-4 w-32" />
-        <Skeleton className="h-6 w-16 rounded-full" />
-      </div>
+    <div className="grid gap-5" aria-label="Loading Factory metrics">
       <Skeleton className="h-64 w-full" />
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Skeleton className="h-16 w-full" />
@@ -204,19 +201,7 @@ function FlowOverview({
     metrics.transitions.total === 0 ? EM_DASH : `${Math.round((automatedMoves / metrics.transitions.total) * 100)}%`;
 
   return (
-    <section className="flex flex-col gap-5 border-t border-border1 pt-7">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <Txt as="h2" variant="ui-md" className="m-0 font-medium text-icon6">
-            Delivery flow
-          </Txt>
-          <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
-            Completed work over time, with the Factory's current operating state.
-          </Txt>
-        </div>
-        <Badge size="sm">{windowDays}-day view</Badge>
-      </div>
-
+    <section className="flex flex-col gap-5">
       <div className="min-w-0">
         <div className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
           <div>
@@ -244,10 +229,11 @@ function FlowOverview({
         />
       </div>
 
-      <dl className="m-0 grid grid-cols-2 gap-x-5 gap-y-4 border-t border-border1 pt-4 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-border1">
+      <dl className="m-0 grid grid-cols-2 gap-x-5 gap-y-4 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-border1">
         <OverviewReadout
           icon={<Clock3 aria-hidden="true" />}
           label="Median cycle time"
+          tone={METRICS_PALETTE[0]}
           value={formatDuration(metrics.cycleTime.medianMs)}
           detail={
             metrics.cycleTime.p90Ms === null
@@ -258,18 +244,21 @@ function FlowOverview({
         <OverviewReadout
           icon={<Layers3 aria-hidden="true" />}
           label="In flight"
+          tone={METRICS_PALETTE[1]}
           value={String(metrics.wipTotal)}
           detail="Items in non-terminal stages"
         />
         <OverviewReadout
           icon={<Bot aria-hidden="true" />}
           label="Agents running"
+          tone={METRICS_PALETTE[2]}
           value={String(agentsRunning)}
           detail="Live across active worktrees"
         />
         <OverviewReadout
           icon={<Workflow aria-hidden="true" />}
           label="Automated moves"
+          tone={METRICS_PALETTE[3]}
           value={automationRate}
           detail={
             metrics.transitions.total === 0
@@ -287,16 +276,23 @@ function OverviewReadout({
   label,
   value,
   detail,
+  tone,
 }: {
   icon: ReactNode;
   label: string;
   value: string;
   detail: string;
+  tone: string;
 }) {
   return (
     <div className="flex min-w-0 flex-col lg:px-4 lg:first:pl-0 lg:last:pr-0">
-      <dt className="flex items-center gap-1.5 text-ui-xs text-icon3 [&>svg]:size-3.5">
-        {icon}
+      <dt className="flex items-center gap-1.5 text-ui-xs text-icon3">
+        <span
+          className="grid size-5 shrink-0 place-items-center rounded-md bg-surface3 [&>svg]:size-3.5"
+          style={{ color: tone }}
+        >
+          {icon}
+        </span>
         {label}
       </dt>
       <dd className="m-0 mt-1 text-header-sm font-medium tabular-nums text-icon6">{value}</dd>
@@ -384,7 +380,10 @@ function StageAutomation({ metrics }: { metrics: FactoryMetrics }) {
             </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-surface4" aria-hidden="true">
               {pct !== null && automated > 0 ? (
-                <div className="h-full rounded-full bg-accent1" style={{ width: `${Math.max(2, pct)}%` }} />
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${Math.max(2, pct)}%`, backgroundColor: 'var(--chart-4)' }}
+                />
               ) : null}
             </div>
             {row && automated > 0 ? (
@@ -457,26 +456,43 @@ function SourceMix({ metrics }: { metrics: FactoryMetrics }) {
       </Txt>
     );
   }
+
+  const sources = metrics.sourceMix.map((entry, index) => ({
+    ...entry,
+    percentage: Math.round((entry.count / total) * 100),
+    color: METRICS_PALETTE[index % METRICS_PALETTE.length] ?? METRICS_PALETTE[0],
+  }));
+
   return (
-    <ul className="m-0 flex list-none flex-col gap-3 p-0">
-      {metrics.sourceMix.map(entry => {
-        const percentage = Math.round((entry.count / total) * 100);
-        return (
-          <li key={entry.source} className="grid gap-1.5">
-            <div className="flex items-baseline justify-between gap-3">
-              <Txt as="span" variant="ui-sm" className="font-medium text-icon5">
-                {SOURCE_LABELS[entry.source] ?? entry.source}
+    <div className="flex flex-col gap-4">
+      <div className="flex h-2.5 w-full gap-1" aria-hidden="true">
+        {sources.map(source => (
+          <span
+            key={source.source}
+            className="h-full min-w-1 basis-0 rounded-full"
+            style={{ flexGrow: source.count, backgroundColor: source.color }}
+          />
+        ))}
+      </div>
+      <ul className="m-0 flex list-none flex-col gap-2.5 p-0">
+        {sources.map(source => (
+          <li key={source.source} className="flex items-baseline justify-between gap-3">
+            <span className="flex min-w-0 items-center gap-2">
+              <span
+                className="size-2 shrink-0 rounded-full"
+                style={{ backgroundColor: source.color }}
+                aria-hidden="true"
+              />
+              <Txt as="span" variant="ui-sm" className="truncate font-medium text-icon5">
+                {SOURCE_LABELS[source.source] ?? source.source}
               </Txt>
-              <Txt as="span" variant="ui-xs" className="tabular-nums text-icon3">
-                {entry.count} · {percentage}%
-              </Txt>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-surface4" aria-hidden="true">
-              <div className="h-full rounded-full bg-accent3" style={{ width: `${Math.max(2, percentage)}%` }} />
-            </div>
+            </span>
+            <Txt as="span" variant="ui-xs" className="shrink-0 tabular-nums text-icon3">
+              {source.count} · {source.percentage}%
+            </Txt>
           </li>
-        );
-      })}
-    </ul>
+        ))}
+      </ul>
+    </div>
   );
 }

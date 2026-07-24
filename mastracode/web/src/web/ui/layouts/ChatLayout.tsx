@@ -1,12 +1,8 @@
-import { Button } from '@mastra/playground-ui/components/Button';
+import { ResizeHandleIndicator } from '@mastra/playground-ui/primitives/resize-handle-indicator';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
-import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
-import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { Panel, usePanelRef } from 'react-resizable-panels';
-import { PanelRightIcon } from 'lucide-react';
 
 import { ViewportLayout } from './PageLayout';
 
@@ -22,15 +18,12 @@ type ChatLayoutProps = {
   /** Optional workspace panel rendered inline on desktop and in a drawer on mobile. */
   rightPanel?: ReactNode;
   rightPanelExpanded?: boolean;
-  rightPanelAvailable?: boolean;
-  onRightPanelOpen?: () => void;
-  onRightPanelClose?: () => void;
+  rightPanelOpen?: boolean;
 };
 
 const COMPACT_RIGHT_PANEL_WIDTH = 320;
 const EXPANDED_RIGHT_PANEL_WIDTH = 720;
 const MIN_RIGHT_PANEL_WIDTH = 260;
-const MIN_CHAT_WIDTH = 420;
 
 /** Slot-based chat content arrangement inside the shared application page frame. */
 export function ChatLayout({
@@ -41,9 +34,7 @@ export function ChatLayout({
   footer,
   rightPanel,
   rightPanelExpanded = false,
-  rightPanelAvailable = false,
-  onRightPanelOpen,
-  onRightPanelClose,
+  rightPanelOpen = false,
 }: ChatLayoutProps) {
   const isMobile = useIsMobile();
 
@@ -52,8 +43,8 @@ export function ChatLayout({
       <div className="relative flex h-full min-w-0 flex-1 overflow-visible">
         <DesktopRightPanelFrame
           initialWidth={rightPanelExpanded ? EXPANDED_RIGHT_PANEL_WIDTH : COMPACT_RIGHT_PANEL_WIDTH}
+          open={rightPanelOpen}
           rightPanel={isMobile ? undefined : rightPanel}
-          onRightPanelClose={onRightPanelClose}
         >
           <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
             {main ?? (
@@ -69,19 +60,6 @@ export function ChatLayout({
             {rightPanel}
           </PanelDrawer>
         ) : null}
-        {!rightPanel && rightPanelAvailable ? (
-          <Button
-            size="icon-md"
-            variant="ghost"
-            tooltip="Open workspace files"
-            className="absolute right-2 top-2 z-10 hidden rounded-md lg:inline-flex"
-            onClick={onRightPanelOpen}
-            aria-label="Open workspace files"
-            aria-expanded="false"
-          >
-            <PanelRightIcon className="rotate-180" />
-          </Button>
-        ) : null}
       </div>
     </ViewportLayout>
   );
@@ -89,65 +67,106 @@ export function ChatLayout({
 
 function DesktopRightPanelFrame({
   initialWidth,
+  open,
   rightPanel,
   children,
-  onRightPanelClose,
 }: {
   initialWidth: number;
+  open: boolean;
   rightPanel?: ReactNode;
   children: ReactNode;
-  onRightPanelClose?: () => void;
 }) {
-  const rightPanelRef = usePanelRef();
+  const frameRef = useRef<HTMLDivElement>(null);
+  const rightPanelSlotRef = useRef<HTMLDivElement>(null);
+  const resizeCleanupRef = useRef<(() => void) | undefined>(undefined);
   const hasRightPanel = rightPanel !== undefined;
-  const previousInitialWidthRef = useRef(initialWidth);
-  const previousHasRightPanelRef = useRef(hasRightPanel);
 
   useEffect(() => {
-    const previousInitialWidth = previousInitialWidthRef.current;
-    const previouslyHadRightPanel = previousHasRightPanelRef.current;
-    previousInitialWidthRef.current = initialWidth;
-    previousHasRightPanelRef.current = hasRightPanel;
-    if (hasRightPanel && previouslyHadRightPanel && previousInitialWidth !== initialWidth) {
-      rightPanelRef.current?.resize(initialWidth);
+    frameRef.current?.style.setProperty('--chat-right-panel-width', `${initialWidth}px`);
+    return () => resizeCleanupRef.current?.();
+  }, [initialWidth]);
+
+  const setPanelWidth = (requestedWidth: number, frameWidth?: number) => {
+    const frame = frameRef.current;
+    if (!frame) return;
+
+    const availableWidth = frameWidth ?? frame.getBoundingClientRect().width;
+    const maximumWidth = Math.min(EXPANDED_RIGHT_PANEL_WIDTH, Math.max(0, availableWidth - 16));
+    const minimumWidth = Math.min(MIN_RIGHT_PANEL_WIDTH, maximumWidth);
+    const nextWidth = Math.min(maximumWidth, Math.max(minimumWidth, requestedWidth));
+    frame.style.setProperty('--chat-right-panel-width', `${nextWidth}px`);
+  };
+
+  const startResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const panelSlot = rightPanelSlotRef.current;
+    if (!panelSlot) return;
+
+    event.preventDefault();
+    resizeCleanupRef.current?.();
+    frameRef.current?.setAttribute('data-panel-gesture', 'active');
+    const startX = event.clientX;
+    const startWidth = panelSlot.getBoundingClientRect().width || initialWidth;
+    const frameWidth = frameRef.current?.getBoundingClientRect().width;
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      setPanelWidth(startWidth - (moveEvent.clientX - startX), frameWidth);
+    };
+    const cleanup = () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', cleanup);
+      window.removeEventListener('pointercancel', cleanup);
+      frameRef.current?.removeAttribute('data-panel-gesture');
+      resizeCleanupRef.current = undefined;
+    };
+
+    resizeCleanupRef.current = cleanup;
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', cleanup);
+    window.addEventListener('pointercancel', cleanup);
+  };
+
+  const resizeWithKeyboard = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    const currentWidth = rightPanelSlotRef.current?.getBoundingClientRect().width || initialWidth;
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      setPanelWidth(currentWidth + 24);
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      setPanelWidth(currentWidth - 24);
     }
-  }, [hasRightPanel, initialWidth, rightPanelRef]);
+  };
 
   return (
-    <PanelGroup className="h-full min-h-0 w-full min-w-0">
-      <Panel id="chat-main-slot" minSize={MIN_CHAT_WIDTH} className="min-w-0">
+    <div
+      ref={frameRef}
+      data-expanded={initialWidth === EXPANDED_RIGHT_PANEL_WIDTH}
+      className="relative h-full min-h-0 w-full min-w-0 flex-1 [--chat-right-panel-width:320px] [--chat-session-header-height:3.25rem] data-[expanded=true]:[--chat-right-panel-width:720px]"
+    >
+      <div id="chat-main-slot" className="h-full min-h-0 min-w-0">
         {children}
-      </Panel>
+      </div>
       {hasRightPanel ? (
-        <>
-          <PanelSeparator />
-          <Panel
-            id="chat-right-slot"
-            panelRef={rightPanelRef}
-            minSize={MIN_RIGHT_PANEL_WIDTH}
-            defaultSize={initialWidth}
-            groupResizeBehavior="preserve-pixel-size"
-            className="min-w-0"
+        <div
+          ref={rightPanelSlotRef}
+          id="chat-right-slot"
+          data-open={open}
+          aria-hidden={!open}
+          inert={!open}
+          className="absolute right-0 top-[calc(var(--chat-session-header-height)+0.5rem)] z-20 flex max-h-[70dvh] w-(--chat-right-panel-width) max-w-[calc(100%-1rem)] min-w-0 p-2 opacity-100 transition-[width,opacity,translate] duration-220 ease-[cubic-bezier(0.32,0.72,0,1)] data-[open=false]:pointer-events-none data-[open=false]:translate-x-2 data-[open=false]:opacity-0 motion-reduce:transition-none in-data-[panel-gesture=active]:transition-none"
+        >
+          <button
+            type="button"
+            className="group absolute inset-y-2 left-2 z-20 flex w-2 -translate-x-1/2 cursor-col-resize touch-none items-center justify-center focus-visible:outline-hidden"
+            onPointerDown={startResize}
+            onKeyDown={resizeWithKeyboard}
+            aria-label="Resize workspace files"
           >
-            <div className="relative h-full min-w-0">
-              {rightPanel}
-              {onRightPanelClose ? (
-                <Button
-                  size="icon-md"
-                  variant="ghost"
-                  tooltip="Close workspace files"
-                  className="absolute right-2 top-2 z-10 rounded-md"
-                  onClick={onRightPanelClose}
-                  aria-label="Close workspace files"
-                  aria-expanded="true"
-                >
-                  <PanelRightIcon />
-                </Button>
-              ) : null}
-            </div>
-          </Panel>
-        </>
+            <ResizeHandleIndicator className="group-hover:opacity-100 group-focus-visible:via-accent1 group-focus-visible:opacity-100 in-data-[panel-gesture=active]:via-neutral6/45 in-data-[panel-gesture=active]:opacity-100" />
+          </button>
+          <div className="relative flex max-h-[calc(70dvh-1rem)] min-h-0 w-full overflow-hidden rounded-xl border border-border1/40 bg-surface3 shadow-main-frame">
+            {rightPanel}
+          </div>
+        </div>
       ) : null}
-    </PanelGroup>
+    </div>
   );
 }
