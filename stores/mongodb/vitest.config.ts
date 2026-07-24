@@ -1,5 +1,5 @@
 import { config } from 'dotenv';
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from '@internal/lint/vitest';
 
 // Reads stores/mongodb/.env, the same file docker compose reads. Put VOYAGE_API_KEY or
 // MONGODB_AUTOEMBED_URL there to enable the Automated Embedding tests.
