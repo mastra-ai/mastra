@@ -14,6 +14,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pkgRoot = path.resolve(here, '..');
 const webRoot = path.resolve(pkgRoot, '../web');
+const factoryUiRoot = path.resolve(pkgRoot, '../factory-ui');
+const monorepoRoot = path.resolve(pkgRoot, '../..');
 const script = path.join(pkgRoot, 'scripts', 'sync-template.mjs');
 const ALPHA_FALLBACK_PACKAGES = new Set([
   '@mastra/client-js',
@@ -52,17 +54,11 @@ beforeAll(() => {
   // Fake npm: model stable packages whose latest tag matches local source and
   // release-train packages whose matching base version is still on alpha.
   const webManifest = JSON.parse(fs.readFileSync(path.join(webRoot, 'package.json'), 'utf8'));
+  const factoryUiManifest = JSON.parse(fs.readFileSync(path.join(factoryUiRoot, 'package.json'), 'utf8'));
   linkedLocalVersions = {};
   const registryVersions: Record<string, Record<string, string>> = {};
-  for (const [name, spec] of Object.entries<string>({
-    ...webManifest.dependencies,
-    ...webManifest.devDependencies,
-  })) {
-    if (!spec.startsWith('link:')) continue;
-    const linkedManifest = JSON.parse(
-      fs.readFileSync(path.resolve(webRoot, spec.slice('link:'.length), 'package.json'), 'utf8'),
-    );
-    const localVersion = linkedManifest.version as string;
+
+  function addLinkedVersion(name: string, localVersion: string) {
     const baseVersion = localVersion.split('-')[0]!;
     linkedLocalVersions[name] = localVersion;
     registryVersions[name] = {
@@ -70,6 +66,74 @@ beforeAll(() => {
       alpha: `${baseVersion}-alpha.0`,
     };
   }
+
+  // Discover link: deps from the web manifest (server-side packages).
+  for (const [name, spec] of Object.entries<string>({
+    ...webManifest.dependencies,
+    ...webManifest.devDependencies,
+  })) {
+    if (!spec.startsWith('link:')) continue;
+    if (name.startsWith('@internal/')) continue; // private package, not resolved
+    const linkedManifest = JSON.parse(
+      fs.readFileSync(path.resolve(webRoot, spec.slice('link:'.length), 'package.json'), 'utf8'),
+    );
+    addLinkedVersion(name, linkedManifest.version as string);
+  }
+
+  // Discover workspace: deps from the factory-ui manifest (UI-side packages).
+  // These are resolved by sync-template via pnpm-workspace.yaml package glob
+  // scanning (not node_modules symlinks, which may not be installed in CI).
+  // Skip packages already discovered from web — both manifests reference the
+  // same workspace packages (e.g. @mastra/core).
+  function findWorkspacePackage(name: string): string {
+    const wsContent = fs.readFileSync(path.join(monorepoRoot, 'pnpm-workspace.yaml'), 'utf8');
+    let inPackages = false;
+    const globs: string[] = [];
+    for (const line of wsContent.split('\n')) {
+      if (/^packages:/.test(line)) {
+        inPackages = true;
+        continue;
+      }
+      if (!inPackages) continue;
+      if (line.length === 0 || line.startsWith('#')) continue;
+      if (!line.startsWith(' ')) {
+        inPackages = false;
+        continue;
+      }
+      const match = line.match(/^\s+-\s+['"]?([^'"\n]+)['"]?\s*$/);
+      if (match?.[1]) globs.push(match[1]);
+    }
+    for (const glob of globs) {
+      const parts = glob.split('/');
+      const wildcardIdx = parts.findIndex(p => p.includes('*'));
+      const baseParts = wildcardIdx === -1 ? parts : parts.slice(0, wildcardIdx);
+      const basePath = path.join(monorepoRoot, ...baseParts);
+      if (!fs.existsSync(basePath)) continue;
+      const candidates =
+        wildcardIdx === -1
+          ? [basePath]
+          : fs.readdirSync(basePath, { withFileTypes: true }).filter(e => e.isDirectory()).map(e => path.join(basePath, e.name));
+      for (const dir of candidates) {
+        const pkgJsonPath = path.join(dir, 'package.json');
+        if (!fs.existsSync(pkgJsonPath)) continue;
+        const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+        if (pkg.name === name) return dir;
+      }
+    }
+    throw new Error(`workspace package ${name} not found in pnpm-workspace.yaml`);
+  }
+
+  for (const [name, spec] of Object.entries<string>({
+    ...factoryUiManifest.dependencies,
+    ...factoryUiManifest.devDependencies,
+  })) {
+    if (!spec.startsWith('workspace:')) continue;
+    if (linkedLocalVersions[name]) continue;
+    const pkgDir = findWorkspacePackage(name);
+    const linkedManifest = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
+    addLinkedVersion(name, linkedManifest.version as string);
+  }
+
   registryVersions['@mastra/memory'] = { latest: '9.9.9', alpha: '9.9.9-alpha.0' };
 
   fakeBinDir = path.join(workDir, 'bin');
@@ -200,5 +264,28 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     const gitignore = fs.readFileSync(path.join(outDir, '.gitignore'), 'utf8');
     expect(gitignore).toContain('src/mastra/public/factory/');
     expect(gitignore).not.toContain('src/mastra/public/ui/');
+
+    // Factory-ui source: the browser application source is composed from the
+    // factory-ui package into the same established src/shared and src/web/ui
+    // paths so reciprocal imports between hooks, services, and components
+    // stay relative.
+    expect(fs.existsSync(path.join(outDir, 'src/shared'))).toBe(true);
+    expect(fs.existsSync(path.join(outDir, 'src/shared/api/config.tsx'))).toBe(true);
+    expect(fs.existsSync(path.join(outDir, 'src/web/ui'))).toBe(true);
+    expect(fs.existsSync(path.join(outDir, 'src/web/vite.config.ts'))).toBe(true);
+
+    // The private @internal/factory-ui package must never appear in the
+    // template — it is not published and template users get editable source.
+    expect(allDeps['@internal/factory-ui']).toBeUndefined();
+    for (const name of Object.keys(allDeps)) {
+      expect(name).not.toMatch(/^@internal\//);
+    }
+
+    // Factory-ui runtime/build deps are present (moved from web to factory-ui).
+    expect(allDeps.react).toBeDefined();
+    expect(allDeps['react-dom']).toBeDefined();
+    expect(allDeps['@tanstack/react-query']).toBeDefined();
+    expect(allDeps.vite).toBeDefined();
+    expect(allDeps.tailwindcss).toBeDefined();
   });
 });

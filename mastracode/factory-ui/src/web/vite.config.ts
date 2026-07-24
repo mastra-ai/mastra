@@ -10,11 +10,14 @@ import type { Plugin } from 'vite';
 const here = dirname(fileURLToPath(import.meta.url));
 
 /**
- * The standalone web package links dependencies from pnpm's store, which sits
- * outside Vite's default workspace boundary. Allow only the font package that
- * serves files in development rather than exposing the entire pnpm store.
+ * Resolve the mona-sans font package root. In the monorepo workspace the
+ * package is a pnpm symlink into the virtual store; in the standalone web
+ * host (linked via `link:`) it sits in the host's node_modules. realpathSync
+ * resolves the symlink so Vite can serve font files in dev without exposing
+ * the entire pnpm store.
  */
-const monaSansPackageRoot = realpathSync(resolve(here, '../../node_modules/@fontsource-variable/mona-sans'));
+const monaSansEntry = resolve(here, '../../node_modules/@fontsource-variable/mona-sans');
+const monaSansPackageRoot = realpathSync(monaSansEntry);
 const fsAllow = [searchForWorkspaceRoot(here), monaSansPackageRoot];
 
 /**
@@ -47,30 +50,34 @@ function runtimeConfigPlugin(): Plugin {
 }
 
 /**
- * Vite config for the MastraCode web UI.
+ * Vite config for the MastraCode Factory UI.
  *
- * In dev, `pnpm web:dev` runs `mastra factory dev` (the API server from
- * `src/mastra/index.ts` on :4111) and Vite (:5173) side by side; API paths are
- * proxied to that server so the browser uses same-origin requests in dev.
+ * In dev, `pnpm web:dev` (from mastracode/web) runs `mastra factory dev` (the
+ * API server from `src/mastra/index.ts` on :4111) and Vite (:5173) side by
+ * side; API paths are proxied to that server so the browser uses same-origin
+ * requests in dev.
  *
- * The production build outputs the static SPA to `src/mastra/public/factory`.
- * `mastra build` copies the `public/` dir next to the Mastra entry into
- * `.mastra/output/` automatically, so the build output is self-contained and
- * the API server serves the SPA same-origin at `/` (see @mastra/factory/spa-static).
+ * The production build outputs the static SPA. The standalone web host sets
+ * `MASTRACODE_OUT_DIR` to its `src/mastra/public/factory` so `mastra build`
+ * copies the `public/` dir next to the Mastra entry into `.mastra/output/`
+ * automatically, making the build self-contained and letting the API server
+ * serve the SPA same-origin at `/` (see @mastra/factory/spa-static). The host
+ * sets `MASTRACODE_ENV_DIR` so Vite loads `.env` from the host project root.
  * Hosting the SPA separately (static host / CDN, cross-origin via
  * MASTRACODE_ALLOWED_ORIGINS) remains possible.
  */
 export default defineConfig({
   root: resolve(here, 'ui'),
-  envDir: resolve(here, '../..'),
+  envDir: process.env.MASTRACODE_ENV_DIR ?? resolve(here, '../..'),
   plugins: [react(), tailwindcss(), runtimeConfigPlugin()],
   resolve: {
-    // Monorepo packages arrive via `link:` and would otherwise resolve their
-    // own react copy from the monorepo store — force a single copy from here.
+    // Monorepo packages arrive via `link:`/`workspace:` and would otherwise
+    // resolve their own react copy from the monorepo store — force a single
+    // copy from here.
     dedupe: ['react', 'react-dom', '@tanstack/react-query'],
   },
   build: {
-    outDir: resolve(here, '../mastra/public/factory'),
+    outDir: process.env.MASTRACODE_OUT_DIR ?? resolve(here, '../mastra/public/factory'),
     emptyOutDir: true,
   },
   server: {

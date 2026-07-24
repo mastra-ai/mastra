@@ -1,4 +1,4 @@
-Packages: `mastracode/sdk` (`@mastra/code-sdk`), `mastracode/tui` (`mastracode`), and standalone `mastracode/web`. Scope commands to the changed package.
+Packages: `mastracode/sdk` (`@mastra/code-sdk`), `mastracode/tui` (`mastracode`), `mastracode/factory-ui` (`@internal/factory-ui`), and standalone `mastracode/web`. Scope commands to the changed package.
 
 Build TUI dependencies from root: pnpm build:mastracode
 Test SDK and TUI: pnpm test:mastracode
@@ -7,6 +7,8 @@ Lint TUI: pnpm --filter ./mastracode/tui lint
 
 Run pnpm build:mastracode before broad tests so workspace dist artifacts exist.
 Focused TUI test: pnpm --filter ./mastracode/tui exec vitest run <test-file> --reporter=dot --bail 1
+
+Factory UI (mastracode/factory-ui): React SPA + client data layer consumed by the standalone web host via `link:`. See mastracode/factory-ui/AGENTS.md for build, typecheck, test, and MSW conventions.
 
 Unit tests are colocated under `mastracode/sdk/src` or `mastracode/tui/src`. Test the owning package first.
 

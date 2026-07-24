@@ -1,19 +1,25 @@
 #!/usr/bin/env node
 /**
- * Produces the Mastra Factory template tree from `mastracode/web`.
+ * Produces the Mastra Factory template tree from two source roots:
+ *   - `mastracode/web`          — server/deployment files (src/mastra, scripts, .env.schema)
+ *   - `mastracode/factory-ui`   — browser application source (src/shared, src/web/ui, vite.config.ts)
  *
- * The template is the web project minus monorepo coupling:
- *   - `link:` deps           -> exact versions resolved from npm
- *   - monorepo tsconfig      -> standalone tsconfig
- *   - contributor README     -> checked-in template/README.md
- *   - e2e/tests/test deps    -> stripped
- *   - monorepo-only scripts  -> user-facing scripts (dev/build/start/deploy)
- *   - .env.schema            -> also emitted as .env.example (decorators stripped)
+ * The template is a single standalone project — the web host's server tree plus
+ * the factory-ui app tree merged into the same established `src/shared` and
+ * `src/web/ui` paths. Monorepo coupling is removed:
+ *   - `link:`/`workspace:` deps -> exact versions resolved from npm
+ *   - `catalog:` deps           -> resolved from the monorepo pnpm-workspace.yaml catalog
+ *   - monorepo tsconfig         -> standalone tsconfig
+ *   - contributor README        -> checked-in template/README.md
+ *   - e2e/tests/test deps       -> stripped
+ *   - monorepo-only scripts     -> user-facing scripts (dev/build/start/deploy)
+ *   - .env.schema               -> also emitted as .env.example (decorators stripped)
+ *   - `@internal/factory-ui`    -> excluded (private package, not published)
  *
- * Versions: every `link:` dep is resolved from npm and written as an exact
- * version. The sync selects `latest` or `alpha`, whichever has the same base
- * version as the local source package, so release transitions cannot pair new
- * source with an older stable package.
+ * Versions: every `link:`/`workspace:` dep is resolved from npm and written as
+ * an exact version. The sync selects `latest` or `alpha`, whichever has the same
+ * base version as the local source package, so release transitions cannot pair
+ * new source with an older stable package.
  *
  * Usage:
  *   node scripts/sync-template.mjs [--out <dir>] [--tag <dist-tag>]
@@ -23,9 +29,9 @@
  *
  * Output defaults to `template-out/` next to this package (gitignored).
  * Publish flow: automated — the sync-softwarefactory-template workflow runs
- * this on pushes to main touching `mastracode/web`, then force-syncs the
- * softwarefactory-template repository, mirroring the templates/* sync process
- * (one-way overwrite; the monorepo is truth).
+ * this on pushes to main touching `mastracode/web` or `mastracode/factory-ui`,
+ * then force-syncs the softwarefactory-template repository, mirroring the
+ * templates/* sync process (one-way overwrite; the monorepo is truth).
  */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -35,6 +41,7 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const pkgRoot = path.resolve(here, '..');
 const webRoot = path.resolve(pkgRoot, '../web');
+const factoryUiRoot = path.resolve(pkgRoot, '../factory-ui');
 const monorepoRoot = path.resolve(pkgRoot, '../..');
 
 const args = process.argv.slice(2);
@@ -82,6 +89,96 @@ function linkSpecToRelPath(spec) {
     throw new Error(`sync-template: link spec ${spec} resolves outside the monorepo (${target})`);
   }
   return rel;
+}
+
+/**
+ * Resolve a `workspace:*` spec to the workspace package's monorepo directory
+ * (relative to monorepoRoot). Scans the `packages:` globs in pnpm-workspace.yaml
+ * to find the package by name — this works even when the workspace member's
+ * node_modules symlinks are not installed (e.g. in CI E2E contexts where only
+ * a filtered subset of the monorepo is installed).
+ *
+ * Workspace packages are discovered rather than hardcoded so a new `workspace:`
+ * dep added to factory-ui can never slip into the template untransformed.
+ */
+function findWorkspacePackageDir(name) {
+  const wsPath = path.join(monorepoRoot, 'pnpm-workspace.yaml');
+  const content = fs.readFileSync(wsPath, 'utf8');
+  let inPackages = false;
+  const globs = [];
+  for (const line of content.split('\n')) {
+    if (/^packages:/.test(line)) {
+      inPackages = true;
+      continue;
+    }
+    if (!inPackages) continue;
+    if (line.length === 0 || line.startsWith('#')) continue;
+    if (!line.startsWith(' ')) {
+      inPackages = false;
+      continue;
+    }
+    const match = line.match(/^\s+-\s+['"]?([^'"\n]+)['"]?\s*$/);
+    if (match) globs.push(match[1]);
+  }
+
+  for (const glob of globs) {
+    const parts = glob.split('/');
+    const wildcardIdx = parts.findIndex(p => p.includes('*'));
+    const baseParts = wildcardIdx === -1 ? parts : parts.slice(0, wildcardIdx);
+    const basePath = path.join(monorepoRoot, ...baseParts);
+    if (!fs.existsSync(basePath)) continue;
+
+    const candidates =
+      wildcardIdx === -1
+        ? [basePath]
+        : fs.readdirSync(basePath, { withFileTypes: true }).filter(e => e.isDirectory()).map(e => path.join(basePath, e.name));
+
+    for (const dir of candidates) {
+      const pkgJsonPath = path.join(dir, 'package.json');
+      if (!fs.existsSync(pkgJsonPath)) continue;
+      const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+      if (pkg.name === name) return path.relative(monorepoRoot, dir);
+    }
+  }
+
+  throw new Error(`sync-template: workspace dep ${name} not found in pnpm-workspace.yaml packages`);
+}
+
+function workspaceSpecToRelPath(name) {
+  return findWorkspacePackageDir(name);
+}
+
+/** Private monorepo packages that must never appear in the generated template. */
+const PRIVATE_PACKAGES = new Set(['@internal/factory-ui']);
+
+/**
+ * Parse the default `catalog:` section from the monorepo's pnpm-workspace.yaml.
+ * Catalog entries map package names to version specs (exact or range); these
+ * replace `catalog:` specs in the factory-ui manifest so the standalone
+ * template has no monorepo-only protocol specs.
+ */
+function readCatalog() {
+  const wsPath = path.join(monorepoRoot, 'pnpm-workspace.yaml');
+  const content = fs.readFileSync(wsPath, 'utf8');
+  const catalog = {};
+  let inCatalog = false;
+  for (const line of content.split('\n')) {
+    if (/^catalog:/.test(line)) {
+      inCatalog = true;
+      continue;
+    }
+    if (!inCatalog) continue;
+    // Blank lines and comments are tolerated within the section.
+    if (line.length === 0 || line.startsWith('#')) continue;
+    // A non-indented line ends the catalog section.
+    if (!line.startsWith(' ')) {
+      inCatalog = false;
+      continue;
+    }
+    const match = line.match(/^\s+([@\w./-]+):\s*(.+)$/);
+    if (match) catalog[match[1]] = match[2].trim();
+  }
+  return catalog;
 }
 
 /** devDependencies that only support the monorepo test suites. */
@@ -209,6 +306,7 @@ function resolveLinkedVersion(name, localVersion) {
 
 function transformPackageJson() {
   const manifest = JSON.parse(fs.readFileSync(path.join(webRoot, 'package.json'), 'utf8'));
+  const factoryUiManifest = JSON.parse(fs.readFileSync(path.join(factoryUiRoot, 'package.json'), 'utf8'));
 
   manifest.name = 'mastra-factory';
   manifest.version = '0.1.0';
@@ -229,20 +327,60 @@ function transformPackageJson() {
     deploy: 'mastra deploy',
   };
 
-  // Resolve each linked package from a published release with the same base
-  // version as its local source. Immediately after exiting prerelease mode,
-  // `latest` can still point at the previous stable release while `alpha`
-  // contains the package matching the newly-stable local source version.
-  console.log('sync-template: resolving published versions for link: deps...');
+  // The private @internal/factory-ui package is a build-time link from the web
+  // host — it is not published and must never appear in the template manifest.
+  // Its deps (React, Vite, Tailwind, etc.) are merged from its own manifest
+  // below.
+  for (const section of ['dependencies', 'devDependencies']) {
+    for (const name of PRIVATE_PACKAGES) {
+      delete manifest[section]?.[name];
+    }
+  }
+
+  // Merge the factory-ui manifest's deps into the web manifest. The web host
+  // no longer carries React/Vite/Tailwind etc. — those live in factory-ui now.
+  // Skip private packages and deps already present from web (the web host
+  // carries the server's @mastra/* link: deps, which are resolved below).
+  const catalog = readCatalog();
+  for (const section of ['dependencies', 'devDependencies']) {
+    const uiDeps = factoryUiManifest[section];
+    if (!uiDeps) continue;
+    const target = (manifest[section] ??= {});
+    for (const [name, spec] of Object.entries(uiDeps)) {
+      if (PRIVATE_PACKAGES.has(name)) continue;
+      if (target[name] !== undefined) continue; // web manifest wins for shared deps
+      target[name] = spec;
+    }
+  }
+
+  // Resolve each linked/workspace package from a published release with the
+  // same base version as its local source. Immediately after exiting
+  // prerelease mode, `latest` can still point at the previous stable release
+  // while `alpha` contains the package matching the newly-stable local source
+  // version.
+  console.log('sync-template: resolving published versions for link:/workspace: deps...');
   for (const section of ['dependencies', 'devDependencies']) {
     const deps = manifest[section];
     if (!deps) continue;
     for (const [name, spec] of Object.entries(deps)) {
-      if (!spec.startsWith('link:')) continue;
-      const localVersion = linkedPackageVersion(name, linkSpecToRelPath(spec));
-      const { version, tag } = resolveLinkedVersion(name, localVersion);
-      deps[name] = version;
-      console.log(`  ✓ ${name}@${version} (${tag})`);
+      if (spec.startsWith('link:')) {
+        const localVersion = linkedPackageVersion(name, linkSpecToRelPath(spec));
+        const { version, tag } = resolveLinkedVersion(name, localVersion);
+        deps[name] = version;
+        console.log(`  ✓ ${name}@${version} (${tag})`);
+      } else if (spec.startsWith('workspace:')) {
+        const localVersion = linkedPackageVersion(name, workspaceSpecToRelPath(name));
+        const { version, tag } = resolveLinkedVersion(name, localVersion);
+        deps[name] = version;
+        console.log(`  ✓ ${name}@${version} (${tag}, workspace)`);
+      } else if (spec.startsWith('catalog:')) {
+        const catalogVersion = catalog[name];
+        if (!catalogVersion) {
+          throw new Error(`sync-template: catalog spec ${name}@${spec} has no entry in pnpm-workspace.yaml catalog`);
+        }
+        deps[name] = catalogVersion;
+        console.log(`  ✓ ${name}@${catalogVersion} (catalog)`);
+      }
     }
   }
 
@@ -440,8 +578,12 @@ if (!fs.existsSync(path.join(webRoot, 'package.json'))) {
   console.error(`sync-template: web project not found at ${webRoot}`);
   process.exit(1);
 }
+if (!fs.existsSync(path.join(factoryUiRoot, 'package.json'))) {
+  console.error(`sync-template: factory-ui package not found at ${factoryUiRoot}`);
+  process.exit(1);
+}
 
-console.log(`sync-template: ${webRoot} -> ${outDir}`);
+console.log(`sync-template: ${webRoot} + ${factoryUiRoot} -> ${outDir}`);
 // Clear the output tree but keep its .git — template-out doubles as the
 // checkout that pushes to the template repo, and deleting .git would make
 // git commands silently fall through to the enclosing monorepo repo.
@@ -451,7 +593,11 @@ if (fs.existsSync(outDir)) {
     fs.rmSync(path.join(outDir, entry), { recursive: true, force: true });
   }
 }
+// Copy server/deployment files from the web host (src/mastra, scripts, .env.schema).
 copyTree(webRoot, outDir);
+// Copy the browser application source from factory-ui into the same established
+// src/shared and src/web/ui paths so the 200+ reciprocal imports stay relative.
+copyTree(path.join(factoryUiRoot, 'src'), path.join(outDir, 'src'), 'src');
 transformPackageJson();
 writeTsconfig();
 stripTestingTypesFromUiTsconfig();

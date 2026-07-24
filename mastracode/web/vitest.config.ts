@@ -1,9 +1,9 @@
 import { defineConfig } from 'vitest/config';
 
 /**
- * Unit tests colocated under `src/**`. The two e2e suites live under `e2e/`
- * with their own explicit `--config`s (node scenarios and jsdom MSW tests);
- * their globs are disjoint from this one.
+ * Unit tests colocated under `src/**`. The server/controller scenario suite
+ * lives under `e2e/web/` with its own explicit `--config`; its globs are
+ * disjoint from this one. UI/MSW tests live in mastracode/factory-ui.
  */
 export default defineConfig({
   test: {

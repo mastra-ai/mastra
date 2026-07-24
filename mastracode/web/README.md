@@ -1,8 +1,8 @@
 # mastracode-web
 
-The Mastra Code web surface: API routes (config/fs/GitHub/Linear), a deployable Mastra entry (`src/mastra/index.ts`), and the SPA UI. Built on [`@mastra/code-sdk`](../sdk). One factory storage backend persists agent state (threads, messages, and memory) and web app data. When `DATABASE_URL` is set, a separate `PgVector` uses the same PostgreSQL database for recall search; explicit local development and test runs use the SDK's local LibSQL database without vector storage. (`APP_DATABASE_URL` is honored as a deprecated fallback.)
+The Mastra Code web host: API routes (config/fs/GitHub/Linear), a deployable Mastra entry (`src/mastra/index.ts`), and server/controller scenario tests. The SPA UI lives in [`mastracode/factory-ui`](../factory-ui) (`@internal/factory-ui`), linked via `link:` — the host delegates UI development and building to that package. Built on [`@mastra/code-sdk`](../sdk). One factory storage backend persists agent state (threads, messages, and memory) and web app data. When `DATABASE_URL` is set, a separate `PgVector` uses the same PostgreSQL database for recall search; explicit local development and test runs use the SDK's local LibSQL database without vector storage. (`APP_DATABASE_URL` is honored as a deprecated fallback.)
 
-This is a **standalone pnpm project** (own lockfile, not a monorepo workspace member). For development, the monorepo-provided packages (`@mastra/*`, `mastra`) are consumed via `link:` specs pointing at the monorepo directories, so you always develop against local source. For builds, `scripts/monorepo-deps.mjs` temporarily pins those deps to the exact versions found in the monorepo (see below).
+This is a **standalone pnpm project** (own lockfile, not a monorepo workspace member). For development, the monorepo-provided packages (`@mastra/*`, `mastra`) are consumed via `link:` specs pointing at the monorepo directories, so you always develop against local source. The `@internal/factory-ui` package is a monorepo workspace member that carries the React SPA, Vite config, client data layer, and UI tests. For builds, `scripts/monorepo-deps.mjs` temporarily pins the `link:` deps to the exact versions found in the monorepo (see below).
 
 ## Setup
 
@@ -23,6 +23,8 @@ pnpm web:dev
 - API server (`mastra factory dev`) on **:4111**, env loaded/validated by varlock from `.env` against `.env.schema` (package root).
 - Vite SPA on **:5173**, proxying `/api`, `/web`, and `/auth/` to the API server.
 
+The SPA is built and served by Vite using the config in `mastracode/factory-ui/src/web/vite.config.ts`. The host sets `MASTRACODE_ENV_DIR` (its project root for `.env`) and `MASTRACODE_OUT_DIR` (its `src/mastra/public/factory` for the SPA artifact) when invoking Vite. See [`mastracode/factory-ui/AGENTS.md`](../factory-ui/AGENTS.md) for UI build, typecheck, and test commands.
+
 To test the production-like, same-origin setup on port 5173 with one long-running process, build the SPA once and serve it from the Factory API server:
 
 ```bash
@@ -40,9 +42,9 @@ pnpm web:build
 ```
 
 1. `prebuild` — builds the linked monorepo packages via turbo.
-2. Vite builds the SPA to `src/mastra/public/factory/`.
+2. Vite builds the SPA (via `mastracode/factory-ui`) to `src/mastra/public/factory/`. The host sets `MASTRACODE_ENV_DIR` and `MASTRACODE_OUT_DIR` so Vite reads `.env` from the web project root and emits the SPA artifact into the server's public directory.
 3. `scripts/monorepo-deps.mjs run -- mastra build --dir src/mastra` — pins the `link:` deps to the **exact versions found in the monorepo** (read from each linked package's `package.json`), runs the build, then always restores the `link:` specs (also on failure/Ctrl-C). The build calls `build:ui` (step 2) automatically when a Factory entry is detected, bundles the API server to `.mastra/output/`, and copies `public/` (including the SPA) into it automatically.
-4. The server serves the SPA same-origin at `/` (see `src/web/spa-static.ts`).
+4. The server serves the SPA same-origin at `/` (see `src/mastra/public/factory/`).
 
 The deploy output's `package.json` therefore pins the exact monorepo versions of `@mastra/*`, so a production deploy `npm install`s them straight from npm — those versions must be published (CI releases alphas). **Known limitation:** until `@mastra/code-sdk` has a proper npm release (changeset queued), the build's final output-deps install step fails on `@mastra/code-sdk@0.0.0`; the bundle, SPA, and output `package.json` are still produced correctly before that step.
 
@@ -62,8 +64,9 @@ This runs `web:build` (pinned versions, as above), validates the output (server 
 
 ```bash
 pnpm web:test     # server scenario tests (e2e/web)
-pnpm web:ui:test  # UI MSW tests (e2e/web-ui)
 ```
+
+UI MSW tests (`*.msw.test.tsx`) and unit tests live in [`mastracode/factory-ui`](../factory-ui). Run them with `pnpm --filter ./mastracode/factory-ui test` (or `test:unit` / `test:msw` for focused suites).
 
 ## Factories, bindings, and repositories
 
@@ -97,7 +100,7 @@ The private Web API can activate a user-invocable skill on an existing scoped Ag
 
 ## Factory metrics
 
-The **Metrics** page at `/factories/:factoryId/metrics` shows queue health for the active Factory. The Queue Health Chart contains one horizontal bar per Work stage. Each bar is segmented by item age and overlays diagonal stripes where agent work is active. Selecting a segment filters the item list below the chart. Age comes from the open `stageHistory` entry and falls back to `createdAt`. The pure `computeQueueHealth()` function in `src/web/ui/domains/factory/queue-health.ts` performs the client-side aggregation.
+The **Metrics** page at `/factories/:factoryId/metrics` shows queue health for the active Factory. The Queue Health Chart contains one horizontal bar per Work stage. Each bar is segmented by item age and overlays diagonal stripes where agent work is active. Selecting a segment filters the item list below the chart. Age comes from the open `stageHistory` entry and falls back to `createdAt`. The pure `computeQueueHealth()` function in `mastracode/factory-ui/src/web/ui/domains/factory/queue-health.ts` performs the client-side aggregation.
 
 Queue age thresholds are server-side Factory project config in seconds. `GET /web/factory/projects/:factoryProjectId/health/thresholds` reads them from the `queue-health` storage domain. The `queue_health_settings` table keys records by `(org_id, factory_project_id)`. Defaults are `[14400, 86400, 259200]` (4h, 24h, and 72h). `saveConfig` rejects empty or non-ascending `thresholdsSeconds` values.
 
@@ -106,8 +109,8 @@ Queue age thresholds are server-side Factory project config in seconds. `GET /we
 `MastraFactory` accepts one authoritative `rules` tree for Work and Review stage entry and exit, completed tool results, and normalized GitHub events. Construct it with `defaultFactoryRules()` so every deployment policy has an explicit version:
 
 ```ts
-import { MastraFactory } from './src/web/factory-entry.js';
-import { defaultFactoryRules } from './src/web/factory/rules/index.js';
+import { MastraFactory } from '@mastra/factory';
+import { defaultFactoryRules } from '@mastra/factory/rules';
 
 const rules = defaultFactoryRules({
   version: '2026-07-18.1',

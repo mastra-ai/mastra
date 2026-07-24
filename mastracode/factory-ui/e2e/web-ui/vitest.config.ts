@@ -9,8 +9,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 /**
  * jsdom test project for the TanStack Query hooks + settings components.
  *
- * This is intentionally SEPARATE from `e2e/web/vitest.config.ts` (the
- * node-environment scenario suite that folds the real SSE stream). The globs
+ * This is intentionally SEPARATE from the node-environment scenario suite that
+ * stays in `mastracode/web/e2e/web/` (folds the real SSE stream). The globs
  * are disjoint — this project only picks up `*.msw.test.tsx` — so the two
  * suites never cross-pick each other's files.
  *
