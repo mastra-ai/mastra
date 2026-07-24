@@ -438,6 +438,7 @@ export const experimentResultResponseSchema = z.object({
   traceId: z.string().nullable(),
   status: z.enum(['needs-review', 'reviewed', 'complete']).nullable().optional(),
   tags: z.array(z.string()).nullable().optional(),
+  comment: z.string().nullable().optional(),
   toolMockReport: toolMockReportSchema.nullable(),
   createdAt: z.coerce.date(),
 });
@@ -445,6 +446,7 @@ export const experimentResultResponseSchema = z.object({
 export const updateExperimentResultBodySchema = z.object({
   status: z.enum(['needs-review', 'reviewed', 'complete']).nullable().optional(),
   tags: z.array(z.string()).optional(),
+  comment: z.string().nullable().optional(),
 });
 
 // Comparison item schema (MVP shape)

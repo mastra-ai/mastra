@@ -34,7 +34,7 @@ export const useDatasetReviewItems = (datasetId: string) => {
                 traceId: r.traceId ?? undefined,
                 scores: r.scores ? Object.fromEntries(r.scores.map(s => [s.scorerId, s.score ?? 0])) : {},
                 tags: r.tags ?? [],
-                comment: '',
+                comment: r.comment ?? '',
               }));
           } catch {
             return [];
@@ -80,7 +80,7 @@ export const useDatasetCompletedItems = (datasetId: string) => {
                 traceId: r.traceId ?? undefined,
                 scores: r.scores ? Object.fromEntries(r.scores.map(s => [s.scorerId, s.score ?? 0])) : {},
                 tags: r.tags ?? [],
-                comment: '',
+                comment: r.comment ?? '',
               }));
           } catch {
             return [];

@@ -2965,6 +2965,7 @@ type Shared_Type_134 = {
   traceId: string | null;
   status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
   tags?: (string[] | null) | undefined;
+  comment?: (string | null) | undefined;
   /** Diagnostic receipt for item-level tool mocks */
   toolMockReport?: (Shared_Type_133 | undefined) | null;
   createdAt: Date;
@@ -17627,6 +17628,7 @@ export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_PathPar
 export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Body = {
   status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
   tags?: string[] | undefined;
+  comment?: (string | null) | undefined;
 };
 
 export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Response = Shared_Type_134;

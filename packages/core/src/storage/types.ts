@@ -2783,6 +2783,7 @@ export interface ExperimentResult {
   traceId: string | null;
   status: ExperimentResultStatus | null;
   tags: string[] | null;
+  comment?: string | null;
   toolMockReport?: DatasetToolMockReport | null;
   /** Multi-tenant organization/account scope. Denormalized from the parent experiment for efficient tenancy-scoped queries. */
   organizationId?: string | null;
@@ -2797,6 +2798,7 @@ export interface UpdateExperimentResultInput {
   experimentId?: string;
   status?: ExperimentResultStatus | null;
   tags?: string[] | null;
+  comment?: string | null;
 }
 
 export interface CreateExperimentInput {

@@ -79,6 +79,7 @@ function rowToExperimentResult(row: Record<string, any>): ExperimentResult {
     traceId: t.traceId ?? null,
     status: (t.status ?? null) as ExperimentResult['status'],
     tags: (t.tags ?? null) as string[] | null,
+    comment: (t.comment ?? null) as string | null,
     toolMockReport: (t.toolMockReport ?? null) as ExperimentResult['toolMockReport'],
     createdAt: toDate(t.createdAt),
   };
@@ -119,7 +120,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
     await this.db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: TABLE_SCHEMAS[TABLE_EXPERIMENT_RESULTS],
-      ifNotExists: ['organizationId', 'projectId'],
+      ifNotExists: ['comment', 'organizationId', 'projectId'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -536,7 +537,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
 
   async updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult> {
     try {
-      if (input.status === undefined && input.tags === undefined) {
+      if (input.status === undefined && input.tags === undefined && input.comment === undefined) {
         const existing = await this.getExperimentResultById({ id: input.id });
         // Honor the experimentId scope even on the no-op path: a result that
         // belongs to a different experiment must not be returned.
@@ -564,6 +565,11 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         setClauses.push(`${quoteIdent('tags', 'column name')} = @tags`);
         params.tags = input.tags === null ? null : JSON.stringify(input.tags);
         types.tags = 'json';
+      }
+      if (input.comment !== undefined) {
+        setClauses.push(`${quoteIdent('comment', 'column name')} = @comment`);
+        params.comment = input.comment;
+        if (input.comment === null) types.comment = 'string';
       }
       const whereClauses = [`${quoteIdent('id', 'column name')} = @id`];
       if (input.experimentId !== undefined) {

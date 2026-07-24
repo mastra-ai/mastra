@@ -790,7 +790,7 @@ export const UPDATE_EXPERIMENT_RESULT_ROUTE = createRoute({
   bodySchema: updateExperimentResultBodySchema,
   responseSchema: experimentResultResponseSchema,
   summary: 'Update an experiment result',
-  description: 'Updates the status and/or tags on an experiment result',
+  description: 'Updates the status, tags, and/or comment on an experiment result',
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, resultId, experimentId, ...params }) => {
@@ -810,6 +810,7 @@ export const UPDATE_EXPERIMENT_RESULT_ROUTE = createRoute({
         experimentId,
         status: params.status,
         tags: params.tags,
+        comment: params.comment,
       });
 
       return result;
