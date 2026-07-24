@@ -1,3 +1,8 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import type { Client } from '@libsql/client';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 describe('getStorageConfig', () => {
@@ -144,6 +149,27 @@ describe('createStorage', () => {
     expect(result.storage.constructor.name).toBe('LibSQLStore');
     expect(result.backend).toBe('libsql');
     expect(result.warning).toBeUndefined();
+  });
+
+  it('uses DELETE journaling for the shared local Mastra Code database', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mastracode-storage-mode-'));
+    const dbPath = path.join(tmpDir, 'mastra.db');
+    const { createStorage } = await import('../storage-factory.js');
+    const result = await createStorage({
+      backend: 'libsql',
+      url: `file:${dbPath}`,
+      isRemote: false,
+    });
+
+    try {
+      await result.storage.init();
+      const client = (result.storage as unknown as { client: Client }).client;
+      const mode = await client.execute('PRAGMA journal_mode;');
+      expect(Object.values(mode.rows[0] ?? {})[0]).toBe('delete');
+    } finally {
+      await result.storage.close?.();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   it('falls back to LibSQL with warning when pg has no connection info', async () => {

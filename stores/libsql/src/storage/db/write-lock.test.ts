@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { Client } from '@libsql/client';
+import { createClient } from '@libsql/client';
+import type { Client, Transaction } from '@libsql/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { LibSQLStore } from '..';
@@ -236,6 +237,114 @@ describe('LibSQL observational-memory write-lock regression', () => {
     // The workflow snapshot must also survive the contention.
     const snapshot = await workflows.loadWorkflowSnapshot({ workflowName, runId });
     expect(snapshot).toBeDefined();
+  });
+
+  it('does not roll back a message save that races a failing OM buffer transaction', async () => {
+    const rawClient = createClient({ url: `file:${path.join(tmpDir, 'om-message-race.db')}` });
+    let pauseNextTransaction = false;
+    let transactionStarted!: () => void;
+    let resumeTransaction!: () => void;
+    const transactionStartedPromise = new Promise<void>(resolve => {
+      transactionStarted = resolve;
+    });
+    const resumeTransactionPromise = new Promise<void>(resolve => {
+      resumeTransaction = resolve;
+    });
+
+    const client = new Proxy(rawClient, {
+      get(target, property) {
+        if (property === 'transaction') {
+          return async (...args: Parameters<Client['transaction']>) => {
+            const transaction = await target.transaction(...args);
+            if (!pauseNextTransaction) return transaction;
+            pauseNextTransaction = false;
+
+            let paused = false;
+            return new Proxy(transaction, {
+              get(transactionTarget, transactionProperty) {
+                const value = Reflect.get(transactionTarget, transactionProperty, transactionTarget);
+                if (transactionProperty === 'execute' && typeof value === 'function') {
+                  return async (...executeArgs: Parameters<Transaction['execute']>) => {
+                    if (!paused) {
+                      paused = true;
+                      transactionStarted();
+                      await resumeTransactionPromise;
+                    }
+                    return value.apply(transactionTarget, executeArgs);
+                  };
+                }
+                return typeof value === 'function' ? value.bind(transactionTarget) : value;
+              },
+            });
+          };
+        }
+
+        const value = Reflect.get(target, property, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+
+    store = new LibSQLStore({ id: 'om-message-race', client });
+    const memory = store.stores.memory!;
+    await memory.init();
+
+    const threadId = `thread-${randomUUID()}`;
+    const resourceId = `resource-${randomUUID()}`;
+    await memory.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'OM race',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+
+    pauseNextTransaction = true;
+    const failingBuffer = memory
+      .updateBufferedObservations({
+        id: 'missing-om-record',
+        chunk: {
+          cycleId: `cycle-${randomUUID()}`,
+          observations: 'will roll back',
+          tokenCount: 50,
+          messageIds: ['buffer-message'],
+          messageTokens: 100,
+          lastObservedAt: new Date(),
+        },
+      })
+      .catch(error => error);
+
+    await transactionStartedPromise;
+
+    const messageId = `message-${randomUUID()}`;
+    const savedMessage = memory.saveMessages({
+      messages: [
+        {
+          id: messageId,
+          threadId,
+          resourceId,
+          role: 'user',
+          type: 'v2',
+          content: { format: 2, parts: [{ type: 'text', text: 'survive OM rollback' }] },
+          createdAt: new Date(),
+        },
+      ],
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 25));
+    resumeTransaction();
+
+    await expect(failingBuffer).resolves.toBeInstanceOf(Error);
+    await expect(savedMessage).resolves.toBeDefined();
+
+    const persisted = await memory.listMessagesById({ messageIds: [messageId] });
+    expect(persisted.messages).toHaveLength(1);
+    expect(persisted.messages[0]?.id).toBe(messageId);
+
+    const integrity = await rawClient.execute('PRAGMA quick_check');
+    expect(integrity.rows[0]?.quick_check).toBe('ok');
   });
 
   // Verifies that a failed OM operation does not contaminate or roll back
