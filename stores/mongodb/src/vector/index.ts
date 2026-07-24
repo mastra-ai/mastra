@@ -731,7 +731,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * `createSearchIndex` with the default name and a `fields` mapping would hit
    * `IndexAlreadyExists` and silently keep the dynamic mapping. To make `fields` take effect,
    * when `fields` is provided and no explicit `searchIndexName` is given, the field-mapped
-   * index is created under a DISTINCT name (`${collectionName}_search_fields_index`) and
+   * index is created under a DISTINCT name (`${collectionName}_${indexName}_search_fields_index`,
+   * unique per logical index so two logical indexes on one collection do not collide) and
    * persisted as the text-search index, so `textQuery`/`hybridQuery` use the restricted
    * mapping instead of the dynamic one. Pass `searchIndexName` to override the name explicitly.
    */
@@ -856,7 +857,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
   /**
    * Run a hybrid search that fuses vector similarity and full-text (BM25) results
-   * using MongoDB's server-side $rankFusion aggregation stage (requires MongoDB >= 8.1).
+   * using MongoDB's server-side $rankFusion aggregation stage. Requires MongoDB >= 8.0
+   * (see {@link assertRankFusionSupported}: generally available from 8.1; on 8.0.x it may
+   * need a MongoDB support case to enable, and runs where enabled, e.g. Atlas 8.0.x).
    */
   async hybridQuery(params: {
     indexName: string;

@@ -284,7 +284,7 @@ Provisions an Atlas Search (BM25/full-text) index on the collection backing an i
 
 Naming:
 
-- When `fields` is provided **without** an explicit `searchIndexName`, the field-mapped index is created under a **distinct** default name (`${collectionName}_search_fields_index`) so it does not collide with — and get silently ignored by — a managed collection's auto-created dynamic index. This distinct index is persisted as the text-search index, so `textQuery()`/`hybridQuery()` use the restricted mapping automatically.
+- When `fields` is provided **without** an explicit `searchIndexName`, the field-mapped index is created under a **distinct** default name (`${collectionName}_${indexName}_search_fields_index`, unique per logical index) so it does not collide with — and get silently ignored by — a managed collection's auto-created dynamic index. This distinct index is persisted as the text-search index, so `textQuery()`/`hybridQuery()` use the restricted mapping automatically.
 - When `searchIndexName` is provided, that exact name is used and persisted. `textQuery()`/`hybridQuery()` resolve the persisted name automatically; you can also override the name per call via their `searchIndexName` / `textSearchIndexName` parameters.
 
 <PropertiesTable
@@ -433,7 +433,7 @@ const results = await store.textQuery({
 
 ### `hybridQuery()`
 
-Runs a hybrid search that fuses vector similarity and full-text results using MongoDB's server-side `$rankFusion` (requires MongoDB >= 8.1). A full-text search index must exist: it is auto-created for managed indexes, but for a bring-your-own collection you must call `createSearchIndex()` first (opt-in).
+Runs a hybrid search that fuses vector similarity and full-text results using MongoDB's server-side `$rankFusion` (requires MongoDB >= 8.0; generally available from 8.1, and on 8.0.x it may need a MongoDB support case to enable — it runs where enabled, e.g. Atlas 8.0.x). A full-text search index must exist: it is auto-created for managed indexes, but for a bring-your-own collection you must call `createSearchIndex()` first (opt-in).
 
 <PropertiesTable
   content={[
@@ -512,7 +512,7 @@ const results = await store.hybridQuery({
 })
 ```
 
-**Note:** `hybridQuery()` requires MongoDB >= 8.1 for the `$rankFusion` stage. If you're running an older version, use `query()` and `textQuery()` separately and merge the results client-side.
+**Note:** `hybridQuery()` requires MongoDB >= 8.0 for the `$rankFusion` stage (generally available from 8.1; on 8.0.x it may need a MongoDB support case to enable, and runs where enabled, such as Atlas 8.0.x). If you're running an older version, or `$rankFusion` is not enabled on your 8.0.x deployment, use `query()` and `textQuery()` separately and merge the results client-side.
 
 ### `describeIndex()`
 
