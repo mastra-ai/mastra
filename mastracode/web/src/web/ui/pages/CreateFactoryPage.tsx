@@ -10,6 +10,7 @@ import { useCreateFactoryMutation } from '../../../shared/hooks/useFactories';
 import { connectLinear } from '../domains/factory/services/linear';
 import { FactoryNameStep } from '../domains/workspaces/components/FactoryNameStep';
 import { FactorySetupShell } from '../domains/workspaces/components/FactorySetupShell';
+import { ModelProviderFactoryStep } from '../domains/workspaces/components/ModelProviderFactoryStep';
 import { ProjectManagementFactoryStep } from '../domains/workspaces/components/ProjectManagementFactoryStep';
 import { VcsFactoryStep } from '../domains/workspaces/components/VcsFactoryStep';
 import { useConnectFactoryRepository } from '../domains/workspaces/hooks/useConnectFactoryRepository';
@@ -27,11 +28,12 @@ const STEP_TITLES = {
   name: 'Name your new Factory.',
   vcs: 'Choose your codebase.',
   'project-management': 'Connect the work behind the code.',
+  'model-provider': 'Choose your Factory model.',
 } as const;
 
 /**
  * Full-screen Create Factory wizard (`/factories/create`): Name → VCS →
- * Project management, mirroring onboarding. The factory is created up-front on
+ * Project management → Model provider, mirroring onboarding. The factory is created up-front on
  * the name step so the GitHub OAuth redirect can resume mid-flow (see
  * `useCreateFactoryFlow`) and repo linking has a target. Back/Escape return to
  * the previous page via history; deep links fall back to `/`.
@@ -47,7 +49,6 @@ export function CreateFactoryPage() {
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [connectingRepositoryId, setConnectingRepositoryId] = useState<number | null>(null);
   const [githubRedirecting, setGithubRedirecting] = useState(false);
-  const [finishing, setFinishing] = useState(false);
 
   const pendingFactory = flow.state?.pendingFactory;
   const linkRepository = useConnectFactoryRepository({
@@ -96,14 +97,12 @@ export function CreateFactoryPage() {
       return;
     }
     setCompletionError(null);
-    setFinishing(true);
     try {
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
       await flow.clear();
       void navigate(factoryHomePath(pendingFactory));
     } catch (error) {
       setCompletionError(errorMessage(error));
-      setFinishing(false);
     }
   };
 
@@ -113,7 +112,9 @@ export function CreateFactoryPage() {
       ? 'A Factory owns its board, metrics, and audit trail. You can connect repositories in the next step.'
       : step === 'vcs'
         ? `Connect GitHub, then select the repository to link to ${pendingFactory?.name ?? 'your Factory'}.`
-        : undefined;
+        : step === 'model-provider'
+          ? 'Connect a provider and select the default model for Factory runs.'
+          : undefined;
 
   return (
     <FactorySetupShell
@@ -127,7 +128,10 @@ export function CreateFactoryPage() {
       {step && (
         <>
           <FactorySetupShell.Header title={STEP_TITLES[step]} description={stepDescription}>
-            <FactorySetupShell.Progress steps={['name', 'vcs', 'project-management']} current={step} />
+            <FactorySetupShell.Progress
+              steps={['name', 'vcs', 'project-management', 'model-provider']}
+              current={step}
+            />
           </FactorySetupShell.Header>
           <FactorySetupShell.Step stepKey={step}>
             {step === 'name' && (
@@ -155,15 +159,20 @@ export function CreateFactoryPage() {
                 onSelectRepository={repo => void chooseRepository(repo)}
               />
             )}
-            {step === 'project-management' && (
+            {step === 'project-management' && pendingFactory && (
               <ProjectManagementFactoryStep
-                completionError={completionError}
-                finishing={finishing}
                 onConnect={() => {
                   flow.persistBeforeRedirect();
                   connectLinear(baseUrl);
                 }}
-                onFinish={() => void finish()}
+                onContinue={() => void flow.advanceToModelProvider(pendingFactory)}
+              />
+            )}
+            {step === 'model-provider' && pendingFactory && (
+              <ModelProviderFactoryStep
+                factoryId={pendingFactory.id}
+                completionError={completionError ?? undefined}
+                onComplete={() => void finish()}
               />
             )}
           </FactorySetupShell.Step>

@@ -1,3 +1,4 @@
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import type { AvailableModelOption } from '../../../../../shared/hooks/useAvailableModels';
@@ -9,13 +10,10 @@ import { useParams } from 'react-router';
 
 import { ModelCombobox } from './ModelCombobox';
 
-const SESSION_DEFAULT_OPTION = [{ label: 'Session default', value: '' }];
-
 /**
- * Factory default model. Server-backed Factories persist a default model on
- * the Factory project itself; factory runs (issue triage, board work items)
- * start on it. Renders nothing for local-folder factories — they have no
- * server-side project to carry the setting.
+ * Factory default model. Persisted on the Factory project itself; factory
+ * runs (issue triage, board work items) and new chats start on it. The
+ * setting is mandatory — it can be changed but not cleared.
  */
 export function FactoryDefaultModelSection({ models }: { models: AvailableModelOption[] }) {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -42,17 +40,21 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
           </Txt>
         )}
       </div>
-      <label className="w-full max-w-72">
-        <span className="sr-only">Factory default model</span>
-        <ModelCombobox
-          models={models}
-          value={defaultModelId}
-          placeholder="Session default"
-          leadingOptions={SESSION_DEFAULT_OPTION}
-          disabled={projectQuery.isPending || setDefaultModel.isPending}
-          onValueChange={value => setDefaultModel.mutate(value || null)}
-        />
-      </label>
+      <div className="flex w-full max-w-72 items-center gap-2">
+        {setDefaultModel.isPending && (
+          <Spinner size="sm" aria-label="Saving default model" className="shrink-0 text-icon3" />
+        )}
+        <label className="min-w-0 flex-1">
+          <span className="sr-only">Factory default model</span>
+          <ModelCombobox
+            models={models}
+            value={defaultModelId}
+            placeholder="Select a model"
+            disabled={projectQuery.isPending || setDefaultModel.isPending}
+            onValueChange={value => setDefaultModel.mutate(value)}
+          />
+        </label>
+      </div>
     </div>
   );
 }

@@ -3,10 +3,10 @@
  * card must announce where it is going ("Moving to Planning…") instead of
  * silently waiting, and drop the status once the server answers.
  */
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
-import { createMemoryRouter, RouterProvider } from 'react-router';
+import { delay, http, HttpResponse } from 'msw';
+import { createMemoryRouter, matchRoutes, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
@@ -16,6 +16,8 @@ import { createAppRoutes } from '../router';
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
 const ITEM_ID = 'item-1';
+const SESSION_ID = 'session-1';
+const THREAD_ID = 'thread-1';
 
 const workItem = {
   id: ITEM_ID,
@@ -29,7 +31,14 @@ const workItem = {
   url: null,
   stages: ['triage'],
   stageHistory: [],
-  sessions: {},
+  sessions: {
+    chat: {
+      sessionId: SESSION_ID,
+      branch: 'fix-login',
+      threadId: THREAD_ID,
+      startedBy: 'user-1',
+    },
+  },
   metadata: {},
   revision: 1,
   createdAt: '2026-07-18T00:00:00.000Z',
@@ -44,9 +53,27 @@ function deferred() {
   return { promise, resolve };
 }
 
+function createDataTransfer() {
+  const values = new Map<string, string>();
+  const types: string[] = [];
+  return {
+    types,
+    effectAllowed: 'uninitialized',
+    dropEffect: 'none',
+    setData(type: string, value: string) {
+      values.set(type, value);
+      if (!types.includes(type)) types.push(type);
+    },
+    getData(type: string) {
+      return values.get(type) ?? '';
+    },
+  };
+}
+
 /** Stubs the Work board's data endpoints with one triage item and a gated transition. */
 function stubBoardEndpoints() {
   const transitionGate = deferred();
+  const transitionRequests: string[] = [];
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -80,6 +107,7 @@ function stubBoardEndpoints() {
       HttpResponse.json({ decisions: [] }),
     ),
     http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/${ITEM_ID}/transition`, async () => {
+      transitionRequests.push(ITEM_ID);
       await transitionGate.promise;
       return HttpResponse.json({
         result: {
@@ -106,11 +134,30 @@ function stubBoardEndpoints() {
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
       HttpResponse.json({ issues: [], nextPage: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
+    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+      HttpResponse.json({
+        sessions: [
+          {
+            id: 'session-row-1',
+            sessionId: SESSION_ID,
+            projectRepositoryId: REPO_ID,
+            orgId: 'org-1',
+            userId: 'user-1',
+            branch: 'fix-login',
+            baseBranch: 'main',
+            sandboxId: null,
+            sandboxWorkdir: '/repo',
+            materializedAt: '2026-07-18T00:00:00.000Z',
+            createdAt: '2026-07-18T00:00:00.000Z',
+            updatedAt: '2026-07-18T00:00:00.000Z',
+          },
+        ],
+      }),
+    ),
     http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/ensure`, () => HttpResponse.json({ ok: true })),
   );
 
-  return { transitionGate };
+  return { transitionGate, transitionRequests };
 }
 
 function renderWorkBoard() {
@@ -135,6 +182,118 @@ describe('Board card pending states', () => {
     expect(status.closest('[role="status"]')).not.toBeNull();
 
     // Server answered: the status row disappears.
+    transitionGate.resolve();
+    await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
+  });
+
+  it('uses the whole card as the thread link without rendering a separate thread action', async () => {
+    stubBoardEndpoints();
+    renderWorkBoard();
+
+    const titleText = await screen.findByText('Fix login bug');
+    const card = titleText.closest<HTMLElement>('[data-testid="work-item-card"]');
+    if (!card) throw new Error('Expected the title inside its work item card');
+    expect(titleText.closest('a, button')).toBeNull();
+
+    const threadLink = within(card).getByRole('link', { name: 'Open thread for Fix login bug' });
+    expect(within(card).queryByText('Open thread')).not.toBeInTheDocument();
+    expect(threadLink).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
+    );
+    const matches = matchRoutes(createAppRoutes(), threadLink.getAttribute('href') ?? '');
+    expect(matches?.at(-1)?.route.path).toBe('threads/:threadId');
+  });
+
+  it('opens GitHub and Linear intake issues in their external provider', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            {
+              ...workItem,
+              id: 'github-item',
+              factoryProjectId: FACTORY_ID,
+              title: 'GitHub intake issue',
+              stages: ['intake'],
+              sessions: {},
+              externalSource: {
+                integrationId: 'github',
+                type: 'issue',
+                externalId: '42',
+                url: 'https://github.com/acme/app/issues/42',
+              },
+            },
+            {
+              ...workItem,
+              id: 'linear-item',
+              factoryProjectId: FACTORY_ID,
+              title: 'Linear intake issue',
+              stages: ['intake'],
+              sessions: {},
+              externalSource: {
+                integrationId: 'linear',
+                type: 'issue',
+                externalId: 'ENG-42',
+                url: 'https://linear.app/acme/issue/ENG-42/linear-intake-issue',
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for GitHub intake issue' }));
+    const githubLink = await screen.findByRole('menuitem', { name: 'Open in GitHub' });
+    expect(githubLink).toHaveAttribute('href', 'https://github.com/acme/app/issues/42');
+    expect(githubLink).toHaveAttribute('target', '_blank');
+    await user.keyboard('{Escape}');
+
+    await user.click(screen.getByRole('button', { name: 'Actions for Linear intake issue' }));
+    const linearLink = await screen.findByRole('menuitem', { name: 'Open in Linear' });
+    expect(linearLink).toHaveAttribute('href', 'https://linear.app/acme/issue/ENG-42/linear-intake-issue');
+    expect(linearLink).toHaveAttribute('target', '_blank');
+  });
+
+  it('ignores a card dropped back into its current column', async () => {
+    const { transitionRequests } = stubBoardEndpoints();
+    renderWorkBoard();
+
+    const titleText = await screen.findByText('Fix login bug');
+    const card = titleText.closest<HTMLElement>('[data-testid="work-item-card"]');
+    if (!card) throw new Error('Expected the title inside its work item card');
+    const currentColumn = screen.getByTestId('board-column-triage');
+    const dataTransfer = createDataTransfer();
+
+    fireEvent.dragStart(titleText, { dataTransfer });
+    fireEvent.dragOver(currentColumn, { dataTransfer });
+    fireEvent.drop(currentColumn, { dataTransfer });
+    await delay(50);
+
+    expect(transitionRequests).toEqual([]);
+    expect(currentColumn).toContainElement(card);
+  });
+
+  it('moves a card when it is dropped into a collapsed empty column', async () => {
+    const { transitionGate, transitionRequests } = stubBoardEndpoints();
+    renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    const planningColumn = screen.getByTestId('board-column-planning');
+    expect(planningColumn).toHaveAccessibleName('Planning, empty');
+    const dataTransfer = createDataTransfer();
+
+    fireEvent.dragStart(card, { dataTransfer });
+    fireEvent.dragOver(planningColumn, { dataTransfer });
+    expect(dataTransfer.dropEffect).toBe('move');
+    fireEvent.drop(planningColumn, { dataTransfer });
+
+    await waitFor(() => expect(transitionRequests).toEqual([ITEM_ID]));
+    expect(within(planningColumn).getByTestId('work-item-card')).toHaveTextContent('Fix login bug');
+
     transitionGate.resolve();
     await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
   });
