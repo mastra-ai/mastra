@@ -901,6 +901,25 @@ export class Agent<
   }
 
   /**
+   * Resolves the stream options for a deferred notification that wakes an idle
+   * thread, so the dispatcher can attach the request context and model
+   * selection a wake run needs ("No model selected" otherwise).
+   *
+   * Routes to the signal provider that produced the record by matching
+   * `source === provider.notificationSource`, then calls that provider's
+   * `getNotificationStreamOptions`. Resolved at dispatch time because the
+   * stream options carry live, non-serializable state that cannot be persisted
+   * on the record.
+   */
+  getNotificationStreamOptions(
+    source: string,
+    target: { resourceId: string; threadId: string },
+  ): AgentExecutionOptions | undefined | Promise<AgentExecutionOptions | undefined> {
+    const provider = this.#signals?.find(p => p.notificationSource === source);
+    return provider?.getNotificationStreamOptions?.(target);
+  }
+
+  /**
    * Returns the background tasks configuration for this agent.
    */
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined {

@@ -1,3 +1,4 @@
+import type { AgentExecutionOptions } from '../agent/agent.types';
 import type { CreatedAgentSignal } from '../agent/signals';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { SendAgentSignalOptions, SendAgentSignalResult } from '../agent/types';
@@ -10,8 +11,31 @@ import type { NotificationDeliveryThreadState, NotificationRecord } from './type
 type NotificationDispatchAgent = {
   id?: string;
   getPubSub?: () => PubSub | undefined;
+  getNotificationStreamOptions?: (
+    source: string,
+    target: { resourceId: string; threadId: string },
+  ) => AgentExecutionOptions | undefined | Promise<AgentExecutionOptions | undefined>;
   sendSignal: (signal: CreatedAgentSignal, target: SendAgentSignalOptions) => SendAgentSignalResult;
 };
+
+/**
+ * Builds the signal target for a notification that wakes an idle thread.
+ *
+ * A wake starts a fresh run, but the dispatcher carries no request context or
+ * model selection, which surfaces as "No model selected". Resolve the stream
+ * options from the signal provider that produced the record (matched by
+ * `source`) and attach them so the woken run has the context it needs.
+ * Resolved here because stream options carry live, non-serializable state
+ * (e.g. a RequestContext) that cannot be persisted on the record.
+ */
+async function buildWakeTarget(
+  agent: NotificationDispatchAgent,
+  source: string,
+  target: { resourceId: string; threadId: string },
+): Promise<SendAgentSignalOptions> {
+  const streamOptions = await agent.getNotificationStreamOptions?.(source, target);
+  return streamOptions ? { ...target, ifIdle: { behavior: 'wake', streamOptions } } : target;
+}
 
 export type DispatchDueNotificationsInput = {
   mastra: Mastra;
@@ -126,7 +150,10 @@ async function sendNotificationRecord({
     deliveredAt: now,
     lastDeliveryAttemptAt: now,
   });
-  const target: SendAgentSignalOptions = { resourceId: current.resourceId, threadId: current.threadId };
+  const target = await buildWakeTarget(agent, current.source, {
+    resourceId: current.resourceId,
+    threadId: current.threadId,
+  });
   const result = agent.sendSignal(signal, target);
   // `accepted` rejects when the signal could not be routed/started (e.g. a
   // misconfigured agent). Let that propagate so the caller records the
@@ -158,13 +185,13 @@ async function sendNotificationSummary({
   if (!first?.agentId) throw new Error('Notification summary is missing agentId');
   if (!first.resourceId) throw new Error('Notification summary is missing resourceId');
 
-  const agent = await mastra.getAgentById(first.agentId as never);
+  const agent = (await mastra.getAgentById(first.agentId as never)) as NotificationDispatchAgent;
   const summary = summarizeNotifications(records);
   const signal = createNotificationSummarySignal(summary);
   const target: SendAgentSignalOptions = records.every(record => record.priority === 'low')
     ? { resourceId: first.resourceId, threadId: first.threadId, ifIdle: { behavior: 'persist' } }
-    : { resourceId: first.resourceId, threadId: first.threadId };
-  const result = (agent as NotificationDispatchAgent).sendSignal(signal, target);
+    : await buildWakeTarget(agent, first.source, { resourceId: first.resourceId, threadId: first.threadId });
+  const result = agent.sendSignal(signal, target);
   // `accepted` rejects when the signal could not be routed/started; let it
   // propagate so the caller records the notifications as failed deliveries.
   await result.accepted;

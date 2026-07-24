@@ -658,6 +658,47 @@ describe('notification inbox', () => {
     });
   });
 
+  it('attaches resolved stream options when a wake dispatch starts a run', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
+      signal,
+      persisted: Promise.resolve(),
+    }));
+    const streamOptions = { memory: { thread: 'thread-1', resource: 'resource-1' }, maxSteps: 1000 };
+    const getNotificationStreamOptions = vi.fn(async (_source: string, _target: unknown) => streamOptions);
+    const mastra = {
+      getAgentById: vi.fn(async () => ({
+        sendSignal,
+        getNotificationStreamOptions,
+      })),
+    } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'High priority update',
+      deliverAt: now,
+    });
+
+    const result = await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(result.failed).toEqual([]);
+    expect(getNotificationStreamOptions).toHaveBeenCalledWith('github', {
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+    });
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'notification', tagName: 'notification' }),
+      { resourceId: 'resource-1', threadId: 'thread-1', ifIdle: { behavior: 'wake', streamOptions } },
+    );
+  });
+
   it('keeps failed deliveries pending with attempt metadata', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
