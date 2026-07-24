@@ -114,3 +114,26 @@ export const CustomDialogTitle: Story = {
     codeStr: sampleJson,
   },
 };
+
+// Content with a term that repeats many times so the search match-navigation is easy to try:
+// click the magnifier, type "pregunta", then cycle with Enter / Shift+Enter or the ▲/▼ buttons.
+export const SearchNavigation: Story = {
+  args: {
+    title: 'Input',
+    icon: <CodeIcon />,
+    codeStr: JSON.stringify(
+      {
+        topic: 'Sumas y restas hasta 9999',
+        instructions:
+          'Genera exactamente 10 preguntas usando solo los tipos seleccionados. Ordena las preguntas de menor a mayor dificultad. Recuerda que cada pregunta es obligatoria y nunca null.',
+        questions: Array.from({ length: 10 }, (_, i) => ({
+          id: `question-${i + 1}`,
+          type: i % 2 === 0 ? 'opcion_multiple' : 'abierta',
+          prompt: `Pregunta ${i + 1}`,
+        })),
+      },
+      null,
+      2,
+    ),
+  },
+};
