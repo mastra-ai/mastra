@@ -17,6 +17,7 @@ import {
 import type { BrowserSessionProbe } from '@/domains/agents/hooks/use-browser-session-probe';
 import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result';
 import { useMcpAppTools } from '@/domains/mcps/hooks';
+import { useTools } from '@/domains/tools/hooks/use-all-tools';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
 import { useChatSend } from '@/lib/ai-ui/chat/chat-context';
@@ -57,6 +58,13 @@ export interface ToolCardProps {
 
 const TASK_TOOL_NAMES = new Set(['task_write', 'task_update', 'task_complete', 'task_check']);
 
+/**
+ * The intrinsic `id` of the built-in Ask User tool (`createTool({ id: 'ask_user' })`
+ * in `@mastra/core`). This is stable regardless of the object key an agent
+ * registers the tool under (e.g. `tools: { askUserTool }` → key `askUserTool`).
+ */
+const ASK_USER_TOOL_ID = 'ask_user';
+
 export const ToolCard = (props: ToolCardProps) => {
   return (
     <WorkflowRunProvider workflowId={''} withoutTimeTravel>
@@ -73,6 +81,14 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   const { data: mcpAppToolsMap } = useMcpAppTools();
   const send = useChatSend();
   const queryClient = useQueryClient();
+  // The tool `toolName` is the object key the tool was registered under, not its
+  // intrinsic `id`. Resolve the id from the tools list so built-ins like
+  // `ask_user` are recognized regardless of registration key. This query is
+  // shared (single `['tools']` key) and cached, so the lookup is effectively
+  // free after the first tool card fetches it.
+  const { data: toolsById } = useTools();
+  const resolvedToolId = toolsById?.[toolName]?.id;
+  const isAskUserTool = toolName === ASK_USER_TOOL_ID || resolvedToolId === ASK_USER_TOOL_ID;
 
   const args = input;
   const result = output;
@@ -178,8 +194,10 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
     return null;
   }
 
-  // ask_user tool renders a dedicated interactive component for answering questions.
-  if (toolName === 'ask_user') {
+  // ask_user tool renders a dedicated interactive component for answering
+  // questions. Match by the tool's intrinsic id (resolved from the tools list)
+  // so it works even when registered under a non-`ask_user` object key.
+  if (isAskUserTool) {
     return <AskUserTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
   }
 
