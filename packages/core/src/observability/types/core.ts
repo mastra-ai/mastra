@@ -591,7 +591,7 @@ export interface ObservabilityExporter extends ObservabilityEvents {
   name: string;
 
   /** Initialize exporter with tracing configuration and/or access to Mastra */
-  init?(options: InitExporterOptions): void;
+  init?(options: InitExporterOptions): void | Promise<void>;
 
   /** Sets logger instance on the exporter.  */
   __setLogger?(logger: IMastraLogger): void;

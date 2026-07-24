@@ -219,13 +219,17 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
       exporters.forEach(exporter => {
         // Initialize exporter if it has an init method
         if ('init' in exporter && typeof exporter.init === 'function') {
-          try {
-            exporter.init({ mastra, config, emitDropEvent });
-          } catch (error) {
+          const handleInitError = (error: unknown) => {
             this.logger?.warn('Failed to initialize observability exporter', {
               exporterName: exporter.name,
               error: error instanceof Error ? error.message : String(error),
             });
+          };
+
+          try {
+            void Promise.resolve(exporter.init({ mastra, config, emitDropEvent })).catch(handleInitError);
+          } catch (error) {
+            handleInitError(error);
           }
         }
       });
