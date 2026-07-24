@@ -14,6 +14,16 @@ describe('getLogsRefetchInterval', () => {
     expect(getLogsRefetchInterval(query)).toBe(false);
   });
 
+  it('disables polling when the observability storage domain is unavailable', () => {
+    const query = {
+      state: {
+        error: new Error('HTTP error! status: 501 - {"error":"Observability storage domain is not available"}'),
+      },
+    } as Query;
+
+    expect(getLogsRefetchInterval(query)).toBe(false);
+  });
+
   it('keeps polling for supported logs queries', () => {
     const query = { state: { error: null } } as Query;
 

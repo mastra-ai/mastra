@@ -6,6 +6,7 @@ import { SessionExpired } from '@/ds/components/SessionExpired';
 import {
   is401UnauthorizedError,
   is403ForbiddenError,
+  isObservabilityUnavailableError,
   isUnsupportedObservabilityOperationError,
 } from '@/lib/query-utils';
 
@@ -26,6 +27,15 @@ export interface LogsErrorContentProps {
 export function LogsErrorContent({ error, resource, errorTitle }: LogsErrorContentProps) {
   if (is401UnauthorizedError(error)) return <SessionExpired />;
   if (is403ForbiddenError(error)) return <PermissionDenied resource={resource} />;
+  if (isObservabilityUnavailableError(error)) {
+    return (
+      <EmptyState
+        iconSlot={<CircleSlashIcon />}
+        titleSlot="Observability storage is not available"
+        descriptionSlot="The observability storage domain is disabled or not configured. Enable it in your storage configuration to view logs in Studio."
+      />
+    );
+  }
   if (isUnsupportedObservabilityOperationError(error, 'logs')) {
     return (
       <EmptyState
