@@ -363,3 +363,4 @@ allowBuilds:
   node-liblzma: false
   workerd: false
   braintrust: false
+  '@sap/hana-client': true
