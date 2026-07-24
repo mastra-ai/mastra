@@ -1269,15 +1269,22 @@ export class AgentThreadStreamRuntime {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const topic = this.#threadTopic(key);
     await new Promise<void>(resolve => {
-      const onEvent: EventCallback = event => {
+      const finishWaiting = () => {
+        void resolvedPubSub.unsubscribe(topic, onEvent).catch(() => {});
+        resolve();
+      };
+      const onEvent: EventCallback = (event, ack) => {
         const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
-        if (
+        const isTerminalEvent =
           (data?.type === 'run-completed' || data?.type === 'run-aborted' || data?.type === 'run-failed') &&
-          data.runId === runId
-        ) {
-          void resolvedPubSub.unsubscribe(topic, onEvent).catch(() => {});
-          resolve();
+          data.runId === runId;
+        const acknowledgement = ack?.();
+        if (!isTerminalEvent) return acknowledgement;
+        if (!acknowledgement) {
+          finishWaiting();
+          return;
         }
+        return acknowledgement.then(finishWaiting);
       };
       void resolvedPubSub.subscribe(topic, onEvent).catch(() => resolve());
     });
@@ -1385,7 +1392,7 @@ export class AgentThreadStreamRuntime {
       };
     };
 
-    const onEvent: EventCallback = event => {
+    const handleEvent = (event: Parameters<EventCallback>[0]) => {
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (!data) return;
       if (data.type === 'run-registered') {
@@ -1487,6 +1494,11 @@ export class AgentThreadStreamRuntime {
         }
         wake();
       }
+    };
+
+    const onEvent: EventCallback = (event, ack) => {
+      handleEvent(event);
+      return ack?.();
     };
 
     await resolvedPubSub.subscribe(topic, onEvent);
