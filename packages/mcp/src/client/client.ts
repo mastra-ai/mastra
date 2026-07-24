@@ -118,6 +118,17 @@ function shouldDetachPersistentTransportRequest(init?: RequestInit): boolean {
 function extractToolErrorText(content: unknown): string {
   const fallback = 'MCP tool execution failed';
   if (!Array.isArray(content)) return fallback;
+  const text = extractModelTextFromToolContent(content);
+  return text || fallback;
+}
+
+/**
+ * Extract LLM-facing text from a successful CallToolResult's `content` blocks.
+ * Per MCP spec, `content` is the human/model-readable channel; `structuredContent`
+ * is for client/UI consumption.
+ */
+function extractModelTextFromToolContent(content: unknown): string | undefined {
+  if (!Array.isArray(content)) return undefined;
   const text = content
     .filter((part): part is { type: 'text'; text: string } => {
       return !!part && typeof part === 'object' && (part as { type?: unknown }).type === 'text';
@@ -125,7 +136,25 @@ function extractToolErrorText(content: unknown): string {
     .map(part => part.text)
     .join('\n')
     .trim();
-  return text || fallback;
+  return text || undefined;
+}
+
+/**
+ * Choose the value Mastra should return from MCP tool execute() for downstream
+ * model context. When the server returned structuredContent, prefer the LLM-facing
+ * text from `content` and only fall back to structuredContent when no text is available.
+ */
+function resolveModelFacingToolOutput(res: { structuredContent?: unknown; content?: unknown }): unknown {
+  if (res.structuredContent === undefined) {
+    return res;
+  }
+
+  const modelText = extractModelTextFromToolContent(res.content);
+  if (modelText !== undefined) {
+    return modelText;
+  }
+
+  return res.structuredContent;
 }
 
 function getDatadogScope(): DatadogScopeLike | null {
@@ -1062,13 +1091,7 @@ export class InternalMastraMCPClient extends MastraBase {
 
                 this.log('debug', `Tool executed successfully: ${tool.name}`);
 
-                // When a tool has an outputSchema, return the structuredContent directly
-                // so that output validation works correctly
-                if (res.structuredContent !== undefined) {
-                  return res.structuredContent;
-                }
-
-                return res;
+                return resolveModelFacingToolOutput(res);
               };
 
               try {

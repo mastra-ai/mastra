@@ -976,7 +976,14 @@ export class MCPServer extends MCPServerBase {
         }
 
         if (response.structuredContent) {
-          response.content = [{ type: 'text', text: JSON.stringify(response.structuredContent) }];
+          const authorContent =
+            result && typeof result === 'object' && 'content' in result && Array.isArray(result.content)
+              ? result.content
+              : undefined;
+          response.content =
+            authorContent && authorContent.length > 0
+              ? authorContent
+              : [{ type: 'text', text: JSON.stringify(response.structuredContent) }];
         } else {
           response.content = [
             {

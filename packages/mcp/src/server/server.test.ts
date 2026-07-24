@@ -2930,10 +2930,14 @@ describe('MCPServer with Tool Output Schema', () => {
     const result = await tool.execute!({ input: 'hello' });
 
     expect(result).toBeDefined();
-    // When a tool has outputSchema, the MCP client returns structuredContent directly
-    // so output validation can work correctly
-    expect(result.processedInput).toBe('processed: hello');
-    expect(result.timestamp).toBe(mockDateISO);
+    // MCPServer mirrors structured output as JSON in content; the client returns
+    // that LLM-facing text instead of the parsed structuredContent object.
+    expect(result).toBe(
+      JSON.stringify({
+        processedInput: 'processed: hello',
+        timestamp: mockDateISO,
+      }),
+    );
   });
 });
 
