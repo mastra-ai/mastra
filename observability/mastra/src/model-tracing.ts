@@ -42,6 +42,50 @@ import { extractUsageMetrics } from './usage';
 
 type StepInputPreview = Array<{ role: string; content: string }> | Record<string, unknown> | string | undefined;
 
+function parseGatewayCost(providerMetadata: EndGenerationOptions['providerMetadata']): number | undefined {
+  const rawCost = providerMetadata?.gateway?.cost;
+  const cost =
+    typeof rawCost === 'number'
+      ? rawCost
+      : typeof rawCost === 'string' && rawCost.trim().length > 0
+        ? Number(rawCost)
+        : undefined;
+
+  return typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? cost : undefined;
+}
+
+function getGatewayCostContext({
+  providerMetadata,
+  stepProviderMetadata,
+}: Pick<EndGenerationOptions, 'providerMetadata' | 'stepProviderMetadata'>) {
+  const metadataByStep = stepProviderMetadata ?? [providerMetadata];
+
+  if (!metadataByStep.some(metadata => metadata?.gateway !== undefined)) {
+    return undefined;
+  }
+
+  const costs: number[] = [];
+  for (const metadata of metadataByStep) {
+    const cost = parseGatewayCost(metadata);
+    if (cost === undefined) {
+      return undefined;
+    }
+    costs.push(cost);
+  }
+
+  return {
+    estimatedCost: costs.reduce((total, cost) => total + cost, 0),
+    costUnit: 'USD',
+    costMetadata: {
+      source: 'provider_reported',
+      sdkProvider: 'vercel_ai_gateway',
+      sdkCostField: 'gateway.cost',
+      scope: 'query_total',
+      reportedStepCount: costs.length,
+    },
+  };
+}
+
 function formatPreviewLabel(label: unknown, fallback: string): string {
   return typeof label === 'string' && label.length > 0 ? label : fallback;
 }
@@ -348,11 +392,14 @@ export class ModelSpanTracker {
    * If usage is provided, it will be converted to UsageStats with cache token details.
    */
   endGeneration(options?: EndGenerationOptions): void {
-    const { usage, providerMetadata, ...spanOptions } = options ?? {};
+    const { usage, providerMetadata, stepProviderMetadata, ...spanOptions } = options ?? {};
 
     if (spanOptions.attributes) {
       spanOptions.attributes.completionStartTime = this.#completionStartTime;
       spanOptions.attributes.usage = extractUsageMetrics(usage, providerMetadata);
+      if (!spanOptions.attributes.costContext) {
+        spanOptions.attributes.costContext = getGatewayCostContext({ providerMetadata, stepProviderMetadata });
+      }
     }
 
     this.#modelSpan?.end(spanOptions);
