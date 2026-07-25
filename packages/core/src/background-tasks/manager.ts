@@ -68,6 +68,11 @@ export class BackgroundTaskManager {
   // run until initialization has either completed or failed.
   private shutdownPromise?: Promise<void>;
 
+  // Wall-clock deadline shared by every step of the teardown sequence. Set once
+  // when shutdown begins; steps that start after it has passed fire their
+  // cleanup without blocking on it.
+  private shutdownDeadline?: number;
+
   constructor(config: BackgroundTaskManagerConfig = { enabled: false }) {
     this.config = {
       globalConcurrency: config.globalConcurrency ?? 10,
@@ -765,6 +770,7 @@ export class BackgroundTaskManager {
   shutdown(): Promise<void> {
     if (this.shutdownPromise) return this.shutdownPromise;
     this.shuttingDown = true;
+    this.shutdownDeadline = Date.now() + SHUTDOWN_GRACE_PERIOD_MS;
     this.shutdownPromise = this.#shutdown();
     return this.shutdownPromise;
   }
@@ -855,14 +861,31 @@ export class BackgroundTaskManager {
     this.activeAbortControllers.clear();
   }
 
+  /**
+   * Await one teardown step against the shutdown-wide deadline. Callers pass an
+   * already-started promise, so a step that finds the budget spent still runs —
+   * it just stops blocking the rest of teardown, which keeps cleanup
+   * best-effort while bounding `#shutdown()` as a whole.
+   */
   async #waitForShutdownStep<T>(description: string, promise: Promise<T>): Promise<T | undefined> {
+    const remainingMs = this.#remainingShutdownBudgetMs();
+    if (remainingMs <= 0) {
+      void promise.catch(() => {});
+      this.#mastra
+        ?.getLogger?.()
+        ?.warn(
+          `${description} left running in the background: the ${SHUTDOWN_GRACE_PERIOD_MS}ms shutdown budget is spent`,
+        );
+      return undefined;
+    }
+
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     let outcome: { status: 'settled'; value: T } | { status: 'timed-out' };
     try {
       outcome = await Promise.race([
         promise.then(value => ({ status: 'settled' as const, value })),
         new Promise<{ status: 'timed-out' }>(resolve => {
-          timeoutHandle = setTimeout(() => resolve({ status: 'timed-out' }), SHUTDOWN_GRACE_PERIOD_MS);
+          timeoutHandle = setTimeout(() => resolve({ status: 'timed-out' }), remainingMs);
         }),
       ]);
     } catch (error) {
@@ -875,10 +898,19 @@ export class BackgroundTaskManager {
     if (outcome.status === 'timed-out') {
       this.#mastra
         ?.getLogger?.()
-        ?.warn(`${description} exceeded the ${SHUTDOWN_GRACE_PERIOD_MS}ms graceful shutdown limit`);
+        ?.warn(
+          `${description} exhausted the remaining ${remainingMs}ms of the ${SHUTDOWN_GRACE_PERIOD_MS}ms graceful shutdown budget`,
+        );
       return undefined;
     }
     return outcome.value;
+  }
+
+  #remainingShutdownBudgetMs(): number {
+    // No deadline means this ran outside `shutdown()`; fall back to the full
+    // budget rather than treating the step as already expired.
+    if (this.shutdownDeadline === undefined) return SHUTDOWN_GRACE_PERIOD_MS;
+    return this.shutdownDeadline - Date.now();
   }
 
   async #releaseLateInitSubscriptions(subscriptions: Array<[string, EventCallback]>): Promise<void> {

@@ -144,6 +144,35 @@ describe('BackgroundTaskManager lifecycle', () => {
     mastra.__unregisterHooks();
   });
 
+  it('bounds the whole shutdown sequence with a single grace period', async () => {
+    vi.useFakeTimers();
+    const pubsub = new NeverSubscribePubSub();
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), workers: false });
+    const manager = new BackgroundTaskManager({ enabled: true });
+    manager.__registerMastra(mastra);
+    const storage = await manager.getStorage();
+    await storage.createTask(makeRunningTask({ maxRetries: 0 }));
+    void manager.init(pubsub);
+    await pubsub.subscribeStarted.promise;
+
+    const controller = new AbortController();
+    manager.activeAbortControllers.set('task-1', controller);
+    vi.spyOn(manager, 'cancel').mockReturnValue(new Promise<void>(() => {}));
+
+    const shutdownPromise = manager.shutdown();
+    let settled = false;
+    void shutdownPromise.then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(shutdownPromise).resolves.toBeUndefined();
+    expect(controller.signal.aborted).toBe(true);
+    mastra.__unregisterHooks();
+  });
+
   it('logs task cancellation failures during shutdown', async () => {
     const mastra = new Mastra({ logger: false, storage: new MockStore(), workers: false });
     const warn = vi.spyOn(mastra.getLogger(), 'warn');
