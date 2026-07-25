@@ -735,7 +735,7 @@ export class LocalSandbox extends MastraSandbox {
     this._mountPathToIsolationPath.set(normMount, isolationPath);
 
     // Seatbelt: regenerate the inline profile so the next executeCommand() picks it up
-    if (this.isolation === 'seatbelt') {
+    if (this.isolation === 'seatbelt' && !this._userProvidedProfilePath) {
       this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
     }
     // Bwrap: buildBwrapCommand reads config.readWritePaths each call, so no extra work needed
@@ -770,7 +770,7 @@ export class LocalSandbox extends MastraSandbox {
           paths.splice(idx, 1);
         }
       }
-      if (this.isolation === 'seatbelt') {
+      if (this.isolation === 'seatbelt' && !this._userProvidedProfilePath) {
         this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
       }
     } else {

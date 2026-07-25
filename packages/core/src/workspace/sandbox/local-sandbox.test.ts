@@ -986,6 +986,45 @@ describe('LocalSandbox', () => {
         await fs.rm(unrelatedTempDir, { recursive: true, force: true });
       }
     });
+
+    it('should not overwrite custom seatbelt profile in memory on mount/unmount', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      // Create a custom seatbelt profile file
+      const customProfilePath = path.join(tempDir, 'custom-profile.sb');
+      const customContent = ';; custom profile content\n(version 1)\n(allow default)\n';
+      await fs.writeFile(customProfilePath, customContent, 'utf-8');
+
+      const seatbeltSandbox = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: {
+          seatbeltProfilePath: customProfilePath,
+        },
+      });
+
+      await seatbeltSandbox._start();
+
+      // Verify the in-memory profile is our custom content
+      expect((seatbeltSandbox as any)._seatbeltProfile).toBe(customContent);
+
+      // Trigger a mount operation (which calls addMountPathToIsolation)
+      const mockFs = {
+        id: 'test-fs',
+        name: 'MockFs',
+        provider: 'local',
+        getMountConfig: () => ({ type: 'local', basePath: path.join(tempDir, 'src-dir') }),
+      } as any;
+      await fs.mkdir(path.join(tempDir, 'src-dir'), { recursive: true });
+      await seatbeltSandbox.mount(mockFs, '/my-mount');
+
+      // Verify the in-memory profile is STILL our custom content and wasn't overwritten
+      expect((seatbeltSandbox as any)._seatbeltProfile).toBe(customContent);
+
+      await seatbeltSandbox._destroy();
+    });
   });
 
   // ===========================================================================
