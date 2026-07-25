@@ -1,5 +1,24 @@
 # @mastra/core
 
+## 1.53.0-alpha.2
+
+### Minor Changes
+
+- Channel reaction tools (`add_reaction`, `remove_reaction`) are no longer injected into a channel-bearing agent's toolset automatically. Replies are unaffected — they stream back to the channel without a tool. If you want your agent to react to channel messages, add the tools explicitly: ([#20152](https://github.com/mastra-ai/mastra/pull/20152))
+
+  ```ts
+  const channels = new AgentChannels({
+    adapters: { slack: createSlackAdapter() },
+  });
+
+  const agent = new Agent({
+    name: 'assistant',
+    model: 'openai/gpt-5',
+    channels,
+    tools: { ...channels.getTools() },
+  });
+  ```
+
 ## 1.53.0-alpha.1
 
 ### Minor Changes

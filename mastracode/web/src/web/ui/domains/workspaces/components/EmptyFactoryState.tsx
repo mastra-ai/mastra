@@ -9,9 +9,8 @@ import {
   useLinkRepositoryMutation,
 } from '../../../../../shared/hooks/useFactories';
 import { connectLinear } from '../../factory/services/linear';
-import type { FactoryProject, FactoryProjectPayload } from '../services/github';
+import type { FactoryProject, FactoryProjectPayload, GithubRepo } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
-import type { GithubRepo } from '../services/github';
 import {
   clearOnboardingFlow,
   ONBOARDING_FACTORY_KEY as FACTORY_KEY,
