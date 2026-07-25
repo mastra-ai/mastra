@@ -106,6 +106,17 @@ function createStreamResult({
   };
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+
+  return { promise, reject, resolve };
+}
+
 describe('A2A Handler', () => {
   describe('getAgentCardByIdHandler', () => {
     let mockMastra: Mastra;
@@ -376,7 +387,7 @@ describe('A2A Handler', () => {
     it('should return a working task before non-blocking execution completes', async () => {
       const taskId = 'non-blocking-task-id';
       const contextId = 'non-blocking-context-id';
-      const generation = Promise.withResolvers<{ text: string }>();
+      const generation = createDeferred<{ text: string }>();
       const mockAgent = {
         generate: vi.fn().mockReturnValue(generation.promise),
       } as unknown as Agent;
@@ -444,9 +455,65 @@ describe('A2A Handler', () => {
       });
     });
 
+    it('should return an existing working task without starting duplicate non-blocking execution', async () => {
+      const taskId = 'duplicate-non-blocking-task-id';
+      const generation = createDeferred<{ text: string }>();
+      const mockAgent = {
+        generate: vi.fn().mockReturnValue(generation.promise),
+      } as unknown as Agent;
+
+      const firstResponse = await handleMessageSend({
+        requestId: 'first-non-blocking-request-id',
+        params: {
+          message: {
+            messageId: 'first-non-blocking-message-id',
+            taskId,
+            kind: 'message',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'Run once' }],
+          },
+          configuration: { blocking: false },
+        },
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+      });
+
+      const duplicateResponse = await handleMessageSend({
+        requestId: 'duplicate-non-blocking-request-id',
+        params: {
+          message: {
+            messageId: 'duplicate-non-blocking-message-id',
+            taskId,
+            kind: 'message',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'Run again' }],
+          },
+          configuration: { blocking: false },
+        },
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+      });
+
+      expect(firstResponse.result?.status.state).toBe('working');
+      expect(duplicateResponse.result).toEqual(firstResponse.result);
+      expect(mockAgent.generate).toHaveBeenCalledTimes(1);
+      expect((await mockTaskStore.load({ agentId: 'test-agent', taskId }))?.history).toHaveLength(1);
+
+      generation.resolve({ text: 'Completed once' });
+      await vi.waitFor(async () => {
+        expect(await mockTaskStore.load({ agentId: 'test-agent', taskId })).toMatchObject({
+          status: { state: 'completed' },
+        });
+      });
+    });
+
     it('should persist non-blocking execution failures after returning', async () => {
       const taskId = 'failed-background-task-id';
-      const generation = Promise.withResolvers<{ text: string }>();
+      const generation = createDeferred<{ text: string }>();
       const mockAgent = {
         generate: vi.fn().mockReturnValue(generation.promise),
       } as unknown as Agent;
@@ -486,7 +553,7 @@ describe('A2A Handler', () => {
 
     it('should not overwrite a canceled non-blocking task when execution finishes', async () => {
       const taskId = 'canceled-background-task-id';
-      const generation = Promise.withResolvers<{ text: string }>();
+      const generation = createDeferred<{ text: string }>();
       const mockAgent = {
         generate: vi.fn().mockReturnValue(generation.promise),
       } as unknown as Agent;
@@ -521,11 +588,11 @@ describe('A2A Handler', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       expect((await mockTaskStore.load({ agentId: 'test-agent', taskId }))?.status.state).toBe('canceled');
-      expect(save).toHaveBeenCalledTimes(3);
+      expect(save.mock.calls.some(([{ data }]) => data.status.state === 'completed')).toBe(false);
     });
 
     it('should wait for execution when blocking is true', async () => {
-      const generation = Promise.withResolvers<{ text: string }>();
+      const generation = createDeferred<{ text: string }>();
       const mockAgent = {
         generate: vi.fn().mockReturnValue(generation.promise),
       } as unknown as Agent;
@@ -1310,7 +1377,7 @@ describe('A2A Handler', () => {
         fetch: fetchMock,
         lookup: vi.fn().mockResolvedValue([{ address: '93.184.216.34', family: 4 }]),
       });
-      const generation = Promise.withResolvers<{ text: string }>();
+      const generation = createDeferred<{ text: string }>();
 
       const params: MessageSendParams = {
         message: {

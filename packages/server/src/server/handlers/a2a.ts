@@ -707,6 +707,10 @@ export async function handleMessageSend({
   const { message, metadata } = params;
   const { contextId } = message;
   const taskId = message.taskId || crypto.randomUUID();
+  const existingTask = await taskStore.load({ agentId, taskId });
+  if (params.configuration?.blocking === false && existingTask?.status.state === 'working') {
+    return createSuccessResponse(requestId, existingTask);
+  }
   const {
     pushNotificationStore: resolvedPushNotificationStore,
     pushNotificationSender: resolvedPushNotificationSender,
