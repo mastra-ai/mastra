@@ -196,6 +196,7 @@ import {
   getDynamicModel,
   getAnthropicApiKey,
   getOpenAIApiKey,
+  getAtlasCloudApiKey,
   MastraCodeGateway,
   resolveAuth,
 } from '../model.js';
@@ -225,6 +226,10 @@ describe('resolveModel', () => {
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_BASE_URL;
+    delete process.env.ATLASCLOUD_API_KEY;
+    delete process.env.ATLAS_CLOUD_API_KEY;
+    delete process.env.ATLASCLOUD_BASE_URL;
+    delete process.env.ATLAS_CLOUD_BASE_URL;
     delete process.env.MOONSHOT_API_KEY;
     delete process.env.MOONSHOT_AI_API_KEY;
     delete process.env.MASTRA_GATEWAY_API_KEY;
@@ -819,6 +824,39 @@ describe('resolveModel', () => {
       expect(MastraGateway).toHaveBeenCalledWith({ baseUrl: 'https://gateway-api.mastra.ai' });
     });
 
+    it('routes Atlas Cloud models through the OpenAI-compatible endpoint', () => {
+      process.env.ATLASCLOUD_API_KEY = 'atlas-env-key';
+
+      const result = resolveModel('atlascloud/deepseek-ai/deepseek-v4-pro') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('custom-openai-compatible');
+      expect(result.modelId).toBe('deepseek-ai/deepseek-v4-pro');
+      expect(result.url).toBe('https://api.atlascloud.ai/v1');
+      expect(result.apiKey).toBe('atlas-env-key');
+    });
+
+    it('accepts Atlas Cloud API key and base URL aliases', () => {
+      process.env.ATLAS_CLOUD_API_KEY = 'atlas-alias-key';
+      process.env.ATLAS_CLOUD_BASE_URL = 'https://atlas.example.test/v1/';
+
+      const result = resolveModel('atlascloud/deepseek-ai/deepseek-v4-flash') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('custom-openai-compatible');
+      expect(result.modelId).toBe('deepseek-ai/deepseek-v4-flash');
+      expect(result.url).toBe('https://atlas.example.test/v1');
+      expect(result.apiKey).toBe('atlas-alias-key');
+    });
+
+    it('uses stored Atlas Cloud credentials before environment aliases', () => {
+      process.env.ATLASCLOUD_API_KEY = 'atlas-env-key';
+      mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'atlas-stored-key' });
+
+      const result = resolveModel('atlascloud/deepseek-ai/deepseek-v4-pro') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('custom-openai-compatible');
+      expect(result.apiKey).toBe('atlas-stored-key');
+    });
+
     it('passes baseUrl when explicitly set in settings for explicit mastra-prefixed models', () => {
       mockLoadSettings.mockReturnValue({
         customProviders: [],
@@ -993,5 +1031,41 @@ describe('getOpenAIApiKey', () => {
   it('ignores the env var when the credential store disables environment fallback', () => {
     process.env.OPENAI_API_KEY = 'sk-env-key';
     expect(getOpenAIApiKey(makeTenantCredentialStore())).toBeUndefined();
+  });
+});
+
+describe('getAtlasCloudApiKey', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.ATLASCLOUD_API_KEY;
+    delete process.env.ATLAS_CLOUD_API_KEY;
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnv };
+  });
+
+  it('returns stored API key when set', () => {
+    mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'atlas-stored-key' });
+    expect(getAtlasCloudApiKey()).toBe('atlas-stored-key');
+  });
+
+  it('falls back to the canonical Atlas Cloud env var in local mode', () => {
+    process.env.ATLASCLOUD_API_KEY = 'atlas-env-key';
+    mockAuthStorageInstance.get.mockReturnValue(undefined);
+    expect(getAtlasCloudApiKey()).toBe('atlas-env-key');
+  });
+
+  it('falls back to the readable Atlas Cloud env var alias', () => {
+    process.env.ATLAS_CLOUD_API_KEY = 'atlas-alias-key';
+    mockAuthStorageInstance.get.mockReturnValue(undefined);
+    expect(getAtlasCloudApiKey()).toBe('atlas-alias-key');
+  });
+
+  it('ignores environment aliases when the credential store disables environment fallback', () => {
+    process.env.ATLASCLOUD_API_KEY = 'atlas-env-key';
+    expect(getAtlasCloudApiKey(makeTenantCredentialStore())).toBeUndefined();
   });
 });

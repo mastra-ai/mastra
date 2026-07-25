@@ -16,6 +16,7 @@ import {
 import type { MastraCodeGatewayOptions } from './mastracode-gateway.js';
 
 export {
+  getAtlasCloudApiKey,
   getAnthropicApiKey,
   getOpenAIApiKey,
   MASTRACODE_GATEWAY_ID,

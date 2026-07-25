@@ -37,6 +37,7 @@ export interface ProviderAccess {
   cerebras: ProviderAccessLevel;
   google: ProviderAccessLevel;
   deepseek: ProviderAccessLevel;
+  atlascloud: ProviderAccessLevel;
   'github-copilot': ProviderAccessLevel;
   [provider: string]: ProviderAccessLevel;
 }
@@ -99,6 +100,19 @@ export function getAvailableModePacks(
         build: 'github-copilot/gpt-4.1',
         plan: 'github-copilot/gemini-2.5-pro',
         fast: 'github-copilot/grok-code-fast-1',
+      },
+    });
+  }
+
+  if (access.atlascloud) {
+    packs.push({
+      id: 'atlascloud',
+      name: 'Atlas Cloud',
+      description: 'OpenAI-compatible models via Atlas Cloud API key',
+      models: {
+        build: 'atlascloud/deepseek-ai/deepseek-v4-pro',
+        plan: 'atlascloud/deepseek-ai/deepseek-v4-pro',
+        fast: 'atlascloud/deepseek-ai/deepseek-v4-flash',
       },
     });
   }
@@ -169,6 +183,15 @@ export function getAvailableOmPacks(access: ProviderAccess): OMPack[] {
       name: 'DeepSeek',
       description: 'Via DeepSeek API key',
       modelId: 'deepseek/deepseek-v4-flash',
+    });
+  }
+
+  if (access.atlascloud) {
+    packs.push({
+      id: 'atlascloud',
+      name: 'Atlas Cloud',
+      description: 'Via Atlas Cloud API key',
+      modelId: 'atlascloud/deepseek-ai/deepseek-v4-flash',
     });
   }
 

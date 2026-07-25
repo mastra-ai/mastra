@@ -163,6 +163,7 @@ describe('buildProviderAccess', () => {
         { provider: 'cerebras', hasApiKey: true },
         { provider: 'google', hasApiKey: true },
         { provider: 'deepseek', hasApiKey: true },
+        { provider: 'atlascloud', hasApiKey: true },
         { provider: 'xai', hasApiKey: true },
       ]),
       tenantCredentials: [],
@@ -173,6 +174,7 @@ describe('buildProviderAccess', () => {
       cerebras: false,
       google: false,
       deepseek: false,
+      atlascloud: false,
       xai: false,
     });
   });

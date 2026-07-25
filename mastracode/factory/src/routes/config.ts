@@ -316,6 +316,7 @@ export async function buildProviderAccess({
     cerebras: accessLevel('cerebras'),
     google: accessLevel('google'),
     deepseek: accessLevel('deepseek'),
+    atlascloud: accessLevel('atlascloud'),
     'github-copilot': accessLevel('github-copilot'),
   };
   const seen = new Set(Object.keys(access));

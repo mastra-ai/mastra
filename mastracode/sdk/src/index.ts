@@ -391,6 +391,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         google: 'GOOGLE_GENERATIVE_AI_API_KEY',
         cerebras: 'CEREBRAS_API_KEY',
         deepseek: 'DEEPSEEK_API_KEY',
+        atlascloud: 'ATLASCLOUD_API_KEY',
       });
     }
   }
@@ -791,6 +792,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     cerebras: process.env.CEREBRAS_API_KEY ? 'apikey' : false,
     google: process.env.GOOGLE_GENERATIVE_AI_API_KEY ? 'apikey' : false,
     deepseek: process.env.DEEPSEEK_API_KEY ? 'apikey' : false,
+    atlascloud: process.env.ATLASCLOUD_API_KEY || process.env.ATLAS_CLOUD_API_KEY ? 'apikey' : false,
     'github-copilot': githubCopilotCred?.type === 'oauth' ? 'oauth' : false,
   };
   // Gateway covers all providers — ensure Anthropic/OpenAI packs are visible

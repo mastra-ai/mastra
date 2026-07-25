@@ -11,6 +11,7 @@ describe('getAvailableModePacks', () => {
       cerebras: false,
       google: false,
       deepseek: false,
+      atlascloud: false,
       'github-copilot': false,
     });
 
@@ -28,6 +29,7 @@ describe('getAvailableModePacks', () => {
       cerebras: false,
       google: false,
       deepseek: false,
+      atlascloud: false,
       'github-copilot': false,
     });
 
@@ -41,6 +43,7 @@ describe('getAvailableModePacks', () => {
       cerebras: false,
       google: false,
       deepseek: false,
+      atlascloud: false,
       'github-copilot': 'oauth',
     });
 
@@ -60,6 +63,7 @@ describe('getAvailableModePacks', () => {
       cerebras: false,
       google: false,
       deepseek: false,
+      atlascloud: false,
       'github-copilot': 'oauth',
     });
 
@@ -75,9 +79,30 @@ describe('getAvailableModePacks', () => {
       cerebras: false,
       google: false,
       deepseek: false,
+      atlascloud: false,
       'github-copilot': false,
     });
 
     expect(packs.find(p => p.id === 'github-copilot')).toBeUndefined();
+  });
+
+  it('exposes an Atlas Cloud pack when an API key is available', () => {
+    const packs = getAvailableModePacks({
+      anthropic: false,
+      openai: false,
+      cerebras: false,
+      google: false,
+      deepseek: false,
+      atlascloud: 'apikey',
+      'github-copilot': false,
+    });
+
+    const pack = packs.find(p => p.id === 'atlascloud');
+    expect(pack).toBeDefined();
+    expect(pack?.models).toEqual({
+      plan: 'atlascloud/deepseek-ai/deepseek-v4-pro',
+      build: 'atlascloud/deepseek-ai/deepseek-v4-pro',
+      fast: 'atlascloud/deepseek-ai/deepseek-v4-flash',
+    });
   });
 });

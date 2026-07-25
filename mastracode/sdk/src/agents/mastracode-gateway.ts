@@ -41,6 +41,10 @@ import { resolveCustomProviders } from './custom-provider-source.js';
 export const OPENAI_PREFIX = 'openai/';
 export const MASTRA_GATEWAY_PREFIX = 'mastra/';
 export const MASTRACODE_GATEWAY_ID = 'mastracode';
+const ATLAS_CLOUD_PROVIDER_ID = 'atlascloud';
+const ATLAS_CLOUD_BASE_URL = 'https://api.atlascloud.ai/v1';
+const ATLAS_CLOUD_API_KEY_ENV_VARS = ['ATLASCLOUD_API_KEY', 'ATLAS_CLOUD_API_KEY'] as const;
+const ATLAS_CLOUD_BASE_URL_ENV_VARS = ['ATLASCLOUD_BASE_URL', 'ATLAS_CLOUD_BASE_URL'] as const;
 
 const CODEX_OPENAI_MODEL_REMAPS: Record<string, string> = {
   'gpt-5.3': 'gpt-5.3-codex',
@@ -151,6 +155,38 @@ function openaiApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRe
   });
 }
 
+function getEnvValue(envVars: readonly string[]): string | undefined {
+  for (const envVar of envVars) {
+    const value = process.env[envVar]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function getAtlasCloudBaseURL(): string {
+  return (getEnvValue(ATLAS_CLOUD_BASE_URL_ENV_VARS) ?? ATLAS_CLOUD_BASE_URL).replace(/\/+$/, '');
+}
+
+export function getAtlasCloudApiKey(credentials: CredentialStore = authStorage): string | undefined {
+  const storedCred = credentials.get(ATLAS_CLOUD_PROVIDER_ID);
+  if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
+    return storedCred.key.trim();
+  }
+  const dedicatedKey = credentials.getStoredApiKey(ATLAS_CLOUD_PROVIDER_ID)?.trim();
+  if (dedicatedKey) return dedicatedKey;
+  return credentials.allowEnvironmentFallback === false ? undefined : getEnvValue(ATLAS_CLOUD_API_KEY_ENV_VARS);
+}
+
+function atlasCloudProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders) {
+  const atlasCloud = createOpenAICompatible({
+    name: ATLAS_CLOUD_PROVIDER_ID,
+    baseURL: getAtlasCloudBaseURL(),
+    apiKey,
+    headers,
+  });
+  return atlasCloud.chatModel(modelId) as unknown as GatewayLanguageModel;
+}
+
 function getAuthProviderId(providerId: string): string {
   return providerId === 'openai' ? 'openai-codex' : providerId;
 }
@@ -241,9 +277,14 @@ async function getMastraCodeProviderConfigs(
   return providers;
 }
 
-function getApiKeyEnvVar(providerConfig: Pick<ProviderConfig, 'apiKeyEnvVar'> | undefined): string | undefined {
+function getApiKeyEnvVars(providerConfig: Pick<ProviderConfig, 'apiKeyEnvVar'> | undefined): string[] {
   const envVars = providerConfig?.apiKeyEnvVar;
-  return Array.isArray(envVars) ? envVars[0] : envVars;
+  if (!envVars) return [];
+  return Array.isArray(envVars) ? envVars : [envVars];
+}
+
+function getApiKeyEnvVar(providerConfig: Pick<ProviderConfig, 'apiKeyEnvVar'> | undefined): string | undefined {
+  return getApiKeyEnvVars(providerConfig)[0];
 }
 
 export class MastraCodeGateway extends MastraModelGateway {
@@ -326,6 +367,11 @@ export class MastraCodeGateway extends MastraModelGateway {
       return { bearerToken: 'oauth', source: 'gateway' };
     }
 
+    if (request.providerId === ATLAS_CLOUD_PROVIDER_ID) {
+      const atlasCloudApiKey = getAtlasCloudApiKey(credentials);
+      return atlasCloudApiKey ? { apiKey: atlasCloudApiKey, source: 'gateway' } : undefined;
+    }
+
     const apiKey = getProviderAuthKey(request.providerId, credentials);
     return apiKey ? { apiKey, source: 'gateway' } : undefined;
   }
@@ -337,7 +383,7 @@ export class MastraCodeGateway extends MastraModelGateway {
 
       for (const [provider, providerConfig] of Object.entries(registry)) {
         const apiKeyEnvVar = getApiKeyEnvVar(providerConfig);
-        const hasEnvKey = apiKeyEnvVar ? Boolean(process.env[apiKeyEnvVar]) : false;
+        const hasEnvKey = getApiKeyEnvVars(providerConfig).some(envVar => Boolean(process.env[envVar]));
         const modelNames = providerConfig.models;
         if (!Array.isArray(modelNames)) continue;
 
@@ -410,6 +456,7 @@ export class MastraCodeGateway extends MastraModelGateway {
   async getApiKey(modelId: string): Promise<string> {
     const providerId = stripMastraGatewayPrefix(modelId).split('/', 1)[0];
     if (this.#routeThroughMastraGateway) return this.#mastraGatewayApiKey ?? '';
+    if (providerId === ATLAS_CLOUD_PROVIDER_ID) return getAtlasCloudApiKey(this.#credentials) ?? '';
     return providerId ? (getProviderAuthKey(providerId, this.#credentials) ?? '') : '';
   }
 
@@ -471,6 +518,14 @@ export class MastraCodeGateway extends MastraModelGateway {
         name: 'moonshotai.anthropicv1',
         headers: args.headers,
       })(args.modelId) as unknown as GatewayLanguageModel;
+    }
+
+    if (args.providerId === ATLAS_CLOUD_PROVIDER_ID) {
+      const apiKey = args.apiKey?.trim() || getAtlasCloudApiKey(this.#credentials);
+      if (!apiKey) {
+        throw new Error('Need ATLASCLOUD_API_KEY or ATLAS_CLOUD_API_KEY');
+      }
+      return atlasCloudProvider(args.modelId, apiKey, args.headers);
     }
 
     if (args.providerId === 'anthropic') {
