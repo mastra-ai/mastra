@@ -1099,6 +1099,33 @@ describe('vNext Workflow Handlers', () => {
       expect(pushed.length).toBe(firstChunks.length);
     });
 
+    it('caches chunks in emission order even when the cache backend resolves out of order', async () => {
+      const serverCache = mockMastra.getServerCache();
+      const pushedTypes: unknown[] = [];
+      let writeCount = 0;
+      vi.spyOn(serverCache!, 'listPush').mockImplementation(async (_key, value) => {
+        writeCount += 1;
+        if (writeCount === 1) {
+          // Delay only the first chunk's write. A pump that doesn't await write()
+          // would let a later, faster write jump ahead of this one.
+          await new Promise(resolve => setTimeout(resolve, 20));
+        }
+        pushedTypes.push((value as { type?: unknown })?.type);
+      });
+
+      const stream = (await STREAM_WORKFLOW_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId: 'test-run-cache-pump-order',
+        inputData: {},
+      } as any)) as ReadableStream;
+
+      const emittedChunks = await drain(stream);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(pushedTypes).toEqual(emittedChunks.map(chunk => chunk?.type));
+    });
+
     it('attaches a fresh pump for a later stream once the earlier pump for the same runId has settled', async () => {
       const serverCache = mockMastra.getServerCache();
       const pushed: any[] = [];

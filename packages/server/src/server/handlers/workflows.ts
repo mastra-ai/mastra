@@ -77,8 +77,17 @@ function attachRunCachePump({
       .pipeTo(
         new WritableStream<ChunkType>({
           write(chunk) {
-            // Fire and forget: a cache write must never stall or break the run.
-            void serverCache.listPush(runId, chunk).catch(() => {});
+            // `pipeTo()` only awaits what `write()` returns, so this must return the
+            // write promise rather than fire-and-forget it — otherwise, against an
+            // async cache backend (e.g. `RedisServerCache`), writes can complete out
+            // of order and the cached history `/observe` replays ends up scrambled.
+            // Awaiting here only paces this pump's own `fullStream` subscription; the
+            // client's `fullStream` is a separate subscription and is unaffected, so
+            // this can't stall or slow down the run itself. A write failure is still
+            // caught and logged rather than left to abort the pipe.
+            return serverCache.listPush(runId, chunk).catch(error => {
+              mastra.getLogger()?.warn('Workflow stream cache pump write failed', { runId, error });
+            });
           },
         }),
       )
