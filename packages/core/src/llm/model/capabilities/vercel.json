@@ -470,6 +470,7 @@
     "xai/grok-build-0.1",
     "zai/glm-5-turbo",
     "zai/glm-5.1",
-    "zai/glm-5.2"
+    "zai/glm-5.2",
+    "zai/glm-5.2-fast"
   ]
 }

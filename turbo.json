@@ -13,6 +13,10 @@
     "lint": {
       "dependsOn": []
     },
+    "lint:fix": {
+      "dependsOn": [],
+      "cache": false
+    },
     "//#lint:format": {
       "dependsOn": [],
       "cache": false
