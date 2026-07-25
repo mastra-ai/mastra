@@ -373,6 +373,195 @@ describe('A2A Handler', () => {
       });
     });
 
+    it('should return a working task before non-blocking execution completes', async () => {
+      const taskId = 'non-blocking-task-id';
+      const contextId = 'non-blocking-context-id';
+      const generation = Promise.withResolvers<{ text: string }>();
+      const mockAgent = {
+        generate: vi.fn().mockReturnValue(generation.promise),
+      } as unknown as Agent;
+      const params: MessageSendParams = {
+        message: {
+          messageId: 'non-blocking-message-id',
+          taskId,
+          contextId,
+          kind: 'message',
+          role: 'user',
+          parts: [{ kind: 'text', text: 'Run this in the background' }],
+        },
+        configuration: { blocking: false },
+      };
+      const requestContext = new RequestContext();
+
+      const responsePromise = handleMessageSend({
+        requestId: 'non-blocking-request-id',
+        params,
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId: 'test-agent',
+        requestContext,
+      });
+      let returned = false;
+      void responsePromise.then(() => {
+        returned = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(returned).toBe(true);
+      const response = await responsePromise;
+      expect(response.result).toMatchObject({
+        id: taskId,
+        contextId,
+        status: { state: 'working' },
+      });
+      expect(mockAgent.generate).toHaveBeenCalledWith(expect.any(Array), {
+        runId: taskId,
+        requestContext,
+        threadId: contextId,
+        resourceId: 'test-agent',
+      });
+      expect((await mockTaskStore.load({ agentId: 'test-agent', taskId }))?.status.state).toBe('working');
+
+      generation.resolve({ text: 'Background result' });
+
+      await vi.waitFor(async () => {
+        expect(
+          await handleTaskGet({
+            requestId: 'get-completed-task',
+            taskStore: mockTaskStore,
+            agentId: 'test-agent',
+            taskId,
+          }),
+        ).toMatchObject({
+          result: {
+            id: taskId,
+            contextId,
+            status: { state: 'completed' },
+            artifacts: [{ parts: [{ kind: 'text', text: 'Background result' }] }],
+          },
+        });
+      });
+    });
+
+    it('should persist non-blocking execution failures after returning', async () => {
+      const taskId = 'failed-background-task-id';
+      const generation = Promise.withResolvers<{ text: string }>();
+      const mockAgent = {
+        generate: vi.fn().mockReturnValue(generation.promise),
+      } as unknown as Agent;
+
+      const response = await handleMessageSend({
+        requestId: 'failed-background-request-id',
+        params: {
+          message: {
+            messageId: 'failed-background-message-id',
+            taskId,
+            kind: 'message',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'Fail later' }],
+          },
+          configuration: { blocking: false },
+        },
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+      });
+
+      expect(response.result?.status.state).toBe('working');
+      generation.reject(new Error('Background failure'));
+
+      await vi.waitFor(async () => {
+        expect(await mockTaskStore.load({ agentId: 'test-agent', taskId })).toMatchObject({
+          status: {
+            state: 'failed',
+            message: {
+              parts: [{ kind: 'text', text: 'Handler failed: Background failure' }],
+            },
+          },
+        });
+      });
+    });
+
+    it('should not overwrite a canceled non-blocking task when execution finishes', async () => {
+      const taskId = 'canceled-background-task-id';
+      const generation = Promise.withResolvers<{ text: string }>();
+      const mockAgent = {
+        generate: vi.fn().mockReturnValue(generation.promise),
+      } as unknown as Agent;
+      const save = vi.spyOn(mockTaskStore, 'save');
+
+      await handleMessageSend({
+        requestId: 'canceled-background-request-id',
+        params: {
+          message: {
+            messageId: 'canceled-background-message-id',
+            taskId,
+            kind: 'message',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'Cancel me' }],
+          },
+          configuration: { blocking: false },
+        },
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+      });
+
+      await handleTaskCancel({
+        requestId: 'cancel-request-id',
+        taskStore: mockTaskStore,
+        agentId: 'test-agent',
+        taskId,
+      });
+      generation.resolve({ text: 'Too late' });
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect((await mockTaskStore.load({ agentId: 'test-agent', taskId }))?.status.state).toBe('canceled');
+      expect(save).toHaveBeenCalledTimes(3);
+    });
+
+    it('should wait for execution when blocking is true', async () => {
+      const generation = Promise.withResolvers<{ text: string }>();
+      const mockAgent = {
+        generate: vi.fn().mockReturnValue(generation.promise),
+      } as unknown as Agent;
+      const responsePromise = handleMessageSend({
+        requestId: 'blocking-request-id',
+        params: {
+          message: {
+            messageId: 'blocking-message-id',
+            kind: 'message',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'Wait for me' }],
+          },
+          configuration: { blocking: true },
+        },
+        taskStore: mockTaskStore,
+        agent: mockAgent,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+      });
+      let returned = false;
+      void responsePromise.then(() => {
+        returned = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(returned).toBe(false);
+
+      generation.resolve({ text: 'Blocking result' });
+      await expect(responsePromise).resolves.toMatchObject({
+        result: {
+          status: { state: 'completed' },
+          artifacts: [{ parts: [{ kind: 'text', text: 'Blocking result' }] }],
+        },
+      });
+    });
+
     it('should accept file parts (FileWithUri + FileWithBytes) and pass them through to the converter', async () => {
       // Regression test for the handler-level schema rejecting non-text parts.
       // Pre-fix, params.message.parts was validated as `kind: z.enum(['text'])`
@@ -1121,6 +1310,7 @@ describe('A2A Handler', () => {
         fetch: fetchMock,
         lookup: vi.fn().mockResolvedValue([{ address: '93.184.216.34', family: 4 }]),
       });
+      const generation = Promise.withResolvers<{ text: string }>();
 
       const params: MessageSendParams = {
         message: {
@@ -1131,6 +1321,7 @@ describe('A2A Handler', () => {
           parts: [{ kind: 'text', text: 'Notify me when done' }],
         },
         configuration: {
+          blocking: false,
           pushNotificationConfig: {
             url: 'https://example.com/webhook',
             token: 'notification-token',
@@ -1139,8 +1330,8 @@ describe('A2A Handler', () => {
       };
 
       const mockAgent = mockMastra.getAgentById(agentId);
-      // @ts-expect-error - mockResolvedValue is not available on the Agent class
-      mockAgent.generate.mockResolvedValue({ text: 'Done.' });
+      // @ts-expect-error - mockReturnValue is not available on the Agent class
+      mockAgent.generate.mockReturnValue(generation.promise);
 
       const result = await handleMessageSend({
         requestId,
@@ -1153,7 +1344,8 @@ describe('A2A Handler', () => {
         requestContext: new RequestContext(),
       });
 
-      expect(result.result?.status.state).toBe('completed');
+      expect(result.result?.status.state).toBe('working');
+      expect(fetchMock).not.toHaveBeenCalled();
 
       const storedConfig = pushNotificationStore.get({
         agentId,
@@ -1168,7 +1360,14 @@ describe('A2A Handler', () => {
         },
       });
 
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      generation.resolve({ text: 'Done.' });
+
+      await vi.waitFor(async () => {
+        expect(await mockTaskStore.load({ agentId, taskId })).toMatchObject({
+          status: { state: 'completed' },
+        });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      });
       expect(fetchMock).toHaveBeenCalledWith(
         'https://93.184.216.34/webhook',
         expect.objectContaining({
