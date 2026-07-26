@@ -301,7 +301,11 @@ type Shared_Type_16 = {
   };
   /** Which processor phases to enable */
   enabledPhases: (
-    'processInput' | 'processInputStep' | 'processOutputStream' | 'processOutputResult' | 'processOutputStep'
+    | 'processInput'
+    | 'processInputStep'
+    | 'processOutputStream'
+    | 'processOutputResult'
+    | 'processOutputStep'
   )[];
 };
 
@@ -16560,7 +16564,11 @@ export type GetProcessorProviders_Response = {
     name: string;
     description?: string | undefined;
     availablePhases: (
-      'processInput' | 'processInputStep' | 'processOutputStream' | 'processOutputResult' | 'processOutputStep'
+      | 'processInput'
+      | 'processInputStep'
+      | 'processOutputStream'
+      | 'processOutputResult'
+      | 'processOutputStep'
     )[];
   }[];
 };
@@ -16593,7 +16601,11 @@ export type GetProcessorProvidersProviderId_Response = {
   name: string;
   description?: string | undefined;
   availablePhases: (
-    'processInput' | 'processInputStep' | 'processOutputStream' | 'processOutputResult' | 'processOutputStep'
+    | 'processInput'
+    | 'processInputStep'
+    | 'processOutputStream'
+    | 'processOutputResult'
+    | 'processOutputStep'
   )[];
   configSchema: {
     [key: string]: unknown;

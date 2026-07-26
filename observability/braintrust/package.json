@@ -27,7 +27,8 @@
     "build:watch": "pnpm build --watch",
     "test": "vitest run",
     "test:watch": "vitest watch",
-    "lint": "eslint .",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
     "example:basic": "tsx examples/basic.ts",
     "example:traced": "tsx examples/with-logger-traced.ts",
     "example:eval": "tsx examples/with-eval.ts"

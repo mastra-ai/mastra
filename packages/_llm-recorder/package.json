@@ -34,7 +34,8 @@
   "scripts": {
     "build": "tsup --config tsup.config.ts",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "keywords": [],
   "author": "",

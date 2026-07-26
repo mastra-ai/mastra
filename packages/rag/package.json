@@ -28,7 +28,8 @@
     "build:watch": "pnpm build:lib --watch",
     "vitest": "vitest",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "author": "",
   "license": "Apache-2.0",

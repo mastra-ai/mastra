@@ -113,7 +113,12 @@ export interface SubagentEntry {
 
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
 export type TimelineEntry =
-  MessageEntry | NoticeEntry | PromptEntry | NotificationEntry | NotificationSummaryEntry | SubagentEntry;
+  | MessageEntry
+  | NoticeEntry
+  | PromptEntry
+  | NotificationEntry
+  | NotificationSummaryEntry
+  | SubagentEntry;
 
 /** Token usage snapshot from usage_update events. */
 export interface UsageSnapshot {
