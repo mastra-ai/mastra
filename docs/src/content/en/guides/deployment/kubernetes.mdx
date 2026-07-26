@@ -266,7 +266,7 @@ cleanup()
 
 Because the run state is in Postgres and the events are in Redis, the reconnecting request can be served by any pod, not only the one that started the run. See [Resumable streams](/docs/long-running-agents/durable-agents#resumable-streams).
 
-Multiple clients can observe the same run at once. Each `observe()` call receives the full stream, so a user watching from two devices, or several users following one run, all stay in sync.
+Multiple clients can observe the same run at once. Each `observe()` call receives the full stream, so a user watching from two devices, or two people following the same run, stay in sync.
 
 ## Tool approval across pods
 
@@ -293,7 +293,7 @@ The pod that handles the approval loads the suspended run from Postgres. It then
 
 - The default in-process setup keeps run state in one pod's memory and doesn't share it across pods. Use [durable agents](/docs/long-running-agents/durable-agents) with shared Redis and Postgres so streaming, approvals, and reconnection work across pods.
 - Cross-pod streaming, approvals, and reconnection require the durable-agent path. A plain agent keeps run state in memory and doesn't resume on another pod.
-- When several pods start at once against an uninitialized database, they can race to create the schema and a pod may fail to start. Start with one replica so the schema is created once, then scale up.
+- When multiple pods start at once against an uninitialized database, they can race to create the schema and a pod may fail to start. Start with one replica so the schema is created once, then scale up.
 
 ## Related
 
