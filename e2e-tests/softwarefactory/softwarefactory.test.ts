@@ -144,7 +144,9 @@ describe('softwarefactory template', () => {
       const probe = async (port: number, path: string) => {
         for (const host of ['localhost', '127.0.0.1', '[::1]']) {
           try {
-            const res = await fetch(`http://${host}:${port}${path}`);
+            // Bound each attempt: a hung request would otherwise stall the
+            // poll loop past its deadline and lose the collected diagnostics.
+            const res = await fetch(`http://${host}:${port}${path}`, { signal: AbortSignal.timeout(10_000) });
             lastProbe.set(path, `${host} -> ${res.status}`);
             if (res.ok) return res;
           } catch (error) {

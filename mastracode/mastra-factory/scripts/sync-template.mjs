@@ -258,7 +258,9 @@ function transformPackageJson() {
   // Transitive runtime peers that must be declared as direct deps so npm
   // resolves them without needing pnpm's auto-install-peers behavior.
   // (In the monorepo dev setup pnpm provides them automatically.)
-  manifest.dependencies['@mastra/memory'] = resolveTaggedVersion('@mastra/memory', 'latest'); // peer of @mastra/playground-ui
+  // Under --tag, `latest` can belong to a different snapshot set on shared
+  // registries, which would install a second @mastra/memory copy.
+  manifest.dependencies['@mastra/memory'] = resolveTaggedVersion('@mastra/memory', pinTag ?? 'latest'); // peer of @mastra/playground-ui
   manifest.dependencies['react-is'] = '^19.0.0'; // peer of recharts (via @mastra/playground-ui)
 
   // Downgrade `typescript` from tsgo (v7) to classic (v5). The Mastra Factory
