@@ -221,6 +221,10 @@ Register the durable agent with the `Mastra` instance above. Its run state now l
     ```bash
     kubectl apply -f hpa.yaml
     ```
+
+    :::note
+    CPU-based autoscaling needs the [metrics-server](https://github.com/kubernetes-sigs/metrics-server) running in the cluster. Managed clusters like GKE, EKS, and AKS include it. Local clusters like kind and minikube don't, so enable it there first (for example, `minikube addons enable metrics-server`).
+    :::
   </StepItem>
 
   <StepItem>
@@ -294,6 +298,7 @@ The pod that handles the approval loads the suspended run from Postgres. It then
 - The default in-process setup keeps run state in one pod's memory and doesn't share it across pods. Use [durable agents](/docs/long-running-agents/durable-agents) with shared Redis and Postgres so streaming, approvals, and reconnection work across pods.
 - Cross-pod streaming, approvals, and reconnection require the durable-agent path. A plain agent keeps run state in memory and doesn't resume on another pod.
 - When multiple pods start at once against an uninitialized database, they can race to create the schema and a pod may fail to start. Start with one replica so the schema is created once, then scale up.
+- For a stricter setup, initialize the schema outside the app (for example, a one-off Kubernetes Job) and set `disableInit: true` on the `PostgresStore` in every pod.
 
 ## Related
 
