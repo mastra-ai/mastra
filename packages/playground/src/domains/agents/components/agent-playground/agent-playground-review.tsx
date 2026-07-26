@@ -439,11 +439,11 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
             <DialogTitle>Proposed Tag Assignments</DialogTitle>
             {analysisModelId && (
               <Txt variant="ui-xs" className="text-neutral3 mt-1">
-                Analyzed by <span className="font-medium text-neutral4">{analysisModelId}</span>
+                Analyzed by <span className="text-neutral4 font-medium">{analysisModelId}</span>
               </Txt>
             )}
           </DialogHeader>
-          <DialogBody className="max-h-[400px] overflow-y-auto space-y-2">
+          <DialogBody className="max-h-[400px] space-y-2 overflow-y-auto">
             {proposedAssignments.map((proposal, idx) => {
               const item = items.find(i => i.id === proposal.itemId);
               const inputStr =
@@ -465,11 +465,11 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     }}
                     className="mt-1"
                   />
-                  <div className="flex-1 min-w-0">
-                    <Txt variant="ui-xs" className="text-neutral4 truncate block">
+                  <div className="min-w-0 flex-1">
+                    <Txt variant="ui-xs" className="text-neutral4 block truncate">
                       {inputStr || `Item ${proposal.itemId.slice(0, 8)}`}
                     </Txt>
-                    <div className="flex flex-wrap gap-1 mt-1">
+                    <div className="mt-1 flex flex-wrap gap-1">
                       {proposal.tags.map((tag, tagIdx) => (
                         <ProposalTag
                           key={`${tag}-${tagIdx}`}
@@ -657,7 +657,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     <DropdownMenu.Trigger asChild>
                       <Button disabled={isAnalyzing}>
                         {isAnalyzing ? (
-                          <Spinner className="w-4 h-4" />
+                          <Spinner className="h-4 w-4" />
                         ) : (
                           <Icon size="sm">
                             <ChevronDown />
@@ -723,12 +723,12 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
           </Column.Toolbar>
 
           {isLoadingDisplay ? (
-            <div className="flex-1 flex items-center justify-center">
+            <div className="flex flex-1 items-center justify-center">
               <Spinner className="h-4 w-4" />
             </div>
           ) : displayItems.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center px-8">
+            <div className="flex flex-1 items-center justify-center">
+              <div className="px-8 text-center">
                 <Txt variant="ui-sm" className="text-neutral3 block">
                   {showCompleted ? 'No completed reviews yet' : 'No items to review'}
                 </Txt>
@@ -767,7 +767,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                 const rowCells = (
                   <>
                     {/* Input preview */}
-                    <DataList.Cell height="compact" className="min-w-0 text-neutral4">
+                    <DataList.Cell height="compact" className="text-neutral4 min-w-0">
                       <span className="block truncate">{truncateInput(item.input, 80)}</span>
                     </DataList.Cell>
 

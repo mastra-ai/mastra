@@ -27,7 +27,8 @@
     "test:integration": "vitest run ./src/**/*.integration.test.ts",
     "test": "pnpm test:unit && pnpm test:integration",
     "test:cloud": "pnpm test:integration",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "devDependencies": {

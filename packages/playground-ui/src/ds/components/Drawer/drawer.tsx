@@ -378,7 +378,7 @@ const DrawerFloatingSideHandle = ({ side, variant }: DrawerFloatingSideHandlePro
         side === 'right' ? '-left-2' : '-right-2',
       )}
     >
-      <div className="h-10 w-1 rounded-full bg-surface5/80 shadow-sm" />
+      <div className="bg-surface5/80 h-10 w-1 rounded-full shadow-sm" />
     </div>
   );
 };

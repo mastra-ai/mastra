@@ -1,6 +1,6 @@
 {
   "name": "@mastra/client-js",
-  "version": "1.34.0-alpha.0",
+  "version": "1.34.0-alpha.3",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "type": "module",
@@ -34,7 +34,8 @@
   "homepage": "https://mastra.ai",
   "license": "Apache-2.0",
   "scripts": {
-    "lint": "eslint .",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
     "generate:route-types": "pnpm --filter @mastra/server generate:route-types",
     "build:lib": "tsup --config tsup.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",

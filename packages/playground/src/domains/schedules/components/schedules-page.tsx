@@ -13,7 +13,7 @@ export function SchedulesPage({ workflowId }: { workflowId?: string } = {}) {
   }
 
   return (
-    <div className="grid grid-rows-[auto_1fr] gap-4 h-full overflow-hidden">
+    <div className="grid h-full grid-rows-[auto_1fr] gap-4 overflow-hidden">
       <div className="max-w-120">
         <ListSearch onSearch={setSearch} label="Filter schedules" placeholder="Filter by id or workflow" />
       </div>

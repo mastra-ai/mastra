@@ -1,6 +1,6 @@
 {
   "name": "create-factory",
-  "version": "0.1.2-alpha.0",
+  "version": "0.1.2-alpha.3",
   "description": "Create a Mastra Factory project: an agent-powered software delivery environment built on Mastra. Run `npm create factory` to scaffold and get started.",
   "type": "module",
   "license": "Apache-2.0",
@@ -16,7 +16,8 @@
     "prepack": "npm run build",
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "engines": {
     "node": ">=22.13.0"

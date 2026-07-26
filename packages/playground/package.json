@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.20.2-alpha.0",
+  "version": "1.20.2-alpha.3",
   "type": "module",
   "main": "./src/exports.ts",
   "types": "./src/exports.ts",
@@ -31,7 +31,8 @@
     "build": "vite build",
     "build:lib": "vite build",
     "build:watch": "vite build --watch",
-    "lint": "eslint --no-warn-ignored .",
+    "lint": "oxlint . && eslint --no-warn-ignored .",
+    "lint:fix": "oxlint --fix . && eslint --fix --no-warn-ignored .",
     "typecheck": "tsc --noEmit -p tsconfig.build.json",
     "preview": "vite preview",
     "test": "vitest",
