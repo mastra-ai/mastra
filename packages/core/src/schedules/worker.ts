@@ -1,4 +1,4 @@
-import type { AgentSignalIfIdleOptions } from '../agent/types';
+import type { AgentSignal, AgentSignalIfIdleOptions } from '../agent/types';
 import type { Event, EventCallback } from '../events/types';
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
@@ -389,16 +389,14 @@ export async function executeAgentSchedule(
         ...(effective.attributes ? { attributes: effective.attributes } : {}),
         providerOptions: mergeProviderOptions(effective.providerOptions, scheduleRunMeta),
       };
-      signalResult = agent.sendSignal(
-        // Branched so `type` narrows into the AgentSignalInput union (state signals forbid transient).
-        signalType === 'state' ? { ...signalBase, type: signalType } : { ...signalBase, type: signalType },
-        {
-          resourceId: effective.resourceId,
-          threadId: effective.threadId,
-          ...(effective.ifActive ? { ifActive: effective.ifActive } : {}),
-          ...(effective.ifIdle ? { ifIdle: buildIfIdleOptions(effective.ifIdle) } : {}),
-        },
-      );
+      const signal: AgentSignal =
+        signalType === 'state' ? { ...signalBase, type: 'state' } : { ...signalBase, type: signalType };
+      signalResult = agent.sendSignal(signal, {
+        resourceId: effective.resourceId,
+        threadId: effective.threadId,
+        ...(effective.ifActive ? { ifActive: effective.ifActive } : {}),
+        ...(effective.ifIdle ? { ifIdle: buildIfIdleOptions(effective.ifIdle) } : {}),
+      });
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       await safeHookCall(log, () =>

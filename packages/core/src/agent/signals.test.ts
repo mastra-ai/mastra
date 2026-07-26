@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import type { CreatedNonStateAgentSignal, CreatedStateAgentSignal } from './signals';
+import type { CreatedAgentSignal } from './signals';
 import {
   createSignal,
   dataPartToSignal,
@@ -66,8 +66,8 @@ describe('transient signals (transient: true)', () => {
     const stateSignal = createSignal({ type: 'state', contents: 'state' });
     const legacySignal = createSignal({ type: 'system-reminder', contents: 'reminder' });
 
-    expectTypeOf(stateSignal).toEqualTypeOf<CreatedStateAgentSignal>();
-    expectTypeOf(legacySignal).toEqualTypeOf<CreatedNonStateAgentSignal>();
+    expectTypeOf(stateSignal).toEqualTypeOf<Extract<CreatedAgentSignal, { type: 'state' }>>();
+    expectTypeOf(legacySignal).toEqualTypeOf<Exclude<CreatedAgentSignal, { type: 'state' }>>();
     expect(legacySignal.type).toBe('reactive');
   });
 

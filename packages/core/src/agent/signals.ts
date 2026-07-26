@@ -132,29 +132,22 @@ type CreatedAgentSignalBase = Omit<AgentSignalInputBase, 'id' | 'createdAt' | 'a
  *
  * @experimental Agent signals are experimental and may change in a future release.
  */
-export type CreatedStateAgentSignal = CreatedAgentSignalBase & { type: 'state'; transient?: never };
-export type CreatedNonStateAgentSignal = CreatedAgentSignalBase & {
-  type: Exclude<AgentSignalCategory, 'state'>;
-  transient?: boolean;
-};
-export type CreatedAgentSignal = CreatedStateAgentSignal | CreatedNonStateAgentSignal;
+export type CreatedAgentSignal =
+  | (CreatedAgentSignalBase & { type: 'state'; transient?: never })
+  | (CreatedAgentSignalBase & {
+      type: Exclude<AgentSignalCategory, 'state'>;
+      transient?: boolean;
+    });
 
 export function isMastraSignalMessage(message: MastraDBMessage): message is MastraDBMessage & { role: 'signal' } {
   return message.role === 'signal';
 }
 
 /**
- * True for a signal DB message created with `transient: true`. Save paths use this to drop the
- * message before writing to storage — the signal still reaches the model (the prompt is projected
- * from the live message list, not the persisted set), it is just never retained.
+ * True for a signal DB message created with `transient: true`.
  *
- * Compatibility note: @mastra/memory intentionally copies this helper into
- * packages/memory/src/index.ts instead of importing it. Its peer range permits older core
- * versions that do not export this newer name, and importing it can crash published memory
- * builds during ESM instantiation. Until v2 can tighten that peer contract, keep both sides
- * manually in sync.
- *
- * TODO(v2): dedupe — remove the memory-side copy once the peer contract is tightened.
+ * @mastra/memory keeps a matching local predicate because its peer range includes core versions
+ * without this export. Keep both copies in sync until that peer range can be tightened.
  *
  * @experimental Agent signals are experimental and may change in a future release.
  */
@@ -567,10 +560,12 @@ export function isCreatedAgentSignal(input: unknown): input is CreatedAgentSigna
   return candidate.__isCreatedSignal === true;
 }
 
-export function createSignal(input: Extract<AgentSignalInput, { type: 'state' }>): CreatedStateAgentSignal;
+export function createSignal(
+  input: Extract<AgentSignalInput, { type: 'state' }>,
+): Extract<CreatedAgentSignal, { type: 'state' }>;
 export function createSignal(
   input: Extract<AgentSignalInput, { type: Exclude<AgentSignalType, 'state'> }>,
-): CreatedNonStateAgentSignal;
+): Extract<CreatedAgentSignal, { type: Exclude<AgentSignalCategory, 'state'> }>;
 export function createSignal(input: AgentSignalInput): CreatedAgentSignal;
 export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
   if (input.type === 'state' && input.transient !== undefined) {
@@ -611,11 +606,10 @@ export function resolveDeliveryAttributes(
 ): CreatedAgentSignal {
   if (!attributes || Object.keys(attributes).length === 0) return signal;
 
-  const input = {
+  return createSignal({
     ...signal,
     attributes: { ...signal.attributes, ...attributes },
-  };
-  return createSignal(input);
+  });
 }
 
 export function signalToMessage(signal: AgentSignalInput | CreatedAgentSignal): UserModelMessage {

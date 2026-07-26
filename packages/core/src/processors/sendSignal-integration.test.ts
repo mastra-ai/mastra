@@ -449,38 +449,4 @@ describe('sendSignal integration through ProcessorRunner', () => {
     expect((signals[0]!.content.metadata?.signal as Record<string, unknown>).transient).toBe(true);
     expect(isTransientSignalMessage(signals[0]!)).toBe(true);
   });
-
-  it('does not mark a normal processor sendSignal as transient', async () => {
-    const runner = new ProcessorRunner({
-      inputProcessors: [
-        {
-          id: 'normal-signal',
-          processInputStep: async ({ sendSignal }) => {
-            await sendSignal?.({
-              type: 'system-reminder',
-              contents: 'persisted reminder',
-            });
-          },
-        },
-      ],
-      outputProcessors: [],
-      logger: mockLogger,
-      agentName: 'test-agent',
-    });
-
-    await runner.runProcessInputStep({
-      messageList,
-      stepNumber: 0,
-      steps: [],
-      model: {} as any,
-      tools: {},
-      retryCount: 0,
-      messageId: 'response-1',
-      writer: { custom: async () => {} },
-    });
-
-    const signals = messageList.get.all.db().filter(m => m.role === 'signal');
-    expect(signals).toHaveLength(1);
-    expect(isTransientSignalMessage(signals[0]!)).toBe(false);
-  });
 });

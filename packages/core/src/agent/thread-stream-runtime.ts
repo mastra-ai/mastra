@@ -145,7 +145,7 @@ type AgentThreadRuntimeState = {
 
 export type AgentThreadState = 'active' | 'idle';
 
-type SerializableAgentSignal = (AgentSignal | CreatedAgentSignal) & Pick<CreatedAgentSignal, 'id' | 'createdAt'>;
+type SerializableAgentSignal = AgentSignal & Pick<CreatedAgentSignal, 'id' | 'createdAt'>;
 
 type AgentThreadStreamRuntimeEvent =
   | { type: 'run-registered'; runId: string; streamId: string; streamSeq: number }
@@ -1734,13 +1734,12 @@ export class AgentThreadStreamRuntime {
    */
   sendSignal<OUTPUT = unknown>(
     agent: Agent<any, any, any, any>,
-    signalInput: AgentSignal | CreatedAgentSignal,
+    signalInput: AgentSignal,
     target: SendAgentSignalOptions<OUTPUT>,
     pubsub?: PubSub,
   ): SendAgentSignalResult<OUTPUT> {
     const state = this.#getState(pubsub);
-    const input = { ...signalInput, acceptedAt: new Date() };
-    let signal = createSignal(input);
+    let signal = createSignal({ ...signalInput, acceptedAt: new Date() });
     let key: string | undefined;
     let runId = target.runId;
     const activeBehavior = target.ifActive?.behavior ?? 'deliver';
