@@ -149,7 +149,13 @@ Register the durable agent with the `Mastra` instance above. Its run state now l
               livenessProbe:
                 tcpSocket:
                   port: 8080
+              resources:
+                requests:
+                  cpu: 500m
+                  memory: 512Mi
     ```
+
+    The `resources.requests.cpu` value is required for the HorizontalPodAutoscaler below. Kubernetes calculates CPU utilization as usage divided by the requested amount, so without a CPU request the autoscaler can't compute a target and won't scale.
 
     ```bash
     kubectl apply -f deployment.yaml
@@ -218,11 +224,21 @@ Register the durable agent with the `Mastra` instance above. Its run state now l
   </StepItem>
 
   <StepItem>
-    Verify the pods are running and the service responds:
+    Verify the pods are running:
 
     ```bash
     kubectl get pods -l app=mastra
+    ```
+
+    Forward the service in one terminal. This command stays in the foreground:
+
+    ```bash
     kubectl port-forward service/mastra 8080:80
+    ```
+
+    In a second terminal, call the API:
+
+    ```bash
     curl http://localhost:8080/api/agents
     ```
 
