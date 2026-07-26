@@ -473,6 +473,7 @@ export function createDurableToolCallStep() {
         type: 'approval' | 'suspension';
         resumeSchema?: string;
         suspendPayload?: unknown;
+        suspendedToolRunId?: string;
       }) => {
         if (!messageList) return;
         const metadataKey = opts.type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
@@ -496,7 +497,11 @@ export function createDurableToolCallStep() {
           toolName,
           args,
           type: opts.type,
-          runId,
+          // Store the suspended tool's own runId
+          // so resume can present the snapshot's key; mirrors the regular
+          // agent's tool-call-step metadata.
+          runId: opts.suspendedToolRunId ?? runId,
+          ...(opts.suspendedToolRunId && opts.suspendedToolRunId !== runId ? { parentRunId: runId } : {}),
           ...(opts.type === 'suspension' ? { suspendPayload: opts.suspendPayload } : {}),
           ...(opts.resumeSchema ? { resumeSchema: opts.resumeSchema } : {}),
         };
@@ -505,8 +510,10 @@ export function createDurableToolCallStep() {
       // Remove suspended-tool / pending-approval metadata from the last
       // assistant message when a tool is being resumed. This mirrors the
       // regular agent's `removeToolMetadata()`.
-      const removeToolMetadata = async (type: 'suspension' | 'approval') => {
-        if (!messageList) return;
+      // Returns the removed entry so resume can recover the suspended tool's
+      // own runId (e.g. a workflow tool's inner run) from it.
+      const removeToolMetadata = async (type: 'suspension' | 'approval'): Promise<Record<string, any> | undefined> => {
+        if (!messageList) return undefined;
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         const allMessages = messageList.get.all.db();
         const lastAssistantMessage = [...allMessages].reverse().find(msg => {
@@ -523,12 +530,12 @@ export function createDurableToolCallStep() {
             )
           );
         });
-        if (!lastAssistantMessage?.content) return;
+        if (!lastAssistantMessage?.content) return undefined;
         const meta =
           typeof lastAssistantMessage.content.metadata === 'object' && lastAssistantMessage.content.metadata !== null
             ? (lastAssistantMessage.content.metadata as Record<string, any>)
             : undefined;
-        if (!meta?.[metadataKey]) return;
+        if (!meta?.[metadataKey]) return undefined;
         // Resolve key: exact toolCallId, then by entry toolCallId, then by toolName
         const entries = meta[metadataKey] as Record<string, any>;
         const key = entries[toolCallId]
@@ -536,7 +543,9 @@ export function createDurableToolCallStep() {
           : (Object.keys(entries).find(k => entries[k]?.toolCallId === toolCallId) ??
             Object.keys(entries).find(k => entries[k]?.toolName === toolName) ??
             (entries[toolName] ? toolName : undefined));
+        let removedEntry: Record<string, any> | undefined;
         if (key) {
+          removedEntry = entries[key];
           delete entries[key];
           if (Object.keys(entries).length === 0) {
             delete meta[metadataKey];
@@ -544,6 +553,7 @@ export function createDurableToolCallStep() {
         }
         // Flush to persist the metadata removal
         await doFlush();
+        return removedEntry;
       };
 
       if (requiresApproval && !resumeData) {
@@ -656,7 +666,23 @@ export function createDurableToolCallStep() {
       // Remove suspension metadata when resuming from an in-execution (non-approval-decision) suspension.
       // `isResumingFromSuspension` already excludes the approval-decision case above.
       if (isResumingFromSuspension) {
-        await removeToolMetadata('suspension');
+        const removedEntry = await removeToolMetadata('suspension');
+        // Workflow (and agent) tools persist their suspended inner run under their
+        // own runId; the wrapper needs it back as `suspendedToolRunId` to resume
+        // that run instead of starting a fresh one (which would re-suspend from
+        // scratch). Mirrors the regular agent's tool-call-step runId lookup.
+        // Entries whose runId equals the agent run's id are plain tools (or
+        // pre-fix metadata) — skip those to keep their behavior unchanged.
+        const suspendedToolRunId = removedEntry?.runId;
+        if (
+          suspendedToolRunId &&
+          suspendedToolRunId !== runId &&
+          typeof args === 'object' &&
+          args !== null &&
+          !args.suspendedToolRunId
+        ) {
+          args.suspendedToolRunId = suspendedToolRunId;
+        }
       }
 
       // 3. Check for background task execution
@@ -767,7 +793,11 @@ export function createDurableToolCallStep() {
             }
 
             // Add approval metadata to message before persisting
-            addToolMetadata({ type: 'approval', resumeSchema: approvalResumeSchema });
+            addToolMetadata({
+              type: 'approval',
+              resumeSchema: approvalResumeSchema,
+              suspendedToolRunId: suspendOptions?.runId,
+            });
 
             await doFlush();
 
@@ -813,6 +843,7 @@ export function createDurableToolCallStep() {
               type: 'suspension',
               suspendPayload,
               resumeSchema: suspendOptions?.resumeSchema,
+              suspendedToolRunId: suspendOptions?.runId,
             });
 
             await doFlush();
