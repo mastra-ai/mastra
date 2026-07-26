@@ -283,7 +283,9 @@ export interface FactoryTransitionResultRejected {
 }
 
 export type FactoryTransitionResult =
-  FactoryTransitionResultAccepted | FactoryTransitionResultPendingApproval | FactoryTransitionResultRejected;
+  | FactoryTransitionResultAccepted
+  | FactoryTransitionResultPendingApproval
+  | FactoryTransitionResultRejected;
 
 export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRuleSource {
   switch (source) {
