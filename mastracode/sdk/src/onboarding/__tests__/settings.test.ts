@@ -739,6 +739,26 @@ describe('browser viewport parsing/persistence', () => {
       expect(loadSettings(filePath).browser.viewport).toEqual({ width: 1280, height: 720 });
     });
   });
+
+  // A partial/zero/negative/fractional dimension must fall back to the COMPLETE
+  // default, never a hybrid (e.g. a valid width paired with a defaulted height).
+  it.each([
+    ['partial (width only)', { width: 1440 }],
+    ['partial (height only)', { height: 900 }],
+    ['zero width', { width: 0, height: 720 }],
+    ['zero height', { width: 1280, height: 0 }],
+    ['negative width', { width: -1280, height: 720 }],
+    ['negative height', { width: 1280, height: -720 }],
+    ['fractional width', { width: 1280.5, height: 720 }],
+    ['fractional height', { width: 1280, height: 720.5 }],
+    ['NaN width', { width: NaN, height: 720 }],
+    ['empty object', {}],
+  ])('falls back to the complete 1280x720 default on %s', (_label, viewport) => {
+    withTempSettingsFile(filePath => {
+      writeBrowser(filePath, viewport);
+      expect(loadSettings(filePath).browser.viewport).toEqual({ width: 1280, height: 720 });
+    });
+  });
 });
 
 describe('createBrowserFromSettings — viewport mapping', () => {

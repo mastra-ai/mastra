@@ -489,19 +489,36 @@ const BROWSER_PROVIDERS = new Set<BrowserProvider>(['stagehand', 'agent-browser'
 const STAGEHAND_ENVS = new Set<StagehandEnv>(['LOCAL', 'BROWSERBASE']);
 
 /**
+ * Validate a persisted viewport value.
+ *
+ * Accepts the `'window'` sentinel (match the real window, no emulation) or a
+ * fixed `{ width, height }` object. A fixed viewport is only honored when both
+ * dimensions are positive safe integers; any partial, zero, negative, or
+ * fractional value falls back to the complete {@link DEFAULT_VIEWPORT} rather
+ * than producing a hybrid (e.g. a valid width paired with a defaulted height).
+ */
+function parseViewport(raw: unknown): BrowserSettings['viewport'] {
+  if (raw === 'window') return 'window';
+  if (raw && typeof raw === 'object') {
+    const { width, height } = raw as Record<string, unknown>;
+    if (isPositiveSafeInteger(width) && isPositiveSafeInteger(height)) {
+      return { width, height };
+    }
+  }
+  return { ...DEFAULT_VIEWPORT };
+}
+
+function isPositiveSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0;
+}
+
+/**
  * Deep-merge and validate browser settings from JSON.
  * Explicitly validates types to handle malformed settings.json gracefully.
  */
 function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
   const raw = rawBrowser && typeof rawBrowser === 'object' ? (rawBrowser as Record<string, unknown>) : {};
-  const rawViewport = raw.viewport && typeof raw.viewport === 'object' ? (raw.viewport as Record<string, unknown>) : {};
-  const parsedViewport: BrowserSettings['viewport'] =
-    raw.viewport === 'window'
-      ? 'window'
-      : {
-          width: typeof rawViewport.width === 'number' ? rawViewport.width : DEFAULT_VIEWPORT.width,
-          height: typeof rawViewport.height === 'number' ? rawViewport.height : DEFAULT_VIEWPORT.height,
-        };
+  const parsedViewport = parseViewport(raw.viewport);
   const rawStagehand =
     raw.stagehand && typeof raw.stagehand === 'object' ? (raw.stagehand as Record<string, unknown>) : {};
   const rawAgentBrowser =

@@ -7,7 +7,7 @@ Added viewport control to the `/browser` command. The setup wizard now prompts f
 
 You can also configure it non-interactively:
 
-```
+```text
 /browser set viewport 1440x900   # fixed dimensions
 /browser set viewport window     # match the real browser window
 /browser clear viewport          # reset to the 1280x720 default

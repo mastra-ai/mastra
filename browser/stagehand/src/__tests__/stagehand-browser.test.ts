@@ -177,6 +177,31 @@ describe('StagehandBrowser', () => {
     });
   });
 
+  describe('viewport launch options', () => {
+    async function launchViewport(config: Partial<StagehandBrowserConfig>): Promise<unknown> {
+      const b = new StagehandBrowser(config);
+      const options = await (
+        b as unknown as { buildStagehandOptions(): Promise<{ localBrowserLaunchOptions?: { viewport?: unknown } }> }
+      ).buildStagehandOptions();
+      return options.localBrowserLaunchOptions?.viewport;
+    }
+
+    // A null viewport (match-window) must reach Stagehand as `undefined`, not
+    // `null`: Stagehand's Zod schema rejects null, and undefined yields the same
+    // "no fixed viewport, follow the real window" behavior.
+    it('maps a null viewport to undefined in local launch options', async () => {
+      expect(await launchViewport({ viewport: null })).toBeUndefined();
+    });
+
+    it('passes a fixed viewport through to local launch options unchanged', async () => {
+      expect(await launchViewport({ viewport: { width: 1440, height: 900 } })).toEqual({ width: 1440, height: 900 });
+    });
+
+    it('maps a null viewport to undefined when a cdpUrl is set', async () => {
+      expect(await launchViewport({ viewport: null, cdpUrl: 'ws://localhost:9222' })).toBeUndefined();
+    });
+  });
+
   describe('lifecycle', () => {
     it('should launch successfully', async () => {
       await browser.launch();
