@@ -18,19 +18,18 @@ import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboa
 import {
   resolveThreadActiveModelPackId,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
-  MEMORY_GATEWAY_PROVIDER,
+  MASTRA_GATEWAY_PROVIDER,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { LoadedPlugin } from '@mastra/code-sdk/plugins/types';
 import {
   detectPackageManager,
   fetchChangelog,
   fetchLatestVersion,
-  getInstallCommand,
   isNewerVersion,
-  runUpdate,
+  performUpdate,
 } from '@mastra/code-sdk/utils/update-check';
 import type { AgentSignalAttributes } from '@mastra/core/agent';
-import type { AgentControllerEvent, AgentControllerMessage } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
@@ -63,6 +62,7 @@ import {
   renderExistingMessages,
   renderTaskDeltaInline,
 } from './render-messages.js';
+import { flushRender, requestRender } from './render-scheduler.js';
 import {
   setupKeyboardShortcuts,
   buildLayout,
@@ -160,6 +160,7 @@ export class MastraTUI {
   private caffeinateProcess: ChildProcess | null = null;
   private cleanupKeyHandlers?: () => void;
   private cleanupPluginReloadListener?: () => void;
+  private cleanupPluginUpdateListener?: () => void;
   private lastStreamError: string | null = null;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
@@ -180,7 +181,7 @@ export class MastraTUI {
         lastNotificationPriority: subscription.lastNotificationPriority,
       }));
       updateStatusLine(this.state);
-      this.state.ui.requestRender();
+      flushRender(this.state);
     });
 
     (options.githubSignals as GithubSignalsWithPollingEvents | undefined)?.onPollingChanged?.(event => {
@@ -190,13 +191,14 @@ export class MastraTUI {
       if (!this.state.githubPrGradientAnimator) {
         this.state.githubPrGradientAnimator = new GradientAnimator(() => {
           updateStatusLine(this.state);
+          requestRender(this.state);
         });
       }
       this.state.githubPrPollingActive = event.running;
       if (event.running) this.state.githubPrGradientAnimator.start();
       else this.state.githubPrGradientAnimator.stop();
       updateStatusLine(this.state);
-      this.state.ui.requestRender();
+      flushRender(this.state);
     });
 
     // Load user preferences
@@ -246,7 +248,7 @@ export class MastraTUI {
     this.state.editor.onImagePaste = image => {
       this.state.pendingImages.push(image);
       this.state.editor.insertTextAtCursor?.('[image] ');
-      this.state.ui.requestRender();
+      flushRender(this.state);
     };
     this.state.editor.getPromptAnimator = () => this.state.gradientAnimator;
 
@@ -285,10 +287,10 @@ export class MastraTUI {
         addUserMessage(this.state, {
           id: messageId,
           role: 'user',
-          content: [{ type: 'text', text: msg }],
+          content: { format: 2, parts: [{ type: 'text', text: msg }] },
           createdAt: new Date(),
         });
-        this.state.ui.requestRender();
+        flushRender(this.state);
 
         const allowed = await this.runUserPromptHook(msg);
         if (!allowed) {
@@ -296,7 +298,7 @@ export class MastraTUI {
           if (comp) {
             this.state.chatContainer.removeChild(comp as never);
             this.state.messageComponentsById.delete(messageId);
-            this.state.ui.requestRender();
+            flushRender(this.state);
           }
         } else {
           try {
@@ -374,14 +376,17 @@ export class MastraTUI {
     content: string,
     images?: Array<{ data: string; mimeType: string }>,
     id = '',
-  ): AgentControllerMessage {
+  ): MastraDBMessage {
     return {
       id,
       role: 'user',
-      content: [
-        { type: 'text', text: content },
-        ...(images?.map(img => ({ type: 'image' as const, data: img.data, mimeType: img.mimeType })) ?? []),
-      ],
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: content },
+          ...(images?.map(img => ({ type: 'file' as const, data: img.data, mimeType: img.mimeType })) ?? []),
+        ],
+      },
       createdAt: new Date(),
     };
   }
@@ -401,7 +406,7 @@ export class MastraTUI {
     addUserMessage(this.state, this.createUserSignalMessage(content, images, messageId), {
       ...(isInterjection ? { label: 'steer' } : {}),
     });
-    this.state.ui.requestRender();
+    flushRender(this.state);
     return messageId;
   }
 
@@ -410,7 +415,7 @@ export class MastraTUI {
     if (!component) return;
     this.state.chatContainer.removeChild(component as never);
     this.state.messageComponentsById.delete(messageId);
-    this.state.ui.requestRender();
+    flushRender(this.state);
   }
 
   private remapOptimisticUserMessage(optimisticMessageId: string, signalId: string): void {
@@ -525,7 +530,7 @@ export class MastraTUI {
     this.state.pendingFollowUpMessages.push({ content, images });
     this.state.pendingQueuedActions.push('message');
     updateStatusLine(this.state);
-    this.state.ui.requestRender();
+    flushRender(this.state);
   }
 
   /**
@@ -557,9 +562,15 @@ export class MastraTUI {
       this.cleanupPluginReloadListener = undefined;
     }
 
+    if (this.cleanupPluginUpdateListener) {
+      this.cleanupPluginUpdateListener();
+      this.cleanupPluginUpdateListener = undefined;
+    }
+
     if (this.state.unsubscribe) {
       this.state.unsubscribe();
     }
+    this.state.renderScheduler?.dispose();
     this.state.ui.stop();
   }
 
@@ -592,6 +603,14 @@ export class MastraTUI {
           process.stderr.write(`[plugin runtime refresh] ${msg}\n`);
         }),
       );
+    }
+
+    if (this.state.pluginManager && !this.cleanupPluginUpdateListener) {
+      this.cleanupPluginUpdateListener = this.state.pluginManager.onGithubPluginsUpdated(pluginNames => {
+        if (pluginNames.length === 0) return;
+        const label = pluginNames.length === 1 ? 'Plugin' : 'Plugins';
+        showInfo(this.state, `${label} updated to the latest version: ${pluginNames.join(', ')}`);
+      });
     }
 
     // Load custom slash commands
@@ -644,7 +663,11 @@ export class MastraTUI {
         .initInBackground()
         .then(result => {
           for (const s of result.failed) {
-            showInfo(this.state, `MCP: Failed to connect to "${s.name}": ${s.error}`);
+            if (s.needsAuth) {
+              showInfo(this.state, `MCP: \u26a0 "${s.name}" needs authentication \u2192 run /mcp to authenticate`);
+            } else {
+              showInfo(this.state, `MCP: Failed to connect to "${s.name}": ${s.error}`);
+            }
           }
           for (const s of result.skipped) {
             showInfo(this.state, `MCP: Skipped "${s.name}": ${s.reason}`);
@@ -684,13 +707,13 @@ export class MastraTUI {
 
   private updateIdleStatusLine(now = Date.now()): void {
     this.state.idleCounter?.setTimingState(this.state, now);
-    this.state.ui.requestRender?.();
+    requestRender(this.state);
   }
 
   private updateActiveStatusTiming(now = Date.now()): void {
     this.state.idleCounter?.setTimingState(this.state, now);
     updateStatusLine(this.state);
-    this.state.ui.requestRender?.();
+    requestRender(this.state);
   }
 
   private startActiveStatusTimingTicker(): void {
@@ -737,7 +760,7 @@ export class MastraTUI {
     }
     if (clearDisplay) {
       this.state.idleCounter?.setTimingState(undefined);
-      this.state.ui.requestRender?.();
+      requestRender(this.state);
     }
   }
 
@@ -938,7 +961,7 @@ export class MastraTUI {
     };
     // Gateway covers all providers
     const mgKey =
-      this.state.authStorage?.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+      this.state.authStorage?.getStoredApiKey(MASTRA_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
     if (mgKey) {
       if (!access.anthropic) access.anthropic = 'apikey';
       if (!access.openai) access.openai = 'apikey';
@@ -1111,7 +1134,7 @@ export class MastraTUI {
         if (isGoalJudgeInputLocked(this.state)) {
           this.state.editor.setText(text);
           showGoalJudgeInputLockInfo(this.state);
-          this.state.ui.requestRender();
+          flushRender(this.state);
           return;
         }
 
@@ -1514,7 +1537,7 @@ export class MastraTUI {
       tool.setQuietModeDisplay?.(enabled ? 'quiet' : 'normal');
       tool.setQuietPreviewLineLimit?.(previewLineLimit);
     }
-    this.state.ui.requestRender();
+    flushRender(this.state);
   }
 
   private parseQuietPreviewLineAnswer(answer: string | null): number {
@@ -1652,19 +1675,19 @@ export class MastraTUI {
       insertChatComponentWithBoundarySpacing(this.state.chatContainer, component);
       this.state.activeInlineQuestion = component;
       component.focused = true;
-      this.state.ui.requestRender();
+      flushRender(this.state);
     });
 
     if (answer === 'Yes') {
       showInfo(this.state, `Updating to v${latestVersion}…`);
-      const ok = await runUpdate(pm, latestVersion);
-      if (ok) {
-        showInfo(this.state, `Updated to v${latestVersion}. Please restart Mastra Code.`);
+      const outcome = await performUpdate(pm, latestVersion);
+      if (outcome.status === 'updated') {
+        // Printed after TUI teardown — a message rendered inside it is lost in the exit race.
         this.stop();
+        console.info(outcome.message);
         process.exit(0);
       } else {
-        const cmd = getInstallCommand(pm, latestVersion);
-        showError(this.state, `Auto-update failed. Run \`${cmd}\` manually.`);
+        showError(this.state, outcome.message);
       }
     } else {
       // User declined — save the dismissed version

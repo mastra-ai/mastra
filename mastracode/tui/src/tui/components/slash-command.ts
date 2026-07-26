@@ -4,15 +4,16 @@
  * expanded with ctrl+e. The full content is still sent to the assistant.
  */
 
-import { Container, Text } from '@earendil-works/pi-tui';
+import { Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { BOX_INDENT, getTermWidth, mastra } from '../theme.js';
+import { BOX_INDENT, mastra } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
+import { WidthAwareContainer } from './width-aware-container.js';
 
 const MAX_COLLAPSED_LINES = 3;
 const getBorderColor = () => mastra.green;
 
-export class SlashCommandComponent extends Container {
+export class SlashCommandComponent extends WidthAwareContainer {
   private commandName: string;
   private contentLines: string[];
   private expanded = false;
@@ -41,12 +42,11 @@ export class SlashCommandComponent extends Container {
     this.rebuild();
   }
 
-  private rebuild(): void {
+  protected rebuildForWidth(termWidth: number): void {
     this.clear();
 
     const border = (char: string) => chalk.bold.hex(getBorderColor())(char);
-    const termWidth = getTermWidth();
-    const maxLineWidth = termWidth - 6 - BOX_INDENT * 2;
+    const maxLineWidth = Math.max(1, termWidth - 6 - BOX_INDENT * 2);
 
     const heading = chalk.hex(mastra.specialGray)(`/${this.commandName}`);
 

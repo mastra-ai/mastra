@@ -25,7 +25,8 @@
     "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
     "test:cloud": "vitest run ./src/**/*.integration.test.ts",
     "test:watch": "vitest watch",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
@@ -36,8 +37,8 @@
     "@internal/types-builder": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.21",
-    "eslint": "^10.4.1",
+    "@types/node": "22.20.1",
+    "eslint": "^10.7.0",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

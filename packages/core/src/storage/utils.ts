@@ -30,6 +30,17 @@ export type StoreName =
   | 'VECTORIZE'
   | (string & {});
 
+export function hasErrorCode(error: unknown, codes: ReadonlySet<string | number>): boolean {
+  const seen = new Set<object>();
+  let current: unknown = error;
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    seen.add(current);
+    if ('code' in current && codes.has((current as { code: string | number }).code)) return true;
+    current = 'cause' in current ? (current as { cause?: unknown }).cause : undefined;
+  }
+  return false;
+}
+
 const DURATION_UNIT_MS: Record<string, number> = {
   ms: 1,
   s: 1000,

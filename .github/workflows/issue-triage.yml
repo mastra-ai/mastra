@@ -13,7 +13,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           persist-credentials: false
 
@@ -27,9 +27,9 @@ jobs:
           permission-issues: read
 
       - name: Setup Node.js 22.x
-        uses: actions/setup-node@7c2c68d20d402ed6a201ada70a81341941093140
+        uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
-          node-version: 22.23.1
+          node-version: 24.18.0
           package-manager-cache: false
 
       - name: Install dependencies

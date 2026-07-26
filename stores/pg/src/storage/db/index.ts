@@ -134,6 +134,16 @@ export function resolvePgConfig(config: PgDomainConfig): {
     });
   }
 
+  // pg emits 'error' on the pool when an idle client's connection drops;
+  // without a listener Node escalates the event to an uncaughtException and
+  // crashes the process. No logger is threaded into this helper, so warn on
+  // the console like COLLISION_WARNING does.
+  pool.on('error', err => {
+    console.warn(
+      `resolvePgConfig: idle pool client error (pool discards the client and reconnects on next checkout): ${err instanceof Error ? err.message : String(err)}`,
+    );
+  });
+
   return {
     client: new PoolAdapter(pool),
     schemaName: config.schemaName,

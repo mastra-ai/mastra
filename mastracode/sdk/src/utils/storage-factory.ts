@@ -21,8 +21,7 @@ export const MASTRA_CODE_LOCAL_PRAGMAS = {
 
 /**
  * Construct a LibSQL store for an arbitrary url/authToken, applying the same
- * local pragmas the default factory uses. Shared so per-tenant storage
- * (see `web/tenant-storage.ts`) doesn't duplicate the construction.
+ * local pragmas the default factory uses.
  */
 export function buildLibSQLStore(opts: {
   id?: string;

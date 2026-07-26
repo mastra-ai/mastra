@@ -24,7 +24,7 @@ describe('web scenario: plan-approval', () => {
 
         // Approving a plan resumes the tool and transitions to the build
         // (default) mode — the observable effect of a plan-approval handoff.
-        await waitFor(() => driver.state().modeId === 'build', 'mode to return to build');
+        await waitFor(() => driver.sessionState().modeId === 'build', 'mode to return to build');
       },
     });
   });

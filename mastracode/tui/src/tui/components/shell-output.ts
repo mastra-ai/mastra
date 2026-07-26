@@ -3,10 +3,11 @@
  * Shows a bordered box with live stdout/stderr and a status footer.
  */
 
-import { Container, Text } from '@earendil-works/pi-tui';
-import { getTermWidth, theme } from '../theme.js';
+import { Text } from '@earendil-works/pi-tui';
+import { theme } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
+import { WidthAwareContainer } from './width-aware-container.js';
 
 const MAX_LINES = 200;
 const COLLAPSED_LINES = 20;
@@ -17,7 +18,7 @@ function formatDuration(ms: number): string {
   return seconds < 60 ? `${seconds.toFixed(1)}s` : `${Math.floor(seconds / 60)}m${Math.floor(seconds % 60)}s`;
 }
 
-export class ShellStreamComponent extends Container {
+export class ShellStreamComponent extends WidthAwareContainer {
   private command: string;
   private lines: string[] = [];
   private trailingPartial = '';
@@ -65,11 +66,10 @@ export class ShellStreamComponent extends Container {
     this.rebuild();
   }
 
-  private rebuild(): void {
+  protected rebuildForWidth(termWidth: number): void {
     this.clear();
 
     const border = (char: string) => theme.bold(theme.fg('accent', char));
-    const termWidth = getTermWidth();
     const maxLineWidth = termWidth - 6;
 
     const done = this.exitCode !== undefined;

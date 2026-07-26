@@ -122,4 +122,38 @@ describe('safeStringify', () => {
       expect(parsed.branchB.shared).toEqual({ id: 'shared', back: {} });
     });
   });
+
+  describe('guards against unbounded recursion', () => {
+    // Regression test for https://github.com/mastra-ai/mastra/issues/19594:
+    // deeply-nested values (e.g. a long chained Error.cause) used to overflow
+    // the call stack with an uncaught `RangeError: Maximum call stack size
+    // exceeded`. safeStringify must cap the recursion and emit a sentinel
+    // instead of throwing.
+    it('serializes a deeply-nested object without throwing and inserts a sentinel at depth', () => {
+      // Build nesting far past the internal MAX_DEPTH cap. Without the depth
+      // guard this recursion overflows the call stack with a RangeError.
+      let deep: Record<string, any> = { leaf: true };
+      for (let i = 0; i < 50_000; i++) {
+        deep = { next: deep };
+      }
+
+      let json = '';
+      expect(() => {
+        json = safeStringify(deep);
+      }).not.toThrow();
+
+      expect(json).toContain('[Max depth exceeded]');
+
+      // The shallow portion of the graph is still walked normally.
+      const parsed = JSON.parse(json);
+      expect(parsed.next.next.next).toBeDefined();
+    });
+
+    it('leaves shallow values untouched (no false sentinel)', () => {
+      const value = { a: { b: { c: { d: 1 } } } };
+
+      expect(safeStringify(value)).toBe('{"a":{"b":{"c":{"d":1}}}}');
+      expect(safeStringify(value)).not.toContain('[Max depth exceeded]');
+    });
+  });
 });

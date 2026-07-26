@@ -28,7 +28,9 @@ export interface LintIssue {
   code: LintIssueCode;
   severity: LintIssueSeverity;
   message: string;
-  fix: string;
+  // string for single-step remediation, string[] when the printer should
+  // render one arrow line per option (matches PreflightIssue.fix).
+  fix: string | string[];
   scope: 'project' | 'bundle';
 }
 

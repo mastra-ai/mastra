@@ -664,9 +664,7 @@ const myAgent = new Agent({
   id: 'my-agent',
   model: 'openai/gpt-4o',
   instructions: 'You are a helpful assistant.',
-  tools: {
-    /* your tools */
-  },
+  tools: {/* your tools */},
 });
 
 // Wrap with durable execution

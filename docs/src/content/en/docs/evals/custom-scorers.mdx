@@ -349,13 +349,7 @@ A custom scorer in Mastra uses `createScorer` with four core components:
 1. [**Score Generation**](#score-generation)
 1. [**Reason Generation**](#reason-generation)
 
-Together, these components allow you to define custom evaluation logic using LLMs as judges.
-
-:::info
-
-Visit [createScorer](/reference/evals/create-scorer) for the full API and configuration options.
-
-:::
+Together, these components allow you to define custom evaluation logic using LLMs as judges. Visit [createScorer](/reference/evals/create-scorer) for the full API and configuration options.
 
 ```typescript title="src/mastra/scorers/gluten-checker.ts"
 import { createScorer } from '@mastra/core/evals'

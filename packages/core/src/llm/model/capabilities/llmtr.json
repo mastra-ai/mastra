@@ -1,4 +1,5 @@
 {
   "attachment": ["medgemma-4b", "qwen3-6-35b"],
-  "temperature": ["gemma-4", "magibu-11b-v8", "medgemma-4b", "qwen3-6-35b", "sincap", "trendyol-7b"]
+  "temperature": ["gemma-4", "magibu-11b-v8", "medgemma-4b", "qwen3-6-35b", "sincap", "trendyol-7b"],
+  "structuredOutput": ["qwen3-6-35b"]
 }

@@ -147,4 +147,58 @@ describe('startDevServer - inspect flag integration', () => {
       );
     });
   });
+
+  describe('factory mode', () => {
+    it('should pass factory: true to dev when factory is set', async () => {
+      const { startDevServer } = await import('./start-dev-server');
+
+      await startDevServer({
+        inspect: false,
+        inspectBrk: false,
+        debug: false,
+        factory: true,
+      });
+
+      expect(devMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          factory: true,
+        }),
+      );
+    });
+
+    it('should track factory dev analytics command when factory is set', async () => {
+      const { analytics } = await import('../..');
+      const { startDevServer } = await import('./start-dev-server');
+
+      await startDevServer({
+        inspect: false,
+        inspectBrk: false,
+        debug: false,
+        factory: true,
+      });
+
+      expect(analytics.trackCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: 'factory dev',
+        }),
+      );
+    });
+
+    it('should track dev analytics command when factory is not set', async () => {
+      const { analytics } = await import('../..');
+      const { startDevServer } = await import('./start-dev-server');
+
+      await startDevServer({
+        inspect: false,
+        inspectBrk: false,
+        debug: false,
+      });
+
+      expect(analytics.trackCommand).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: 'dev',
+        }),
+      );
+    });
+  });
 });

@@ -1,0 +1,288 @@
+---
+title: "Reference: Mistral | Voice"
+description: "API reference for MistralVoice, providing text-to-speech and speech-to-text capabilities using Mistral's Voxtral models."
+packages:
+  - "@mastra/voice-mistral"
+---
+
+# Mistral
+
+The MistralVoice class provides text-to-speech and speech-to-text capabilities using Mistral's Voxtral audio models. It supports buffered and streaming TTS, batch transcription with diarization, and voice cloning via reference audio.
+
+## Usage example
+
+```typescript
+import { MistralVoice } from '@mastra/voice-mistral'
+
+const voice = new MistralVoice()
+
+// Text-to-speech
+const audioStream = await voice.speak('Hello, how can I help you?', {
+  responseFormat: 'mp3',
+})
+
+// Speech-to-text
+const text = await voice.listen(audioStream, {
+  language: 'en',
+})
+
+// List available voices
+const speakers = await voice.getSpeakers()
+```
+
+```typescript
+import { MistralVoice } from '@mastra/voice-mistral'
+
+// Initialize with specific configuration
+const voice = new MistralVoice({
+  speechModel: {
+    name: 'voxtral-mini-tts-2603',
+    apiKey: 'your-mistral-api-key',
+  },
+  listeningModel: {
+    name: 'voxtral-mini-latest',
+    apiKey: 'your-mistral-api-key',
+  },
+  speaker: 'en_paul_neutral',
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'speechModel',
+    type: 'MistralModelConfig',
+    description: 'Configuration for text-to-speech synthesis.',
+    isOptional: true,
+    defaultValue: "{ name: 'voxtral-mini-tts-2603' }",
+    properties: [
+      {
+        type: 'MistralModelConfig',
+        parameters: [
+          {
+            name: 'name',
+            type: 'string',
+            description: 'Model ID for speech synthesis.',
+            isOptional: true,
+            defaultValue: "'voxtral-mini-tts-2603'",
+          },
+          {
+            name: 'apiKey',
+            type: 'string',
+            description: 'Mistral API key. Falls back to MISTRAL_API_KEY environment variable.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'listeningModel',
+    type: 'MistralModelConfig',
+    description: 'Configuration for speech-to-text recognition.',
+    isOptional: true,
+    defaultValue: "{ name: 'voxtral-mini-latest' }",
+    properties: [
+      {
+        type: 'MistralModelConfig',
+        parameters: [
+          {
+            name: 'name',
+            type: 'string',
+            description: "Model ID for transcription. Use 'voxtral-mini-2507' for a pinned version.",
+            isOptional: true,
+            defaultValue: "'voxtral-mini-latest'",
+          },
+          {
+            name: 'apiKey',
+            type: 'string',
+            description: 'Mistral API key. Falls back to MISTRAL_API_KEY environment variable.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'speaker',
+    type: 'string',
+    description: 'Default voice ID for speech synthesis. Retrieve available IDs from getSpeakers().',
+    isOptional: true,
+    defaultValue: "'en_paul_neutral'",
+  },
+]}
+/>
+
+## Methods
+
+### `speak(input, options?)`
+
+Converts text to speech using Mistral's Voxtral TTS model. Supports both buffered and streaming output.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'input',
+    type: 'string | NodeJS.ReadableStream',
+    description: 'Text or text stream to convert to speech.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'MistralSpeakOptions',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'MistralSpeakOptions',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'string',
+            description: 'Voice ID to use. Overrides the constructor default.',
+            isOptional: true,
+          },
+          {
+            name: 'responseFormat',
+            type: "'pcm' | 'wav' | 'mp3' | 'flac' | 'opus'",
+            description: "Audio output format. Use 'pcm' for lowest latency streaming.",
+            isOptional: true,
+          },
+          {
+            name: 'refAudio',
+            type: 'string',
+            description: 'Base64-encoded reference audio for one-off voice cloning (minimum 2-3 seconds).',
+            isOptional: true,
+          },
+          {
+            name: 'model',
+            type: 'string',
+            description: 'Override the speech model for this call.',
+            isOptional: true,
+          },
+          {
+            name: 'stream',
+            type: 'boolean',
+            description: 'Enable streaming TTS. Audio chunks are written to the stream as they arrive.',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+Returns: `Promise<NodeJS.ReadableStream>`
+
+### `listen(audioStream, options?)`
+
+Transcribes audio using Mistral's Voxtral transcription model. Supports diarization, context biasing, and timestamp granularity.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'audioStream',
+    type: 'NodeJS.ReadableStream',
+    description: 'Audio stream to transcribe.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'MistralListenOptions',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'MistralListenOptions',
+        parameters: [
+          {
+            name: 'language',
+            type: 'string',
+            description: "Language code (e.g., 'en'). Improves accuracy when specified.",
+            isOptional: true,
+          },
+          {
+            name: 'diarize',
+            type: 'boolean',
+            description: 'Enable speaker diarization.',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
+            name: 'contextBias',
+            type: 'string[]',
+            description: 'Words or phrases for vocabulary guidance.',
+            isOptional: true,
+          },
+          {
+            name: 'timestampGranularities',
+            type: "('segment' | 'word')[]",
+            description: 'Timestamp detail level for transcription segments.',
+            isOptional: true,
+          },
+          {
+            name: 'filetype',
+            type: 'string',
+            description: 'Audio file extension hint for the input stream.',
+            isOptional: true,
+            defaultValue: "'mp3'",
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+Returns: `Promise<string>`
+
+### `getSpeakers()`
+
+Fetches available preset voices from the Mistral Voices API. Each entry contains:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'voiceId',
+    type: 'string',
+    description: 'Unique identifier for the voice.',
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Display name of the voice.',
+    isOptional: false,
+  },
+  {
+    name: 'languages',
+    type: 'string[]',
+    description: 'Languages supported by the voice.',
+    isOptional: true,
+  },
+  {
+    name: 'gender',
+    type: 'string | null',
+    description: 'Gender of the voice.',
+    isOptional: true,
+  },
+]}
+/>
+
+### `getListener()`
+
+Returns `{ enabled: true }`.
+
+## Notes
+
+- API keys can be provided via constructor options or the `MISTRAL_API_KEY` environment variable
+- TTS supports 9 languages: English, French, Spanish, Portuguese, Italian, Dutch, German, Hindi, Arabic
+- STT supports 13 languages: English, Chinese, Hindi, Spanish, Arabic, French, Portuguese, Russian, German, Japanese, Korean, Italian, Dutch
+- TTS input text should be kept under 300 words per request for best results
+- STT supports up to 3 hours of audio per request
+- Voice cloning via `refAudio` requires a minimum of 2-3 seconds of reference audio
+- `getSpeakers()` returns preset voices with UUID identifiers. The default `en_paul_neutral` is a named alias accepted by the TTS endpoint but not included in the list

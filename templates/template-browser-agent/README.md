@@ -10,7 +10,7 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 
 ## Prerequisites
 
-- A [Mastra Gateway API key](https://mastra.ai/docs/models/gateways/mastra).
+- A [Gateway API key](https://mastra.ai/docs/models/gateways/mastra).
 - A [Turso](https://turso.tech) database URL + auth token (or swap to `:memory:` for ephemeral local runs).
 - Playwright Chromium is installed by the `playwright-chromium` package during dependency install. On Linux root runtimes, the template runs `playwright install-deps chromium` before the first local browser launch. You can set `BROWSER_CDP_URL` for a hosted Chrome/Browserbase/Browserless instance instead.
 

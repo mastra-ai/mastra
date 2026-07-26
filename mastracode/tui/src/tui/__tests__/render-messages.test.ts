@@ -1,5 +1,6 @@
 import { Container } from '@earendil-works/pi-tui';
-import type { AgentControllerMessage } from '@mastra/core/agent-controller';
+import type { MastraDBMessage } from '@mastra/core/agent-controller';
+import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessageComponent } from '../components/assistant-message.js';
@@ -39,6 +40,9 @@ function createState(): TUIState {
         get: () => ({ isRunning: false }),
         restoreTasks: vi.fn(),
       },
+      mode: {
+        resolve: vi.fn(() => ({ id: 'build', metadata: {} })),
+      },
     },
   } as unknown as TUIState;
 }
@@ -47,24 +51,160 @@ function createUserMessage(
   text: string,
   id = 'user-1',
   attributes?: Record<string, string | number | boolean | null | undefined>,
-): AgentControllerMessage {
-  return {
+): MastraDBMessage {
+  return createSignal({
     id,
-    role: 'user',
-    content: [{ type: 'text', text }],
+    type: 'user',
+    tagName: 'user',
+    contents: text,
     attributes,
-  } as unknown as AgentControllerMessage;
+  }).toDBMessage();
 }
 
-function createReminderMessage(
-  reminder: Extract<AgentControllerMessage['content'][number], { type: 'system_reminder' }>,
-  id = '__temporal_1',
-): AgentControllerMessage {
+interface ReminderInput {
+  reminderType?: string;
+  message: string;
+  path?: string;
+  precedesMessageId?: string;
+  gapText?: string;
+  gapMs?: number;
+  goalMaxTurns?: number;
+  judgeModelId?: string;
+  goalEvaluation?: Record<string, unknown>;
+}
+
+function createReminderMessage(reminder: ReminderInput, id = '__temporal_1'): MastraDBMessage {
+  const { reminderType, message, path, precedesMessageId, gapText, gapMs, goalMaxTurns, judgeModelId, goalEvaluation } =
+    reminder;
+  return createSignal({
+    id,
+    type: 'reactive',
+    tagName: 'system-reminder',
+    contents: message,
+    attributes: { type: reminderType, path, precedesMessageId, gapText, gapMs },
+    metadata: { goalMaxTurns, judgeModelId, goalEvaluation },
+  } as Parameters<typeof createSignal>[0]).toDBMessage();
+}
+
+function createStateSignalMessage(
+  input: { stateId: string; mode: string; version: number; message: string },
+  id: string,
+): MastraDBMessage {
+  return createSignal({
+    id,
+    type: 'state',
+    tagName: input.stateId,
+    contents: input.message,
+    metadata: { state: { id: input.stateId, mode: input.mode, version: input.version } },
+  } as Parameters<typeof createSignal>[0]).toDBMessage();
+}
+
+function createReactiveSignalMessage(input: { tagName: string; message: string }, id: string): MastraDBMessage {
+  return createSignal({
+    id,
+    type: 'reactive',
+    tagName: input.tagName,
+    contents: input.message,
+  }).toDBMessage();
+}
+
+function createNotificationSummaryMessage(
+  input: {
+    message: string;
+    pending: number;
+    bySource: Record<string, number>;
+    byPriority: Record<string, number>;
+    notificationIds: string[];
+  },
+  id: string,
+): MastraDBMessage {
+  return createSignal({
+    id,
+    type: 'notification',
+    tagName: 'notification-summary',
+    contents: input.message,
+    metadata: {
+      notificationSummary: {
+        pending: input.pending,
+        bySource: input.bySource,
+        byPriority: input.byPriority,
+        notificationIds: input.notificationIds,
+      },
+    },
+  } as Parameters<typeof createSignal>[0]).toDBMessage();
+}
+
+function createNotificationMessage(
+  input: { message: string; source: string; kind: string; priority: string; status: string },
+  id: string,
+): MastraDBMessage {
+  return createSignal({
+    id,
+    type: 'notification',
+    tagName: 'notification',
+    contents: input.message,
+    attributes: {
+      source: input.source,
+      kind: input.kind,
+      priority: input.priority,
+      status: input.status,
+    },
+  }).toDBMessage();
+}
+
+interface ToolPair {
+  id: string;
+  name: string;
+  args: unknown;
+  result?: unknown;
+  isError?: boolean;
+}
+
+function assistantToolMessage(id: string, tools: ToolPair[]): MastraDBMessage {
   return {
     id,
-    role: 'user',
-    content: [reminder],
-  } as AgentControllerMessage;
+    role: 'assistant',
+    createdAt: new Date(),
+    content: {
+      format: 2,
+      parts: tools.map(tool => ({
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolCallId: tool.id,
+          toolName: tool.name,
+          args: tool.args,
+          state: tool.result !== undefined ? 'result' : 'call',
+          ...(tool.result !== undefined ? { result: tool.result } : {}),
+        },
+      })),
+    },
+  } as unknown as MastraDBMessage;
+}
+
+function legacyAssistantToolMessage(id: string, tool: ToolPair): MastraDBMessage {
+  return {
+    id,
+    role: 'assistant',
+    createdAt: new Date(),
+    content: {
+      format: 2,
+      parts: [
+        {
+          type: 'tool-call',
+          toolCallId: tool.id,
+          toolName: tool.name,
+          args: tool.args,
+        },
+        {
+          type: 'tool-result',
+          toolCallId: tool.id,
+          toolName: tool.name,
+          result: tool.result,
+          isError: tool.isError,
+        },
+      ],
+    },
+  } as unknown as MastraDBMessage;
 }
 
 describe('addUserMessage', () => {
@@ -85,20 +225,18 @@ describe('addUserMessage', () => {
   it('renders state signals as inline state components', () => {
     const state = createState();
 
-    addUserMessage(state, {
-      id: 'state-signal-1',
-      role: 'user',
-      content: [
+    addUserMessage(
+      state,
+      createStateSignalMessage(
         {
-          type: 'state_signal',
           stateId: 'browser',
           mode: 'delta',
           version: 2,
           message: 'changed: active tab URL changed to https://example.com',
         },
-      ],
-      createdAt: new Date('2026-05-04T00:00:00.000Z'),
-    } as unknown as AgentControllerMessage);
+        'state-signal-1',
+      ),
+    );
 
     expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(true);
     expect(state.messageComponentsById.get('state-signal-1')).toBeInstanceOf(StateSignalComponent);
@@ -107,20 +245,18 @@ describe('addUserMessage', () => {
   it('does not render the tasks state signal inline (the pinned task UI shows it)', () => {
     const state = createState();
 
-    addUserMessage(state, {
-      id: 'tasks-state-signal-1',
-      role: 'user',
-      content: [
+    addUserMessage(
+      state,
+      createStateSignalMessage(
         {
-          type: 'state_signal',
           stateId: 'tasks',
           mode: 'snapshot',
           version: 1,
           message: '<current-task-list>\n  ○ [pending] {id: alpha} Alpha\n</current-task-list>',
         },
-      ],
-      createdAt: new Date('2026-05-04T00:00:00.000Z'),
-    } as unknown as AgentControllerMessage);
+        'tasks-state-signal-1',
+      ),
+    );
 
     expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
     expect(state.messageComponentsById.has('tasks-state-signal-1')).toBe(false);
@@ -129,20 +265,18 @@ describe('addUserMessage', () => {
   it('does not render the goal state signal inline (the goal/judge UI shows it)', () => {
     const state = createState();
 
-    addUserMessage(state, {
-      id: 'goal-state-signal-1',
-      role: 'user',
-      content: [
+    addUserMessage(
+      state,
+      createStateSignalMessage(
         {
-          type: 'state_signal',
           stateId: 'goal',
           mode: 'snapshot',
           version: 1,
           message: '<current-objective>\n  Ship the goal feature\n</current-objective>',
         },
-      ],
-      createdAt: new Date('2026-05-04T00:00:00.000Z'),
-    } as unknown as AgentControllerMessage);
+        'goal-state-signal-1',
+      ),
+    );
 
     expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
     expect(state.messageComponentsById.has('goal-state-signal-1')).toBe(false);
@@ -151,18 +285,10 @@ describe('addUserMessage', () => {
   it('renders generic reactive signals as inline signal components', () => {
     const state = createState();
 
-    addUserMessage(state, {
-      id: 'reactive-signal-1',
-      role: 'user',
-      content: [
-        {
-          type: 'reactive_signal',
-          tagName: 'build-status',
-          message: 'Build is still running',
-        },
-      ],
-      createdAt: new Date('2026-05-04T00:00:00.000Z'),
-    } as unknown as AgentControllerMessage);
+    addUserMessage(
+      state,
+      createReactiveSignalMessage({ tagName: 'build-status', message: 'Build is still running' }, 'reactive-signal-1'),
+    );
 
     expect(state.chatContainer.children.some(child => child instanceof ReactiveSignalComponent)).toBe(true);
     expect(state.messageComponentsById.get('reactive-signal-1')).toBeInstanceOf(ReactiveSignalComponent);
@@ -171,18 +297,13 @@ describe('addUserMessage', () => {
   it('does not render GitHub subscribe operation signals from history', () => {
     const state = createState();
 
-    addUserMessage(state, {
-      id: 'github-subscribe-signal-1',
-      role: 'user',
-      content: [
-        {
-          type: 'reactive_signal',
-          tagName: 'github-subscribe-pr',
-          message: 'Subscribe to GitHub PR #17241',
-        },
-      ],
-      createdAt: new Date('2026-05-04T00:00:00.000Z'),
-    } as unknown as AgentControllerMessage);
+    addUserMessage(
+      state,
+      createReactiveSignalMessage(
+        { tagName: 'github-subscribe-pr', message: 'Subscribe to GitHub PR #17241' },
+        'github-subscribe-signal-1',
+      ),
+    );
 
     expect(state.chatContainer.children.some(child => child instanceof ReactiveSignalComponent)).toBe(false);
     expect(state.messageComponentsById.has('github-subscribe-signal-1')).toBe(false);
@@ -191,21 +312,19 @@ describe('addUserMessage', () => {
   it('renders notification summaries as inline notification components', () => {
     const state = createState();
 
-    addUserMessage(state, {
-      id: 'notification-summary-1',
-      role: 'user',
-      content: [
+    addUserMessage(
+      state,
+      createNotificationSummaryMessage(
         {
-          type: 'notification_summary',
           message: 'mastracode: 1',
           pending: 1,
           bySource: { mastracode: 1 },
           byPriority: { low: 1 },
           notificationIds: ['notification-1'],
         },
-      ],
-      createdAt: new Date('2026-05-04T00:00:00.000Z'),
-    } as unknown as AgentControllerMessage);
+        'notification-summary-1',
+      ),
+    );
 
     expect(state.chatContainer.children.some(child => child instanceof NotificationSummaryComponent)).toBe(true);
     expect(state.messageComponentsById.get('notification-summary-1')).toBeInstanceOf(NotificationSummaryComponent);
@@ -214,21 +333,19 @@ describe('addUserMessage', () => {
   it('renders full notifications as inline notification components', () => {
     const state = createState();
 
-    addUserMessage(state, {
-      id: 'notification-1',
-      role: 'user',
-      content: [
+    addUserMessage(
+      state,
+      createNotificationMessage(
         {
-          type: 'notification',
           message: 'CI failed on main',
           source: 'github',
           kind: 'ci-status',
           priority: 'high',
           status: 'delivered',
         },
-      ],
-      createdAt: new Date('2026-05-04T00:00:00.000Z'),
-    } as unknown as AgentControllerMessage);
+        'notification-1',
+      ),
+    );
 
     expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(true);
     expect(state.messageComponentsById.get('notification-1')).toBeInstanceOf(NotificationComponent);
@@ -322,7 +439,6 @@ describe('addUserMessage', () => {
     addUserMessage(
       state,
       createReminderMessage({
-        type: 'system_reminder',
         reminderType: 'temporal-gap',
         message: '15 minutes later — 9:15 AM',
         gapText: '15 minutes later',
@@ -344,7 +460,6 @@ describe('addUserMessage', () => {
     addUserMessage(
       state,
       createReminderMessage({
-        type: 'system_reminder',
         reminderType: 'temporal-gap',
         message: '15 minutes later — 9:15 AM',
         gapText: '15 minutes later',
@@ -403,7 +518,6 @@ describe('addUserMessage', () => {
       state,
       createReminderMessage(
         {
-          type: 'system_reminder',
           reminderType: 'goal-judge',
           message: '[Goal attempt 2/20] The goal is not yet complete. Judge feedback: Need another fact.',
           goalEvaluation: {
@@ -419,7 +533,7 @@ describe('addUserMessage', () => {
             maxRunsReached: false,
             suppressFeedback: false,
           },
-        } as Extract<AgentControllerMessage['content'][number], { type: 'system_reminder' }>,
+        },
         'goal-judge-1',
       ),
     );
@@ -443,12 +557,11 @@ describe('addUserMessage', () => {
     addUserMessage(
       state,
       createReminderMessage({
-        type: 'system_reminder',
         reminderType: 'goal',
         message: 'Finish the implementation.',
         goalMaxTurns: 20,
         judgeModelId: 'openai/gpt-5.5',
-      } as Extract<AgentControllerMessage['content'][number], { type: 'system_reminder' }>),
+      }),
     );
 
     expect(state.chatContainer.children).toHaveLength(1);
@@ -470,12 +583,11 @@ describe('addUserMessage', () => {
     addUserMessage(
       state,
       createReminderMessage({
-        type: 'system_reminder',
         reminderType: 'goal',
         message: 'Finish the implementation.',
         goalMaxTurns: 20,
         judgeModelId: 'openai/gpt-5.5',
-      } as Extract<AgentControllerMessage['content'][number], { type: 'system_reminder' }>),
+      }),
     );
 
     expect(state.chatContainer.children).toHaveLength(2);
@@ -648,29 +760,10 @@ describe('renderExistingMessages tasks', () => {
         activeForm: 'Loading history task three',
       },
     ];
-    const message: AgentControllerMessage = {
-      id: 'assistant-task-delta-history',
-      role: 'assistant',
-      createdAt: new Date(),
-      content: [
-        { type: 'tool_call', id: 'task-write-1', name: 'task_write', args: { tasks: initialTasks } },
-        {
-          type: 'tool_result',
-          id: 'task-write-1',
-          name: 'task_write',
-          result: { tasks: initialTasks },
-          isError: false,
-        },
-        { type: 'tool_call', id: 'task-complete-1', name: 'task_complete', args: { id: 'history-task-1' } },
-        {
-          type: 'tool_result',
-          id: 'task-complete-1',
-          name: 'task_complete',
-          result: { tasks: updatedTasks },
-          isError: false,
-        },
-      ],
-    } as unknown as AgentControllerMessage;
+    const message = assistantToolMessage('assistant-task-delta-history', [
+      { id: 'task-write-1', name: 'task_write', args: { tasks: initialTasks }, result: { tasks: initialTasks } },
+      { id: 'task-complete-1', name: 'task_complete', args: { id: 'history-task-1' }, result: { tasks: updatedTasks } },
+    ]);
     const state = createState();
     state.session = {
       ...state.session,
@@ -705,15 +798,9 @@ describe('renderExistingMessages tasks', () => {
         activeForm: 'Loading history task two',
       },
     ];
-    const message: AgentControllerMessage = {
-      id: 'assistant-task-history',
-      role: 'assistant',
-      createdAt: new Date(),
-      content: [
-        { type: 'tool_call', id: 'task-write-1', name: 'task_write', args: { tasks } },
-        { type: 'tool_result', id: 'task-write-1', name: 'task_write', result: { tasks }, isError: false },
-      ],
-    } as unknown as AgentControllerMessage;
+    const message = assistantToolMessage('assistant-task-history', [
+      { id: 'task-write-1', name: 'task_write', args: { tasks }, result: { tasks } },
+    ]);
     const state = createState();
     state.session = {
       ...state.session,
@@ -733,27 +820,42 @@ describe('renderExistingMessages tasks', () => {
 });
 
 describe('renderExistingMessages subagents', () => {
+  it('replays legacy persisted tool-call/tool-result parts', async () => {
+    const message = legacyAssistantToolMessage('assistant-legacy-tool', {
+      id: 'tool-legacy-1',
+      name: 'view',
+      args: { path: 'src/quiet-mode-e2e.ts', offset: 1, limit: 3 },
+      result:
+        'src/quiet-mode-e2e.ts:1-3\n     1→export const QUIET_MODE_LOADED_PREVIEW = "loaded quiet compact preview";',
+      isError: false,
+    });
+    const state = createState();
+    state.quietMode = true;
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+    } as unknown as TUIState['session'];
+
+    await renderExistingMessages(state);
+
+    const rendered = state.chatContainer
+      .render(100)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('▐view▌src/quiet-mode-e2e.ts');
+    expect(rendered).toContain('QUIET_MODE_LOADED_PREVIEW');
+  });
+
   it('uses static plugin renderer config when replaying persisted plugin tool calls', async () => {
-    const message: AgentControllerMessage = {
-      id: 'assistant-plugin-renderer',
-      role: 'assistant',
-      createdAt: new Date(),
-      content: [
-        {
-          type: 'tool_call',
-          id: 'tool-1',
-          name: 'mastra_expert',
-          args: { question: 'How does memory rendering work?' },
-        },
-        {
-          type: 'tool_result',
-          id: 'tool-1',
-          name: 'mastra_expert',
-          result: 'remembered answer',
-          isError: false,
-        },
-      ],
-    } as unknown as AgentControllerMessage;
+    const message = assistantToolMessage('assistant-plugin-renderer', [
+      {
+        id: 'tool-1',
+        name: 'mastra_expert',
+        args: { question: 'How does memory rendering work?' },
+        result: 'remembered answer',
+        isError: false,
+      },
+    ]);
     const state = createState();
     state.quietMode = true;
     state.pluginManager = {
@@ -782,30 +884,14 @@ describe('renderExistingMessages subagents', () => {
   });
 
   it('uses the current model id for persisted forked subagents when no metadata tag is present', async () => {
-    const message: AgentControllerMessage = {
-      id: 'assistant-1',
-      role: 'assistant',
-      createdAt: new Date(),
-      content: [
-        {
-          type: 'tool_call',
-          id: 'tool-1',
-          name: 'subagent',
-          args: {
-            agentType: 'explore',
-            task: 'Summarize the thread',
-            forked: true,
-          },
-        },
-        {
-          type: 'tool_result',
-          id: 'tool-1',
-          name: 'subagent',
-          result: 'summary text',
-          isError: false,
-        },
-      ],
-    };
+    const message = assistantToolMessage('assistant-1', [
+      {
+        id: 'tool-1',
+        name: 'subagent',
+        args: { agentType: 'explore', task: 'Summarize the thread', forked: true },
+        result: 'summary text',
+      },
+    ]);
     const state = createState();
     state.quietMode = true;
     state.session = {

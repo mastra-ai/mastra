@@ -8,6 +8,7 @@ import { getScenario } from './tui/index.js';
 import type {
   McE2eInProcessApp,
   McE2ePrepareContext,
+  McE2eScenario,
   McE2eScenarioRuntime,
   McE2eStartMastraCodeAppOptions,
   McE2eTerminal,
@@ -47,8 +48,8 @@ class EmulatedTerminal implements Terminal {
   private outputQueue = Promise.resolve();
   private resizeHandler?: () => void;
   private stdinBuffer?: StdinBuffer;
-  private readonly terminalColumns: number;
-  private readonly terminalRows: number;
+  private terminalColumns: number;
+  private terminalRows: number;
 
   constructor(terminalColumns: number, terminalRows: number) {
     this.terminalColumns = terminalColumns;
@@ -154,6 +155,8 @@ class EmulatedTerminal implements Terminal {
   }
 
   resize(columns: number, rows: number): void {
+    this.terminalColumns = columns;
+    this.terminalRows = rows;
     this.xterm.resize(columns, rows);
     this.resizeHandler?.();
   }
@@ -213,6 +216,9 @@ function createScenarioTerminal(terminal: EmulatedTerminal): McE2eTerminal {
     },
     keyCtrlC() {
       terminal.sendInput('\x03');
+    },
+    resize(columns: number, rows: number) {
+      terminal.resize(columns, rows);
     },
     serialize() {
       return terminal.serialize();
@@ -394,8 +400,11 @@ async function startMastraCodeApp(
     }
   }
 
+  let stopped = false;
   return {
     async stop() {
+      if (stopped) return;
+      stopped = true;
       tui.stop();
       const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
       await Promise.allSettled([
@@ -404,13 +413,24 @@ async function startMastraCodeApp(
         result.controller.stopIntervals(),
         closeSignalsPubSub?.(),
       ]);
+      // Close storage last — checkpoints WAL and switches to DELETE journal
+      // mode for local libsql, mirroring the production asyncCleanup() path.
+      await result.storageMaintenance?.closeStorage?.().catch(() => {
+        // Best-effort during test shutdown.
+      });
     },
   };
 }
 
 export async function runTerminalBackend(runConfig: TerminalRunConfig): Promise<number> {
   if (runConfig.liveOutput) throw new Error('terminal backend only supports run mode');
-  const scenario = getScenario(runConfig.scenarioName);
+  return runTerminalScenario(runConfig, getScenario(runConfig.scenarioName));
+}
+
+export async function runTerminalScenario(
+  runConfig: TerminalRunConfig,
+  scenario: Omit<McE2eScenario, 'name'> & { name: string },
+): Promise<number> {
   if (scenario.entrypoint && !scenario.inProcessApp) {
     throw new Error(`Terminal backend does not yet support custom entrypoint scenarios: ${scenario.name}`);
   }
@@ -451,7 +471,13 @@ export async function runTerminalBackend(runConfig: TerminalRunConfig): Promise<
         stopApp = app.stop;
       }
 
-      await withTerminalProcessOutput(terminal, () => scenario.run({ terminal: scenarioTerminal, runtime }));
+      runtime.stopApp = async () => {
+        await stopApp?.();
+      };
+
+      await withTerminalProcessOutput(terminal, () =>
+        scenario.run({ terminal: scenarioTerminal, runtime, dbPath: runConfig.context.dbPath }),
+      );
       return 0;
     } finally {
       await stopApp?.();

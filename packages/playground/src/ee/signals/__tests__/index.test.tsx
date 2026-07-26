@@ -1,319 +1,273 @@
 // @vitest-environment jsdom
-import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import type { ReactNode } from 'react';
-import { MemoryRouter, Outlet, Route, Routes, useLocation } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import SignalsOverviewPage, { SignalDetailsPage, SignalTraceIdPage } from '..';
-import { SignalCrumb, SignalDetailsCrumb, SignalsRootCrumb } from '../signal-crumb';
+import SignalsOverviewPage from '..';
+import { navHandle } from '../../../lib/nav';
+import { RouteHeader } from '../../../lib/route-header/route-header';
+import {
+  billingThemeSnapshotsResponse,
+  emptyThemeEntitiesResponse,
+  lowSignalFirstThemeEntitiesResponse,
+  multiAgentThemeEntitiesResponse,
+  multiEligibleThemeEntitiesResponse,
+  populatedThemeEntitiesResponse,
+  themeFlowResponse,
+  themeSnapshotsResponse,
+} from './fixtures/theme-flow';
 import { server } from '@/test/msw-server';
 
-const BASE_URL = 'http://localhost:4111';
-const OBSERVABILITY_ENDPOINT = 'https://observability.test';
-const ENTITY_LEARNING_ROOT = `${OBSERVABILITY_ENDPOINT}/api/learning`;
+const BASE_URL = window.location.origin;
 
-type EntityLearningWindow = typeof globalThis & {
-  MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT?: string;
-};
-const w = window as EntityLearningWindow;
-
-// `react-resizable-panels` drives layout through a ResizeObserver-backed group
-// controller that throws under jsdom. It is a third-party DOM boundary, so we
-// stub it to plain elements and keep every first-party component (the route
-// adapters, the overview page, the details page, the trace panel) real per the
-// package testing rules — our own hooks/services/components are never mocked.
-vi.mock('react-resizable-panels', () => ({
-  Group: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  Panel: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  Separator: () => null,
-  usePanelRef: () => ({ current: null }),
-}));
-
-// The overview page lists entities and the topics (clusters) of the selected
-// entity. `entity_support` exposes the `sentiment` and `behavior` signals.
-const entitiesResponse = {
-  entities: [
-    {
-      organizationId: 'org-1',
-      projectId: 'proj-1',
-      entityType: 'agent',
-      entityId: 'entity_support',
-      availableSignals: ['sentiment'],
-      latestRunId: '32',
-      latestRunAt: '2026-06-29T00:00:00.000Z',
-      runCount: 1,
-      topicCount: 1,
-      sourceItemCount: 10,
-      groupedItemCount: 9,
-      outlierItemCount: 1,
-    },
-  ],
-};
-
-const topicsResponse = {
-  run: {
-    runId: '32',
-    signalName: 'sentiment',
-    topicCount: 1,
-    sourceItemCount: 10,
-    groupedItemCount: 9,
-    outlierItemCount: 1,
-  },
-  topics: [
-    {
-      topicId: '89',
-      runId: '32',
-      signalName: 'sentiment',
-      name: 'Frustrated escalations',
-      description: 'Users expressing frustration before escalating.',
-      itemCount: 9,
-      coverage: 0.9,
-      score: 0.9,
-    },
-  ],
-};
-
-const topicExamplesResponse = {
-  runId: '32',
-  examples: [
-    {
-      exampleId: 'ex-1',
-      runId: '32',
-      signalName: 'sentiment',
-      topicId: '89',
-      isOutlier: false,
-      signalId: 'sig-1',
-      traceId: 'trace-1',
-      extractedTraceId: 'extracted-1',
-      signalText: 'This is taking forever.',
-      x: 0.1,
-      y: 0.2,
-    },
-  ],
-  nextOffset: null,
-};
-
-function useEntityLearningHandlers() {
-  server.use(
-    http.get(`${ENTITY_LEARNING_ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
-    http.get(`${ENTITY_LEARNING_ROOT}/entities/:entityId/topics`, () => HttpResponse.json(topicsResponse)),
-    http.get(`${ENTITY_LEARNING_ROOT}/entities/:entityId/topics/:topicId/examples`, () =>
-      HttpResponse.json(topicExamplesResponse),
-    ),
-  );
-}
-
-// The details/trace route renders the real trace panel, which lazily fetches a
-// trace's spans through the Mastra client. The route adapter only owns the
-// signal/trace param wiring and close navigation, not the panel internals
-// (covered in playground-ui), so an empty observability response is enough to
-// mount it without coupling this test to internal trace-detail route shapes.
-function useTraceDetailHandlers() {
-  server.use(
-    http.get(`${BASE_URL}/api/observability/*`, () =>
-      HttpResponse.json({ spans: [], pagination: { total: 0, page: 0, perPage: 25, hasMore: false } }),
-    ),
-  );
-}
-
-function LocationProbe() {
-  const location = useLocation();
-  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
-}
-
-function SignalsTestShell() {
-  return (
-    <>
-      <Outlet />
-      <LocationProbe />
-    </>
-  );
-}
-
-function renderSignalsPage(initialEntry = '/signals') {
+function renderSignalsPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <MastraReactProvider baseUrl={BASE_URL}>
+    <MemoryRouter>
       <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={[initialEntry]}>
-          <Routes>
-            <Route path="/signals" element={<SignalsTestShell />}>
-              <Route index element={<SignalsOverviewPage />} />
-              <Route path=":signalId" element={<SignalDetailsPage />} />
-              <Route path=":signalId/traces/:traceId" element={<SignalTraceIdPage />} />
-            </Route>
-          </Routes>
-        </MemoryRouter>
+        <SignalsOverviewPage />
       </QueryClientProvider>
-    </MastraReactProvider>,
+    </MemoryRouter>,
   );
 }
 
-beforeEach(() => {
-  w.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = OBSERVABILITY_ENDPOINT;
-});
+function renderSignalsPageWithShell() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/signals',
+        handle: navHandle('/signals'),
+        element: (
+          <QueryClientProvider client={queryClient}>
+            <RouteHeader />
+            <SignalsOverviewPage />
+          </QueryClientProvider>
+        ),
+      },
+    ],
+    { initialEntries: ['/signals'] },
+  );
+  return render(<RouterProvider router={router} />);
+}
 
 afterEach(() => {
   cleanup();
-  delete w.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT;
 });
 
-describe('Signals page wrappers', () => {
-  describe('when an entity is selected on the overview', () => {
-    it('navigates to the signal route preserving the entity query params', async () => {
-      useEntityLearningHandlers();
-
-      renderSignalsPage('/signals?entityId=entity_support');
-
-      const seeDetails = await screen.findByRole('button', { name: /See details/ });
-      fireEvent.click(seeDetails);
-
-      await waitFor(() =>
-        expect(screen.getByTestId('location').textContent).toBe('/signals/sentiment?entityId=entity_support'),
+describe('Signals page', () => {
+  describe('when the entities request is pending', () => {
+    it('shows the Signals loading state', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, async () => {
+          await new Promise(() => {});
+          return HttpResponse.json(emptyThemeEntitiesResponse);
+        }),
       );
-    }, 15000);
 
-    it('navigates to the signal route with the clicked cluster topic id', async () => {
-      useEntityLearningHandlers();
+      renderSignalsPage();
 
-      renderSignalsPage('/signals?entityId=entity_support');
+      expect(await screen.findByRole('status', { name: 'Loading signal analysis' })).not.toBeNull();
+    });
+  });
 
-      const card = (await screen.findAllByRole('button', { name: /Frustrated escalations/ }))[0];
-      fireEvent.click(card);
-
-      await waitFor(() =>
-        expect(screen.getByTestId('location').textContent).toBe(
-          '/signals/sentiment?entityId=entity_support&topicId=89',
+  describe('when the entities request fails', () => {
+    it('shows the entities error state', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () =>
+          HttpResponse.json({ error: 'Unable to load entities' }, { status: 500 }),
         ),
       );
-    }, 15000);
-  });
 
-  describe('when the details route renders for the selected entity', () => {
-    it('passes the route signal param to the reusable details page', async () => {
-      useEntityLearningHandlers();
+      renderSignalsPage();
 
-      renderSignalsPage('/signals/sentiment?entityId=entity_support');
-
-      expect(await screen.findByRole('heading', { name: 'Sentiment' })).not.toBeNull();
-    });
-
-    it('renders inside a route-level scroll boundary', async () => {
-      useEntityLearningHandlers();
-
-      renderSignalsPage('/signals/sentiment?entityId=entity_support');
-
-      expect(await screen.findByRole('heading', { name: 'Sentiment' })).not.toBeNull();
-      const scrollBoundary = screen.getByTestId('signal-details-scroll-boundary');
-
-      expect(scrollBoundary.className).toContain('h-full');
-      expect(scrollBoundary.className).toContain('min-h-0');
-      expect(scrollBoundary.className).toContain('overflow-y-auto');
+      expect(await screen.findByText('Unable to load signal entities.')).not.toBeNull();
     });
   });
 
-  describe('when a trace route is active', () => {
-    it('renders the details with the trace panel and closes back to the signal route preserving the entity', async () => {
-      useEntityLearningHandlers();
-      useTraceDetailHandlers();
-
-      renderSignalsPage('/signals/sentiment/traces/trace-1?entityId=entity_support');
-
-      expect(await screen.findByRole('heading', { name: 'Sentiment' })).not.toBeNull();
-
-      const closeButton = await screen.findByRole('button', { name: 'Close Panel' });
-      fireEvent.click(closeButton);
-
-      await waitFor(() =>
-        expect(screen.getByTestId('location').textContent).toBe('/signals/sentiment?entityId=entity_support'),
-      );
-    }, 15000);
-
-    it('renders inside a route-level scroll boundary', async () => {
-      useEntityLearningHandlers();
-      useTraceDetailHandlers();
-
-      renderSignalsPage('/signals/sentiment/traces/trace-1?entityId=entity_support');
-
-      expect(await screen.findByRole('heading', { name: 'Sentiment' })).not.toBeNull();
-      const scrollBoundary = screen.getByTestId('signal-details-scroll-boundary');
-
-      expect(scrollBoundary.className).toContain('h-full');
-      expect(scrollBoundary.className).toContain('min-h-0');
-      expect(scrollBoundary.className).toContain('overflow-y-auto');
-    }, 15000);
-  });
-
-  describe('when rendering a signal breadcrumb', () => {
-    it('resolves the signal name from the playground-ui EE boundary', () => {
-      render(
-        <MemoryRouter initialEntries={['/signals/tasks']}>
-          <Routes>
-            <Route path="/signals/:signalId" element={<SignalCrumb />} />
-          </Routes>
-        </MemoryRouter>,
+  describe('when the entities request fails once', () => {
+    it('retries the failed request and renders the page', async () => {
+      let attempts = 0;
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => {
+          attempts += 1;
+          return attempts === 1
+            ? HttpResponse.json({ error: 'Unable to load entities' }, { status: 500 })
+            : HttpResponse.json(populatedThemeEntitiesResponse);
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
       );
 
-      expect(screen.getByText('Tasks')).not.toBeNull();
+      renderSignalsPage();
+
+      expect(await screen.findByText('Unable to load signal entities.')).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+      expect(await screen.findByRole('combobox', { name: 'Agent' })).not.toBeNull();
+      expect(attempts).toBe(2);
     });
   });
 
-  describe('when rendering the Signals root breadcrumb', () => {
-    it('links back to /signals preserving the current entity query params', () => {
-      render(
-        <MemoryRouter initialEntries={['/signals/sentiment?entityId=entity_support']}>
-          <Routes>
-            <Route path="/signals/:signalId" element={<SignalsRootCrumb />} />
-          </Routes>
-        </MemoryRouter>,
-      );
+  describe('when no Agent Learning entities exist', () => {
+    it('shows that the analysis is waiting for traces', async () => {
+      server.use(http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(emptyThemeEntitiesResponse)));
 
-      const link = screen.getByRole('link', { name: 'Signals' });
-      expect(link.getAttribute('href')).toBe('/signals?entityId=entity_support');
-    });
+      renderSignalsPage();
 
-    it('links to /signals without a query string when no entity params are present', () => {
-      render(
-        <MemoryRouter initialEntries={['/signals/sentiment']}>
-          <Routes>
-            <Route path="/signals/:signalId" element={<SignalsRootCrumb />} />
-          </Routes>
-        </MemoryRouter>,
-      );
-
-      const link = screen.getByRole('link', { name: 'Signals' });
-      expect(link.getAttribute('href')).toBe('/signals');
+      expect(await screen.findByText('Waiting for traces.')).not.toBeNull();
     });
   });
 
-  describe('when rendering the signal breadcrumb on the trace route', () => {
-    it('links back to the signal details page preserving the current query params', () => {
-      render(
-        <MemoryRouter initialEntries={['/signals/sentiment/traces/trace-1?entityId=entity_support&topicId=89']}>
-          <Routes>
-            <Route path="/signals/:signalId/traces/:traceId" element={<SignalDetailsCrumb />} />
-          </Routes>
-        </MemoryRouter>,
+  describe('when an agent has theme flow data', () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
       );
-
-      const link = screen.getByRole('link', { name: 'Sentiment' });
-      expect(link.getAttribute('href')).toBe('/signals/sentiment?entityId=entity_support&topicId=89');
     });
 
-    it('links to the signal details page without a query string when no params are present', () => {
-      render(
-        <MemoryRouter initialEntries={['/signals/sentiment/traces/trace-1']}>
-          <Routes>
-            <Route path="/signals/:signalId/traces/:traceId" element={<SignalDetailsCrumb />} />
-          </Routes>
-        </MemoryRouter>,
+    it('labels the populated analysis', async () => {
+      renderSignalsPage();
+
+      expect(
+        await screen.findByRole('heading', { name: 'Understand what drives every agent interaction' }),
+      ).not.toBeNull();
+    });
+
+    it('exposes the theme flow as a named region', async () => {
+      renderSignalsPage();
+
+      expect(await screen.findByRole('region', { name: 'Signal theme flow' })).not.toBeNull();
+    });
+
+    it('keeps exactly one Signals documentation action across the shell and page', async () => {
+      renderSignalsPageWithShell();
+      await screen.findByRole('region', { name: 'Signal theme flow' });
+
+      expect(screen.getAllByRole('link', { name: 'Signals documentation' })).toHaveLength(1);
+    });
+
+    it('keeps the single agent visible in the selector', async () => {
+      renderSignalsPage();
+
+      expect((await screen.findByRole('combobox', { name: 'Agent' })).textContent).toContain('support-agent');
+    });
+  });
+
+  describe('when a low-signal agent is returned before an eligible agent', () => {
+    it('defaults to the first agent that can render a flow', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(lowSignalFirstThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
       );
 
-      const link = screen.getByRole('link', { name: 'Sentiment' });
-      expect(link.getAttribute('href')).toBe('/signals/sentiment');
+      renderSignalsPage();
+
+      expect((await screen.findByRole('combobox', { name: 'Agent' })).textContent).toContain('support-agent');
+      expect(screen.queryByText('Not enough signal data yet')).toBeNull();
+    });
+  });
+
+  describe('when multiple agents have different signal coverage', () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(multiAgentThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+      );
+    });
+
+    it('lists every agent in the always-visible selector', async () => {
+      renderSignalsPage();
+
+      const selector = await screen.findByRole('combobox', { name: 'Agent' });
+      fireEvent.click(selector);
+
+      expect(await screen.findByRole('option', { name: 'support-agent' })).not.toBeNull();
+      expect(screen.getByRole('option', { name: 'triage-agent' })).not.toBeNull();
+    });
+
+    it('explains why the selected agent cannot render a flow', async () => {
+      renderSignalsPage();
+
+      fireEvent.click(await screen.findByRole('combobox', { name: 'Agent' }));
+      const triageAgent = await screen.findByRole('option', { name: 'triage-agent' });
+      fireEvent.pointerDown(triageAgent, { pointerType: 'mouse' });
+      fireEvent.click(triageAgent, { detail: 1 });
+
+      expect(await screen.findByText('Not enough signal data yet')).not.toBeNull();
+      expect(screen.getByText('Available signals: Goal')).not.toBeNull();
+      expect(screen.getByRole('combobox', { name: 'Agent' })).not.toBeNull();
+    });
+  });
+
+  describe('when switching between eligible agents', () => {
+    it("loads the selected agent's latest snapshot", async () => {
+      let billingFlowSnapshotId: string | null = null;
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(multiEligibleThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/billing-agent/theme-snapshots`, () =>
+          HttpResponse.json(billingThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/billing-agent/theme-flow`, ({ request }) => {
+          billingFlowSnapshotId = new URL(request.url).searchParams.get('snapshotId');
+          return HttpResponse.json({
+            ...themeFlowResponse,
+            snapshot: billingThemeSnapshotsResponse.snapshots[1],
+          });
+        }),
+      );
+      renderSignalsPage();
+      fireEvent.click(await screen.findByRole('combobox', { name: 'Agent' }));
+      const billingAgent = await screen.findByRole('option', { name: 'billing-agent' });
+
+      fireEvent.pointerDown(billingAgent, { pointerType: 'mouse' });
+      fireEvent.click(billingAgent, { detail: 1 });
+
+      expect(await screen.findByText('Snapshot 2/2 · Jul 8–15, 2026 · 30 traces')).not.toBeNull();
+      expect(billingFlowSnapshotId).toBe('billing-snapshot-2');
+    });
+  });
+
+  describe('when an agent has no theme snapshots', () => {
+    it('shows that the analysis is waiting for traces', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json({ snapshots: [] }),
+        ),
+      );
+
+      renderSignalsPage();
+
+      expect(await screen.findByText('Waiting for traces.')).not.toBeNull();
     });
   });
 });

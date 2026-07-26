@@ -943,6 +943,42 @@ describe('MastraClient', () => {
       expect(result.toolMocks).toEqual(toolMocks);
     });
 
+    it('addDatasetItem posts externalId in the request body', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ id: 'item-1', externalId: 'source-item-1' }),
+      });
+
+      const result = await client.addDatasetItem({
+        datasetId: 'ds-1',
+        externalId: 'source-item-1',
+        input: { q: 'x' },
+      });
+
+      const [, init] = (global.fetch as any).mock.calls[0];
+      expect(JSON.parse(init.body)).toMatchObject({ externalId: 'source-item-1', input: { q: 'x' } });
+      expect(result.externalId).toBe('source-item-1');
+    });
+
+    it('batchInsertDatasetItems posts externalId in each item', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ items: [{ id: 'item-1', externalId: 'source-item-1' }], count: 1 }),
+      });
+
+      await client.batchInsertDatasetItems({
+        datasetId: 'ds-1',
+        items: [{ externalId: 'source-item-1', input: { q: 'x' } }],
+      });
+
+      const [, init] = (global.fetch as any).mock.calls[0];
+      expect(JSON.parse(init.body)).toMatchObject({
+        items: [{ externalId: 'source-item-1', input: { q: 'x' } }],
+      });
+    });
+
     it('updateDatasetItem posts toolMocks in the request body', async () => {
       const toolMocks = [{ toolName: 'write', args: { f: 'a' }, output: 'ok' }];
       (global.fetch as any).mockResolvedValueOnce({

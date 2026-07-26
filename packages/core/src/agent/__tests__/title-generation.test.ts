@@ -2810,6 +2810,257 @@ function titleGenerationTests(version: 'v1' | 'v2') {
       expect(allText).not.toContain('toolCallId');
     });
 
+    it('should send each conversation message to the title model exactly once (no content/parts duplication)', async () => {
+      // Regression: the standard title path feeds AIV4 UI messages, which carry the
+      // same text in both `content` (string) and a text `part`. formatMessagesForTitle
+      // used to emit both, so the title model received every message twice, e.g.
+      //   User: hi
+      //   User: hi
+      //   Assistant: Dummy response
+      //   Assistant: Dummy response
+      let capturedUserContent: any[] = [];
+
+      let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        titleModel = new MockLanguageModelV1({
+          doGenerate: async options => {
+            const userMsg = options.prompt.find((msg: any) => msg.role === 'user');
+            if (userMsg) {
+              capturedUserContent = userMsg.content;
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 5, completionTokens: 10 },
+              text: 'Greeting',
+            };
+          },
+        });
+      } else {
+        titleModel = new MockLanguageModelV2({
+          doGenerate: async options => {
+            const userMsg = options.prompt.find((msg: any) => msg.role === 'user');
+            if (userMsg) {
+              capturedUserContent = userMsg.content;
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: 'Greeting',
+              content: [{ type: 'text', text: 'Greeting' }],
+              warnings: [],
+            };
+          },
+        });
+      }
+
+      const mockMemory = new MockMemory();
+      mockMemory.getMergedThreadConfig = () => ({
+        generateTitle: {
+          model: titleModel,
+        },
+      });
+
+      const agent = new Agent({
+        id: 'dedupe-title-agent',
+        name: 'Dedupe Title Agent',
+        instructions: 'test agent',
+        model: dummyModel,
+        memory: mockMemory,
+      });
+
+      if (version === 'v1') {
+        await agent.generateLegacy('hi', {
+          memory: {
+            resource: 'user-1',
+            thread: {
+              id: 'thread-dedupe',
+              title: '', // Empty title triggers title generation
+            },
+          },
+        });
+      } else {
+        await agent.generate('hi', {
+          memory: {
+            resource: 'user-1',
+            thread: {
+              id: 'thread-dedupe',
+              title: '', // Empty title triggers title generation
+            },
+          },
+        });
+      }
+
+      // Title generation is fire-and-forget after the turn completes
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const textParts = capturedUserContent.filter((p: any) => p.type === 'text');
+      const allText = textParts.map((p: any) => p.text).join('\n');
+
+      // The legacy (v1) path sends only the most recent user message to the title
+      // model; the v2 path sends the full transcript. Either way, each message must
+      // appear exactly once.
+      expect(allText).toBe(version === 'v1' ? 'User: hi' : 'User: hi\nAssistant: Dummy response');
+      // No JSON artifacts
+      expect(allText).not.toContain('{');
+      expect(allText).not.toContain('"type"');
+      expect(allText).not.toContain('providerOptions');
+    });
+
+    it('should still emit string content when a message has no text part (tool-invocation only)', async () => {
+      // Pins the content fallback: a hand-built message with string `content` and only
+      // a tool-invocation part has no text part, so the content line must still be
+      // emitted (alongside the tool lines) — exactly once each.
+      let capturedUserContent: any[] = [];
+
+      let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        titleModel = new MockLanguageModelV1({
+          doGenerate: async options => {
+            const userMsg = options.prompt.find((msg: any) => msg.role === 'user');
+            if (userMsg) {
+              capturedUserContent = userMsg.content;
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 5, completionTokens: 10 },
+              text: 'Weather Check',
+            };
+          },
+        });
+      } else {
+        titleModel = new MockLanguageModelV2({
+          doGenerate: async options => {
+            const userMsg = options.prompt.find((msg: any) => msg.role === 'user');
+            if (userMsg) {
+              capturedUserContent = userMsg.content;
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: 'Weather Check',
+              content: [{ type: 'text', text: 'Weather Check' }],
+              warnings: [],
+            };
+          },
+        });
+      }
+
+      const agent = new Agent({
+        id: 'content-fallback-title-agent',
+        name: 'Content Fallback Title Agent',
+        instructions: 'test agent',
+        model: titleModel,
+      });
+
+      await agent.generateTitleFromUserMessage({
+        messages: [
+          {
+            id: '1',
+            role: 'user' as const,
+            content: 'Please check the weather',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  toolCallId: 'call-1',
+                  toolName: 'getWeather',
+                  state: 'result' as const,
+                  args: { city: 'Paris' },
+                  result: { temp: 22, condition: 'sunny' },
+                },
+              },
+            ],
+          },
+        ],
+      });
+
+      const textParts = capturedUserContent.filter((p: any) => p.type === 'text');
+      const allText = textParts.map((p: any) => p.text).join('\n');
+      const lines = allText.split('\n');
+
+      // The content line survives (no text part exists to carry it) — exactly once
+      expect(lines.filter(l => l === 'User: Please check the weather')).toHaveLength(1);
+      // The tool result line is emitted — exactly once
+      expect(lines.filter(l => l.startsWith('Tool Result getWeather:'))).toHaveLength(1);
+    });
+
+    it('should keep string content when no text part carries the same text', async () => {
+      // Pins the equality rule in formatMessagesForTitle: `content` may only be
+      // skipped when a text part carries the exact same text. A stored message can
+      // legitimately have a content string that differs from its text parts
+      // (AIV4Adapter uses m.content.content verbatim when set), and that text must
+      // not be dropped.
+      let capturedUserContent: any[] = [];
+
+      let titleModel: MockLanguageModelV1 | MockLanguageModelV2;
+
+      if (version === 'v1') {
+        titleModel = new MockLanguageModelV1({
+          doGenerate: async options => {
+            const userMsg = options.prompt.find((msg: any) => msg.role === 'user');
+            if (userMsg) {
+              capturedUserContent = userMsg.content;
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 5, completionTokens: 10 },
+              text: 'Weather Check',
+            };
+          },
+        });
+      } else {
+        titleModel = new MockLanguageModelV2({
+          doGenerate: async options => {
+            const userMsg = options.prompt.find((msg: any) => msg.role === 'user');
+            if (userMsg) {
+              capturedUserContent = userMsg.content;
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              text: 'Weather Check',
+              content: [{ type: 'text', text: 'Weather Check' }],
+              warnings: [],
+            };
+          },
+        });
+      }
+
+      const agent = new Agent({
+        id: 'content-mismatch-agent',
+        name: 'Content Mismatch Agent',
+        instructions: 'You are a helpful assistant.',
+        model: titleModel,
+      });
+
+      await agent.generateTitleFromUserMessage({
+        messages: [
+          {
+            id: '1',
+            role: 'user' as const,
+            content: 'Please check the weather',
+            parts: [{ type: 'text' as const, text: 'Paris' }],
+          },
+        ],
+      });
+
+      const textParts = capturedUserContent.filter((p: any) => p.type === 'text');
+      const allText = textParts.map((p: any) => p.text).join('\n');
+      const lines = allText.split('\n');
+
+      // Both the distinct content and the text part are emitted — exactly once each
+      expect(lines.filter(l => l === 'User: Please check the weather')).toHaveLength(1);
+      expect(lines.filter(l => l === 'User: Paris')).toHaveLength(1);
+    });
+
     it('should handle file parts after .ui() conversion uses url/mediaType (regression)', async () => {
       // Verify that MessageList.aiV5.ui() converts core-format file parts (data/mimeType)
       // into UI-format (url/mediaType), which is what generateTitleFromUserMessage
@@ -2949,5 +3200,152 @@ describe('sub-agent title generation propagation (#18738)', () => {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     expect(subAgentGenTitle).not.toHaveBeenCalled();
+  });
+});
+
+describe('onTitleGenerated callback', () => {
+  function createMockModels() {
+    const agentModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [{ type: 'text' as const, text: 'Agent response' }],
+        warnings: [],
+      }),
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start' as const, warnings: [] },
+          { type: 'response-metadata' as const, id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start' as const, id: 'text-1' },
+          { type: 'text-delta' as const, id: 'text-1', delta: 'Agent response' },
+          { type: 'text-end' as const, id: 'text-1' },
+          {
+            type: 'finish' as const,
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+
+    const titleModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: 'Generated Title' }],
+        warnings: [],
+      }),
+    });
+
+    return { agentModel, titleModel };
+  }
+
+  function createAgentWithTitleGen(agentModel: MockLanguageModelV2, titleModel: MockLanguageModelV2) {
+    const mockMemory = new MockMemory();
+    mockMemory.getMergedThreadConfig = () => ({
+      generateTitle: { model: titleModel },
+    });
+
+    const agent = new Agent({
+      id: 'on-title-gen-test',
+      name: 'OnTitleGenerated Test',
+      instructions: 'test agent',
+      model: agentModel,
+      memory: mockMemory,
+    });
+
+    return { agent, mockMemory };
+  }
+
+  it('should fire onTitleGenerated after title is persisted via generate()', async () => {
+    const { agentModel, titleModel } = createMockModels();
+    const { agent } = createAgentWithTitleGen(agentModel, titleModel);
+
+    let receivedTitle: string | undefined;
+
+    await agent.generate('Hello', {
+      memory: {
+        resource: 'user-1',
+        thread: { id: 'thread-cb-1', title: '' },
+        onTitleGenerated: title => {
+          receivedTitle = title;
+        },
+      },
+    });
+
+    // Title generation is fire-and-forget, wait for it
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    expect(receivedTitle).toBe('Generated Title');
+  });
+
+  it('should fire onTitleGenerated after title is persisted via stream()', async () => {
+    const { agentModel, titleModel } = createMockModels();
+    const { agent } = createAgentWithTitleGen(agentModel, titleModel);
+
+    let receivedTitle: string | undefined;
+
+    const result = await agent.stream('Hello', {
+      memory: {
+        resource: 'user-1',
+        thread: { id: 'thread-cb-2', title: '' },
+        onTitleGenerated: title => {
+          receivedTitle = title;
+        },
+      },
+    });
+
+    // Drain the stream to trigger onFinish
+    for await (const _ of result.fullStream) {
+      // drain
+    }
+
+    // Title generation is fire-and-forget, wait for it
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    expect(receivedTitle).toBe('Generated Title');
+  });
+
+  it('should not fire onTitleGenerated when thread already has a title', async () => {
+    const { agentModel, titleModel } = createMockModels();
+    const { agent } = createAgentWithTitleGen(agentModel, titleModel);
+
+    let callbackFired = false;
+
+    await agent.generate('Hello', {
+      memory: {
+        resource: 'user-1',
+        thread: { id: 'thread-cb-3', title: 'Existing Title' },
+        onTitleGenerated: () => {
+          callbackFired = true;
+        },
+      },
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    expect(callbackFired).toBe(false);
+  });
+
+  it('should not crash when onTitleGenerated throws', async () => {
+    const { agentModel, titleModel } = createMockModels();
+    const { agent } = createAgentWithTitleGen(agentModel, titleModel);
+
+    await agent.generate('Hello', {
+      memory: {
+        resource: 'user-1',
+        thread: { id: 'thread-cb-4', title: '' },
+        onTitleGenerated: () => {
+          throw new Error('Callback error');
+        },
+      },
+    });
+
+    // Should not throw — error is caught in the .catch() handler
+    await new Promise(resolve => setTimeout(resolve, 200));
   });
 });

@@ -9,7 +9,7 @@ const meta: Meta<typeof DataCodeSection> = {
   decorators: [
     Story => (
       <TooltipProvider>
-        <div className="w-[600px]">
+        <div className="w-150">
           <Story />
         </div>
       </TooltipProvider>

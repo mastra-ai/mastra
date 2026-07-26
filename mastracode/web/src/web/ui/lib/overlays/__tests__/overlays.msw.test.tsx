@@ -2,7 +2,7 @@
  * BDD coverage for the cross-cutting overlay open-state context
  * (`src/web/ui/lib/overlays`).
  *
- * Overlay visibility (sidebar, palette, settings, shortcuts, projects) is
+ * Overlay visibility (sidebar, shortcuts) is
  * platform-level UI plumbing shared by unrelated components, so it lives in a
  * dedicated provider instead of being prop-drilled through the layout tree.
  */
@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { OverlaysProvider, useOverlays } from '../overlays';
 import type { OverlayName } from '../overlays';
 
-const OVERLAY_NAMES: OverlayName[] = ['sidebar', 'palette', 'settings', 'shortcuts', 'projects'];
+const OVERLAY_NAMES: OverlayName[] = ['sidebar', 'shortcuts'];
 
 function Probe() {
   const overlays = useOverlays();
@@ -56,10 +56,10 @@ describe('OverlaysProvider', () => {
   it('given a closed overlay, when opened, then only that overlay reports open', async () => {
     renderProbe();
 
-    await userEvent.click(screen.getByRole('button', { name: 'open palette' }));
+    await userEvent.click(screen.getByRole('button', { name: 'open shortcuts' }));
 
-    expect(stateOf('palette')).toBe('open');
-    for (const name of OVERLAY_NAMES.filter(n => n !== 'palette')) {
+    expect(stateOf('shortcuts')).toBe('open');
+    for (const name of OVERLAY_NAMES.filter(n => n !== 'shortcuts')) {
       expect(stateOf(name)).toBe('closed');
     }
   });
@@ -67,11 +67,11 @@ describe('OverlaysProvider', () => {
   it('given two open overlays, when one is closed, then the other stays open', async () => {
     renderProbe();
 
-    await userEvent.click(screen.getByRole('button', { name: 'open settings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'open shortcuts' }));
     await userEvent.click(screen.getByRole('button', { name: 'open sidebar' }));
-    await userEvent.click(screen.getByRole('button', { name: 'close settings' }));
+    await userEvent.click(screen.getByRole('button', { name: 'close shortcuts' }));
 
-    expect(stateOf('settings')).toBe('closed');
+    expect(stateOf('shortcuts')).toBe('closed');
     expect(stateOf('sidebar')).toBe('open');
   });
 
@@ -88,8 +88,8 @@ describe('OverlaysProvider', () => {
   it('given several open overlays, when closeAll is called, then every overlay closes', async () => {
     renderProbe();
 
-    await userEvent.click(screen.getByRole('button', { name: 'open palette' }));
-    await userEvent.click(screen.getByRole('button', { name: 'open projects' }));
+    await userEvent.click(screen.getByRole('button', { name: 'open sidebar' }));
+    await userEvent.click(screen.getByRole('button', { name: 'open shortcuts' }));
     await userEvent.click(screen.getByRole('button', { name: 'close all' }));
 
     for (const name of OVERLAY_NAMES) {

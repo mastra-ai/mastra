@@ -51,8 +51,13 @@ async function performLogin(ctx: SlashCommandContext, providerId: string): Promi
       .then(async () => {
         ctx.state.ui.hideOverlay();
 
+        // The `/login` command must not change the user's active model or model
+        // pack — that only belongs to the onboarding flow. Only auto-select the
+        // provider default when no model is selected yet (e.g. onboarding was
+        // skipped), so the user isn't left without a usable model.
+        const hasSelectedModel = ctx.state.session.model.get() !== '';
         const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
-        if (defaultModel) {
+        if (defaultModel && !hasSelectedModel) {
           await ctx.state.session.model.switch({ modelId: defaultModel });
           ctx.showInfo(`Logged in to ${providerName} - switched to ${defaultModel}`);
         } else {

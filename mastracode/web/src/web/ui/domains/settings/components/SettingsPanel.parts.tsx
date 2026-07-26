@@ -12,8 +12,12 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import type { Theme } from '@mastra/playground-ui/components/ThemeProvider';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+
+import { DONE_SOUND_OPTIONS, loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
+import type { DoneSound } from '../services/doneSound';
 
 type ThinkingLevel = AgentControllerSessionSettings['thinkingLevel'];
 type NotificationMode = AgentControllerSessionSettings['notifications'];
@@ -32,106 +36,114 @@ const NOTIFICATION_MODES: { value: NotificationMode; label: string }[] = [
   { value: 'both', label: 'Both' },
 ];
 
-interface GeneralTabProps {
+interface GeneralSettingsProps {
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
 }
 
-export function GeneralTab({ theme, onThemeChange }: GeneralTabProps) {
+export function GeneralSettings({ theme, onThemeChange }: GeneralSettingsProps) {
+  const [doneSound, setDoneSound] = useState<DoneSound>(() => loadDoneSound());
+  const changeDoneSound = (next: DoneSound) => {
+    setDoneSound(next);
+    saveDoneSound(next);
+    // Preview the pick so the user hears what they chose.
+    playDoneSound(next);
+  };
   return (
-    <FieldRow label="Theme" hint="Color scheme for the interface">
-      <Segmented
-        ariaLabel="Theme"
-        value={theme}
-        options={[
-          { value: 'system', label: 'System' },
-          { value: 'light', label: 'Light' },
-          { value: 'dark', label: 'Dark' },
-        ]}
-        onChange={onThemeChange}
-      />
-    </FieldRow>
+    <FieldRowGroup>
+      <FieldRow label="Theme" hint="Color scheme for the interface">
+        <Segmented
+          ariaLabel="Theme"
+          value={theme}
+          options={[
+            { value: 'system', label: 'System' },
+            { value: 'light', label: 'Light' },
+            { value: 'dark', label: 'Dark' },
+          ]}
+          onChange={onThemeChange}
+        />
+      </FieldRow>
+      <FieldRow label="Completion sound" hint="Played when an agent run finishes in a workspace">
+        <Segmented
+          ariaLabel="Completion sound"
+          value={doneSound}
+          options={DONE_SOUND_OPTIONS}
+          onChange={changeDoneSound}
+        />
+      </FieldRow>
+    </FieldRowGroup>
   );
 }
 
-interface ModelTabProps {
-  models: AgentControllerAvailableModel[];
-  currentModelId: string | null;
+interface ModelSettingsProps {
   settings: AgentControllerSessionSettings | null;
-  onModelChange: (modelId: string) => void;
+  updating: boolean;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
 }
 
-export function ModelTab({ models, currentModelId, settings, onModelChange, onBehaviorChange }: ModelTabProps) {
+export function ModelSettings({ settings, updating, onBehaviorChange }: ModelSettingsProps) {
   return (
-    <>
-      <div className="flex flex-col gap-2 py-3 border-b border-border1/40">
-        <div className="flex flex-col gap-0.5">
-          <Txt variant="ui-md" className="text-icon5">
-            Model
-          </Txt>
-          <Txt variant="ui-sm" className="text-icon3">
-            Default model for this session
-          </Txt>
-        </div>
-        <ModelPicker models={models} currentModelId={currentModelId} onModelChange={onModelChange} />
-      </div>
-
+    <FieldRowGroup>
       <FieldRow label="Thinking level" hint="Extended-reasoning budget for the agent">
         <Segmented
           ariaLabel="Thinking level"
           value={settings?.thinkingLevel ?? 'off'}
-          disabled={!settings}
+          disabled={!settings || updating}
           options={THINKING_LEVELS}
           onChange={v => onBehaviorChange({ thinkingLevel: v })}
         />
       </FieldRow>
-    </>
+    </FieldRowGroup>
   );
 }
 
-interface BehaviorTabProps {
+interface BehaviorSettingsProps {
   settings: AgentControllerSessionSettings | null;
+  updating: boolean;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
   permissions: PermissionRules | null;
   pendingPermissionCategory: ToolCategory | null;
   setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
 }
 
-export function BehaviorTab({
+export function BehaviorSettings({
   settings,
+  updating,
   onBehaviorChange,
   permissions,
   pendingPermissionCategory,
   setPermissionForCategory,
-}: BehaviorTabProps) {
+}: BehaviorSettingsProps) {
+  const notificationMode = settings?.notifications ?? 'off';
   return (
     <>
-      <FieldRow label="Auto-approve tools" hint="Run tool calls without asking (YOLO)">
-        <Toggle
-          ariaLabel="Auto-approve tools"
-          checked={!!settings?.yolo}
-          disabled={!settings}
-          onChange={v => onBehaviorChange({ yolo: v })}
-        />
-      </FieldRow>
-      <FieldRow label="Smart editing" hint="Use AST-aware edits when available">
-        <Toggle
-          ariaLabel="Smart editing"
-          checked={!!settings?.smartEditing}
-          disabled={!settings}
-          onChange={v => onBehaviorChange({ smartEditing: v })}
-        />
-      </FieldRow>
-      <FieldRow label="Notifications" hint="How completion alerts are delivered">
-        <Segmented
-          ariaLabel="Notifications"
-          value={settings?.notifications ?? 'off'}
-          disabled={!settings}
-          options={NOTIFICATION_MODES}
-          onChange={v => onBehaviorChange({ notifications: v })}
-        />
-      </FieldRow>
+      <FieldRowGroup>
+        <FieldRow label="Auto-approve tools" hint="Run tool calls without asking (YOLO)">
+          <Toggle
+            ariaLabel="Auto-approve tools"
+            checked={!!settings?.yolo}
+            disabled={!settings || updating}
+            onChange={v => onBehaviorChange({ yolo: v })}
+          />
+        </FieldRow>
+        <FieldRow label="Smart editing" hint="Use AST-aware edits when available">
+          <Toggle
+            ariaLabel="Smart editing"
+            checked={!!settings?.smartEditing}
+            disabled={!settings || updating}
+            onChange={v => onBehaviorChange({ smartEditing: v })}
+          />
+        </FieldRow>
+        <FieldRow label="Notifications" hint="How completion alerts are delivered">
+          <Segmented
+            ariaLabel="Notifications"
+            value={notificationMode}
+            disabled={!settings || updating}
+            options={NOTIFICATION_MODES}
+            onChange={v => onBehaviorChange({ notifications: v })}
+          />
+        </FieldRow>
+      </FieldRowGroup>
       <PermissionsSection
         permissions={permissions}
         pendingPermissionCategory={pendingPermissionCategory}
@@ -158,31 +170,33 @@ function PermissionsSection({
   permissions,
   pendingPermissionCategory,
   setPermissionForCategory,
-}: Pick<BehaviorTabProps, 'permissions' | 'pendingPermissionCategory' | 'setPermissionForCategory'>) {
+}: Pick<BehaviorSettingsProps, 'permissions' | 'pendingPermissionCategory' | 'setPermissionForCategory'>) {
   const update = async (category: ToolCategory, policy: PermissionPolicy) => {
     await setPermissionForCategory(category, policy);
   };
 
   return (
-    <div className="mt-6 pt-4 border-t border-border1/40">
+    <div className="mt-6 pt-4">
       <Txt variant="ui-lg" className="text-icon6 font-medium">
         Tool permissions
       </Txt>
-      <Txt variant="ui-sm" as="p" className="mt-1 mb-2 text-icon3">
+      <Txt variant="ui-sm" as="p" className="text-icon3 mt-1 mb-2">
         Choose how each tool category is approved. “Allow” runs without asking, “Ask” prompts you, “Deny” blocks it.
         Turning on “Auto-approve tools” above sets every category to Allow.
       </Txt>
-      {TOOL_CATEGORIES.map(({ value, label, hint }) => (
-        <FieldRow key={value} label={label} hint={hint}>
-          <Segmented
-            ariaLabel={`${label} permission`}
-            value={permissions?.categories?.[value] ?? 'ask'}
-            disabled={!permissions || pendingPermissionCategory === value}
-            options={PERMISSION_POLICIES}
-            onChange={policy => void update(value, policy)}
-          />
-        </FieldRow>
-      ))}
+      <FieldRowGroup>
+        {TOOL_CATEGORIES.map(({ value, label, hint }) => (
+          <FieldRow key={value} label={label} hint={hint}>
+            <Segmented
+              ariaLabel={`${label} permission`}
+              value={permissions?.categories?.[value] ?? 'ask'}
+              disabled={!permissions || pendingPermissionCategory === value}
+              options={PERMISSION_POLICIES}
+              onChange={policy => void update(value, policy)}
+            />
+          </FieldRow>
+        ))}
+      </FieldRowGroup>
     </div>
   );
 }
@@ -289,11 +303,11 @@ function ModelPicker({
 
       {open && (
         <div
-          className="absolute z-50 mt-1 w-full rounded-lg border border-border1/60 bg-surface3 shadow-dialog"
+          className="border-border1/60 bg-surface3 shadow-dialog absolute z-50 mt-1 w-full rounded-lg border"
           role="dialog"
           aria-label="Choose a model"
         >
-          <div className="p-2 border-b border-border1/40">
+          <div className="border-border1/40 border-b p-2">
             <Input
               ref={inputRef}
               placeholder="Search models or providers…"
@@ -317,12 +331,16 @@ function ModelPicker({
                   type="button"
                   role="option"
                   aria-selected={m.id === currentModelId}
-                  className={`flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left ${i === active ? 'bg-surface4' : ''} ${m.hasApiKey ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
+                  className={cn(
+                    'flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-left',
+                    i === active && 'bg-surface4',
+                    m.hasApiKey ? 'cursor-pointer' : 'cursor-not-allowed opacity-50',
+                  )}
                   disabled={!m.hasApiKey}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => choose(m)}
                 >
-                  <span className="flex flex-col gap-0.5 min-w-0">
+                  <span className="flex min-w-0 flex-col gap-0.5">
                     <Txt variant="ui-md" className="text-icon6 truncate">
                       {m.modelName}
                     </Txt>
@@ -345,9 +363,13 @@ function ModelPicker({
   );
 }
 
+function FieldRowGroup({ children }: { children: React.ReactNode }) {
+  return <div className="divide-border1/40 divide-y">{children}</div>;
+}
+
 function FieldRow({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-3 border-b border-border1/40">
+    <div className="flex items-center justify-between gap-4 py-3">
       <div className="flex flex-col gap-0.5">
         <Txt variant="ui-md" className="text-icon5">
           {label}

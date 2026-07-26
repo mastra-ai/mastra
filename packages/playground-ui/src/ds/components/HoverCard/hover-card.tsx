@@ -91,8 +91,8 @@ const HoverCardContent = React.forwardRef<HTMLDivElement, HoverCardContentProps>
           <PreviewCardPrimitive.Popup
             ref={ref}
             className={cn(
-              'w-auto max-w-100 rounded-md border border-border1 bg-surface5 p-2 px-4 text-ui-sm text-neutral5 origin-[var(--transform-origin)]',
-              'data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95',
+              'max-w-100 w-auto origin-[var(--transform-origin)] rounded-md border border-border1 bg-surface5 p-2 px-4 text-ui-sm text-neutral5',
+              'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
               'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
               className,
             )}

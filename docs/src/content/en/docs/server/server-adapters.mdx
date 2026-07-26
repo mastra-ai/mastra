@@ -99,11 +99,7 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
     })
     ```
 
-    :::info
-
     See the [Express Adapter](/reference/server/express-adapter) documentation for full configuration options.
-
-    :::
   </TabItem>
 
   <TabItem value="hono" label="Hono">
@@ -124,11 +120,7 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
     })
     ```
 
-    :::info
-
     See the [Hono Adapter](/reference/server/hono-adapter) documentation for full configuration options.
-
-    :::
   </TabItem>
 
   <TabItem value="fastify" label="Fastify">
@@ -156,11 +148,7 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
     })
     ```
 
-    :::info
-
     See the [Fastify Adapter](/reference/server/fastify-adapter) documentation for full configuration options.
-
-    :::
   </TabItem>
 
   <TabItem value="koa" label="Koa">
@@ -195,11 +183,7 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
     })
     ```
 
-    :::info
-
     See the [Koa Adapter](/reference/server/koa-adapter) documentation for full configuration options.
-
-    :::
   </TabItem>
 
   <TabItem value="nestjs" label="NestJS">
@@ -230,11 +214,7 @@ Initialize your app as usual, then create a `MastraServer` by passing in the `ap
     bootstrap()
     ```
 
-    :::info
-
     See the [NestJS Adapter](/reference/server/nestjs-adapter) documentation for full configuration options.
-
-    :::
   </TabItem>
 </Tabs>
 
@@ -282,11 +262,7 @@ You can add your own routes to the app alongside Mastra's routes.
 - When you want Mastra-managed auth and route metadata such as `requiresAuth`, prefer `registerApiRoute()`.
 - When you mount routes directly on the framework app, use the adapter's exported `createAuthMiddleware()` helper if those routes need Mastra auth.
 
-:::info
-
 Visit "Adding custom routes" for [Express](/reference/server/express-adapter#adding-custom-routes) and [Hono](/reference/server/hono-adapter#adding-custom-routes) for more information.
-
-:::
 
 ## Route prefixes
 
@@ -339,11 +315,7 @@ const server = new MastraServer({
 })
 ```
 
-:::info
-
 See [MastraServer](/reference/server/mastra-server) for full configuration options.
-
-:::
 
 ## Per-route auth overrides
 
@@ -370,11 +342,7 @@ const server = new MastraServer({
 })
 ```
 
-:::info
-
 See [MastraServer](/reference/server/mastra-server) for full configuration options.
-
-:::
 
 ## Accessing the app
 

@@ -2,9 +2,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playgr
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-interface ShortcutsOverlayProps {
-  onClose: () => void;
-}
+import { useOverlays } from '../../../lib/overlays';
 
 interface Shortcut {
   keys: string[];
@@ -12,7 +10,6 @@ interface Shortcut {
 }
 
 const SHORTCUTS: Shortcut[] = [
-  { keys: ['⌘', 'K'], description: 'Open the command palette' },
   { keys: ['?'], description: 'Show this shortcuts help' },
   { keys: ['Enter'], description: 'Send the message' },
   { keys: ['Shift', 'Enter'], description: 'Insert a newline' },
@@ -21,9 +18,11 @@ const SHORTCUTS: Shortcut[] = [
 ];
 
 /** A help overlay listing the keyboard shortcuts, triggered by '?'. */
-export function ShortcutsOverlay({ onClose }: ShortcutsOverlayProps) {
+export function ShortcutsOverlay() {
+  const { close } = useOverlays();
+
   return (
-    <Dialog open onOpenChange={open => !open && onClose()}>
+    <Dialog open onOpenChange={open => !open && close('shortcuts')}>
       <DialogContent className="w-full max-w-md" aria-label="Keyboard shortcuts">
         <DialogHeader className="px-5 pt-4 pb-2">
           <DialogTitle>Keyboard shortcuts</DialogTitle>

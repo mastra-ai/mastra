@@ -1,175 +1,189 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { createContext, useContext, useEffect, useEffectEvent, useRef } from 'react';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
+import { createContext, useContext } from 'react';
+import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { queryKeys } from '../../../../../shared/api/keys';
-// Deep imports (not the workspaces barrel): the barrel re-exports components
-// that consume this chat context, so importing it here would create a cycle.
-import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
-import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
-import { useAgentControllerConnection } from '../hooks/useAgentControllerConnection';
-import type { ConnectionStatus } from '../hooks/useAgentControllerConnection';
-import { useAgentControllerThreadMessages } from '../hooks/useAgentControllerThreadMessages';
-import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
+import { SkeletonRows } from '../../../ui';
+import { useAgentControllerThreadMessages } from '../../../../../shared/hooks/useAgentControllerThreadMessages';
+import { useFactoryQuery } from '../../../../../shared/hooks/useFactories';
+import { useEnsureMaterializedSandbox } from '../../../../../shared/hooks/useEnsureMaterializedSandbox';
+import { useUserSessionQuery } from '../../../../../shared/hooks/useWorkspaces';
+import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import type { TranscriptState } from '../services/transcript';
+import { ChatCommandsProvider } from './ChatCommandsProvider';
+import { ChatModelsProvider } from './ChatModelsProvider';
+import { ChatModesProvider } from './ChatModesProvider';
+import { ChatSessionContext } from './ChatSessionContext';
+import { ChatTranscriptProvider } from './ChatTranscriptProvider';
+import { useChatSessionContext } from './useChatSessionContext';
 
-export interface ChatSessionApi {
-  transcript: TranscriptState;
-  status: ConnectionStatus;
-  modes: ReturnType<typeof useAgentControllerConnection>['modes'];
-  messagesPending: boolean;
-  busy: boolean;
-  showWorkingIndicator: boolean;
-  localUser: (text: string, steer?: boolean) => void;
-  resetHydration: () => void;
-  resetCurrentThread: (threadId?: string) => void;
-  syncState: (state: {
-    modeId?: string;
-    modelId?: string;
-    omProgress?: TranscriptState['omProgress'];
-    tokenUsage?: TranscriptState['usage'];
-  }) => void;
-  reset: (state?: Parameters<ReturnType<typeof useAgentControllerTranscript>['reset']>[0], threadId?: string) => void;
-  resolvePrompt: (id: string) => void;
-  pushNotice: (text: string, level?: 'info' | 'error') => void;
+interface ChatThreadMessagesApi {
+  threadId?: string;
+  isPending: boolean;
+  error: unknown;
 }
 
-const ChatSessionContext = createContext<ChatSessionApi | null>(null);
+const ChatThreadMessagesContext = createContext<ChatThreadMessagesApi | null>(null);
 
-export function ChatSessionProvider({ children }: { children: ReactNode }) {
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
-  const projectPath = deriveProjectPath(activeProject);
-
-  return (
-    <ChatSessionBoundary
-      key={`${resourceId}:${projectPath ?? ''}`}
-      resourceId={resourceId}
-      projectPath={projectPath}
-      sessionEnabled={sessionEnabled}
-    >
-      {children}
-    </ChatSessionBoundary>
-  );
-}
-
-function ChatSessionBoundary({
+/** Stable project/API configuration for chat shell consumers such as the sidebar. */
+export function ChatSessionConfigProvider({
   children,
-  resourceId,
-  projectPath,
-  sessionEnabled,
+  threadId,
+  userScoped = false,
 }: {
   children: ReactNode;
-  resourceId: string;
-  projectPath?: string;
-  sessionEnabled: boolean;
+  threadId?: string;
+  userScoped?: boolean;
 }) {
-  const queryClient = useQueryClient();
+  const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const { baseUrl } = useApiConfig();
-  const firstSyncAtRef = useRef(0);
-
-  const {
-    transcript,
-    hydrateMessages,
-    reset,
-    resetDormant,
-    resetHydration,
-    resetCurrentThread,
-    syncState,
-    onEvent,
-    localUser,
-    resolvePrompt,
-    pushNotice,
-  } = useAgentControllerTranscript();
-
-  const messagesQuery = useAgentControllerThreadMessages({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    threadId: transcript.threadId,
-    baseUrl,
-    enabled: sessionEnabled,
-  });
-
-  const onMessagesData = useEffectEvent((data: typeof messagesQuery.data) => {
-    hydrateMessages(data);
-  });
-
-  useEffect(() => {
-    onMessagesData(messagesQuery.data);
-  }, [messagesQuery.data]);
-
-  const connection = useAgentControllerConnection({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
+  const factoryQuery = useFactoryQuery(factoryId);
+  const sessionQuery = useUserSessionQuery(userScoped ? threadId : sessionId);
+  const factory = factoryQuery.data;
+  const storedSession = sessionQuery.data;
+  const repository = storedSession
+    ? factory?.repositories.find(
+        (repo: LinkedRepositoryPayload) => repo.projectRepositoryId === storedSession.projectRepositoryId,
+      )
+    : factory?.repositories[0];
+  const ensureQuery = useEnsureMaterializedSandbox(repository?.projectRepositoryId);
+  const resolvingSession = Boolean(userScoped ? threadId : sessionId) && sessionQuery.isPending;
+  // Sessions and their threads are provisioned with the session's own id as the
+  // memory resourceId and no scope (see FactoryStartCoordinator.prepare and
+  // UserSessionsSection), so the chat surface must address the same
+  // (resourceId, no scope) session to read threads and share the live run.
+  // On user routes the :threadId param IS the sessionId. Factory routes with
+  // no workspace session (e.g. /settings/*) fall back to the factory-level
+  // session address returned by the /ensure route so resource-scoped surfaces
+  // (behavior settings, tool permissions) stay functional.
+  const resourceId = userScoped ? threadId : (storedSession?.sessionId ?? sessionId ?? ensureQuery.data?.resourceId);
+  const projectPath = undefined;
+  const sessionEnabled = userScoped
+    ? Boolean(storedSession) && !resolvingSession
+    : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
+  const value = {
+    resourceId: resourceId ?? '',
+    sessionEnabled,
+    resourceEnabled: userScoped ? Boolean(resourceId) : ensureQuery.isSuccess,
     projectPath,
+    factorySessionState:
+      factory && repository
+        ? {
+            factoryProjectId: factory.id,
+            projectRepositoryId: repository.projectRepositoryId,
+            sandboxId: storedSession?.sandboxId ?? ensureQuery.data?.sandboxId,
+            sandboxWorkdir:
+              storedSession?.sandboxWorkdir ?? ensureQuery.data?.sandboxWorkdir ?? repository.sandboxWorkdir,
+          }
+        : undefined,
     baseUrl,
-    enabled: sessionEnabled,
-    onEvent,
-  });
-
-  const onConnectionStateSynced = useEffectEvent(() => {
-    if (!connection.state || !connection.stateUpdatedAt) return;
-    const isFirst = firstSyncAtRef.current === 0;
-    firstSyncAtRef.current = connection.stateUpdatedAt;
-    resetHydration();
-    queryClient.removeQueries({
-      queryKey: queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, connection.state.threadId),
-    });
-    reset(
-      connection.state,
-      isFirst ? (connection.createdThreadId ?? connection.state.threadId) : connection.state.threadId,
-    );
-  });
-
-  useEffect(() => {
-    if (!connection.state || !connection.stateUpdatedAt) return;
-    onConnectionStateSynced();
-  }, [connection.state, connection.stateUpdatedAt]);
-
-  const onSessionDisabled = useEffectEvent(resetDormant);
-
-  useEffect(() => {
-    if (sessionEnabled) return;
-    onSessionDisabled();
-  }, [sessionEnabled]);
-
-  const busy = transcript.running || transcript.pending;
-  const lastEntry = transcript.entries[transcript.entries.length - 1];
-  const lastEntryHasText =
-    lastEntry?.kind === 'message' &&
-    lastEntry.message.role === 'assistant' &&
-    lastEntry.message.content.parts.some(part => part.type === 'text' && part.text.trim().length > 0);
-  const showWorkingIndicator =
-    busy &&
-    !(
-      lastEntry?.kind === 'message' &&
-      lastEntry.message.role === 'assistant' &&
-      lastEntry.streaming &&
-      lastEntryHasText
-    );
-
-  const value: ChatSessionApi = {
-    transcript,
-    status: connection.status,
-    modes: connection.modes,
-    messagesPending: Boolean(transcript.threadId) && messagesQuery.isPending,
-    busy,
-    showWorkingIndicator,
-    localUser,
-    resetHydration,
-    resetCurrentThread,
-    syncState,
-    reset,
-    resolvePrompt,
-    pushNotice,
+    kind: userScoped ? ('user' as const) : ('factory' as const),
   };
 
   return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;
 }
 
-export function useChatSession(): ChatSessionApi {
-  const ctx = useContext(ChatSessionContext);
-  if (!ctx) throw new Error('useChatSession must be used within a ChatSessionProvider');
-  return ctx;
+/**
+ * Route-thread state and transport. This boundary deliberately remains below
+ * the persistent shell so only chat content responds to history loading.
+ */
+export function ChatSessionBoundary({
+  children,
+  threadId,
+  deferUntilMessagesReady = false,
+}: {
+  children: ReactNode;
+  threadId?: string;
+  deferUntilMessagesReady?: boolean;
+}) {
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const messagesQuery = useAgentControllerThreadMessages({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    scope: projectPath,
+    threadId,
+    baseUrl,
+    enabled: sessionEnabled && Boolean(threadId),
+  });
+  const messages = {
+    threadId,
+    isPending: Boolean(threadId) && messagesQuery.isPending,
+    error: messagesQuery.error,
+  };
+
+  if (deferUntilMessagesReady && threadId && (messages.isPending || messages.error)) {
+    return <ChatMessageFeedback {...messages} />;
+  }
+
+  return (
+    <ChatTranscriptProvider
+      key={`${resourceId}:${threadId ?? 'draft'}:${messagesQuery.isPending ? 'loading' : 'ready'}`}
+      threadId={threadId}
+      initialMessages={messagesQuery.data}
+      hasMoreHistory={messagesQuery.hasMore}
+      isLoadingMoreHistory={messagesQuery.isLoadingMore}
+      loadMoreHistory={messagesQuery.loadMore}
+    >
+      <ChatModesProvider>
+        <ChatModelsProvider>
+          <ChatCommandsProvider>
+            <ChatThreadMessagesContext.Provider value={messages}>{children}</ChatThreadMessagesContext.Provider>
+          </ChatCommandsProvider>
+        </ChatModelsProvider>
+      </ChatModesProvider>
+    </ChatTranscriptProvider>
+  );
+}
+
+/** Limits delayed thread-history feedback to the transcript content region. */
+export function ChatMessageBoundary({ children }: { children: ReactNode }) {
+  const value = useContext(ChatThreadMessagesContext);
+  if (!value) throw new Error('ChatMessageBoundary must be used within a ChatSessionBoundary');
+
+  if (value.isPending || value.error) return <ChatMessageFeedback {...value} />;
+
+  return children;
+}
+
+function ChatMessageFeedback({ threadId, isPending, error }: ChatThreadMessagesApi) {
+  if (threadId && isPending) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-smooth px-3 pt-6 pb-2 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]">
+        <SkeletonRows label="Loading messages" rows={6} />
+      </div>
+    );
+  }
+
+  if (threadId && error) {
+    const errorMessage = error instanceof Error ? error.message : undefined;
+    return (
+      <div className="flex min-h-0 flex-1 flex-col place-items-center gap-4 overflow-y-auto scroll-smooth px-3 pt-6 pb-2 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]">
+        <Notice variant="destructive">
+          {errorMessage ? `Failed to load messages: ${errorMessage}` : 'Failed to load messages.'}
+        </Notice>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+/** Backward-compatible full chat boundary for focused component tests. */
+export function ChatSessionProvider({
+  children,
+  threadId,
+  userScoped = false,
+}: {
+  children: ReactNode;
+  threadId?: string;
+  userScoped?: boolean;
+}) {
+  return (
+    <ChatSessionConfigProvider threadId={threadId} userScoped={userScoped}>
+      <ChatSessionBoundary threadId={threadId} deferUntilMessagesReady>
+        {children}
+      </ChatSessionBoundary>
+    </ChatSessionConfigProvider>
+  );
 }

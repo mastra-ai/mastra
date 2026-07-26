@@ -62,11 +62,7 @@ export const testWorkflow = createWorkflow({})
   .commit()
 ```
 
-:::info
-
 Visit [Input Data Mapping](/docs/workflows/control-flow#input-data-mapping) for more information.
-
-:::
 
 When no `structuredOutput` option is provided, Mastra agents use a default schema that expects a `prompt` string as input and returns a `text` string as output:
 
@@ -115,13 +111,7 @@ export const testWorkflow = createWorkflow({})
   .commit()
 ```
 
-The `structuredOutput.schema` option accepts any Standard JSON Schema. The agent will generate output conforming to this schema, and the step's `outputSchema` will be automatically set to match.
-
-:::info
-
-Visit [Structured Output](/docs/agents/structured-output) for more options like error handling strategies and streaming with structured output.
-
-:::
+The `structuredOutput.schema` option accepts any Standard JSON Schema. The agent will generate output conforming to this schema, and the step's `outputSchema` will be automatically set to match. Visit [Structured Output](/docs/agents/structured-output) for more options like error handling strategies and streaming with structured output.
 
 ## Using tools in workflows
 
@@ -170,11 +160,7 @@ export const testWorkflow = createWorkflow({})
   .commit()
 ```
 
-:::info
-
 Visit [Input Data Mapping](/docs/workflows/control-flow#input-data-mapping) for more information.
-
-:::
 
 ## Related
 

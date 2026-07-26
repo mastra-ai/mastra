@@ -25,5 +25,6 @@
     "accounts/fireworks/routers/kimi-k2p6-fast",
     "accounts/fireworks/routers/kimi-k2p6-turbo",
     "accounts/fireworks/routers/kimi-k2p7-code-fast"
-  ]
+  ],
+  "structuredOutput": ["accounts/fireworks/models/deepseek-v4-flash", "accounts/fireworks/models/deepseek-v4-pro"]
 }

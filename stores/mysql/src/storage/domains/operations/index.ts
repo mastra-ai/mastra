@@ -5,6 +5,7 @@ import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
 import {
   formatTableName,
   prepareDeleteStatement,
+  prepareInsertOnlyStatement,
   prepareStatement,
   prepareUpdateStatement,
   prepareWhereClause,
@@ -347,6 +348,23 @@ export class StoreOperationsMySQL extends StoreOperations {
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
       const statement = prepareStatement({ tableName, record, database: this.database });
+      await this.pool.execute(statement.sql, statement.args);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MYSQL_STORE_INSERT_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+    }
+  }
+
+  async insertOnly({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+    try {
+      const statement = prepareInsertOnlyStatement({ tableName, record, database: this.database });
       await this.pool.execute(statement.sql, statement.args);
     } catch (error) {
       throw new MastraError(

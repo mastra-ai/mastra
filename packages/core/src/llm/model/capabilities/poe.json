@@ -127,5 +127,6 @@
     "xai/grok-4.20-multi-agent",
     "xai/grok-code-fast-1"
   ],
-  "temperature": ["novita/deepseek-v3.2", "novita/glm-5", "novita/kimi-k2.5", "novita/kimi-k2.6"]
+  "temperature": ["novita/deepseek-v3.2", "novita/glm-5", "novita/kimi-k2.5", "novita/kimi-k2.6"],
+  "structuredOutput": ["google/gemini-3.5-flash", "openai/gpt-5.5"]
 }

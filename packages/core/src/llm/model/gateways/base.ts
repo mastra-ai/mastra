@@ -41,6 +41,7 @@ export interface ProviderConfig {
  */
 export type AttachmentCapabilities = Record<string, string[]>;
 export type TemperatureCapabilities = Record<string, string[]>;
+export type StructuredOutputCapabilities = Record<string, string[]>;
 
 /**
  * Union type for language models that can be returned by gateways.

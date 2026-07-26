@@ -10,13 +10,7 @@ import TabItem from "@theme/TabItem";
 
 # DaytonaSandbox
 
-Executes commands in isolated [Daytona](https://www.daytona.io) cloud sandboxes. Supports multiple runtimes, resource configuration, volumes, snapshots, streaming output, sandbox reconnection, filesystem mounting (S3, GCS), and network isolation.
-
-:::info
-
-For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
-
-:::
+Executes commands in isolated [Daytona](https://www.daytona.io) cloud sandboxes. Supports multiple runtimes, resource configuration, volumes, snapshots, streaming output, sandbox reconnection, filesystem mounting (S3, GCS), and network isolation. For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
 
 ## Installation
 
@@ -565,12 +559,8 @@ Then use the snapshot name in your sandbox config:
 ```typescript
 const workspace = new Workspace({
   mounts: {
-    '/s3-data': new S3Filesystem({
-      /* ... */
-    }),
-    '/gcs-data': new GCSFilesystem({
-      /* ... */
-    }),
+    '/s3-data': new S3Filesystem({/* ... */}),
+    '/gcs-data': new GCSFilesystem({/* ... */}),
   },
   sandbox: new DaytonaSandbox({ snapshot: 'cloud-fs-mounting' }),
 })

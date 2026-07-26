@@ -12,7 +12,7 @@ export const TabContent = ({ children, value, className }: TabContentProps) => {
   return (
     <BaseTabs.Panel
       value={value}
-      className={cn('grid py-3 overflow-y-auto ring-offset-background', focusRing.visible, className)}
+      className={cn('ring-offset-background grid overflow-y-auto py-3', focusRing.visible, className)}
     >
       {children}
     </BaseTabs.Panel>

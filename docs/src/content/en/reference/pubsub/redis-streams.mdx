@@ -76,6 +76,14 @@ export const mastra = new Mastra({
     defaultValue: '10000',
   },
   {
+    name: 'streamIdleTtlMs',
+    type: 'number',
+    description:
+      'Idle expiry in milliseconds: a sliding TTL refreshed on every write (publish, nack retry, group re-creation). Each write resets it, so an actively-written stream never expires mid-flight; a stream left idle for the full duration is deleted by Redis automatically. Note that only writes refresh the TTL — a consumer slowly draining a backlog does not — so set it well above the longest expected gap between writes on a live topic. This is a backstop, not the primary cleanup — `clearTopic` handles normal end-of-lifecycle deletion; this only bounds memory for streams that never reach a `clearTopic` call (e.g. a crashed run). Must be a non-negative integer. Defaults to 0 (disabled).',
+    isOptional: true,
+    defaultValue: '0',
+  },
+  {
     name: 'reclaimIntervalMs',
     type: 'number',
     description:
@@ -140,6 +148,16 @@ Waits for in-flight publishes to complete.
 
 ```typescript
 await pubsub.flush()
+```
+
+### `clearTopic(topic)`
+
+Deletes a topic's stream and every consumer group on it, freeing the memory a finished topic would otherwise hold. Mastra's run lifecycles — durable agents and the evented workflow engine — call this automatically when a run reaches a terminal state; call it yourself only once nothing will read the topic again. It's best-effort and never throws — failures are logged at warn level. A subscriber still attached when the stream is deleted recovers on its own but misses the deleted entries.
+
+Automatic cleanup requires `@mastra/core` and `@mastra/redis-streams` versions that both support `clearTopic`: the runtime routes the call through its caching layer, so upgrade the two packages together to get end-of-run stream deletion.
+
+```typescript
+await pubsub.clearTopic('workflow.events.run-123')
 ```
 
 ### `close()`

@@ -375,6 +375,10 @@ export const updateStoredAgentBodySchema = agentMetadataSchema
       .max(500)
       .optional()
       .describe('Optional message describing the changes for the auto-created version'),
+    autoPublish: z
+      .boolean()
+      .optional()
+      .describe('Immediately activate the auto-created version. Defaults to false when omitted.'),
   });
 
 export const exportStoredAgentBodySchema = snapshotConfigUpdateSchema.partial();

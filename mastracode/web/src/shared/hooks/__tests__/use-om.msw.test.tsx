@@ -13,18 +13,15 @@ const URL = `${TEST_BASE_URL}/web/config/om`;
 
 describe('useOMQuery', () => {
   describe('when no resourceId is provided', () => {
-    it('stays disabled and never hits the network', async () => {
+    it('loads persisted settings without a session', async () => {
       const onGet = vi.fn(() => HttpResponse.json(omResponse()));
       server.use(http.get(URL, onGet));
 
       const { result } = renderHookWithProviders(() => useOMQuery(undefined));
 
-      // give react-query a tick; the query must not fire
-      await act(async () => {
-        await Promise.resolve();
-      });
-      expect(result.current.fetchStatus).toBe('idle');
-      expect(onGet).not.toHaveBeenCalled();
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(onGet).toHaveBeenCalledOnce();
+      expect(result.current.data).toEqual(omResponse());
     });
   });
 

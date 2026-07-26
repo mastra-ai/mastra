@@ -1,0 +1,32 @@
+---
+title: "Logger | File-based Agents"
+description: Set the Mastra logger by file convention with logger.ts.
+packages:
+  - "@mastra/core"
+  - "@mastra/loggers"
+---
+
+# Logger
+
+Mastra sets the project's [logger](/docs/observability/logging) from a `logger.ts` file directly under `src/mastra/`. The file default-exports a logger, which replaces the built-in `ConsoleLogger` used across agents, workflows, and other components.
+
+Use this page for the file-based convention. For log levels, transports, and provider details, see [logging](/docs/observability/logging).
+
+## Quickstart
+
+Create `src/mastra/logger.ts` and default-export a logger, such as [`PinoLogger`](/reference/logging/pino-logger):
+
+```typescript title="src/mastra/logger.ts"
+import { PinoLogger } from '@mastra/loggers'
+
+export default new PinoLogger({
+  name: 'Mastra',
+  level: 'info',
+})
+```
+
+Mastra registers the logger before storage, observability, and file-based agents, so those primitives log through this logger as they're wired up.
+
+## Precedence with code
+
+Code-registered logging wins over `logger.ts`. If you pass `logger` to `new Mastra({ logger })` in `src/mastra/index.ts` (or set `logger: false` to disable logging), `logger.ts` is ignored with a warning. Use `logger.ts` when one project-wide logger is enough; use code registration when setup depends on runtime wiring.

@@ -15,13 +15,19 @@ This feature is in beta. Breaking changes may occur without a major version bump
 
 :::
 
-File-based agents are a new, convention-based way to define Mastra agents and project primitives from a directory structure under `src/mastra/`. You'll like this approach if you want an agent to be self-contained, easy to scan and extend.
+File-based agents are an experimental, convention-based way to define [Mastra agents](/docs/agents/overview) and the primitives they use in files under `src/mastra/`, instead of registering them manually on your [`Mastra`](/reference/core/mastra-class) instance.
 
-Adopting this feature is a fundamental decision about how to structure your project. You'll need to follow the file conventions and be aware of its limitations, namely that you can't use dynamic configuration or runtime wiring.
+This approach reduces glue code and makes the file system itself a direct representation of your [project structure](/reference/project-structure), so both you and your coding agent can understand it at a glance.
 
-However, you can use file-based agents, code-defined agents, or both in the same project. All Mastra docs currently use code-first examples. As file-based agents mature, more examples may use this structure where it makes sense.
+You can build your entire project with file-based agents or combine this approach with agents and other primitives defined directly in code for incremental adoption.
 
-Under the hood Mastra is assembling code-defined agents and primitives from the files you create. So explanations and concepts you can find on other docs pages apply to file-based agents as well.
+File-based agents have some limitations while in beta. Not every Mastra feature can be defined in a file yet, and they're not the best fit for dynamic configuration or runtime wiring. When needed, you can define agents and related primitives directly in code.
+
+:::note
+
+All Mastra documentation currently shows agents and primitives defined directly in code. File-based agents use the same underlying concepts and APIs, so the guidance elsewhere in the docs still applies. As file-based agents mature, more examples may use this structure where appropriate.
+
+:::
 
 ## Basic layout
 
@@ -79,12 +85,15 @@ Map each primitive or feature to its file convention:
 | [Memory](/reference/file-based-agents/memory) | `src/mastra/agents/<agent-id>/memory.ts` |
 | [Workspace](/reference/file-based-agents/workspace) | `src/mastra/agents/<agent-id>/workspace.ts` and `src/mastra/agents/<agent-id>/workspace/` |
 | [Processors](/reference/file-based-agents/processors) | `src/mastra/agents/<agent-id>/processors/` |
+| [Scorers](/reference/file-based-agents/scorers) | `src/mastra/agents/<agent-id>/scorers/` |
 | [Subagents](/reference/file-based-agents/subagents) | `src/mastra/agents/<agent-id>/subagents/` |
 | [Workflows](/reference/file-based-agents/workflows) | `src/mastra/workflows/` |
 | [Storage](/reference/file-based-agents/storage) | `src/mastra/storage.ts` |
 | [Observability](/reference/file-based-agents/observability) | `src/mastra/observability.ts` |
+| [Logger](/reference/file-based-agents/logger) | `src/mastra/logger.ts` |
 | [Server config](/reference/file-based-agents/server) | `src/mastra/server.ts` |
 | [Studio config](/reference/file-based-agents/studio) | `src/mastra/studio.ts` |
+| [Schedules](/docs/long-running-agents/schedules) | Not yet file-based — create at runtime with `mastra.schedules.create()` |
 
 ## Discovery lifecycle
 

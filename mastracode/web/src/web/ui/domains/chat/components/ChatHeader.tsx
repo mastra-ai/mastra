@@ -1,17 +1,20 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { Menu } from 'lucide-react';
+import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import type { ReactNode } from 'react';
 
-import { useOverlays } from '../../../lib/overlays';
-
-/** Mobile-only chat header: exposes the sidebar toggle. Hidden on desktop. */
-export function ChatHeader() {
-  const overlays = useOverlays();
+export function ChatHeader({ mobileContent }: { mobileContent?: ReactNode }) {
+  const { desktopState } = useMainSidebar();
 
   return (
-    <header className="flex items-center gap-2 border-b border-border1 px-3 py-2 md:hidden">
-      <Button variant="ghost" size="icon-sm" onClick={() => overlays.toggle('sidebar')} aria-label="Toggle sidebar">
-        <Menu />
-      </Button>
-    </header>
+    <>
+      <header className="flex items-center gap-2 px-3 py-2 md:hidden">
+        <MainSidebar.MobileTrigger id="mobile-navigation-trigger" />
+        {mobileContent}
+      </header>
+      {desktopState === 'collapsed' && (
+        <header className="hidden shrink-0 items-center px-3 py-2 md:flex">
+          <MainSidebar.Trigger className="mx-0" />
+        </header>
+      )}
+    </>
   );
 }

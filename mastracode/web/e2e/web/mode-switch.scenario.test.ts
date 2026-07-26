@@ -16,8 +16,8 @@ describe('web scenario: mode-switch', () => {
       run: async ({ driver }) => {
         await driver.switchMode('plan');
 
-        // mode_changed flows through the reducer into the status-line state.
-        await waitFor(() => driver.state().modeId === 'plan', 'mode to become plan');
+        // mode_changed flows through the session-state layer into the status line.
+        await waitFor(() => driver.sessionState().modeId === 'plan', 'mode to become plan');
 
         await driver.submit('Outline the plan');
         await driver.waitForText('Switch to build mode');

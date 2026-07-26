@@ -33,5 +33,6 @@
     "open-mixtral-8x7b",
     "pixtral-12b",
     "pixtral-large-latest"
-  ]
+  ],
+  "structuredOutput": ["mistral-medium-2604", "mistral-medium-latest"]
 }

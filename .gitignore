@@ -72,6 +72,12 @@ om-reflector-fixture.json
 .mastracode/*
 !.mastracode/commands/
 !.mastracode/commands/gh-triage.md
+!.mastracode/commands/gh-bulk-issues.md
+!.mastracode/commands/understand-pr.md
+!.mastracode/commands/understand-issue.md
+!.mastracode/skills/
+!.mastracode/skills/*/
+!.mastracode/skills/*/SKILL.md
 !.mastracode/shared/
 !.mastracode/shared/pr-review-context.md
 !.mastracode/shared/issue-debug-context.md

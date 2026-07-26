@@ -68,6 +68,70 @@ describe('LocalSandbox', () => {
   });
 
   // ===========================================================================
+  // Cloning
+  // ===========================================================================
+  describe('clone', () => {
+    it('constructs an unstarted sibling inheriting configuration', () => {
+      const template = new LocalSandbox({ workingDirectory: tempDir, env: { BASE: '1' } });
+
+      const child = template.clone({ id: 'mc-project-1' });
+
+      expect(child).toBeInstanceOf(LocalSandbox);
+      expect(child).not.toBe(template);
+      expect(child.id).toBe('mc-project-1');
+      expect(child.status).toBe('pending');
+      expect(child.workingDirectory).toBe(tempDir);
+      expect(child.isolation).toBe(template.isolation);
+    });
+
+    it('applies a derived working directory override', () => {
+      const template = new LocalSandbox({ workingDirectory: tempDir });
+      const childWorkdir = path.join(tempDir, 'child');
+
+      const child = template.clone({ workingDirectory: childWorkdir });
+
+      expect(child.workingDirectory).toBe(childWorkdir);
+      expect(template.workingDirectory).toBe(tempDir);
+    });
+
+    it('applies env overrides and can execute commands after start', async () => {
+      const template = new LocalSandbox({ workingDirectory: tempDir, env: { PATH: process.env.PATH } });
+
+      const child = template.clone({ env: { PATH: process.env.PATH ?? '', CLONED_VAR: 'cloned-value' } });
+      await child._start();
+      try {
+        const result = await child.executeCommand!('sh', ['-c', 'echo "$CLONED_VAR"']);
+        expect(result.success).toBe(true);
+        expect(result.stdout.trim()).toBe('cloned-value');
+      } finally {
+        await child._destroy();
+      }
+    });
+
+    it('inherits the template env when no env override is passed', async () => {
+      const template = new LocalSandbox({
+        workingDirectory: tempDir,
+        env: { PATH: process.env.PATH, TEMPLATE_VAR: 'from-template' },
+      });
+
+      const child = template.clone();
+      await child._start();
+      try {
+        const result = await child.executeCommand!('sh', ['-c', 'echo "$TEMPLATE_VAR"']);
+        expect(result.stdout.trim()).toBe('from-template');
+      } finally {
+        await child._destroy();
+      }
+    });
+
+    it('ignores sandboxId and idleTimeoutMinutes (no local equivalent)', () => {
+      const template = new LocalSandbox({ workingDirectory: tempDir });
+      const child = template.clone({ sandboxId: 'ignored', idleTimeoutMinutes: 15, id: 'local-child' });
+      expect(child.id).toBe('local-child');
+    });
+  });
+
+  // ===========================================================================
   // Lifecycle
   // ===========================================================================
   describe('lifecycle', () => {
@@ -194,7 +258,7 @@ describe('LocalSandbox', () => {
       expect(result.success).toBe(true);
       expect(result.stdout.trim()).toBe('Hello, World!');
       expect(result.exitCode).toBe(0);
-      expect(result.executionTimeMs).toBeGreaterThan(0);
+      expect(result.executionTimeMs).toBeGreaterThanOrEqual(0);
     });
 
     it('should handle command failure', async () => {

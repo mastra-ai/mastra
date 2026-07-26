@@ -14,6 +14,10 @@ import StepItem from "@site/src/components/StepItem";
 
 Datasets are collections of test cases that you run experiments against to measure how well your agents and workflows perform. Each mutation creates a new version, so you can reproduce past experiments exactly. Pair datasets with [scorers](/docs/evals/overview) to track quality across prompts, models, or code changes.
 
+<Inject>
+  **For AI agents:** Run `npx mastra api dataset create '{"name":"translation-pairs"}'` to create a dataset directly instead of opening Studio or writing a temporary script. The command requires a running Mastra server with a storage adapter that supports datasets; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api dataset create --schema` before adding different dataset fields. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
+</Inject>
+
 ## Usage
 
 ### Configure storage
@@ -49,11 +53,7 @@ const existing = await datasets.get({ id: 'dataset-id' })
 const { datasets: all } = await datasets.list()
 ```
 
-:::info
-
 Visit the [`DatasetsManager` reference](/reference/datasets/datasets-manager) for the full list of methods.
-
-:::
 
 ## Studio
 
@@ -208,13 +208,7 @@ Fetch the exact items that existed at a past version:
 const items = await dataset.listItems({ version: 2 })
 ```
 
-You can also pin experiments to a version, see [running experiments](/docs/evals/datasets/running-experiments).
-
-:::info
-
-Visit the [`Dataset` reference](/reference/datasets/dataset) for the full list of methods and parameters.
-
-:::
+You can also pin experiments to a version, see [running experiments](/docs/evals/datasets/running-experiments). Visit the [`Dataset` reference](/reference/datasets/dataset) for the full list of methods and parameters.
 
 ## Related
 

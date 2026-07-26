@@ -132,11 +132,7 @@ Each check is a standard `createScorer()` instance with a `preprocess` step and 
 1. **preprocess**: Extracts and normalizes relevant data from the agent run (text content, tool calls)
 1. **generateScore**: Converts the preprocessed result into a score (typically binary 1 or 0)
 
-Because checks skip the `analyze` and `generateReason` steps and make no LLM calls, they run in microseconds.
-
-:::note
-Visit the [Quick Checks reference](/reference/evals/checks) for the full API, including all parameters and options for each check.
-:::
+Because checks skip the `analyze` and `generateReason` steps and make no LLM calls, they run in microseconds. Visit the [Quick Checks reference](/reference/evals/checks) for the full API, including all parameters and options for each check.
 
 ## Related
 
