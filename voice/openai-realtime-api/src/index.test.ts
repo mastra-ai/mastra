@@ -160,6 +160,25 @@ describe('OpenAIRealtimeVoice', () => {
       );
       expect(sent.filter((ev: any) => ev.type === 'response.create')).toHaveLength(0);
     });
+
+    it('should not execute or continue function calls that were not added', async () => {
+      (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn() };
+
+      await (voice as any).handleFunctionCalls({
+        response: {
+          output: [
+            {
+              type: 'function_call',
+              name: 'external_tool',
+              call_id: 'external-1',
+              arguments: '{}',
+            },
+          ],
+        },
+      });
+
+      expect((voice as any).ws.send).not.toHaveBeenCalled();
+    });
   });
 
   describe('event handling', () => {
@@ -182,6 +201,73 @@ describe('OpenAIRealtimeVoice', () => {
       (voice as any).emit('speak', 'test');
 
       expect(mockCallback).not.toHaveBeenCalled();
+    });
+
+    it('should expose raw events and socket lifecycle', () => {
+      const handlers = new Map<string, (...args: any[]) => void>();
+      (voice as any).ws = {
+        on: vi.fn((event, callback) => handlers.set(event, callback)),
+        send: vi.fn(),
+        close: vi.fn(),
+      };
+      const rawCallback = vi.fn();
+      const openCallback = vi.fn();
+      const closeCallback = vi.fn();
+      const errorCallback = vi.fn();
+      voice.on('openAIRealtime:input_audio_buffer.committed', rawCallback);
+      voice.on('openAIRealtime:socket.open', openCallback);
+      voice.on('openAIRealtime:socket.close', closeCallback);
+      voice.on('openAIRealtime:socket.error', errorCallback);
+      (voice as any).setupEventListeners();
+
+      handlers.get('open')?.();
+      const committed = { type: 'input_audio_buffer.committed' };
+      handlers.get('message')?.(Buffer.from(JSON.stringify(committed)));
+      const error = new Error('socket failed');
+      handlers.get('error')?.(error);
+      handlers.get('close')?.(1006, Buffer.from('remote close'));
+
+      expect(openCallback).toHaveBeenCalledTimes(1);
+      expect(rawCallback).toHaveBeenCalledWith(committed);
+      expect(errorCallback).toHaveBeenCalledWith(error);
+      expect(closeCallback).toHaveBeenCalledWith({
+        code: 1006,
+        reason: Buffer.from('remote close'),
+      });
+      expect((voice as any).state).toBe('close');
+    });
+
+    it('should flush raw events queued before the socket opens', () => {
+      const handlers = new Map<string, (...args: any[]) => void>();
+      const send = vi.fn();
+      (voice as any).ws = {
+        OPEN: 1,
+        readyState: 0,
+        on: vi.fn((event, callback) => handlers.set(event, callback)),
+        send,
+        close: vi.fn(),
+      };
+      voice.sendEvent('conversation.item.create', {
+        item: { type: 'message', role: 'user' },
+      });
+      (voice as any).setupEventListeners();
+      (voice as any).ws.readyState = 1;
+
+      handlers.get('message')?.(
+        Buffer.from(
+          JSON.stringify({
+            type: 'session.created',
+            session: { id: 'session-1' },
+          }),
+        ),
+      );
+
+      expect(send).toHaveBeenCalledWith(
+        JSON.stringify({
+          type: 'conversation.item.create',
+          item: { type: 'message', role: 'user' },
+        }),
+      );
     });
 
     it('should handle current OpenAI output audio events', async () => {

@@ -567,12 +567,23 @@ export class OpenAIRealtimeVoice extends MastraVoice {
 
     this.ws.on('message', message => {
       const data = JSON.parse(message.toString());
+      this.emit(`openAIRealtime:${data.type}`, data);
       this.client.emit(data.type, data);
 
       if (this.debug) {
         const { delta, ...fields } = data;
         console.info(data.type, fields, delta?.length < 100 ? delta : '');
       }
+    });
+    this.ws.on('open', () => {
+      this.emit('openAIRealtime:socket.open');
+    });
+    this.ws.on('close', (code, reason) => {
+      this.state = 'close';
+      this.emit('openAIRealtime:socket.close', { code, reason });
+    });
+    this.ws.on('error', error => {
+      this.emit('openAIRealtime:socket.error', error);
     });
 
     this.client.on('session.created', ev => {
@@ -657,7 +668,7 @@ export class OpenAIRealtimeVoice extends MastraVoice {
   private async handleFunctionCalls(ev: any) {
     let handledFunctionCall = false;
     for (const output of ev.response?.output ?? []) {
-      if (output.type === 'function_call') {
+      if (output.type === 'function_call' && this.tools?.[output.name]) {
         handledFunctionCall = true;
         await this.handleFunctionCall(output);
       }
@@ -733,7 +744,11 @@ export class OpenAIRealtimeVoice extends MastraVoice {
     return btoa(binary);
   }
 
-  private sendEvent(type: string, data: any) {
+  /**
+   * Sends a raw event to the underlying OpenAI Realtime session.
+   * Events are queued until the WebSocket is open.
+   */
+  sendEvent(type: string, data: Record<string, unknown> = {}) {
     if (!this.ws || this.ws.readyState !== this.ws.OPEN) {
       this.queue.push({ type: type, ...data });
     } else {
