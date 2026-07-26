@@ -138,13 +138,15 @@ describe('softwarefactory template', () => {
     try {
       // The dev server binds `localhost`, which lands on ::1 or 127.0.0.1
       // depending on the OS/Node resolver — accept whichever loopback answers.
+      const lastProbe = new Map<string, string>();
       const probe = async (port: number, path: string) => {
         for (const host of ['localhost', '127.0.0.1', '[::1]']) {
           try {
             const res = await fetch(`http://${host}:${port}${path}`);
+            lastProbe.set(path, `${host} -> ${res.status}`);
             if (res.ok) return res;
-          } catch {
-            // Try the next loopback address.
+          } catch (error) {
+            lastProbe.set(path, `${host} -> ${(error as Error).message}`);
           }
         }
         return null;
@@ -156,24 +158,22 @@ describe('softwarefactory template', () => {
 
       const deadline = Date.now() + 5 * 60 * 1000;
       let ready = false;
-      let unanswered: string[] = [];
       while (Date.now() < deadline && !devExited) {
         const [ui, api] = await Promise.all([probe(port, '/'), probe(port, apiRoute)]);
         if (ui && api) {
           ready = true;
           break;
         }
-        unanswered = [];
-        if (!ui) unanswered.push('/');
-        if (!api) unanswered.push(apiRoute);
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
       if (!ready) {
-        // Kill first so awaiting the (reject: false) result yields output.
+        // Read before killDev(), which resolves `dev` and flips devExited.
+        const exited = devExited;
+        const probes = [...lastProbe].map(([path, outcome]) => `${path} ${outcome}`).join(', ');
         killDev();
         const result = await dev;
-        const detail = devExited ? 'dev server exited' : `no response from ${unanswered.join(', ')}`;
+        const detail = exited ? 'process exited' : probes || 'no probe completed';
         throw new Error(`Dev server did not become ready on port ${port} (${detail}).\n${result.all ?? ''}`);
       }
 
