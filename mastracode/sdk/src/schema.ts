@@ -18,6 +18,17 @@ export interface MastraCodeState {
   projectName?: string;
   /** Factory project that owns this session. */
   factoryProjectId?: string;
+  /** Factory tenant that owns a server-managed global session. */
+  factoryOrgId?: string;
+  /** Marks the canonical Factory supervisor session (`'true'` is the persisted thread tag form). */
+  factorySupervisor?: boolean | 'true';
+  /**
+   * Factory user the supervisor session acts as. Server-initiated runs (boot
+   * check-ins, idle observations, approval notifications) build a fresh request
+   * context that carries no authenticated `user`, so the supervisor's tools
+   * resolve their tenant identity from session state instead.
+   */
+  factorySupervisorUserId?: string;
   /** Linked repository used by this session when source-control execution is required. */
   projectRepositoryId?: string;
   /** Persisted sandbox id for reattaching the project's cloud workspace. */
@@ -90,6 +101,9 @@ export const stateSchema = z.object({
   projectPath: z.string().optional(),
   projectName: z.string().optional(),
   factoryProjectId: z.string().optional(),
+  factoryOrgId: z.string().optional(),
+  factorySupervisor: z.union([z.boolean(), z.literal('true')]).optional(),
+  factorySupervisorUserId: z.string().optional(),
   projectRepositoryId: z.string().optional(),
   sandboxId: z.string().optional(),
   sandboxWorkdir: z.string().optional(),

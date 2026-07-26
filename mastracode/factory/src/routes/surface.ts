@@ -30,6 +30,8 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import type { SourceControlStorage } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { FactorySupervisorService } from '../supervisor/service.js';
+import type { FactorySupervisorSignalService } from '../supervisor/signal-service.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
@@ -37,6 +39,7 @@ import { IntakeRoutes } from './intake.js';
 import { OAuthRoutes } from './oauth.js';
 import type { RouteAuth } from './route.js';
 import { SkillRoutes } from './skills.js';
+import { SupervisorRoutes } from './supervisor.js';
 import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
 import { WorkItemRoutes } from './work-items.js';
 
@@ -80,6 +83,8 @@ export interface FactoryApiRoutesDeps {
   rules: FactoryRules;
   factoryTransitionService?: FactoryTransitionService;
   runLifecycleObserver?: Pick<FactoryRunLifecycleObserver, 'observe' | 'subscribeIdle'>;
+  supervisorService?: FactorySupervisorService;
+  supervisorSignals?: Pick<FactorySupervisorSignalService, 'refresh'>;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
@@ -410,6 +415,14 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           ),
         }).routes()
       : []),
+    ...(deps.factoryReady && deps.supervisorService
+      ? new SupervisorRoutes({
+          auth: deps.auth,
+          projects: deps.domains.projects,
+          service: deps.supervisorService,
+          signals: deps.supervisorSignals,
+        }).routes()
+      : []),
     ...(deps.factoryReady
       ? new WorkItemRoutes({
           auth: deps.auth,
@@ -420,6 +433,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           approvalService: approvalService!,
           transitionService,
           startCoordinator,
+          onFactoryStateChanged: deps.supervisorSignals ? input => deps.supervisorSignals!.refresh(input) : undefined,
         }).routes()
       : []),
   ];

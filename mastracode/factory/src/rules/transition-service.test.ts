@@ -146,9 +146,18 @@ describe('FactoryTransitionService', () => {
       },
     });
 
-    const result = await new FactoryTransitionService({ rules, storage }).transition(request(item));
+    const onCommitted = vi.fn(async () => {});
+    const transitionRequest = request(item);
+    const result = await new FactoryTransitionService({ rules, storage, onCommitted }).transition(transitionRequest);
 
     expect(order).toEqual(['exit', 'enter']);
+    expect(onCommitted).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      actor: transitionRequest.actor,
+      result,
+    });
     expect(result).toMatchObject({ status: 'accepted', revision: 2, stage: 'execute' });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stageHistory.map(entry => entry.stage)).toEqual([
       'intake',
@@ -158,6 +167,28 @@ describe('FactoryTransitionService', () => {
       'notify-exit',
       'message-enter',
     ]);
+  });
+
+  it('does not roll back a committed transition when the state-refresh callback fails', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await new FactoryTransitionService({
+      storage,
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      onCommitted: async () => {
+        throw new Error('state delivery failed');
+      },
+    }).transition(request(item));
+
+    expect(result.status).toBe('accepted');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['execute']);
+    expect(warn).toHaveBeenCalledWith(
+      '[factory] Supervisor state refresh failed after transition:',
+      expect.objectContaining({ message: 'state delivery failed' }),
+    );
+    warn.mockRestore();
   });
 
   it('creates one pending approval for agent transitions without moving or dispatching effects', async () => {

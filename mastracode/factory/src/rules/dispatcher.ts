@@ -10,6 +10,7 @@ import type {
   FactoryDeferredDecisionRecord,
   FactoryPendingStartRecord,
   FactoryRunBindingRecord,
+  FactorySupervisorNotificationRecord,
   WorkItemRow,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
@@ -52,6 +53,7 @@ export interface FactoryDecisionDispatcherOptions {
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  dispatchSupervisorNotification?: (record: FactorySupervisorNotificationRecord) => Promise<void>;
 }
 
 function sanitizeDispatchError(error: unknown): string {
@@ -96,7 +98,10 @@ function deferredActor(record: FactoryDeferredDecisionRecord): FactoryRuleActor 
 }
 
 function leaseIdentity(
-  record: Pick<FactoryDeferredDecisionRecord | FactoryPendingStartRecord, 'id' | 'orgId' | 'factoryProjectId'>,
+  record: Pick<
+    FactoryDeferredDecisionRecord | FactoryPendingStartRecord | FactorySupervisorNotificationRecord,
+    'id' | 'orgId' | 'factoryProjectId'
+  >,
   ownerId: string,
 ) {
   return { id: record.id, orgId: record.orgId, factoryProjectId: record.factoryProjectId, ownerId };
@@ -130,6 +135,7 @@ export class FactoryDecisionDispatcher {
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  readonly #dispatchSupervisorNotification?: (record: FactorySupervisorNotificationRecord) => Promise<void>;
   #timer?: ReturnType<typeof setInterval>;
   #activeRun?: Promise<void>;
 
@@ -141,6 +147,7 @@ export class FactoryDecisionDispatcher {
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
+    this.#dispatchSupervisorNotification = options.dispatchSupervisorNotification;
   }
 
   start(): void {
@@ -173,9 +180,18 @@ export class FactoryDecisionDispatcher {
         limit: BATCH_SIZE,
       }),
     ]);
+    const supervisorNotifications = this.#dispatchSupervisorNotification
+      ? await this.#storage.claimSupervisorNotifications({
+          ownerId: this.#ownerId,
+          now,
+          leaseExpiresAt,
+          limit: BATCH_SIZE,
+        })
+      : [];
     await Promise.all([
       ...decisions.map(decision => this.#dispatchDecision(decision, now)),
       ...starts.map(start => this.#dispatchPendingStart(start, now)),
+      ...supervisorNotifications.map(notification => this.#dispatchSupervisorEvent(notification, now)),
     ]);
   }
 
@@ -188,6 +204,29 @@ export class FactoryDecisionDispatcher {
       await this.#activeRun;
     } finally {
       this.#activeRun = undefined;
+    }
+  }
+
+  async #dispatchSupervisorEvent(record: FactorySupervisorNotificationRecord, now: Date): Promise<void> {
+    try {
+      await this.#withLease(
+        async leaseExpiresAt =>
+          this.#storage.renewSupervisorNotificationLease(leaseIdentity(record, this.#ownerId), leaseExpiresAt),
+        async () => this.#dispatchSupervisorNotification?.(record),
+      );
+      const completed = await this.#storage.completeSupervisorNotification(
+        leaseIdentity(record, this.#ownerId),
+        new Date(),
+      );
+      if (!completed) throw new Error('Factory supervisor notification lease was lost before completion.');
+    } catch (error) {
+      await this.#storage.failSupervisorNotification({
+        ...leaseIdentity(record, this.#ownerId),
+        now: new Date(),
+        availableAt: retryAt(now, record.attempts),
+        lastError: sanitizeDispatchError(error),
+        terminal: record.attempts >= MAX_ATTEMPTS,
+      });
     }
   }
 

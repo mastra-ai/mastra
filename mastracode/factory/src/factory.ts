@@ -50,6 +50,7 @@ import {
   primeTenantCredentials,
   registerTenantCredentialResolver,
 } from './routes/tenant-credentials.js';
+import { FactoryTransitionApprovalService } from './rules/approval-service.js';
 import { builtInFactoryRules } from './rules/defaults.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
@@ -76,6 +77,10 @@ import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
+import { FactoryBootCheckIn } from './supervisor/boot-check-in.js';
+import { FactorySupervisorService } from './supervisor/service.js';
+import { FactorySupervisorSignalService } from './supervisor/signal-service.js';
+import { createFactorySupervisorTools } from './supervisor/tools.js';
 import { createWorkspaceFactory } from './workspace.js';
 
 type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
@@ -274,6 +279,7 @@ export class MastraFactory {
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
+  #bootCheckIn: FactoryBootCheckIn | undefined;
   #preparing = false;
 
   constructor(config: MastraFactoryConfig) {
@@ -497,8 +503,31 @@ export class MastraFactory {
       | GithubIntegration
       | undefined;
     const workItemsReady = storage.isDomainReady('work-items');
+    let supervisorService: FactorySupervisorService | undefined;
+    let supervisorSignals: FactorySupervisorSignalService | undefined;
     const transitionService = workItemsReady
-      ? new FactoryTransitionService({ rules, storage: workItemsStorage })
+      ? new FactoryTransitionService({
+          rules,
+          storage: workItemsStorage,
+          onCommitted: async input => {
+            if (!supervisorSignals || input.result.status === 'rejected') return;
+            const item = await workItemsStorage.getForProject(input.orgId, input.factoryProjectId, input.workItemId);
+            const userId =
+              (input.actor.type === 'human' ? input.actor.id : undefined) ??
+              (input.actor.type === 'agent' ? item?.sessions[input.actor.role]?.startedBy : undefined) ??
+              Object.values(item?.sessions ?? {}).find(session => session.startedBy)?.startedBy;
+            if (userId) {
+              await supervisorSignals.refresh({
+                orgId: input.orgId,
+                userId,
+                factoryProjectId: input.factoryProjectId,
+              });
+            }
+          },
+        })
+      : undefined;
+    const approvalService = workItemsReady
+      ? new FactoryTransitionApprovalService({ storage: workItemsStorage })
       : undefined;
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
@@ -609,6 +638,16 @@ export class MastraFactory {
                   await createFactoryTransitionTools({ requestContext, storage: workItemsStorage, transitionService }),
                 );
               }
+              if (supervisorService) {
+                mergeTools(
+                  'factory-supervisor',
+                  await createFactorySupervisorTools({
+                    requestContext,
+                    service: supervisorService,
+                    audit: auditDomain,
+                  }),
+                );
+              }
               for (const { integration, ready, ensureReady } of toolIntegrations) {
                 if (!ready && ensureReady) {
                   try {
@@ -648,46 +687,75 @@ export class MastraFactory {
         );
       },
       ...(pubsub ? { pubsub, crossProcessPubSub: true } : {}),
-      buildApiRoutes: ({ controller, authStorage }: BuildApiRoutesDeps) => [
-        // Public `/auth/*` routes (login/callback/logout/me). Folded in as
-        // `apiRoutes` (not plain Hono routes) because the entry can't touch the
-        // Hono app the deployer generates. `requiresAuth: false`; the gate
-        // skips `/auth/*`.
-        ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : []),
-        // Custom `/web/*` routes (fs / config / integrations / factory / audit).
-        ...assembleFactoryApiRoutes({
-          controllerId: CONTROLLER_ID,
-          controller,
-          auth: routeAuth,
-          authStorage,
-          audit: auditDomain,
-          publicOrigin,
-          stateSigner,
-          fleet,
-          factoryStorage: storage,
-          integrationStorage,
-          sourceControlStorage,
-          domains,
-          integrations: integrationRegistrations,
-          intakeReady,
-          factoryReady,
-          rules,
-          factoryTransitionService: transitionService,
-          runLifecycleObserver,
-          onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
-            this.#dispatcher ??= new FactoryDecisionDispatcher({
-              controller,
-              transitionService: runtimeTransitionService,
-              storage: storage.getDomain<WorkItemsStorage>('work-items'),
-              reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
-              prepareBinding,
-              primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
+      buildApiRoutes: ({ controller, authStorage }: BuildApiRoutesDeps) => {
+        if (approvalService) {
+          supervisorService ??= new FactorySupervisorService({
+            controller,
+            projects: factoryProjectsStorage,
+            workItems: workItemsStorage,
+            approvals: approvalService,
+            primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
+            storedSessions: sourceControlStorage.forIntegration('github').sessions,
+          });
+          if (!supervisorSignals) {
+            const signals = new FactorySupervisorSignalService(supervisorService);
+            supervisorSignals = signals;
+            runLifecycleObserver?.subscribeIdle(event => signals.notifyIdle(event));
+            this.#bootCheckIn ??= new FactoryBootCheckIn({
+              storage: workItemsStorage,
+              audit: auditStorage,
+              rules,
+              onError: error => console.warn('[factory] Supervisor boot check-in failed:', error),
             });
-          },
-        }),
-        ...projectRoutes.routes(),
-        ...auditDomain.routes(),
-      ],
+          }
+        }
+        return [
+          // Public `/auth/*` routes (login/callback/logout/me). Folded in as
+          // `apiRoutes` (not plain Hono routes) because the entry can't touch the
+          // Hono app the deployer generates. `requiresAuth: false`; the gate
+          // skips `/auth/*`.
+          ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : []),
+          // Custom `/web/*` routes (fs / config / integrations / factory / audit).
+          ...assembleFactoryApiRoutes({
+            controllerId: CONTROLLER_ID,
+            controller,
+            auth: routeAuth,
+            authStorage,
+            audit: auditDomain,
+            publicOrigin,
+            stateSigner,
+            fleet,
+            factoryStorage: storage,
+            integrationStorage,
+            sourceControlStorage,
+            domains,
+            integrations: integrationRegistrations,
+            intakeReady,
+            factoryReady,
+            rules,
+            factoryTransitionService: transitionService,
+            runLifecycleObserver,
+            supervisorService,
+            supervisorSignals,
+            onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
+              this.#dispatcher ??= new FactoryDecisionDispatcher({
+                controller,
+                transitionService: runtimeTransitionService,
+                storage: storage.getDomain<WorkItemsStorage>('work-items'),
+                reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
+                prepareBinding,
+                primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
+                dispatchSupervisorNotification: record => {
+                  if (!supervisorSignals) throw new Error('Factory supervisor signals are unavailable.');
+                  return supervisorSignals.notify(record);
+                },
+              });
+            },
+          }),
+          ...projectRoutes.routes(),
+          ...auditDomain.routes(),
+        ];
+      },
       buildServerConfig: () => {
         const cors = allowedOrigins.length ? { cors: { origin: allowedOrigins, credentials: true } } : {};
         // Log route errors with method/path/stack and answer with structured
@@ -792,6 +860,8 @@ export class MastraFactory {
     }
     await this.#prepared.finalize();
     await this.#factoryProcessor?.reconcileAllBoundThreads();
+    // Enqueue before the dispatcher starts so the first tick delivers it.
+    await this.#bootCheckIn?.run();
     this.#dispatcher?.start();
   }
 

@@ -157,6 +157,13 @@ export type FactoryBoardRules = Partial<
 
 export interface FactorySupervisorRules {
   observeIdleWithoutTransition?: boolean;
+  /**
+   * Wake the supervisor once after a server boot when the project still has
+   * non-terminal work. A restart kills in-flight runs without emitting an
+   * `agent_end`, so the idle observer never sees them — this is the only
+   * signal that surfaces work stranded by the restart itself.
+   */
+  checkInOnBoot?: boolean;
 }
 
 export interface FactoryRules {

@@ -39,6 +39,12 @@ Authenticated clients can list and resolve approvals through the tenant-scoped r
 
 Resolver and tenant identity always come from server authentication, not request-body fields.
 
+## Supervisor state and lifecycle signals
+
+Opening the canonical supervisor session emits a full `factory-state` snapshot. The snapshot is bounded to board and stage counts, at most 50 pending approvals with work-item title, role, requested stage, revision, reason, summary, and age, and live worker activity per active run binding — `running` (a run is in flight) or `idle` (no run in flight). It never includes credentials, storage handles, repository paths, or raw integration payloads. A stable cache key suppresses unchanged snapshots.
+
+Approval requests and terminal approval results (`approved`, `rejected`, or `stale`) are written to a tenant-scoped durable outbox in the same transaction as the approval state change. The Factory dispatcher retries delivery to the singleton supervisor conversation and refreshes its state snapshot. Idle-without-transition notifications use the live observer described below and refresh the same state snapshot, but remain advisory rather than durable.
+
 ## Idle worker observation
 
 Factory observes live work-item sessions for runs that finish normally without changing the item's stage or revision and without leaving a transition approval pending. The observer reconciles final persisted tool results before comparing state, records a bounded `factory.run.idle_without_transition` audit event, and provides the lifecycle callback used by the Factory supervisor.
@@ -55,6 +61,25 @@ const rules = defaultFactoryRules({
 ```
 
 This is an advisory live lifecycle signal, not durable Factory state. Each qualifying `agent_end` triggers it directly; there is no persisted completion cursor or polling deduplication, so a process crash at the completion boundary may lose the notification. Aborted, errored, suspended, transitioned, approval-pending, unbound, and opted-out runs do not emit it.
+
+## Boot check-in
+
+A server restart kills in-flight runs without an `agent_end`, so idle worker observation cannot see them and the affected work stalls silently. On boot, Factory enqueues one supervisor wake per tenant that still has a work item outside the `done` and `canceled` stages, asking the supervisor to find stalled work and resolve it one item at a time.
+
+The wake is a durable row in the same supervisor notification outbox approvals use, so the dispatcher delivers it exactly once even when several replicas boot together. Enqueue happens before the dispatcher starts and never fails the boot: a tenant that cannot be enqueued is logged and skipped.
+
+Repeated restarts inside a 15-minute window collapse into a single wake, which keeps a file-watching dev server from spending a supervisor turn on every save. Tenants whose work is entirely `done` or `canceled` are skipped.
+
+Boot check-in is enabled by default. A Factory can opt out through its rules configuration:
+
+```ts
+const rules = defaultFactoryRules({
+  version: 'factory-rules-v1',
+  overrides: {
+    supervisor: { checkInOnBoot: false },
+  },
+});
+```
 
 ## Development (monorepo)
 

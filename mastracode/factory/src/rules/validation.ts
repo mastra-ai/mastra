@@ -199,12 +199,15 @@ export function assertFactoryRules(rules: unknown): asserts rules is FactoryRule
     if (!isPlainObject(rules.supervisor)) {
       throw new FactoryRuleValidationError('Factory rules.supervisor must be an object.');
     }
-    assertExactKeys(rules.supervisor, ['observeIdleWithoutTransition'], 'Factory rules.supervisor');
+    assertExactKeys(rules.supervisor, ['observeIdleWithoutTransition', 'checkInOnBoot'], 'Factory rules.supervisor');
     if (
       rules.supervisor.observeIdleWithoutTransition !== undefined &&
       typeof rules.supervisor.observeIdleWithoutTransition !== 'boolean'
     ) {
       throw new FactoryRuleValidationError('Factory rules.supervisor.observeIdleWithoutTransition must be a boolean.');
+    }
+    if (rules.supervisor.checkInOnBoot !== undefined && typeof rules.supervisor.checkInOnBoot !== 'boolean') {
+      throw new FactoryRuleValidationError('Factory rules.supervisor.checkInOnBoot must be a boolean.');
     }
   }
 }
