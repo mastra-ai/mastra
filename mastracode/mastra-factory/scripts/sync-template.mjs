@@ -16,7 +16,12 @@
  * source with an older stable package.
  *
  * Usage:
- *   node scripts/sync-template.mjs [--out <dir>]
+ *   node scripts/sync-template.mjs [--out <dir>] [--tag <dist-tag>]
+ *
+ * `--tag` resolves every `link:` dep from that one dist-tag instead, for
+ * registries that publish the whole workspace under a single tag (the E2E
+ * registry). Omit it for the real sync — the release-train selection above is
+ * what keeps published template deps consistent.
  *
  * Output defaults to `template-out/` next to this package (gitignored).
  * Publish flow: automated — the sync-softwarefactory-template workflow runs
@@ -41,6 +46,7 @@ function argValue(flag) {
 }
 const defaultOutDir = path.join(pkgRoot, 'template-out');
 const outDir = path.resolve(argValue('--out') ?? defaultOutDir);
+const pinTag = argValue('--tag'); // undefined = resolve from latest/alpha
 
 /** True when `candidate` is `parent` or nested inside it. */
 function containsPath(parent, candidate) {
@@ -176,6 +182,15 @@ function baseVersion(version) {
 }
 
 function resolveLinkedVersion(name, localVersion) {
+  // `--tag` names a registry that serves the whole workspace under one
+  // dist-tag. The E2E registry publishes changeset snapshots, whose
+  // `0.0.0-<tag>-<timestamp>` versions deliberately do not track the source
+  // version — the base-version match below guards the release train and can
+  // never hold for them, so resolve the pinned tag directly.
+  if (pinTag) {
+    return { version: resolveTaggedVersion(name, pinTag), tag: pinTag };
+  }
+
   const localBase = baseVersion(localVersion);
 
   if (!localVersion.includes('-alpha.')) {
