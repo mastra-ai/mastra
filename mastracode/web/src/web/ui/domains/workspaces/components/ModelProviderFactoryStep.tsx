@@ -164,11 +164,11 @@ export function ModelProviderFactoryStep({ factoryId, completionError, onComplet
 
   return (
     <section aria-label="Model provider setup" className="flex max-w-xl flex-col gap-5">
-      <div className="flex flex-col gap-5 rounded-2xl border border-border1 bg-surface2/80 p-5">
+      <div className="border-border1 bg-surface2/80 flex flex-col gap-5 rounded-2xl border p-5">
         {providersQuery.isPending || modelsQuery.isPending ? (
           <SkeletonRows label="Loading model providers" rows={3} rowClassName="h-9 w-full" />
         ) : catalogError instanceof Error ? (
-          <Txt as="p" variant="ui-sm" className="m-0 text-notice-destructive-fg" role="alert">
+          <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg m-0" role="alert">
             {catalogError.message}
           </Txt>
         ) : selectedProvider && providerConfigured ? (
@@ -237,17 +237,17 @@ export function ModelProviderFactoryStep({ factoryId, completionError, onComplet
 
             {signInProviders.length > 0 && (
               <div className="flex items-center gap-3" aria-hidden="true">
-                <div className="h-px flex-1 bg-border1" />
+                <div className="bg-border1 h-px flex-1" />
                 <Txt as="span" variant="ui-sm" className="text-icon3">
                   OR
                 </Txt>
-                <div className="h-px flex-1 bg-border1" />
+                <div className="bg-border1 h-px flex-1" />
               </div>
             )}
 
             <div className="flex flex-col gap-3">
               <div className="relative">
-                <Search size={14} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-icon3" />
+                <Search size={14} className="text-icon3 pointer-events-none absolute top-1/2 left-3 -translate-y-1/2" />
                 <Input
                   type="search"
                   placeholder="Search providers to connect with an API key…"
@@ -273,7 +273,7 @@ export function ModelProviderFactoryStep({ factoryId, completionError, onComplet
                 </div>
               )}
               {searchQuery && visibleKeyProviders.length === 0 && (
-                <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+                <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
                   {`No providers match “${providerSearch.trim()}”.`}
                 </Txt>
               )}
@@ -282,7 +282,7 @@ export function ModelProviderFactoryStep({ factoryId, completionError, onComplet
         )}
 
         {(error ?? completionError) && (
-          <Txt as="p" variant="ui-sm" className="m-0 text-notice-destructive-fg" role="alert">
+          <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg m-0" role="alert">
             {error ?? completionError}
           </Txt>
         )}

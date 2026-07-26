@@ -168,12 +168,13 @@ describe.skipIf(process.platform === 'win32')('sync-template.mjs', () => {
     expect(pkg.devDependencies.typescript).toMatch(/^\^5\./);
 
     // Package-manager coupling never ships: the web project's lockfiles stay
-    // behind. A template-specific `pnpm-workspace.yaml` with only `allowBuilds`
-    // is emitted so pnpm v10+ installs don't error on
-    // ERR_PNPM_IGNORED_BUILDS.
+    // behind. A template-specific `pnpm-workspace.yaml` is emitted so pnpm v10+
+    // installs don't error on ERR_PNPM_IGNORED_BUILDS and user-configured
+    // minimum release ages don't block newly published Mastra packages.
     expect(fs.existsSync(path.join(outDir, 'pnpm-lock.yaml'))).toBe(false);
     expect(fs.existsSync(path.join(outDir, 'package-lock.json'))).toBe(false);
     const pnpmWorkspace = fs.readFileSync(path.join(outDir, 'pnpm-workspace.yaml'), 'utf8');
+    expect(pnpmWorkspace).toMatch(/^minimumReleaseAgeExclude:\n  - '@mastra\/\*'\n  - mastra$/m);
     expect(pnpmWorkspace).toMatch(/^allowBuilds:/m);
 
     // Tests and their dependencies are stripped.

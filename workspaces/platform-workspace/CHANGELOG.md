@@ -1,5 +1,14 @@
 # @mastra/platform
 
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- Fixed PlatformSandbox reattach so stale sandbox IDs are recreated before commands run. ([#20102](https://github.com/mastra-ai/mastra/pull/20102))
+
+- Updated dependencies [[`df6a9ce`](https://github.com/mastra-ai/mastra/commit/df6a9ce87214f7aadb2edfe62f67605fe998a0a4)]:
+  - @mastra/core@1.52.2-alpha.0
+
 ## 0.2.0
 
 ### Minor Changes
