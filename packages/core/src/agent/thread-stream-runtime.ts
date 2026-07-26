@@ -822,6 +822,8 @@ export class AgentThreadStreamRuntime {
     threadId: string,
     requestContext?: RequestContext,
   ) {
+    if (signal.transient) return;
+
     await this.#persistSignal(agent, signal, resourceId, threadId, requestContext);
     this.#broadcastPersistedSignal(state, pubsub, key, runId, signal, resourceId, threadId);
   }

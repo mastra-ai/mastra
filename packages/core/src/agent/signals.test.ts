@@ -1,6 +1,14 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { CreatedNonStateAgentSignal, CreatedStateAgentSignal } from './signals';
-import { createSignal, isCreatedAgentSignal, isTransientSignalMessage, mastraDBMessageToSignal } from './signals';
+import {
+  createSignal,
+  dataPartToSignal,
+  isTransientSignalMessage,
+  mastraDBMessageToSignal,
+  signalToDataPartFormat,
+  signalToMastraDBMessage,
+  signalToMessage,
+} from './signals';
 
 describe('transient signals (transient: true)', () => {
   it('marks the DB message with content.metadata.signal.transient when transient is true', () => {
@@ -61,18 +69,40 @@ describe('transient signals (transient: true)', () => {
     expectTypeOf(stateSignal).toEqualTypeOf<CreatedStateAgentSignal>();
     expectTypeOf(legacySignal).toEqualTypeOf<CreatedNonStateAgentSignal>();
     expect(legacySignal.type).toBe('reactive');
-    expect(isCreatedAgentSignal({ ...legacySignal, toLLMMessage: undefined })).toBe(false);
+  });
+
+  it('projects current fields from a spread created signal', () => {
+    const original = createSignal({ type: 'reactive', contents: 'stale contents' });
+    const updated = { ...original, contents: 'updated contents' };
+
+    expect(signalToMessage(updated).content).toContain('updated contents');
+    expect(signalToMastraDBMessage(updated).content.parts).toContainEqual(
+      expect.objectContaining({ type: 'text', text: 'updated contents' }),
+    );
+    expect(signalToDataPartFormat(updated).data.contents).toBe('updated contents');
+  });
+
+  it('round-trips the signal retention flag separately from the stream marker', () => {
+    const part = signalToDataPartFormat(
+      createSignal({ type: 'reactive', contents: 'current-call only', transient: true }),
+    );
+
+    expect(part.transient).toBe(true);
+    expect(part.data.transient).toBe(true);
+    expect(dataPartToSignal(part).transient).toBe(true);
   });
 
   it('rejects transient state signals (state tracking is rebuilt from persisted history)', () => {
-    expect(() =>
-      // @ts-expect-error — the union forbids transient on state signals; verify the runtime guard too
-      createSignal({
-        type: 'state',
-        contents: 'full state snapshot',
-        transient: true,
-      }),
-    ).toThrow('state signals cannot be transient');
+    for (const transient of [true, false]) {
+      expect(() =>
+        // @ts-expect-error — the union forbids transient on state signals; verify the runtime guard too
+        createSignal({
+          type: 'state',
+          contents: 'full state snapshot',
+          transient,
+        }),
+      ).toThrow('state signals cannot be transient');
+    }
 
     const stateSignal = createSignal({ type: 'state', contents: 'full state snapshot' });
     expect(stateSignal.transient).toBeUndefined();

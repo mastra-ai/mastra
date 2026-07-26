@@ -112,6 +112,7 @@ export type AgentSignalDataPart = {
     attributes?: AgentSignalAttributes;
     metadata?: Record<string, unknown>;
     providerOptions?: MastraProviderMetadata;
+    transient?: boolean;
   };
   transient: true;
 };
@@ -503,6 +504,7 @@ function signalToDataPart(signal: ReturnType<typeof normalizeSignal>, parts: Sig
       ...(signal.attributes ? { attributes: signal.attributes } : {}),
       ...(signal.metadata ? { metadata: signal.metadata } : {}),
       ...(signal.providerOptions ? { providerOptions: signal.providerOptions } : {}),
+      ...(signal.transient ? { transient: true } : {}),
     },
     transient: true,
   };
@@ -562,12 +564,7 @@ export function isCreatedAgentSignal(input: unknown): input is CreatedAgentSigna
   if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
 
   const candidate = input as Partial<CreatedAgentSignal>;
-  return (
-    candidate.__isCreatedSignal === true &&
-    typeof candidate.toDBMessage === 'function' &&
-    typeof candidate.toLLMMessage === 'function' &&
-    typeof candidate.toDataPart === 'function'
-  );
+  return candidate.__isCreatedSignal === true;
 }
 
 export function createSignal(input: Extract<AgentSignalInput, { type: 'state' }>): CreatedStateAgentSignal;
@@ -576,7 +573,7 @@ export function createSignal(
 ): CreatedNonStateAgentSignal;
 export function createSignal(input: AgentSignalInput): CreatedAgentSignal;
 export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
-  if (input.type === 'state' && input.transient === true) {
+  if (input.type === 'state' && input.transient !== undefined) {
     // State signals maintain cross-turn tracking (version/cacheKey/activeCopies) that is
     // rebuilt from persisted history — a delivery-only state signal would silently break
     // dedupe and leave tracking pointing at messages that were never stored.
@@ -622,18 +619,18 @@ export function resolveDeliveryAttributes(
 }
 
 export function signalToMessage(signal: AgentSignalInput | CreatedAgentSignal): UserModelMessage {
-  return isCreatedAgentSignal(signal) ? signal.toLLMMessage() : createSignal(signal).toLLMMessage();
+  return createSignal(signal).toLLMMessage();
 }
 
 export function signalToMastraDBMessage(
   signal: AgentSignalInput | CreatedAgentSignal,
   options?: { threadId?: string; resourceId?: string },
 ): MastraDBMessage {
-  return isCreatedAgentSignal(signal) ? signal.toDBMessage(options) : createSignal(signal).toDBMessage(options);
+  return createSignal(signal).toDBMessage(options);
 }
 
 export function signalToDataPartFormat(signal: AgentSignalInput | CreatedAgentSignal): AgentSignalDataPart {
-  return isCreatedAgentSignal(signal) ? signal.toDataPart() : createSignal(signal).toDataPart();
+  return createSignal(signal).toDataPart();
 }
 
 export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentSignal {
@@ -676,7 +673,7 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
         : undefined,
   };
 
-  if (type === 'state' && signalMetadata?.transient === true) {
+  if (type === 'state' && signalMetadata?.transient !== undefined) {
     throw new Error('state signals cannot be transient');
   }
 
@@ -705,5 +702,11 @@ export function createMessageSignal(
 }
 
 export function dataPartToSignal(part: AgentSignalDataPart): CreatedAgentSignal {
-  return createSignal(part.data);
+  if (part.data.type === 'state') {
+    if (part.data.transient !== undefined) throw new Error('state signals cannot be transient');
+    const { transient: _transient, ...data } = part.data;
+    return createSignal({ ...data, type: 'state' });
+  }
+
+  return createSignal({ ...part.data, type: part.data.type });
 }

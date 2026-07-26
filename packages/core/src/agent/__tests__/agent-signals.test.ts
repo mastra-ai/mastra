@@ -2666,6 +2666,49 @@ describe('Agent signals', () => {
     }
   });
 
+  it('does not persist or broadcast a transient idle signal when idle behavior is persist', async () => {
+    const memory = new MockMemory();
+    await memory.createThread({ threadId: 'transient-idle-persist-thread', resourceId: 'transient-idle-persist-user' });
+    const agent = new Agent({
+      id: 'transient-idle-persist-agent',
+      name: 'Transient Idle Persist Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('unused response'),
+      memory,
+    });
+    const subscription = await agent.subscribeToThread({
+      resourceId: 'transient-idle-persist-user',
+      threadId: 'transient-idle-persist-thread',
+    });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      const result = agent.sendSignal(
+        { type: 'user-message', contents: 'do not retain', transient: true },
+        {
+          resourceId: 'transient-idle-persist-user',
+          threadId: 'transient-idle-persist-thread',
+          ifIdle: { behavior: 'persist' },
+        },
+      );
+      await expect(result.persisted).resolves.toBeUndefined();
+
+      const recalled = await memory.recall({
+        threadId: 'transient-idle-persist-thread',
+        resourceId: 'transient-idle-persist-user',
+      });
+      expect(recalled.messages).toHaveLength(0);
+      await expect(
+        Promise.race([
+          iterator.next().then(() => 'broadcast'),
+          new Promise(resolve => setTimeout(resolve, 25, 'none')),
+        ]),
+      ).resolves.toBe('none');
+    } finally {
+      subscription.unsubscribe();
+    }
+  });
+
   it('discards an active signal when active behavior is discard', async () => {
     let releaseFirst!: () => void;
     const firstFinished = new Promise<void>(resolve => {
