@@ -37,12 +37,8 @@ describe('softwarefactory template', () => {
     const templateDir = join(workDir, 'template');
     scaffoldDir = join(workDir, 'factory');
 
-    // `build:lib` below runs the CLI's tsup `onSuccess`, which builds
-    // mastracode/web's embedded SPA. That Vite build imports @mastra/playground-ui,
-    // @mastra/client-js and friends through their `exports` maps, which point at
-    // `dist/`. `pnpm --filter` runs a single script without turbo, so those
-    // workspace packages are not built for it — run mastracode/web's own prebuild
-    // (a turbo build of exactly that dependency set) first.
+    // `pnpm --filter` bypasses turbo, so the embedded SPA that `build:lib`
+    // builds below would resolve @mastra/* `exports` into unbuilt `dist/`.
     await execa('pnpm', ['run', 'prebuild'], {
       cwd: join(rootDir, 'mastracode', 'web'),
       stdio: 'inherit',
@@ -154,10 +150,8 @@ describe('softwarefactory template', () => {
         return null;
       };
 
-      // `/api` is a prefix, not a route: the server matches it explicitly to
-      // hand it to the next handler, and nothing is mounted there, so it 404s
-      // even on a healthy server. Probe a real endpoint, as the monorepo,
-      // deployers and no-bundling suites all do.
+      // `/api` is a prefix with nothing mounted on it — 404s on a healthy
+      // server. The other suites probe `/api/tools` too.
       const apiRoute = '/api/tools';
 
       const deadline = Date.now() + 5 * 60 * 1000;
@@ -179,9 +173,6 @@ describe('softwarefactory template', () => {
         // Kill first so awaiting the (reject: false) result yields output.
         killDev();
         const result = await dev;
-        // Name the unanswered paths — this suite boots a whole scaffold, so
-        // "did not become ready" alone cannot tell a dead server from a
-        // single route that never came up.
         const detail = devExited ? 'dev server exited' : `no response from ${unanswered.join(', ')}`;
         throw new Error(`Dev server did not become ready on port ${port} (${detail}).\n${result.all ?? ''}`);
       }
