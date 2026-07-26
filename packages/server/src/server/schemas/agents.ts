@@ -110,17 +110,22 @@ const agentMessageInputObjectSchema = z.object({
 
 const agentMessageInputSchema = z.union([userMessageSignalContentsSchema, agentMessageInputObjectSchema]);
 
-const agentSignalSchema = baseSignalSchema
-  .extend({
-    type: z.enum(['user', 'state', 'reactive', 'notification', 'user-message', 'system-reminder']),
-    tagName: z.string().optional(),
-    contents: userMessageSignalContentsSchema,
-    providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
+const agentSignalBaseSchema = baseSignalSchema.extend({
+  tagName: z.string().optional(),
+  contents: userMessageSignalContentsSchema,
+  providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
+});
+
+const agentSignalSchema = z.discriminatedUnion('type', [
+  agentSignalBaseSchema.extend({
+    type: z.literal('state'),
+    transient: z.never().optional(),
+  }),
+  agentSignalBaseSchema.extend({
+    type: z.enum(['user', 'reactive', 'notification', 'user-message', 'system-reminder']),
     transient: z.boolean().optional(),
-  })
-  .refine(signal => !(signal.type === 'state' && signal.transient === true), {
-    message: 'state signals cannot be transient',
-  });
+  }),
+]);
 
 // Path parameter schemas
 export const agentIdPathParams = z.object({
