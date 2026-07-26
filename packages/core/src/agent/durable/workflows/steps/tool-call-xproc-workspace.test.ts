@@ -86,6 +86,47 @@ describe('durable tool-call cross-process workspace tool resolution', () => {
     expect(result.result).toEqual({ content: 'Hello, wonderful human!' });
   });
 
+  it('forwards the run-level requestContext to the rebuild when initData carries no snapshot (issue #20210)', async () => {
+    // Cross-process worker: empty registry, and initData has NO requestContextEntries
+    // snapshot (it is not propagated onto the step input). The run-level requestContext
+    // — rebuilt by the durable workflow from the run event — is the only source of the
+    // caller's context, so the step must forward it to the rebuild. Without this, the
+    // rebuilt delegation tool captures an empty context and a delegated subagent loses
+    // the caller's tenant/user.
+    expect(globalRunRegistry.has(RUN_ID)).toBe(false);
+
+    const executeMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.mocked(resolveRuntime.rebuildRunToolsFromMastra).mockResolvedValueOnce({
+      tools: { 'agent-note_taker': { id: 'agent-note_taker', execute: executeMock } as any },
+      workspace: undefined,
+    });
+
+    // A run-level context carrying the caller's tenant (what workflow.ts rebuilds from
+    // event.data.requestContext). RequestContext is Map-like, so a Map stands in here.
+    const runLevelRequestContext = new Map([['tenant', 'team-42']]);
+
+    const step = createDurableToolCallStep();
+    await (step as any).execute({
+      inputData: { toolCallId: 'call-delegate', toolName: 'agent-note_taker', args: { prompt: 'save a note' } },
+      mastra: { getLogger: () => undefined, listTools: () => ({}) },
+      suspend: vi.fn(),
+      resumeData: undefined,
+      requestContext: runLevelRequestContext,
+      getInitData: () => makeInitData(), // no requestContextEntries
+      [PUBSUB_SYMBOL]: mockPubsub(),
+    });
+
+    // The step forwarded its run-level requestContext to the rebuild, and did NOT pass a
+    // snapshot (initData had none) — so the rebuild's own run-level fallback kicks in.
+    expect(resolveRuntime.rebuildRunToolsFromMastra).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: RUN_ID,
+        requestContext: runLevelRequestContext,
+        requestContextEntries: undefined,
+      }),
+    );
+  });
+
   it('still emits ToolNotFoundError when the Mastra rebuild also has no such tool', async () => {
     globalRunRegistry.set(RUN_ID, { isPlaceholder: true, tools: {}, model: undefined as any } as any); // placeholder (inngest resume path)
     vi.mocked(resolveRuntime.rebuildRunToolsFromMastra).mockResolvedValueOnce({
