@@ -146,11 +146,11 @@ export const Thread = ({
   return (
     <ComposerAttachmentsProvider>
       <MessageScrollerProvider>
-        <div className="group/thread grid grid-rows-[1fr_auto] h-full overflow-y-auto" data-testid="thread-wrapper">
+        <div className="group/thread grid h-full grid-rows-[1fr_auto] overflow-y-auto" data-testid="thread-wrapper">
           <MessageScroller>
             <MessageScrollerViewport
               ref={areaRef}
-              className="overflow-y-scroll h-full"
+              className="h-full overflow-y-scroll"
               style={{ overflowAnchor: 'none' }}
             >
               {isEmpty ? (
@@ -161,7 +161,7 @@ export const Thread = ({
                   <div
                     ref={messagesContainerRef}
                     data-testid="thread-message-column"
-                    className="relative max-w-3xl w-full mx-auto px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
+                    className="relative mx-auto w-full max-w-3xl px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
                   >
                     <BracketOverlay containerRef={messagesContainerRef} />
                     <MessageScrollerContent className="flex flex-col gap-6 py-6">
@@ -201,7 +201,7 @@ export const Thread = ({
           </MessageScroller>
 
           {showThumbnailInChat && agentId && threadId && (
-            <div className="mb-2 max-w-3xl w-full mx-auto px-4">
+            <div className="mx-auto mb-2 w-full max-w-3xl px-4">
               <BrowserThumbnail agentName={agentName} />
             </div>
           )}
@@ -355,7 +355,7 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       onClick={() => (isListening ? stop() : start())}
     >
-      {isListening ? <CircleStopIcon /> : <Mic className="h-5 w-5 text-neutral3 hover:text-neutral6" />}
+      {isListening ? <CircleStopIcon /> : <Mic className="text-neutral3 hover:text-neutral6 h-5 w-5" />}
     </Button>
   );
 };
@@ -388,10 +388,10 @@ const ComposerActionRow = ({
   return (
     <>
       {((showModelSwitcher && agentId) || runOptionsSlot) && (
-        <div className="flex items-center gap-1.5 shrink-0 max-w-full">
+        <div className="flex max-w-full shrink-0 items-center gap-1.5">
           {showModelSwitcher && agentId && (
             <>
-              <div className="rounded-full bg-surface3 border border-border1 transition-colors duration-normal focus-within:border-border2">
+              <div className="bg-surface3 border-border1 duration-normal focus-within:border-border2 rounded-full border transition-colors">
                 <ComposerModelSwitcher />
               </div>
               <ComposerModelSettings agentId={agentId} />
@@ -450,10 +450,10 @@ const ComposerSendButton = ({
         variant="default"
         size="icon-md"
         tooltip={canExecute ? 'Send' : 'No permission to execute'}
-        className="rounded-full border border-border1 bg-surface5"
+        className="border-border1 bg-surface5 rounded-full border"
         disabled={!canExecute || isEmpty}
       >
-        <ArrowUp className="h-6 w-6 text-neutral3 hover:text-neutral6" />
+        <ArrowUp className="text-neutral3 hover:text-neutral6 h-6 w-6" />
       </Button>
       {isRunning && (
         <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>

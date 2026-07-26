@@ -13,7 +13,7 @@ function FactoryMetadata({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] gap-2">
       <dt className="text-icon3">{label}</dt>
-      <dd className="min-w-0 truncate text-icon5">{value}</dd>
+      <dd className="text-icon5 min-w-0 truncate">{value}</dd>
     </div>
   );
 }
@@ -33,10 +33,10 @@ export function EmptyThreadState() {
   return (
     <section className={emptyThreadClass} aria-labelledby="empty-thread-title">
       <Logo size="md" aria-label="Mastra Code" />
-      <h1 id="empty-thread-title" className="mt-7 text-balance text-header-xl font-medium tracking-tight text-icon6">
+      <h1 id="empty-thread-title" className="text-header-xl text-icon6 mt-7 font-medium tracking-tight text-balance">
         What can I help you build?
       </h1>
-      <p className="mt-2 max-w-lg text-pretty text-ui-lg leading-relaxed text-icon3">
+      <p className="text-ui-lg text-icon3 mt-2 max-w-lg leading-relaxed text-pretty">
         Ask about this codebase, plan a change, or describe something that isn&apos;t working.
       </p>
 
@@ -70,10 +70,10 @@ export function EmptyThreadState() {
         </Button>
       </div>
 
-      <details className="group mt-8 w-full min-w-0 max-w-lg text-ui-sm text-icon3">
-        <summary className="flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors hover:text-icon5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent1 [&::-webkit-details-marker]:hidden">
+      <details className="group text-ui-sm text-icon3 mt-8 w-full max-w-lg min-w-0">
+        <summary className="hover:text-icon5 focus-visible:outline-accent1 flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
           <span>
-            Working in <span className="font-medium text-icon5">{activeFactory.name}</span>
+            Working in <span className="text-icon5 font-medium">{activeFactory.name}</span>
           </span>
           <ChevronDown
             aria-hidden="true"

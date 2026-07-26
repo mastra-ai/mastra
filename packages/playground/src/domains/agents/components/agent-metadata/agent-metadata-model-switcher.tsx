@@ -177,12 +177,12 @@ export const AgentMetadataModelSwitcher = ({
           : 'Locked by admin';
     return (
       <div
-        className="flex items-center gap-2 rounded-md border border-border1 bg-surface3 px-3 py-2"
+        className="border-border1 bg-surface3 flex items-center gap-2 rounded-md border px-3 py-2"
         data-testid="agent-metadata-model-locked"
       >
-        <Lock className="h-4 w-4 shrink-0 text-neutral3" />
-        <span className="truncate text-ui-sm text-neutral6">{lockedLabel}</span>
-        <span className="ml-auto shrink-0 text-ui-xs text-neutral3">Set by admin</span>
+        <Lock className="text-neutral3 h-4 w-4 shrink-0" />
+        <span className="text-ui-sm text-neutral6 truncate">{lockedLabel}</span>
+        <span className="text-ui-xs text-neutral3 ml-auto shrink-0">Set by admin</span>
       </div>
     );
   }
@@ -195,7 +195,7 @@ export const AgentMetadataModelSwitcher = ({
 
   return (
     <div className="@container">
-      <div className="flex flex-col @xs:flex-row items-stretch @xs:items-center gap-2 w-full">
+      <div className="flex w-full flex-col items-stretch gap-2 @xs:flex-row @xs:items-center">
         <div className="w-full @xs:w-2/5">
           <LLMProviders
             value={currentModelProvider}
@@ -220,18 +220,18 @@ export const AgentMetadataModelSwitcher = ({
           size="md"
           onClick={handleReset}
           disabled={loading}
-          className="flex items-center gap-1.5 text-xs whitespace-nowrap border-0!"
+          className="flex items-center gap-1.5 border-0! text-xs whitespace-nowrap"
           title="Reset to original model"
         >
-          <RotateCcw className="w-3.5 h-3.5" />
+          <RotateCcw className="h-3.5 w-3.5" />
         </Button>
       </div>
 
       {stale && (
-        <div className="pt-2 p-2" data-testid="agent-metadata-model-stale-warning">
+        <div className="p-2 pt-2" data-testid="agent-metadata-model-stale-warning">
           <Notice variant="warning" title="Model not allowed">
             <Notice.Message>
-              <code className="px-1 py-0.5 bg-yellow-100 dark:bg-yellow-900/50 rounded">
+              <code className="rounded bg-yellow-100 px-1 py-0.5 dark:bg-yellow-900/50">
                 {selectedProvider}/{selectedModel}
               </code>{' '}
               is no longer allowed by the admin policy. Pick a different model to save changes.
@@ -242,11 +242,11 @@ export const AgentMetadataModelSwitcher = ({
 
       {/* Show warning if selected provider is not connected */}
       {currentProvider && !currentProvider.connected && (
-        <div className="pt-2 p-2">
+        <div className="p-2 pt-2">
           <Notice variant="warning" title="Provider not connected">
             <Notice.Message>
               Set the{' '}
-              <code className="px-1 py-0.5 bg-yellow-100 dark:bg-yellow-900/50 rounded">
+              <code className="rounded bg-yellow-100 px-1 py-0.5 dark:bg-yellow-900/50">
                 {Array.isArray(currentProvider.envVar) ? currentProvider.envVar.join(', ') : currentProvider.envVar}
               </code>{' '}
               environment{' '}

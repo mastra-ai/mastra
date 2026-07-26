@@ -26,7 +26,8 @@
     "test:cloud": "vitest run ./src/**/*.integration.test.ts",
     "test:watch": "vitest watch",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {

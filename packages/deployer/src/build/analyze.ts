@@ -27,7 +27,9 @@ import {
 import type { BundlerPlatform } from './utils';
 
 type ErrorId =
-  'DEPLOYER_ANALYZE_MODULE_NOT_FOUND' | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD' | 'DEPLOYER_ANALYZE_TYPE_ERROR';
+  | 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND'
+  | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD'
+  | 'DEPLOYER_ANALYZE_TYPE_ERROR';
 
 function preferDependencyInfo(
   existing: ExternalDependencyInfo | undefined,

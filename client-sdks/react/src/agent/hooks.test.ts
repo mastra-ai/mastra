@@ -1227,7 +1227,8 @@ describe('useChat optimistic pending user message', () => {
     // so the echo can reconcile the pending bubble.
     expect(sendMessageMock).toHaveBeenCalledTimes(1);
     const sendArgs = sendMessageMock.mock.calls[0]?.[0] as
-      { message?: { metadata?: Record<string, unknown> } } | undefined;
+      | { message?: { metadata?: Record<string, unknown> } }
+      | undefined;
     expect(sendArgs?.message?.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe(optimisticMessageId);
   });
 

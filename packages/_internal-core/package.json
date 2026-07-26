@@ -83,7 +83,8 @@
   "sideEffects": false,
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.build.json",
-    "lint": "eslint .",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
     "build:lib": "tsup --config tsup.config.ts"
   },
   "peerDependencies": {

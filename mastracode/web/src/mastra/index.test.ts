@@ -106,5 +106,16 @@ describe('platform entry (src/mastra/index.ts)', () => {
         expect(mod.mastra).toBeDefined();
       },
     );
+
+    it('registers the direct Linear integration when the full group is configured', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
+      vi.stubEnv('WORKOS_COOKIE_PASSWORD', 'stable-state-secret');
+      vi.stubEnv('LINEAR_CLIENT_ID', 'lin_client');
+      vi.stubEnv('LINEAR_CLIENT_SECRET', 'linear-secret');
+      const mod = await import('./index.js');
+      const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
+      expect(paths).toContain('/auth/linear/connect');
+    });
   });
 });

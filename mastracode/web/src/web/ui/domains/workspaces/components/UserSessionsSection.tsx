@@ -16,9 +16,8 @@ import { useFactoryQuery } from '../../../../../shared/hooks/useFactories';
 import { useWorkspacesQuery } from '../../../../../shared/hooks/useWorkspaces';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { USER_SESSION_BRANCH_PREFIX } from '../services/github';
+import { USER_SESSION_BRANCH_PREFIX, createUserSession, deleteUserSession } from '../services/github';
 import type { FactoryUserSession } from '../services/github';
-import { createUserSession, deleteUserSession } from '../services/github';
 import { SessionNavRow } from './SessionNavRow';
 
 function sessionLabel(session: FactoryUserSession): string {
@@ -38,7 +37,6 @@ export function UserSessionsSection() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
-  const [openingId, setOpeningId] = useState<string | null>(null);
 
   const repository = factoryQuery.data?.repositories[0];
   const sessionsEnabled = Boolean(repository);
@@ -117,17 +115,12 @@ export function UserSessionsSection() {
   if (!sessionsEnabled) return null;
   const pending = createSession.isPending || deleteSession.isPending;
 
-  const openSession = async (session: FactoryUserSession) => {
-    if (openingId) return;
-    setOpeningId(session.sessionId);
-    try {
-      await controllerSession(session.sessionId).create({ threadId: session.sessionId });
-      void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to open session');
-    } finally {
-      setOpeningId(null);
-    }
+  const openSession = (session: FactoryUserSession) => {
+    // A user session's thread id is its own id (created with that binding in
+    // `createSession`), so navigate straight to it instead of blocking on a
+    // session create round-trip first — the thread page brings the session
+    // online on mount and shows a skeleton while its messages load.
+    void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`);
   };
 
   const closeCreateDialog = () => {
@@ -143,7 +136,7 @@ export function UserSessionsSection() {
   return (
     <section className="flex flex-col gap-2" aria-label="User sessions">
       <div className="flex items-center justify-between px-1">
-        <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
+        <Txt as="span" variant="ui-xs" className="text-icon3 tracking-wide uppercase">
           User Sessions
         </Txt>
         <Button
@@ -172,15 +165,14 @@ export function UserSessionsSection() {
                 url={url}
                 active={active}
                 disabled={pending}
-                loading={openingId === session.sessionId}
-                onSelect={() => void openSession(session)}
+                onSelect={() => openSession(session)}
                 onDelete={() => setConfirmDelete(session)}
               />
             );
           })}
         </MainSidebar.NavList>
         {sessions.length === 0 && (
-          <Txt as="p" variant="ui-xs" className="m-0 px-2 py-1 text-icon3">
+          <Txt as="p" variant="ui-xs" className="text-icon3 m-0 px-2 py-1">
             No sessions yet
           </Txt>
         )}
@@ -226,7 +218,7 @@ export function UserSessionsSection() {
               <DialogTitle>Delete session?</DialogTitle>
             </DialogHeader>
             <div className="flex flex-col gap-4 px-5 pb-4">
-              <Txt as="p" variant="ui-sm" className="m-0 text-icon4">
+              <Txt as="p" variant="ui-sm" className="text-icon4 m-0">
                 This deletes the <span className="text-icon6">{sessionLabel(confirmDelete)}</span> session, its checkout
                 with any uncommitted changes, and its conversation. This can’t be undone.
               </Txt>

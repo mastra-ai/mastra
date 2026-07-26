@@ -251,14 +251,40 @@ async function validateDurableToolCallAccess({
 }
 
 /**
+ * Providers whose apiKeyEnvVar entries are aliases for the same credential (any one
+ * suffices), rather than distinct required values (all needed — the default assumption).
+ * Keep this list to cases with a confirmed alias relationship; see the "google" entry in
+ * PROVIDER_OVERRIDES in packages/core/src/llm/model/gateways/models-dev.ts and #17343.
+ */
+const ALIASED_API_KEY_ENV_VAR_PROVIDERS = new Set(['google']);
+
+/**
  * Checks if a provider has its required API key environment variable(s) configured.
  * Handles provider IDs with suffixes (e.g., "openai.chat" -> "openai").
  * Also handles custom gateway providers that are stored with gateway prefix (e.g., "acme/acme-openai").
  * @param providerId - The provider identifier (may include a suffix like ".chat" or be from a custom gateway)
  * @param customProviders - Optional record of custom gateway providers to check
- * @returns true if all required environment variables are set, false otherwise
+ * @returns true if all required environment variables are set (or, for aliased providers, if any one is set), false otherwise
  */
 export function isProviderConnected(providerId: string, customProviders?: Record<string, ProviderConfig>): boolean {
+  // Vertex AI is a distinct provider from Google AI Studio and must not be collapsed to the
+  // "google" registry entry below (e.g. "google.vertex.chat", "google.vertex.anthropic.chat",
+  // or the bare docs-sidebar id "google-vertex"). Vertex has no registry entry of its own
+  // (provider-registry.json is machine-generated from gateway APIs, so a hand-authored Vertex
+  // entry there would be overwritten on the next regeneration).
+  //
+  // @ai-sdk/google-vertex's createVertex() calls loadSetting() for both project and location,
+  // which throws unconditionally when the env var is absent (no default) — see
+  // GOOGLE_VERTEX_PROJECT/GOOGLE_VERTEX_LOCATION in @ai-sdk/google-vertex's
+  // google-vertex-provider.ts. Both are therefore hard requirements we can check directly.
+  // GOOGLE_APPLICATION_CREDENTIALS is deliberately NOT required here: it's only one of several
+  // ways Application Default Credentials can be supplied (gcloud CLI login, GCE/Cloud Run
+  // metadata server also work with no env var at all), so requiring it would produce new false
+  // negatives for anyone authenticated through one of those other paths.
+  if (providerId === 'google-vertex' || providerId.startsWith('google.vertex')) {
+    return !!(process.env.GOOGLE_VERTEX_PROJECT && process.env.GOOGLE_VERTEX_LOCATION);
+  }
+
   // Clean provider ID (e.g., "openai.chat" -> "openai")
   const cleanId = providerId.includes('.') ? providerId.split('.')[0]! : providerId;
 
@@ -299,6 +325,16 @@ export function isProviderConnected(providerId: string, customProviders?: Record
   if (!provider) return false;
 
   const envVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
+
+  // Most providers with multiple apiKeyEnvVar entries need every one of them (e.g. Netlify's
+  // NETLIFY_TOKEN + NETLIFY_SITE_ID are two distinct required values, checked separately by
+  // NetlifyGateway.getApiKey — see packages/core/src/llm/model/gateways/netlify.ts). Google is a
+  // deliberate exception: GOOGLE_API_KEY and GOOGLE_GENERATIVE_AI_API_KEY are aliases for the same
+  // credential (see the "google" entry in PROVIDER_OVERRIDES in
+  // packages/core/src/llm/model/gateways/models-dev.ts, and #17343), so only one needs to be set.
+  if (ALIASED_API_KEY_ENV_VAR_PROVIDERS.has(cleanId)) {
+    return envVars.some(envVar => !!process.env[envVar]);
+  }
   return envVars.every(envVar => !!process.env[envVar]);
 }
 
@@ -1989,7 +2025,8 @@ async function handleAgentMessageRoute({
   methodName: 'sendMessage' | 'queueMessage';
 }) {
   const idleStreamOptions = ifIdle?.streamOptions as
-    (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides }) | undefined;
+    | (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides })
+    | undefined;
   const bodyRequestContext = idleStreamOptions?.requestContext;
   const normalizedIdleStreamOptions = normalizePublicExecutionOptions(idleStreamOptions, serverRequestContext);
   const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);

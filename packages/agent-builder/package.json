@@ -24,7 +24,8 @@
   ],
   "scripts": {
     "check": "tsc --noEmit",
-    "lint": "eslint .",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
     "build": "tsup --silent --config tsup.config.ts",
     "test": "vitest run"
   },

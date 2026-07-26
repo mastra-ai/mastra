@@ -1,5 +1,37 @@
 # @mastra/factory
 
+## 0.2.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`75f843d`](https://github.com/mastra-ai/mastra/commit/75f843d09f758223e6eeb321321bdcc5c7e779d0)]:
+  - @mastra/core@1.53.0-alpha.2
+  - @mastra/code-sdk@1.0.2-alpha.2
+
+## 0.2.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`c8d8a01`](https://github.com/mastra-ai/mastra/commit/c8d8a010ee2efe2b7bf4d07707382c34c87b14e4), [`371cf60`](https://github.com/mastra-ai/mastra/commit/371cf6075cef88ac6919a08d59a82e485397364a), [`263d2ca`](https://github.com/mastra-ai/mastra/commit/263d2cac80ba3b03b9c0f008db6f1f1b9eb0278c)]:
+  - @mastra/core@1.53.0-alpha.1
+  - @mastra/code-sdk@1.0.2-alpha.1
+
+## 0.2.1-alpha.0
+
+### Patch Changes
+
+- Improved Platform GitHub event polling efficiency and added event-count and latency logging for each poll. ([#20123](https://github.com/mastra-ai/mastra/pull/20123))
+
+- Bound the `withProjectLock` / `withDbAdvisoryLock` critical section with an `AbortSignal` timeout (default 60s, configurable via `timeoutMs`). Previously, an unbounded outbound call inside the lock could keep the transaction open for up to Neon's `idle_in_transaction_session_timeout` (5 minutes), pinning the pool connection and the advisory lock the entire time. On timeout the wrapper aborts the `fn`'s signal, rolls the transaction back, releases the connection, and throws `ProjectLockTimeoutError`. ([#20129](https://github.com/mastra-ai/mastra/pull/20129))
+
+- Fixed the workspace files panel in Factory web returning "Path is outside the browsable root" for Factory sessions. The workspace file endpoints now recognize a session id, reattach to that session's sandbox, and list and read rendered files (like .artifacts) directly from the sandbox, so session artifacts render on deployed factories. ([#20101](https://github.com/mastra-ai/mastra/pull/20101))
+
+- Added an updateIssue capability to the Intake surface so Factory can change the state of external issues (open/closed on GitHub, workflow state on Linear) as a side effect of stage transitions. Adapters cover the direct GitHub, direct Linear, platform GitHub, and platform Linear integrations. GitHub adapters reject pull-request targets. Linear adapters resolve the target workflow state per team and skip when the issue is already in the desired state. The platform Linear adapter degrades to a no-op (returns null) when the platform workflow-states endpoint is not yet deployed, so this change is safe to ship ahead of the platform companion route. This is a plumbing change: no rule currently emits the new decision, so behavior is unchanged. ([#20111](https://github.com/mastra-ai/mastra/pull/20111))
+
+- Updated dependencies [[`df6a9ce`](https://github.com/mastra-ai/mastra/commit/df6a9ce87214f7aadb2edfe62f67605fe998a0a4), [`cadd3a2`](https://github.com/mastra-ai/mastra/commit/cadd3a276f8e0026e3c84cffe935538419cb890c)]:
+  - @mastra/core@1.52.2-alpha.0
+  - @mastra/code-sdk@1.0.2-alpha.0
+
 ## 0.2.0
 
 ### Minor Changes
