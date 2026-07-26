@@ -180,7 +180,12 @@ describe('softwarefactory template', () => {
       }
 
       const providers = await probe(port, '/web/config/providers');
-      expect(providers?.status).toBe(200);
+      if (!providers) {
+        throw new Error(
+          `Provider config endpoint did not respond successfully (${lastProbe.get('/web/config/providers') ?? 'no probe completed'})`,
+        );
+      }
+      expect(providers.status).toBe(200);
     } finally {
       killDev();
       await dev.catch(() => {});
