@@ -37,6 +37,17 @@ describe('softwarefactory template', () => {
     const templateDir = join(workDir, 'template');
     scaffoldDir = join(workDir, 'factory');
 
+    // `build:lib` below runs the CLI's tsup `onSuccess`, which builds
+    // mastracode/web's embedded SPA. That Vite build imports @mastra/playground-ui,
+    // @mastra/client-js and friends through their `exports` maps, which point at
+    // `dist/`. `pnpm --filter` runs a single script without turbo, so those
+    // workspace packages are not built for it — run mastracode/web's own prebuild
+    // (a turbo build of exactly that dependency set) first.
+    await execa('pnpm', ['run', 'prebuild'], {
+      cwd: join(rootDir, 'mastracode', 'web'),
+      stdio: 'inherit',
+    });
+
     // The create-factory bundle externalizes its `mastra/internal/auth`
     // dependency, so both package dist directories must exist before it runs.
     await execa('pnpm', ['--filter', './packages/cli', 'build:lib'], {
