@@ -83,19 +83,45 @@ export interface ResolveRuntimeOptions {
   agentId: string;
   /** Workflow input containing serialized state */
   input: DurableAgenticWorkflowInput;
+  /**
+   * Run-level RequestContext for the current durable step. Used as a fallback
+   * for the caller's request context when the workflow input's
+   * `requestContextEntries` snapshot is absent (cross-process worker).
+   */
+  requestContext?: RequestContext;
   /** Logger for debugging */
   logger?: { debug?: (...args: any[]) => void; error?: (...args: any[]) => void };
 }
 
 /**
- * Restore a RequestContext from the JSON-safe `requestContextEntries`
- * snapshot serialized onto the workflow input (see preparation.ts). Returns
- * an empty context when no snapshot is present.
+ * Restore a RequestContext for a durable step.
+ *
+ * Prefers the JSON-safe `requestContextEntries` snapshot serialized onto the
+ * workflow input (see preparation.ts). When that snapshot is absent — which is
+ * the case on a cross-process engine (e.g. the @mastra/inngest connect()
+ * worker), where the workflow-input field is not propagated onto the step's
+ * `inputData` — it falls back to the run-level `RequestContext` the durable
+ * workflow already rebuilt from the run event (in @mastra/inngest, from
+ * `event.data.requestContext`). Without that fallback the rebuilt toolset —
+ * and therefore any subagent delegated to inside the tool-call step — resolves
+ * with an empty context, dropping request-scoped tenant/user/workspace values.
+ *
+ * Returns an empty context only when neither source has any entries.
  */
-function restoreRequestContext(entries?: Record<string, unknown>): RequestContext {
-  return entries
-    ? new RequestContext(Object.entries(entries) as Iterable<readonly [string, unknown]>)
-    : new RequestContext();
+function restoreRequestContext(
+  entries: Record<string, unknown> | undefined,
+  runLevel?: RequestContext,
+): RequestContext {
+  if (entries) {
+    return new RequestContext(Object.entries(entries) as Iterable<readonly [string, unknown]>);
+  }
+  if (runLevel) {
+    // Clone from the run-level context's JSON-safe entries so the rebuilt
+    // context is independent (a step must not mutate the shared run context)
+    // and carries only serializable values across the durable boundary.
+    return new RequestContext(Object.entries(runLevel.toJSON()) as Iterable<readonly [string, unknown]>);
+  }
+  return new RequestContext();
 }
 
 /**
@@ -127,7 +153,7 @@ export class DurableProcessorRebuildError extends Error {
  * process restarts.
  */
 export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions): Promise<ResolvedRuntimeDependencies> {
-  const { mastra, runId, agentId, input, logger } = options;
+  const { mastra, runId, agentId, input, requestContext: runLevelRequestContext, logger } = options;
 
   // 1. Deserialize MessageList
   // Reuse the existing MessageList from the registry if available so that
@@ -187,10 +213,11 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       const agent = mastra.getAgentById(agentId);
 
       // Restore the caller's request context from the JSON-safe snapshot on
-      // the workflow input (mirrors durable-agent.ts resume handling), so
-      // request-scoped tools / workspace / memory / processors resolve with
-      // the same configuration as the original call site.
-      const resolveRequestContext = restoreRequestContext(input.requestContextEntries);
+      // the workflow input (mirrors durable-agent.ts resume handling), falling
+      // back to the run-level context on a cross-process worker where the
+      // snapshot field is absent, so request-scoped tools / workspace / memory /
+      // processors resolve with the same configuration as the original call site.
+      const resolveRequestContext = restoreRequestContext(input.requestContextEntries, runLevelRequestContext);
 
       tools = await agent.getToolsForExecution({
         runId,
@@ -350,16 +377,33 @@ export async function rebuildRunToolsFromMastra(options: {
   options?: SerializableDurableOptions;
   /** JSON-safe request-context snapshot from the workflow input (see preparation.ts). */
   requestContextEntries?: Record<string, unknown>;
+  /**
+   * Run-level RequestContext for the current durable step. Used as a fallback
+   * when `requestContextEntries` is absent (cross-process worker), so the
+   * rebuilt toolset — and any subagent delegated to from the tool-call step —
+   * resolves with the caller's context instead of an empty one.
+   */
+  requestContext?: RequestContext;
   logger?: { debug?: (...args: any[]) => void };
 }): Promise<RebuiltRunTools | undefined> {
-  const { mastra, runId, agentId, state, options: execOptions, requestContextEntries, logger } = options;
+  const {
+    mastra,
+    runId,
+    agentId,
+    state,
+    options: execOptions,
+    requestContextEntries,
+    requestContext: runLevelRequestContext,
+    logger,
+  } = options;
   if (!mastra) return undefined;
 
   try {
     const agent = mastra.getAgentById(agentId);
     // Restore the caller's request context so request-scoped tools, workspace
-    // and memory resolve with the same configuration as the original call.
-    const resolveRequestContext = restoreRequestContext(requestContextEntries);
+    // and memory resolve with the same configuration as the original call,
+    // falling back to the run-level context cross-process (see restoreRequestContext).
+    const resolveRequestContext = restoreRequestContext(requestContextEntries, runLevelRequestContext);
 
     const tools = await agent.getToolsForExecution({
       runId,

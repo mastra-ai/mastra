@@ -354,6 +354,10 @@ export function createDurableToolCallStep() {
           state: state as any,
           options: agentOptions,
           requestContextEntries: initData.requestContextEntries,
+          // Fallback caller context when the init data carries no snapshot
+          // (cross-process worker) — otherwise the rebuilt delegation tools
+          // capture an empty context and subagents lose the caller's tenant/user.
+          requestContext,
           logger,
         });
         if (rebuilt) {

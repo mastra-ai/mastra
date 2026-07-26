@@ -167,6 +167,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         runId,
         agentId,
         input: typedInput,
+        // Fallback caller context when the workflow input carries no
+        // requestContextEntries snapshot (cross-process worker).
+        requestContext,
         logger,
       });
 
