@@ -112,6 +112,8 @@ describe('softwarefactory template', () => {
       env: {
         ...process.env,
         ...registryEnv,
+        // This smoke test probes UI and API routes directly.
+        MASTRACODE_AUTH_DISABLED: '1',
         PORT: String(port),
       },
       detached: true,
@@ -146,14 +148,14 @@ describe('softwarefactory template', () => {
             lastProbe.set(path, `${host} -> ${res.status}`);
             if (res.ok) return res;
           } catch (error) {
-            lastProbe.set(path, `${host} -> ${(error as Error).message}`);
+            const message = error instanceof Error ? error.message : String(error);
+            lastProbe.set(path, `${host} -> ${message}`);
           }
         }
         return null;
       };
 
-      // `/api` is a prefix with nothing mounted on it — 404s on a healthy
-      // server. The other suites probe `/api/tools` too.
+      // Probe a concrete API endpoint, matching the other E2E suites.
       const apiRoute = '/api/tools';
 
       const deadline = Date.now() + 5 * 60 * 1000;
