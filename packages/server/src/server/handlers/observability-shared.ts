@@ -63,7 +63,6 @@ export async function getScoresStore(mastra: Mastra): Promise<ScoresStorage> {
   const storage = getStorage(mastra);
   const scores = await storage.getStore('scores');
   if (!scores) {
-    // Same capability-gap semantics as getObservabilityStore above.
     throw new HTTPException(501, { message: 'Scores storage domain is not available' });
   }
   return scores;

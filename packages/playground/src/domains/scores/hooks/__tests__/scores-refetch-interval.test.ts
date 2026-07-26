@@ -6,8 +6,6 @@ import { getTraceSpanScoresRefetchInterval } from '../use-trace-span-scores';
 const unavailableError = new Error(
   'HTTP error! status: 501 - {"error":"Observability storage domain is not available"}',
 );
-// The span scores endpoint is backed by the separate `scores` storage domain
-// and reports its own message when that domain is disabled.
 const scoresDomainUnavailableError = new Error(
   'HTTP error! status: 501 - {"error":"Scores storage domain is not available"}',
 );

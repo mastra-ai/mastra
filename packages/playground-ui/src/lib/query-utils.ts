@@ -124,24 +124,14 @@ export function isUnsupportedObservabilityOperationError(
   return message.includes(`does not support listing ${operation}`);
 }
 
-/**
- * Stable messages from the server's observability domain getters when the
- * backing storage domain is disabled — e.g. `domains: { observability: false }`
- * on a composite store. Most observability endpoints report the
- * `observability` domain; span scores are backed by the separate `scores`
- * domain and report their own message. Kept as an explicit list because many
- * other (non-observability) server domains share the same message suffix.
- */
+// Span scores are backed by the separate `scores` domain. Explicit list: many
+// unrelated server domains share the "storage domain is not available" suffix.
 const OBSERVABILITY_UNAVAILABLE_MESSAGES = [
   'Observability storage domain is not available',
   'Scores storage domain is not available',
 ];
 
-/**
- * Check if an error came from a server whose observability (or scores)
- * storage domain is unavailable. Affects every observability endpoint, so no
- * operation argument.
- */
+/** Check if an error came from a server whose observability storage domain is disabled. */
 export function isObservabilityUnavailableError(error: unknown): boolean {
   if (!error || typeof error !== 'object' || !('message' in error)) return false;
   const message = (error as { message: unknown }).message;
