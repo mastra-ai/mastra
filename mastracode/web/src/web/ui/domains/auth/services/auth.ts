@@ -33,6 +33,15 @@ export function userSessionResourceId(state: FactoryAuthState | undefined): stri
   return userId;
 }
 
+export function userMessageAttributes(
+  state: FactoryAuthState | undefined,
+): { name: string; userId?: string } | undefined {
+  const name = state?.authenticated ? state.user?.name : undefined;
+  if (!name || name.length > 128) return undefined;
+  const userId = state?.user?.userId;
+  return userId && userId.length <= 128 ? { name, userId } : { name };
+}
+
 /**
  * Build the hosted-login URL. `returnTo` is where the server sends the user
  * after authenticating; it defaults to the current location so contexts that

@@ -55,6 +55,34 @@ describe('Factory rule validation', () => {
     ).toThrow(/rejection cannot be persisted/i);
   });
 
+  it('validates approval requests separately from deferred effects', () => {
+    expect(
+      validateFactoryRuleDecision({
+        type: 'requestApproval',
+        idempotencyKey: 'approval-1',
+        reason: 'Supervisor approval required.',
+        summary: 'Move item to execute',
+      }),
+    ).toEqual({
+      type: 'requestApproval',
+      idempotencyKey: 'approval-1',
+      reason: 'Supervisor approval required.',
+      summary: 'Move item to execute',
+    });
+    expect(() =>
+      validateFactoryRuleDecisions([
+        { type: 'requestApproval', idempotencyKey: 'approval-1', reason: 'Supervisor approval required.' },
+      ]),
+    ).toThrow(/approval request cannot be persisted/i);
+    expect(() =>
+      validateFactoryRuleDecision({
+        type: 'requestApproval',
+        idempotencyKey: 'approval-1',
+        reason: 'x'.repeat(513),
+      }),
+    ).toThrow(/approval reason is invalid/i);
+  });
+
   it('enforces bounds, serializability, and causal depth', () => {
     expect(() =>
       validateFactoryRuleDecision({
@@ -121,6 +149,20 @@ describe('Factory rule validation', () => {
     ).toThrow(/unique idempotency keys/i);
   });
 
+  it('defaults idle-without-transition observation on and preserves an explicit opt-out', () => {
+    expect(defaultFactoryRules({ version: 'validation-v1' }).supervisor?.observeIdleWithoutTransition).toBe(true);
+    expect(
+      defaultFactoryRules({
+        version: 'validation-v1',
+        overrides: { supervisor: { observeIdleWithoutTransition: false } },
+      }).supervisor?.observeIdleWithoutTransition,
+    ).toBe(false);
+
+    const legacyRules = defaultFactoryRules({ version: 'validation-v1' });
+    delete legacyRules.supervisor;
+    expect(() => assertFactoryRules(legacyRules)).not.toThrow();
+  });
+
   it('rejects unknown rule keys and non-handler leaves at boot', () => {
     const rules = defaultFactoryRules({ version: 'validation-v1' });
     expect(() => assertFactoryRules({ ...rules, actions: {} })).toThrow(/unsupported field/i);
@@ -142,5 +184,11 @@ describe('Factory rule validation', () => {
         linear: { madeUpEvent: { onEvent: () => undefined } },
       }),
     ).toThrow(/Linear event is invalid/i);
+    expect(() =>
+      assertFactoryRules({
+        ...rules,
+        supervisor: { observeIdleWithoutTransition: 'yes' },
+      }),
+    ).toThrow(/must be a boolean/i);
   });
 });

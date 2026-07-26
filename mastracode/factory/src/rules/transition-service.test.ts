@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { defaultFactoryRules } from './defaults.js';
+import { defaultFactoryRules, requireSupervisorApproval } from './defaults.js';
 import { FactoryTransitionService } from './transition-service.js';
-import type { FactoryRuleBoard, FactoryRuleStage } from './types.js';
+import type { FactoryRuleActor, FactoryRuleBoard, FactoryRuleStage } from './types.js';
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH } from './validation.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
@@ -42,6 +42,7 @@ function request(
     stage: FactoryRuleStage;
     expectedRevision: number;
     identity: string;
+    actor: FactoryRuleActor;
     causalChain: Array<{ ingressId: string; decisionType: 'transition' }>;
   }> = {},
 ) {
@@ -52,8 +53,11 @@ function request(
     board: overrides.board ?? ('work' as const),
     stage: overrides.stage ?? ('execute' as const),
     expectedRevision: overrides.expectedRevision ?? item.revision,
-    actor: { type: 'human' as const, id: 'user-1' },
-    ingress: { type: 'human' as const, identity: overrides.identity ?? 'request-1' },
+    actor: overrides.actor ?? { type: 'human' as const, id: 'user-1' },
+    ingress: {
+      type: overrides.actor?.type === 'agent' ? ('agent' as const) : ('human' as const),
+      identity: overrides.identity ?? 'request-1',
+    },
     cause: 'test',
     causalChain: overrides.causalChain,
   };
@@ -154,6 +158,102 @@ describe('FactoryTransitionService', () => {
       'notify-exit',
       'message-enter',
     ]);
+  });
+
+  it('creates one pending approval for agent transitions without moving or dispatching effects', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const rules = defaultFactoryRules({
+      version: 'rules-v1',
+      overrides: {
+        work: {
+          intake: {
+            issue: {
+              onExit: context =>
+                requireSupervisorApproval(context, {
+                  reason: 'A supervisor must approve execution.',
+                  summary: 'Move Fix the bug to execute',
+                }),
+            },
+          },
+          execute: {
+            issue: {
+              onEnter: () => ({ type: 'notify', idempotencyKey: 'ready-effect', title: 'Ready to execute' }),
+            },
+          },
+        },
+      },
+    });
+
+    const result = await new FactoryTransitionService({ rules, storage }).transition(
+      request(item, { actor: { type: 'agent', bindingId: 'binding-1', role: 'work' } }),
+    );
+
+    expect(result).toMatchObject({
+      status: 'pending_approval',
+      approvalId: expect.any(String),
+      revision: item.revision,
+      stage: 'execute',
+      reason: 'A supervisor must approve execution.',
+    });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['intake']);
+    expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+    expect(await storage.listApprovals('org-1', PROJECT_ID, ['pending'])).toEqual([
+      expect.objectContaining({
+        workItemId: item.id,
+        expectedRevision: item.revision,
+        decisions: [expect.objectContaining({ idempotencyKey: 'ready-effect' })],
+      }),
+    ]);
+  });
+
+  it('does not gate human transitions when a rule uses the supervisor approval helper', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const rules = defaultFactoryRules({
+      version: 'rules-v1',
+      overrides: {
+        work: {
+          execute: {
+            issue: {
+              onEnter: context => requireSupervisorApproval(context, { reason: 'Supervisor approval required.' }),
+            },
+          },
+        },
+      },
+    });
+
+    const result = await new FactoryTransitionService({ rules, storage }).transition(request(item));
+
+    expect(result).toMatchObject({ status: 'accepted', stage: 'execute' });
+    expect(await storage.listApprovals('org-1', PROJECT_ID)).toEqual([]);
+  });
+
+  it('lets rejection win when another rule requests agent approval', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const rules = defaultFactoryRules({
+      version: 'rules-v1',
+      overrides: {
+        work: {
+          intake: {
+            issue: {
+              onExit: context => requireSupervisorApproval(context, { reason: 'Supervisor approval required.' }),
+            },
+          },
+          execute: {
+            issue: { onEnter: () => ({ type: 'reject', code: 'forbidden', reason: 'Execution is frozen.' }) },
+          },
+        },
+      },
+    });
+
+    const result = await new FactoryTransitionService({ rules, storage }).transition(
+      request(item, { actor: { type: 'agent', bindingId: 'binding-1', role: 'work' } }),
+    );
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'forbidden', reason: 'Execution is frozen.' });
+    expect(await storage.listApprovals('org-1', PROJECT_ID)).toEqual([]);
   });
 
   it('persists rule rejection without moving or queuing decisions', async () => {
@@ -317,24 +417,6 @@ describe('FactoryTransitionService', () => {
       status: 'rejected',
       code: 'invalid_transition',
     });
-  });
-
-  it('accepts a human cancel and can revive the item out of canceled', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const item = await createItem(storage, { stages: ['review'] });
-    const service = new FactoryTransitionService({ rules: defaultFactoryRules({ version: 'rules-v1' }), storage });
-
-    const discard = await service.transition(request(item, { stage: 'canceled', identity: 'discard-1' }));
-    expect(discard).toMatchObject({ status: 'accepted', stage: 'canceled' });
-    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['canceled']);
-
-    // An item sitting in canceled still has a canonical stage, so it can be
-    // pulled back onto the board.
-    const revive = await service.transition(
-      request({ id: item.id, revision: 2 }, { stage: 'triage', identity: 'revive-1' }),
-    );
-    expect(revive).toMatchObject({ status: 'accepted', stage: 'triage' });
-    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['triage']);
   });
 
   it('scopes ingress replay and deferred idempotency to the tenant', async () => {

@@ -194,7 +194,9 @@ export class FactoryDecisionDispatcher {
   async #dispatchDecision(record: FactoryDeferredDecisionRecord, now: Date): Promise<void> {
     try {
       const decision = validateFactoryRuleDecision(record.decision, record.causalChain.length);
-      if (decision.type === 'reject') throw new Error('Deferred Factory decisions cannot reject.');
+      if (decision.type === 'reject' || decision.type === 'requestApproval') {
+        throw new Error('Deferred Factory decisions must contain an executable effect.');
+      }
       await this.#withLease(
         async leaseExpiresAt =>
           this.#storage.renewDeferredDecisionLease(leaseIdentity(record, this.#ownerId), leaseExpiresAt),
