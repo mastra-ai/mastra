@@ -177,11 +177,14 @@ export interface BrowserConfigBase {
   /**
    * Browser viewport dimensions.
    * Controls the size of the browser window and how websites render.
+   *
+   * Set to `null` to disable fixed-viewport emulation so the page follows the
+   * real browser window content area (Playwright `viewport: null`).
    */
   viewport?: {
     width: number;
     height: number;
-  };
+  } | null;
 
   /**
    * Default timeout in milliseconds for browser operations.

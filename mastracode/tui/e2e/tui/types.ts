@@ -24,6 +24,7 @@ export type ScenarioName =
   | 'browser-toggle-attach'
   | 'browser-wizard-browserbase'
   | 'browser-wizard-export'
+  | 'browser-wizard-viewport'
   | 'clipboard-image-paste'
   | 'commit-attribution-prompt'
   | 'custom-config-dir'

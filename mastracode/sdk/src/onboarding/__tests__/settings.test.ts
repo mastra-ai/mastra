@@ -680,6 +680,8 @@ describe('createBrowserFromSettings — recording tools gating', () => {
       }
       expect(tools[providerToolName], `expected provider tool ${providerToolName} to be present`).toBeDefined();
     },
+    // Constructing a real provider browser can exceed the 5s default on a cold cache.
+    30000,
   );
 
   it('does NOT expose recording tools when StagehandBrowser is constructed directly', async () => {
@@ -699,4 +701,64 @@ describe('createBrowserFromSettings — recording tools gating', () => {
       expect(tools[name], `expected tool ${name} to be absent on direct AgentBrowser`).toBeUndefined();
     }
   });
+});
+
+describe('browser viewport parsing/persistence', () => {
+  function writeBrowser(filePath: string, viewport: unknown): void {
+    writeFileSync(
+      filePath,
+      JSON.stringify({ onboarding: {}, models: {}, preferences: {}, storage: {}, browser: { viewport } }),
+      'utf-8',
+    );
+  }
+
+  it("round-trips the 'window' sentinel for match-window", () => {
+    withTempSettingsFile(filePath => {
+      writeBrowser(filePath, 'window');
+      expect(loadSettings(filePath).browser.viewport).toBe('window');
+    });
+  });
+
+  it('round-trips a valid fixed viewport object', () => {
+    withTempSettingsFile(filePath => {
+      writeBrowser(filePath, { width: 1440, height: 900 });
+      expect(loadSettings(filePath).browser.viewport).toEqual({ width: 1440, height: 900 });
+    });
+  });
+
+  it('falls back to the 1280x720 default on a malformed string viewport', () => {
+    withTempSettingsFile(filePath => {
+      writeBrowser(filePath, 'garbage');
+      expect(loadSettings(filePath).browser.viewport).toEqual({ width: 1280, height: 720 });
+    });
+  });
+
+  it('falls back to the 1280x720 default on a malformed object viewport', () => {
+    withTempSettingsFile(filePath => {
+      writeBrowser(filePath, { width: 'x' });
+      expect(loadSettings(filePath).browser.viewport).toEqual({ width: 1280, height: 720 });
+    });
+  });
+});
+
+describe('createBrowserFromSettings — viewport mapping', () => {
+  function makeBrowserSettings(overrides: Partial<BrowserSettings> = {}): BrowserSettings {
+    return { enabled: true, provider: 'stagehand', headless: true, ...overrides } as BrowserSettings;
+  }
+
+  function readConfigViewport(browser: unknown): unknown {
+    return (browser as { config: { viewport?: unknown } }).config.viewport;
+  }
+
+  it("maps the 'window' sentinel to viewport: null at the provider boundary", async () => {
+    const browser = await createBrowserFromSettings(makeBrowserSettings({ viewport: 'window' }));
+    expect(browser).toBeDefined();
+    expect(readConfigViewport(browser)).toBeNull();
+  }, 30000);
+
+  it('passes a fixed viewport object through unchanged', async () => {
+    const browser = await createBrowserFromSettings(makeBrowserSettings({ viewport: { width: 1440, height: 900 } }));
+    expect(browser).toBeDefined();
+    expect(readConfigViewport(browser)).toEqual({ width: 1440, height: 900 });
+  }, 30000);
 });
