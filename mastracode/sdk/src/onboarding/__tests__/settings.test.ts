@@ -766,6 +766,12 @@ describe('createBrowserFromSettings — viewport mapping', () => {
     return { enabled: true, provider: 'stagehand', headless: true, ...overrides } as BrowserSettings;
   }
 
+  // Reads the viewport off the real constructed provider instance (not a mock).
+  // For StagehandBrowser, `config.viewport` is exactly the value that feeds
+  // `localBrowserLaunchOptions.viewport` (via `?? undefined`) — see
+  // browser/stagehand/src/stagehand-browser.ts. So asserting `config.viewport`
+  // here confirms the launch-option value, and the null->undefined hand-off to
+  // Stagehand is covered separately in stagehand-browser.test.ts.
   function readConfigViewport(browser: unknown): unknown {
     return (browser as { config: { viewport?: unknown } }).config.viewport;
   }
@@ -773,6 +779,7 @@ describe('createBrowserFromSettings — viewport mapping', () => {
   it("maps the 'window' sentinel to viewport: null at the provider boundary", async () => {
     const browser = await createBrowserFromSettings(makeBrowserSettings({ viewport: 'window' }));
     expect(browser).toBeDefined();
+    // null (not a defaulted 1280x720) must reach the provider so match-window works.
     expect(readConfigViewport(browser)).toBeNull();
   }, 30000);
 

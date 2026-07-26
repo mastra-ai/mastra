@@ -159,6 +159,20 @@ describe('handleBrowserCommand', () => {
     expect(ctx.showError).toHaveBeenCalled();
   });
 
+  // An unsafe integer must be rejected here, matching the safe-integer check in
+  // the persisted-settings path (parseViewport). Otherwise `/browser set` would
+  // accept and save a value that is silently reset to the default on reload.
+  it('set viewport with an unsafe integer is rejected as invalid', async () => {
+    const { ctx, settings } = createContext();
+    browserMocks.loadSettings.mockReturnValue(settings);
+
+    await handleBrowserCommand(ctx, ['set', 'viewport', '9999999999999999x720']);
+
+    expect(settings.browser.viewport).toEqual({ width: 1280, height: 720 });
+    expect(browserMocks.saveSettings).not.toHaveBeenCalled();
+    expect(ctx.showError).toHaveBeenCalled();
+  });
+
   it('clear viewport resets to the 1280x720 default', async () => {
     const { ctx, settings } = createContext();
     settings.browser.viewport = 'window';

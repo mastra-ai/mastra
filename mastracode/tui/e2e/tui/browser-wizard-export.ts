@@ -72,6 +72,11 @@ export const browserWizardExportScenario = {
     terminal.write(cdpUrl);
     terminal.write('\r');
 
+    // Step 7 (non-Browserbase, incl. CDP): viewport picker. Accept the default
+    // preset (Desktop 1280x720) so the wizard reaches completion.
+    await runtime.waitForScreenText(/Viewport size:/i, terminal, 8_000);
+    terminal.write('\r');
+
     await runtime.waitForScreenText(/Browser automation enabled:/i, terminal, 10_000);
     await runtime.waitForScreenText(/Provider:\s+AgentBrowser \(deterministic\)/i, terminal, 8_000);
     await runtime.waitForScreenText(/Headless:\s+no/i, terminal, 8_000);

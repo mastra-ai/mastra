@@ -76,14 +76,17 @@ function formatViewport(viewport: BrowserSettings['viewport']): string {
 
 /**
  * Parse a `<w>x<h>` viewport string. Returns null when the input is not a
- * valid pair of positive integers (rejects 0x0, negatives, and non-numeric).
+ * valid pair of positive safe integers (rejects 0x0, negatives, non-numeric,
+ * and values beyond Number.MAX_SAFE_INTEGER). This mirrors the safe-integer
+ * validation in the persisted-settings path (parseViewport in settings.ts) so
+ * a value accepted by `/browser set` is not silently reset on reload.
  */
 function parseViewportSize(input: string): { width: number; height: number } | null {
   const match = input.trim().match(/^(\d+)\s*[x×]\s*(\d+)$/i);
   if (!match) return null;
   const width = Number(match[1]);
   const height = Number(match[2]);
-  if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) return null;
+  if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width <= 0 || height <= 0) return null;
   return { width, height };
 }
 

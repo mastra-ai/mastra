@@ -46,8 +46,9 @@ then interact with elements using their refs (e.g., @e5).`,
   },
   {
     name: 'viewport',
-    type: '{ width: number; height: number }',
-    description: 'Browser viewport dimensions.',
+    type: '{ width: number; height: number } | null',
+    description:
+      'Browser viewport dimensions. Set to `null` to match the real browser window with no viewport emulation, so the page follows the window as it resizes.',
     isOptional: true,
     defaultValue: '{ width: 1280, height: 720 }',
   },
