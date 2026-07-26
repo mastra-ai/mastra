@@ -154,14 +154,24 @@ describe('softwarefactory template', () => {
         return null;
       };
 
+      // `/api` is a prefix, not a route: the server matches it explicitly to
+      // hand it to the next handler, and nothing is mounted there, so it 404s
+      // even on a healthy server. Probe a real endpoint, as the monorepo,
+      // deployers and no-bundling suites all do.
+      const apiRoute = '/api/tools';
+
       const deadline = Date.now() + 5 * 60 * 1000;
       let ready = false;
+      let unanswered: string[] = [];
       while (Date.now() < deadline && !devExited) {
-        const [ui, api] = await Promise.all([probe(port, '/'), probe(port, '/api')]);
+        const [ui, api] = await Promise.all([probe(port, '/'), probe(port, apiRoute)]);
         if (ui && api) {
           ready = true;
           break;
         }
+        unanswered = [];
+        if (!ui) unanswered.push('/');
+        if (!api) unanswered.push(apiRoute);
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
@@ -169,7 +179,11 @@ describe('softwarefactory template', () => {
         // Kill first so awaiting the (reject: false) result yields output.
         killDev();
         const result = await dev;
-        throw new Error(`Dev server did not become ready on port ${port}.\n${result.all ?? ''}`);
+        // Name the unanswered paths — this suite boots a whole scaffold, so
+        // "did not become ready" alone cannot tell a dead server from a
+        // single route that never came up.
+        const detail = devExited ? 'dev server exited' : `no response from ${unanswered.join(', ')}`;
+        throw new Error(`Dev server did not become ready on port ${port} (${detail}).\n${result.all ?? ''}`);
       }
 
       const providers = await probe(port, '/web/config/providers');
