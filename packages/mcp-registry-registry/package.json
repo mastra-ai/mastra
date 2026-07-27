@@ -25,7 +25,8 @@
     "build:cli": "tsup src/stdio.ts --format esm --no-dts --treeshake=smallest --splitting && tsc -p tsconfig.build.json",
     "pretest": "pnpm turbo build --filter @mastra/mcp-registry-registry",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "keywords": [],
   "author": "",
@@ -45,7 +46,7 @@
     "@vitest/ui": "catalog:",
     "@wong2/mcp-cli": "^2.0.0",
     "cross-env": "^10.1.0",
-    "eslint": "^10.4.1",
+    "eslint": "^10.7.0",
     "hono": "^4.12.8",
     "tsup": "^8.5.1",
     "tsx": "catalog:",

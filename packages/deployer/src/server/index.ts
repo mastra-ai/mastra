@@ -21,6 +21,7 @@ import { timeout } from 'hono/timeout';
 import { describeRoute } from 'hono-openapi';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import { escapeStudioHtmlValue, injectStudioHtmlConfig, normalizeStudioBase } from '../build/utils';
+import { agentLearningProxyHandler } from './handlers/agent-learning';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
@@ -271,6 +272,10 @@ export async function createHonoServer(
     }),
     healthHandler,
   );
+
+  if (options?.isDev && options.studio) {
+    app.get('/api/learning/*', agentLearningProxyHandler);
+  }
 
   if (options?.isDev || server?.build?.swaggerUI) {
     app.get(

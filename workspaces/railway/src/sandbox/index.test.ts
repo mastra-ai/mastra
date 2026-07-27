@@ -456,6 +456,48 @@ describe('RailwaySandbox', () => {
         expect.objectContaining({ token: 'tok', idleTimeoutMinutes: 45, env: { BASE: '1' } }),
       );
     });
+
+    it('inherits the template checkpoint name when no override is passed', async () => {
+      mockCreate.mockRejectedValueOnce(new Error('checkpoint not found')).mockResolvedValueOnce(mockSandbox);
+      const template = new RailwaySandbox({ token: 'tok', checkpointName: 'root-checkpoint' });
+
+      const child = template.clone({ id: 'mc-project-1' });
+      await child._start();
+
+      expect(mockCreate).toHaveBeenNthCalledWith(1, 'root-checkpoint', expect.objectContaining({ token: 'tok' }));
+      expect(mockSandbox.checkpoint).toHaveBeenCalledWith('root-checkpoint');
+    });
+
+    it('uses a derived checkpoint override when restoring an existing checkpoint', async () => {
+      mockCheckpoints.mockResolvedValueOnce([
+        { id: 'checkpoint-id', key: 'session-checkpoint', environmentId: 'env-1' },
+      ]);
+      const template = new RailwaySandbox({ token: 'tok', checkpointName: 'root-checkpoint' });
+
+      const child = template.clone({ id: 'mc-project-1', checkpointName: 'session-checkpoint' });
+      await child._start();
+
+      expect(mockCreate).toHaveBeenCalledWith('session-checkpoint', expect.objectContaining({ token: 'tok' }));
+      expect(mockCreate).not.toHaveBeenCalledWith('root-checkpoint', expect.anything());
+      expect(mockSandbox.checkpoint).not.toHaveBeenCalled();
+    });
+
+    it('uses a derived checkpoint override when capturing a missing checkpoint', async () => {
+      mockCreate.mockRejectedValueOnce(new Error('checkpoint not found')).mockResolvedValueOnce(mockSandbox);
+      const template = new RailwaySandbox({
+        token: 'tok',
+        checkpointName: 'root-checkpoint',
+        template: t => t.run('npm i -g pnpm'),
+      });
+
+      const child = template.clone({ id: 'mc-project-1', checkpointName: 'session-checkpoint' });
+      await child._start();
+
+      expect(mockCreate).toHaveBeenNthCalledWith(1, 'session-checkpoint', expect.objectContaining({ token: 'tok' }));
+      expect(mockCreate).toHaveBeenNthCalledWith(2, mockTemplate, expect.objectContaining({ token: 'tok' }));
+      expect(mockSandbox.checkpoint).toHaveBeenCalledWith('session-checkpoint');
+      expect(mockSandbox.checkpoint).not.toHaveBeenCalledWith('root-checkpoint');
+    });
   });
 
   describe('executeCommand', () => {

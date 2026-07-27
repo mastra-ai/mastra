@@ -1,54 +1,63 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import type { ReactNode } from 'react';
+import { useParams } from 'react-router';
 
-import { useOverlays } from '../../../lib/overlays';
+import { useFactoryQuery } from '../../../../../shared/hooks/useFactories';
 import { Sidebar } from '../../../Sidebar';
-import { PageLayout } from '../../../ui';
+import { PageLayout, ViewportLayout } from '../../../layouts/PageLayout';
 import { ChatHeader } from '../../chat/components/ChatHeader';
-import { EmptyProjectState, useActiveProjectContext, useGithubStatusQuery } from '../../workspaces';
-import type { Project } from '../../workspaces';
+import type { FactoryProject } from '../../workspaces/services/github';
 
 interface FactoryPageShellProps {
-  title: string;
-  description: string;
-  /** Renders the page body once a GitHub-backed project is active. */
-  children: (project: Project & { githubProjectId: string }) => ReactNode;
+  /** Renders the page body once a server-backed factory is active. */
+  children: (factory: FactoryProject) => ReactNode;
 }
 
 /**
- * Shared frame for the Factory pages (the Board): the standard app
- * layout (sidebar + mobile header) around a titled content column. Factory data
- * comes from GitHub, so local projects and disconnected GitHub states get an
- * explanatory notice instead of a broken empty list.
+ * Shared frame for the Factory pages (Board, Metrics, Rules, Audit): the standard
+ * app layout (sidebar + mobile header) around a titled content column. Any
+ * server-backed Factory renders its pages — including one with zero linked
+ * repositories (the pages show connect prompts). Local folder factories get an
+ * explanatory notice; when a factory links multiple repositories a picker in
+ * the header scopes repository-based intake.
  */
-export function FactoryPageShell({ title, description, children }: FactoryPageShellProps) {
-  const overlays = useOverlays();
-  const { activeProject } = useActiveProjectContext();
-  const isGithubProject = activeProject?.source === 'github' && Boolean(activeProject.githubProjectId);
-  const status = useGithubStatusQuery(isGithubProject);
+function FactoryPageShellFrame({
+  children,
+  Layout,
+}: FactoryPageShellProps & {
+  Layout: typeof PageLayout;
+}) {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factoryQuery = useFactoryQuery(factoryId);
+
+  if (factoryQuery.isPending) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  }
+
+  const factory = factoryQuery.data;
 
   return (
-    <PageLayout
-      sidebar={<Sidebar />}
-      header={<ChatHeader />}
-      title={activeProject ? title : undefined}
-      description={activeProject ? description : undefined}
-    >
-      {activeProject ? (
-        !isGithubProject || !activeProject.githubProjectId ? (
-          <Notice variant="info">
-            Factory is only available for GitHub projects. Switch to a GitHub-backed project.
-          </Notice>
-        ) : status.isPending ? null : status.data?.enabled && status.data.connected ? (
-          children({ ...activeProject, githubProjectId: activeProject.githubProjectId })
-        ) : (
-          <Notice variant="info">
-            Factory requires a GitHub connection. Connect GitHub from the projects menu to see issues and pull requests.
-          </Notice>
-        )
-      ) : (
-        <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />
-      )}
-    </PageLayout>
+    <Layout sidebar={<Sidebar />} header={<ChatHeader />}>
+      {factory ? children(factory) : <Notice variant="destructive">Factory not found.</Notice>}
+    </Layout>
+  );
+}
+
+/** Factory page whose content participates in native document scrolling. */
+export function DocumentFactoryPageShell(props: FactoryPageShellProps) {
+  return <FactoryPageShellFrame {...props} Layout={PageLayout} />;
+}
+
+/** Factory page with nested scroll regions constrained to the viewport. */
+export function FactoryPageShell({ children }: FactoryPageShellProps) {
+  return (
+    <FactoryPageShellFrame Layout={ViewportLayout}>
+      {factory => <div className="flex min-h-0 flex-1 flex-col p-5">{children(factory)}</div>}
+    </FactoryPageShellFrame>
   );
 }

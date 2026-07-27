@@ -1,171 +1,250 @@
-import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
-import { join } from 'path';
-import { mkdtemp, rm } from 'fs/promises';
-import { tmpdir } from 'os';
-import getPort from 'get-port';
-import { existsSync } from 'fs';
+import { spawn } from 'node:child_process';
+import { readFile, readdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { execa } from 'execa';
-import { execSync } from 'child_process';
+import getPort from 'get-port';
+import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 
-describe('create mastra', () => {
-  let fixturePath: string;
-  let projectPath: string;
+const tag = inject('tag');
+const registry = inject('registry');
+const publishedVersions = inject('publishedVersions');
+const testRoot = join(tmpdir(), `mastra-create-e2e-${process.pid}`);
+const createMastraProject = join(testRoot, 'create-mastra-managed');
+const mastraProject = join(testRoot, 'mastra-managed');
+const emptyProject = join(testRoot, 'empty-project');
+const registryEnv = {
+  ...process.env,
+  npm_config_registry: registry,
+  pnpm_config_registry: registry,
+  MASTRA_TELEMETRY_DISABLED: '1',
+};
+const generatedMastraPackages = [
+  'mastra',
+  '@mastra/core',
+  '@mastra/duckdb',
+  '@mastra/libsql',
+  '@mastra/memory',
+  '@mastra/observability',
+] as const;
 
-  beforeAll(
-    async () => {
-      const tag = inject('tag');
-      const registry = inject('registry');
+async function runCreate(binary: 'create-mastra' | 'mastra', projectName: string, extraArgs: string[] = []) {
+  const packageSpec = `${binary}@${tag}`;
+  const args = ['dlx', `--config.registry=${registry}`, packageSpec];
+  if (binary === 'mastra') {
+    args.push('create');
+  }
+  args.push(projectName, '--no-skills', '--no-git', ...extraArgs);
 
-      console.log('registry', registry);
-      console.log('tag', tag);
+  await execa('pnpm', args, {
+    cwd: testRoot,
+    env: registryEnv,
+    timeout: 5 * 60_000,
+    stdio: 'inherit',
+  });
+}
 
-      fixturePath = await mkdtemp(join(tmpdir(), 'mastra-create-test-'));
-      projectPath = join(fixturePath, 'project');
-      execSync(
-        `pnpm --config.trust-policy=off --config.block-exotic-subdeps=false --config.minimum-release-age=0 dlx create-mastra@${tag} -c agents,tools,workflows,scorers -l openai -e project`,
-        {
-          cwd: fixturePath,
-          stdio: ['inherit', 'inherit', 'inherit'],
-          env: {
-            ...process.env,
-            pnpm_config_registry: registry,
-            pnpm_config_minimum_release_age: '0',
-          },
-        },
-      );
-    },
-    10 * 60 * 1000,
+async function readJson(path: string) {
+  return JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>;
+}
+
+async function getInstalledVersions(projectPath: string) {
+  const result = await execa('pnpm', ['list', '--depth', '0', '--json'], {
+    cwd: projectPath,
+    env: registryEnv,
+  });
+  const roots = JSON.parse(result.stdout) as Array<{
+    dependencies?: Record<string, { version?: string }>;
+    devDependencies?: Record<string, { version?: string }>;
+  }>;
+  const root = roots.find(candidate => {
+    const dependencies = { ...candidate.dependencies, ...candidate.devDependencies };
+    return generatedMastraPackages.some(packageName => packageName in dependencies);
+  });
+  if (!root) throw new Error(`Could not find installed Mastra dependencies in ${projectPath}`);
+  const dependencies = { ...root.dependencies, ...root.devDependencies };
+  return Object.fromEntries(
+    generatedMastraPackages.map(packageName => [packageName, dependencies[packageName]?.version]),
   );
+}
+
+async function normalizedManagedProject(projectPath: string) {
+  const manifest = await readJson(join(projectPath, 'package.json'));
+  delete manifest.name;
+  for (const sectionName of ['dependencies', 'devDependencies'] as const) {
+    const section = manifest[sectionName] as Record<string, unknown> | undefined;
+    for (const packageName of generatedMastraPackages) {
+      if (section?.[packageName]) section[packageName] = '<mastra-version>';
+    }
+  }
+
+  return {
+    manifest,
+    agent: await readFile(join(projectPath, 'src/mastra/agents/agent.ts'), 'utf8'),
+    index: await readFile(join(projectPath, 'src/mastra/index.ts'), 'utf8'),
+    envExample: await readFile(join(projectPath, '.env.example'), 'utf8'),
+  };
+}
+
+async function waitForServer(url: string, timeout = 60_000) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) return response;
+    } catch {
+      // The server is still starting.
+    }
+    await delay(500);
+  }
+  throw new Error(`Timed out waiting for ${url}`);
+}
+
+async function waitForServerStop(url: string, timeout = 5_000) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    try {
+      await fetch(url, { signal: AbortSignal.timeout(500) });
+    } catch {
+      return;
+    }
+    await delay(100);
+  }
+  throw new Error(`Timed out waiting for ${url} to stop`);
+}
+
+describe('create-mastra published binaries', () => {
+  beforeAll(async () => {
+    await execa('rm', ['-rf', testRoot]);
+    await execa('mkdir', ['-p', testRoot]);
+    await runCreate('create-mastra', 'create-mastra-managed', ['--llm', 'openai']);
+    await runCreate('mastra', 'mastra-managed', ['--llm', 'openai']);
+    await runCreate('create-mastra', 'empty-project', ['--empty']);
+  }, 15 * 60_000);
 
   afterAll(async () => {
-    try {
-      await rm(fixturePath, {
-        force: true,
-      });
-    } catch {}
+    await execa('rm', ['-rf', testRoot]);
   });
 
-  it('folder should exist', async () => {
-    expect(existsSync(join(projectPath, 'src', 'mastra', 'index.ts'))).toBe(true);
+  it('creates equivalent managed agent-harness projects through both binaries', async () => {
+    expect(await normalizedManagedProject(createMastraProject)).toEqual(await normalizedManagedProject(mastraProject));
+
+    for (const projectPath of [createMastraProject, mastraProject]) {
+      expect(await getInstalledVersions(projectPath)).toEqual(publishedVersions);
+      expect(await readFile(join(projectPath, 'src/mastra/agents/agent.ts'), 'utf8')).toContain("id: 'agent'");
+      await expect(readFile(join(projectPath, '.env'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    }
   });
 
-  describe('dev', () => {
-    let port: number;
-    let proc: ReturnType<typeof execa> | undefined;
-    beforeAll(
-      async () => {
-        port = await getPort();
-        proc = execa('pnpm', ['dev'], {
-          cwd: projectPath,
-          env: {
-            PORT: port.toString(),
-          },
-        });
-
-        await new Promise<void>((resolve, reject) => {
-          console.log('waiting for server to start');
-
-          const timeout = setTimeout(() => {
-            reject(new Error('Dev server did not start in time'));
-          }, 30000); // 30s safety
-
-          proc!.stderr?.on('data', data => {
-            const output = data?.toString() ?? '';
-            console.error(output);
-
-            const errorPatterns = ['error', 'err', 'failed', 'enoent', 'module_not_found'];
-            if (errorPatterns.some(pattern => output.toLowerCase().includes(pattern))) {
-              clearTimeout(timeout);
-              reject(new Error('failed to start dev: ' + output));
-            }
-          });
-
-          proc!.stdout?.on('data', data => {
-            const output = data?.toString() ?? '';
-            console.log(output);
-
-            if (output.includes(`http://localhost:${port}`)) {
-              clearTimeout(timeout);
-              resolve();
-            }
-          });
-        });
-      },
-      60 * 10 * 1000,
-    );
-
-    afterAll(async () => {
-      if (proc) {
-        proc.kill('SIGTERM');
-      }
+  it('serves Studio and the agent API from the managed project', async () => {
+    const port = await getPort();
+    const server = spawn(process.execPath, [join(createMastraProject, 'node_modules/mastra/dist/index.js'), 'dev'], {
+      cwd: createMastraProject,
+      env: { ...registryEnv, PORT: String(port) },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: process.platform !== 'win32',
+    });
+    let serverOutput = '';
+    server.stdout?.on('data', (chunk: unknown) => {
+      serverOutput += String(chunk);
+    });
+    server.stderr?.on('data', (chunk: unknown) => {
+      serverOutput += String(chunk);
     });
 
-    it(
-      'should open studio',
-      {
-        timeout: 60 * 1000,
-      },
-      async () => {
-        const response = await fetch(`http://localhost:${port}`);
-        expect(response.status).toBe(200);
-      },
-    );
+    const serverExit = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => {
+      server.once('exit', (code, signal) => resolve({ code, signal }));
+    });
+    const serverExited = serverExit.then(({ code, signal }) => {
+      throw new Error(`Mastra dev exited before startup (code ${code}, signal ${signal})`);
+    });
 
-    it(
-      'should fetch agents',
-      {
-        timeout: 60 * 1000,
-      },
-      async () => {
-        const response = await fetch(`http://localhost:${port}/api/agents`);
-        expect(response.status).toBe(200);
-        await expect(response.json()).resolves.toMatchInlineSnapshot(`
-          {
-            "weather-agent": {
-              "agents": {},
-              "browserTools": [],
-              "defaultGenerateOptionsLegacy": {},
-              "defaultOptions": {},
-              "defaultStreamOptionsLegacy": {},
-              "description": "",
-              "hasDraft": false,
-              "id": "weather-agent",
-              "inputProcessors": [],
-              "instructions": "You are a helpful weather assistant that provides accurate weather information and can help planning activities based on the weather.
+    try {
+      const studio = await Promise.race([waitForServer(`http://localhost:${port}`), serverExited]).catch(error => {
+        throw new Error(`${String(error)}\n${serverOutput}`);
+      });
+      expect(await studio.text()).toContain('<div id="root"></div>');
 
-          Your primary function is to help users get weather details for specific locations. When responding:
-          - Always ask for a location if none is provided
-          - If the location name isn't in English, please translate it
-          - If giving a location with multiple parts (e.g. "New York, NY"), use the most relevant part (e.g. "New York")
-          - Include relevant details like humidity, wind conditions, and precipitation
-          - Keep responses concise but informative
-          - If the user asks for activities and provides the weather forecast, suggest activities based on the weather forecast.
-          - If the user asks for activities, respond in the format they request.
-
-          Use the weatherTool to fetch current weather data.",
-              "modelId": "gpt-5-mini",
-              "modelVersion": "v2",
-              "name": "Weather Agent",
-              "outputProcessors": [],
-              "provider": "openai",
-              "skills": [],
-              "source": "code",
-              "supportsMemory": true,
-              "tools": {
-                "weatherTool": {
-                  "description": "Get current weather for a location",
-                  "id": "get-weather",
-                  "inputSchema": "{"json":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"location":{"type":"string","description":"City name"}},"required":["location"],"additionalProperties":false}}",
-                  "outputSchema": "{"json":{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"temperature":{"type":"number"},"feelsLike":{"type":"number"},"humidity":{"type":"number"},"windSpeed":{"type":"number"},"windGust":{"type":"number"},"conditions":{"type":"string"},"location":{"type":"string"}},"required":["temperature","feelsLike","humidity","windSpeed","windGust","conditions","location"],"additionalProperties":false}}",
-                  "requireApproval": false,
-                },
-              },
-              "workflows": {},
-              "workspaceTools": [],
-            },
+      const agentsResponse = await waitForServer(`http://localhost:${port}/api/agents`);
+      const agents = (await agentsResponse.json()) as Record<string, { name?: string }>;
+      expect(agents.agent?.name).toBe('Agent');
+    } finally {
+      if (server.exitCode === null && server.signalCode === null && server.pid) {
+        if (process.platform === 'win32') {
+          server.kill('SIGTERM');
+        } else {
+          try {
+            process.kill(-server.pid, 'SIGTERM');
+          } catch (error) {
+            if ((error as { code?: string }).code !== 'ESRCH') {
+              console.warn('Failed to terminate the Mastra dev process:', error);
+            }
           }
-        `);
-      },
+        }
+      }
+
+      const stopped = await Promise.race([serverExit.then(() => true), delay(5_000).then(() => false)]);
+      if (!stopped && server.exitCode === null && server.signalCode === null) {
+        if (process.platform === 'win32') {
+          server.kill('SIGKILL');
+        } else if (server.pid) {
+          try {
+            process.kill(-server.pid, 'SIGKILL');
+          } catch (error) {
+            if ((error as { code?: string }).code !== 'ESRCH') {
+              console.warn('Failed to kill the Mastra dev process:', error);
+            }
+          }
+        }
+        await serverExit;
+      }
+      await waitForServerStop(`http://localhost:${port}`);
+    }
+  }, 90_000);
+
+  it('creates the exact provider-free empty scaffold', async () => {
+    const entries = (await readdir(emptyProject)).sort();
+    expect(entries).toEqual(
+      [
+        '.gitignore',
+        'node_modules',
+        'package.json',
+        'pnpm-lock.yaml',
+        'pnpm-workspace.yaml',
+        'src',
+        'tsconfig.json',
+      ].sort(),
     );
+
+    const manifest = await readJson(join(emptyProject, 'package.json'));
+    expect(manifest).toEqual({
+      name: 'empty-project',
+      version: '1.0.0',
+      private: true,
+      type: 'module',
+      engines: { node: '>=22.13.0' },
+      scripts: {
+        dev: 'mastra dev',
+        build: 'mastra build',
+        start: 'mastra start',
+      },
+      dependencies: { '@mastra/core': tag },
+      devDependencies: {
+        mastra: tag,
+        typescript: '^6.0.3',
+        '@types/node': 'latest',
+      },
+    });
+    expect(await readFile(join(emptyProject, 'src/mastra/index.ts'), 'utf8')).toBe(
+      "import { Mastra } from '@mastra/core/mastra';\n\nexport const mastra = new Mastra({});\n",
+    );
+    expect(await getInstalledVersions(emptyProject)).toMatchObject({
+      mastra: publishedVersions.mastra,
+      '@mastra/core': publishedVersions['@mastra/core'],
+    });
+    await expect(readFile(join(emptyProject, 'README.md'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readFile(join(emptyProject, '.env'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(readdir(join(emptyProject, 'src/mastra/agents'))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });

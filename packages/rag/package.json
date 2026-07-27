@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "2.4.1",
+  "version": "2.4.2",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -28,7 +28,8 @@
     "build:watch": "pnpm build:lib --watch",
     "vitest": "vitest",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "author": "",
   "license": "Apache-2.0",
@@ -55,7 +56,7 @@
     "@vitest/ui": "catalog:",
     "ai": "^4.3.19",
     "dotenv": "^17.4.2",
-    "eslint": "^10.4.1",
+    "eslint": "^10.7.0",
     "tsup": "^8.5.1",
     "tsx": "catalog:",
     "typescript": "catalog:",

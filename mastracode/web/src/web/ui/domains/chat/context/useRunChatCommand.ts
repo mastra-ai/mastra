@@ -1,12 +1,13 @@
 import type { ToolCategory } from '@mastra/client-js';
 
-import { useActiveProjectContext } from '../../workspaces';
+import { useParams } from 'react-router';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
   useResumeAgentControllerGoalMutation,
 } from '../../../../../shared/hooks/useAgentControllerGoalMutations';
 import { useAbortAgentControllerMutation } from '../../../../../shared/hooks/useAgentControllerRunMutations';
+import { useFactoryQuery } from '../../../../../shared/hooks/useFactories';
 import { SLASH_COMMANDS } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { useChatModes } from './useChatModes';
@@ -20,8 +21,9 @@ import { useChatTranscript } from './useChatTranscript';
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 
 export function useRunChatCommand() {
-  const { activeProject } = useActiveProjectContext();
-  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factoryQuery = useFactoryQuery(factoryId);
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { busy, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
   const { threadId } = useChatConnection();
@@ -85,8 +87,8 @@ export function useRunChatCommand() {
       case 'settings':
         pushNotice(
           [
-            `Project: ${activeProject?.name ?? '(none)'}`,
-            `Path: ${activeProject?.path ?? '(default workspace)'}`,
+            `Factory: ${factoryQuery.data?.name ?? '(none)'}`,
+            `Path: ${projectPath ?? '(no workspace selected)'}`,
             `Mode: ${activeModeId ?? '—'}`,
             `Model: ${activeModelId ?? '—'}`,
             `Thread: ${threadId ?? '—'}`,

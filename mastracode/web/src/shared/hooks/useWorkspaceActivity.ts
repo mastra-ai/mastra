@@ -17,8 +17,8 @@ function isActiveWorkspaceThread(thread: AgentControllerThreadInfo, projectPath:
 interface WorkspaceActivityOptions {
   agentControllerId: string;
   resourceId: string;
-  /** The active worktree's path — the session scope the listing is read through. */
-  projectPath: string | undefined;
+  /** Session scope for the listing read — the active worktree's project path. */
+  scope: string | undefined;
   worktreePaths: string[];
   baseUrl?: string;
   enabled: boolean;
@@ -33,7 +33,7 @@ interface WorkspaceActivityOptions {
 function useWorkspaceThreadsQuery({
   agentControllerId,
   resourceId,
-  projectPath,
+  scope,
   baseUrl,
   enabled,
 }: Omit<WorkspaceActivityOptions, 'worktreePaths'>): AgentControllerThreadInfo[] {
@@ -46,7 +46,7 @@ function useWorkspaceThreadsQuery({
       const { session } = createAgentControllerClient({
         agentControllerId,
         resourceId,
-        scope: projectPath,
+        scope,
         baseUrl,
       });
       return requireAgentControllerSession(session).listThreads();
@@ -67,18 +67,33 @@ export function useWorkspaceActivity(options: WorkspaceActivityOptions): Record<
 }
 
 /**
- * Maps each worktree to the title of its most recent titled thread. A factory
- * worktree holds a single conversation, so this is the session's display name;
- * paths with no titled thread yet are omitted (callers fall back to the branch).
+ * A worktree's conversation thread: the most recent *titled* thread, falling
+ * back to the most recent thread of any kind. Bringing a session online can
+ * seed an empty untitled thread whose `updatedAt` sorts newer than the real
+ * conversation, so recency alone is not a reliable signal — titled threads win
+ * regardless of age. Both the sidebar row label and its navigation target use
+ * this rule so they can never point at different threads.
+ */
+export function conversationThread<T extends { title?: string | null; updatedAt?: string; createdAt?: string }>(
+  threads: T[],
+): T | undefined {
+  const sorted = [...threads].sort((a, b) =>
+    (b.updatedAt ?? b.createdAt ?? '').localeCompare(a.updatedAt ?? a.createdAt ?? ''),
+  );
+  return sorted.find(thread => thread.title?.trim()) ?? sorted[0];
+}
+
+/**
+ * Maps each worktree to its conversation thread's title. A factory worktree
+ * holds a single conversation, so this is the session's display name; paths
+ * with no titled thread yet are omitted (callers fall back to the branch).
  */
 export function useWorkspaceThreadTitles(options: WorkspaceActivityOptions): Record<string, string> {
   const threads = useWorkspaceThreadsQuery(options);
   const titles: Record<string, string> = {};
   for (const path of options.worktreePaths) {
-    const titled = threads
-      .filter(thread => thread.tags?.projectPath === path && thread.title?.trim())
-      .sort((a, b) => (b.updatedAt ?? b.createdAt ?? '').localeCompare(a.updatedAt ?? a.createdAt ?? ''));
-    const title = titled[0]?.title?.trim();
+    const thread = conversationThread(threads.filter(t => t.tags?.projectPath === path));
+    const title = thread?.title?.trim();
     if (title) titles[path] = title;
   }
   return titles;

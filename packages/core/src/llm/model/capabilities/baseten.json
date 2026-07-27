@@ -6,6 +6,8 @@
     "thinkingmachines/inkling"
   ],
   "temperature": [
+    "MiniMaxAI/MiniMax-M2.5",
+    "deepseek-ai/DeepSeek-V3.1",
     "deepseek-ai/DeepSeek-V4-Pro",
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
@@ -17,7 +19,8 @@
     "zai-org/GLM-4.7",
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.2-Fast"
   ],
   "structuredOutput": [
     "deepseek-ai/DeepSeek-V4-Pro",
@@ -31,6 +34,7 @@
     "zai-org/GLM-4.7",
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
-    "zai-org/GLM-5.2"
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.2-Fast"
   ]
 }

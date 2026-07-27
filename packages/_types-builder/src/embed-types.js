@@ -1,8 +1,8 @@
-import fs from 'fs/promises';
-import path from 'path';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { Extractor, ExtractorConfig } from '@microsoft/api-extractor';
 import { Project } from 'ts-morph';
-import { createReadStream } from 'fs';
+import { createReadStream } from 'node:fs';
 import { Writable } from 'node:stream';
 
 export async function embedTypes(file, rootDir, bundledPackages) {

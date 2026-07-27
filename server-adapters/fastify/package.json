@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastify",
-  "version": "1.4.8-alpha.4",
+  "version": "1.4.11-alpha.0",
   "description": "Mastra Fastify adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -22,7 +22,8 @@
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm build --watch",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
@@ -30,7 +31,7 @@
     "@mastra/server": "workspace:*"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.111",
+    "@ai-sdk/openai": "^2.0.114",
     "@fastify/swagger": "^9.7.0",
     "@fastify/swagger-ui": "^5.2.6",
     "@internal/lint": "workspace:*",
@@ -43,7 +44,7 @@
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
     "@types/node": "22.20.1",
-    "eslint": "^10.4.1",
+    "eslint": "^10.7.0",
     "fastify": "^5.8.5",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
