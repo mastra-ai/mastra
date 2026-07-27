@@ -1,5 +1,6 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Lock } from 'lucide-react';
+import { useLocation } from 'react-router';
 import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
 import { isAuthenticated } from '../types';
 import { LoginButton } from './login-button';
@@ -33,6 +34,7 @@ export type AuthRequiredProps = {
  */
 export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/signup' }: AuthRequiredProps) {
   const { data: capabilities, isLoading } = useAuthCapabilities();
+  const { pathname } = useLocation();
 
   // While loading, show nothing (or could show a skeleton)
   if (isLoading) {
@@ -46,6 +48,11 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
 
   // If user is authenticated, render children
   if (isAuthenticated(capabilities)) {
+    return <>{children}</>;
+  }
+
+  // Header-based auth has no login flow, so Settings must remain available for configuring its request header.
+  if (!capabilities.login && pathname === '/settings') {
     return <>{children}</>;
   }
 
