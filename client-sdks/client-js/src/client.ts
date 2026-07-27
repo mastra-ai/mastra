@@ -203,6 +203,7 @@ import type {
   RunScheduleResponse,
 } from './types';
 import { base64RequestContext, buildTenancyQuery, parseClientRequestContext, requestContextQueryString } from './utils';
+import { createSseJsonTransform } from './utils/stream-transforms';
 
 export class MastraClient extends BaseResource {
   private observability: Observability;
@@ -2191,49 +2192,7 @@ export class MastraClient extends BaseResource {
       throw new Error('Response body is null');
     }
 
-    //using undefined instead of empty string to avoid parsing errors
-    let failedChunk: string | undefined = undefined;
-    const decoder = new TextDecoder();
-
-    const processDecoded = (decoded: string, controller: TransformStreamDefaultController) => {
-      const chunks = decoded.split('\n\n');
-
-      for (const chunk of chunks) {
-        if (chunk) {
-          const cleanChunk = chunk.substring('data: '.length);
-          const newChunk: string = failedChunk ? failedChunk + cleanChunk : cleanChunk;
-          try {
-            const parsedChunk = JSON.parse(newChunk);
-            controller.enqueue(parsedChunk);
-            failedChunk = undefined;
-          } catch {
-            failedChunk = newChunk;
-          }
-        }
-      }
-    };
-
-    return response.body.pipeThrough(
-      new TransformStream({
-        async transform(chunk, controller) {
-          try {
-            processDecoded(decoder.decode(chunk, { stream: true }), controller);
-          } catch {
-            // Silently ignore processing errors
-          }
-        },
-        flush(controller) {
-          try {
-            const decoded = decoder.decode();
-            if (decoded) {
-              processDecoded(decoded, controller);
-            }
-          } catch {
-            // Silently ignore processing errors
-          }
-        },
-      }),
-    );
+    return response.body.pipeThrough(createSseJsonTransform());
   }
 
   /**

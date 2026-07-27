@@ -4,6 +4,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ClientOptions, WorkflowRunResult, StreamVNextChunkType, TimeTravelParams } from '../types';
 
 import { parseClientRequestContext } from '../utils';
+import { createRecordSeparatorJsonTransform } from '../utils/stream-transforms';
 import { BaseResource } from './base';
 
 /**
@@ -20,8 +21,6 @@ function deserializeWorkflowError<T extends WorkflowRunResult>(result: T): T {
   return result;
 }
 
-const RECORD_SEPARATOR = '\x1E';
-
 export class Run extends BaseResource {
   constructor(
     options: ClientOptions,
@@ -31,51 +30,8 @@ export class Run extends BaseResource {
     super(options);
   }
 
-  /**
-   * Creates a transform stream that parses RECORD_SEPARATOR-delimited JSON chunks
-   */
   private createChunkTransformStream<T = StreamVNextChunkType>(): TransformStream<ArrayBuffer, T> {
-    //using undefined instead of empty string to avoid parsing errors
-    let failedChunk: string | undefined = undefined;
-    const decoder = new TextDecoder();
-
-    const processDecoded = (decoded: string, controller: TransformStreamDefaultController<T>) => {
-      const chunks = decoded.split(RECORD_SEPARATOR);
-
-      for (const chunk of chunks) {
-        if (chunk) {
-          const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-          try {
-            const parsedChunk = JSON.parse(newChunk);
-            controller.enqueue(parsedChunk);
-            failedChunk = undefined;
-          } catch {
-            failedChunk = newChunk;
-          }
-        }
-      }
-    };
-
-    return new TransformStream<ArrayBuffer, T>({
-      start() {},
-      async transform(chunk, controller) {
-        try {
-          processDecoded(decoder.decode(chunk, { stream: true }), controller);
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-      flush(controller) {
-        try {
-          const decoded = decoder.decode();
-          if (decoded) {
-            processDecoded(decoded, controller);
-          }
-        } catch {
-          // Silently ignore processing errors
-        }
-      },
-    });
+    return createRecordSeparatorJsonTransform<T>();
   }
 
   /**
