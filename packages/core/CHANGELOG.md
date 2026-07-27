@@ -1,5 +1,168 @@
 # @mastra/core
 
+## 1.54.0-alpha.0
+
+### Minor Changes
+
+- Added exact metadata filtering to message history queries across Memory APIs and supported storage providers. ([#19991](https://github.com/mastra-ai/mastra/pull/19991))
+
+  ```ts
+  const messages = await memory.recall({
+    threadId: 'thread-1',
+    filter: {
+      metadata: {
+        status: 'done',
+        priority: 'high',
+      },
+    },
+  });
+  ```
+
+  Multiple fields use AND semantics. Supported values are strings, finite numbers, booleans, and `null`.
+
+## 1.53.0
+
+### Minor Changes
+
+- Added a `readOnly` option to `NativeSandboxConfig` to restrict the local sandbox's working directory to read-only access on macOS (Seatbelt) and Linux (Bubblewrap). ([#18999](https://github.com/mastra-ai/mastra/pull/18999))
+
+  **Usage Example:**
+
+  ```typescript
+  import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core';
+
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: './workspace', readOnly: true }),
+    sandbox: new LocalSandbox({
+      workingDirectory: './workspace',
+      isolation: 'bwrap', // or 'seatbelt'
+      nativeSandbox: {
+        readOnly: true,
+      },
+    }),
+  });
+  ```
+
+- Added `resolveThreadId` to `ChannelConfig`: resolve the internal Mastra thread id before a channel thread is created, mirroring `resolveResourceId`. The hook runs after `resolveResourceId` (the resolved owner is on the context) and only for newly-created threads — existing threads keep their stored id. This lets a host align channel thread ids with ids it controls, e.g. give the thread the same id as the session it belongs to: ([#20147](https://github.com/mastra-ai/mastra/pull/20147))
+
+  ```ts
+  const channels = new AgentChannels({
+    adapters,
+    resolveResourceId: async ctx => resolveSessionId(ctx),
+    resolveThreadId: ({ resourceId, defaultThreadId }) => (isSessionId(resourceId) ? resourceId : defaultThreadId),
+  });
+  ```
+
+- Channel reaction tools (`add_reaction`, `remove_reaction`) are no longer injected into a channel-bearing agent's toolset automatically. Replies are unaffected — they stream back to the channel without a tool. If you want your agent to react to channel messages, add the tools explicitly: ([#20152](https://github.com/mastra-ai/mastra/pull/20152))
+
+  ```ts
+  const channels = new AgentChannels({
+    adapters: { slack: createSlackAdapter() },
+  });
+
+  const agent = new Agent({
+    name: 'assistant',
+    model: 'openai/gpt-5',
+    channels,
+    tools: { ...channels.getTools() },
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`c8d8a01`](https://github.com/mastra-ai/mastra/commit/c8d8a010ee2efe2b7bf4d07707382c34c87b14e4))
+
+- Fixed sub-agent tool approvals resuming the wrong run. When a sub-agent suspends for approval and the bot restarts, the approval handler now correctly resumes the parent agent's run instead of the sub-agent's. ([#19769](https://github.com/mastra-ai/mastra/pull/19769))
+
+- Removed redundant non-null assertions from core control flow. ([#20140](https://github.com/mastra-ai/mastra/pull/20140))
+
+- Fixed thread title generation receiving each conversation message twice. The duplicated transcript confused small title models into replying to the conversation instead of producing a title, so threads could get refusal text as their title. ([#20141](https://github.com/mastra-ai/mastra/pull/20141))
+
+- Improved Factory work-item concurrency by replacing distributed advisory locks with atomic claims, idempotent replay, and serializable relationship transactions. ([#20135](https://github.com/mastra-ai/mastra/pull/20135))
+
+- Keep deprecated provider models in the model registry instead of dropping them ([#20220](https://github.com/mastra-ai/mastra/pull/20220))
+
+  The models.dev gateway filtered out every model marked `status: 'deprecated'` upstream. That status means "still served, scheduled for retirement" rather than "removed", so filtering it silently degraded models that still work.
+
+  A dropped model lost its capability data: `modelSupportsAttachments`, `modelSupportsTemperature`, and `modelSupportsStructuredOutput` return `false` for a model that is missing from a known provider's capability file, rather than `undefined`. A model that genuinely supports attachments therefore reported that it does not. Dropped models also lost their per-model endpoint/shape/SDK overrides, so a model that needs a non-default endpoint or SDK routed with provider defaults instead. They also disappeared from the generated model-id union used for editor autocomplete, and from any surface that lists a provider's models.
+
+  Deprecated models are now retained in `models`, in the generated types, and in the capability and override data. They are additionally reported through a new optional `deprecatedModels` field on `ProviderConfig`, so surfaces that offer models for new selection can hide or mark them.
+
+- Fixed `isTaskComplete` completion checks leaking the internal scorer report (`#### Completion Check Results`) into the agent's final answer and saved conversation history. ([#19951](https://github.com/mastra-ai/mastra/pull/19951))
+
+  When completion scorers passed on the first check, the report was appended after the model's answer and became the last response message. Agents with memory (or any output processors) then resolved `stream.text` and the persisted assistant message to the report instead of the real answer.
+
+  ```ts
+  const stream = await agent.stream('What is the capital of France?', {
+    memory: { thread, resource },
+    isTaskComplete: { scorers: [myScorer] },
+  });
+
+  // Before: '#### Completion Check Results ...'
+  // After:  'The capital of France is Paris.'
+  console.log(await stream.text);
+  ```
+
+  Scorer feedback is now only added to the conversation when a check fails, where it steers the next iteration. Failing checks still retry with feedback exactly as before. Fixes [#19875](https://github.com/mastra-ai/mastra/issues/19875).
+
+- Fixed AI SDK v7 providers receiving screenshot and file tool results in an older content format. Tool result media is now sent in the file content shape expected by v7 providers such as Bedrock. ([#19755](https://github.com/mastra-ai/mastra/pull/19755))
+
+## 1.53.0-alpha.4
+
+### Minor Changes
+
+- Added a `readOnly` option to `NativeSandboxConfig` to restrict the local sandbox's working directory to read-only access on macOS (Seatbelt) and Linux (Bubblewrap). ([#18999](https://github.com/mastra-ai/mastra/pull/18999))
+
+  **Usage Example:**
+
+  ```typescript
+  import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core';
+
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: './workspace', readOnly: true }),
+    sandbox: new LocalSandbox({
+      workingDirectory: './workspace',
+      isolation: 'bwrap', // or 'seatbelt'
+      nativeSandbox: {
+        readOnly: true,
+      },
+    }),
+  });
+  ```
+
+### Patch Changes
+
+- Removed redundant non-null assertions from core control flow. ([#20140](https://github.com/mastra-ai/mastra/pull/20140))
+
+- Improved Factory work-item concurrency by replacing distributed advisory locks with atomic claims, idempotent replay, and serializable relationship transactions. ([#20135](https://github.com/mastra-ai/mastra/pull/20135))
+
+- Keep deprecated provider models in the model registry instead of dropping them ([#20220](https://github.com/mastra-ai/mastra/pull/20220))
+
+  The models.dev gateway filtered out every model marked `status: 'deprecated'` upstream. That status means "still served, scheduled for retirement" rather than "removed", so filtering it silently degraded models that still work.
+
+  A dropped model lost its capability data: `modelSupportsAttachments`, `modelSupportsTemperature`, and `modelSupportsStructuredOutput` return `false` for a model that is missing from a known provider's capability file, rather than `undefined`. A model that genuinely supports attachments therefore reported that it does not. Dropped models also lost their per-model endpoint/shape/SDK overrides, so a model that needs a non-default endpoint or SDK routed with provider defaults instead. They also disappeared from the generated model-id union used for editor autocomplete, and from any surface that lists a provider's models.
+
+  Deprecated models are now retained in `models`, in the generated types, and in the capability and override data. They are additionally reported through a new optional `deprecatedModels` field on `ProviderConfig`, so surfaces that offer models for new selection can hide or mark them.
+
+- Fixed `isTaskComplete` completion checks leaking the internal scorer report (`#### Completion Check Results`) into the agent's final answer and saved conversation history. ([#19951](https://github.com/mastra-ai/mastra/pull/19951))
+
+  When completion scorers passed on the first check, the report was appended after the model's answer and became the last response message. Agents with memory (or any output processors) then resolved `stream.text` and the persisted assistant message to the report instead of the real answer.
+
+  ```ts
+  const stream = await agent.stream('What is the capital of France?', {
+    memory: { thread, resource },
+    isTaskComplete: { scorers: [myScorer] },
+  });
+
+  // Before: '#### Completion Check Results ...'
+  // After:  'The capital of France is Paris.'
+  console.log(await stream.text);
+  ```
+
+  Scorer feedback is now only added to the conversation when a check fails, where it steers the next iteration. Failing checks still retry with feedback exactly as before. Fixes [#19875](https://github.com/mastra-ai/mastra/issues/19875).
+
+- Fixed AI SDK v7 providers receiving screenshot and file tool results in an older content format. Tool result media is now sent in the file content shape expected by v7 providers such as Bedrock. ([#19755](https://github.com/mastra-ai/mastra/pull/19755))
+
 ## 1.53.0-alpha.3
 
 ## 1.53.0-alpha.2

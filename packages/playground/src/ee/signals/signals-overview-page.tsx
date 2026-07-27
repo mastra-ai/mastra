@@ -1,3 +1,5 @@
+import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
+import type { DateRangePreset } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
 import { useState } from 'react';
@@ -15,14 +17,24 @@ function formatSignalName(signalName: TraceSignalName) {
   return signalName.charAt(0).toUpperCase() + signalName.slice(1);
 }
 
-function AgentSelector({
+function SignalsControls({
   entities,
   selectedEntityId,
   onEntityChange,
+  datePreset,
+  dateFrom,
+  dateTo,
+  onDatePresetChange,
+  onDateChange,
 }: {
   entities: ThemeLearningEntity[];
   selectedEntityId: string;
   onEntityChange: (entityId: string) => void;
+  datePreset: DateRangePreset;
+  dateFrom?: Date;
+  dateTo?: Date;
+  onDatePresetChange: (preset: DateRangePreset) => void;
+  onDateChange: (value: Date | undefined, type: 'from' | 'to') => void;
 }) {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-3 px-4 pt-4 lg:px-6 lg:pt-6">
@@ -41,6 +53,16 @@ function AgentSelector({
           ))}
         </SelectContent>
       </Select>
+      <span className="text-neutral4 text-xs font-medium">Snapshot date</span>
+      <DateTimeRangePicker
+        preset={datePreset}
+        onPresetChange={onDatePresetChange}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onDateChange={onDateChange}
+        presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+        size="sm"
+      />
     </div>
   );
 }
@@ -48,6 +70,13 @@ function AgentSelector({
 export function SignalsOverviewPage() {
   const entitiesQuery = useThemeEntities('agent');
   const [selectedEntityId, setSelectedEntityId] = useState<string>();
+  const [datePreset, setDatePreset] = useState<DateRangePreset>('last-7d');
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(() => new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+  const [dateTo, setDateTo] = useState<Date>();
+  const handleDateChange = (value: Date | undefined, type: 'from' | 'to') => {
+    if (type === 'from') setDateFrom(value);
+    else setDateTo(value);
+  };
 
   if (entitiesQuery.isPending) {
     return <SignalsLoadingSkeleton />;
@@ -71,13 +100,24 @@ export function SignalsOverviewPage() {
 
   return (
     <>
-      <AgentSelector entities={entities} selectedEntityId={entity.entityId} onEntityChange={setSelectedEntityId} />
+      <SignalsControls
+        entities={entities}
+        selectedEntityId={entity.entityId}
+        onEntityChange={setSelectedEntityId}
+        datePreset={datePreset}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onDatePresetChange={setDatePreset}
+        onDateChange={handleDateChange}
+      />
       {signalNames.length >= 2 ? (
         <SankeySignals
-          key={`${entity.entityId}:${signalNames.join(',')}`}
+          key={`${entity.entityId}:${signalNames.join(',')}:${dateFrom?.toISOString() ?? 'open'}:${dateTo?.toISOString() ?? 'open'}`}
           entityId={entity.entityId}
           entityType="agent"
           signalNames={signalNames}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
         />
       ) : (
         <section

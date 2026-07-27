@@ -71,6 +71,7 @@ export type ProviderModelsMap = {
     'accounts/fireworks/models/gpt-oss-20b',
     'accounts/fireworks/models/kimi-k2p6',
     'accounts/fireworks/models/kimi-k2p7-code',
+    'accounts/fireworks/models/kimi-k3',
     'accounts/fireworks/models/minimax-m2p7',
     'accounts/fireworks/models/minimax-m3',
     'accounts/fireworks/models/qwen3p7-plus',
@@ -78,6 +79,7 @@ export type ProviderModelsMap = {
     'accounts/fireworks/routers/kimi-k2p6-fast',
     'accounts/fireworks/routers/kimi-k2p6-turbo',
     'accounts/fireworks/routers/kimi-k2p7-code-fast',
+    'accounts/fireworks/routers/kimi-k3-fast',
   ];
   readonly wandb: readonly [
     'JetBrains/Mellum2-12B-A2.5B-Instruct',
@@ -1611,6 +1613,7 @@ export type ProviderModelsMap = {
     'kimi-k2.5-free',
     'kimi-k2.6',
     'kimi-k2.7-code',
+    'kimi-k3',
     'laguna-s-2.1-free',
     'ling-2.6-flash-free',
     'ling-3.0-flash-free',

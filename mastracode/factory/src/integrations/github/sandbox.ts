@@ -96,6 +96,23 @@ export function shellQuote(value: string): string {
 }
 
 /**
+ * Default hang guard for sandbox shell commands. Generous by design — large
+ * clones and dependency installs legitimately take minutes; the guard exists
+ * so a wedged sandbox surfaces a failure instead of hanging the request that
+ * triggered materialization forever.
+ */
+const DEFAULT_COMMAND_TIMEOUT_MS = 15 * 60_000;
+/** Branch checkout only fetches one ref — a much tighter budget applies. */
+export const CHECKOUT_COMMAND_TIMEOUT_MS = 5 * 60_000;
+
+interface ShOptions {
+  /** Override the hang-guard budget for this command. */
+  timeoutMs?: number;
+  /** Human-readable phase name included in the timeout error. */
+  phase?: string;
+}
+
+/**
  * A thrown transport-level failure that is worth retrying: remote sandbox
  * providers (e.g. the platform workspace proxy) surface transient 5xx errors
  * as exceptions carrying an HTTP `status` — typically while a freshly
@@ -112,18 +129,48 @@ const SH_RETRIES = 2;
 const SH_RETRY_DELAY_MS = 2000;
 
 /**
- * Run a shell script in the sandbox via `sh -c`. Retries transient
- * transport-level 5xx failures (proxy hiccups while the VM boots) with a
- * short backoff; every script routed through here is safe to re-run.
+ * Run a shell script in the sandbox via `sh -c`, bounded by a hang guard.
+ * Transient transport-level 5xx failures (proxy hiccups while the VM boots)
+ * are retried with a short backoff; every script routed through here is safe
+ * to re-run. Hang-guard timeouts are NOT retried — the budget applies to the
+ * command as a whole.
  */
-async function sh(sandbox: MaterializationSandbox, script: string): Promise<SandboxCommandResult> {
+async function sh(
+  sandbox: MaterializationSandbox,
+  script: string,
+  options: ShOptions = {},
+): Promise<SandboxCommandResult> {
   for (let attempt = 0; ; attempt++) {
     try {
-      return await sandbox.executeCommand('sh', ['-c', script]);
+      return await shOnce(sandbox, script, options);
     } catch (error) {
       if (attempt >= SH_RETRIES || !isTransientTransportError(error)) throw error;
       await new Promise(resolve => setTimeout(resolve, SH_RETRY_DELAY_MS * (attempt + 1)));
     }
+  }
+}
+
+/** Single `sh -c` execution attempt, bounded by the hang guard. */
+async function shOnce(
+  sandbox: MaterializationSandbox,
+  script: string,
+  options: ShOptions,
+): Promise<SandboxCommandResult> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const hangGuard = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const phase = options.phase ? ` during ${options.phase}` : '';
+      reject(new Error(`Sandbox command timed out after ${Math.round(timeoutMs / 1000)}s${phase}.`));
+    }, timeoutMs);
+    timer.unref?.();
+  });
+  try {
+    // Forward the budget to the provider too so it can terminate the wedged
+    // process; the race stays as the outer guard for providers that ignore it.
+    return await Promise.race([sandbox.executeCommand('sh', ['-c', script], { timeout: timeoutMs }), hangGuard]);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -233,6 +280,7 @@ export async function materializeRepo(options: {
       const clone = await sh(
         sandbox,
         `git clone --depth=1 --single-branch --branch ${shellQuote(repoInfo.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,
+        { phase: 'repository clone' },
       );
       if (clone.exitCode !== 0) {
         throw classifyGitFailure(clone, 'clone-failed');
@@ -244,7 +292,7 @@ export async function materializeRepo(options: {
       if (setUrl.exitCode !== 0) {
         throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
       }
-      const pull = await sh(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`);
+      const pull = await sh(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`, { phase: 'repository pull' });
       if (pull.exitCode !== 0) {
         throw classifyGitFailure(pull, 'pull-failed');
       }
@@ -299,6 +347,7 @@ export async function checkoutSessionBranch(
     const fetch = await sh(
       sandbox,
       `git -C ${shellQuote(workdir)} fetch origin ${shellQuote(baseBranch)} && git -C ${shellQuote(workdir)} checkout -b ${shellQuote(branch)} FETCH_HEAD`,
+      { timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS, phase: 'branch checkout' },
     );
     if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'clone-failed');
   } finally {
@@ -702,7 +751,7 @@ export async function runWorktreeSetup(
   worktreePath: string,
   command: string,
 ): Promise<void> {
-  const result = await sh(sandbox, `cd ${shellQuote(worktreePath)} && { ${command}\n}`);
+  const result = await sh(sandbox, `cd ${shellQuote(worktreePath)} && { ${command}\n}`, { phase: 'worktree setup' });
   if (result.exitCode !== 0) {
     const detail = (result.stderr.trim() || result.stdout.trim()).slice(-2000);
     throw new WorktreeError(`Setup command failed (exit ${result.exitCode}): ${detail}`, 'setup-failed');

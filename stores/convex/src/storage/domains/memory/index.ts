@@ -12,6 +12,8 @@ import {
   createStorageErrorId,
   normalizePerPage,
   safelyParseJSON,
+  storageMessageMatchesMetadataFilter,
+  validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 import type {
   BufferedObservationChunk,
@@ -359,6 +361,7 @@ export class MemoryConvex extends MemoryStorage {
 
   async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     // Normalize threadId to array
     const threadIds = Array.isArray(threadId) ? threadId : [threadId];
@@ -410,6 +413,7 @@ export class MemoryConvex extends MemoryStorage {
 
     // Apply date range filter
     rows = filterByDateRange(rows, row => new Date(row.createdAt), filter?.dateRange);
+    rows = rows.filter(row => storageMessageMatchesMetadataFilter(row.content, metadataFilter));
 
     rows.sort((a, b) => {
       const aValue =
@@ -439,7 +443,7 @@ export class MemoryConvex extends MemoryStorage {
       // dateRange filters are active, the rows are a subset and would cause
       // addContextMessages() to compute neighbors from a truncated snapshot.
       const preloadedThreads = new Map<string, StoredMessage[]>();
-      if (!resourceId && !filter?.dateRange) {
+      if (!resourceId && !filter?.dateRange && !metadataFilter) {
         for (const tid of threadIds) {
           preloadedThreads.set(
             tid,
@@ -459,8 +463,9 @@ export class MemoryConvex extends MemoryStorage {
 
     messages = this._sortMessages(messages, field, direction);
 
-    const hasMore =
-      include && include.length > 0
+    const hasMore = metadataFilter
+      ? perPageInput !== false && offset + perPage < totalThreadMessages
+      : include && include.length > 0
         ? new Set(messages.filter(m => m.threadId === threadId).map(m => m.id)).size < totalThreadMessages
         : perPageInput === false
           ? false
@@ -477,6 +482,7 @@ export class MemoryConvex extends MemoryStorage {
 
   async listMessagesByResourceId(args: StorageListMessagesByResourceIdInput): Promise<StorageListMessagesOutput> {
     const { resourceId, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
     const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
 
     // Normalize perPage for query (false → MAX_SAFE_INTEGER, 0 → 0, undefined → 40)
@@ -515,6 +521,7 @@ export class MemoryConvex extends MemoryStorage {
 
     // Apply date range filter
     rows = filterByDateRange(rows, row => new Date(row.createdAt), filter?.dateRange);
+    rows = rows.filter(row => storageMessageMatchesMetadataFilter(row.content, metadataFilter));
 
     rows = this._sortStoredMessages(rows, field, direction);
 

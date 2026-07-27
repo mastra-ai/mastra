@@ -52,12 +52,17 @@ class ChartResizeObserver implements ResizeObserver {
   disconnect() {}
 }
 
-function renderSankeySignals() {
+function renderSankeySignals({ dateFrom, dateTo }: { dateFrom?: Date; dateTo?: Date } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <MemoryRouter>
       <QueryClientProvider client={queryClient}>
-        <SankeySignals entityId="support-agent" signalNames={['goal', 'outcome', 'behavior', 'sentiment']} />
+        <SankeySignals
+          entityId="support-agent"
+          signalNames={['goal', 'outcome', 'behavior', 'sentiment']}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+        />
       </QueryClientProvider>
     </MemoryRouter>,
   );
@@ -409,6 +414,48 @@ describe('SankeySignals', () => {
   });
 
   describe('when a signal distribution is reordered', () => {
+    it('keeps the selected snapshot range on the perspective request', async () => {
+      const snapshotRanges: Array<[string | null, string | null]> = [];
+      const reorderedSnapshot = {
+        ...themeSnapshotsResponse.snapshots[0],
+        snapshotId: 'reordered-snapshot',
+        availableSignals: ['goal', 'behavior', 'outcome', 'sentiment'],
+      };
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          const url = new URL(request.url);
+          const signalNames = url.searchParams.get('signalNames');
+          snapshotRanges.push([url.searchParams.get('from'), url.searchParams.get('to')]);
+          return HttpResponse.json(
+            signalNames === 'goal,behavior,outcome,sentiment'
+              ? { snapshots: [reorderedSnapshot] }
+              : themeSnapshotsResponse,
+          );
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const signalNames = new URL(request.url).searchParams.get('signalNames');
+          return HttpResponse.json(
+            signalNames === 'goal,behavior,outcome,sentiment'
+              ? { ...reorderedFourStageThemeFlowResponse, snapshot: reorderedSnapshot }
+              : fourStageThemeFlowResponse,
+          );
+        }),
+      );
+      renderSankeySignals({
+        dateFrom: new Date('2026-07-01T00:00:00.000Z'),
+        dateTo: new Date('2026-07-08T12:30:00.000Z'),
+      });
+      await screen.findByLabelText('Reorder Outcome');
+
+      await reorderOutcomeAfterBehavior();
+
+      await waitFor(() => expect(snapshotRanges).toHaveLength(2));
+      expect(snapshotRanges).toEqual([
+        ['2026-07-01T00:00:00.000Z', '2026-07-08T12:30:00.000Z'],
+        ['2026-07-01T00:00:00.000Z', '2026-07-08T12:30:00.000Z'],
+      ]);
+    });
+
     it('requests the new perspective only after the column is dropped', async () => {
       const snapshotOrders: string[] = [];
       const flowOrders: string[] = [];

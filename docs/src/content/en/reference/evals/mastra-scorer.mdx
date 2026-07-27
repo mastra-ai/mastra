@@ -129,8 +129,67 @@ const result = await scorer.run({
     type: 'string',
     description: 'Generate reason prompt, if defined (optional).',
   },
+  {
+    name: 'judge',
+    type: 'ScorerJudgeResults',
+    description: 'Execution details for prompt-based scorer steps, if any (optional).',
+  },
 ]}
 />
+
+### Judge results
+
+The optional `judge` record contains details about the judge model calls made by prompt-based scorer steps. Its known keys are `preprocess`, `analyze`, `generateScore`, and `generateReason`. Each key contains an ordered `executions` array.
+
+```typescript
+interface ScorerJudgeExecution {
+  prompt: string
+  output: JSONValue
+  judgeModelId: string
+  judgeProvider?: string
+  usage: ScorerJudgeUsage
+  attemptCount: number
+  modelCallCount: number
+  durationMs: number
+  cost?: {
+    amount: number
+    unit: string
+    source: string
+  }
+}
+
+interface ScorerJudgeUsage {
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+  reasoningTokens?: number
+  cachedInputTokens?: number
+  cacheCreationInputTokens?: number
+}
+
+type ScorerJudgeResults = Partial<
+  Record<
+    'preprocess' | 'analyze' | 'generateScore' | 'generateReason',
+    { executions: ScorerJudgeExecution[] }
+  >
+>
+```
+
+Use the step key to access its judge execution details:
+
+```typescript
+const execution = result.judge?.generateScore?.executions[0]
+
+console.log(execution?.judgeModelId)
+console.log(execution?.usage.totalTokens)
+console.log(execution?.durationMs)
+```
+
+`attemptCount` counts judge invocations, including a structured-output fallback. `modelCallCount` counts the completed model steps across those attempts. `durationMs` covers the full prompt-step execution.
+
+Function steps don't create `judge` entries. Usage in this record belongs to the scorer's judge model, not the agent or workflow being evaluated. The optional `cost` field is present only when the execution directly reports an authoritative cost, source, and unit.
+
+Use Mastra metrics to query aggregate usage, latency, and estimated cost across scorer runs. The `judge` record describes one scorer run and doesn't query metrics or traces.
 
 ## Step execution flow
 
