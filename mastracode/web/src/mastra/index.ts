@@ -222,6 +222,9 @@ export const factory = new MastraFactory({
   // factory: webhook secret first, then the WorkOS cookie password. Unset →
   // per-process random secret (single-process local dev only).
   stateSecret: process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined,
+  // Slack channels are optional: chat's Slack adapter validates `signingSecret`
+  // at construction, so only wire channels when the Slack app env is configured.
+  ...(process.env.SLACK_APP_SIGNING_SECRET ? { channels: createAgentControllerSlackChannels() } : {}),
 });
 
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
@@ -229,13 +232,6 @@ export const factory = new MastraFactory({
 // carrying the controller (via `agentControllers`), storage, and the assembled
 // `server` config (middleware + apiRoutes + cors).
 const prepared = await factory.prepare();
-
-// Slack channels are optional: chat's Slack adapter validates `signingSecret`
-// at construction, so only wire channels when the Slack app env is configured.
-const mcAgentController = prepared.agentControllers?.['code'];
-if (mcAgentController && process.env.SLACK_APP_SIGNING_SECRET) {
-  mcAgentController.setChannels(createAgentControllerSlackChannels());
-}
 
 export const mastra = new Mastra({
   ...prepared,
