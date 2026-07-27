@@ -75,6 +75,7 @@ import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
+import { timedPhase } from './timing.js';
 import { createWorkspaceFactory } from './workspace.js';
 
 type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
@@ -426,12 +427,14 @@ export class MastraFactory {
     // Failures surface here, at prepare() — a misconfigured provider must
     // not boot.
     if (auth && hasAuthInit(auth)) {
-      await auth.init({ database: storage.authDatabase?.(), publicUrl: publicOrigin, allowedOrigins });
+      await timedPhase('prepare.auth.init', () =>
+        auth.init({ database: storage.authDatabase?.(), publicUrl: publicOrigin, allowedOrigins }),
+      );
     }
 
     // Single init path: backend connection failure is a hard boot error;
     // registered app domains initialize fail-soft inside FactoryStorage.
-    await storage.init();
+    await timedPhase('prepare.storage.init', () => storage.init());
 
     // Per-tenant model credentials: once the credentials domain is up, model
     // resolution goes through the caller's own store and the SDK stops
@@ -549,6 +552,7 @@ export class MastraFactory {
     // MCP, providers) — identical to the terminal app. Agent state lives in
     // the storage backend's Mastra store alongside the Factory app tables —
     // one shared database for all users, separated by `resourceId` scoping.
+    const controllerMountStart = performance.now();
     const prepared = await prepareAgentControllerMount({
       controllerId: CONTROLLER_ID,
       workspace: createWorkspaceFactory({
@@ -718,6 +722,9 @@ export class MastraFactory {
         };
       },
     });
+    process.stderr.write(
+      `[factory:timing] prepare.controllerMount ${Math.round(performance.now() - controllerMountStart)}ms\n`,
+    );
 
     this.#prepared = prepared;
     this.#factoryProcessor = factoryProcessor;
@@ -770,8 +777,11 @@ export class MastraFactory {
     if (!this.#prepared) {
       throw new Error('MastraFactory.finalize() called before prepare()');
     }
-    await this.#prepared.finalize();
-    await this.#factoryProcessor?.reconcileAllBoundThreads();
+    await timedPhase('finalize.controller', () => this.#prepared!.finalize());
+    await timedPhase(
+      'finalize.reconcileBoundThreads',
+      () => this.#factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
+    );
     this.#dispatcher?.start();
   }
 

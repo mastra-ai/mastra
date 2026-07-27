@@ -11,6 +11,7 @@ import type { ApiRoute, IMastraAuthProvider, ISessionProvider } from '@mastra/co
 import type { Context, Hono } from 'hono';
 
 import type { RouteAuth } from './routes/route.js';
+import { timedAboveThreshold } from './timing.js';
 
 /**
  * Provider-neutral factory auth gating for the MastraCode web server.
@@ -644,7 +645,11 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     }
 
     const token = getBearerToken(c.req.header('Authorization'));
-    const user = await authenticateRequest(provider, token, c.req.raw);
+    // A slow verification here delays EVERY protected request — surface
+    // outliers so auth-backend latency is attributable from server logs.
+    const user = await timedAboveThreshold('auth.gate.authenticate', 1_000, () =>
+      authenticateRequest(provider, token, c.req.raw),
+    );
 
     if (user) {
       // Bootstrap a personal org for no-org accounts so the org id resolves on
