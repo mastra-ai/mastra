@@ -218,7 +218,8 @@ describe('setupKeyboardShortcuts', () => {
     expect(commandNames).not.toContain('judge');
     expect(commandNames).not.toContain('notify');
     const goalCommand = autocompleteProviders[0]?.commands.find(command => command.name === 'goal') as
-      { getArgumentCompletions?: (prefix: string) => Array<{ value: string }> } | undefined;
+      | { getArgumentCompletions?: (prefix: string) => Array<{ value: string }> }
+      | undefined;
     expect(goalCommand?.getArgumentCompletions?.('').map(command => command.value)).toEqual([
       'status',
       'pause',
@@ -228,7 +229,8 @@ describe('setupKeyboardShortcuts', () => {
     ]);
     expect(goalCommand?.getArgumentCompletions?.('pa').map(command => command.value)).toEqual(['pause']);
     const githubCommand = autocompleteProviders[0]?.commands.find(command => command.name === 'github') as
-      { getArgumentCompletions?: (prefix: string) => Array<{ value: string }> } | undefined;
+      | { getArgumentCompletions?: (prefix: string) => Array<{ value: string }> }
+      | undefined;
     expect(githubCommand?.getArgumentCompletions?.('').map(command => command.value)).toEqual([
       'subscribe',
       'unsubscribe',

@@ -27,7 +27,9 @@ import {
 import type { BundlerPlatform } from './utils';
 
 type ErrorId =
-  'DEPLOYER_ANALYZE_MODULE_NOT_FOUND' | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD' | 'DEPLOYER_ANALYZE_TYPE_ERROR';
+  | 'DEPLOYER_ANALYZE_MODULE_NOT_FOUND'
+  | 'DEPLOYER_ANALYZE_MISSING_NATIVE_BUILD'
+  | 'DEPLOYER_ANALYZE_TYPE_ERROR';
 
 function preferDependencyInfo(
   existing: ExternalDependencyInfo | undefined,
@@ -389,9 +391,7 @@ export async function analyzeBundle(
   logger: IMastraLogger,
 ) {
   const mastraConfig = await readFile(mastraEntry, 'utf-8');
-  const mastraConfigResult = {
-    hasValidConfig: false,
-  } as const;
+  const mastraConfigResult: { hasValidConfig: boolean; projectType?: string } = { hasValidConfig: false };
 
   await transformAsync(mastraConfig, {
     filename: mastraEntry,
@@ -639,5 +639,6 @@ export async function analyzeBundle(
   return {
     ...result,
     externalDependencies: mergedExternalDeps,
+    ...(mastraConfigResult.projectType ? { projectType: mastraConfigResult.projectType } : {}),
   };
 }

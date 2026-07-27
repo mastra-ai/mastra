@@ -6,7 +6,6 @@ export { Composer } from './components/Composer';
 export { GoalPanel } from './components/GoalPanel';
 export { ShortcutsOverlay } from './components/ShortcutsOverlay';
 export { StatusLine } from './components/StatusLine';
-export { ThreadList } from './components/ThreadList';
 export { Transcript } from './components/Transcript';
 export { SLASH_COMMANDS } from './services/commands';
 export { ChatSessionProvider } from './context/ChatSessionProvider';

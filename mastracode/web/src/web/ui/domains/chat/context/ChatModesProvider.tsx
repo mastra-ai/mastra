@@ -42,8 +42,14 @@ export function ChatModesProvider({ children }: ChatModesProviderProps) {
     activeModeId,
     activeMode: modes.find(mode => mode.id === activeModeId),
     setMode: async modeId => {
-      await switchModeMutation.mutateAsync(modeId);
+      const previousModeId = activeModeId;
       setActiveModeId(modeId);
+      try {
+        await switchModeMutation.mutateAsync(modeId);
+      } catch (error) {
+        setActiveModeId(currentModeId => (currentModeId === modeId ? previousModeId : currentModeId));
+        throw error;
+      }
     },
   };
 

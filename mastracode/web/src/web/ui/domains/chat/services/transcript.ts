@@ -113,7 +113,12 @@ export interface SubagentEntry {
 
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
 export type TimelineEntry =
-  MessageEntry | NoticeEntry | PromptEntry | NotificationEntry | NotificationSummaryEntry | SubagentEntry;
+  | MessageEntry
+  | NoticeEntry
+  | PromptEntry
+  | NotificationEntry
+  | NotificationSummaryEntry
+  | SubagentEntry;
 
 /** Token usage snapshot from usage_update events. */
 export interface UsageSnapshot {
@@ -198,6 +203,7 @@ type Action =
   | { type: 'clearPending' }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
   | { type: 'resolvePrompt'; id: string }
+  | { type: 'prependOlder'; messages: MastraDBMessage[] }
   | {
       type: 'reset';
       threadId?: string;
@@ -251,6 +257,8 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
           ),
         ],
       };
+    case 'prependOlder':
+      return prependOlderMessages(state, action.messages);
     case 'clearPending':
       return { ...state, pending: false };
     case 'localNotice':
@@ -561,7 +569,65 @@ export function createInitialTranscript({
 }
 
 function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
-  return messages.map(message => toMessageEntry(message, { streaming: false }));
+  return messages.flatMap(message => [
+    toMessageEntry(message, { streaming: false }),
+    ...persistedSuspensionPrompts(message),
+  ]);
+}
+
+function persistedSuspensionPrompts(message: MastraDBMessage): SuspensionPrompt[] {
+  const suspendedTools = message.content.metadata?.suspendedTools;
+  if (!suspendedTools || typeof suspendedTools !== 'object' || Array.isArray(suspendedTools)) return [];
+
+  return Object.values(suspendedTools).flatMap(suspension => {
+    if (
+      !suspension ||
+      typeof suspension !== 'object' ||
+      Array.isArray(suspension) ||
+      !('toolCallId' in suspension) ||
+      !('toolName' in suspension) ||
+      typeof suspension.toolCallId !== 'string' ||
+      typeof suspension.toolName !== 'string'
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        kind: 'suspension' as const,
+        id: `suspension-${suspension.toolCallId}`,
+        toolCallId: suspension.toolCallId,
+        toolName: suspension.toolName,
+        args: 'args' in suspension ? suspension.args : undefined,
+        suspendPayload: 'suspendPayload' in suspension ? suspension.suspendPayload : undefined,
+      },
+    ];
+  });
+}
+
+/**
+ * Prepend older history messages to the front of the timeline. `messages` is the
+ * newest-N window from a grown history fetch (oldest-first). We keep only the
+ * portion strictly older than the oldest message already on screen — anchored on
+ * the first existing message entry's id — and prepend those. The overlapping tail
+ * of the fetch (messages we already have, including any that streamed in live and
+ * later persisted) is discarded, so nothing double-renders. If no anchor is found
+ * (e.g. the transcript has no message entries yet) the full window is seeded.
+ */
+function prependOlderMessages(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
+  if (messages.length === 0) return state;
+
+  const firstMessageEntry = state.entries.find(e => e.kind === 'message');
+  const anchorId = firstMessageEntry?.kind === 'message' ? firstMessageEntry.id : undefined;
+
+  const anchorIndex = anchorId != null ? messages.findIndex(m => m.id === anchorId) : -1;
+  // Older messages are everything before the anchor; if the anchor isn't in this
+  // window (transcript had no message entries, or the window didn't reach it),
+  // treat the whole window as older history to seed.
+  const olderMessages = anchorIndex === -1 ? messages : messages.slice(0, anchorIndex);
+  if (olderMessages.length === 0) return state;
+
+  return { ...state, entries: [...messagesToEntries(olderMessages), ...state.entries] };
 }
 
 function toMessageEntry(

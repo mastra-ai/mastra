@@ -27,7 +27,7 @@ export function SectionHeader({ title, subtitle, icon, className }: SectionHeade
 
 export function SubSectionHeader({ title, icon }: SectionHeaderProps) {
   return (
-    <Txt as="h4" variant="ui-sm" className="flex items-center gap-1 text-neutral2 uppercase">
+    <Txt as="h4" variant="ui-sm" className="text-neutral2 flex items-center gap-1 uppercase">
       {icon && (
         <Icon size="sm" className="text-neutral1">
           {icon}

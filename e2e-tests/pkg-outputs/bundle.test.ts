@@ -60,6 +60,7 @@ describe.for(
       it.skipIf(
         pkgName === '@mastra/playground-ui' ||
           pkgName === '@mastra/code-sdk' ||
+          pkgName === '@mastra/factory' ||
           pkgName === 'mastra' ||
           pkgName.startsWith('@internal/'),
       )('should use .cjs and .d.ts extensions when using require', async () => {
@@ -92,6 +93,7 @@ describe.for(
       pkgJson.name === '@mastra/client-js' ||
       pkgJson.name === '@mastra/opencode' ||
       pkgJson.name === '@mastra/code-sdk' ||
+      pkgJson.name === '@mastra/factory' ||
       !pkgJson.name.startsWith('@mastra/'),
   )('should have @mastra/core as a peer dependency if used', async () => {
     const hasMastraCoreAsDependency = pkgJson?.dependencies?.['@mastra/core'];

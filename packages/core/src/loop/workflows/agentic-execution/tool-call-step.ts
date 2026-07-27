@@ -218,6 +218,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             args: transformedArgs,
             type,
             runId: suspendedToolRunId ?? runId, // Store the runId so we can resume after page refresh
+            ...(suspendedToolRunId && suspendedToolRunId !== runId ? { parentRunId: runId } : {}),
             ...(type === 'suspension' ? { suspendPayload: transformedSuspendPayload } : {}),
             resumeSchema,
             ...(toolStateTransformMetadata ? { metadata: toolStateTransformMetadata } : {}),

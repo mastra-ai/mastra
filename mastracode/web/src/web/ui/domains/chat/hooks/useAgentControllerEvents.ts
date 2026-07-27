@@ -15,6 +15,8 @@ interface UseAgentControllerEventsArgs {
 
 interface SharedSubscription {
   state: SseConnectionState;
+  /** A subscribe attempt is in flight — do not start another. */
+  connecting: boolean;
   eventListeners: Set<(event: AgentControllerEvent) => void>;
   stateListeners: Set<(state: SseConnectionState) => void>;
   unsubscribe?: () => void;
@@ -22,59 +24,75 @@ interface SharedSubscription {
   disposed?: boolean;
 }
 
-const subscriptions = new WeakMap<AgentControllerSession, Map<number, SharedSubscription>>();
+const subscriptions = new WeakMap<AgentControllerSession, SharedSubscription>();
 
-function getSubscription(session: AgentControllerSession, epoch: number) {
-  let sessionSubscriptions = subscriptions.get(session);
-  if (!sessionSubscriptions) {
-    sessionSubscriptions = new Map();
-    subscriptions.set(session, sessionSubscriptions);
-  }
+function setState(subscription: SharedSubscription, state: SseConnectionState) {
+  if (subscription.state === state) return;
+  subscription.state = state;
+  for (const listener of subscription.stateListeners) listener(state);
+}
 
-  let subscription = sessionSubscriptions.get(epoch);
-  if (subscription) {
-    if (subscription.teardown) {
-      clearTimeout(subscription.teardown);
-      subscription.teardown = undefined;
-    }
-    return subscription;
-  }
+/**
+ * Start a stream attempt unless one is already established or in flight.
+ *
+ * Callers re-invoke this on every sync epoch bump; that is what retries a
+ * dropped (or never-established) stream after the state re-sync completes.
+ * A healthy or still-connecting stream must NOT be torn down by an epoch
+ * bump: while the stream is disconnected the session-state query polls
+ * every second (see useAgentControllerSessionSync), so cancelling the
+ * in-flight subscribe on each successful poll livelocks — the stream can
+ * never finish connecting, which keeps the poll alive, which keeps
+ * cancelling the stream.
+ */
+function ensureConnected(session: AgentControllerSession, subscription: SharedSubscription) {
+  if (subscription.connecting || subscription.state === 'connected') return;
 
-  subscription = {
-    state: 'never',
-    eventListeners: new Set(),
-    stateListeners: new Set(),
-  };
-  sessionSubscriptions.set(epoch, subscription);
-
-  const setState = (state: SseConnectionState) => {
-    if (subscription?.state === state) return;
-    subscription!.state = state;
-    for (const listener of subscription!.stateListeners) listener(state);
-  };
+  subscription.unsubscribe?.();
+  subscription.unsubscribe = undefined;
+  subscription.connecting = true;
 
   void session
     .subscribe({
       onEvent: event => {
-        for (const listener of subscription!.eventListeners) listener(event);
+        for (const listener of subscription.eventListeners) listener(event);
       },
       onError: () => {
-        if (subscription?.state === 'connected') setState('dropped');
+        if (subscription.state === 'connected') setState(subscription, 'dropped');
       },
     })
     .then(
       sub => {
-        if (subscription!.disposed) {
+        subscription.connecting = false;
+        if (subscription.disposed) {
           sub.unsubscribe();
           return;
         }
-        subscription!.unsubscribe = sub.unsubscribe;
-        setState('connected');
+        subscription.unsubscribe = sub.unsubscribe;
+        setState(subscription, 'connected');
       },
       () => {
-        if (subscription?.state === 'connected') setState('dropped');
+        subscription.connecting = false;
+        if (subscription.state === 'connected') setState(subscription, 'dropped');
       },
     );
+}
+
+function getSubscription(session: AgentControllerSession) {
+  let subscription = subscriptions.get(session);
+  if (!subscription) {
+    subscription = {
+      state: 'never',
+      connecting: false,
+      eventListeners: new Set(),
+      stateListeners: new Set(),
+    };
+    subscriptions.set(session, subscription);
+  }
+
+  if (subscription.teardown) {
+    clearTimeout(subscription.teardown);
+    subscription.teardown = undefined;
+  }
 
   return subscription;
 }
@@ -96,7 +114,7 @@ export function useAgentControllerEvents({
   useEffect(() => {
     if (!enabled || !session || !epoch) return;
 
-    const subscription = getSubscription(session, epoch);
+    const subscription = getSubscription(session);
     const handleEvent = (event: AgentControllerEvent) => onEventRef.current(event);
     const handleState = (state: SseConnectionState) => {
       onConnectedChangeRef.current(state === 'connected');
@@ -106,6 +124,7 @@ export function useAgentControllerEvents({
     subscription.eventListeners.add(handleEvent);
     subscription.stateListeners.add(handleState);
     handleState(subscription.state);
+    ensureConnected(session, subscription);
 
     return () => {
       subscription.eventListeners.delete(handleEvent);
@@ -116,7 +135,7 @@ export function useAgentControllerEvents({
         if (subscription.eventListeners.size > 0 || subscription.stateListeners.size > 0) return;
         subscription.disposed = true;
         subscription.unsubscribe?.();
-        subscriptions.get(session)?.delete(epoch);
+        subscriptions.delete(session);
       }, 0);
     };
   }, [enabled, session, epoch]);

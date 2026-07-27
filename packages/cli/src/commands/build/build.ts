@@ -1,12 +1,18 @@
 import { join } from 'node:path';
 import { getDeployer } from '@mastra/deployer';
-import { prepareFsAgentsEntry, writeFsAgentsEntry, mirrorFsAgentWorkspaces } from '@mastra/deployer/build';
+import {
+  analyzeEntryProjectType,
+  prepareFsAgentsEntry,
+  writeFsAgentsEntry,
+  mirrorFsAgentWorkspaces,
+} from '@mastra/deployer/build';
 import { checkMastraPeerDeps, logPeerDepWarnings } from '../../utils/check-peer-deps';
 import { findMastraEntryFile } from '../../utils/find-mastra-entry';
 import { createLogger } from '../../utils/logger';
 import { getMastraPackages } from '../../utils/mastra-packages';
 import { computeSourceHash, writeBuildManifest } from '../../utils/source-hash';
 import { BuildBundler } from './BuildBundler';
+import { buildFactoryUI } from './factory-ui-build';
 
 export async function build({
   dir,
@@ -36,6 +42,17 @@ export async function build({
     // file-based project), prepareFsAgentsEntry auto-constructs a Mastra
     // instance from discovered primitives.
     const mastraEntryFile = findMastraEntryFile(mastraDir);
+
+    // For Software Factory projects, copy the prebuilt SPA bundled with the CLI
+    // into the public directory so copyPublic() can include it in the output.
+    // Skip for synthetic file-routed entries (no real index.ts).
+    let projectType: string | undefined;
+    if (mastraEntryFile) {
+      projectType = await analyzeEntryProjectType(mastraEntryFile);
+      if (projectType === 'factory') {
+        await buildFactoryUI(mastraDir, logger);
+      }
+    }
 
     // Discover fs-routed agents under agents/* and, if any exist, wrap the entry
     // so they are registered onto the user's mastra instance during the build.
@@ -70,7 +87,7 @@ export async function build({
       await mirrorFsAgentWorkspaces(mastraDir, join(outputDirectory, 'output'));
 
       // Write build manifest with source hash for staleness detection
-      const sourceHash = await computeSourceHash(rootDir, mastraDir);
+      const sourceHash = await computeSourceHash(rootDir, mastraDir, projectType);
       await writeBuildManifest(outputDirectory, sourceHash);
 
       logger.info('Build successful, you can now deploy the .mastra/output directory to your target platform.');
@@ -104,7 +121,7 @@ export async function build({
     await mirrorFsAgentWorkspaces(mastraDir, join(outputDirectory, 'output'));
 
     // Write build manifest with source hash for staleness detection
-    const sourceHash = await computeSourceHash(rootDir, mastraDir);
+    const sourceHash = await computeSourceHash(rootDir, mastraDir, projectType);
     await writeBuildManifest(outputDirectory, sourceHash);
 
     // Push-style deployers (e.g. sandbox deploys) opt in to deploying as part

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/langfuse",
-  "version": "1.4.5-alpha.1",
+  "version": "1.4.5",
   "description": "Langfuse observability provider for Mastra - uses official Langfuse v5 SDK",
   "type": "module",
   "main": "dist/index.js",
@@ -27,7 +27,8 @@
     "build:watch": "pnpm build --watch",
     "test": "vitest run",
     "test:watch": "vitest watch",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {

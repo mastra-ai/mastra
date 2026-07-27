@@ -86,7 +86,7 @@ class LocalProcessHandle extends ProcessHandle {
         }
         resolve({
           success: this.exitCode === 0,
-          exitCode: this.exitCode!,
+          exitCode: this.exitCode,
           stdout: this.stdout,
           stderr: this.stderr,
           executionTimeMs: Date.now() - this.startTime,

@@ -26,7 +26,13 @@ export type BlockingHookEvent = 'PreToolUse' | 'Stop' | 'UserPromptSubmit';
 
 /** Lifecycle hook events are non-blocking: they observe behavior without changing it. */
 export type LifecycleHookEvent =
-  'AgentStart' | 'AgentEnd' | 'PermissionRequest' | 'PermissionResult' | 'Interrupt' | 'SubagentStart' | 'SubagentEnd';
+  | 'AgentStart'
+  | 'AgentEnd'
+  | 'PermissionRequest'
+  | 'PermissionResult'
+  | 'Interrupt'
+  | 'SubagentStart'
+  | 'SubagentEnd';
 
 export function isBlockingEvent(event: HookEventName): event is BlockingHookEvent {
   return event === 'PreToolUse' || event === 'Stop' || event === 'UserPromptSubmit';

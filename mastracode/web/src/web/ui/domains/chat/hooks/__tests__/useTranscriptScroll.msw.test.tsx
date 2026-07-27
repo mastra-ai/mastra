@@ -4,6 +4,7 @@ import { act, render, screen } from '@testing-library/react';
 import { useEffect } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { LoadMoreHistory } from '../../context/ChatTranscriptContext';
 import { useTranscriptScroll } from '../useTranscriptScroll';
 
 interface HookSnapshot {
@@ -56,13 +57,15 @@ function messages(text: string): TranscriptState {
 function Harness({
   transcriptState,
   threadId = 'thread-a',
+  loadMore,
   onSnapshot,
 }: {
   transcriptState: TranscriptState;
   threadId?: string;
+  loadMore?: LoadMoreHistory;
   onSnapshot: (snapshot: HookSnapshot) => void;
 }) {
-  const scroll = useTranscriptScroll(transcriptState, threadId);
+  const scroll = useTranscriptScroll(transcriptState, threadId, loadMore);
 
   useEffect(() => {
     onSnapshot({ showScrollDown: scroll.showScrollDown, scrollToBottom: scroll.scrollToBottom });
@@ -255,5 +258,93 @@ describe('useTranscriptScroll', () => {
 
     expect(scrollTo).toHaveBeenLastCalledWith({ top: 1000, behavior: 'auto' });
     expect(snapshots.at(-1)?.showScrollDown).toBe(false);
+  });
+
+  describe('older-history load-more', () => {
+    function loadMoreStub(overrides: Partial<LoadMoreHistory> = {}): { loadMore: LoadMoreHistory; load: () => void } {
+      const load = vi.fn();
+      return {
+        load,
+        loadMore: { hasMore: true, isLoading: false, load, ...overrides },
+      };
+    }
+
+    it('does not request older history on initial mount at the top', () => {
+      const { load, loadMore } = loadMoreStub();
+      render(<Harness transcriptState={messages('hello')} loadMore={loadMore} onSnapshot={() => {}} />);
+      const el = screen.getByTestId('thread');
+
+      // Mount lands at the very top before the auto-scroll-to-bottom settles.
+      setScrollMetrics(el, { scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
+      installScrollTo(el);
+      dispatchScroll(el);
+      flushAnimationFrame();
+
+      // The gate is still locked: reaching the top before ever seeing the bottom
+      // must not fire load-more (this is what caused the runaway fetch loop).
+      expect(load).not.toHaveBeenCalled();
+    });
+
+    it('requests older history only after settling at the bottom then scrolling to the top', () => {
+      const { load, loadMore } = loadMoreStub();
+      render(<Harness transcriptState={messages('hello')} loadMore={loadMore} onSnapshot={() => {}} />);
+      const el = screen.getByTestId('thread');
+      installScrollTo(el);
+
+      // Settle at the bottom (arms load-more).
+      setScrollMetrics(el, { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 });
+      dispatchScroll(el);
+      flushAnimationFrame();
+      expect(load).not.toHaveBeenCalled();
+
+      // Now scroll to the top -> older history is requested exactly once.
+      setScrollMetrics(el, { scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
+      dispatchScroll(el);
+      expect(load).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not re-request while a load is already in flight', () => {
+      const { load, loadMore } = loadMoreStub();
+      const { rerender } = render(
+        <Harness transcriptState={messages('hello')} loadMore={loadMore} onSnapshot={() => {}} />,
+      );
+      const el = screen.getByTestId('thread');
+      installScrollTo(el);
+
+      setScrollMetrics(el, { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 });
+      dispatchScroll(el);
+      flushAnimationFrame();
+
+      setScrollMetrics(el, { scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
+      dispatchScroll(el);
+      expect(load).toHaveBeenCalledTimes(1);
+
+      // The fetch is now in flight (isLoading true). Staying at the top must not
+      // queue another request.
+      rerender(
+        <Harness
+          transcriptState={messages('hello')}
+          loadMore={{ hasMore: true, isLoading: true, load }}
+          onSnapshot={() => {}}
+        />,
+      );
+      dispatchScroll(el);
+      expect(load).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not request older history when there is none left', () => {
+      const { load, loadMore } = loadMoreStub({ hasMore: false });
+      render(<Harness transcriptState={messages('hello')} loadMore={loadMore} onSnapshot={() => {}} />);
+      const el = screen.getByTestId('thread');
+      installScrollTo(el);
+
+      setScrollMetrics(el, { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 });
+      dispatchScroll(el);
+      flushAnimationFrame();
+      setScrollMetrics(el, { scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
+      dispatchScroll(el);
+
+      expect(load).not.toHaveBeenCalled();
+    });
   });
 });

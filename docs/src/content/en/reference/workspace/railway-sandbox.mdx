@@ -10,7 +10,7 @@ import TabItem from "@theme/TabItem";
 
 # RailwaySandbox
 
-Executes commands in ephemeral, isolated [Railway](https://docs.railway.com/sandboxes) sandboxes. Each sandbox is an isolated Debian Linux VM provisioned on demand through the Railway TypeScript SDK. Supports command execution with streaming output, command timeouts, configurable idle timeout, `ISOLATED`/`PRIVATE` network isolation, custom base images via the Railway template builder, forking a running sandbox, and reattaching to an existing sandbox by ID. For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
+Executes commands in ephemeral, isolated [Railway](https://docs.railway.com/sandboxes) sandboxes. Each sandbox is an isolated Debian Linux VM provisioned on demand through the Railway TypeScript SDK. Supports command execution with streaming output, command timeouts, configurable idle timeout, `ISOLATED`/`PRIVATE` network isolation, custom base images via the Railway template builder, checkpoint-backed recovery, forking a running sandbox, and reattaching to an existing sandbox by ID. For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
 
 ## Installation
 
@@ -118,6 +118,38 @@ console.log(result.stdout)
 
 The forked sandbox inherits the parent's credentials and defaults unless overridden via the `fork()` options.
 
+### Checkpoint recovery
+
+Set `checkpointName` to preserve a sandbox filesystem across Railway sandbox replacement. On `start()`, `RailwaySandbox` first tries to create the sandbox from the named checkpoint. If the checkpoint is missing, it creates a sandbox from the configured template or default image, then captures the checkpoint.
+
+```typescript
+const sandbox = new RailwaySandbox({
+  checkpointName: 'project-session-42',
+  idleTimeoutMinutes: 30,
+})
+```
+
+`RailwaySandbox` refreshes the checkpoint shortly before the idle timeout. Recovery restores the latest successful checkpoint. It doesn't restore running processes or filesystem writes made after the last checkpoint.
+
+Use one stable checkpoint name for each independent filesystem. Do not share a checkpoint name across unrelated sessions or projects.
+
+### Derived sandbox checkpoints
+
+Use `derive({ checkpointName })` when a configured `RailwaySandbox` acts as the template for a sandbox fleet:
+
+```typescript
+const template = new RailwaySandbox({ idleTimeoutMinutes: 30 })
+
+const sessionSandbox = template.derive({
+  id: 'session-42',
+  checkpointName: 'project-session-42',
+})
+
+await sessionSandbox.start()
+```
+
+A derived sandbox uses the checkpoint passed to `derive()`. If no override is passed, it inherits the template sandbox's `checkpointName`.
+
 ### Streaming output
 
 Stream command output in real time via `onStdout` and `onStderr` callbacks:
@@ -170,6 +202,13 @@ const result = await sandbox.executeCommand('cat', ['/tmp/state.txt'])
     type: 'string',
     description:
       'Reattach to an existing Railway sandbox by its Railway ID instead of creating a new one. When set, start() calls Sandbox.connect().',
+    isOptional: true,
+  },
+  {
+    name: 'checkpointName',
+    type: 'string',
+    description:
+      'Named Railway checkpoint used to seed new sandboxes and preserve the filesystem before idle teardown. Use a unique stable name for each independent filesystem.',
     isOptional: true,
   },
   {
@@ -266,6 +305,12 @@ const result = await sandbox.executeCommand('cat', ['/tmp/state.txt'])
     type: '(options?) => Promise<RailwaySandbox>',
     description:
       'Clone this running sandbox into a new, independent RailwaySandbox. The returned sandbox is already started and reattached to the forked Railway sandbox. Accepts optional id, idleTimeoutMinutes, networkIsolation, and env overrides. Throws SandboxNotReadyError if this sandbox has not been started.',
+  },
+  {
+    name: 'derive',
+    type: '(options?) => RailwaySandbox',
+    description:
+      'Construct an unstarted sibling sandbox that inherits credentials and defaults. Accepts optional id, sandboxId, env, idleTimeoutMinutes, and checkpointName overrides. The derived sandbox uses options.checkpointName when set, otherwise it inherits the template checkpointName.',
   },
 ]}
 />

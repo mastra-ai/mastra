@@ -1,6 +1,6 @@
 {
   "name": "@internal/voice",
-  "version": "0.0.14",
+  "version": "0.0.16",
   "description": "Internal Mastra voice primitives and utilities",
   "private": true,
   "type": "module",
@@ -57,7 +57,8 @@
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
-    "lint": "eslint .",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
     "typecheck": "tsc --noEmit -p tsconfig.build.json"
   },
   "license": "Apache-2.0",

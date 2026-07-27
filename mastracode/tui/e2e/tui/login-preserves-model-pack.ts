@@ -11,7 +11,7 @@ const packId = `custom:${packName}`;
 /**
  * The `/login` command must not change the active model or model pack — that
  * only belongs to the onboarding flow. This exercises logging in to Anthropic
- * (whose post-login default is anthropic/claude-opus-4-6) while a custom pack is
+ * (whose post-login default is anthropic/claude-fable-5) while a custom pack is
  * active, and asserts the session keeps its custom build model.
  */
 export const loginPreservesModelPackScenario = {
@@ -83,7 +83,7 @@ export const loginPreservesModelPackScenario = {
     // The active model pack must survive login: the status line still shows the
     // custom build model, and the login never switched to the provider default.
     await runtime.waitForScreenText(/▐build▌login-preserve-e2e\/build-model/i, terminal, 8_000);
-    await runtime.waitForScreenTextAbsent(/claude-opus-4-6/i, terminal, 4_000);
+    await runtime.waitForScreenTextAbsent(/claude-fable-5/i, terminal, 4_000);
     await runtime.waitForScreenTextAbsent(/switched to anthropic/i, terminal, 4_000);
 
     terminal.submit(
