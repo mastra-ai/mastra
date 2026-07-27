@@ -247,6 +247,89 @@ describe('MastraAuthStudio', () => {
   });
 
   // -------------------------------------------------------------------------
+  // verification caching + fetch timeout
+  // -------------------------------------------------------------------------
+
+  describe('verification caching', () => {
+    it('should reuse a successful cookie verification without refetching', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+
+      const req = mockRequest({ cookie: 'wos-session=sealed-token-abc' });
+      const first = await auth.authenticateToken('', req);
+      const second = await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=sealed-token-abc' }));
+
+      expect(first?.id).toBe('user-1');
+      expect(second).toEqual(first);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should reuse a successful bearer verification without refetching', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockVerifyResponse), { status: 200 }));
+
+      const first = await auth.authenticateToken('cli-token-xyz', mockRequest());
+      const second = await auth.authenticateToken('cli-token-xyz', mockRequest());
+
+      expect(first?.id).toBe('user-2');
+      expect(second).toEqual(first);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not share cache entries between different credentials', async () => {
+      fetchSpy.mockResolvedValue(new Response(JSON.stringify(mockVerifyResponse), { status: 200 }));
+
+      await auth.authenticateToken('token-a', mockRequest());
+      await auth.authenticateToken('token-b', mockRequest());
+
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('should refetch after the cache TTL expires', async () => {
+      vi.useFakeTimers();
+      try {
+        fetchSpy.mockResolvedValue(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+
+        await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=sealed' }));
+        vi.advanceTimersByTime(31_000);
+        await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=sealed' }));
+
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('should not cache failed verifications', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+
+      const first = await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=flaky' }));
+      const second = await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=flaky' }));
+
+      expect(first).toBeNull();
+      expect(second?.id).toBe('user-1');
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('should pass an abort signal so verification fetches are time-bounded', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+      await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=abc' }));
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${SHARED_API}/auth/me`,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    });
+
+    it('should return null when the verification fetch times out', async () => {
+      fetchSpy.mockRejectedValueOnce(new DOMException('The operation timed out.', 'TimeoutError'));
+
+      const user = await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=slow' }));
+
+      expect(user).toBeNull();
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // authorizeUser
   // -------------------------------------------------------------------------
 
