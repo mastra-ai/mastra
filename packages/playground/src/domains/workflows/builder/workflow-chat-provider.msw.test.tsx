@@ -211,6 +211,84 @@ describe('WorkflowChatProvider', () => {
     });
   });
 
+  describe('when an accepted checkpoint awaits finalization', () => {
+    it('enforces checkpoint, repair, and finalize phases without discarding accepted progress', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+        http.post(
+          `${BASE_URL}/api/editor/workflow-builder/stream`,
+          () =>
+            new HttpResponse(new ReadableStream({ start: () => {} }), {
+              headers: { 'content-type': 'text/event-stream' },
+            }),
+        ),
+      );
+      let reportResult: ((event: WorkflowDraftToolResult) => void) | undefined;
+      let canExecute: ((toolId: string) => string | undefined) | undefined;
+
+      render(
+        <Providers>
+          <WorkflowChatProvider
+            threadId="workflow-builder-phase-enforcement"
+            authoringState={createWorkflowDraftAuthoringState('phase-enforcement')}
+            initialMessages={[]}
+            createTools={(_, onResult, __, ___, toolGuard) => {
+              reportResult = onResult;
+              canExecute = toolGuard;
+              return {};
+            }}
+          >
+            <Composer message="Build a workflow" />
+          </WorkflowChatProvider>
+        </Providers>,
+      );
+
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+
+      act(() => {
+        reportResult?.({
+          toolId: 'checkpoint-workflow-draft',
+          result: { success: true, lifecycle: 'constructing', revision: 1 },
+        });
+      });
+
+      expect(canExecute?.('checkpoint-workflow-draft')).toContain('Call finalize-workflow-draft');
+      expect(canExecute?.('update-workflow-step')).toContain('Call finalize-workflow-draft');
+      expect(canExecute?.('finalize-workflow-draft')).toBeUndefined();
+
+      act(() => {
+        reportResult?.({
+          toolId: 'finalize-workflow-draft',
+          result: {
+            success: false,
+            error: 'Invalid draft',
+            issues: [{ code: 'incompatible-schema', path: 'graph.1', message: 'Insert a mapping step.' }],
+          },
+        });
+      });
+
+      expect(canExecute?.('checkpoint-workflow-draft')).toContain('targeted workflow-step repair tools');
+      expect(canExecute?.('finalize-workflow-draft')).toContain('checkpoint-workflow-candidate');
+      expect(canExecute?.('update-workflow-step')).toBeUndefined();
+
+      act(() => {
+        reportResult?.({
+          toolId: 'update-workflow-step',
+          result: { success: true, lifecycle: 'constructing', revision: 1, candidateRevision: 1 },
+        });
+        reportResult?.({
+          toolId: 'checkpoint-workflow-candidate',
+          result: { success: true, lifecycle: 'constructing', revision: 2, candidateRevision: 0 },
+        });
+      });
+
+      expect(canExecute?.('finalize-workflow-draft')).toBeUndefined();
+      expect(canExecute?.('checkpoint-workflow-draft')).toContain('Call finalize-workflow-draft');
+    });
+  });
+
   describe('when a checkpoint conflicts with a newer accepted revision', () => {
     it('does not consume the structured repair budget', async () => {
       server.use(

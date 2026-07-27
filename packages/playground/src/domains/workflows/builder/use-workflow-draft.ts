@@ -141,6 +141,7 @@ export function useWorkflowDraft(
       onResult?: (event: WorkflowDraftToolResult) => void,
       candidate?: WorkflowDraftCandidate,
       onCandidateChange?: (candidate: WorkflowDraftCandidate) => void,
+      getToolBlockReason?: (toolId: string) => string | undefined,
     ) =>
       createWorkflowDraftTools({
         getState: () => stateRef.current,
@@ -152,6 +153,7 @@ export function useWorkflowDraft(
           mutateWorkflowDraftAuthoringState(candidateState, expectedRevision, mutation, validationContext),
         candidate,
         isCurrentGeneration,
+        getToolBlockReason,
         onResult,
         onCandidateChange,
       }),

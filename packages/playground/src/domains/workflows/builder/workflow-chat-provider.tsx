@@ -14,6 +14,15 @@ export interface WorkflowGenerationFailure {
   message: string;
 }
 
+type WorkflowGenerationPhase = 'constructing' | 'checkpointed' | 'repairing' | 'finalized';
+
+const WORKFLOW_MUTATION_TOOL_IDS = new Set([
+  'add-workflow-step',
+  'update-workflow-step',
+  'remove-workflow-step',
+  'set-workflow-metadata',
+]);
+
 export interface WorkflowChatProviderProps {
   threadId: string;
   authoringState: WorkflowDraftAuthoringState;
@@ -25,6 +34,7 @@ export interface WorkflowChatProviderProps {
     onResult?: (event: WorkflowDraftToolResult) => void,
     candidate?: WorkflowDraftCandidate,
     onCandidateChange?: (candidate: WorkflowDraftCandidate) => void,
+    getToolBlockReason?: (toolId: string) => string | undefined,
   ) => ClientToolsInput;
   onGenerationFailure?: (failure: WorkflowGenerationFailure | null) => void;
   onCandidateChange?: (candidate: WorkflowDraftCandidate | undefined) => void;
@@ -58,6 +68,7 @@ function WorkflowChatSession({
   const generationStateRef = useRef({
     accepted: false,
     finalized: false,
+    phase: 'constructing' as WorkflowGenerationPhase,
     rejected: 0,
     rejectionSignature: undefined as string | undefined,
     stopped: false,
@@ -82,35 +93,47 @@ function WorkflowChatSession({
 
   const createClientTools = useCallback(() => {
     const generation = ++generationRef.current;
-    generationStateRef.current = {
-      accepted: false,
-      finalized: false,
-      rejected: 0,
-      rejectionSignature: undefined,
-      stopped: false,
-    };
-    onGenerationFailure?.(null);
     const acceptedState = authoringStateRef.current;
     const existingCandidate = candidateRef.current;
     const candidate =
       existingCandidate?.baseAcceptedRevision === acceptedState.revision
         ? existingCandidate
         : createWorkflowDraftCandidate(acceptedState);
+    generationStateRef.current = {
+      accepted: acceptedState.revision > 0,
+      finalized: false,
+      phase: candidate.hasUncheckpointedChanges
+        ? 'repairing'
+        : acceptedState.revision > 0
+          ? 'checkpointed'
+          : 'constructing',
+      rejected: 0,
+      rejectionSignature: undefined,
+      stopped: false,
+    };
+    onGenerationFailure?.(null);
     updateCandidate(candidate);
 
     const onResult = ({ toolId, result }: WorkflowDraftToolResult) => {
       if (generation !== generationRef.current || generationStateRef.current.stopped) return;
       const isCheckpoint = toolId === 'checkpoint-workflow-draft' || toolId === 'checkpoint-workflow-candidate';
       const isFinalize = toolId === 'finalize-workflow-draft';
+      const isMutation = WORKFLOW_MUTATION_TOOL_IDS.has(toolId);
       if (result.success) {
         if (isCheckpoint || isFinalize) {
           generationStateRef.current.accepted = true;
           generationStateRef.current.rejected = 0;
           generationStateRef.current.rejectionSignature = undefined;
         }
-        if (isFinalize) generationStateRef.current.finalized = true;
+        if (isCheckpoint) generationStateRef.current.phase = 'checkpointed';
+        if (isMutation) generationStateRef.current.phase = 'repairing';
+        if (isFinalize) {
+          generationStateRef.current.finalized = true;
+          generationStateRef.current.phase = 'finalized';
+        }
         return;
       }
+      if (isFinalize) generationStateRef.current.phase = 'repairing';
       if (!isCheckpoint && !isFinalize) return;
       if (
         result.error === 'Draft changed before this operation completed.' ||
@@ -139,6 +162,29 @@ function WorkflowChatSession({
       }
     };
 
+    const getToolBlockReason = (toolId: string) => {
+      const phase = generationStateRef.current.phase;
+      if (phase === 'checkpointed' && WORKFLOW_MUTATION_TOOL_IDS.has(toolId)) {
+        return 'The accepted draft is already checkpointed. Call finalize-workflow-draft before making further edits.';
+      }
+      if (toolId === 'checkpoint-workflow-draft' && phase === 'checkpointed') {
+        return 'The accepted draft is already checkpointed. Call finalize-workflow-draft with its accepted revision.';
+      }
+      if (toolId === 'checkpoint-workflow-draft' && phase === 'repairing') {
+        return 'Preserve the last accepted revision. Use targeted workflow-step repair tools, then checkpoint-workflow-candidate.';
+      }
+      if (toolId === 'checkpoint-workflow-candidate' && phase !== 'repairing') {
+        return 'There are no generation-local repairs to checkpoint. Finalize the accepted draft instead.';
+      }
+      if (toolId === 'finalize-workflow-draft' && phase === 'constructing') {
+        return 'Checkpoint a complete workflow draft before finalizing it.';
+      }
+      if (toolId === 'finalize-workflow-draft' && phase === 'repairing') {
+        return 'Checkpoint the repaired candidate with checkpoint-workflow-candidate before finalizing it.';
+      }
+      return undefined;
+    };
+
     return createTools(
       () =>
         generation === generationRef.current &&
@@ -147,6 +193,7 @@ function WorkflowChatSession({
       onResult,
       candidate,
       updateCandidate,
+      getToolBlockReason,
     );
   }, [createTools, failGeneration, onGenerationFailure, updateCandidate]);
 

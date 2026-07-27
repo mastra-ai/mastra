@@ -67,12 +67,24 @@ const mappingStepSchema = z.object({
   id: z.string().min(1),
   mapConfig: z.string().min(1),
 });
-const mappingStepInputSchema = z.object({
-  type: z.literal('mapping'),
-  id: z.string().min(1),
-  mapConfig: z.union([z.string().min(1), jsonSchema]).optional(),
-  output: jsonSchema.optional(),
-});
+const mappingDescriptorInputSchema = z.union([
+  z.object({ value: z.unknown() }).strict(),
+  z.object({ template: z.string().min(1) }).strict(),
+  z.object({ requestContextPath: z.string().min(1) }).strict(),
+  z.object({ initData: z.literal(true), path: z.string() }).strict(),
+  z.object({ step: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]), path: z.string() }).strict(),
+]);
+const mappingConfigInputSchema = z.record(z.string(), mappingDescriptorInputSchema);
+const mappingStepInputSchema = z
+  .object({
+    type: z.literal('mapping'),
+    id: z.string().min(1),
+    mapConfig: mappingConfigInputSchema.optional(),
+    output: mappingConfigInputSchema.optional(),
+  })
+  .refine(step => (step.mapConfig === undefined) !== (step.output === undefined), {
+    message: 'Provide exactly one of mapConfig or output.',
+  });
 const nestedWorkflowStepSchema = z.object({
   type: z.literal('workflow'),
   id: z.string().min(1),
@@ -82,8 +94,11 @@ const nestedWorkflowStepSchema = z.object({
 const executableInnerStepSchema = z.union([agentStepSchema, toolStepSchema, nestedWorkflowStepSchema]);
 const executableInnerStepInputSchema = z.union([agentStepInputSchema, toolStepSchema, nestedWorkflowStepSchema]);
 const literalScalarSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+const predicatePathSchema = z
+  .string()
+  .regex(/^(initData|inputData|stepResults|state)(\.[A-Za-z0-9_-]+)*$/, 'Use a canonical predicate path root.');
 const pathOrLiteralSchema = z.union([
-  z.object({ path: z.string().min(1) }),
+  z.object({ path: predicatePathSchema }),
   z.object({ literal: literalScalarSchema }),
 ]);
 const predicateSchema: z.ZodType<WorkflowPredicate> = z.lazy(() =>
@@ -94,7 +109,7 @@ const predicateSchema: z.ZodType<WorkflowPredicate> = z.lazy(() =>
       right: pathOrLiteralSchema,
     }),
     z.object({ op: z.enum(['in', 'notIn']), value: pathOrLiteralSchema, set: z.array(literalScalarSchema).min(1) }),
-    z.object({ op: z.enum(['exists', 'notExists']), path: z.string().min(1) }),
+    z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }),
     z.object({ op: z.enum(['truthy', 'falsy']), value: pathOrLiteralSchema }),
     z.object({ op: z.enum(['and', 'or']), args: z.array(predicateSchema).min(1) }),
     z.object({ op: z.literal('not'), arg: predicateSchema }),
@@ -181,6 +196,9 @@ export const workflowDefinitionInputSchema = z.object({
   requestContextSchema: jsonSchema.nullish(),
   graph: z.array(workflowStepInputSchema),
 });
+const normalizedWorkflowDefinitionSchema = workflowDefinitionInputSchema.extend({
+  graph: z.array(workflowStepSchema),
+});
 export const workflowCandidateCheckpointInputSchema = z.object({
   candidateRevision: z.number().int().nonnegative(),
 });
@@ -188,7 +206,7 @@ export const workflowCheckpointInputSchema = workflowDefinitionInputSchema;
 
 export function parseWorkflowDefinitionInput(input: unknown): WorkflowBuilderDefinition {
   const normalized = normalizeWorkflowBuilderDefinition(input);
-  workflowDefinitionInputSchema.parse(normalized);
+  normalizedWorkflowDefinitionSchema.parse(normalized);
   return normalized;
 }
 
@@ -243,7 +261,7 @@ function parseWorkflowStep(step: unknown) {
 
 export interface WorkflowDraftToolResult {
   toolId: string;
-  result: ReturnType<typeof toToolResult>;
+  result: z.infer<typeof resultSchema>;
 }
 
 export interface WorkflowDraftCandidate {
@@ -275,6 +293,7 @@ export interface WorkflowDraftToolStore {
   ) => WorkflowDraftAuthoringResult;
   candidate?: WorkflowDraftCandidate;
   isCurrentGeneration?: () => boolean;
+  getToolBlockReason?: (toolId: string) => string | undefined;
   onResult?: (event: WorkflowDraftToolResult) => void;
   onCandidateChange?: (candidate: WorkflowDraftCandidate) => void;
 }
@@ -331,13 +350,29 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
           candidateRevision: candidate.revision,
           baseAcceptedRevision: candidate.baseAcceptedRevision,
         }
-      : { success: false as const, error: result.error, ...(result.issues ? { issues: result.issues } : {}) };
+      : {
+          success: false as const,
+          error: result.error,
+          ...(result.issues ? { issues: result.issues } : {}),
+          candidateRevision: candidate.revision,
+          baseAcceptedRevision: candidate.baseAcceptedRevision,
+        };
     store.onResult?.({ toolId, result: toolResult });
     return toolResult;
   };
 
+  const blockedResult = (toolId: string) => {
+    const error = store.getToolBlockReason?.(toolId);
+    if (!error) return undefined;
+    const result = { success: false as const, error };
+    store.onResult?.({ toolId, result });
+    return result;
+  };
+
   const executeMutation = async (toolId: string, mutation: WorkflowDraftMutation) => {
     if (store.isCurrentGeneration?.() === false) return supersededResult;
+    const blocked = blockedResult(toolId);
+    if (blocked) return blocked;
     const result = store.mutateCandidate(toCandidateAuthoringState(candidate), candidate.revision, mutation);
     if (result.ok) {
       candidate.draft = result.state.draft;
@@ -361,6 +396,8 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
       outputSchema: resultSchema,
       execute: async input => {
         if (store.isCurrentGeneration?.() === false) return supersededResult;
+        const blocked = blockedResult('checkpoint-workflow-draft');
+        if (blocked) return blocked;
         candidate.draft = parseWorkflowDraftInput(input);
         candidate.revision += 1;
         candidate.issues = [];
@@ -378,7 +415,9 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
         }
         publishCandidate();
         if (store.isCurrentGeneration?.() === false) return supersededResult;
-        return reportResult(store, 'checkpoint-workflow-draft', result);
+        return result.ok
+          ? reportResult(store, 'checkpoint-workflow-draft', result)
+          : reportCandidateResult('checkpoint-workflow-draft', result);
       },
     }),
     'checkpoint-workflow-candidate': createTool({
@@ -389,6 +428,8 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
       outputSchema: resultSchema,
       execute: async ({ candidateRevision }) => {
         if (store.isCurrentGeneration?.() === false) return supersededResult;
+        const blocked = blockedResult('checkpoint-workflow-candidate');
+        if (blocked) return blocked;
         if (candidateRevision !== candidate.revision) {
           return reportCandidateResult('checkpoint-workflow-candidate', {
             ok: false,
@@ -408,7 +449,9 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
         }
         publishCandidate();
         if (store.isCurrentGeneration?.() === false) return supersededResult;
-        return reportResult(store, 'checkpoint-workflow-candidate', result);
+        return result.ok
+          ? reportResult(store, 'checkpoint-workflow-candidate', result)
+          : reportCandidateResult('checkpoint-workflow-candidate', result);
       },
     }),
     'finalize-workflow-draft': createTool({
@@ -419,6 +462,8 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
       outputSchema: resultSchema,
       execute: async ({ expectedRevision }: { expectedRevision: number }) => {
         if (store.isCurrentGeneration?.() === false) return supersededResult;
+        const blocked = blockedResult('finalize-workflow-draft');
+        if (blocked) return blocked;
         if (candidate.hasUncheckpointedChanges) {
           const error = 'Checkpoint the current generation candidate before finalizing.';
           const result = { ok: false as const, state: store.getState(), error };

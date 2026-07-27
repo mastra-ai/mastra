@@ -16,6 +16,7 @@ import {
   createWorkflowDraftTools,
   parseWorkflowDefinitionInput,
   workflowCandidateCheckpointInputSchema,
+  workflowCheckpointInputSchema,
 } from './workflow-draft-tools';
 import type { WorkflowDraftCandidate, WorkflowDraftToolResult } from './workflow-draft-tools';
 
@@ -95,6 +96,36 @@ describe('workflow draft client tools', () => {
       expect(jsonSchema.properties).toHaveProperty('candidateRevision');
       expect(jsonSchema.required).toContain('candidateRevision');
     });
+
+    it('rejects ambiguous mapping descriptors before they enter the candidate workspace', () => {
+      const result = workflowCheckpointInputSchema.safeParse({
+        ...completeDefinition,
+        graph: [
+          {
+            type: 'mapping',
+            id: 'shape-input',
+            mapConfig: { email: { initData: true, step: 'lookup-customer', path: 'email' } },
+          },
+        ],
+      });
+
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects conditional predicate paths without a canonical namespace root', () => {
+      const result = workflowCheckpointInputSchema.safeParse({
+        ...completeDefinition,
+        graph: [
+          {
+            type: 'conditional',
+            steps: [{ type: 'tool', id: 'urgent-response', toolId: 'report-data' }],
+            predicates: [{ op: 'exists', path: 'priority' }],
+          },
+        ],
+      });
+
+      expect(result.success).toBe(false);
+    });
   });
 
   describe('when a draft tool returns structured repair feedback', () => {
@@ -114,7 +145,11 @@ describe('workflow draft client tools', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0]?.toolId).toBe('checkpoint-workflow-draft');
-      expect(results[0]?.result.success).toBe(false);
+      expect(results[0]?.result).toMatchObject({
+        success: false,
+        candidateRevision: 1,
+        baseAcceptedRevision: 0,
+      });
     });
   });
 
