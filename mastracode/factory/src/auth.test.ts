@@ -161,6 +161,55 @@ describe('mountFactoryAuth gate (enabled)', () => {
     expect(await res.json()).toEqual({ error: 'unauthorized' });
   });
 
+  it('lets unauthenticated channel webhook deliveries reach the route handler', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const res = await app.request('/api/agent-controllers/mastra-code/channels/slack/webhook', {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('ok');
+    expect(mockAuthenticate).not.toHaveBeenCalled();
+  });
+
+  it('passes channel webhooks through for any controller id', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const res = await app.request('/api/agent-controllers/some-other-controller/channels/discord/webhook', {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+    });
+    expect(res.status).toBe(200);
+    expect(mockAuthenticate).not.toHaveBeenCalled();
+  });
+
+  it('does not bypass auth for non-POST channel webhook requests', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const res = await app.request('/api/agent-controllers/mastra-code/channels/slack/webhook', {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'unauthorized' });
+  });
+
+  it('does not bypass auth for other agent-controller API paths', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const res = await app.request('/api/agent-controllers/mastra-code/sessions', {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'unauthorized' });
+  });
+
   it('returns 401 for unauthenticated non-HTML navigation (XHR)', async () => {
     mockAuthenticate.mockResolvedValue(null);
     const { app } = buildApp();

@@ -689,6 +689,15 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     if (c.req.method === 'POST' && path === '/web/github/webhook') {
       return next();
     }
+    // Inbound chat-channel webhooks (Slack events, slash commands) carry no user
+    // session: they authenticate by platform signature (the adapter verifies the
+    // request against its signing secret) and the routes themselves declare
+    // `requiresAuth: false`. This gate matches on paths rather than reading that
+    // route metadata, so the channel webhook path needs an explicit pass — the
+    // controller id is whatever the host registered, so match the shape.
+    if (c.req.method === 'POST' && /^\/api\/agent-controllers\/[^/]+\/channels\/[^/]+\/webhook$/.test(path)) {
+      return next();
+    }
     // The Slack account-linking deep link and the Sign-in-with-Slack OIDC
     // start/callback do their own auth (friendly login-redirect for signed-out
     // visitors; the OIDC callback authenticates via its signed `state`) — see
