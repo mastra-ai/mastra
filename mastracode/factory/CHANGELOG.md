@@ -1,5 +1,19 @@
 # @mastra/factory
 
+## 0.2.1-alpha.4
+
+### Patch Changes
+
+- Removed Git and GitHub route locking that held database transactions open during sandbox and network operations. ([#20135](https://github.com/mastra-ai/mastra/pull/20135))
+
+- Improved Factory work-item concurrency by replacing distributed advisory locks with atomic claims, idempotent replay, and serializable relationship transactions. ([#20135](https://github.com/mastra-ai/mastra/pull/20135))
+
+- Fixed Factory integrations so GitHub and Linear attach their own event rules. This restores work-item rule ingestion for Platform-backed Linear intake and for the Platform GitHub issue poller. ([#20169](https://github.com/mastra-ai/mastra/pull/20169))
+
+- Updated dependencies [[`f497717`](https://github.com/mastra-ai/mastra/commit/f497717304ad76043f689711ccc044f0cd51ba41), [`73839cb`](https://github.com/mastra-ai/mastra/commit/73839cb58322679c170627d1015669ede5f619aa), [`8e4dc79`](https://github.com/mastra-ai/mastra/commit/8e4dc793dcf035ea506f9ce79f56d2d501a4be14), [`2db93cc`](https://github.com/mastra-ai/mastra/commit/2db93ccd0b872e4de7853a93383efe0647901df8), [`094ab61`](https://github.com/mastra-ai/mastra/commit/094ab6129a1a3ecf6eeb86decac17d5faea4e02a), [`fe80944`](https://github.com/mastra-ai/mastra/commit/fe80944f3ef6681fea6eae8200fce387b7bb3c2f), [`e51e166`](https://github.com/mastra-ai/mastra/commit/e51e166c52e220abc9b64554ce37359dca8544b1)]:
+  - @mastra/code-sdk@1.0.2-alpha.4
+  - @mastra/core@1.53.0-alpha.4
+
 ## 0.2.1-alpha.3
 
 ### Patch Changes
