@@ -2,9 +2,11 @@ import type { IMastraLogger } from '../logger';
 import type { MastraCompositeStore } from './base';
 
 const isAugmentedSymbol = Symbol('isAugmented');
-const initIndependentMethods = new Set<PropertyKey>(
-  ['__registerMastra', '__setLogger', '__setRawConfig'] satisfies (keyof MastraCompositeStore)[],
-);
+const initIndependentMethods = new Set<PropertyKey>([
+  '__registerMastra',
+  '__setLogger',
+  '__setRawConfig',
+] satisfies (keyof MastraCompositeStore)[]);
 
 export function augmentWithInit(storage: MastraCompositeStore): MastraCompositeStore {
   let hasInitialized: null | Promise<void> = null;
