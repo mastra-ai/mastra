@@ -1306,6 +1306,11 @@ type Shared_Type_65 = {
       }
     | undefined;
   roles?: string[] | undefined;
+  metadata?:
+    | {
+        [key: string]: string | number | boolean | null;
+      }
+    | undefined;
 };
 
 type Shared_Type_66 = {

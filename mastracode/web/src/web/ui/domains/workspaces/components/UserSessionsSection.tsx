@@ -16,9 +16,8 @@ import { useFactoryQuery } from '../../../../../shared/hooks/useFactories';
 import { useWorkspacesQuery } from '../../../../../shared/hooks/useWorkspaces';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { USER_SESSION_BRANCH_PREFIX } from '../services/github';
+import { USER_SESSION_BRANCH_PREFIX, createUserSession, deleteUserSession } from '../services/github';
 import type { FactoryUserSession } from '../services/github';
-import { createUserSession, deleteUserSession } from '../services/github';
 import { SessionNavRow } from './SessionNavRow';
 
 function sessionLabel(session: FactoryUserSession): string {

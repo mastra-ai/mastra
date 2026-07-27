@@ -1599,7 +1599,7 @@ export class Agent<
 
     // Single item that's already a workflow - mark it as processor type and return
     if (processors.length === 1 && isProcessorWorkflow(processors[0]!)) {
-      const workflow = processors[0]!;
+      const workflow = processors[0];
       // Mark the workflow as a processor workflow if not already set
       // Note: This mutates the workflow, but processor workflows are expected to be
       // dedicated to this purpose and not reused as regular workflows
@@ -1618,7 +1618,7 @@ export class Agent<
 
     // If after filtering we have a single workflow, mark it as processor type and return
     if (validProcessors.length === 1 && isProcessorWorkflow(validProcessors[0]!)) {
-      const workflow = validProcessors[0]!;
+      const workflow = validProcessors[0];
       // Mark the workflow as a processor workflow if not already set
       if (!workflow.type) {
         workflow.type = 'processor';
@@ -3720,67 +3720,6 @@ export class Agent<
     }
 
     return convertedWorkspaceTools;
-  }
-
-  /**
-   * Returns tools provided by the agent's channels (e.g. discord_send_message).
-   * @internal
-   */
-  private async listChannelTools({
-    runId,
-    resourceId,
-    threadId,
-    requestContext,
-    mastraProxy,
-    autoResumeSuspendedTools,
-    backgroundTaskEnabled,
-    ...rest
-  }: {
-    runId?: string;
-    resourceId?: string;
-    threadId?: string;
-    requestContext: RequestContext;
-    mastraProxy?: MastraUnion;
-    autoResumeSuspendedTools?: boolean;
-    backgroundTaskEnabled?: boolean;
-  } & Partial<ObservabilityContext>) {
-    const observabilityContext = resolveObservabilityContext(rest);
-    const convertedChannelTools: Record<string, CoreTool> = {};
-
-    if (!this.#agentChannels) {
-      return convertedChannelTools;
-    }
-
-    const channelTools = this.#agentChannels.getTools();
-
-    if (Object.keys(channelTools).length > 0) {
-      const memory = await this.getMemory({ requestContext });
-
-      for (const [toolName, tool] of Object.entries(channelTools)) {
-        const options: ToolOptions = {
-          name: toolName,
-          runId,
-          threadId,
-          resourceId,
-          logger: this.logger,
-          mastra: mastraProxy as MastraUnion | undefined,
-          memory,
-          agentName: this.name,
-          requestContext,
-          ...observabilityContext,
-          tracingPolicy: this.#options?.tracingPolicy,
-        };
-        convertedChannelTools[toolName] = makeCoreTool(
-          tool as ToolToConvert,
-          options,
-          undefined,
-          autoResumeSuspendedTools,
-          backgroundTaskEnabled,
-        );
-      }
-    }
-
-    return convertedChannelTools;
   }
 
   /**
@@ -6049,17 +5988,6 @@ export class Agent<
       suppressEagerSkillTools: hasOnDemandProcessor && !hasSkillsProcessor,
     });
 
-    const channelTools = await this.listChannelTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-    });
-
     const browserTools = await this.listBrowserTools({
       runId,
       resourceId,
@@ -6092,7 +6020,6 @@ export class Agent<
       ...workflowTools,
       ...workspaceTools,
       ...skillTools,
-      ...channelTools,
       ...browserTools,
       ...inputProcessorLoadedTools,
     };
@@ -6936,7 +6863,7 @@ export class Agent<
         : options.tracingOptions;
 
     const spanInput = isResume
-      ? this.#getResumeSpanInput(resumeContext!.resumeData, suspendedToolInfo)
+      ? this.#getResumeSpanInput(resumeContext.resumeData, suspendedToolInfo)
       : options.messages;
 
     const agentSpan = getOrCreateSpan({

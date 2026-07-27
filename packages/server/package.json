@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.53.0-alpha.1",
+  "version": "1.54.0-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -105,7 +105,8 @@
     "check:permissions": "tsx scripts/check-permissions.ts",
     "check:core-imports": "tsx scripts/check-core-imports.ts",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "keywords": [],
   "author": "",

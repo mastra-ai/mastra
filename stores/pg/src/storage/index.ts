@@ -160,7 +160,7 @@ export type { VNextPostgresObservabilityConfig };
 export { PoolAdapter } from './client';
 export type { DbClient, TxClient, QueryValues, Pool, PoolClient, QueryResult } from './client';
 export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomainRestConfig } from './db';
-export { PgFactoryStorage, hashAdvisoryLockKey, type PgFactoryStorageConfig } from './factory-storage';
+export { PgFactoryStorage, type PgFactoryStorageConfig } from './factory-storage';
 
 /**
  * PostgreSQL storage adapter for Mastra.

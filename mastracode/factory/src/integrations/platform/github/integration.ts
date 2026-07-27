@@ -44,6 +44,7 @@ import type {
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
 import type { GithubIntegration, GithubRepositoryPermission, RepoSummary } from '../../github/integration.js';
 import { buildGithubRoutes } from '../../github/routes.js';
+import { attachGithubRules } from '../../github/rules.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -406,6 +407,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {
+    const ingestFactoryEvent = attachGithubRules(this, ctx);
     return [
       this.#statusRoute(ctx),
       this.#connectRoute(ctx),
@@ -420,7 +422,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         controller: ctx.controller,
         projects: ctx.storage.projects,
         emitAudit: ctx.hooks?.emitAudit,
-        ingestFactoryEvent: ctx.hooks?.ingestGithubEvent,
+        ingestFactoryEvent,
       }).filter(
         route =>
           route.path !== '/web/github/status' &&
@@ -590,7 +592,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         controller: ctx.controller,
         github: this,
         storage: ctx.storage.generic as unknown as PlatformGithubEventStorage,
-        ingestFactoryEvent: ctx.hooks?.ingestGithubEvent,
+        ingestFactoryEvent: attachGithubRules(this, ctx),
         intervalMs: this.#pollingIntervalMs,
       }),
     ];

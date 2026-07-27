@@ -47,8 +47,8 @@ import {
   useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
+  useWorkItemsQuery,
 } from '../../../shared/hooks/useWorkItems';
-import { useWorkItemsQuery } from '../../../shared/hooks/useWorkItems';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../domains/factory/services/decisions';
 import type { GithubIssue, GithubPullRequest } from '../domains/factory/services/factory';
 import type { LinearIssue } from '../domains/factory/services/linear';

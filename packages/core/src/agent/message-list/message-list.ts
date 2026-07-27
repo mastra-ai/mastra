@@ -15,6 +15,7 @@ import {
   aiV4CoreMessageToV1PromptMessage,
   aiV5ModelMessageToV2PromptMessage,
   aiV5PromptToAIV6Prompt,
+  aiV5PromptToAIV7Prompt,
   coreContentToString,
   messagesAreEqual,
   inputToMastraDBMessage as convertInputToMastraDBMessage,
@@ -691,6 +692,17 @@ export class MessageList {
         downloadRetries?: number;
         supportedUrls?: Record<string, RegExp[]>;
       }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV6Prompt(await this.all.aiV5.llmPrompt(options)),
+    },
+    aiV7: {
+      ui: () => this.toAIV6UIMessages(this.all.db()),
+
+      // Builds the v5 prompt, then converts tool-result `media` parts to the
+      // file content shape AI SDK v7 (spec 'v4') providers require.
+      llmPrompt: async (options?: {
+        downloadConcurrency?: number;
+        downloadRetries?: number;
+        supportedUrls?: Record<string, RegExp[]>;
+      }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV7Prompt(await this.all.aiV5.llmPrompt(options)),
     },
 
     /* @deprecated use list.get.all.aiV4.prompt() instead */

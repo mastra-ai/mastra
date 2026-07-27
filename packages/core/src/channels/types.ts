@@ -494,8 +494,10 @@ export interface ChannelConfig {
   };
 
   /**
-   * Whether to include channel tools (add_reaction, remove_reaction).
-   * Set to `false` for models that don't support function calling.
+   * Whether `getTools()` returns the channel tools (add_reaction,
+   * remove_reaction). Set to `false` for models that don't support function
+   * calling. Channel tools are never injected into the agent automatically —
+   * pass them explicitly via `tools: { ...channels.getTools() }`.
    *
    * @default true
    */
