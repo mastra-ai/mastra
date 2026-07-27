@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed Mastra construction so internal storage setup no longer initializes the database.
+Fixed Mastra construction so failed storage initialization no longer causes unhandled promise rejections.
