@@ -3365,7 +3365,7 @@ importers:
         specifier: workspace:*
         version: link:../_types-builder
       '@microsoft/api-extractor':
-        specifier: ^7.58.11
+        specifier: ^7.58.12
         version: 7.58.12(@types/node@22.19.15)
       '@opentelemetry/api':
         specifier: ^1.9.1
@@ -3700,7 +3700,7 @@ importers:
         specifier: workspace:*
         version: link:../../_types-builder
       '@microsoft/api-extractor':
-        specifier: ^7.58.11
+        specifier: ^7.58.12
         version: 7.58.12(@types/node@22.19.15)
       '@opentelemetry/api':
         specifier: ^1.9.1
@@ -6900,7 +6900,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/core
       '@microsoft/api-extractor':
-        specifier: ^7.58.11
+        specifier: ^7.58.12
         version: 7.58.12(@types/node@22.19.15)
       '@types/node':
         specifier: 22.19.15
