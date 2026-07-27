@@ -6,6 +6,7 @@
   "description": "Browser application for MastraCode: React SPA, client data layer, Vite config, and UI tests. Consumed by the standalone mastracode/web host via link:.",
   "scripts": {
     "dev": "vite --config src/vite.config.ts",
+    "web": "MASTRACODE_ENV_DIR=../web MASTRACODE_API_TARGET=${MASTRACODE_API_TARGET:-http://localhost:4111} MASTRACODE_UI_PORT=${MASTRACODE_UI_PORT:-5173} vite --config src/vite.config.ts",
     "build": "vite --config src/vite.config.ts build",
     "typecheck": "tsc --noEmit -p src/ui/tsconfig.json",
     "test": "vitest run && vitest run --config e2e/ui/vitest.config.ts",

@@ -52,10 +52,10 @@ function runtimeConfigPlugin(): Plugin {
 /**
  * Vite config for the MastraCode Factory UI.
  *
- * In dev, `pnpm web:dev` (from mastracode/web) runs `mastra factory dev` (the
- * API server from `src/mastra/index.ts` on :4111) and Vite (:5173) side by
- * side; API paths are proxied to that server so the browser uses same-origin
- * requests in dev.
+ * For split UI/API development, `pnpm api` (from mastracode/web) runs
+ * `mastra factory dev` (the API server from `src/mastra/index.ts` on :4111)
+ * and `pnpm web` runs Vite (:5173) from this package. API paths are proxied to
+ * that server so the browser uses same-origin requests in dev.
  *
  * The production build outputs the static SPA. The standalone web host sets
  * `MASTRACODE_OUT_DIR` to its `src/mastra/public/factory` so `mastra build`
@@ -77,7 +77,7 @@ export default defineConfig({
     dedupe: ['react', 'react-dom', '@tanstack/react-query'],
   },
   build: {
-    outDir: process.env.MASTRACODE_OUT_DIR ?? resolve(here, 'mastra/public/factory'),
+    outDir: process.env.MASTRACODE_OUT_DIR ?? resolve(here, '../dist'),
     emptyOutDir: true,
   },
   server: {

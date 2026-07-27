@@ -1,13 +1,14 @@
+Web UI (Vite HMR against the web host API): pnpm --filter ./mastracode/factory-ui web
 Build: pnpm --filter ./mastracode/factory-ui build
 Typecheck: pnpm --filter ./mastracode/factory-ui typecheck
 Unit tests: pnpm --filter ./mastracode/factory-ui test:unit
 MSW UI tests: pnpm --filter ./mastracode/factory-ui test:msw
 
 This package owns the MastraCode browser application: React SPA, client data
-layer, Vite config, and UI tests. The standalone `mastracode/web` host links
-this package via `link:` and delegates UI dev/build to it — the host sets
-`MASTRACODE_ENV_DIR` (its project root for `.env`) and `MASTRACODE_OUT_DIR`
-(its `src/mastra/public/factory` for the SPA artifact) when invoking Vite.
+layer, Vite config, and UI tests. For split UI/API development, run
+`pnpm --dir mastracode/web api` first, then `pnpm --dir mastracode/factory-ui web`.
+The `web` script reads the host `.env`, runs Vite on :5173, and proxies to the
+host API on :4111.
 
 Build upstream workspace deps first (playground-ui, client-js, factory, etc.):
 `pnpm turbo build --filter ./mastracode/factory-ui` handles the graph.

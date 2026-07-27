@@ -16,54 +16,53 @@ pnpm install
 
 ## Development
 
-```bash
-pnpm web:dev
-```
-
-- API server (`mastra factory dev`) on **:4111**, env loaded/validated by varlock from `.env` against `.env.schema` (package root).
-- Vite SPA on **:5173**, proxying `/api`, `/web`, and `/auth/` to the API server.
-
-The SPA is built and served by Vite using the config in `mastracode/factory-ui/src/vite.config.ts`. The host sets `MASTRACODE_ENV_DIR` (its project root for `.env`) and `MASTRACODE_OUT_DIR` (its `src/mastra/public/factory` for the SPA artifact) when invoking Vite. See [`mastracode/factory-ui/AGENTS.md`](../factory-ui/AGENTS.md) for UI build, typecheck, and test commands.
-
-To test the production-like, same-origin setup on port 5173 with one long-running process, build the SPA once and serve it from the Factory API server:
+For the integrated Factory server and its bundled UI:
 
 ```bash
-pnpm web:dev:prod
+pnpm dev
 ```
 
-This mode does not provide UI HMR. Run `pnpm web:dev` for normal UI development.
+For UI design work with Vite HMR, run the API and SPA separately:
 
-Local development works without PostgreSQL: the full web surface uses the SDK's local LibSQL database. To exercise the PostgreSQL backend and distributed-lock path, run `pnpm web:dev:github` (Docker Compose on port 54329).
+```bash
+# terminal 1 — in mastracode/web
+pnpm api
+
+# terminal 2 — in mastracode/factory-ui
+pnpm web
+```
+
+Open **http://localhost:5173**. The Factory API runs on **:4111**; the Vite SPA
+proxies `/api`, `/web`, and `/auth/` to it. The `api` script sets
+`MASTRACODE_PUBLIC_URL` to the Vite origin so local OAuth callbacks return to
+the browser UI. The UI script reads the host `.env` through `MASTRACODE_ENV_DIR`.
+
+Local development works without PostgreSQL: the full web surface uses the SDK's local LibSQL database. To exercise the PostgreSQL backend and distributed-lock path, run `pnpm db:up` before `pnpm api`.
 
 ## Build & deploy
 
 ```bash
-pnpm web:build
+pnpm build
 ```
 
-1. `prebuild` — builds the linked monorepo packages via turbo.
-2. Vite builds the SPA (via `mastracode/factory-ui`) to `src/mastra/public/factory/`. The host sets `MASTRACODE_ENV_DIR` and `MASTRACODE_OUT_DIR` so Vite reads `.env` from the web project root and emits the SPA artifact into the server's public directory.
-3. `scripts/monorepo-deps.mjs run -- mastra build --dir src/mastra` — pins the `link:` deps to the **exact versions found in the monorepo** (read from each linked package's `package.json`), runs the build, then always restores the `link:` specs (also on failure/Ctrl-C). The build calls `build:ui` (step 2) automatically when a Factory entry is detected, bundles the API server to `.mastra/output/`, and copies `public/` (including the SPA) into it automatically.
-4. The server serves the SPA same-origin at `/` (see `src/mastra/public/factory/`).
+1. `prebuild` builds linked monorepo packages with Turbo.
+2. `scripts/monorepo-deps.mjs run -- mastra build --dir src/mastra` pins `link:` dependencies to the exact monorepo versions, builds the API server into `.mastra/output/`, and restores the `link:` specs afterward, including on failure or interruption.
+3. The Factory server serves its SPA artifact same-origin at `/`.
 
-The deploy output's `package.json` therefore pins the exact monorepo versions of `@mastra/*`, so a production deploy `npm install`s them straight from npm — those versions must be published (CI releases alphas). **Known limitation:** until `@mastra/code-sdk` has a proper npm release (changeset queued), the build's final output-deps install step fails on `@mastra/code-sdk@0.0.0`; the bundle, SPA, and output `package.json` are still produced correctly before that step.
-
-To switch the manifest manually: `pnpm deps:pin` / `pnpm deps:link` (the `link:` state is what's committed).
-
-Run the output with `pnpm web:start` (or `node .mastra/output/index.mjs` after installing output deps).
+Run the output with `pnpm start` (or `node .mastra/output/index.mjs` after installing output dependencies).
 
 To deploy to Mastra Cloud:
 
 ```bash
-pnpm web:deploy
+pnpm deploy
 ```
 
-This runs `web:build` (pinned versions, as above), validates the output (server entry, deploy manifest, SPA), and then `mastra deploy --skip-build`, which uploads the existing `.mastra/output`. Deploy targets `--env production` by default and auto-selects `.env.production` if present — otherwise it will offer to upload vars from the local `.env`, so double-check what you confirm in the prompt. Requires `mastra auth login` first; pass extra flags via `pnpm web:deploy -- --env staging` etc.
+This builds and validates the output, then runs `mastra deploy --skip-build` to upload the existing `.mastra/output`. Deploy targets `--env production` by default and auto-selects `.env.production` if present; otherwise it offers to upload variables from the local `.env`. Requires `mastra auth login` first; pass extra flags with `pnpm deploy -- --env staging`.
 
 ## Tests
 
 ```bash
-pnpm web:test     # server scenario tests (e2e/web)
+pnpm test     # host unit and server/controller scenario tests
 ```
 
 UI MSW tests (`*.msw.test.tsx`) and unit tests live in [`mastracode/factory-ui`](../factory-ui). Run them with `pnpm --filter ./mastracode/factory-ui test` (or `test:unit` / `test:msw` for focused suites).
