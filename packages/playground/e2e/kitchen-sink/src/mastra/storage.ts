@@ -2,7 +2,7 @@ import { LibSQLStore } from '@mastra/libsql';
 
 export const storage = new LibSQLStore({
   id: 'e2e-test-storage',
-  url: 'file:e2e-test-storage.db',
+  url: process.env.WORKFLOW_EVAL_STORAGE_URL ?? 'file:e2e-test-storage.db',
 });
 
 export async function initE2EStorage() {
