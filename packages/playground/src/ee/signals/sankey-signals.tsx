@@ -38,6 +38,8 @@ export interface SankeySignalsProps {
   entityId: string;
   entityType?: string;
   signalNames: TraceSignalName[];
+  dateFrom?: Date;
+  dateTo?: Date;
   height?: number;
 }
 
@@ -121,11 +123,13 @@ export function SankeySignals({
   entityId,
   entityType = 'agent',
   signalNames: initialSignalNames,
+  dateFrom,
+  dateTo,
   height,
 }: SankeySignalsProps) {
   const queryClient = useQueryClient();
   const [signalNames, setSignalNames] = useState(() => initialSignalNames);
-  const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames);
+  const snapshotsQuery = useThemeSnapshots(entityId, entityType, signalNames, dateFrom, dateTo);
   const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
   const [selectedSnapshotOrdinal, setSelectedSnapshotOrdinal] = useState<number>();
   const [isPlaying, setIsPlaying] = useState(false);
@@ -182,8 +186,16 @@ export function SankeySignals({
   const perspectiveMutation = useMutation({
     mutationFn: async (nextSignalNames: TraceSignalName[]) => {
       const nextSnapshots = await queryClient.fetchQuery({
-        queryKey: ['entity-learning', entityType, entityId, 'theme-snapshots', nextSignalNames],
-        queryFn: () => fetchThemeSnapshots(entityId, entityType, nextSignalNames),
+        queryKey: [
+          'entity-learning',
+          entityType,
+          entityId,
+          'theme-snapshots',
+          nextSignalNames,
+          dateFrom?.toISOString(),
+          dateTo?.toISOString(),
+        ],
+        queryFn: () => fetchThemeSnapshots(entityId, entityType, nextSignalNames, dateFrom, dateTo),
       });
       await Promise.all(
         nextSnapshots.snapshots.map(nextSnapshot =>
