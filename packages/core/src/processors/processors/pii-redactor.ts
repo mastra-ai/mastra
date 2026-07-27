@@ -12,6 +12,7 @@ import type {
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
 import {
+  deoverlapPIIDetections,
   detectPIIWithPatterns,
   LLM_ONLY_PII_TYPES,
   PII_PATTERNS,
@@ -283,7 +284,7 @@ export class PIIRedactor implements Processor<'pii-redactor', PIIRedactorTripwir
    * that was already emitted, which would shift slice offsets.
    */
   private redactNewRegion(combined: string, tailLength: number, detections: PIIDetection[]): string {
-    const sorted = [...detections].sort((a, b) => a.start - b.start);
+    const sorted = deoverlapPIIDetections(detections);
     let cursor = tailLength;
     let out = '';
     for (const detection of sorted) {

@@ -56,11 +56,24 @@ export interface PIIDetectionResult {
  */
 export type PIIRedactionMethod = 'mask' | 'hash' | 'remove' | 'placeholder';
 
+/** All regex-detectable PII types */
+export const REGEX_DETECTABLE_PII_TYPES = [
+  'email',
+  'phone',
+  'credit-card',
+  'ssn',
+  'api-key',
+  'ip-address',
+  'url',
+  'uuid',
+  'crypto-wallet',
+  'iban',
+] as const;
+
 /**
  * PII types detectable with regex patterns alone (no LLM required)
  */
-export type RegexDetectablePIIType =
-  'email' | 'phone' | 'credit-card' | 'ssn' | 'api-key' | 'ip-address' | 'url' | 'uuid' | 'crypto-wallet' | 'iban';
+export type RegexDetectablePIIType = (typeof REGEX_DETECTABLE_PII_TYPES)[number];
 
 /**
  * Regex patterns for local (zero-cost) PII detection
@@ -78,9 +91,6 @@ export const PII_PATTERNS: Record<RegexDetectablePIIType, RegExp> = {
   'crypto-wallet': /\b(?:0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-zA-HJ-NP-Z0-9]{39,59})\b/g,
   iban: /\b[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}(?:[A-Z0-9]?){0,16}\b/g,
 };
-
-/** All regex-detectable PII types */
-export const REGEX_DETECTABLE_PII_TYPES = Object.keys(PII_PATTERNS) as RegexDetectablePIIType[];
 
 /** PII types that require LLM context and cannot be detected by regex */
 export const LLM_ONLY_PII_TYPES = new Set(['name', 'address', 'date-of-birth']);
@@ -126,7 +136,7 @@ export function maskPIIValue(value: string, type: string, preserveFormat: boolea
   }
 
   switch (type) {
-    case 'email':
+    case 'email': {
       const emailParts = value.split('@');
       if (emailParts.length === 2) {
         const [local, domain] = emailParts;
@@ -140,6 +150,7 @@ export function maskPIIValue(value: string, type: string, preserveFormat: boolea
         return `${maskedLocal}@${maskedDomain}`;
       }
       break;
+    }
 
     case 'phone':
       // Preserve format like XXX-XXX-1234 or (XXX) XXX-1234
@@ -197,13 +208,31 @@ export function hashPIIValue(value: string): string {
 }
 
 /**
+ * Drop detections that overlap an earlier-starting (or same-start, longer) one
+ * so span replacement always operates on disjoint ranges. Patterns run
+ * independently, so e.g. an email inside a matched URL produces overlapping
+ * spans that would garble spliced output.
+ */
+export function deoverlapPIIDetections(detections: PIIDetection[]): PIIDetection[] {
+  const sorted = [...detections].sort((a, b) => a.start - b.start || b.end - a.end);
+  const disjoint: PIIDetection[] = [];
+  let lastEnd = -1;
+  for (const detection of sorted) {
+    if (detection.start < lastEnd) continue;
+    disjoint.push(detection);
+    lastEnd = detection.end;
+  }
+  return disjoint;
+}
+
+/**
  * Apply redaction to content given a set of detections
  */
 export function applyPIIRedaction(content: string, detections: PIIDetection[], options: PIIRedactionOptions): string {
   let redacted = content;
 
   // Sort detections by start position in reverse order to maintain indices
-  const sortedDetections = [...detections].sort((a, b) => b.start - a.start);
+  const sortedDetections = deoverlapPIIDetections(detections).sort((a, b) => b.start - a.start);
 
   for (const detection of sortedDetections) {
     const redactedValue = redactPIIValue(detection.value, detection.type, options);
@@ -249,21 +278,23 @@ export function detectPIIWithPatterns(
     }
   }
 
-  const detectedTypes = new Set(detections.map(d => d.type));
+  const disjointDetections = deoverlapPIIDetections(detections);
+
+  const detectedTypes = new Set(disjointDetections.map(d => d.type));
   for (const type of detectedTypes) {
     categories.push({ type, score: 1.0 });
   }
 
   let redacted_content: string | null | undefined;
-  if (redact && detections.length > 0) {
-    redacted_content = applyPIIRedaction(content, detections, redact);
+  if (redact && disjointDetections.length > 0) {
+    redacted_content = applyPIIRedaction(content, disjointDetections, redact);
   } else if (redact) {
     redacted_content = null;
   }
 
   return {
     categories: categories.length > 0 ? categories : null,
-    detections: detections.length > 0 ? detections : null,
+    detections: disjointDetections.length > 0 ? disjointDetections : null,
     ...(redact ? { redacted_content } : {}),
   };
 }

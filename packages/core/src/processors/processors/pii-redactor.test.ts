@@ -161,6 +161,22 @@ describe('PIIRedactor', () => {
       expect(result).toBe(messages);
     });
 
+    it('keeps the earlier, longer match when detection spans overlap', async () => {
+      const redactor = new PIIRedactor({ detectionTypes: ['email', 'url'], redactionMethod: 'placeholder' });
+      const result = await redactor.processInput(
+        createInputArgs([createMessage('see https://example.com/u/a@b.io done')]),
+      );
+
+      expect(getText((result as MastraDBMessage[])[0]!)).toBe('see [URL] done');
+    });
+
+    it('does not garble text when two types match the same digits', async () => {
+      const redactor = new PIIRedactor({ detectionTypes: ['phone', 'credit-card'], redactionMethod: 'placeholder' });
+      const result = await redactor.processInput(createInputArgs([createMessage('card 4111-1111-1111-1111 end')]));
+
+      expect(getText((result as MastraDBMessage[])[0]!)).toBe('card [CREDIT-CARD] end');
+    });
+
     it('only checks the last message when lastMessageOnly is set', async () => {
       const redactor = new PIIRedactor({
         detectionTypes: ['email'],

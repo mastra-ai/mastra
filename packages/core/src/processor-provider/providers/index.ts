@@ -202,8 +202,9 @@ export const piiRedactorProvider: ProcessorProvider = {
     strategy: z.enum(['block', 'warn', 'filter', 'redact']).optional(),
     redactionMethod: z.enum(['mask', 'hash', 'remove', 'placeholder']).optional(),
     preserveFormat: z.boolean().optional(),
+    lastMessageOnly: z.boolean().optional(),
   }),
-  availablePhases: ['processInput'] as ProcessorPhase[],
+  availablePhases: ['processInput', 'processOutputStream', 'processOutputResult'] as ProcessorPhase[],
   createProcessor(config) {
     return new PIIRedactor(config as unknown as PIIRedactorOptions);
   },
