@@ -1,5 +1,5 @@
 import { lookup as dnsLookup } from 'node:dns';
-import type { LookupOptions } from 'node:dns';
+import type { LookupAddress, LookupOptions } from 'node:dns';
 import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
@@ -84,15 +84,18 @@ function createLookup() {
   return (
     hostname: string,
     options: LookupOptions,
-    callback: (error: NodeJS.ErrnoException | null, address: string, family: number) => void,
+    callback: (error: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void,
   ) => {
-    dnsLookup(hostname, { ...options, all: false }, (error, address, family) => {
+    dnsLookup(hostname, options, (error, address, family) => {
       if (error) {
         callback(error, address, family);
         return;
       }
 
-      if (isBlockedIp(address)) {
+      const resolvedAddresses = Array.isArray(address) ? address.map(result => result.address) : [address];
+      const blockedAddress = resolvedAddresses.find(isBlockedIp);
+
+      if (blockedAddress) {
         callback(new WebFetchError('URL resolves to a private or reserved address.'), address, family);
         return;
       }

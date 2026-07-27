@@ -39,7 +39,14 @@ import { webFetchTool as exportedWebFetchTool } from '../index';
 import { webFetchTool } from './web-fetch';
 
 function allowPublicDns(address = '93.184.216.34') {
-  mocks.dnsLookup.mockImplementation((_hostname, _options, callback) => callback(null, address, 4));
+  mocks.dnsLookup.mockImplementation((_hostname, options, callback) => {
+    if (options.all) {
+      callback(null, [{ address, family: 4 }]);
+      return;
+    }
+
+    callback(null, address, 4);
+  });
 }
 
 function mockRequest(
@@ -178,6 +185,33 @@ describe('webFetchTool', () => {
   it('rejects private addresses returned by DNS lookup', async () => {
     mocks.dnsLookup.mockImplementation((_hostname, _options, callback) => callback(null, '127.0.0.1', 4));
     mockRequest(createResponse(['internal'], { statusCode: 200 }));
+
+    const result = await (webFetchTool as any).execute({ url: 'https://example.com' }, {});
+
+    expect(result).toEqual({
+      content: 'Failed to fetch URL: URL resolves to a private or reserved address.',
+      isError: true,
+    });
+  });
+
+  it('preserves DNS lookup options and rejects blocked addresses in all results', async () => {
+    mocks.dnsLookup.mockImplementation((_hostname, options, callback) => {
+      expect(options.all).toBe(true);
+      callback(null, [
+        { address: '93.184.216.34', family: 4 },
+        { address: '127.0.0.1', family: 4 },
+      ]);
+    });
+
+    const request = mockRequest(createResponse(['internal'], { statusCode: 200 }));
+    request.end = vi.fn(() => {
+      const options = mocks.httpsRequest.mock.calls.at(-1)?.[1];
+      options.lookup('example.com', { all: true }, (error: Error | null) => {
+        if (error) {
+          request.emit('error', error);
+        }
+      });
+    });
 
     const result = await (webFetchTool as any).execute({ url: 'https://example.com' }, {});
 
