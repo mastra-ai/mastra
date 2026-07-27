@@ -1,5 +1,17 @@
 # @internal/playground
 
+## 1.20.2-alpha.4
+
+### Patch Changes
+
+- Fixed Studio repeatedly polling observability endpoints when the observability storage domain is disabled. Studio now treats the disabled domain as an unavailable capability: score and log views stop polling, failed requests are not retried, and the Logs page shows a clear unavailable state instead of a generic error. Related to [#20157](https://github.com/mastra-ai/mastra/issues/20157). ([#20158](https://github.com/mastra-ai/mastra/pull/20158))
+
+- Updated dependencies [[`20c7fc2`](https://github.com/mastra-ai/mastra/commit/20c7fc224a7a22632c4632c18b4d281a023a08f9)]:
+  - @mastra/playground-ui@43.0.0-alpha.4
+  - @mastra/core@1.53.0-alpha.3
+  - @mastra/client-js@1.34.0-alpha.4
+  - @mastra/react@1.3.2-alpha.4
+
 ## 1.20.2-alpha.3
 
 ### Patch Changes

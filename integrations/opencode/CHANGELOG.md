@@ -1,5 +1,12 @@
 # @mastra/opencode
 
+## 0.1.10-alpha.3
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.53.0-alpha.3
+
 ## 0.1.10-alpha.2
 
 ### Patch Changes
