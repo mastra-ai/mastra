@@ -1,7 +1,9 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { describe, expect, it, vi } from 'vitest';
 
 import {
   createWorkflowConversationGeneration,
+  getOriginalWorkflowRequest,
   getWorkflowBuilderThreadId,
   serializeWorkflowDraftInstructions,
 } from './workflow-conversation';
@@ -31,6 +33,28 @@ describe('workflow conversation', () => {
       expect(instructions).toContain('"id": "daily-report"');
       expect(instructions).toContain('{ "initData": "prompt", "path": "" }');
       expect(instructions).toContain('After a successful checkpoint, Finalize immediately');
+    });
+
+    it('retains the original request while repairing a persisted conversation', () => {
+      const messages = [
+        {
+          id: 'original-request',
+          role: 'user',
+          createdAt: new Date('2026-07-27T12:00:00.000Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'Build the mixed support pipeline' }] },
+        },
+      ] satisfies MastraDBMessage[];
+      const originalRequest = getOriginalWorkflowRequest(messages);
+      const instructions = serializeWorkflowDraftInstructions(
+        createWorkflowDraftAuthoringState('mixed-support-pipeline'),
+        {},
+        undefined,
+        originalRequest,
+      );
+
+      expect(instructions).toContain('## Original workflow request');
+      expect(instructions).toContain('Build the mixed support pipeline');
+      expect(instructions).toContain('Do not ask the user to restate it.');
     });
 
     it('includes the repairable generation candidate separately from accepted state', () => {

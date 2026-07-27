@@ -3,7 +3,7 @@ import type { ClientToolsInput } from '@mastra/react';
 import { useCallback, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { serializeWorkflowDraftInstructions } from './workflow-conversation';
+import { getOriginalWorkflowRequest, serializeWorkflowDraftInstructions } from './workflow-conversation';
 import type { WorkflowDraftAuthoringState, WorkflowDraftValidationContext } from './workflow-draft';
 import { createWorkflowDraftCandidate } from './workflow-draft-tools';
 import type { WorkflowDraftCandidate, WorkflowDraftToolResult } from './workflow-draft-tools';
@@ -17,6 +17,10 @@ export interface WorkflowGenerationFailure {
 type WorkflowGenerationPhase = 'constructing' | 'checkpointed' | 'repairing' | 'finalized';
 
 const WORKFLOW_MUTATION_TOOL_IDS = new Set([
+  'insert-workflow-mapping-before',
+  'insert-workflow-mapping-after',
+  'set-workflow-mapping-source',
+  'set-workflow-predicate',
   'add-workflow-step',
   'update-workflow-step',
   'remove-workflow-step',
@@ -61,6 +65,7 @@ function WorkflowChatSession({
   children,
 }: WorkflowChatProviderProps) {
   const [hydrationMessages] = useState(initialMessages);
+  const [originalRequest] = useState(() => initialUserMessage ?? getOriginalWorkflowRequest(initialMessages));
   const [candidateSnapshot, setCandidateSnapshot] = useState<WorkflowDraftCandidate>();
   const candidateRef = useRef<WorkflowDraftCandidate | undefined>(undefined);
   const authoringStateRef = useRef(authoringState);
@@ -70,8 +75,10 @@ function WorkflowChatSession({
     accepted: false,
     finalized: false,
     phase: 'constructing' as WorkflowGenerationPhase,
-    rejected: 0,
-    rejectionSignature: undefined as string | undefined,
+    constructionRejected: 0,
+    constructionRejectionSignature: undefined as string | undefined,
+    repairRejected: 0,
+    repairRejectionSignature: undefined as string | undefined,
     stopped: false,
   });
 
@@ -108,8 +115,10 @@ function WorkflowChatSession({
         : acceptedState.revision > 0
           ? 'checkpointed'
           : 'constructing',
-      rejected: 0,
-      rejectionSignature: undefined,
+      constructionRejected: 0,
+      constructionRejectionSignature: undefined,
+      repairRejected: 0,
+      repairRejectionSignature: undefined,
       stopped: false,
     };
     onGenerationFailure?.(null);
@@ -121,10 +130,14 @@ function WorkflowChatSession({
       const isFinalize = toolId === 'finalize-workflow-draft';
       const isMutation = WORKFLOW_MUTATION_TOOL_IDS.has(toolId);
       if (result.success) {
-        if (isCheckpoint || isFinalize) {
-          generationStateRef.current.accepted = true;
-          generationStateRef.current.rejected = 0;
-          generationStateRef.current.rejectionSignature = undefined;
+        if (isCheckpoint || isFinalize) generationStateRef.current.accepted = true;
+        if (toolId === 'checkpoint-workflow-draft') {
+          generationStateRef.current.constructionRejected = 0;
+          generationStateRef.current.constructionRejectionSignature = undefined;
+        }
+        if (toolId === 'checkpoint-workflow-candidate' || isFinalize) {
+          generationStateRef.current.repairRejected = 0;
+          generationStateRef.current.repairRejectionSignature = undefined;
         }
         if (isCheckpoint) generationStateRef.current.phase = 'checkpointed';
         if (isMutation) generationStateRef.current.phase = 'repairing';
@@ -137,31 +150,37 @@ function WorkflowChatSession({
         }
         return;
       }
-      if (isFinalize) generationStateRef.current.phase = 'repairing';
-      if (!isCheckpoint && !isFinalize) return;
       if (
         result.error === 'Draft changed before this operation completed.' ||
         result.error === 'Generation candidate changed before checkpoint completed.' ||
-        result.error === 'Submission was superseded.'
+        result.error === 'Submission was superseded.' ||
+        getToolBlockReason(toolId) !== undefined
       )
         return;
+      if (!isCheckpoint && !isFinalize && !isMutation) return;
 
+      const budget = toolId === 'checkpoint-workflow-draft' ? 'construction' : 'repair';
+      if (isFinalize) generationStateRef.current.phase = 'repairing';
       const rejectionSignature = JSON.stringify({
         toolId,
         issues: result.issues?.map(issue => ({ code: issue.code, path: issue.path })) ?? [],
         error: result.issues?.length ? undefined : result.error,
       });
-      if (generationStateRef.current.rejectionSignature === rejectionSignature) {
-        generationStateRef.current.rejected += 1;
+      const signatureKey = budget === 'construction' ? 'constructionRejectionSignature' : 'repairRejectionSignature';
+      const countKey = budget === 'construction' ? 'constructionRejected' : 'repairRejected';
+      if (generationStateRef.current[signatureKey] === rejectionSignature) {
+        generationStateRef.current[countKey] += 1;
       } else {
-        generationStateRef.current.rejectionSignature = rejectionSignature;
-        generationStateRef.current.rejected = 1;
+        generationStateRef.current[signatureKey] = rejectionSignature;
+        generationStateRef.current[countKey] = 1;
       }
-      if (generationStateRef.current.rejected >= 3) {
+      if (generationStateRef.current[countKey] >= 3) {
         failGeneration({
           code: 'repair-budget-exhausted',
           message:
-            'Workflow generation stopped after three equivalent rejected draft repairs. Review the latest issues and retry.',
+            budget === 'construction'
+              ? 'Workflow generation stopped after three equivalent rejected construction attempts. Review the latest issues and retry.'
+              : 'Workflow generation stopped after three equivalent rejected repairs. Review the latest issues and retry.',
         });
       }
     };
@@ -226,7 +245,12 @@ function WorkflowChatSession({
       initialMessages={hydrationMessages}
       initialUserMessage={initialUserMessage}
       createClientTools={createClientTools}
-      extraInstructions={serializeWorkflowDraftInstructions(authoringState, validationContext, candidateSnapshot)}
+      extraInstructions={serializeWorkflowDraftInstructions(
+        authoringState,
+        validationContext,
+        candidateSnapshot,
+        originalRequest,
+      )}
       enableThreadSignals={false}
       debounceTime={debounceTime}
       maxSteps={10}

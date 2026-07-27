@@ -1,3 +1,5 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+
 import type { WorkflowDraftAuthoringState, WorkflowDraftValidationContext } from './workflow-draft';
 import type { WorkflowDraftCandidate } from './workflow-draft-tools';
 
@@ -5,11 +7,21 @@ export function getWorkflowBuilderThreadId(projectId: string, workflowId: string
   return `workflow-builder-${projectId}-${workflowId}`;
 }
 
+export function getOriginalWorkflowRequest(messages: MastraDBMessage[]): string | undefined {
+  const content = messages.find(message => message.role === 'user')?.content;
+  if (!content || typeof content === 'string') return typeof content === 'string' ? content : undefined;
+  return content.parts.find(part => part.type === 'text')?.text;
+}
+
 export function serializeWorkflowDraftInstructions(
   authoringState: WorkflowDraftAuthoringState,
   validationContext: WorkflowDraftValidationContext = {},
   candidate?: WorkflowDraftCandidate,
+  originalRequest?: string,
 ): string {
+  const originalRequestContext = originalRequest
+    ? `## Original workflow request\n${originalRequest}\n\nContinue constructing or repairing this workflow. Do not ask the user to restate it.\n\n`
+    : '';
   const catalogContext = {
     workflowCatalog: validationContext.workflowCatalog ?? 'available',
     agents: Object.keys(validationContext.agents ?? {}),
@@ -32,7 +44,7 @@ Candidate definition:
 ${JSON.stringify(candidate.draft, null, 2)}
 \`\`\``
     : '';
-  return `## Current unsaved workflow authoring state
+  return `${originalRequestContext}## Current unsaved workflow authoring state
 Lifecycle: ${authoringState.lifecycle}
 Revision: ${authoringState.revision}
 Finalized revision: ${authoringState.finalizedRevision ?? 'none'}

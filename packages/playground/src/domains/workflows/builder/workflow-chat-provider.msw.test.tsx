@@ -154,6 +154,82 @@ describe('WorkflowChatProvider', () => {
     });
   });
 
+  describe('when construction advances into repair', () => {
+    it('tracks construction and repair rejection budgets independently', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+        http.post(
+          `${BASE_URL}/api/editor/workflow-builder/stream`,
+          () =>
+            new HttpResponse(new ReadableStream({ start: () => {} }), {
+              headers: { 'content-type': 'text/event-stream' },
+            }),
+        ),
+      );
+      let reportResult: ((event: WorkflowDraftToolResult) => void) | undefined;
+      let failureCode: string | undefined;
+
+      render(
+        <Providers>
+          <WorkflowChatProvider
+            threadId="workflow-builder-separated-budgets"
+            authoringState={createWorkflowDraftAuthoringState('separated-budgets')}
+            initialMessages={[]}
+            createTools={(_, onResult) => {
+              reportResult = onResult;
+              return {};
+            }}
+            onGenerationFailure={failure => {
+              failureCode = failure?.code;
+            }}
+          >
+            <Composer message="Build a workflow" />
+          </WorkflowChatProvider>
+        </Providers>,
+      );
+
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      const rejectedConstruction: WorkflowDraftToolResult = {
+        toolId: 'checkpoint-workflow-draft',
+        result: { success: false, error: 'Invalid initial draft' },
+      };
+      const rejectedFinalize: WorkflowDraftToolResult = {
+        toolId: 'finalize-workflow-draft',
+        result: {
+          success: false,
+          error: 'Strict validation failed',
+          issues: [{ code: 'incompatible-schema', path: 'graph.0', message: 'Incompatible input' }],
+        },
+      };
+      const rejectedRepair: WorkflowDraftToolResult = {
+        toolId: 'set-workflow-mapping-source',
+        result: {
+          success: false,
+          error: 'Repair remains invalid',
+          issues: [{ code: 'incompatible-schema', path: 'graph.0', message: 'Incompatible input' }],
+        },
+      };
+
+      act(() => {
+        reportResult?.(rejectedConstruction);
+        reportResult?.(rejectedConstruction);
+        reportResult?.({
+          toolId: 'checkpoint-workflow-draft',
+          result: { success: true, lifecycle: 'constructing', revision: 1 },
+        });
+        reportResult?.(rejectedFinalize);
+        reportResult?.(rejectedRepair);
+        reportResult?.(rejectedRepair);
+      });
+      expect(failureCode).toBeUndefined();
+
+      act(() => reportResult?.(rejectedRepair));
+      expect(failureCode).toBe('repair-budget-exhausted');
+    });
+  });
+
   describe('when rejected repairs make diagnostic progress', () => {
     it('preserves the repair budget until the same rejection repeats three times', async () => {
       server.use(
