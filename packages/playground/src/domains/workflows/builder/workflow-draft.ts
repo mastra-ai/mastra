@@ -11,6 +11,7 @@ export type WorkflowDraftStep = WorkflowDraft['graph'][number];
 type JsonSchema = WorkflowDraft['inputSchema'];
 
 export interface WorkflowDraftStepSchema {
+  runtimeId?: string;
   inputSchema?: JsonSchema;
   outputSchema?: JsonSchema;
 }

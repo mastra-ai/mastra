@@ -60,11 +60,14 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
     workflowsQuery.error instanceof Error && /403|forbidden|permission/i.test(workflowsQuery.error.message);
   const validationContext = useMemo<WorkflowDraftValidationContext>(
     () => ({
-      agents: Object.fromEntries(Object.keys(agentsQuery.data ?? {}).map(id => [id, {}])),
+      agents: Object.fromEntries(
+        Object.entries(agentsQuery.data ?? {}).map(([id, agent]) => [id, { runtimeId: agent.id }]),
+      ),
       tools: Object.fromEntries(
         Object.entries(toolsQuery.data ?? {}).map(([id, tool]) => [
           id,
           {
+            runtimeId: tool.id,
             inputSchema: parseWorkflowCatalogSchema(tool.inputSchema),
             outputSchema: parseWorkflowCatalogSchema(tool.outputSchema),
           },

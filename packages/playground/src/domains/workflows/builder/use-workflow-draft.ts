@@ -54,12 +54,7 @@ function initializeAuthoringState(
 
 function createValidationContextKey(validationContext?: WorkflowDraftValidationContext) {
   if (!validationContext) return 'pending';
-  const catalogEntries = (
-    catalog?: Record<
-      string,
-      { inputSchema?: WorkflowDraft['inputSchema']; outputSchema?: WorkflowDraft['outputSchema'] }
-    >,
-  ) =>
+  const catalogEntries = (catalog?: WorkflowDraftValidationContext['agents']) =>
     Object.entries(catalog ?? {})
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([id, schemas]) => [id, schemas]);
@@ -152,6 +147,7 @@ export function useWorkflowDraft(
         mutateCandidate: (candidateState, expectedRevision, mutation) =>
           mutateWorkflowDraftAuthoringState(candidateState, expectedRevision, mutation, validationContext),
         candidate,
+        validationContext,
         isCurrentGeneration,
         getToolBlockReason,
         onResult,

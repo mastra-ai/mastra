@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  compareWorkflowBuilderSchemas,
+  inspectWorkflowBuilderSchemas,
   normalizeWorkflowBuilderDefinition,
   preflightWorkflowDefinition,
   WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS,
@@ -212,6 +214,32 @@ describe('workflow builder authoring contract', () => {
         ok: false,
         issues: [expect.objectContaining({ code: 'invalid-map-placement', path: 'graph.0.steps.0' })],
       });
+    });
+
+    it('exposes canonical schema inspection for authoring frontends', () => {
+      const definition = normalizeWorkflowBuilderDefinition({
+        id: 'parallel-flow',
+        inputSchema,
+        outputSchema: {},
+        graph: [
+          {
+            type: 'parallel',
+            steps: [
+              { type: 'tool', id: 'lookup-a', toolId: 'lookupCustomer' },
+              { type: 'tool', id: 'lookup-b', toolId: 'lookupCustomer' },
+            ],
+          },
+        ],
+      });
+
+      const inspection = inspectWorkflowBuilderSchemas(definition, {
+        tools: { lookupCustomer: { inputSchema, outputSchema: lookupOutputSchema } },
+      });
+
+      expect([...inspection.stepOutputs.keys()]).toEqual(['lookup-a', 'lookup-b']);
+      expect(inspection.stepOutputs.get('lookup-a')).toEqual(lookupOutputSchema);
+      expect(compareWorkflowBuilderSchemas(lookupOutputSchema, inputSchema)).toBe('incompatible');
+      expect(compareWorkflowBuilderSchemas(undefined, inputSchema)).toBe('unknown');
     });
   });
 });

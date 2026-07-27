@@ -1,5 +1,9 @@
 import { createTool } from '@mastra/client-js';
-import { normalizeWorkflowBuilderDefinition } from '@mastra/core/workflows/builder';
+import {
+  compareWorkflowBuilderSchemas,
+  inspectWorkflowBuilderSchemas,
+  normalizeWorkflowBuilderDefinition,
+} from '@mastra/core/workflows/builder';
 import type { WorkflowBuilderDefinition } from '@mastra/core/workflows/builder';
 import type { ClientToolsInput } from '@mastra/react';
 import { z } from 'zod-v4';
@@ -10,12 +14,18 @@ import type {
   WorkflowDraftAuthoringState,
   WorkflowDraftMutation,
   WorkflowDraftStep,
+  WorkflowDraftValidationContext,
   WorkflowDraftValidationIssue,
 } from './workflow-draft';
 
 type WorkflowPredicate = Extract<WorkflowDraftStep, { type: 'conditional' }>['predicates'][number];
 
 const jsonSchema = z.record(z.string(), z.unknown());
+const inspectionResultSchema = z.record(z.string(), z.unknown());
+const catalogLookupInputSchema = z.object({ registryKey: z.string().min(1) });
+const compatibleSourcesInputSchema = z.object({ targetStepId: z.string().min(1) });
+const validationIssueInputSchema = z.object({ code: z.string().min(1), path: z.string().min(1) });
+
 const resultSchema = z.object({
   success: z.boolean(),
   error: z.string().optional(),
@@ -292,6 +302,7 @@ export interface WorkflowDraftToolStore {
     mutation: WorkflowDraftMutation,
   ) => WorkflowDraftAuthoringResult;
   candidate?: WorkflowDraftCandidate;
+  validationContext?: WorkflowDraftValidationContext;
   isCurrentGeneration?: () => boolean;
   getToolBlockReason?: (toolId: string) => string | undefined;
   onResult?: (event: WorkflowDraftToolResult) => void;
@@ -326,6 +337,71 @@ function toCandidateAuthoringState(candidate: WorkflowDraftCandidate): WorkflowD
     checkpointIssues: candidate.issues,
     finalIssues: candidate.issues,
   };
+}
+
+function catalogUnavailable(store: WorkflowDraftToolStore) {
+  return !store.validationContext || store.validationContext.workflowCatalog === 'unavailable';
+}
+
+function lookupCatalogEntry(
+  store: WorkflowDraftToolStore,
+  catalog: keyof Pick<WorkflowDraftValidationContext, 'agents' | 'tools' | 'workflows'>,
+  registryKey: string,
+) {
+  if (catalogUnavailable(store)) return { available: false, reason: 'catalog-unavailable' };
+  const entry = store.validationContext?.[catalog]?.[registryKey];
+  if (!entry) return { available: true, found: false, registryKey };
+  return {
+    available: true,
+    found: true,
+    registryKey,
+    runtimeId: entry.runtimeId,
+    inputSchema: entry.inputSchema,
+    outputSchema: entry.outputSchema,
+  };
+}
+
+function getStepId(step: WorkflowDraftStep): string | undefined {
+  return 'id' in step ? step.id : undefined;
+}
+
+function findStep(draft: WorkflowDraft, targetStepId: string): WorkflowDraftStep | undefined {
+  for (const step of draft.graph) {
+    if (getStepId(step) === targetStepId) return step;
+    if (step.type === 'parallel' || step.type === 'conditional') {
+      const child = step.steps.find(candidate => candidate.id === targetStepId);
+      if (child) return child;
+    } else if ((step.type === 'foreach' || step.type === 'loop') && step.step.id === targetStepId) {
+      return step.step;
+    }
+  }
+  return undefined;
+}
+
+function getStepInputSchema(step: WorkflowDraftStep, context: WorkflowDraftValidationContext) {
+  if (step.type === 'agent') return context.agents?.[step.agentId]?.inputSchema;
+  if (step.type === 'tool') return context.tools?.[step.toolId]?.inputSchema;
+  if (step.type === 'workflow') return context.workflows?.[step.workflowId]?.inputSchema;
+  return undefined;
+}
+
+function orderedSourceIds(draft: WorkflowDraft, targetStepId: string) {
+  const ids: string[] = [];
+  for (const step of draft.graph) {
+    if (getStepId(step) === targetStepId) return ids;
+    if (step.type === 'parallel' || step.type === 'conditional') {
+      for (const child of step.steps) {
+        if (child.id === targetStepId) return ids;
+        ids.push(child.id);
+      }
+    } else if (step.type === 'foreach' || step.type === 'loop') {
+      if (step.step.id === targetStepId) return ids;
+      ids.push(step.step.id);
+    }
+    const id = getStepId(step);
+    if (id) ids.push(id);
+  }
+  return ids;
 }
 
 export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientToolsInput {
@@ -388,6 +464,74 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
   };
 
   return {
+    'get-tool-schema': createTool({
+      id: 'get-tool-schema',
+      description: 'Inspect the authoritative registered tool identity and normalized input/output JSON Schemas.',
+      inputSchema: catalogLookupInputSchema,
+      outputSchema: inspectionResultSchema,
+      execute: async ({ registryKey }) => lookupCatalogEntry(store, 'tools', registryKey),
+    }),
+    'get-agent-schema': createTool({
+      id: 'get-agent-schema',
+      description: 'Inspect the authoritative registered agent identity and normalized input/output JSON Schemas.',
+      inputSchema: catalogLookupInputSchema,
+      outputSchema: inspectionResultSchema,
+      execute: async ({ registryKey }) => lookupCatalogEntry(store, 'agents', registryKey),
+    }),
+    'get-workflow-schema': createTool({
+      id: 'get-workflow-schema',
+      description: 'Inspect the authoritative registered workflow identity and normalized input/output JSON Schemas.',
+      inputSchema: catalogLookupInputSchema,
+      outputSchema: inspectionResultSchema,
+      execute: async ({ registryKey }) => lookupCatalogEntry(store, 'workflows', registryKey),
+    }),
+    'list-compatible-sources': createTool({
+      id: 'list-compatible-sources',
+      description:
+        'List initData and preceding runtime-visible step results in workflow order, with canonical compatible, incompatible, or unknown schema status for a target step input.',
+      inputSchema: compatibleSourcesInputSchema,
+      outputSchema: inspectionResultSchema,
+      execute: async ({ targetStepId }) => {
+        if (catalogUnavailable(store)) return { available: false, reason: 'catalog-unavailable' };
+        const context = store.validationContext;
+        if (!context) return { available: false, reason: 'catalog-unavailable' };
+        const draft = candidate.draft;
+        const target = findStep(draft, targetStepId);
+        if (!target) return { available: true, found: false, targetStepId, sources: [] };
+        const targetInputSchema = getStepInputSchema(target, context);
+        const inspection = inspectWorkflowBuilderSchemas(normalizeWorkflowBuilderDefinition(draft), context);
+        const sources = [
+          {
+            source: 'initData',
+            schema: draft.inputSchema,
+            compatibility: compareWorkflowBuilderSchemas(draft.inputSchema, targetInputSchema),
+          },
+          ...orderedSourceIds(draft, targetStepId).map(stepId => {
+            const schema = inspection.stepOutputs.get(stepId);
+            return {
+              source: 'step',
+              stepId,
+              schema,
+              compatibility: compareWorkflowBuilderSchemas(schema, targetInputSchema),
+            };
+          }),
+        ];
+        return { available: true, found: true, targetStepId, targetInputSchema, sources };
+      },
+    }),
+    'explain-validation-issue': createTool({
+      id: 'explain-validation-issue',
+      description: 'Return the current authoritative validation issue matching a canonical issue code and path.',
+      inputSchema: validationIssueInputSchema,
+      outputSchema: inspectionResultSchema,
+      execute: async ({ code, path }) => {
+        if (catalogUnavailable(store)) return { available: false, reason: 'catalog-unavailable' };
+        const issue = candidate.issues.find(
+          candidateIssue => candidateIssue.code === code && candidateIssue.path === path,
+        );
+        return issue ? { available: true, found: true, issue } : { available: true, found: false, code, path };
+      },
+    }),
     'checkpoint-workflow-draft': createTool({
       id: 'checkpoint-workflow-draft',
       description:

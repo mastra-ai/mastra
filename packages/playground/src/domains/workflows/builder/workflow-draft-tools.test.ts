@@ -10,7 +10,7 @@ import {
   finalizeWorkflowDraft,
   mutateWorkflowDraftAuthoringState,
 } from './workflow-draft';
-import type { WorkflowDraftAuthoringState } from './workflow-draft';
+import type { WorkflowDraftAuthoringState, WorkflowDraftValidationContext } from './workflow-draft';
 import {
   createWorkflowDraftCandidate,
   createWorkflowDraftTools,
@@ -35,6 +35,7 @@ function createStore(
   id = 'new-workflow',
   isCurrentGeneration?: () => boolean,
   onResult?: (event: WorkflowDraftToolResult) => void,
+  validationContext?: WorkflowDraftValidationContext,
 ) {
   let state = createWorkflowDraftAuthoringState(id);
   const apply = (result: ReturnType<typeof checkpointWorkflowDraft>) => {
@@ -51,11 +52,43 @@ function createStore(
       finalize: expectedRevision => apply(finalizeWorkflowDraft(state, expectedRevision)),
       mutateCandidate: (candidateState, expectedRevision, mutation) =>
         mutateWorkflowDraftAuthoringState(candidateState, expectedRevision, mutation),
+      validationContext,
       isCurrentGeneration,
       onResult,
     }),
   };
 }
+
+const availableValidationContext: WorkflowDraftValidationContext = {
+  agents: {
+    supportAgent: { runtimeId: 'support-agent' },
+  },
+  tools: {
+    lookupCustomer: {
+      runtimeId: 'lookup-customer',
+      inputSchema: {
+        type: 'object',
+        properties: { email: { type: 'string' } },
+        required: ['email'],
+        additionalProperties: false,
+      },
+      outputSchema: {
+        type: 'object',
+        properties: { customerId: { type: 'string' } },
+        required: ['customerId'],
+        additionalProperties: false,
+      },
+    },
+  },
+  workflows: {
+    greetingWorkflow: {
+      runtimeId: 'greeting-workflow',
+      inputSchema: { type: 'object', properties: { name: { type: 'string' } } },
+      outputSchema: { type: 'object', properties: { message: { type: 'string' } } },
+    },
+  },
+  workflowCatalog: 'available',
+};
 
 const completeDefinition = {
   id: 'daily-report',
@@ -81,6 +114,11 @@ describe('workflow draft client tools', () => {
       const { tools } = createStore();
 
       expect(Object.keys(tools)).toEqual([
+        'get-tool-schema',
+        'get-agent-schema',
+        'get-workflow-schema',
+        'list-compatible-sources',
+        'explain-validation-issue',
         'checkpoint-workflow-draft',
         'checkpoint-workflow-candidate',
         'finalize-workflow-draft',
@@ -88,6 +126,38 @@ describe('workflow draft client tools', () => {
         'update-workflow-step',
         'remove-workflow-step',
       ]);
+    });
+
+    it('returns registry keys and runtime IDs distinctly without mutating authoring state', async () => {
+      const store = createStore('new-workflow', undefined, undefined, availableValidationContext);
+      const before = store.state;
+
+      const toolResult = await executeTool(store.tools['get-tool-schema'], { registryKey: 'lookupCustomer' });
+      const agentResult = await executeTool(store.tools['get-agent-schema'], { registryKey: 'supportAgent' });
+      const workflowResult = await executeTool(store.tools['get-workflow-schema'], {
+        registryKey: 'greetingWorkflow',
+      });
+
+      expect(toolResult).toMatchObject({
+        available: true,
+        registryKey: 'lookupCustomer',
+        runtimeId: 'lookup-customer',
+      });
+      expect(agentResult).toMatchObject({ available: true, registryKey: 'supportAgent', runtimeId: 'support-agent' });
+      expect(workflowResult).toMatchObject({
+        available: true,
+        registryKey: 'greetingWorkflow',
+        runtimeId: 'greeting-workflow',
+      });
+      expect(store.state).toBe(before);
+    });
+
+    it('returns a structured unavailable result without catalog data when inspection is degraded', async () => {
+      const { tools } = createStore('new-workflow', undefined, undefined, { workflowCatalog: 'unavailable' });
+
+      const result = await executeTool(tools['get-tool-schema'], { registryKey: 'lookupCustomer' });
+
+      expect(result).toEqual({ available: false, reason: 'catalog-unavailable' });
     });
 
     it('publishes candidateRevision as a required candidate-checkpoint input for the model', () => {
@@ -110,6 +180,46 @@ describe('workflow draft client tools', () => {
       });
 
       expect(result.success).toBe(false);
+    });
+
+    it('lists only initData and preceding runtime-visible sources in workflow order', async () => {
+      const context: WorkflowDraftValidationContext = {
+        ...availableValidationContext,
+        tools: {
+          ...availableValidationContext.tools,
+          sourceTool: { runtimeId: 'source-tool' },
+        },
+      };
+      const { tools } = createStore('new-workflow', undefined, undefined, context);
+      await executeTool(tools['checkpoint-workflow-draft'], {
+        id: 'source-order-workflow',
+        inputSchema: context.tools?.lookupCustomer?.inputSchema,
+        outputSchema: context.tools?.lookupCustomer?.outputSchema,
+        graph: [
+          {
+            type: 'parallel',
+            id: 'lookup-pair',
+            steps: [
+              { type: 'tool', id: 'parallel-a', toolId: 'sourceTool' },
+              { type: 'tool', id: 'parallel-b', toolId: 'sourceTool' },
+            ],
+          },
+          { type: 'tool', id: 'target', toolId: 'lookupCustomer' },
+          { type: 'tool', id: 'future', toolId: 'sourceTool' },
+        ],
+      });
+
+      const result = await executeTool(tools['list-compatible-sources'], { targetStepId: 'target' });
+
+      expect(result).toMatchObject({
+        available: true,
+        found: true,
+        sources: [
+          { source: 'initData', compatibility: 'compatible' },
+          { source: 'step', stepId: 'parallel-a', compatibility: 'unknown' },
+          { source: 'step', stepId: 'parallel-b', compatibility: 'unknown' },
+        ],
+      });
     });
 
     it('rejects conditional predicate paths without a canonical namespace root', () => {

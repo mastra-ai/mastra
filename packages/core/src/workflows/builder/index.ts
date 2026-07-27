@@ -185,3 +185,4 @@ export function normalizeWorkflowBuilderDefinition(input: unknown): WorkflowBuil
 }
 
 export * from './preflight';
+export * from './inspection';
