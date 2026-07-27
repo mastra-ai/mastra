@@ -1440,11 +1440,12 @@ describe('Supervisor Pattern - IsTaskComplete scorers', () => {
     const steps = await stream.steps;
     expect(steps.at(-1)?.text).toBe(answer);
 
-    // The report is not persisted to the thread either.
+    // The answer is persisted to the thread, the report is not.
     const recalled = await memory.recall({ threadId: 'thread-1' });
     const persistedTexts = recalled.messages.map(m =>
       typeof m.content === 'string' ? m.content : (m.content?.parts ?? []).map((p: any) => p.text ?? '').join(''),
     );
+    expect(persistedTexts.join('\n')).toContain(answer);
     expect(persistedTexts.join('\n')).not.toContain('Completion Check Results');
   });
 
