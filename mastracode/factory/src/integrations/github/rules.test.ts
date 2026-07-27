@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { GithubIntegration } from '../integrations/github/integration.js';
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { builtInFactoryRules, defaultFactoryRules } from './defaults.js';
-import { FactoryDecisionDispatcher } from './dispatcher.js';
-import { FactoryGithubEventService } from './github-service.js';
-import { FactoryStartCoordinator } from './start-coordinator.js';
-import { FactoryTransitionService } from './transition-service.js';
+import { builtInFactoryRules, defaultFactoryRules } from '../../rules/defaults.js';
+import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
+import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
+import { FactoryTransitionService } from '../../rules/transition-service.js';
+import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import type { GithubIntegration } from './integration.js';
+import { GithubRules } from './rules.js';
 
 async function setup(permission: string | undefined) {
   const seeded = await createFactoryStorageForTests();
@@ -105,10 +105,10 @@ function pullRequest(
   };
 }
 
-describe('FactoryGithubEventService', () => {
+describe('GithubRules', () => {
   it('commits one trusted issue intake decision and replays immutable delivery ingress', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
-    const service = new FactoryGithubEventService({
+    const service = new GithubRules({
       github,
       sourceControl,
       integrationStorage,
@@ -127,7 +127,7 @@ describe('FactoryGithubEventService', () => {
 
   it('keeps trusted issues created before the Factory in Intake', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
-    const service = new FactoryGithubEventService({
+    const service = new GithubRules({
       github,
       sourceControl,
       integrationStorage,
@@ -147,7 +147,7 @@ describe('FactoryGithubEventService', () => {
       await setup('write');
     const rules = builtInFactoryRules();
     const transitionService = new FactoryTransitionService({ storage: workItems, rules });
-    const service = new FactoryGithubEventService({
+    const service = new GithubRules({
       github,
       sourceControl,
       integrationStorage,
@@ -351,7 +351,7 @@ describe('FactoryGithubEventService', () => {
         metadata: {},
       },
     });
-    const service = new FactoryGithubEventService({
+    const service = new GithubRules({
       github,
       sourceControl,
       integrationStorage,
@@ -382,7 +382,7 @@ describe('FactoryGithubEventService', () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup(permission);
     const seen = vi.fn(() => undefined);
     const rules = defaultFactoryRules({ version: 'test-1', overrides: { github: { issueOpened: { onEvent: seen } } } });
-    const service = new FactoryGithubEventService({
+    const service = new GithubRules({
       github,
       sourceControl,
       integrationStorage,
@@ -422,7 +422,7 @@ describe('FactoryGithubEventService', () => {
       status: 'active',
       data: { kind: 'factory-pr-provenance', workItemId: work.item.id },
     });
-    const service = new FactoryGithubEventService({
+    const service = new GithubRules({
       github,
       sourceControl,
       integrationStorage,
@@ -470,7 +470,7 @@ describe('FactoryGithubEventService', () => {
         metadata: {},
       },
     });
-    const service = new FactoryGithubEventService({
+    const service = new GithubRules({
       github,
       sourceControl,
       integrationStorage,
@@ -523,7 +523,7 @@ describe('FactoryGithubEventService', () => {
       sandboxProvider: 'local',
       sandboxWorkdir: '/workspace',
     });
-    const service = new FactoryGithubEventService({
+    const service = new GithubRules({
       github,
       sourceControl,
       integrationStorage,

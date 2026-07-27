@@ -2,6 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { defaultFactoryRules } from '../../../rules/defaults.js';
 import type { IntegrationContext } from '../../base.js';
 
 import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
@@ -642,7 +643,7 @@ describe('PlatformGithubIntegration', () => {
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
   });
 
-  it('forwards polled issues to the Factory ingestion hook', async () => {
+  it('attaches GitHub rules to polled issue ingress', async () => {
     const seed = await createPlatformStorageForTests();
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
@@ -679,7 +680,7 @@ describe('PlatformGithubIntegration', () => {
       sandboxProvider: 'local',
       sandboxWorkdir: '/tmp/app',
     });
-    const ingestGithubEvent = vi.fn(async () => ({ status: 'committed' as const }));
+    const onEvent = vi.fn();
     const context = {
       auth: fakeAuth(),
       fleet: { enabled: false },
@@ -691,7 +692,13 @@ describe('PlatformGithubIntegration', () => {
       },
       controller: {},
       stateSigner: {},
-      hooks: { ingestGithubEvent },
+      rules: {
+        config: defaultFactoryRules({
+          version: 'test-rules',
+          overrides: { github: { issueOpened: { onEvent } } },
+        }),
+        workItems: seed.workItems,
+      },
     } as unknown as IntegrationContext;
     integration.initialize?.({ storage: context.storage.generic });
     integration.versionControl.initialize({ storage: sourceControl });
@@ -705,11 +712,11 @@ describe('PlatformGithubIntegration', () => {
     const response = await app.request(`/web/github/projects/${projectRepository.id}/issues`);
 
     expect(response.status).toBe(200);
-    expect(ingestGithubEvent).toHaveBeenCalledOnce();
-    expect(ingestGithubEvent).toHaveBeenCalledWith(
+    expect(onEvent).toHaveBeenCalledOnce();
+    expect(onEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         deliveryId: 'poll:101:issue:12:2026-07-01T00:00:00Z',
-        event: 'issues',
+        event: 'issueOpened',
       }),
     );
   });
