@@ -26,6 +26,7 @@ import type { MastraWorker } from '@mastra/core/worker';
 import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
+import type { FactoryRules } from '../rules/types.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
@@ -34,33 +35,11 @@ import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
-import type { ParsedGithubWebhook } from './github/webhook.js';
-
-export interface LinearIssueIngress {
-  id: string;
-  identifier: string;
-  title: string;
-  url: string;
-  state: string;
-  stateType: string;
-  priorityLabel: string;
-  assignee: string | null;
-  team: string | null;
-  labels: string[];
-  createdAt: string;
-  updatedAt: string;
-}
+import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 /** Factory-owned hooks integrations may invoke. */
 export interface IntegrationHooks {
   emitAudit?: AuditEmitter['emit'];
-  ingestGithubEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
-  ingestLinearIssues?: (input: {
-    orgId: string;
-    userId: string;
-    factoryProjectId: string;
-    issues: LinearIssueIngress[];
-  }) => Promise<unknown>;
 }
 
 /**
@@ -114,6 +93,15 @@ export interface IntegrationContext {
     projects: FactoryProjectsStorage;
     /** Cross-integration intake selection (which sources are synced). */
     intake: IntakeStorage;
+  };
+  /**
+   * Factory rule runtime available when the work-item domain is ready.
+   * Integrations attach their own provider event rules to their ingress
+   * surfaces instead of relying on provider-specific services in the host.
+   */
+  rules?: {
+    config: FactoryRules;
+    workItems: WorkItemsStorage;
   };
   /** System hooks integrations may invoke. */
   hooks?: IntegrationHooks;

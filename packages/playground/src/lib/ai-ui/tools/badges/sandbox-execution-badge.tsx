@@ -102,13 +102,13 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
   }, [content]);
 
   return (
-    <div className="rounded-md border border-border1 overflow-hidden">
+    <div className="border-border1 overflow-hidden rounded-md border">
       {/* Terminal header with command */}
       {command && (
-        <div className="px-3 py-2 bg-surface3 border-b border-border1 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-neutral6 text-xs shrink-0">$</span>
-            <code className="text-xs text-neutral5 font-mono truncate">{command}</code>
+        <div className="bg-surface3 border-border1 flex items-center justify-between gap-2 border-b px-3 py-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="text-neutral6 shrink-0 text-xs">$</span>
+            <code className="text-neutral5 truncate font-mono text-xs">{command}</code>
           </div>
           {onCopy && (
             <Button variant="default" size="icon-sm" tooltip="Copy output" onClick={onCopy} className="shrink-0">
@@ -134,7 +134,7 @@ const TerminalBlock = ({ command, content, maxHeight = '20rem', onCopy, isCopied
       <pre
         ref={contentRef}
         style={{ maxHeight }}
-        className="overflow-x-auto overflow-y-auto p-3 text-sm text-neutral-300 font-mono whitespace-pre-wrap bg-black"
+        className="overflow-x-auto overflow-y-auto bg-black p-3 font-mono text-sm whitespace-pre-wrap text-neutral-300"
       >
         {content || <span className="text-neutral6 italic">No output</span>}
       </pre>
@@ -245,8 +245,8 @@ export const SandboxExecutionBadge = ({
   return (
     <div className="mb-4" data-testid="sandbox-execution-badge">
       {/* Header row */}
-      <div className="flex items-center gap-2 justify-between">
-        <button onClick={() => setIsCollapsed(s => !s)} className="flex items-center gap-2 min-w-0" type="button">
+      <div className="flex items-center justify-between gap-2">
+        <button onClick={() => setIsCollapsed(s => !s)} className="flex min-w-0 items-center gap-2" type="button">
           <Icon>
             <ChevronUpIcon className={cn('transition-all', isCollapsed ? 'rotate-90' : 'rotate-180')} />
           </Icon>
@@ -254,7 +254,7 @@ export const SandboxExecutionBadge = ({
           {execMeta?.sandbox && (
             <Link
               href={execMeta.id ? `/workspaces/${execMeta.id}` : '/workspaces'}
-              className="flex items-center gap-1.5 text-xs text-neutral6 px-1.5 py-0.5 rounded bg-surface3 border border-border1 hover:bg-surface4 hover:border-border2 transition-colors"
+              className="text-neutral6 bg-surface3 border-border1 hover:bg-surface4 hover:border-border2 flex items-center gap-1.5 rounded border px-1.5 py-0.5 text-xs transition-colors"
               onClick={(e: React.MouseEvent) => e.stopPropagation()}
             >
               <span className={cn('w-1.5 h-1.5 rounded-full', getStatusColor(execMeta.sandbox.status))} />
@@ -267,8 +267,8 @@ export const SandboxExecutionBadge = ({
         <div className="flex items-center gap-2">
           {isRunning ? (
             <>
-              <span className="flex items-center gap-1.5 text-xs text-accent6">
-                <span className="w-1.5 h-1.5 bg-accent6 rounded-full animate-pulse" />
+              <span className="text-accent6 flex items-center gap-1.5 text-xs">
+                <span className="bg-accent6 h-1.5 w-1.5 animate-pulse rounded-full" />
                 <span className="animate-pulse">running</span>
               </span>
               <span className="text-neutral6 text-xs tabular-nums">{elapsedTime}ms</span>
@@ -279,11 +279,11 @@ export const SandboxExecutionBadge = ({
                 (exitSuccess ? (
                   <CheckIcon className="text-green-400" size={14} />
                 ) : wasKilled ? (
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-500/20 text-orange-400">
+                  <span className="rounded bg-orange-500/20 px-1.5 py-0.5 text-[10px] font-medium text-orange-400">
                     killed
                   </span>
                 ) : (
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/20 text-red-400">
+                  <span className="rounded bg-red-500/20 px-1.5 py-0.5 text-[10px] font-medium text-red-400">
                     exit {exitCode}
                   </span>
                 ))}

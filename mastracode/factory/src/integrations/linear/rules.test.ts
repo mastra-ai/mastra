@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
-import { builtInFactoryRules } from './defaults.js';
-import { FactoryLinearIssueService } from './linear-service.js';
+import { builtInFactoryRules } from '../../rules/defaults.js';
+import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import { LinearRules } from './rules.js';
 
 const issue = {
   id: 'issue-1',
@@ -25,7 +25,7 @@ async function setup() {
     userId: 'user-1',
     input: { name: 'acme/repo' },
   });
-  const service = new FactoryLinearIssueService({
+  const service = new LinearRules({
     projects: seeded.projects,
     storage: seeded.workItems,
     rules: builtInFactoryRules(),
@@ -33,7 +33,7 @@ async function setup() {
   return { project, service, workItems: seeded.workItems };
 }
 
-describe('FactoryLinearIssueService', () => {
+describe('LinearRules', () => {
   it('commits one triage decision and replays an unchanged observation', async () => {
     const { project, service, workItems } = await setup();
     const input = { orgId: 'org-1', factoryProjectId: project.id, userId: 'user-1', issues: [issue] };

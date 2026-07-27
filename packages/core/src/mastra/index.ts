@@ -862,7 +862,8 @@ export class Mastra<
                 const isOwnedHere = (() => {
                   if (wfId && rId && self.__hasInternalWorkflow(wfId, rId)) return true;
                   let parent = data?.parentWorkflow as
-                    { workflowId?: string; runId?: string; parentWorkflow?: unknown } | undefined;
+                    | { workflowId?: string; runId?: string; parentWorkflow?: unknown }
+                    | undefined;
                   let depth = 0;
                   while (parent && depth < 16) {
                     const pwfId = parent.workflowId;

@@ -279,7 +279,7 @@
       "groupName": "formatting & linting",
       "commitMessageTopic": "Formatting & linting",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["eslint", "prettier", "/^eslint-/", "@vitest/eslint-plugin", "!@typescript-eslint/"],
+      "matchPackageNames": ["eslint", "oxfmt", "/^eslint-/", "@vitest/eslint-plugin", "!@typescript-eslint/"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,
@@ -454,7 +454,7 @@
       "groupName": "Tailwind ecosystem",
       "commitMessageTopic": "Tailwind ecosystem",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["@tailwindcss/typography", "prettier-plugin-tailwindcss", "tailwind-merge"],
+      "matchPackageNames": ["@tailwindcss/typography", "tailwind-merge"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
     },

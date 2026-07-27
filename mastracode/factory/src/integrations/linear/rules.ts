@@ -1,9 +1,9 @@
-import type { LinearIssueIngress } from '../integrations/base.js';
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { resolveFactoryLinearRule } from './resolve.js';
-import type { FactoryLinearRuleContext, FactoryRuleDecision, FactoryRules } from './types.js';
-import { validateFactoryRuleDecisions } from './validation.js';
+import { resolveFactoryLinearRule } from '../../rules/resolve.js';
+import type { FactoryLinearRuleContext, FactoryRuleDecision, FactoryRules } from '../../rules/types.js';
+import { validateFactoryRuleDecisions } from '../../rules/validation.js';
+import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
+import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { IntegrationContext } from '../base.js';
 
 const RULE_TIMEOUT_MS = 5_000;
 
@@ -21,13 +21,28 @@ async function withRuleTimeout<T>(promise: Promise<T>): Promise<T> {
   }
 }
 
-export interface FactoryLinearIssueServiceOptions {
+export interface LinearIssueIngress {
+  id: string;
+  identifier: string;
+  title: string;
+  url: string;
+  state: string;
+  stateType: string;
+  priorityLabel: string;
+  assignee: string | null;
+  team: string | null;
+  labels: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LinearRulesOptions {
   projects: Pick<FactoryProjectsStorage, 'get'>;
   storage: WorkItemsStorage;
   rules: FactoryRules;
 }
 
-export interface FactoryLinearIssueIngress {
+export interface LinearRulesIngress {
   orgId: string;
   userId: string;
   factoryProjectId: string;
@@ -36,10 +51,10 @@ export interface FactoryLinearIssueIngress {
 
 type IngressStatus = 'committed' | 'replayed' | 'missing';
 
-export class FactoryLinearIssueService {
-  constructor(private readonly options: FactoryLinearIssueServiceOptions) {}
+export class LinearRules {
+  constructor(private readonly options: LinearRulesOptions) {}
 
-  async ingest(input: FactoryLinearIssueIngress): Promise<{ status: IngressStatus; ingested: number }> {
+  async ingest(input: LinearRulesIngress): Promise<{ status: IngressStatus; ingested: number }> {
     const project = await this.options.projects.get({ orgId: input.orgId, id: input.factoryProjectId });
     if (!project) return { status: 'missing', ingested: 0 };
 
@@ -55,7 +70,7 @@ export class FactoryLinearIssueService {
   }
 
   async #ingestIssue(
-    input: FactoryLinearIssueIngress,
+    input: LinearRulesIngress,
     issue: LinearIssueIngress,
     relatedItem: WorkItemRow | undefined,
   ): Promise<IngressStatus> {
@@ -126,4 +141,16 @@ export class FactoryLinearIssueService {
     });
     return committed.status;
   }
+}
+
+export function attachLinearRules(
+  context: IntegrationContext,
+): ((input: LinearRulesIngress) => Promise<unknown>) | undefined {
+  if (!context.rules) return undefined;
+  const rules = new LinearRules({
+    projects: context.storage.projects,
+    storage: context.rules.workItems,
+    rules: context.rules.config,
+  });
+  return input => rules.ingest(input);
 }

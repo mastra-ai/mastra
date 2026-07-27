@@ -25,7 +25,8 @@
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm build:lib --watch",
-    "lint": "eslint .",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
     "test": "vitest run"
   },
   "keywords": [

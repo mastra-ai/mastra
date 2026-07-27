@@ -58,7 +58,8 @@
     "zod": "catalog:"
   },
   "scripts": {
-    "lint": "eslint .",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
     "build:lib": "tsup --silent --config tsup.config.ts",
     "build:patch-commonjs": "node ../../scripts/commonjs-tsc-fixer.js",
     "test": "vitest run"

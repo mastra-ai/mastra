@@ -171,7 +171,10 @@ export interface ToolDisplayContext {
 
 /** Return value from a {@link ToolDisplayFn}. */
 export type ToolDisplayResult =
-  { kind: 'post'; message: PostableMessage } | { kind: 'stream'; chunk: StreamChunk } | undefined | void;
+  | { kind: 'post'; message: PostableMessage }
+  | { kind: 'stream'; chunk: StreamChunk }
+  | undefined
+  | void;
 
 /**
  * Stream agent text deltas to this adapter as the agent generates them, instead of
@@ -235,7 +238,9 @@ export interface ChannelAdapterStreamingConfig extends ChannelAdapterBaseConfig 
  * exclusive with `toolDisplay` and kept for backwards compatibility.
  */
 export type ChannelAdapterConfig =
-  ChannelAdapterStaticConfig | ChannelAdapterStreamingConfig | ChannelAdapterLegacyConfig;
+  | ChannelAdapterStaticConfig
+  | ChannelAdapterStreamingConfig
+  | ChannelAdapterLegacyConfig;
 
 /**
  * @deprecated Legacy shape: the old `cards` boolean and `formatToolCall`
@@ -489,8 +494,10 @@ export interface ChannelConfig {
   };
 
   /**
-   * Whether to include channel tools (add_reaction, remove_reaction).
-   * Set to `false` for models that don't support function calling.
+   * Whether `getTools()` returns the channel tools (add_reaction,
+   * remove_reaction). Set to `false` for models that don't support function
+   * calling. Channel tools are never injected into the agent automatically —
+   * pass them explicitly via `tools: { ...channels.getTools() }`.
    *
    * @default true
    */

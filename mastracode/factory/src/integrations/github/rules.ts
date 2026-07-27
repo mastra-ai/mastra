@@ -1,21 +1,22 @@
-import type { GithubIntegration } from '../integrations/github/integration.js';
-import type { ParsedGithubWebhook } from '../integrations/github/webhook.js';
-import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import type {
-  ExternalRepositoryProjectTarget,
-  SourceControlStorageHandle,
-} from '../storage/domains/source-control/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { resolveFactoryGithubRule } from './resolve.js';
+import { resolveFactoryGithubRule } from '../../rules/resolve.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
   FactoryRuleActor,
   FactoryRuleDecision,
   FactoryRules,
-} from './types.js';
-import { validateFactoryRuleDecisions } from './validation.js';
+} from '../../rules/types.js';
+import { validateFactoryRuleDecisions } from '../../rules/validation.js';
+import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
+import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
+import type {
+  ExternalRepositoryProjectTarget,
+  SourceControlStorageHandle,
+} from '../../storage/domains/source-control/base.js';
+import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { IntegrationContext } from '../base.js';
+import type { GithubRepositoryPermission } from './integration.js';
+import type { ParsedGithubWebhook } from './webhook.js';
 
 const TRUSTED_PERMISSIONS = new Set(['write', 'admin']);
 const RULE_TIMEOUT_MS = 5_000;
@@ -84,7 +85,7 @@ function workItemSourceKey(item: WorkItemRow): string | null {
 }
 
 async function githubActor(
-  github: GithubIntegration,
+  github: GithubRulesIntegration,
   input: { installationId: number; repository: string; login: string; factoryAuthored: boolean },
 ): Promise<FactoryRuleActor> {
   let trusted = false;
@@ -106,21 +107,31 @@ interface FactoryPullRequestProvenanceData {
   workItemId: string;
 }
 
-export interface FactoryGithubEventServiceOptions {
-  github: GithubIntegration;
+function pullRequestProvenance(data: Record<string, unknown> | undefined): FactoryPullRequestProvenanceData | null {
+  if (!data || data.kind !== 'factory-pr-provenance' || typeof data.workItemId !== 'string') return null;
+  return { kind: 'factory-pr-provenance', workItemId: data.workItemId };
+}
+
+export interface GithubRulesIntegration {
+  getRepositoryCollaboratorPermission(
+    installationId: number,
+    repoFullName: string,
+    username: string,
+  ): Promise<GithubRepositoryPermission | undefined>;
+}
+
+export interface GithubRulesOptions {
+  github: GithubRulesIntegration;
   sourceControl: SourceControlStorageHandle;
-  integrationStorage: IntegrationStorageHandle<
-    Record<string, unknown>,
-    Record<string, unknown>,
-    FactoryPullRequestProvenanceData
-  >;
+  /** Integration-scoped storage; provenance rows are validated at read. */
+  integrationStorage: IntegrationStorageHandle;
   projects: FactoryProjectsStorage;
   storage: WorkItemsStorage;
   rules: FactoryRules;
 }
 
-export class FactoryGithubEventService {
-  constructor(private readonly options: FactoryGithubEventServiceOptions) {}
+export class GithubRules {
+  constructor(private readonly options: GithubRulesOptions) {}
 
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const event = eventName(parsed);
@@ -166,12 +177,14 @@ export class FactoryGithubEventService {
     const issueNumber = number(issue?.number);
     const pullRequestNumber = number(pullRequest?.number);
     const provenance = pullRequestNumber
-      ? ((
-          await this.options.integrationStorage.subscriptions.listByTarget(
-            provenanceTarget(repositoryId, pullRequestNumber),
-            { status: 'active' },
-          )
-        ).find(subscription => subscription.orgId === project.orgId)?.data ?? null)
+      ? pullRequestProvenance(
+          (
+            await this.options.integrationStorage.subscriptions.listByTarget(
+              provenanceTarget(repositoryId, pullRequestNumber),
+              { status: 'active' },
+            )
+          ).find(subscription => subscription.orgId === project.orgId)?.data,
+        )
       : null;
     const relatedItem = await this.#relatedItem(
       project.orgId,
@@ -328,4 +341,20 @@ export class FactoryGithubEventService {
     }
     return undefined;
   }
+}
+
+export function attachGithubRules(
+  github: GithubRulesIntegration,
+  context: IntegrationContext,
+): ((event: ParsedGithubWebhook) => Promise<unknown>) | undefined {
+  if (!context.rules) return undefined;
+  const rules = new GithubRules({
+    github,
+    sourceControl: context.storage.sourceControl,
+    integrationStorage: context.storage.generic,
+    projects: context.storage.projects,
+    storage: context.rules.workItems,
+    rules: context.rules.config,
+  });
+  return event => rules.ingest(event);
 }
