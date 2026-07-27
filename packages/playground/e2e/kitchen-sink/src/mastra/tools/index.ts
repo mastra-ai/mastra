@@ -62,3 +62,11 @@ export const lookupCustomer = createTool({
     plan: 'pro',
   }),
 });
+
+export const urgentSupport = createTool({
+  id: 'urgent-support',
+  description: 'Produce a deterministic response for urgent support workflows',
+  inputSchema: z.object({ prompt: z.string(), priority: z.string() }),
+  outputSchema: z.object({ response: z.string() }),
+  execute: async () => ({ response: 'Production incident response started.' }),
+});

@@ -19,7 +19,11 @@ export type Fixtures =
   | 'workflow-builder-prompt-nested-greeting'
   | 'workflow-builder-prompt-foreach-customer-lookup'
   | 'workflow-builder-prompt-priority-support-router'
-  | 'workflow-builder-prompt-mixed-support-pipeline';
+  | 'workflow-builder-prompt-mixed-support-pipeline'
+  | 'workflow-builder-adversarial-customer-ticket'
+  | 'workflow-builder-adversarial-parallel-lookup'
+  | 'workflow-builder-adversarial-priority-router'
+  | 'workflow-builder-adversarial-mixed-pipeline';
 
 export type FixtureConfig = {
   name: Fixtures;

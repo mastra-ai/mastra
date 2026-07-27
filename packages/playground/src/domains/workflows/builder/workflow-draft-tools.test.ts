@@ -282,6 +282,45 @@ describe('workflow draft client tools', () => {
       });
     });
 
+    it('repairs an accepted conditional with a noncanonical predicate before automatic finalization', async () => {
+      const store = createStore(
+        'priority-support-router',
+        undefined,
+        undefined,
+        {
+          ...availableValidationContext,
+          agents: { weatherAgent: { runtimeId: 'weather-agent' } },
+        },
+        true,
+      );
+      await executeTool(store.tools['checkpoint-workflow-draft'], {
+        id: 'priority-support-router',
+        inputSchema: {
+          type: 'object',
+          properties: { prompt: { type: 'string' }, priority: { type: 'string' } },
+          required: ['prompt', 'priority'],
+        },
+        outputSchema: {},
+        graph: [
+          {
+            type: 'conditional',
+            steps: [{ type: 'agent', id: 'urgent', agentId: 'weatherAgent' }],
+            predicates: [{ op: 'truthy', value: { path: 'stepResults.missing' } }],
+          },
+        ],
+      });
+      await executeTool(store.tools['finalize-workflow-draft'], { expectedRevision: 1 });
+
+      const repaired = await executeTool(store.tools['set-workflow-predicate'], {
+        targetStepId: 'urgent',
+        predicate: { op: 'eq', left: { path: 'initData.priority' }, right: { literal: 'urgent' } },
+      });
+      expect(repaired).toMatchObject({ success: true, candidateRevision: 1, baseAcceptedRevision: 1 });
+
+      const checkpointed = await executeTool(store.tools['checkpoint-workflow-candidate'], { candidateRevision: 1 });
+      expect(checkpointed).toMatchObject({ success: true, lifecycle: 'ready', revision: 2, finalizedRevision: 2 });
+    });
+
     it('publishes candidateRevision as a required candidate-checkpoint input for the model', () => {
       const jsonSchema = z.toJSONSchema(workflowCandidateCheckpointInputSchema);
 
