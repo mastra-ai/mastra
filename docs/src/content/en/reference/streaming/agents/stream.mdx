@@ -253,6 +253,18 @@ const stream = await agent.stream('message for agent')
                   },
                 ],
               },
+              {
+                parameters: [
+                  {
+                    name: 'suppressFeedback',
+                    type: 'boolean',
+                    isOptional: true,
+                    defaultValue: 'false',
+                    description:
+                      'When true, marks the completion check feedback so consumers can hide it from displayed output. Feedback is only added to the conversation when the check fails, to guide the next iteration.',
+                  },
+                ],
+              },
             ],
           },
           {

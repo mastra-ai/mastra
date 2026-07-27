@@ -68,7 +68,7 @@ interface SourcePickerItem {
  * between sections, and rounding only on the group's outer edges.
  */
 function SourcePickerGroup({ children }: { children: ReactNode }) {
-  return <div className="overflow-hidden rounded-lg border border-border1 divide-y divide-border1">{children}</div>;
+  return <div className="border-border1 divide-border1 divide-y overflow-hidden rounded-lg border">{children}</div>;
 }
 
 /**
@@ -117,7 +117,7 @@ function SourcePickerSection({
           if (!next) setQuery('');
         }}
       >
-        <CollapsibleTrigger className="flex w-full items-center gap-1.5 px-3 py-2 text-icon4">
+        <CollapsibleTrigger className="text-icon4 flex w-full items-center gap-1.5 px-3 py-2">
           <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
           <Txt as="span" variant="ui-sm">
             {label}
@@ -225,7 +225,7 @@ export function IntakeSection() {
   const busy = saveMutation.isPending;
 
   return (
-    <div className="mt-6 pt-4 flex flex-col gap-6">
+    <div className="mt-6 flex flex-col gap-6 pt-4">
       {heading}
       <section className="flex flex-col gap-2" aria-label="GitHub intake">
         <SourceHeader

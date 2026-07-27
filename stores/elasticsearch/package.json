@@ -28,7 +28,8 @@
     "pretest:watch": "docker compose up -d && (for i in $(seq 1 120); do curl -s http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"' && break || (sleep 2; [ $i -eq 120 ] && exit 1); done)",
     "test:watch": "vitest watch",
     "posttest:watch": "docker compose down -v",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "dependencies": {
     "@elastic/elasticsearch": "^8.19.1"

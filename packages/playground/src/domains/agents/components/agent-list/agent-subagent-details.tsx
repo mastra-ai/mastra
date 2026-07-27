@@ -55,7 +55,7 @@ export function AgentSubagentDetails({ agentName, agents }: AgentSubagentDetails
             tabIndex={0}
           >
             {agentEntries.map(([agentKey, agent]) => (
-              <li key={agentKey} className="overflow-wrap-anywhere text-ui-sm font-medium text-neutral5">
+              <li key={agentKey} className="overflow-wrap-anywhere text-ui-sm text-neutral5 font-medium">
                 {agent.name || agent.id || agentKey}
               </li>
             ))}

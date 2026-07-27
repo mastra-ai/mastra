@@ -9,9 +9,8 @@ import {
   useLinkRepositoryMutation,
 } from '../../../../../shared/hooks/useFactories';
 import { connectLinear } from '../../factory/services/linear';
-import type { FactoryProject, FactoryProjectPayload } from '../services/github';
+import type { FactoryProject, FactoryProjectPayload, GithubRepo } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
-import type { GithubRepo } from '../services/github';
 import {
   clearOnboardingFlow,
   ONBOARDING_FACTORY_KEY as FACTORY_KEY,
@@ -138,7 +137,7 @@ export function EmptyFactoryState() {
   const stepIndex = steps.indexOf(step);
 
   return (
-    <main className="factory-signin-theme min-h-dvh bg-surface1 font-mona-sans text-neutral6">
+    <main className="factory-signin-theme bg-surface1 font-mona-sans text-neutral6 min-h-dvh">
       <div className="grid min-h-dvh w-full grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(480px,42%)]">
         <section className="relative z-3 flex flex-col justify-center px-6 py-12 sm:px-10 lg:px-16 lg:py-17 xl:px-20">
           <div className="w-full max-w-2xl">
@@ -161,7 +160,7 @@ export function EmptyFactoryState() {
               <Txt
                 as="p"
                 variant="ui-lg"
-                className="mt-6 max-w-lg text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.4] tracking-[0.01em] text-neutral3"
+                className="text-neutral3 mt-6 max-w-lg text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.4] tracking-[0.01em]"
               >
                 {STEP_META[step].description}
               </Txt>
@@ -169,7 +168,7 @@ export function EmptyFactoryState() {
 
             <div
               key={step}
-              className="mt-11 w-full animate-in fade-in slide-in-from-bottom-2 duration-300 motion-reduce:animate-none"
+              className="animate-in fade-in slide-in-from-bottom-2 mt-11 w-full duration-300 motion-reduce:animate-none"
             >
               {step === 'initial' && <InitialFactoryStep onContinue={() => goTo('vcs')} />}
               {step === 'vcs' && (

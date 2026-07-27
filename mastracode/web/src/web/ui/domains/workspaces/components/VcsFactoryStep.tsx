@@ -37,7 +37,7 @@ export function VcsFactoryStep({
   return (
     <section
       aria-label="GitHub repository"
-      className="mx-auto max-w-2xl rounded-2xl border border-border1 bg-surface2/80 p-5 text-left"
+      className="border-border1 bg-surface2/80 mx-auto max-w-2xl rounded-2xl border p-5 text-left"
     >
       {githubStatus.isPending ? (
         <SkeletonRows label="Loading GitHub status" rows={3} rowClassName="h-12 w-full rounded-xl" />
@@ -45,23 +45,23 @@ export function VcsFactoryStep({
         <GithubConnection status={githubStatus.data} isConnecting={githubRedirecting} onConnect={onConnect} />
       ) : (
         <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-2 rounded-lg border border-border1 bg-surface1 px-3 py-2">
+          <div className="border-border1 bg-surface1 flex items-center gap-2 rounded-lg border px-3 py-2">
             <SearchIcon size={15} className="text-icon2" />
             <input
               aria-label="Search repositories"
-              className="min-w-0 flex-1 bg-transparent text-ui-sm text-icon6 placeholder:text-icon2 focus:outline-none"
+              className="text-ui-sm text-icon6 placeholder:text-icon2 min-w-0 flex-1 bg-transparent focus:outline-none"
               placeholder="Filter repositories…"
               value={query}
               onChange={event => setQuery(event.target.value)}
             />
           </div>
           {mutationError && (
-            <p role="alert" className="m-0 text-ui-sm text-notice-destructive-fg">
+            <p role="alert" className="text-ui-sm text-notice-destructive-fg m-0">
               {mutationError}
             </p>
           )}
           {repos.isError && (
-            <p role="alert" className="m-0 text-ui-sm text-notice-destructive-fg">
+            <p role="alert" className="text-ui-sm text-notice-destructive-fg m-0">
               {repos.error.message}
             </p>
           )}
@@ -74,19 +74,19 @@ export function VcsFactoryStep({
                 return (
                   <button
                     key={repo.id}
-                    className="group flex cursor-pointer items-center gap-3 rounded-xl bg-surface3 px-4 py-3 text-left hover:bg-surface4 disabled:cursor-not-allowed disabled:opacity-60"
+                    className="group bg-surface3 hover:bg-surface4 flex cursor-pointer items-center gap-3 rounded-xl px-4 py-3 text-left disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={mutationPending}
                     onClick={() => onSelectRepository(repo)}
                   >
-                    <GithubIcon className="shrink-0 text-icon3" />
+                    <GithubIcon className="text-icon3 shrink-0" />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-ui-sm font-medium text-icon6">{repo.fullName}</span>
-                      <span className="block text-ui-xs text-icon3">
+                      <span className="text-ui-sm text-icon6 block truncate font-medium">{repo.fullName}</span>
+                      <span className="text-ui-xs text-icon3 block">
                         {repo.private ? 'Private' : 'Public'} · {repo.defaultBranch}
                       </span>
                     </span>
                     {isConnecting ? (
-                      <Spinner size="sm" aria-label={`Connecting ${repo.fullName}`} className="shrink-0 text-accent1" />
+                      <Spinner size="sm" aria-label={`Connecting ${repo.fullName}`} className="text-accent1 shrink-0" />
                     ) : (
                       <span className="text-ui-xs text-neutral1 opacity-0 transition-opacity group-hover:opacity-100">
                         Select
@@ -97,7 +97,7 @@ export function VcsFactoryStep({
               })}
             </div>
           ) : (
-            <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+            <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
               No repositories found.
             </Txt>
           )}
@@ -136,7 +136,7 @@ function GithubConnection({
   return (
     <EmptyState
       className="py-8"
-      iconSlot={<GithubIcon className="size-10 text-icon3" />}
+      iconSlot={<GithubIcon className="text-icon3 size-10" />}
       titleSlot="Connect GitHub"
       descriptionSlot={message}
       actionSlot={
@@ -147,13 +147,13 @@ function GithubConnection({
           </Button>
         ) : missingEnvVars.length > 0 ? (
           <div className="flex max-w-md flex-col items-center gap-2">
-            <Txt as="p" variant="ui-sm" className="m-0 text-center text-icon3">
+            <Txt as="p" variant="ui-sm" className="text-icon3 m-0 text-center">
               To enable it, set the GitHub App environment variables on the server and restart:
             </Txt>
             <ul className="m-0 flex list-none flex-wrap justify-center gap-1.5 p-0">
               {missingEnvVars.map(name => (
                 <li key={name}>
-                  <code className="rounded bg-surface4 px-1.5 py-0.5 font-mono text-ui-xs text-icon5">{name}</code>
+                  <code className="bg-surface4 text-ui-xs text-icon5 rounded px-1.5 py-0.5 font-mono">{name}</code>
                 </li>
               ))}
             </ul>

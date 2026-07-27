@@ -57,16 +57,16 @@ export function FactorySessionHeader() {
   };
 
   return (
-    <header role="region" className="border-b border-border1 px-3 py-2.5 md:px-5" aria-label="Factory session">
+    <header role="region" className="border-border1 border-b px-3 py-2.5 md:px-5" aria-label="Factory session">
       <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <nav className="flex min-w-0 items-center gap-2 text-ui-sm" aria-label="Factory session breadcrumb">
-          <Link to={sectionPath} className="shrink-0 font-medium text-icon4 hover:text-icon6 hover:underline">
+        <nav className="text-ui-sm flex min-w-0 items-center gap-2" aria-label="Factory session breadcrumb">
+          <Link to={sectionPath} className="text-icon4 hover:text-icon6 shrink-0 font-medium hover:underline">
             {section}
           </Link>
           <span className="text-icon3" aria-hidden>
             /
           </span>
-          <span className="truncate text-icon6">{sessionTitle(currentItem)}</span>
+          <span className="text-icon6 truncate">{sessionTitle(currentItem)}</span>
         </nav>
         {destinations.length > 0 ? (
           <div className="flex shrink-0 flex-wrap items-center gap-1">
@@ -77,7 +77,7 @@ export function FactorySessionHeader() {
                   <Link
                     key={item.id}
                     to={relationshipPath(item, factoryId)}
-                    className="flex items-center gap-1.5 rounded-md px-2 py-1 text-ui-sm text-icon4 hover:bg-surface3 hover:text-icon6"
+                    className="text-ui-sm text-icon4 hover:bg-surface3 hover:text-icon6 flex items-center gap-1.5 rounded-md px-2 py-1"
                     aria-label={`Open ${label}: ${item.title}`}
                   >
                     <Link2 size={13} aria-hidden />

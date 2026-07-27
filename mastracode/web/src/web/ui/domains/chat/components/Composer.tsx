@@ -157,12 +157,14 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     });
     if (accepted.length === 0) return;
     const additions = await Promise.all(
-      accepted.map(async (file): Promise<PendingImage> => ({
-        id: `pending-image-${pendingImageSeq++}`,
-        data: await readFileAsBase64(file),
-        mediaType: file.type,
-        filename: file.name || undefined,
-      })),
+      accepted.map(
+        async (file): Promise<PendingImage> => ({
+          id: `pending-image-${pendingImageSeq++}`,
+          data: await readFileAsBase64(file),
+          mediaType: file.type,
+          filename: file.name || undefined,
+        }),
+      ),
     );
     setImages(prev => [...prev, ...additions]);
   };
@@ -309,13 +311,13 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                 <img
                   src={`data:${img.mediaType};base64,${img.data}`}
                   alt={img.filename ?? 'Attached image'}
-                  className="h-14 w-14 rounded-md border border-border1 object-cover"
+                  className="border-border1 h-14 w-14 rounded-md border object-cover"
                 />
                 <Button
                   type="button"
                   variant="outline"
                   size="icon-xs"
-                  className="absolute -right-1 -top-1 rounded-full bg-surface3"
+                  className="bg-surface3 absolute -top-1 -right-1 rounded-full"
                   onClick={() => removeImage(img.id)}
                   aria-label="Remove image"
                 >
@@ -339,7 +341,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
           aria-keyshortcuts="Shift+Tab"
         />
         {showSuggestions && (
-          <div className="absolute bottom-full mb-2 w-full rounded-md border border-border1 bg-surface3 p-1 shadow-lg">
+          <div className="border-border1 bg-surface3 absolute bottom-full mb-2 w-full rounded-md border p-1 shadow-lg">
             {suggestions.map((cmd, index) => (
               <button
                 key={cmd.name}

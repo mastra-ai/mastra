@@ -34,7 +34,7 @@ export const WorkflowRunDetail = ({
 
   if (isLoadingRunExecutionResult) {
     return (
-      <div className="p-4 space-y-4">
+      <div className="space-y-4 p-4">
         <div className="flex items-start gap-3">
           <Skeleton className="h-5 w-5 shrink-0 rounded-full" />
           <div className="min-w-0 flex-1 space-y-2">
@@ -78,7 +78,7 @@ export const WorkflowRunDetail = ({
 
   if (runId) {
     return (
-      <div className="h-full grid grid-rows-[1fr_auto]">
+      <div className="grid h-full grid-rows-[1fr_auto]">
         <WorkflowTrigger
           {...triggerProps}
           paramsRunId={runId}

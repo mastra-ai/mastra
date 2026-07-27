@@ -13,11 +13,14 @@ import {
   TABLE_SCHEMAS,
   normalizePerPage,
   calculatePagination,
+  validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
   StorageListMessagesInput,
   StorageListMessagesOutput,
+  StorageMetadataFilter,
+  StorageMetadataFilterValue,
   StorageListThreadsInput,
   StorageListThreadsOutput,
 } from '@mastra/core/storage';
@@ -25,6 +28,55 @@ import { D1DB, resolveD1Config } from '../../db';
 import type { D1DomainConfig } from '../../db';
 import { createSqlBuilder } from '../../sql-builder';
 import { deserializeValue, isArrayOfRecords } from '../utils';
+
+function addSqliteMetadataFilter(
+  conditions: string[],
+  params: unknown[],
+  metadataFilter: StorageMetadataFilter | undefined,
+): void {
+  if (!metadataFilter) return;
+
+  for (const [key, value] of Object.entries(metadataFilter)) {
+    const path = `$.metadata.${key}`;
+    conditions.push(`CASE WHEN json_valid(content) THEN json_type(content, ?) IS NOT NULL ELSE 0 END`);
+    params.push(path);
+    addSqliteMetadataValuePredicate(conditions, params, path, value);
+  }
+}
+
+function addSqliteMetadataValuePredicate(
+  conditions: string[],
+  params: unknown[],
+  path: string,
+  value: StorageMetadataFilterValue,
+): void {
+  if (value === null) {
+    conditions.push(`CASE WHEN json_valid(content) THEN json_type(content, ?) = 'null' ELSE 0 END`);
+    params.push(path);
+    return;
+  }
+
+  if (typeof value === 'string') {
+    conditions.push(
+      `CASE WHEN json_valid(content) THEN json_type(content, ?) = 'text' AND json_extract(content, ?) = ? ELSE 0 END`,
+    );
+    params.push(path, path, value);
+    return;
+  }
+
+  if (typeof value === 'number') {
+    conditions.push(
+      `CASE WHEN json_valid(content) THEN json_type(content, ?) IN ('integer', 'real') AND json_extract(content, ?) = ? ELSE 0 END`,
+    );
+    params.push(path, path, value);
+    return;
+  }
+
+  conditions.push(
+    `CASE WHEN json_valid(content) THEN json_type(content, ?) = ? AND json_extract(content, ?) = ? ELSE 0 END`,
+  );
+  params.push(path, value ? 'true' : 'false', path, value ? 1 : 0);
+}
 
 export class MemoryStorageD1 extends MemoryStorage {
   #db: D1DB;
@@ -799,6 +851,7 @@ export class MemoryStorageD1 extends MemoryStorage {
 
     const perPage = normalizePerPage(perPageInput, 40);
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     try {
       const fullTableName = this.#db.getTableName(TABLE_MESSAGES);
@@ -831,6 +884,12 @@ export class MemoryStorageD1 extends MemoryStorage {
         const endOp = dateRange.endExclusive ? '<' : '<=';
         query += ` AND createdAt ${endOp} ?`;
         queryParams.push(endDate);
+      }
+
+      const metadataConditions: string[] = [];
+      addSqliteMetadataFilter(metadataConditions, queryParams, metadataFilter);
+      if (metadataConditions.length > 0) {
+        query += ` AND ${metadataConditions.join(' AND ')}`;
       }
 
       // Build ORDER BY clause
@@ -905,6 +964,12 @@ export class MemoryStorageD1 extends MemoryStorage {
         countParams.push(endDate);
       }
 
+      const countMetadataConditions: string[] = [];
+      addSqliteMetadataFilter(countMetadataConditions, countParams, metadataFilter);
+      if (countMetadataConditions.length > 0) {
+        countQuery += ` AND ${countMetadataConditions.join(' AND ')}`;
+      }
+
       const countResult = (await this.#db.executeQuery({ sql: countQuery, params: countParams })) as {
         count: number;
       }[];
@@ -949,9 +1014,10 @@ export class MemoryStorageD1 extends MemoryStorage {
       // If all thread messages have been returned (through pagination or include), hasMore = false
       // Otherwise, check if there are more pages in the pagination window
       const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
-      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
       const hasMore =
-        perPageInput === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
+        perPageInput !== false &&
+        (metadataFilter || returnedThreadMessageIds.size < total) &&
+        offset + paginatedCount < total;
 
       return {
         messages: finalMessages,

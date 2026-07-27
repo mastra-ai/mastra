@@ -156,7 +156,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     messageList,
     messageId: currentResponseMessageId!,
     options: {
-      runId: runIdToUse!,
+      runId: runIdToUse,
       toolCallStreaming: rest.toolCallStreaming,
       onFinish: rest.options?.onFinish,
       onStepFinish: rest.options?.onStepFinish,
