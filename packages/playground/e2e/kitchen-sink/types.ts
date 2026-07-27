@@ -11,7 +11,15 @@ export type Fixtures =
   | 'agent-builder-pr-reviewer'
   | 'agent-builder-onboarding'
   | 'agent-builder-complex'
-  | 'workflow-builder-lifecycle';
+  | 'workflow-builder-lifecycle'
+  | 'workflow-builder-prompt-addition'
+  | 'workflow-builder-prompt-customer-ticket'
+  | 'workflow-builder-prompt-parallel-customer-lookup'
+  | 'workflow-builder-prompt-support-answer'
+  | 'workflow-builder-prompt-nested-greeting'
+  | 'workflow-builder-prompt-foreach-customer-lookup'
+  | 'workflow-builder-prompt-priority-support-router'
+  | 'workflow-builder-prompt-mixed-support-pipeline';
 
 export type FixtureConfig = {
   name: Fixtures;

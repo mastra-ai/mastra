@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "addition-workflow",
+      "fixture": "workflow-builder-prompt-addition",
+      "expectedGraphEntry": "add-numbers-result",
+      "prompt": "Create a workflow named addition-workflow that accepts two numbers a and b, uses add-numbers, and returns the numeric result in a result field.",
+      "runInput": { "a": 2, "b": 3 },
+      "expectedOutput": { "result": 5 }
+    },
+    {
+      "id": "customer-ticket-workflow",
+      "fixture": "workflow-builder-prompt-customer-ticket",
+      "expectedGraphEntry": "ticket-result",
+      "prompt": "Create a workflow named customer-ticket-workflow that accepts customer email and support summary strings, looks up the customer with lookup-customer, then creates a support ticket with create-support-ticket using the looked-up customerId and the original summary. Return the created ticket result.",
+      "runInput": { "email": "ada@example.com", "summary": "Cannot sign in" },
+      "expectedOutput": { "ticketId": "ticket-456", "status": "open" }
+    },
+    {
+      "id": "parallel-customer-lookup-workflow",
+      "fixture": "workflow-builder-prompt-parallel-customer-lookup",
+      "expectedGraphEntry": "parallel-customer-results",
+      "prompt": "Create a workflow named parallel-customer-lookup-workflow that accepts two customer email strings, looks both customers up in parallel using lookup-customer, and returns both lookup results in a clear object.",
+      "runInput": { "firstEmail": "ada@example.com", "secondEmail": "grace@example.com" },
+      "expectedOutput": {
+        "firstCustomer": { "customerId": "customer-123", "email": "ada@example.com", "plan": "pro" },
+        "secondCustomer": { "customerId": "customer-123", "email": "grace@example.com", "plan": "pro" }
+      }
+    },
+    {
+      "id": "support-answer-workflow",
+      "fixture": "workflow-builder-prompt-support-answer",
+      "expectedGraphEntry": "support-answer-result",
+      "prompt": "Create a workflow named support-answer-workflow that accepts a prompt string, calls support-agent, and returns the agent actual text in a response field.",
+      "runInput": { "prompt": "How do I reset my password?" },
+      "expectedOutputShape": { "response": "string" }
+    },
+    {
+      "id": "nested-greeting-workflow",
+      "fixture": "workflow-builder-prompt-nested-greeting",
+      "expectedGraphEntry": "nested-greeting-result",
+      "prompt": "Create a workflow named nested-greeting-workflow that accepts a name string, invokes greeting-workflow, and returns its message.",
+      "runInput": { "name": "Ada" },
+      "expectedOutput": { "message": "Hello, Ada!" }
+    },
+    {
+      "id": "foreach-customer-lookup-workflow",
+      "fixture": "workflow-builder-prompt-foreach-customer-lookup",
+      "expectedGraphEntry": "lookup-customer-item",
+      "prompt": "Create a workflow named foreach-customer-lookup-workflow that accepts an array of objects where each item has a required email string, uses a foreach step to run lookup-customer for every item, and returns an array of customer objects with customerId, email, and plan.",
+      "runInput": [{ "email": "ada@example.com" }],
+      "expectedOutput": [{ "customerId": "customer-123", "email": "ada@example.com", "plan": "pro" }]
+    },
+    {
+      "id": "priority-support-router",
+      "fixture": "workflow-builder-prompt-priority-support-router",
+      "expectedGraphEntry": "priority-support-result",
+      "prompt": "Create a workflow named priority-support-router that accepts prompt and priority strings. Use a conditional step so urgent priority routes to support-agent with an urgent-support prompt, while any non-urgent priority routes to support-agent with a normal-support prompt. Return the selected agent actual text in a response field.",
+      "runInput": { "prompt": "Production is down", "priority": "urgent" },
+      "expectedOutputShape": { "response": "string" }
+    },
+    {
+      "id": "mixed-support-pipeline",
+      "fixture": "workflow-builder-prompt-mixed-support-pipeline",
+      "expectedGraphEntry": "mixed-support-result",
+      "prompt": "Create a workflow named mixed-support-pipeline that accepts customer email and support summary strings, looks up the customer, asks support-agent to prepare an answer using the customer context, creates a support ticket with the looked-up customerId and original summary, and returns both the agent text and created ticket result.",
+      "runInput": { "email": "ada@example.com", "summary": "Cannot sign in" },
+      "expectedOutputShape": {
+        "response": "string",
+        "ticket": { "ticketId": "string", "status": "open" }
+      }
+    }
+  ]
+}

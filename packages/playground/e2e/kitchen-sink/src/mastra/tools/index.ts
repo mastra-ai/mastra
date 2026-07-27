@@ -46,3 +46,19 @@ export const simpleMcpTool = createTool({
     };
   },
 });
+
+export const lookupCustomer = createTool({
+  id: 'lookup-customer',
+  description: 'Look up a customer by email for Workflow Builder comparison tests',
+  inputSchema: z.object({ email: z.string() }),
+  outputSchema: z.object({
+    customerId: z.string(),
+    email: z.string(),
+    plan: z.string(),
+  }),
+  execute: async ({ email }) => ({
+    customerId: 'customer-123',
+    email,
+    plan: 'pro',
+  }),
+});

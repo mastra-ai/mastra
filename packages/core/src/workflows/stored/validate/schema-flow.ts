@@ -21,7 +21,7 @@ import { leafEntryId } from './types';
 import type { WorkflowRegistryIndex, WorkflowValidationInput, WorkflowValidationIssue } from './types';
 
 export interface GraphSchemaInference {
-  /** Output schema of each id-bearing top-level step (undefined = unknown). */
+  /** Output schema of each runtime-visible step id (undefined = unknown). */
   stepOutputs: Map<string, JsonSchema | undefined>;
   /** Inferred output of the last entry in the graph (undefined = unknown). */
   finalOutput: JsonSchema | undefined;
@@ -224,7 +224,10 @@ export function inferGraphSchemas(def: WorkflowValidationInput, index: WorkflowR
         entry.steps.forEach((child, childIndex) => {
           const output = evalLeaf(child, `${path}.steps.${childIndex}`, incoming, true);
           const childId = leafEntryId(child);
-          if (output && childId) properties[childId] = output;
+          if (childId) {
+            stepOutputs.set(childId, output);
+            if (output) properties[childId] = output;
+          }
         });
         current = {
           type: 'object',
@@ -240,15 +243,17 @@ export function inferGraphSchemas(def: WorkflowValidationInput, index: WorkflowR
         }
         const items = isRecord(incoming?.items) ? (incoming.items as JsonSchema) : undefined;
         const output = evalLeaf(entry.step, `${path}.step`, items, true);
+        const childId = leafEntryId(entry.step);
+        if (childId) stepOutputs.set(childId, output);
         current = output ? { type: 'array', items: output } : output;
         break;
       }
       case 'loop': {
         const output = evalLeaf(entry.step, `${path}.step`, current, true);
+        const stepId = leafEntryId(entry.step);
+        if (stepId) stepOutputs.set(stepId, output);
         if (entry.predicate) {
           const loopStepOutputs = new Map(stepOutputs);
-          const stepId = leafEntryId(entry.step);
-          if (stepId) loopStepOutputs.set(stepId, output);
           issues.push(
             ...validatePredicate(entry.predicate, `${path}.predicate`, {
               initData: def.inputSchema,
