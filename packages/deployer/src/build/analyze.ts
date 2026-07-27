@@ -643,7 +643,7 @@ export async function analyzeBundle(
      * Workspace deps that were optimized (after isDev/externalsPreset pruning).
      * Used by the watcher to re-run optimization when workspace sources change.
      */
-    depsToOptimize: new Map(depsToOptimize),
+    depsToOptimize,
     workspaceRoot,
     outputDir,
     ...(mastraConfigResult.projectType ? { projectType: mastraConfigResult.projectType } : {}),

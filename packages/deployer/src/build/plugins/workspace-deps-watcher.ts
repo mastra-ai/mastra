@@ -150,7 +150,7 @@ async function isSourceNewerThan(sourceFiles: string[], lastOptimizedAt: number)
   for (const file of sourceFiles) {
     try {
       const { mtimeMs } = await stat(file);
-      if (mtimeMs > lastOptimizedAt) {
+      if (mtimeMs >= lastOptimizedAt) {
         return true;
       }
     } catch {
