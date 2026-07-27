@@ -1294,9 +1294,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             downloadConcurrency,
           });
           const llmPromptForModel =
-            currentStep.model?.specificationVersion === 'v3' || currentStep.model?.specificationVersion === 'v4'
-              ? messageList.get.all.aiV6.llmPrompt
-              : messageList.get.all.aiV5.llmPrompt;
+            currentStep.model?.specificationVersion === 'v4'
+              ? messageList.get.all.aiV7.llmPrompt
+              : currentStep.model?.specificationVersion === 'v3'
+                ? messageList.get.all.aiV6.llmPrompt
+                : messageList.get.all.aiV5.llmPrompt;
           let inputMessages = await llmPromptForModel(messageListPromptArgs);
 
           inputMessages = applyAutoResumeSystemMessage({
