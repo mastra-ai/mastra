@@ -500,6 +500,14 @@ export class FactoryDecisionDispatcher {
             candidate => candidate.id === record.bindingId && candidate.status === 'active',
           );
           if (!binding) throw new Error('Prepared Factory binding is unavailable or revoked.');
+          // Wake runs build the Factory workspace, which requires the
+          // authenticated session owner on the request context.
+          const item = await this.#storage.get({ orgId: record.orgId, id: binding.workItemId });
+          const startedBy = item?.sessions[binding.role]?.startedBy;
+          if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
+          await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+          const requestContext = new RequestContext();
+          requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
           const session = await this.#requireSession(binding);
           await awaitNotification(
             await session.sendNotificationSignal(
@@ -512,7 +520,7 @@ export class FactoryDecisionDispatcher {
                 sourceId: record.id,
                 dedupeKey: `factory-kickoff:${record.kickoffKey}`,
               },
-              { ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'wake' } },
+              { ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'wake' }, requestContext },
             ),
             true,
           );

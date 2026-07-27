@@ -1286,6 +1286,48 @@ describe('ensure (materialize)', () => {
     expect(res.status).toBe(404);
   });
 
+  it('self-heals a stale sandbox provider by recomputing the workdir against the current fleet', async () => {
+    // The row was linked while a different provider was active — its workdir
+    // points into that provider's filesystem and would fail to clone here.
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: 'p1',
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        repoFullName: 'octo/hello',
+        defaultBranch: 'main',
+        sandboxProvider: 'platform',
+        sandboxWorkdir: '/old-provider/hello',
+      }),
+    );
+    // A per-user binding already inherited the stale workdir and thinks it is materialized.
+    tables.sandboxes.push(
+      sandboxRow({
+        id: 'sbrow-1',
+        projectRepositoryId: 'p1',
+        userId: 'u1',
+        sandboxId: 'sb-old',
+        sandboxWorkdir: '/old-provider/hello',
+        materializedAt: new Date(),
+      }),
+    );
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ projectRepositoryId: 'p1', sandboxWorkdir: '/workspace/hello' });
+    // The project row was healed to the current fleet's provider + workdir…
+    expect(tables.projectRepositories[0]).toMatchObject({
+      sandboxProvider: 'railway',
+      sandboxWorkdir: '/workspace/hello',
+    });
+    // …and the per-user binding was re-pointed and forced to re-materialize.
+    expect(tables.sandboxes[0]).toMatchObject({ sandboxWorkdir: '/workspace/hello', materializedAt: null });
+    expect(materializeRepo).toHaveBeenCalledOnce();
+    expect(materializeRepo).toHaveBeenCalledWith(
+      expect.objectContaining({ row: expect.objectContaining({ sandboxWorkdir: '/workspace/hello' }) }),
+    );
+  });
+
   it('streams server-side progress events when the client accepts an event stream', async () => {
     tables.projectRepositories.push(
       projectRepositoryRow({

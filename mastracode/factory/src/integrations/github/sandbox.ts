@@ -183,12 +183,17 @@ export async function materializeRepo(options: {
 
   const authUrl = tokenUrl(repo, token);
 
-  // The DB's `materializedAt` can drift from disk — a fresh per-user binding
-  // row over an already-populated workdir (local dev DB resets, repaired
-  // rows, earlier flows) would make `git clone` fail on the non-empty
-  // directory. Re-detect an existing checkout of this repo and pull instead.
-  const alreadyMaterialized = Boolean(sandboxRow.materializedAt) || (await hasExistingCheckout(sandbox, workdir, repo));
+  // The DB's `materializedAt` can drift from disk in both directions: a fresh
+  // binding row over an already-populated workdir (local dev DB resets,
+  // repaired rows, earlier flows) must pull instead of failing `git clone` on
+  // the non-empty directory, and a stale `materializedAt` over an empty
+  // sandbox (an expired/recreated VM whose disk was wiped) must re-clone
+  // instead of running `git -C <workdir>` against a directory that no longer
+  // exists. Disk is the source of truth: detect the checkout instead of
+  // trusting the row.
+  const alreadyMaterialized = await hasExistingCheckout(sandbox, workdir, repo);
 
+  let succeeded = false;
   try {
     if (!alreadyMaterialized) {
       // 2a. First open: shallow-clone the default branch into the workdir. A
@@ -217,12 +222,14 @@ export async function materializeRepo(options: {
         throw classifyGitFailure(pull, 'pull-failed');
       }
     }
+    succeeded = true;
   } finally {
     // 3. Always scrub the token from the remote so it isn't left in the VM's
     // git config, even when the clone/pull above failed partway through. This
-    // is best-effort on the failure path (the workdir may not exist yet after a
-    // failed clone); on the success path the scrub must succeed or we surface it.
-    await scrubRemote(sandbox, workdir, repo, alreadyMaterialized);
+    // is best-effort on the failure path (the workdir may not even exist, and
+    // a scrub error must never mask the primary failure); on the success path
+    // the scrub must succeed or we surface it.
+    await scrubRemote(sandbox, workdir, repo, succeeded);
   }
 
   // 4. Mark materialized.
@@ -293,7 +300,8 @@ async function hasExistingCheckout(
  * Reset the git remote back to the tokenless URL. On a successful clone/pull the
  * workdir always has a `.git`, so a non-zero exit code here means the token may
  * still be persisted — surface it. On the failure path the workdir may not exist
- * (e.g. a failed clone), so a non-zero exit is tolerated.
+ * (e.g. a failed clone), so a non-zero exit is tolerated — and never masks the
+ * primary failure being thrown through the `finally`.
  */
 async function scrubRemote(
   sandbox: MaterializationSandbox,

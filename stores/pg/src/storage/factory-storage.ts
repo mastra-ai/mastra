@@ -449,6 +449,16 @@ export class PgFactoryStorage extends FactoryStorage {
     } else {
       this.#pool = new pg.Pool({ connectionString: config.connectionString });
       this.#ownsPool = true;
+      // pg emits 'error' on the pool when an idle client's connection drops
+      // (backend restart, network partition, local address changes). Without a
+      // listener Node escalates the event to an uncaughtException and crashes
+      // the process. Only pools this storage creates get the listener — a
+      // wrapped store keeps its own listeners, mirroring close().
+      this.#pool.on('error', err => {
+        console.warn(
+          `PgFactoryStorage: idle pool client error (pool discards the client and reconnects on next checkout): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
     }
     this.ops = new PgFactoryStorageOps(this.#pool, this.#schemas);
   }

@@ -382,7 +382,26 @@ export class AgentController<TState = {}> {
     // resource+scope resolve to one session.
     const existing = this.#sessionsByResource.get(registryKey);
     if (existing) {
-      return existing;
+      const session = await existing;
+      // An exact thread binding is part of the createSession contract
+      // ("existing threads are resumed; missing threads are created with this
+      // id"), so honor it on cached sessions too. Without this, whichever
+      // request creates the session first wins: a thread-agnostic caller (SSE
+      // subscribe, message listing) racing ahead of an exact-thread create
+      // would leave the session bound to a different thread and the requested
+      // thread never created.
+      if (threadId && session.thread.getId() !== threadId) {
+        const existingThread = await session.thread.getById({ threadId });
+        if (existingThread) {
+          if (existingThread.resourceId !== effectiveResourceId) {
+            throw new Error(`Thread not found: ${threadId}`);
+          }
+          await session.thread.switch({ threadId });
+        } else {
+          await session.thread.create({ id: threadId });
+        }
+      }
+      return session;
     }
 
     const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId, tags, {

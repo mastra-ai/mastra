@@ -137,6 +137,51 @@ describe('useAgentControllerConnection', () => {
     expect(receivedState).toEqual({ state: { projectPath: '/sandbox/repo', ...factorySessionState } });
   });
 
+  it('given a workspace session with a conventional thread id, when the connection initializes, then session creation binds that exact thread', async () => {
+    // Regression: a factory workspace's thread id is its sessionId (seeded by
+    // FactoryStartCoordinator). If init omits `threadId` and provisioning was
+    // interrupted (or storage was reset), the server binds a fresh random-id
+    // thread and the route's thread lookup 404s forever. Passing the exact id
+    // makes init a get-or-create for the conventional thread.
+    let createBody: unknown;
+    const onEvent = vi.fn();
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, async ({ request }) => {
+        createBody = await request.json();
+        return HttpResponse.json({ controllerId, resourceId, threadId: resourceId });
+      }),
+      http.get(sessionUrl, () =>
+        HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: resourceId,
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        }),
+      ),
+      http.get(
+        `${sessionUrl}/stream`,
+        () =>
+          new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      ),
+    );
+
+    const { result } = renderHookWithProviders(() =>
+      useAgentControllerConnection({
+        ...hookArgs,
+        sessionThreadId: resourceId,
+        onEvent,
+      }),
+    );
+
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(createBody).toMatchObject({ resourceId, threadId: resourceId });
+  });
+
   it('given the event callback changes after connection, then the active stream is not resubscribed', async () => {
     const onStream = vi.fn();
     const onEvent = vi.fn();

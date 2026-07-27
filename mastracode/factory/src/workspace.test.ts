@@ -269,6 +269,10 @@ describe('getFactoryWorkspace', () => {
     const review = await read('factory-review');
     expect(review).toContain('Verdict: approve');
     expect(review).toContain('Verdict: request changes');
+    // The verdict must be published on the PR itself, unprompted.
+    expect(review).toContain('gh pr review <number> --approve --body-file');
+    expect(review).toContain('gh pr review <number> --request-changes --body-file');
+    expect(review).toContain('gh pr comment <number> --body-file');
   });
 
   it('adds read-only Web Factory skills and keeps them authoritative over project shadows', async () => {
