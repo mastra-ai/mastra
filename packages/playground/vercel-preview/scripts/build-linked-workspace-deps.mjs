@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const exampleDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const repoRoot = path.resolve(exampleDir, '..', '..');
+const appDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const repoRoot = path.resolve(appDir, '..', '..', '..');
 
 const linkedPackages = ['mastra', '@mastra/deployer-vercel', '@mastra/core', '@mastra/memory', '@mastra/editor'];
 
@@ -17,6 +17,8 @@ execFileSync(
   { cwd: repoRoot, stdio: 'inherit' },
 );
 
-execFileSync('turbo', ['--cwd', repoRoot, 'build', ...linkedPackages.flatMap(name => ['--filter', name])], {
+// app's own pinned turbo — script must also work outside pnpm run, where .bin is not on PATH
+const turboBin = path.join(appDir, 'node_modules', '.bin', 'turbo');
+execFileSync(turboBin, ['--cwd', repoRoot, 'build', ...linkedPackages.flatMap(name => ['--filter', name])], {
   stdio: 'inherit',
 });

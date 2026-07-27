@@ -2,7 +2,7 @@
 
 This app is the Vercel target for PR previews of Mastra Studio. It deploys Studio and a minimal Mastra API together, so reviewers can open the preview URL and test a working agent page.
 
-It lives under `previews/`, not `examples/`: it is internal preview infrastructure, and its monorepo-only patterns (`link:` overrides, a root turbo build) must not be copied into user-facing examples or constrain the examples-wide tooling (renovate rules, `validate-examples.js`, lint and format excludes).
+It lives inside `packages/playground` because previewing Studio is its whole point, but it is internal preview infrastructure, not part of the published package: it keeps its own lockfile and installs with `--ignore-workspace`, and its monorepo-only patterns (`link:` overrides, a root turbo build) must not be copied into user-facing examples. Edits here count as playground changes for turbo and the changeset-bot; that is accepted noise since the app rarely changes, and no changeset is needed for preview-only edits.
 
 The app is intentionally serverless-friendly:
 
@@ -28,22 +28,22 @@ The data is deterministic and free to produce (no model calls, no provider key n
 From the repository root:
 
 ```bash
-corepack pnpm@10.29.3 --dir previews/studio-preview install --frozen-lockfile --ignore-workspace
-corepack pnpm@10.29.3 --dir previews/studio-preview build
+corepack pnpm@10.29.3 --dir packages/playground/vercel-preview install --frozen-lockfile --ignore-workspace
+corepack pnpm@10.29.3 --dir packages/playground/vercel-preview build
 ```
 
 For local Studio development:
 
 ```bash
-cp previews/studio-preview/.env.example previews/studio-preview/.env
-pnpm --dir previews/studio-preview dev
+cp packages/playground/vercel-preview/.env.example packages/playground/vercel-preview/.env
+pnpm --dir packages/playground/vercel-preview dev
 ```
 
 ## Vercel project setup
 
-Create one Vercel project for the repository and point it at this app. If the project predates the move out of `examples/`, update its Root Directory setting from `examples/studio-preview` to `previews/studio-preview` when this change lands — previews of branches created before the move will fail until they are rebased.
+Create one Vercel project for the repository and point it at this app. If the project predates the move out of `examples/`, update its Root Directory setting from `examples/studio-preview` to `packages/playground/vercel-preview` when this change lands — previews of branches created before the move will fail until they are rebased.
 
-- Root Directory: `previews/studio-preview`
+- Root Directory: `packages/playground/vercel-preview`
 - Build Command: `pnpm build`
 - Install Command: `pnpm install --frozen-lockfile --ignore-workspace`
 - Output Directory: leave empty

@@ -5,28 +5,28 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@mastra/core': link:../../packages/core
-  '@mastra/deployer-vercel': link:../../deployers/vercel
-  '@mastra/editor': link:../../packages/editor
-  '@mastra/memory': link:../../packages/memory
-  mastra: link:../../packages/cli
+  '@mastra/core': link:../../../packages/core
+  '@mastra/deployer-vercel': link:../../../deployers/vercel
+  '@mastra/editor': link:../../../packages/editor
+  '@mastra/memory': link:../../../packages/memory
+  mastra: link:../../../packages/cli
 
 importers:
 
   .:
     dependencies:
       '@mastra/core':
-        specifier: link:../../packages/core
-        version: link:../../packages/core
+        specifier: link:../../core
+        version: link:../../core
       '@mastra/deployer-vercel':
-        specifier: link:../../deployers/vercel
-        version: link:../../deployers/vercel
+        specifier: link:../../../deployers/vercel
+        version: link:../../../deployers/vercel
       '@mastra/editor':
-        specifier: link:../../packages/editor
-        version: link:../../packages/editor
+        specifier: link:../../editor
+        version: link:../../editor
       '@mastra/memory':
-        specifier: link:../../packages/memory
-        version: link:../../packages/memory
+        specifier: link:../../memory
+        version: link:../../memory
       hono:
         specifier: ^4.12.8
         version: 4.12.31
@@ -38,8 +38,8 @@ importers:
         specifier: 22.19.15
         version: 22.19.15
       mastra:
-        specifier: link:../../packages/cli
-        version: link:../../packages/cli
+        specifier: link:../../cli
+        version: link:../../cli
       turbo:
         specifier: ^2.9.12
         version: 2.10.5
