@@ -140,6 +140,26 @@
       "response": {
         "content": "DEEP_DELEGATION_FOREGROUND NESTED_BACKGROUND_COMPLETED BACKGROUND_SUBAGENTS_COMPLETE"
       }
+    },
+    {
+      "match": {
+        "sequenceIndex": 7,
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini"
+      },
+      "response": {
+        "content": "FOREIGN_THREAD_READY"
+      }
+    },
+    {
+      "match": {
+        "sequenceIndex": 8,
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini"
+      },
+      "response": {
+        "content": "POST_SWITCH_RESPONSE_VISIBLE"
+      }
     }
   ]
 }

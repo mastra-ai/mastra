@@ -984,6 +984,7 @@ describe('renderExistingMessages tools', () => {
       .replace(/\x1b\[[0-9;]*m/g, '');
     expect(rendered).toContain('backgroundCompletion');
     expect(rendered).toContain('render-messages.ts:534');
+    expect(rendered).toContain('✓ background · task-result-1');
     expect(rendered).toContain('search_content completed in background');
     expect(state.pendingTools.has('tool-background-result-1')).toBe(false);
     expect(state.chatContainer.children.filter(child => child instanceof NotificationComponent)).toHaveLength(1);
@@ -1011,7 +1012,7 @@ describe('renderExistingMessages tools', () => {
       .render(100)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('⋯');
+    expect(rendered).toContain('◌ background · task-1');
     expect(rendered).not.toContain('Background task started');
   });
 });

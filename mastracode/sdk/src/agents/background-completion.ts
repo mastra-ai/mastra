@@ -1,5 +1,6 @@
 import type { Session } from '@mastra/core/agent-controller';
 import type { BackgroundTask, BackgroundTaskManagerConfig } from '@mastra/core/background-tasks';
+import type { BackgroundCompletionEvents } from './background-completion-events.js';
 
 interface BackgroundCompletionRouter {
   getSessionByResource(resourceId: string): Promise<Session<unknown> | undefined>;
@@ -66,9 +67,27 @@ async function persistBackgroundCompletion(
 
 export function createBackgroundCompletionCallbacks(
   getController: () => BackgroundCompletionRouter,
+  events?: BackgroundCompletionEvents,
 ): Pick<BackgroundTaskManagerConfig, 'onTaskComplete' | 'onTaskFailed'> {
+  const deliver = async (task: BackgroundTask, status: 'completed' | 'failed') => {
+    await persistBackgroundCompletion(getController(), task, status);
+    if (!task.resourceId || !task.threadId) return;
+    events?.publish({
+      id: `background-task:${task.id}:${status}`,
+      taskId: task.id,
+      originRunId: task.runId,
+      originToolCallId: task.toolCallId,
+      resourceId: task.resourceId,
+      threadId: task.threadId,
+      toolName: task.toolName,
+      status,
+      argsSummary: summarizeDetail(task.args),
+      errorSummary: status === 'failed' ? summarizeDetail(task.error) : undefined,
+    });
+  };
+
   return {
-    onTaskComplete: task => persistBackgroundCompletion(getController(), task, 'completed'),
-    onTaskFailed: task => persistBackgroundCompletion(getController(), task, 'failed'),
+    onTaskComplete: task => deliver(task, 'completed'),
+    onTaskFailed: task => deliver(task, 'failed'),
   };
 }

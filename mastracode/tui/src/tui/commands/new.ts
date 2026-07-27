@@ -13,6 +13,9 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
   state.chatContainer.clear();
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
+  state.pendingSubagents.clear();
+  state.pendingSignalMessageComponentsById.clear();
+  state.followUpComponents = [];
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
   state.allSystemReminderComponents = [];

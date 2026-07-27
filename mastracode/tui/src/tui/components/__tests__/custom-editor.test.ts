@@ -180,6 +180,26 @@ describe('CustomEditor image paste handling', () => {
     expect(queueFollowUp).toHaveBeenCalledTimes(1);
   });
 
+  it('routes Ctrl+G to the latest background completion and Alt+G to dismiss it', () => {
+    mocks.matchesKey.mockImplementation(
+      (data: string, key: string) => (data === '\x07' && key === 'ctrl+g') || (data === '\u001bg' && key === 'alt+g'),
+    );
+
+    const editor = new CustomEditor({} as any, {} as any);
+    const jump = vi.fn();
+    const dismiss = vi.fn();
+    editor.onAction('jumpToBackgroundCompletion', jump);
+    editor.onAction('dismissBackgroundCompletion', dismiss);
+
+    editor.handleInput('\x07');
+    expect(jump).toHaveBeenCalledOnce();
+    expect(dismiss).not.toHaveBeenCalled();
+
+    editor.handleInput('\u001bg');
+    expect(dismiss).toHaveBeenCalledOnce();
+    expect(mocks.superHandleInput).not.toHaveBeenCalled();
+  });
+
   it('routes Ctrl+Z to suspend and Alt+Z to undo without falling through to the base editor', () => {
     mocks.matchesKey.mockImplementation(
       (data: string, key: string) => (data === '\x1a' && key === 'ctrl+z') || (data === '\u001bz' && key === 'alt+z'),

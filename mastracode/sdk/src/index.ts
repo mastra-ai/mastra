@@ -46,6 +46,7 @@ import {
 } from '@mastra/observability';
 import { PostgresStore } from '@mastra/pg';
 
+import { createBackgroundCompletionEvents } from './agents/background-completion-events.js';
 import { createBackgroundCompletionCallbacks } from './agents/background-completion.js';
 import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
@@ -884,6 +885,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   }
 
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
+  const backgroundCompletionEvents = createBackgroundCompletionEvents();
   let controller: AgentController<MastraCodeState>;
   controller = new AgentController<MastraCodeState>({
     id: 'mastra-code',
@@ -892,7 +894,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     backgroundTasks: {
       enabled: true,
       recoverStaleTasksOnStart: false,
-      ...createBackgroundCompletionCallbacks(() => controller),
+      ...createBackgroundCompletionCallbacks(() => controller, backgroundCompletionEvents),
     },
     observability,
     memory,
@@ -976,6 +978,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     builtinOmPacks,
     effectiveDefaults,
     githubSignals,
+    backgroundCompletionEvents,
     // Identity for the single local session (Case 3). Servers ignore these and
     // mint per-request sessions with client-supplied resourceIds instead.
     sessionId,

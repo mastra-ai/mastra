@@ -6,6 +6,7 @@ import type { AgentControllerEvent, AgentControllerThread, MastraDBMessage } fro
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
+import { acceptBackgroundActivity } from './background-activity.js';
 import { getMessageText } from './db-message-parts.js';
 import {
   handleAgentStart,
@@ -44,6 +45,7 @@ import {
   clearPendingShellOutputs,
   clearToolInputParsers,
 } from './handlers/index.js';
+import { getBackgroundToolTaskId } from './handlers/tool.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import { flushRender } from './render-scheduler.js';
 import type { TUIState } from './state.js';
@@ -61,6 +63,7 @@ function trackInteractivePrompt(
 }
 
 function isMessageForCurrentThread(message: MastraDBMessage, state: TUIState): boolean {
+  if (state.pendingNewThread) return !message.threadId;
   return !message.threadId || message.threadId === state.session.thread.getId();
 }
 
@@ -142,6 +145,17 @@ export async function dispatchEvent(
 
     case 'tool_start':
       state.agentRunLastStreamPartAt = Date.now();
+      {
+        const threadId = state.session.thread.getId();
+        if (threadId) {
+          state.backgroundToolContexts.set(event.toolCallId, {
+            toolName: event.toolName,
+            resourceId: state.session.identity.getResourceId(),
+            threadId,
+            createdAt: Date.now(),
+          });
+        }
+      }
       handleToolStart(ectx, event.toolCallId, event.toolName, event.args);
       break;
 
@@ -186,10 +200,19 @@ export async function dispatchEvent(
       handleToolInputEnd(ectx, event.toolCallId);
       break;
 
-    case 'tool_end':
+    case 'tool_end': {
       state.agentRunLastStreamPartAt = Date.now();
+      const taskId = getBackgroundToolTaskId(event.result);
+      const context = state.backgroundToolContexts.get(event.toolCallId);
+      if (taskId && context) {
+        acceptBackgroundActivity(state.backgroundActivities, taskId, event.toolCallId, context);
+        state.globalBackgroundNotice.setActivities([...state.backgroundActivities.values()]);
+        flushRender(state);
+      }
+      if (!taskId) state.backgroundToolContexts.delete(event.toolCallId);
       handleToolEnd(ectx, event.toolCallId, event.result, event.isError);
       break;
+    }
 
     case 'info':
       ectx.showInfo(event.message);

@@ -886,6 +886,8 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   state.chatContainer.clear();
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
+  state.pendingSubagents.clear();
+  state.followUpComponents = [];
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
   state.allSystemReminderComponents = [];
@@ -1044,6 +1046,11 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
             },
             state.ui,
           );
+          const backgroundTaskId =
+            getBackgroundToolTaskId(resultValue) ?? backgroundTasksByToolCallId.get(part.toolCallId);
+          if (backgroundTaskId) {
+            toolComponent.setBackgroundTaskId(backgroundTaskId);
+          }
 
           if (hasResult) {
             toolComponent.updateResult(

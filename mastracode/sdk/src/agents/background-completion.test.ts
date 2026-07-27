@@ -1,6 +1,7 @@
 import type { Session } from '@mastra/core/agent-controller';
 import type { BackgroundTask } from '@mastra/core/background-tasks';
 import { describe, expect, it, vi } from 'vitest';
+import { createBackgroundCompletionEvents } from './background-completion-events.js';
 import { createBackgroundCompletionCallbacks } from './background-completion.js';
 
 function createTask(status: BackgroundTask['status']): BackgroundTask {
@@ -25,8 +26,9 @@ function createHarness() {
   const accepted = Promise.resolve({ accepted: true as const });
   const sendSignalToThread = vi.fn(() => ({ accepted }));
   const getSessionByResource = vi.fn(async () => ({ sendSignalToThread }) as unknown as Session<unknown>);
-  const callbacks = createBackgroundCompletionCallbacks(() => ({ getSessionByResource }));
-  return { accepted, callbacks, getSessionByResource, sendSignalToThread };
+  const events = createBackgroundCompletionEvents();
+  const callbacks = createBackgroundCompletionCallbacks(() => ({ getSessionByResource }), events);
+  return { accepted, callbacks, events, getSessionByResource, sendSignalToThread };
 }
 
 describe('createBackgroundCompletionCallbacks', () => {
@@ -71,13 +73,38 @@ describe('createBackgroundCompletionCallbacks', () => {
     },
   );
 
+  it('publishes one process-local event after persisting the origin-thread card', async () => {
+    const { callbacks, events, sendSignalToThread } = createHarness();
+    const listener = vi.fn();
+    events.subscribe(listener);
+
+    await callbacks.onTaskComplete?.(createTask('completed'));
+
+    expect(sendSignalToThread).toHaveBeenCalledOnce();
+    expect(listener).toHaveBeenCalledWith({
+      id: 'background-task:task-1:completed',
+      taskId: 'task-1',
+      originRunId: 'run-1',
+      originToolCallId: 'call-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      toolName: 'mastra_expert',
+      status: 'completed',
+      argsSummary: '{"question":"test"}',
+      errorSummary: undefined,
+    });
+  });
+
   it('skips delivery when the task has no durable conversation target', async () => {
-    const { callbacks, getSessionByResource } = createHarness();
+    const { callbacks, events, getSessionByResource } = createHarness();
+    const listener = vi.fn();
+    events.subscribe(listener);
     const task = createTask('completed');
     task.threadId = undefined;
 
     await callbacks.onTaskComplete?.(task);
 
     expect(getSessionByResource).not.toHaveBeenCalled();
+    expect(listener).not.toHaveBeenCalled();
   });
 });

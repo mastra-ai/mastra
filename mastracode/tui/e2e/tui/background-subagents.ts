@@ -36,7 +36,7 @@ const delayedProbeTool = {
   }),
   execute: async (input: unknown) => {
     const values = isObject(input) ? input : {};
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise(resolve => setTimeout(resolve, values.label === 'deferred' ? 20_000 : 100));
     if (values.fail === true) throw new Error(`BACKGROUND_PROBE_FAILURE:${String(values.label)}`);
     return { marker: `BACKGROUND_PROBE_RESULT:${String(values.label)}` };
   },
@@ -98,6 +98,38 @@ export const backgroundSubagentsScenario = {
     terminal.write('\x05');
     await runtime.waitForOutputText(/invocation · \{"label":"failed","fail":true\}/i, terminal, 10_000);
     await runtime.waitForOutputText(/failure · .*BACKGROUND_PROBE_FAILURE:failed/i, terminal, 10_000);
+
+    terminal.submit('/new');
+    await runtime.waitForScreenText(/Ready for new conversation/i, terminal, 10_000);
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const newConversationOutput = terminal.serialize().view;
+    check(
+      !newConversationOutput.includes('background_probe completed in background'),
+      `Expected /new to clear origin-thread completion cards.\n${newConversationOutput}`,
+    );
+
+    terminal.submit('Create a second thread while the deferred background tool completes.');
+    await runtime.waitForScreenText(/FOREIGN_THREAD_READY/i, terminal, 30_000);
+    await runtime.waitForScreenText(/Background .*completed/i, terminal, 25_000);
+    const foreignThreadOutput = terminal.serialize().view;
+    check(
+      !foreignThreadOutput.includes('BACKGROUND_PROBE_RESULT:deferred'),
+      `Expected background activity to stay outside the current transcript.\n${foreignThreadOutput}`,
+    );
+
+    terminal.write('\x07');
+    await runtime.waitForScreenText(/◌ background_probe/i, terminal, 10_000);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/BACKGROUND_PROBE_RESULT:deferred/i, terminal, 30_000);
+    await runtime.waitForScreenText(/✓ background · [0-9a-f-]{36}/i, terminal, 10_000);
+    const originThreadOutput = terminal.serialize().view;
+    check(
+      !originThreadOutput.includes('Background activity'),
+      `Expected the activity-center overlay to close after switching to the selected origin.\n${originThreadOutput}`,
+    );
+
+    terminal.submit('Verify responses still render after switching threads.');
+    await runtime.waitForScreenText(/POST_SWITCH_RESPONSE_VISIBLE/i, terminal, 10_000);
 
     terminal.keyCtrlC();
   },

@@ -104,6 +104,7 @@ function createState(modeCount = 2) {
         setFocus: vi.fn(),
       },
       chatContainer: { type: 'chat' },
+      globalBackgroundNoticeContainer: { type: 'global-background-notice' },
       editorContainer: { type: 'editor-container', addChild: vi.fn(child => editorChildren.push(child)) },
       editor,
       footer: { type: 'footer', addChild: vi.fn(child => footerChildren.push(child)) },
@@ -139,8 +140,9 @@ describe('buildLayout startup header', () => {
     expect(textOf(uiChildren[4])).toBe('  ⇧+Tab cycle modes · /help info & shortcuts');
     expect(uiChildren[6]).toBe(state.chatContainer);
     expect(uiChildren[7]).toBe(state.taskProgress);
-    expect(uiChildren[8]).toBe(state.editorContainer);
-    expect(uiChildren[9]).toBe(state.footer);
+    expect(uiChildren[8]).toBe(state.globalBackgroundNoticeContainer);
+    expect(uiChildren[9]).toBe(state.editorContainer);
+    expect(uiChildren[10]).toBe(state.footer);
     expect(state.taskProgress.quietMode).toBe(true);
     expect(editorChildren).toEqual([state.idleCounter, editor]);
     expect(footerChildren).toEqual([state.statusLine, state.memoryStatusLine]);
@@ -182,6 +184,7 @@ describe('buildLayout startup header', () => {
     subscribeToAgentController(state, handleEvent);
     const first = listener?.({ type: 'message_update' });
     const second = listener?.({ type: 'agent_end' });
+    const drained = state.waitForAgentControllerEvents?.();
     await Promise.resolve();
 
     expect(order).toEqual(['start:message_update']);
@@ -189,6 +192,7 @@ describe('buildLayout startup header', () => {
     releaseFirst.resolve();
     await first;
     await second;
+    await drained;
 
     expect(order).toEqual(['start:message_update', 'end:message_update', 'start:agent_end', 'end:agent_end']);
   });

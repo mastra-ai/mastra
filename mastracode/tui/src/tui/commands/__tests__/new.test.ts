@@ -9,6 +9,9 @@ function createMockState() {
     chatContainer: { clear: vi.fn() },
     pendingTools: { clear: vi.fn() },
     pendingTaskToolIds: { clear: vi.fn() },
+    pendingSubagents: new Map([['subagent', {}]]),
+    pendingSignalMessageComponentsById: new Map([['signal', {}]]),
+    followUpComponents: [{}],
     allToolComponents: [{}],
     allSlashCommandComponents: [{}],
     allSystemReminderComponents: [{}],
@@ -76,6 +79,10 @@ describe('handleNewCommand', () => {
 
     expect(state.chatContainer.clear).toHaveBeenCalled();
     expect(state.pendingTools.clear).toHaveBeenCalled();
+    expect(state.pendingTaskToolIds.clear).toHaveBeenCalled();
+    expect(state.pendingSubagents.size).toBe(0);
+    expect(state.pendingSignalMessageComponentsById.size).toBe(0);
+    expect(state.followUpComponents).toEqual([]);
     expect(state.allToolComponents).toEqual([]);
     expect(state.allSlashCommandComponents).toEqual([]);
     expect(state.allSystemReminderComponents).toEqual([]);

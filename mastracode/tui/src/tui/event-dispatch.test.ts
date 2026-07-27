@@ -123,6 +123,27 @@ describe('dispatchEvent thread lifecycle', () => {
     expect(ectx.addUserMessage).toHaveBeenCalledOnce();
   });
 
+  it('ignores thread-scoped live messages while waiting to create a new thread', async () => {
+    state.pendingNewThread = true;
+
+    await dispatchEvent(
+      {
+        type: 'message_start',
+        message: {
+          id: 'stale-current-thread-signal',
+          threadId: 'current-thread',
+          role: 'user',
+          createdAt: new Date('2026-07-27T11:47:32.908Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'origin-thread completion' }] },
+        },
+      } as any,
+      ectx,
+      state,
+    );
+
+    expect(ectx.addUserMessage).not.toHaveBeenCalled();
+  });
+
   it('clears tasks, activePlan, and sandboxAllowedPaths on thread_changed', async () => {
     await dispatchEvent(
       { type: 'thread_changed', threadId: 'new-thread', previousThreadId: 'old-thread' } as any,

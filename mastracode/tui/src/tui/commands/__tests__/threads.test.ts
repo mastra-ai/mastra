@@ -63,6 +63,7 @@ function createContext(threads: AgentControllerThread[]) {
     projectInfo: { rootPath: '/repo', gitBranch: 'main' },
     threadPreviewCache: new Map<string, { preview: string; updatedAt: number }>(),
     attemptedThreadPreviewIds: new Set<string>(),
+    waitForAgentControllerEvents: undefined as undefined | (() => Promise<void>),
     ui: {
       showOverlay,
       hideOverlay: vi.fn(),
@@ -77,6 +78,7 @@ function createContext(threads: AgentControllerThread[]) {
         getId: vi.fn(() => null),
         list: vi.fn(async () => threads),
         firstUserMessages: vi.fn(async () => new Map()),
+        switch: vi.fn(async () => {}),
       },
       mode: { get: vi.fn(() => 'build') },
     },
@@ -180,6 +182,25 @@ describe('handleThreadsCommand thread listing', () => {
 
     selector.options.onCancel();
     await commandPromise;
+  });
+
+  it('waits for thread-change rendering before returning control to the editor', async () => {
+    const threads = [createThread('thread-1', '2026-03-17T15:10:00.000Z')];
+    const { ctx, state, showOverlay } = createContext(threads);
+    const rendered = vi.fn();
+    state.waitForAgentControllerEvents = vi.fn(async () => rendered());
+
+    const commandPromise = handleThreadsCommand(ctx);
+    await Promise.resolve();
+    expect(showOverlay).toHaveBeenCalledTimes(1);
+
+    await selectorInstances[0].options.onSelect(threads[0]);
+    await commandPromise;
+
+    expect(state.session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-1' });
+    expect(state.waitForAgentControllerEvents).toHaveBeenCalledTimes(1);
+    expect(rendered).toHaveBeenCalledTimes(1);
+    expect(ctx.renderExistingMessages).not.toHaveBeenCalled();
   });
 
   it('tracks the thread lock prompt when shown', () => {

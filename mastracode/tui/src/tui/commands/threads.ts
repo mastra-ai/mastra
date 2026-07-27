@@ -121,6 +121,7 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
         }
         try {
           await state.session.thread.switch({ threadId: thread.id });
+          await state.waitForAgentControllerEvents?.();
         } catch (error) {
           if (error instanceof ThreadLockError) {
             showThreadLockPrompt(ctx, thread.title || thread.id, error.ownerPid, thread.id);
@@ -131,15 +132,6 @@ export async function handleThreadsCommand(ctx: SlashCommandContext): Promise<vo
           return;
         }
         state.pendingNewThread = false;
-
-        state.chatContainer.clear();
-        state.allToolComponents = [];
-        state.allSystemReminderComponents = [];
-        state.messageComponentsById.clear();
-        state.allShellComponents = [];
-        state.pendingTools.clear();
-        state.pendingTaskToolIds?.clear();
-        await ctx.renderExistingMessages();
 
         ctx.showInfo(`Switched to: ${thread.title || thread.id}`);
         resolve();
