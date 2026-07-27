@@ -1,9 +1,11 @@
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Circle, Hammer, Map, Zap } from 'lucide-react';
 
 import { useChatModes } from '../../context/useChatModes';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
+import { useIsRouteThreadSwitching } from '../../hooks/useIsRouteThreadSwitching';
 import { getModeColorClass } from '../mode-colors';
 
 function ModeIcon({ modeId }: { modeId: string }) {
@@ -38,10 +40,16 @@ function ModeLabel({ modeId, name }: { modeId: string; name: string }) {
 export function ModesSelection() {
   const { kind } = useChatSessionContext();
   const { modes, activeModeId, isSwitchingMode, setMode } = useChatModes();
+  const isSwitchingThread = useIsRouteThreadSwitching();
   const selectedModeId = activeModeId ?? modes[0]?.id;
   const selectedMode = modes.find(mode => mode.id === selectedModeId) ?? modes[0];
 
   if (kind === 'factory') return null;
+  // Never label a new route with the previously-bound thread's mode, and never
+  // let a mode mutation target that thread mid-switch.
+  if (isSwitchingThread) {
+    return <Skeleton aria-label="Loading mode" className="h-3.5 w-16" />;
+  }
   if (!selectedMode) return null;
 
   return (
