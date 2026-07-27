@@ -65,10 +65,8 @@ export function attachClientErrorHandler(client: PoolClient, logger?: ClientErro
   return () => {
     if (detached) return;
     detached = true;
+    client.removeListener('error', onError);
     guarded[GUARD_ATTACHED] = false;
-    if (typeof client.removeListener === 'function') {
-      client.removeListener('error', onError);
-    }
   };
 }
 

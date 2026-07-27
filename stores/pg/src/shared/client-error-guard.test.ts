@@ -72,14 +72,15 @@ describe('attachClientErrorHandler', () => {
     expect(warn.mock.calls[0]![1]).toMatchObject({ err: 'boom' });
   });
 
-  it('no-ops for clients that are not EventEmitters', () => {
-    // Some call sites (and test doubles) pass a plain object client without
-    // `on`/`removeListener`; the guard must not throw for them.
-    const client = { query: vi.fn(), release: vi.fn() } as unknown as PoolClient;
-    let detach: () => void;
-    expect(() => {
-      detach = attachClientErrorHandler(client);
-    }).not.toThrow();
+  it('no-ops for clients without a removable event listener', () => {
+    // Some call sites (and test doubles) lack `on` or `removeListener`; the
+    // guard must not attach a listener it cannot subsequently detach.
+    const on = vi.fn();
+    const client = { on, query: vi.fn(), release: vi.fn() } as unknown as PoolClient;
+
+    const detach = attachClientErrorHandler(client);
+
+    expect(on).not.toHaveBeenCalled();
     expect(() => detach()).not.toThrow();
   });
 });
