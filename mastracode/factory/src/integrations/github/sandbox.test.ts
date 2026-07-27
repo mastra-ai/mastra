@@ -781,6 +781,33 @@ describe('runWorktreeSetup', () => {
     expect(err.message).toContain('exit 1');
     expect(err.message).toContain('ERR_PNPM_NO_LOCKFILE');
   });
+
+  it('fails with a phase-tagged timeout instead of hanging on a wedged sandbox', async () => {
+    vi.useFakeTimers();
+    try {
+      const sandbox = new FakeSandbox();
+      // A sandbox whose shell never returns must not hang the request forever.
+      sandbox.executeCommand = () => new Promise<never>(() => {});
+      const pending = runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
+      const outcome = pending.catch(e => e);
+      await vi.advanceTimersByTimeAsync(15 * 60_000 + 1_000);
+      const err = await outcome;
+      expect(err).toBeInstanceOf(Error);
+      expect(err.message).toContain('timed out');
+      expect(err.message).toContain('worktree setup');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('forwards the hang-guard budget to the provider so it can kill the process', async () => {
+    const sandbox = new FakeSandbox();
+    const spy = vi.spyOn(sandbox, 'executeCommand');
+
+    await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
+
+    expect(spy).toHaveBeenCalledWith('sh', ['-c', expect.any(String)], { timeout: 15 * 60_000 });
+  });
 });
 
 describe('createPullRequest', () => {
