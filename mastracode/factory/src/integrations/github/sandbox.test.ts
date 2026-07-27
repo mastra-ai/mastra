@@ -783,6 +783,59 @@ describe('runWorktreeSetup', () => {
   });
 });
 
+describe('sh transport retry', () => {
+  it('retries a transient 5xx transport error and succeeds (proxy hiccup while VM boots)', async () => {
+    vi.useFakeTimers();
+    try {
+      let attempts = 0;
+      const sandbox = new FakeSandbox(() => {
+        attempts += 1;
+        if (attempts === 1) {
+          throw Object.assign(new Error('Platform proxy request failed with 500'), { status: 500 });
+        }
+        return OK;
+      });
+
+      const pending = runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
+      await vi.advanceTimersByTimeAsync(2000);
+      await pending;
+
+      expect(sandbox.calls).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives up after exhausting retries on persistent 5xx transport errors', async () => {
+    vi.useFakeTimers();
+    try {
+      const sandbox = new FakeSandbox(() => {
+        throw Object.assign(new Error('Platform proxy request failed with 500'), { status: 500 });
+      });
+
+      const pending = runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
+      await vi.advanceTimersByTimeAsync(10_000);
+      const err = await pending;
+
+      expect(err.status).toBe(500);
+      expect(sandbox.calls).toHaveLength(3); // initial + 2 retries
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not retry non-transient transport errors', async () => {
+    const sandbox = new FakeSandbox(() => {
+      throw Object.assign(new Error('Sandbox not found'), { status: 404 });
+    });
+
+    const err = await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i').catch(e => e);
+
+    expect(err.status).toBe(404);
+    expect(sandbox.calls).toHaveLength(1);
+  });
+});
+
 describe('createPullRequest', () => {
   const PR_URL = 'https://github.com/octocat/hello/pull/7';
   // gh prints the PR URL to stdout on success.

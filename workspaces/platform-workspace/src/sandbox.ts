@@ -199,8 +199,14 @@ export class PlatformSandbox extends MastraSandbox {
       try {
         const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`);
         const json = (await response.json()) as CreateSandboxResponse;
-        this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
-        return;
+        // A destroyed record (idle GC, manual delete) is not reattachable —
+        // treat it like a missing sandbox so we fall through to a fresh
+        // provision instead of pointing exec at a dead resource.
+        if (!json.destroyedAt) {
+          this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();
+          return;
+        }
+        this._sandboxId = undefined;
       } catch (error) {
         if (!(error instanceof PlatformApiError) || error.status !== 404) throw error;
         this._sandboxId = undefined;
@@ -317,6 +323,12 @@ export class PlatformSandbox extends MastraSandbox {
       status: this.status,
       createdAt: json.createdAt ? new Date(json.createdAt) : (this._createdAt ?? new Date()),
       metadata: {
+        // The platform assigns its own sandbox id on create (the advisory id
+        // sent in the POST body is not honored). Expose it so callers that
+        // persist a reattach id (e.g. the Factory sandbox fleet, which reads
+        // `metadata.sandboxId`) store the id the proxy actually recognizes
+        // instead of the locally generated construction id.
+        sandboxId: json.id,
         providerResourceId: json.providerResourceId ?? undefined,
         platformStatus: json.status,
       },

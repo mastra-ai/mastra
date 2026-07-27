@@ -95,9 +95,36 @@ export function shellQuote(value: string): string {
   return `'` + value.split(`'`).join(`'\\''`) + `'`;
 }
 
-/** Run a shell script in the sandbox via `sh -c`. */
+/**
+ * A thrown transport-level failure that is worth retrying: remote sandbox
+ * providers (e.g. the platform workspace proxy) surface transient 5xx errors
+ * as exceptions carrying an HTTP `status` — typically while a freshly
+ * provisioned VM is still coming up. Command failures are NOT exceptions
+ * (they resolve with a non-zero exit code), so retrying here never re-runs a
+ * command that the sandbox already executed and rejected.
+ */
+function isTransientTransportError(error: unknown): boolean {
+  const status = (error as { status?: unknown })?.status;
+  return typeof status === 'number' && status >= 500;
+}
+
+const SH_RETRIES = 2;
+const SH_RETRY_DELAY_MS = 2000;
+
+/**
+ * Run a shell script in the sandbox via `sh -c`. Retries transient
+ * transport-level 5xx failures (proxy hiccups while the VM boots) with a
+ * short backoff; every script routed through here is safe to re-run.
+ */
 async function sh(sandbox: MaterializationSandbox, script: string): Promise<SandboxCommandResult> {
-  return sandbox.executeCommand('sh', ['-c', script]);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await sandbox.executeCommand('sh', ['-c', script]);
+    } catch (error) {
+      if (attempt >= SH_RETRIES || !isTransientTransportError(error)) throw error;
+      await new Promise(resolve => setTimeout(resolve, SH_RETRY_DELAY_MS * (attempt + 1)));
+    }
+  }
 }
 
 /** Error raised when the sandbox cannot materialize the repo (actionable). */
