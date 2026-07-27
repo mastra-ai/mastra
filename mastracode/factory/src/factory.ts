@@ -20,7 +20,6 @@
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
-import type { AgentControllerChannels } from '@mastra/core/channels';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -122,19 +121,6 @@ export interface MastraFactoryConfig {
    * leases. Omitted → in-process default.
    */
   pubsub?: PubSub;
-  /**
-   * Chat channels (Slack, Discord, ...) for the factory's agent controller.
-   * Attached to the controller during `prepare()`, before the caller
-   * constructs `new Mastra(...)` — which is what initializes them. Passing
-   * them here rather than calling `controller.setChannels()` on the prepared
-   * args keeps that ordering guaranteed.
-   *
-   * The factory stays platform-agnostic: build the instance in the consumer
-   * (e.g. `createAgentControllerSlackChannels()`) and gate it on whatever
-   * platform env that adapter requires. Omitted → the controller has no
-   * channels and inbound chat events are not served.
-   */
-  channels?: AgentControllerChannels;
   /**
    * Browser-facing origin used to build integration OAuth/install callback
    * URLs and to derive the auth redirect URI. On the platform the SPA is
@@ -735,13 +721,6 @@ export class MastraFactory {
 
     this.#prepared = prepared;
     this.#factoryProcessor = factoryProcessor;
-
-    // Attach channels to the controller before the caller constructs
-    // `new Mastra(...)` — that constructor is what initializes them, so
-    // anything wired afterwards would silently never start.
-    if (this.#config.channels) {
-      prepared.base.controller.setChannels(this.#config.channels);
-    }
 
     // Integration lifecycle workers (e.g. polling an upstream without
     // webhooks): collected from READY integrations only, folded into the
