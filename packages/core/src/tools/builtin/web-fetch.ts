@@ -49,53 +49,80 @@ function isBlockedIpv4(address: string): boolean {
   );
 }
 
-function isBlockedIpv4MappedIpv6(address: string): boolean {
-  if (!address.startsWith('::ffff:')) {
-    return false;
+function normalizeHostname(hostname: string): string {
+  return hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
+}
+
+function parseIpv4MappedGroups(address: string): number[] | undefined {
+  const ipv4Start = address.lastIndexOf(':');
+  const ipv4Address = address.slice(ipv4Start + 1);
+
+  if (!ipv4Address.includes('.')) {
+    return undefined;
   }
 
-  const mappedAddress = address.slice(7);
-  if (mappedAddress.includes('.')) {
-    return isBlockedIpv4(mappedAddress);
+  const ipv4Parts = ipv4Address.split('.').map(Number);
+  if (ipv4Parts.length !== 4 || ipv4Parts.some(part => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return undefined;
   }
 
-  const [high = '', low = ''] = mappedAddress.split(':');
-  const highValue = Number.parseInt(high, 16);
-  const lowValue = Number.parseInt(low, 16);
+  const [first, second, third, fourth] = ipv4Parts as [number, number, number, number];
 
-  if (Number.isNaN(highValue) || Number.isNaN(lowValue)) {
-    return false;
-  }
+  return [...expandIpv6(address.slice(0, ipv4Start), 6), (first << 8) + second, (third << 8) + fourth];
+}
 
-  return isBlockedIpv4(
-    [highValue >> 8, highValue & 255, lowValue >> 8, lowValue & 255].map(part => part.toString()).join('.'),
-  );
+function expandIpv6(address: string, expectedGroups = 8): number[] {
+  const [left = '', right = ''] = address.split('::');
+  const leftGroups = left ? left.split(':') : [];
+  const rightGroups = right ? right.split(':') : [];
+  const missingGroups = expectedGroups - leftGroups.length - rightGroups.length;
+  const groups = address.includes('::')
+    ? [...leftGroups, ...Array(missingGroups).fill('0'), ...rightGroups]
+    : leftGroups;
+
+  return groups.map(group => Number.parseInt(group || '0', 16));
 }
 
 function isBlockedIpv6(address: string): boolean {
-  const normalizedAddress = address.toLowerCase();
+  const normalizedAddress = normalizeHostname(address).toLowerCase();
+  const groups = normalizedAddress.includes('.')
+    ? parseIpv4MappedGroups(normalizedAddress)
+    : expandIpv6(normalizedAddress);
+
+  if (!groups || groups.length !== 8 || groups.some(group => Number.isNaN(group))) {
+    return false;
+  }
+
+  const [first, second, third, fourth, fifth, sixth, seventh, eighth] = groups as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  const isIpv4Mapped = [first, second, third, fourth, fifth].every(group => group === 0) && sixth === 0xffff;
 
   return (
-    normalizedAddress === '::' ||
-    normalizedAddress === '::1' ||
-    isBlockedIpv4MappedIpv6(normalizedAddress) ||
-    normalizedAddress.startsWith('fc') ||
-    normalizedAddress.startsWith('fd') ||
-    normalizedAddress.startsWith('fe8') ||
-    normalizedAddress.startsWith('fe9') ||
-    normalizedAddress.startsWith('fea') ||
-    normalizedAddress.startsWith('feb') ||
-    normalizedAddress.startsWith('ff')
+    groups.every(group => group === 0) ||
+    (groups.slice(0, 7).every(group => group === 0) && eighth === 1) ||
+    (isIpv4Mapped && isBlockedIpv4([seventh >> 8, seventh & 255, eighth >> 8, eighth & 255].join('.'))) ||
+    (first & 0xfe00) === 0xfc00 ||
+    (first & 0xffc0) === 0xfe80 ||
+    (first & 0xff00) === 0xff00
   );
 }
 
 function isBlockedIp(address: string): boolean {
-  const ipVersion = net.isIP(address);
-  return ipVersion === 4 ? isBlockedIpv4(address) : ipVersion === 6 ? isBlockedIpv6(address) : false;
-}
-
-function normalizeHostname(hostname: string): string {
-  return hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
+  const normalizedAddress = normalizeHostname(address);
+  const ipVersion = net.isIP(normalizedAddress);
+  return ipVersion === 4
+    ? isBlockedIpv4(normalizedAddress)
+    : ipVersion === 6
+      ? isBlockedIpv6(normalizedAddress)
+      : false;
 }
 
 function assertAllowedUrl(url: URL): void {
