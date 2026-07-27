@@ -6,40 +6,9 @@ import {
 } from '@mastra/playground-ui/components/DataList';
 import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { getShortId } from '@mastra/playground-ui/components/Text';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { useMemo } from 'react';
+import { ExperimentNameLabel } from './experiment-name-label';
 import { useLinkComponent } from '@/lib/framework';
-
-/**
- * Name cell for the experiments overview: the experiment name as the primary
- * label with the short id beneath it (falling back to the short id when
- * unnamed), and the description surfaced in a tooltip when present.
- */
-function ExperimentNameCell({ experiment }: { experiment: DatasetExperiment }) {
-  const shortId = getShortId(experiment.id) ?? experiment.id;
-
-  if (!experiment.name) {
-    return <span className="text-neutral4 block truncate font-mono">{shortId}</span>;
-  }
-
-  const label = (
-    <span className="flex min-w-0 flex-col gap-0.5 py-0.5 text-left">
-      <span className="text-neutral4 block truncate">{experiment.name}</span>
-      <span className="text-ui-sm text-neutral2 block truncate font-mono">{shortId}</span>
-    </span>
-  );
-
-  if (!experiment.description) {
-    return label;
-  }
-
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>{label}</TooltipTrigger>
-      <TooltipContent>{experiment.description}</TooltipContent>
-    </Tooltip>
-  );
-}
 
 export interface ExperimentsListProps {
   experiments: DatasetExperiment[];
@@ -51,7 +20,8 @@ export interface ExperimentsListProps {
   datasetFilter?: string;
 }
 
-const COLUMNS = 'auto 1fr auto auto auto auto auto auto auto';
+// experiment name is free-form — an `auto` track would let it starve its neighbours
+const COLUMNS = 'minmax(9rem,1fr) 1fr auto auto auto auto auto auto auto';
 
 function formatDate(dateStr: string | Date | undefined | null): string {
   if (!dateStr) return '—';
@@ -138,7 +108,7 @@ export function ExperimentsList({
         return (
           <EntityList.RowLink key={exp.id} to={paths.experimentLink(exp.id)} LinkComponent={Link}>
             <EntityList.Cell>
-              <ExperimentNameCell experiment={exp} />
+              <ExperimentNameLabel experiment={exp} />
             </EntityList.Cell>
             <EntityList.TextCell>{dsName}</EntityList.TextCell>
             <EntityList.Cell>

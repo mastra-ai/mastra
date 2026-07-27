@@ -44,6 +44,15 @@ describe('ExperimentsList', () => {
     });
   });
 
+  describe('when an experiment name is an empty string', () => {
+    it('falls back to its shortened id rather than rendering an empty link', () => {
+      renderList(<ExperimentsList experiments={experiments} isLoading={false} />);
+
+      const link = screen.getByRole('link', { name: /b1a11c00/ });
+      expect(link.getAttribute('href')).toBe('/experiments/b1a11c00-0000-0000-0000-000000000004');
+    });
+  });
+
   describe('when a search term matches an experiment name', () => {
     it('shows only the matching experiment', () => {
       renderList(<ExperimentsList experiments={experiments} isLoading={false} search="model-b" />);
