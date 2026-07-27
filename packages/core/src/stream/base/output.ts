@@ -145,7 +145,7 @@ export type FullOutput<OUTPUT = undefined> = {
 
 /**
  * Resolve the output text from the latest response message, skipping internal
- * completion-check feedback so it can't become the final text (#19875).
+ * completion-check feedback so it can't become the final text.
  * The completionResult metadata only exists on DB-format messages, and the
  * message is converted alone so adjacent assistant messages aren't merged.
  */

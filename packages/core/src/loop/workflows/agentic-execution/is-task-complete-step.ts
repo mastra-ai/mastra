@@ -135,7 +135,7 @@ export function createIsTaskCompleteStep<Tools extends ToolSet = ToolSet, OUTPUT
 
       // Add feedback as assistant message for the LLM to see in next iteration.
       // Skipped when the check passes: the loop ends, so the report would only
-      // leak into the resolved final text and thread memory (#19875).
+      // leak into the resolved final text and thread memory.
       const maxIterationReached = maxSteps ? currentIteration >= maxSteps : false;
       if (!isTaskCompleteResult.complete) {
         const feedback = formatStreamCompletionFeedback(isTaskCompleteResult, maxIterationReached);
