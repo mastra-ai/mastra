@@ -7,6 +7,7 @@
  * array; the save path throws via `assertValidStoredWorkflow`.
  */
 import { validateWorkflowRefs } from './refs';
+import { addWorkflowValidationRepairActions } from './repair-actions';
 import { inferGraphSchemas } from './schema-flow';
 import { validateWorkflowSchemas } from './schemas';
 import { validateWorkflowStructure } from './structure';
@@ -19,6 +20,8 @@ export type {
   WorkflowValidationInput,
   WorkflowValidationIssue,
   WorkflowValidationIssueCode,
+  WorkflowValidationRepairAction,
+  WorkflowValidationRepairSource,
 } from './types';
 export { validateWorkflowStructure } from './structure';
 export { validateWorkflowRefs } from './refs';
@@ -39,12 +42,20 @@ export function validateStoredWorkflow(
   def: WorkflowValidationInput,
   index: WorkflowRegistryIndex = {},
 ): WorkflowValidationIssue[] {
-  return [
-    ...validateWorkflowStructure(def),
-    ...validateWorkflowSchemas(def),
-    ...validateWorkflowRefs(def, index),
-    ...inferGraphSchemas(def, index).issues,
-  ];
+  const inference = inferGraphSchemas(def, index);
+  return addWorkflowValidationRepairActions(
+    def,
+    index,
+    [
+      ...validateWorkflowStructure(def),
+      ...validateWorkflowSchemas(def),
+      ...validateWorkflowRefs(def, index),
+      ...inference.issues,
+    ],
+    inference.stepOutputs,
+    inference.entryInputs,
+    inference.finalOutput,
+  );
 }
 
 /** Throwing presentation of {@link validateStoredWorkflow} for the save path. */

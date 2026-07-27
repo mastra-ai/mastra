@@ -327,7 +327,24 @@ describe('validateStoredWorkflow', () => {
         }),
         { tools: { lookupCustomer: lookupTool } },
       );
-      expect(issues).toEqual([expect.objectContaining({ code: 'incompatible-schema', path: 'graph.0' })]);
+      expect(issues).toEqual([
+        expect.objectContaining({
+          code: 'incompatible-schema',
+          path: 'graph.0',
+          repair: {
+            issueCode: 'incompatible-schema',
+            path: 'graph.0',
+            entryId: 't1',
+            expectedSchema: lookupTool.inputSchema,
+            actualSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+            legalSources: [],
+            operation: 'insert-workflow-mapping-before',
+            arguments: { targetStepId: 't1' },
+            blocksCheckpoint: false,
+            blocksFinalize: true,
+          },
+        }),
+      ]);
     });
 
     it('assumes agents accept { prompt } unless the registry says otherwise', () => {

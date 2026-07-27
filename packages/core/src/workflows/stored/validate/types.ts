@@ -28,10 +28,39 @@ export type WorkflowValidationIssueCode =
   | 'unsupported-schema-keyword'
   | 'self-reference';
 
+export interface WorkflowValidationRepairSource {
+  source: { initData: true; path: string } | { step: string; path: string };
+  schema?: JsonSchema;
+  compatibility: 'compatible' | 'incompatible' | 'unknown';
+}
+
+export interface WorkflowValidationRepairAction {
+  issueCode: WorkflowValidationIssueCode;
+  path: string;
+  entryId?: string;
+  containerId?: string;
+  childId?: string;
+  destinationField?: string;
+  expectedSchema?: JsonSchema;
+  actualSchema?: JsonSchema;
+  legalSources?: WorkflowValidationRepairSource[];
+  operation:
+    | 'insert-workflow-mapping-before'
+    | 'insert-workflow-mapping-after'
+    | 'set-workflow-mapping-source'
+    | 'set-workflow-predicate'
+    | 'update-workflow-step'
+    | 'remove-workflow-step';
+  arguments: Record<string, string | number | boolean>;
+  blocksCheckpoint: boolean;
+  blocksFinalize: boolean;
+}
+
 export interface WorkflowValidationIssue {
   code: WorkflowValidationIssueCode;
   path: string;
   message: string;
+  repair?: WorkflowValidationRepairAction;
 }
 
 /** Input/output shapes known for one registered dependency. */

@@ -23,6 +23,8 @@ import type { WorkflowRegistryIndex, WorkflowValidationInput, WorkflowValidation
 export interface GraphSchemaInference {
   /** Output schema of each runtime-visible step id (undefined = unknown). */
   stepOutputs: Map<string, JsonSchema | undefined>;
+  /** Input schema reaching each evaluated graph path (undefined = unknown). */
+  entryInputs: Map<string, JsonSchema | undefined>;
   /** Inferred output of the last entry in the graph (undefined = unknown). */
   finalOutput: JsonSchema | undefined;
   issues: WorkflowValidationIssue[];
@@ -158,6 +160,7 @@ function validatePredicate(
 export function inferGraphSchemas(def: WorkflowValidationInput, index: WorkflowRegistryIndex): GraphSchemaInference {
   const issues: WorkflowValidationIssue[] = [];
   const stepOutputs = new Map<string, JsonSchema | undefined>();
+  const entryInputs = new Map<string, JsonSchema | undefined>();
 
   /** Evaluates one leaf entry: checks its input against `incoming`, returns its output. */
   const evalLeaf = (
@@ -166,6 +169,7 @@ export function inferGraphSchemas(def: WorkflowValidationInput, index: WorkflowR
     incoming: JsonSchema | undefined,
     container: boolean,
   ): JsonSchema | undefined => {
+    entryInputs.set(path, incoming);
     if (entry.type === 'mapping') {
       // Container placement is a structural issue; don't analyze the config twice.
       if (container) return undefined;
@@ -292,5 +296,5 @@ export function inferGraphSchemas(def: WorkflowValidationInput, index: WorkflowR
       message: 'Workflow output schema is incompatible with the final step output.',
     });
   }
-  return { stepOutputs, finalOutput: current, issues };
+  return { stepOutputs, entryInputs, finalOutput: current, issues };
 }
