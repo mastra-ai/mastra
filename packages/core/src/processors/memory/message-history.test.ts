@@ -690,7 +690,7 @@ describe('MessageHistory', () => {
       );
     });
 
-    it('should update thread metadata', async () => {
+    it('should not rewrite an existing thread row when persisting messages', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockResolvedValue(undefined),
         getThreadById: vi.fn().mockResolvedValue({
@@ -699,6 +699,7 @@ describe('MessageHistory', () => {
           metadata: { createdAt: new Date('2024-01-01') },
         }),
         updateThread: vi.fn().mockResolvedValue(undefined),
+        saveThread: vi.fn().mockResolvedValue(undefined),
       } as unknown as MemoryStorage;
 
       const processor = new MessageHistory({
@@ -725,13 +726,11 @@ describe('MessageHistory', () => {
         messageList,
       });
 
-      expect(mockStorage.updateThread).toHaveBeenCalledWith({
-        id: 'thread-1',
-        title: 'Test Thread',
-        metadata: expect.objectContaining({
-          createdAt: expect.any(Date),
-        }),
-      });
+      // Rewriting the row we just read is a redundant write per turn and races
+      // with title generation, which can land between the read and the write.
+      expect(mockStorage.updateThread).not.toHaveBeenCalled();
+      expect(mockStorage.saveThread).not.toHaveBeenCalled();
+      expect(mockStorage.saveMessages).toHaveBeenCalled();
     });
 
     it('should return original messages when no threadId', async () => {
