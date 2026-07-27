@@ -354,7 +354,8 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
   // Processors can rotate the response message id before the first model step
   // (e.g. observational memory). Hold `start` (and any preceding `data-*`
   // chunks) until the first `step-start` so the announced id matches the id
-  // the response is actually persisted under.
+  // the response is actually persisted under. With `sendStart: false` no
+  // `start` UI chunk is emitted at all, so nothing is held.
   let heldChunks: ChunkType<OUTPUT>[] | null = null;
   let startIdResolved = false;
 
@@ -444,7 +445,7 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
   return new TransformStream<ChunkType<OUTPUT>, object>({
     transform(chunk, controller) {
       if (!startIdResolved) {
-        if (chunk.type === 'start') {
+        if (sendStart && chunk.type === 'start') {
           heldChunks = [chunk];
           return;
         }
