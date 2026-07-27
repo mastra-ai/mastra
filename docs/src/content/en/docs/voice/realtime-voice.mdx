@@ -1,5 +1,5 @@
 ---
-title: 'Using LiveKit with Mastra | Voice'
+title: 'Realtime voice | Voice'
 description: 'Learn how to turn Mastra agents into realtime voice agents with LiveKit, including semantic turn detection and barge-in.'
 packages:
   - '@mastra/livekit'
@@ -8,11 +8,13 @@ packages:
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
 
-# Using LiveKit with Mastra
+# Realtime voice
 
-[LiveKit](https://livekit.io) is an open source WebRTC platform for realtime audio and video. The [`@mastra/livekit`](/reference/voice/livekit) package connects Mastra agents to the [LiveKit Agents framework](https://docs.livekit.io/agents/): LiveKit owns the audio loop like voice activity detection, streaming speech-to-text, semantic turn detection, barge-in, and text-to-speech. Your Mastra agent generates every reply with its own model, tools, and memory.
+Realtime voice turns a Mastra agent into a live call a user can talk over, in the browser or over the phone. Mastra builds it on [LiveKit](https://livekit.io), an open source WebRTC platform for realtime audio and video.
 
-Use this integration when you need low-latency, interruptible voice conversations. For provider-based speech-to-speech without LiveKit, see [Speech to Speech](/docs/voice/speech-to-speech).
+The [`@mastra/livekit`](/reference/voice/livekit) package connects Mastra agents to the [LiveKit Agents framework](https://docs.livekit.io/agents/): LiveKit owns the audio loop like voice activity detection, streaming speech-to-text, semantic turn detection, barge-in, and text-to-speech. Your Mastra agent generates every reply with its own model, tools, and memory.
+
+Use realtime voice when you need low-latency, interruptible voice conversations. For provider-based speech-to-speech without LiveKit, see [Speech to Speech](/docs/voice/speech-to-speech).
 
 ## Quickstart
 
