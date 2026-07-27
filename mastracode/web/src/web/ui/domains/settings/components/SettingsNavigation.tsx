@@ -1,13 +1,13 @@
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ArrowLeft, Brain, GitBranch, Key, Palette, Search, Server, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, GitBranch, Palette, Search, Server, SlidersHorizontal } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
-
-import { useSetSettingsSection, useSettingsSection, type SettingsSection } from '../context/SettingsNavigationProvider';
+import { Link, useLocation, useParams } from 'react-router';
 import { useCloseSettings } from '../hooks/useCloseSettings';
-import { SETTINGS_SECTION_LABELS } from '../settingsSections';
+import { useSettingsSection } from '../hooks/useSettingsSection';
+import { SETTINGS_SECTION_LABELS, settingsSectionPath, type SettingsSection } from '../settingsSections';
 
 const SETTINGS_SECTIONS: {
   id: SettingsSection;
@@ -31,25 +31,14 @@ const SETTINGS_SECTIONS: {
     id: 'model',
     label: SETTINGS_SECTION_LABELS.model,
     icon: Search,
-    searchText: 'model thinking level factory default model packs packs',
-  },
-  {
-    id: 'memory',
-    label: SETTINGS_SECTION_LABELS.memory,
-    icon: Brain,
-    searchText: 'memory observational recall working memory',
+    searchText:
+      'model thinking level factory default model packs packs api keys providers credentials sign in oauth memory observational recall',
   },
   {
     id: 'behavior',
     label: SETTINGS_SECTION_LABELS.behavior,
     icon: SlidersHorizontal,
     searchText: 'behavior auto approve tools smart editing notifications permissions read edit execute mcp',
-  },
-  {
-    id: 'providers',
-    label: SETTINGS_SECTION_LABELS.providers,
-    icon: Key,
-    searchText: 'api keys providers credentials',
   },
   {
     id: 'custom-providers',
@@ -61,7 +50,8 @@ const SETTINGS_SECTIONS: {
 
 export function SettingsNavigation() {
   const section = useSettingsSection();
-  const setSection = useSetSettingsSection();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const location = useLocation();
   const closeSettings = useCloseSettings();
   const { state } = useMainSidebar();
   const [query, setQuery] = useState('');
@@ -73,7 +63,7 @@ export function SettingsNavigation() {
   return (
     <>
       <MainSidebar.NavList>
-        <MainSidebar.NavLink asChild link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
+        <MainSidebar.NavLink asChild size="default" link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
           <button type="button" aria-label="Back to app" onClick={closeSettings}>
             <ArrowLeft aria-hidden="true" />
             <MainSidebar.NavLabel>Back to app</MainSidebar.NavLabel>
@@ -81,7 +71,7 @@ export function SettingsNavigation() {
         </MainSidebar.NavLink>
       </MainSidebar.NavList>
       {state === 'default' && (
-        <div className="px-1 py-2">
+        <div className="py-2">
           <InputGroup variant="outline">
             <InputGroupAddon>
               <Search aria-hidden="true" />
@@ -104,18 +94,19 @@ export function SettingsNavigation() {
               <MainSidebar.NavLink
                 key={id}
                 asChild
+                size="default"
                 isActive={isActive}
                 link={{ name: label, url: '#', icon: <Icon /> }}
               >
-                <button
-                  type="button"
+                <Link
+                  to={settingsSectionPath(factoryId!, id)}
+                  state={location.state}
                   aria-label={label}
                   aria-current={isActive ? 'page' : undefined}
-                  onClick={() => setSection(id)}
                 >
                   <Icon aria-hidden="true" />
                   <MainSidebar.NavLabel>{label}</MainSidebar.NavLabel>
-                </button>
+                </Link>
               </MainSidebar.NavLink>
             );
           })}

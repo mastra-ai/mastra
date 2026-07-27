@@ -9,7 +9,7 @@ import { EmptyThreadState } from './EmptyThreadState';
 import { WorkingIndicator } from './WorkingIndicator';
 
 const transcriptScrollClass =
-  'flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:min-w-0 [&>*]:max-w-[80ch]';
+  'flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:min-w-0 [&>*]:max-w-[80ch]';
 
 export function TranscriptPanel() {
   const { transcript, showWorkingIndicator, loadMore } = useChatTranscript();
@@ -23,7 +23,7 @@ export function TranscriptPanel() {
     <>
       <div className={panelClassName} ref={threadRef}>
         {loadMore.isLoading && (
-          <div className="flex w-full justify-center py-2 text-icon3" aria-live="polite">
+          <div className="text-icon3 flex w-full justify-center py-2" aria-live="polite">
             <Loader2 size={16} className="animate-spin" />
             <span className="sr-only">Loading older messages</span>
           </div>

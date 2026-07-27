@@ -13,7 +13,16 @@ export type NovaSonicRegion = 'us-east-1' | 'us-west-2' | 'ap-northeast-1';
  * Supported language codes for Nova 2 Sonic
  */
 export type NovaSonicLanguageCode =
-  'en-US' | 'en-GB' | 'en-IN' | 'en-AU' | 'fr-FR' | 'it-IT' | 'de-DE' | 'es-ES' | 'pt-BR' | 'hi-IN';
+  | 'en-US'
+  | 'en-GB'
+  | 'en-IN'
+  | 'en-AU'
+  | 'fr-FR'
+  | 'it-IT'
+  | 'de-DE'
+  | 'es-ES'
+  | 'pt-BR'
+  | 'hi-IN';
 
 /**
  * Tool configuration for Nova 2 Sonic

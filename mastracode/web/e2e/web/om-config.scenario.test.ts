@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { applyOmRoleOverride } from '@mastra/code-sdk/onboarding/om-settings';
-import { readOMConfig } from '../../src/web/config-routes.js';
-import type { OMSession } from '../../src/web/config-routes.js';
+import { readOMConfig } from '@mastra/factory/routes/config';
+import type { OMSession } from '@mastra/factory/routes/config';
 
 /**
  * The web settings panel surfaces observational-memory config through the same

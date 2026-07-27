@@ -31,7 +31,7 @@ export function ProposalTag({
 
   if (isEditing) {
     return (
-      <span className="inline-flex items-center gap-0.5 bg-surface3 border border-border1 rounded-md px-1">
+      <span className="bg-surface3 border-border1 inline-flex items-center gap-0.5 rounded-md border px-1">
         <input
           ref={inputRef}
           value={editValue}
@@ -47,7 +47,7 @@ export function ProposalTag({
             }
           }}
           onBlur={handleConfirm}
-          className="bg-transparent text-xs text-neutral4 outline-hidden w-20 py-0.5"
+          className="text-neutral4 w-20 bg-transparent py-0.5 text-xs outline-hidden"
         />
         <button
           type="button"
@@ -57,14 +57,14 @@ export function ProposalTag({
           }}
           className="text-positive1 hover:text-positive2 p-0.5"
         >
-          <Check className="w-3 h-3" />
+          <Check className="h-3 w-3" />
         </button>
       </span>
     );
   }
 
   return (
-    <span className="inline-flex items-center gap-0.5 bg-surface3 border border-border1 rounded-md px-1.5 py-0.5 text-xs text-neutral4 group">
+    <span className="bg-surface3 border-border1 text-neutral4 group inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-xs">
       {tag}
       <button
         type="button"
@@ -72,18 +72,18 @@ export function ProposalTag({
           setEditValue(tag);
           setIsEditing(true);
         }}
-        className="text-neutral2 hover:text-neutral4 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="text-neutral2 hover:text-neutral4 p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
         title="Edit tag"
       >
-        <Pencil className="w-3 h-3" />
+        <Pencil className="h-3 w-3" />
       </button>
       <button
         type="button"
         onClick={onRemove}
-        className="text-neutral2 hover:text-negative1 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+        className="text-neutral2 hover:text-negative1 p-0.5 opacity-0 transition-opacity group-hover:opacity-100"
         title="Remove tag"
       >
-        <X className="w-3 h-3" />
+        <X className="h-3 w-3" />
       </button>
     </span>
   );

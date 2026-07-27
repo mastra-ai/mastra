@@ -1,100 +1,63 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useParams } from 'react-router';
 
-import { useQueryClient } from '@tanstack/react-query';
-
-import { queryKeys } from '../../../../../shared/api/keys';
+import { useFactoryQuery } from '../../../../../shared/hooks/useFactories';
 import { Sidebar } from '../../../Sidebar';
-import { PageLayout } from '../../../ui/PageLayout';
+import { PageLayout, ViewportLayout } from '../../../layouts/PageLayout';
 import { ChatHeader } from '../../chat/components/ChatHeader';
-import { useActiveFactoryContext } from '../../workspaces/context/ActiveFactoryProvider';
-import type { ServerFactory } from '../../workspaces/services/factories';
-import { isServerFactory, selectRepository, selectedRepository } from '../../workspaces/services/factories';
+import type { FactoryProject } from '../../workspaces/services/github';
 
 interface FactoryPageShellProps {
-  title: string;
-  description: string;
   /** Renders the page body once a server-backed factory is active. */
-  children: (factory: ServerFactory) => ReactNode;
+  children: (factory: FactoryProject) => ReactNode;
 }
 
 /**
- * Shared frame for the Factory pages (Board, Metrics, Audit): the standard app
- * layout (sidebar + mobile header) around a titled content column. Any
+ * Shared frame for the Factory pages (Board, Metrics, Rules, Audit): the standard
+ * app layout (sidebar + mobile header) around a titled content column. Any
  * server-backed Factory renders its pages — including one with zero linked
  * repositories (the pages show connect prompts). Local folder factories get an
  * explanatory notice; when a factory links multiple repositories a picker in
  * the header scopes repository-based intake.
  */
-export function FactoryPageShell({ title, description, children }: FactoryPageShellProps) {
-  const { activeFactory, factoriesPending } = useActiveFactoryContext();
-  const serverFactory = activeFactory && isServerFactory(activeFactory) ? activeFactory : undefined;
+function FactoryPageShellFrame({
+  children,
+  Layout,
+}: FactoryPageShellProps & {
+  Layout: typeof PageLayout;
+}) {
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factoryQuery = useFactoryQuery(factoryId);
 
-  if (factoriesPending) {
+  if (factoryQuery.isPending) {
     return (
       <div className="flex h-full w-full items-center justify-center">
         <Spinner />
       </div>
     );
   }
+
+  const factory = factoryQuery.data;
+
   return (
-    <PageLayout
-      sidebar={<Sidebar />}
-      header={<ChatHeader />}
-      title={activeFactory ? title : undefined}
-      description={activeFactory ? description : undefined}
-      actions={serverFactory ? <RepositoryPicker factory={serverFactory} /> : undefined}
-    >
-      {serverFactory ? (
-        children(serverFactory)
-      ) : (
-        <Notice variant="info">
-          Board, metrics, and audit are available for server-backed Factories. This factory is bound to a local folder —
-          create a Factory from the switcher to use the Board.
-        </Notice>
-      )}
-    </PageLayout>
+    <Layout sidebar={<Sidebar />} header={<ChatHeader />}>
+      {factory ? children(factory) : <Notice variant="destructive">Factory not found.</Notice>}
+    </Layout>
   );
 }
 
-/**
- * Scopes repository-based feeds (issues, PRs) when the factory links more
- * than one repository. Selection persists on the factory so the Board, chat
- * session, and settings all agree on the active repository.
- */
-function RepositoryPicker({ factory }: { factory: ServerFactory }) {
-  const queryClient = useQueryClient();
-  const repositories = factory.binding.repositories;
-  const selected = selectedRepository(factory);
-  if (repositories.length < 2 || !selected) return null;
+/** Factory page whose content participates in native document scrolling. */
+export function DocumentFactoryPageShell(props: FactoryPageShellProps) {
+  return <FactoryPageShellFrame {...props} Layout={PageLayout} />;
+}
 
+/** Factory page with nested scroll regions constrained to the viewport. */
+export function FactoryPageShell({ children }: FactoryPageShellProps) {
   return (
-    <DropdownMenu>
-      <DropdownMenu.Trigger
-        render={
-          <Button variant="outline" size="sm" aria-label="Select repository">
-            <span className="max-w-48 truncate">{selected.slug}</span>
-            <ChevronDown size={13} />
-          </Button>
-        }
-      />
-      <DropdownMenu.Content align="end">
-        {repositories.map(repository => (
-          <DropdownMenu.Item
-            key={repository.projectRepositoryId}
-            onSelect={() => {
-              selectRepository(factory, repository.projectRepositoryId);
-              void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
-            }}
-          >
-            <span className="truncate">{repository.slug}</span>
-          </DropdownMenu.Item>
-        ))}
-      </DropdownMenu.Content>
-    </DropdownMenu>
+    <FactoryPageShellFrame Layout={ViewportLayout}>
+      {factory => <div className="flex min-h-0 flex-1 flex-col p-5">{children(factory)}</div>}
+    </FactoryPageShellFrame>
   );
 }

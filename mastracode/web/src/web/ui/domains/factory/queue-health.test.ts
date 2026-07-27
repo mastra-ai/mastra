@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { QueueHealthConfig } from '../../../storage/domains/queue-health/base';
+import type { QueueHealthConfig } from '@mastra/factory/storage/domains/queue-health/base';
 import type { QueueHealthWorkItem } from './queue-health';
 import { computeQueueHealth } from './queue-health';
 
@@ -116,6 +116,17 @@ describe('computeQueueHealth', () => {
       stageHistory: [{ stage: 'done', enteredAt: secondsAgo(10), by: 'u1' }],
     });
     const health = computeQueueHealth([done], new Set(), DEFAULT, NOW);
+    expect(health.stages.every(s => s.total === 0)).toBe(true);
+    expect(health.entries).toEqual([]);
+  });
+
+  it('excludes canceled-only items entirely (terminal, like done)', () => {
+    const canceled = makeItem({
+      stages: ['canceled'],
+      stageHistory: [{ stage: 'canceled', enteredAt: secondsAgo(10), by: 'u1' }],
+    });
+    const health = computeQueueHealth([canceled], new Set(), DEFAULT, NOW);
+    expect(health.stages.find(s => s.stage === 'canceled')).toBeUndefined();
     expect(health.stages.every(s => s.total === 0)).toBe(true);
     expect(health.entries).toEqual([]);
   });

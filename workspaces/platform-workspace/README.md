@@ -12,12 +12,12 @@ npm install @mastra/platform-workspace
 
 All options can be passed to the constructor or read from environment variables:
 
-| Option          | Env var                        | Required         |
-| --------------- | ------------------------------ | ---------------- |
-| `accessToken`   | `MASTRA_PLATFORM_SECRET_KEY`   | Yes              |
-| `projectId`     | `MASTRA_PROJECT_ID`            | Yes              |
-| `environmentId` | `MASTRA_ENVIRONMENT_ID`        | Yes (sandbox)    |
-| `bucketName`    | `MASTRA_PLATFORM_BUCKET_NAME`  | Yes (filesystem) |
+| Option          | Env var                       | Required         |
+| --------------- | ----------------------------- | ---------------- |
+| `accessToken`   | `MASTRA_PLATFORM_SECRET_KEY`  | Yes              |
+| `projectId`     | `MASTRA_PROJECT_ID`           | Yes              |
+| `environmentId` | `MASTRA_ENVIRONMENT_ID`       | Yes (sandbox)    |
+| `bucketName`    | `MASTRA_PLATFORM_BUCKET_NAME` | Yes (filesystem) |
 
 `MASTRA_PLATFORM_ACCESS_TOKEN` is still read as a deprecated fallback for `accessToken`.
 

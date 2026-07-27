@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -18,6 +19,19 @@ import type {
  * the server's source of truth instead of optimistic local edits. Keys are
  * write-only — never read back.
  */
+/**
+ * A credential change (key saved/removed, OAuth completed, signed out) alters
+ * which models are runnable, so the model catalog and the credential-gated
+ * model packs must refetch along with the provider list.
+ */
+function invalidateCredentialDependentQueries(queryClient: QueryClient) {
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.providers() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.modelPacksAll() }),
+  ]);
+}
+
 export function useProvidersQuery() {
   const { client } = useApiConfig();
   return useQuery<ProviderInfo[]>({
@@ -46,7 +60,7 @@ export function useSaveProviderKey() {
         ...(envVar !== undefined ? { envVar } : {}),
         ...(scope !== undefined ? { scope } : {}),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.providers() }),
+    onSuccess: () => invalidateCredentialDependentQueries(queryClient),
   });
 }
 
@@ -63,7 +77,7 @@ export function useRemoveProviderKey() {
       client.del<SaveProviderKeyResponse>(
         `/web/config/providers/${encodeURIComponent(provider)}/key${scope ? `?scope=${scope}` : ''}`,
       ),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.providers() }),
+    onSuccess: () => invalidateCredentialDependentQueries(queryClient),
   });
 }
 
@@ -99,7 +113,7 @@ export function useCompleteProviderOAuth() {
         sessionId,
         code,
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.providers() }),
+    onSuccess: () => invalidateCredentialDependentQueries(queryClient),
   });
 }
 
@@ -117,7 +131,7 @@ export function usePollProviderOAuth() {
       }),
     onSuccess: response => {
       if (response.status === 'complete') {
-        return queryClient.invalidateQueries({ queryKey: queryKeys.providers() });
+        return invalidateCredentialDependentQueries(queryClient);
       }
     },
   });
@@ -143,6 +157,6 @@ export function useSignOutProviderOAuth() {
   return useMutation({
     mutationFn: ({ provider }: ProviderOAuthArgs) =>
       client.del<{ ok: true }>(`/web/config/providers/${encodeURIComponent(provider)}/oauth`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.providers() }),
+    onSuccess: () => invalidateCredentialDependentQueries(queryClient),
   });
 }

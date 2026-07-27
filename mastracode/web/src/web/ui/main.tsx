@@ -11,7 +11,6 @@ import { createQueryClient } from '../../shared/query-client';
 import { createAppRouter } from './router';
 import '@mastra/playground-ui/style.css';
 import './tailwind.css';
-import { ActiveFactoryProvider } from './domains/workspaces';
 
 // The web app talks to the Mastra server same-origin (`baseUrl=""`): in prod
 // the server serves this build itself, and in dev Vite proxies `/api` + `/auth`
@@ -33,10 +32,8 @@ createRoot(document.getElementById('root')!).render(
       <TooltipProvider delayDuration={0}>
         <QueryClientProvider client={queryClient}>
           <ApiConfigProvider baseUrl="">
-            <ActiveFactoryProvider>
-              <RouterProvider router={router} />
-              <Toaster position="bottom-right" />
-            </ActiveFactoryProvider>
+            <RouterProvider router={router} />
+            <Toaster position="bottom-right" />
           </ApiConfigProvider>
         </QueryClientProvider>
       </TooltipProvider>

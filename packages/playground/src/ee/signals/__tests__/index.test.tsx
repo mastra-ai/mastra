@@ -1,13 +1,19 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter } from 'react-router';
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import SignalsOverviewPage from '..';
+import { navHandle } from '../../../lib/nav';
+import { RouteHeader } from '../../../lib/route-header/route-header';
 import {
+  billingThemeSnapshotsResponse,
   emptyThemeEntitiesResponse,
+  lowSignalFirstThemeEntitiesResponse,
+  multiAgentThemeEntitiesResponse,
+  multiEligibleThemeEntitiesResponse,
   populatedThemeEntitiesResponse,
   themeFlowResponse,
   themeSnapshotsResponse,
@@ -25,6 +31,26 @@ function renderSignalsPage() {
       </QueryClientProvider>
     </MemoryRouter>,
   );
+}
+
+function renderSignalsPageWithShell() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/signals',
+        handle: navHandle('/signals'),
+        element: (
+          <QueryClientProvider client={queryClient}>
+            <RouteHeader />
+            <SignalsOverviewPage />
+          </QueryClientProvider>
+        ),
+      },
+    ],
+    { initialEntries: ['/signals'] },
+  );
+  return render(<RouterProvider router={router} />);
 }
 
 afterEach(() => {
@@ -58,6 +84,34 @@ describe('Signals page', () => {
       renderSignalsPage();
 
       expect(await screen.findByText('Unable to load signal entities.')).not.toBeNull();
+    });
+  });
+
+  describe('when the entities request fails once', () => {
+    it('retries the failed request and renders the page', async () => {
+      let attempts = 0;
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => {
+          attempts += 1;
+          return attempts === 1
+            ? HttpResponse.json({ error: 'Unable to load entities' }, { status: 500 })
+            : HttpResponse.json(populatedThemeEntitiesResponse);
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+      );
+
+      renderSignalsPage();
+
+      expect(await screen.findByText('Unable to load signal entities.')).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+      expect(await screen.findByRole('combobox', { name: 'Agent' })).not.toBeNull();
+      expect(attempts).toBe(2);
     });
   });
 
@@ -96,6 +150,109 @@ describe('Signals page', () => {
       renderSignalsPage();
 
       expect(await screen.findByRole('region', { name: 'Signal theme flow' })).not.toBeNull();
+    });
+
+    it('keeps exactly one Signals documentation action across the shell and page', async () => {
+      renderSignalsPageWithShell();
+      await screen.findByRole('region', { name: 'Signal theme flow' });
+
+      expect(screen.getAllByRole('link', { name: 'Signals documentation' })).toHaveLength(1);
+    });
+
+    it('keeps the single agent visible in the selector', async () => {
+      renderSignalsPage();
+
+      expect((await screen.findByRole('combobox', { name: 'Agent' })).textContent).toContain('support-agent');
+    });
+  });
+
+  describe('when a low-signal agent is returned before an eligible agent', () => {
+    it('defaults to the first agent that can render a flow', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(lowSignalFirstThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+      );
+
+      renderSignalsPage();
+
+      expect((await screen.findByRole('combobox', { name: 'Agent' })).textContent).toContain('support-agent');
+      expect(screen.queryByText('Not enough signal data yet')).toBeNull();
+    });
+  });
+
+  describe('when multiple agents have different signal coverage', () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(multiAgentThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+      );
+    });
+
+    it('lists every agent in the always-visible selector', async () => {
+      renderSignalsPage();
+
+      const selector = await screen.findByRole('combobox', { name: 'Agent' });
+      fireEvent.click(selector);
+
+      expect(await screen.findByRole('option', { name: 'support-agent' })).not.toBeNull();
+      expect(screen.getByRole('option', { name: 'triage-agent' })).not.toBeNull();
+    });
+
+    it('explains why the selected agent cannot render a flow', async () => {
+      renderSignalsPage();
+
+      fireEvent.click(await screen.findByRole('combobox', { name: 'Agent' }));
+      const triageAgent = await screen.findByRole('option', { name: 'triage-agent' });
+      fireEvent.pointerDown(triageAgent, { pointerType: 'mouse' });
+      fireEvent.click(triageAgent, { detail: 1 });
+
+      expect(await screen.findByText('Not enough signal data yet')).not.toBeNull();
+      expect(screen.getByText('Available signals: Goal')).not.toBeNull();
+      expect(screen.getByRole('combobox', { name: 'Agent' })).not.toBeNull();
+    });
+  });
+
+  describe('when switching between eligible agents', () => {
+    it("loads the selected agent's latest snapshot", async () => {
+      let billingFlowSnapshotId: string | null = null;
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(multiEligibleThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(themeFlowResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/billing-agent/theme-snapshots`, () =>
+          HttpResponse.json(billingThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/billing-agent/theme-flow`, ({ request }) => {
+          billingFlowSnapshotId = new URL(request.url).searchParams.get('snapshotId');
+          return HttpResponse.json({
+            ...themeFlowResponse,
+            snapshot: billingThemeSnapshotsResponse.snapshots[1],
+          });
+        }),
+      );
+      renderSignalsPage();
+      fireEvent.click(await screen.findByRole('combobox', { name: 'Agent' }));
+      const billingAgent = await screen.findByRole('option', { name: 'billing-agent' });
+
+      fireEvent.pointerDown(billingAgent, { pointerType: 'mouse' });
+      fireEvent.click(billingAgent, { detail: 1 });
+
+      expect(await screen.findByText('Snapshot 2/2 · Jul 8–15, 2026 · 30 traces')).not.toBeNull();
+      expect(billingFlowSnapshotId).toBe('billing-snapshot-2');
     });
   });
 

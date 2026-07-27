@@ -3,8 +3,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useRef } from 'react';
 
 import { CloseIcon } from '../../../ui/icons';
-import { useSettingsSection } from '../context/SettingsNavigationProvider';
 import { useCloseSettings } from '../hooks/useCloseSettings';
+import { useSettingsSection } from '../hooks/useSettingsSection';
 import { SETTINGS_SECTION_LABELS } from '../settingsSections';
 
 type SettingsHeaderProps = {

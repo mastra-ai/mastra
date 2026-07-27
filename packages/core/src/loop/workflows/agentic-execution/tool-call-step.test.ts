@@ -488,6 +488,91 @@ describe('createToolCallStep tool approval workflow', () => {
   });
 });
 
+describe('createToolCallStep delegated agent tool approvals', () => {
+  let controller: { enqueue: Mock };
+  let suspend: Mock;
+  let streamState: { serialize: Mock };
+  let messageList: MessageList;
+  let neverResolve: Promise<never>;
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+    neverResolve = new Promise(() => {});
+    suspend = vi.fn().mockReturnValue(neverResolve);
+    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('stores parentRunId when a nested agent run requests tool approval', async () => {
+    const assistantMessage = {
+      role: 'assistant',
+      content: { metadata: {} as Record<string, unknown> },
+    };
+    messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [assistantMessage] },
+        all: { db: () => [assistantMessage], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+
+    const tools = {
+      'agent-subAgent': {
+        execute: vi.fn(async (_args: unknown, opts: MastraToolInvocationOptions) => {
+          await opts.suspend?.({}, { requireToolApproval: true, runId: 'sub-agent-run-id' });
+          return { text: 'done' };
+        }),
+      },
+    } as ToolSet;
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'parent-run-id',
+      streamState,
+    });
+
+    const inputData = {
+      toolCallId: 'parent-tool-call-id',
+      toolName: 'agent-subAgent',
+      args: { prompt: 'do thing' },
+    };
+
+    const executePromise = toolCallStep.execute({
+      ...makeBaseExecuteParams(suspend),
+      writer: new ToolStream({
+        prefix: 'tool',
+        callId: inputData.toolCallId,
+        name: inputData.toolName,
+        runId: 'parent-run-id',
+      }),
+      inputData,
+    });
+
+    // Allow the microtask / setImmediate chain through tool execution → inner
+    // suspend → addToolMetadata to settle before inspecting the metadata.
+    for (let i = 0; i < 5; i++) {
+      await new Promise(resolve => setImmediate(resolve));
+    }
+
+    const pending = (assistantMessage.content.metadata as Record<string, any>).pendingToolApprovals?.[
+      'parent-tool-call-id'
+    ];
+    expect(pending).toMatchObject({
+      toolCallId: 'parent-tool-call-id',
+      runId: 'sub-agent-run-id',
+      parentRunId: 'parent-run-id',
+    });
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+});
+
 describe('createToolCallStep needsApprovalFn enriched context', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;

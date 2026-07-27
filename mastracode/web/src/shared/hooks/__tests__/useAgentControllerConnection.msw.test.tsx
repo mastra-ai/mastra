@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
+import { queryKeys } from '../../api/keys';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import {
   deriveConnectionStatus,
@@ -270,6 +271,108 @@ describe('useAgentControllerConnection', () => {
         syncFailureCount: 10,
       }),
     ).toBe('error');
+  });
+
+  it('given the stream is slow to establish, when the reconnect poll refetches state, then the in-flight stream attempt is not cancelled', async () => {
+    const onReadState = vi.fn();
+    const onStream = vi.fn();
+    const onEvent = vi.fn();
+    const observedStatuses: string[] = [];
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' }),
+      ),
+      http.get(sessionUrl, () => {
+        onReadState();
+        return HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'state-thread',
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        });
+      }),
+      http.get(`${sessionUrl}/stream`, async () => {
+        onStream();
+        // Slower than the 1s reconnect poll — the poll fires while this
+        // stream is still connecting.
+        await new Promise(resolve => setTimeout(resolve, 1600));
+        return new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+          headers: { 'content-type': 'text/event-stream' },
+        });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => {
+      const connection = useAgentControllerConnection({ ...hookArgs, onEvent });
+
+      useEffect(() => {
+        observedStatuses.push(connection.status);
+      }, [connection.status]);
+
+      return connection;
+    });
+
+    // The poll refetches state at least once while the stream is connecting…
+    await waitFor(() => expect(onReadState.mock.calls.length).toBeGreaterThanOrEqual(2), { timeout: 2500 });
+    // …and the slow stream still connects instead of being torn down.
+    await waitFor(() => expect(result.current.status).toBe('ready'), { timeout: 3000 });
+
+    expect(onStream).toHaveBeenCalledTimes(1);
+    expect(observedStatuses).not.toContain('reconnecting');
+  });
+
+  it('given an active stream, when the session state is refetched, then the stream is not torn down', async () => {
+    const onStream = vi.fn();
+    const onEvent = vi.fn();
+    const observedStatuses: string[] = [];
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' }),
+      ),
+      http.get(sessionUrl, () =>
+        HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'state-thread',
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        }),
+      ),
+      http.get(`${sessionUrl}/stream`, () => {
+        onStream();
+        return new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+          headers: { 'content-type': 'text/event-stream' },
+        });
+      }),
+    );
+
+    const { client, result } = renderHookWithProviders(() => {
+      const connection = useAgentControllerConnection({ ...hookArgs, onEvent });
+
+      useEffect(() => {
+        observedStatuses.push(connection.status);
+      }, [connection.status]);
+
+      return connection;
+    });
+
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    // A refetch bumps dataUpdatedAt (the subscription epoch) — e.g. a mutation
+    // invalidating controller state. The established stream must survive it.
+    await client.invalidateQueries({
+      queryKey: queryKeys.agentControllerConnectionState(controllerId, resourceId, undefined),
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(onStream).toHaveBeenCalledTimes(1);
+    expect(result.current.status).toBe('ready');
+    expect(observedStatuses).not.toContain('reconnecting');
   });
 
   it('given the stream drops, when the state re-sync succeeds, then the hook resubscribes and returns to ready', async () => {

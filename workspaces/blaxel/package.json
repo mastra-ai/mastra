@@ -1,6 +1,6 @@
 {
   "name": "@mastra/blaxel",
-  "version": "0.6.0-alpha.0",
+  "version": "0.6.0",
   "description": "Blaxel cloud sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -26,7 +26,8 @@
     "test:watch": "vitest watch",
     "test": "vitest run ./src/**/*.integration.test.ts",
     "test:cloud": "pnpm test",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {

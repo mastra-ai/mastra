@@ -2,11 +2,9 @@ import { MainSidebarProvider, useMainSidebar } from '@mastra/playground-ui/compo
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router';
 
-import { PageLayoutMainViewProvider } from '../../../../ui/PageLayout';
-import { OverlaysProvider } from '../../../../lib/overlays';
 import { SettingsHeader } from '../../../settings/components/SettingsHeader';
-import { SettingsNavigationProvider } from '../../../settings/context/SettingsNavigationProvider';
 import { ChatHeader } from '../ChatHeader';
 
 function SidebarStateProbe() {
@@ -41,21 +39,17 @@ afterEach(() => {
 function renderMobileHeader() {
   mockMobileViewport(true);
   render(
-    <MainSidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
-      <OverlaysProvider>
-        <SettingsNavigationProvider>
-          <PageLayoutMainViewProvider mobileHeader={<SettingsHeader autoFocus placement="mobile" />}>
-            <ChatHeader />
-            <SidebarStateProbe />
-          </PageLayoutMainViewProvider>
-        </SettingsNavigationProvider>
-      </OverlaysProvider>
-    </MainSidebarProvider>,
+    <MemoryRouter initialEntries={['/settings/general']}>
+      <MainSidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
+        <ChatHeader mobileContent={<SettingsHeader autoFocus placement="mobile" />} />
+        <SidebarStateProbe />
+      </MainSidebarProvider>
+    </MemoryRouter>,
   );
 }
 
 describe('ChatHeader', () => {
-  it('renders and focuses the mobile settings header', () => {
+  it('renders and focuses the mobile content passed by the page', () => {
     renderMobileHeader();
 
     const mobileHeader = screen.getByRole('banner');
