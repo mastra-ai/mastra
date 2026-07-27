@@ -70,29 +70,42 @@ export class AgentBuilder extends BaseResource {
    */
   private createRecordParserTransform(): TransformStream<ArrayBuffer, { type: string; payload: any }> {
     let failedChunk: string | undefined = undefined;
+    const decoder = new TextDecoder();
+
+    const processDecoded = (
+      decoded: string,
+      controller: TransformStreamDefaultController<{ type: string; payload: any }>,
+    ) => {
+      const chunks = decoded.split(RECORD_SEPARATOR);
+
+      for (const chunk of chunks) {
+        if (chunk) {
+          const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
+          try {
+            const parsedChunk = JSON.parse(newChunk);
+            controller.enqueue(parsedChunk);
+            failedChunk = undefined;
+          } catch {
+            failedChunk = newChunk;
+          }
+        }
+      }
+    };
 
     return new TransformStream<ArrayBuffer, { type: string; payload: any }>({
       start() {},
       async transform(chunk, controller) {
         try {
-          // Decode binary data to text
-          const decoded = new TextDecoder().decode(chunk);
-
-          // Split by record separator
-          const chunks = decoded.split(RECORD_SEPARATOR);
-
-          // Process each chunk
-          for (const chunk of chunks) {
-            if (chunk) {
-              const newChunk: string = failedChunk ? failedChunk + chunk : chunk;
-              try {
-                const parsedChunk = JSON.parse(newChunk);
-                controller.enqueue(parsedChunk);
-                failedChunk = undefined;
-              } catch {
-                failedChunk = newChunk;
-              }
-            }
+          processDecoded(decoder.decode(chunk, { stream: true }), controller);
+        } catch {
+          // Silently ignore processing errors
+        }
+      },
+      flush(controller) {
+        try {
+          const decoded = decoder.decode();
+          if (decoded) {
+            processDecoded(decoded, controller);
           }
         } catch {
           // Silently ignore processing errors
