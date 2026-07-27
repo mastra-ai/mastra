@@ -385,17 +385,6 @@ export class MastraFactory {
       },
     });
 
-    // Multi-replica deployments (distributed pubsub configured) need
-    // cross-replica serialization; warn loud when the storage backend can't
-    // provide it so the operator knows locks are per-replica only.
-    if (pubsub && typeof storage.withDistributedLock !== 'function') {
-      process.stderr.write(
-        'MastraCode Web: pubsub is configured (multi-replica?) but the storage backend has no ' +
-          'withDistributedLock capability — project locks serialize per replica only. ' +
-          'Use PgFactoryStorage for multi-replica deployments.\n',
-      );
-    }
-
     // Repository execution needs one sandbox per project-repository link,
     // cloned from the configured machine. A machine without `clone()` would
     // only fail on first use, so fail fast at boot instead.
