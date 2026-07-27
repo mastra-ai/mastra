@@ -758,10 +758,9 @@ export class MemoryMSSQL extends MemoryStorage {
         TABLE_SCHEMAS[TABLE_MESSAGES],
       );
       const metadataWhere = buildMssqlMessageMetadataFilter(metadataFilter);
-      const actualWhereClause = [preparedWhereClause, ...metadataWhere.clauses].reduce((sql, clause) => {
-        if (!clause) return sql;
-        return sql ? `${sql} AND ${clause}` : ` WHERE ${clause}`;
-      }, '');
+      const actualWhereClause = metadataWhere.clauses.length
+        ? `${preparedWhereClause || ' WHERE 1 = 1'} AND ${metadataWhere.clauses.join(' AND ')}`
+        : preparedWhereClause;
       const bindWhereParams = (req: sql.Request) => {
         Object.entries(whereParams).forEach(([paramName, paramValue]) => req.input(paramName, paramValue));
         bindMssqlMetadataParams(req, metadataWhere.params);
