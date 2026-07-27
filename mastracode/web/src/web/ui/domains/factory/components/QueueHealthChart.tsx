@@ -1,5 +1,5 @@
 /**
- * The Factory Overview queue-health chart: one horizontal bar per board stage,
+ * The Metrics page's queue-health chart: one horizontal bar per board stage,
  * segmented left→right by age bucket (green → amber → orange → red) with width
  * proportional to how many work items sit in that cohort. A diagonal-stripe
  * overlay marks the right-anchored portion of each bar where an agent is
@@ -97,7 +97,7 @@ function StageBar({
       </Txt>
 
       {isEmpty ? (
-        <div className="flex h-5 items-center rounded-md border border-dashed border-border1 px-2">
+        <div className="border-border1 flex h-5 items-center rounded-md border border-dashed px-2">
           <Txt as="span" variant="ui-xs" className="text-icon3">
             0
           </Txt>
@@ -106,7 +106,7 @@ function StageBar({
         // Bar background: clicking it clears any selection.
         <div
           role="presentation"
-          className="relative flex h-5 overflow-hidden rounded-md bg-surface4"
+          className="bg-surface4 relative flex h-5 overflow-hidden rounded-md"
           onClick={() => onSelect(null)}
         >
           {AGE_BUCKETS.map(bucket => {
@@ -148,7 +148,7 @@ function StageBar({
         </div>
       )}
 
-      <Txt as="span" variant="ui-xs" className="text-right text-icon3">
+      <Txt as="span" variant="ui-xs" className="text-icon3 text-right">
         {stage.total}
         {stage.activeCount > 0 ? ` · ${stage.activeCount} active` : ''}
       </Txt>

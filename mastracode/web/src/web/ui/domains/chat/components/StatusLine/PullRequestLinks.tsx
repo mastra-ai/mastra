@@ -1,3 +1,4 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { useQuery } from '@tanstack/react-query';
 import { CircleDot, CircleX, GitMerge } from 'lucide-react';
 import { useEffect, useRef } from 'react';
@@ -24,9 +25,9 @@ function PullRequestIcon({ status }: { status: PullRequestSubscription['status']
 }
 
 function statusColor(status: PullRequestSubscription['status']): string {
-  if (status === 'merged') return 'text-accent3 hover:text-accent3';
-  if (status === 'closed') return 'text-error hover:text-error';
-  return 'text-accent1 hover:text-accent1';
+  if (status === 'merged') return 'text-accent3';
+  if (status === 'closed') return 'text-error';
+  return 'text-accent1';
 }
 
 interface PullRequestLinksProps {
@@ -60,22 +61,23 @@ export function PullRequestLinks({
     item =>
       item.source === 'github-pr' &&
       Object.values(item.sessions).some(
-        session => session.threadId === threadId && (!projectPath || session.projectPath === projectPath),
+        session => session.threadId === threadId && (!projectPath || session.sessionId === projectPath),
       ),
   );
-  const reviewNumber = reviewItem?.metadata.number;
+  const reviewNumber = reviewItem?.metadata.githubPullRequestNumber ?? reviewItem?.metadata.number;
+  const normalizedReviewNumber = Number(reviewNumber);
   const factorySubscription: PullRequestSubscription | undefined =
     reviewItem &&
     repositorySlug &&
     (typeof reviewNumber === 'number' || typeof reviewNumber === 'string') &&
-    Number.isInteger(Number(reviewNumber))
+    Number.isInteger(normalizedReviewNumber)
       ? {
           id: `factory-work-item:${reviewItem.id}`,
           repoFullName: repositorySlug,
-          pullRequestNumber: Number(reviewNumber),
+          pullRequestNumber: normalizedReviewNumber,
           status:
             reviewItem.metadata.merged === true ? 'merged' : reviewItem.metadata.state === 'closed' ? 'closed' : 'open',
-          url: `https://github.com/${repositorySlug}/pull/${reviewNumber}`,
+          url: `https://github.com/${repositorySlug}/pull/${normalizedReviewNumber}`,
         }
       : undefined;
   const notificationIds = transcriptEntries
@@ -128,18 +130,21 @@ export function PullRequestLinks({
   if (links.length === 0) return null;
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="ml-auto flex items-center gap-2">
       {links.map(subscription => (
-        <a
+        <Button
           key={subscription.id}
+          as="a"
+          variant="ghost"
+          size="xs"
           href={subscription.url}
           target="_blank"
           rel="noreferrer"
-          className={`inline-flex items-center gap-1 ${statusColor(subscription.status)}`}
           aria-label={`Open ${subscription.status} ${subscription.repoFullName} pull request ${subscription.pullRequestNumber}`}
         >
-          <PullRequestIcon status={subscription.status} /> PR #{subscription.pullRequestNumber}
-        </a>
+          <PullRequestIcon status={subscription.status} />
+          <span className={statusColor(subscription.status)}>PR #{subscription.pullRequestNumber}</span>
+        </Button>
       ))}
     </div>
   );

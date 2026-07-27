@@ -1,6 +1,6 @@
 {
   "name": "@internal/ai-v7",
-  "version": "0.0.61",
+  "version": "0.0.64",
   "description": "",
   "type": "module",
   "private": true,
@@ -31,7 +31,8 @@
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "keywords": [],
   "author": "",

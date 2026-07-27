@@ -2,12 +2,12 @@
  * Browser-side helper for the Factory queue-health threshold endpoint.
  *
  * The thresholds are server-side, project-scoped config (seconds) read by the
- * Overview page to bucket work-item ages; the chart's aggregation itself runs
+ * Metrics page's queue-health section to bucket work-item ages; the chart's aggregation itself runs
  * client-side (its active-work input is browser-only). Mirrors the thin
  * `services/metrics.ts` fetcher shape.
  */
 
-import type { QueueHealthConfig } from '../../../../storage/domains/queue-health/base';
+import type { QueueHealthConfig } from '@mastra/factory/storage/domains/queue-health/base';
 
 /** Fetch the org's age-threshold config for a project (defaults when unset). */
 export async function fetchQueueHealthThresholds(

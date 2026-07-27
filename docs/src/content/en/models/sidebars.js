@@ -123,6 +123,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/aiand',
+          label: 'ai&',
+        },
+        {
+          type: 'doc',
           id: 'providers/aihubmix',
           label: 'AIHubMix',
         },
@@ -363,6 +368,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/hetzner',
+          label: 'Hetzner',
+        },
+        {
+          type: 'doc',
           id: 'providers/hpc-ai',
           label: 'HPC-AI',
         },
@@ -570,6 +580,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/nvidia',
           label: 'Nvidia',
+        },
+        {
+          type: 'doc',
+          id: 'providers/ofox',
+          label: 'Ofox',
         },
         {
           type: 'doc',

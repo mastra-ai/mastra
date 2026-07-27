@@ -1,6 +1,6 @@
 {
   "name": "@mastra/react",
-  "version": "1.3.0-alpha.10",
+  "version": "1.3.3-alpha.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
@@ -29,7 +29,8 @@
     "./styles.css": "./dist/react.css"
   },
   "scripts": {
-    "lint": "eslint .",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
     "build": "echo 'Use turbo to run build'",
     "build:js": "tsup --config tsup.config.ts",
     "build:css": "tailwindcss -i src/ui/index.css -o dist/react.css",
@@ -63,8 +64,8 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@storybook/react-vite": "^9.1.20",
-    "@tailwindcss/cli": "^4.2.2",
-    "@tailwindcss/vite": "^4.2.2",
+    "@tailwindcss/cli": "^4.3.3",
+    "@tailwindcss/vite": "^4.3.3",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -77,7 +78,7 @@
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "storybook": "^9.1.20",
-    "tailwindcss": "^4.2.2",
+    "tailwindcss": "^4.3.3",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vite": "^7.3.1",

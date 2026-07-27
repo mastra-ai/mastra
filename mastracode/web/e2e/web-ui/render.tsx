@@ -58,10 +58,22 @@ export function renderHookWithProviders<Result, Props>(
   };
 }
 
-/** Wait until every in-flight query + mutation in the cache has settled. */
+/**
+ * Wait until every in-flight query + mutation in the cache has settled — and
+ * stays settled. Query chains (session init → resource resolution → messages)
+ * have brief idle gaps between links; a single idle sample can pass in such a
+ * gap while a later link is about to remount the transcript subtree and
+ * detach nodes the test already queried. Requiring two idle samples separated
+ * by a macrotask delay rides out those gaps.
+ */
 export async function waitForMutationsIdle(client: QueryClient) {
-  await waitFor(() => {
+  const assertIdle = () => {
     if (client.isMutating() > 0) throw new Error('mutations still pending');
     if (client.isFetching() > 0) throw new Error('queries still fetching');
+  };
+  await waitFor(async () => {
+    assertIdle();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    assertIdle();
   });
 }

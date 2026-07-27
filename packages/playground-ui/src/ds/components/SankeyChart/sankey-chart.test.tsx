@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SankeyChart } from './sankey-chart';
+import type { SankeyChartNodeSelection } from './sankey-chart-utils';
 import { Sankey, useSankey } from './sankey-context';
 import { buildSankeyHueMap, nodeColor, nodeColorVivid } from './sankeyColor';
 
@@ -49,6 +50,8 @@ function TestControls() {
 
 function Example({
   onCurveClick,
+  onNodeClick,
+  isNodeClickable,
   columnOrder,
   onColumnOrderChange,
   visibleColumnIds,
@@ -56,6 +59,8 @@ function Example({
   getColumnHue,
 }: {
   onCurveClick?: (selection: unknown) => void;
+  onNodeClick?: (selection: unknown) => void;
+  isNodeClickable?: (selection: SankeyChartNodeSelection) => boolean;
   columnOrder?: Array<string>;
   onColumnOrderChange?: (columnOrder: Array<string>) => void;
   visibleColumnIds?: Array<string>;
@@ -73,7 +78,7 @@ function Example({
       getColumnHue={getColumnHue}
     >
       <TestControls />
-      <SankeyChart onCurveClick={onCurveClick} />
+      <SankeyChart onCurveClick={onCurveClick} onNodeClick={onNodeClick} isNodeClickable={isNodeClickable} />
     </Sankey>
   );
 }
@@ -103,10 +108,183 @@ describe('SankeyChart', () => {
     expect(screen.queryByText('Select at least two columns with data to display a flow')).toBeNull();
   });
 
+  describe('when the caller separates node identity from its display label', () => {
+    it('renders equal labels as distinct nodes', async () => {
+      const { container } = render(
+        <Sankey
+          data={[
+            { channel: 'channel-one', channelLabel: 'Shared channel', region: 'eu', regionLabel: 'Europe' },
+            { channel: 'channel-two', channelLabel: 'Shared channel', region: 'us', regionLabel: 'United States' },
+          ]}
+          columns={columns.slice(0, 2)}
+          getRecordNodeId={(record, column) => String(record[column.id])}
+          getRecordNodeLabel={(record, column) => String(record[`${column.id}Label`])}
+        >
+          <SankeyChart />
+        </Sankey>,
+      );
+
+      await screen.findAllByText('Shared channel');
+      expect(
+        [...container.querySelectorAll('svg text')].filter(node => node.textContent === 'Shared channel'),
+      ).toHaveLength(2);
+    });
+  });
+
+  describe('when first-column labels have different lengths', () => {
+    it('aligns short and truncated labels to the same column edge', async () => {
+      const { container } = render(
+        <Sankey
+          data={[
+            { channel: 'Short label', region: 'EU' },
+            { channel: 'A deliberately long channel label', region: 'US' },
+          ]}
+          columns={columns.slice(0, 2)}
+          getRecordLayoutWeight={() => 1}
+        >
+          <SankeyChart />
+        </Sankey>,
+      );
+      await screen.findAllByText('Short label');
+      const labels = [...container.querySelectorAll('svg text')];
+      const shortLabel = labels.find(node => node.textContent === 'Short label');
+      const longLabel = labels.find(node => node.textContent === 'A deliberately long ch…');
+
+      expect(shortLabel?.getAttribute('x')).toBe(longLabel?.getAttribute('x'));
+      expect(shortLabel?.getAttribute('text-anchor')).toBe('start');
+      expect(longLabel?.getAttribute('text-anchor')).toBe('start');
+    });
+  });
+
+  describe('when current values change within stable layout weights', () => {
+    it('changes bar height without moving its center', async () => {
+      const renderFrame = (count: number) => (
+        <Sankey
+          data={[
+            { channel: 'Search', channelCount: count, region: 'EU', regionCount: count, count, layoutCount: 10 },
+            { channel: 'Referral', channelCount: 8, region: 'US', regionCount: 8, count: 8, layoutCount: 10 },
+          ]}
+          columns={columns.slice(0, 2)}
+          getRecordWeight={record => Number(record.count)}
+          getRecordLayoutWeight={record => Number(record.layoutCount)}
+          getRecordNodeValue={(record, column) => Number(record[`${column.id}Count`])}
+        >
+          <SankeyChart />
+        </Sankey>
+      );
+      const { rerender } = render(renderFrame(2));
+      const getSearchRect = async () => {
+        const node = await screen.findByLabelText(/Search: 2 traces/);
+        return node.querySelector('rect');
+      };
+      const initialRect = await getSearchRect();
+      const initialHeight = Number(initialRect?.getAttribute('height'));
+      const initialCenter = Number(initialRect?.getAttribute('y')) + initialHeight / 2;
+
+      rerender(renderFrame(8));
+
+      const updatedNode = await screen.findByLabelText(/Search: 8 traces/);
+      const updatedRect = updatedNode.querySelector('rect');
+      const updatedHeight = Number(updatedRect?.getAttribute('height'));
+      const updatedCenter = Number(updatedRect?.getAttribute('y')) + updatedHeight / 2;
+      expect(updatedHeight).toBeGreaterThan(initialHeight);
+      expect(updatedCenter).toBe(initialCenter);
+    });
+  });
+
+  describe('when a node label includes a description', () => {
+    const description =
+      'Looks up relevant knowledge before responding, including all supporting context needed to explain a long theme description without clipping it.';
+    const nodeLabel = `Search. ${description}: 1 trace (100%)`;
+    const tooltipLabel = `Search: ${description}`;
+
+    function renderDescribedNode() {
+      return render(
+        <Sankey
+          data={[
+            {
+              channel: 'channel-one',
+              channelLabel: `Search\n${description}`,
+              region: 'eu',
+              regionLabel: 'Europe',
+            },
+          ]}
+          columns={columns.slice(0, 2)}
+          getRecordNodeId={(record, column) => String(record[column.id])}
+          getRecordNodeLabel={(record, column) => String(record[`${column.id}Label`])}
+        >
+          <SankeyChart />
+        </Sankey>,
+      );
+    }
+
+    it('shows the description when the node receives focus', async () => {
+      renderDescribedNode();
+      const node = await screen.findByLabelText(nodeLabel);
+
+      fireEvent.focus(node);
+
+      expect(screen.getByRole('tooltip', { name: tooltipLabel })).not.toBeNull();
+    });
+
+    it('shows the description when the node is hovered', async () => {
+      renderDescribedNode();
+      const node = await screen.findByLabelText(nodeLabel);
+
+      fireEvent.mouseEnter(node);
+
+      expect(screen.getByRole('tooltip', { name: tooltipLabel }).textContent).toContain(description);
+    });
+
+    it('keeps the description and ribbons active when the pointer leaves a focused node', async () => {
+      const { container } = renderDescribedNode();
+      const node = await screen.findByLabelText(nodeLabel);
+      fireEvent.focus(node);
+      fireEvent.mouseEnter(node);
+
+      fireEvent.mouseLeave(node);
+
+      expect(screen.getByRole('tooltip', { name: tooltipLabel })).not.toBeNull();
+      expect(container.querySelector('svg path[fill-opacity]')?.getAttribute('fill-opacity')).toBe('0.75');
+    });
+
+    it('keeps the description and ribbons active when a hovered node loses focus', async () => {
+      const { container } = renderDescribedNode();
+      const node = await screen.findByLabelText(nodeLabel);
+      fireEvent.mouseEnter(node);
+      fireEvent.focus(node);
+
+      fireEvent.blur(node);
+
+      expect(screen.getByRole('tooltip', { name: tooltipLabel })).not.toBeNull();
+      expect(container.querySelector('svg path[fill-opacity]')?.getAttribute('fill-opacity')).toBe('0.75');
+    });
+  });
+
+  describe('when a node has a long display label', () => {
+    it('truncates the visible text and preserves the full accessible label', async () => {
+      const longLabel = 'Adding a transcript to a workspace with a very descriptive name';
+      const { container } = render(
+        <Sankey
+          data={[{ channel: 'channel-one', channelLabel: longLabel, region: 'eu', regionLabel: 'Europe' }]}
+          columns={columns.slice(0, 2)}
+          getRecordNodeId={(record, column) => String(record[column.id])}
+          getRecordNodeLabel={(record, column) => String(record[`${column.id}Label`])}
+        >
+          <SankeyChart />
+        </Sankey>,
+      );
+
+      await screen.findByText('Adding a transcript to…');
+      expect([...container.querySelectorAll('svg title')].map(title => title.textContent)).toContain(longLabel);
+      expect(screen.getByLabelText(`${longLabel}: 1 trace (100%)`)).not.toBeNull();
+    });
+  });
+
   it('labels each chart column above its nodes', async () => {
     const { container } = render(<Example />);
 
-    await screen.findByText('Search');
+    await screen.findByText('Search', { selector: 'text' });
     const chartLabels = [...container.querySelectorAll('svg text')].map(element => element.textContent);
 
     expect(chartLabels).toEqual(expect.arrayContaining(['Channel', 'Region', 'Outcome']));
@@ -128,18 +306,18 @@ describe('SankeyChart', () => {
     expect(channelLabel?.getAttribute('x')).toBe('163.5');
     const searchLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Search');
     expect(searchLabel?.getAttribute('font-size')).toBe('11');
-    expect(searchLabel?.getAttribute('text-anchor')).toBe('middle');
-    expect(searchLabel?.getAttribute('x')).toBe('163.5');
+    expect(searchLabel?.getAttribute('text-anchor')).toBe('start');
+    expect(searchLabel?.getAttribute('x')).toBe('160');
     expect(Number(searchLabel?.getAttribute('y'))).toBeGreaterThan(Number(channelLabel?.getAttribute('y')) + 16);
     expect(Number(searchLabel?.getAttribute('y'))).toBeLessThan(Number(node?.getAttribute('y')));
     expect(searchLabel?.getAttribute('style')).toBeNull();
     const searchDetails = [...container.querySelectorAll('svg text')].find(
-      element => element.textContent === '3 (75%)' && element.getAttribute('x') === '163.5',
+      element => element.textContent === '3 (75%)' && element.getAttribute('x') === '160',
     );
-    expect(searchDetails?.getAttribute('text-anchor')).toBe('middle');
+    expect(searchDetails?.getAttribute('text-anchor')).toBe('start');
     expect(Number(searchDetails?.getAttribute('y'))).toBeLessThan(Number(node?.getAttribute('y')) - 4);
     const lostLabel = [...container.querySelectorAll('svg text')].find(element => element.textContent === 'Lost');
-    expect(lostLabel?.getAttribute('text-anchor')).toBe('middle');
+    expect(lostLabel?.getAttribute('text-anchor')).toBe('end');
     expect(container.querySelector('svg text[font-size="9.5"]')).not.toBeNull();
   });
 
@@ -159,7 +337,7 @@ describe('SankeyChart', () => {
         </Sankey>,
       );
 
-      await screen.findByText('Search');
+      await screen.findByText('Search', { selector: 'text' });
 
       expect(container.querySelector('svg rect[rx="3"]')?.getAttribute('x')).toBe('24');
     });
@@ -234,9 +412,24 @@ describe('SankeyChart', () => {
   it('keeps every connected ribbon bright while hovering a node label', async () => {
     render(<Example onCurveClick={() => {}} />);
     const curves = await screen.findAllByRole('button', { name: 'Select Sankey curve' });
-    const searchLabel = screen.getByText('Search');
+    const searchLabel = screen.getByText('Search', { selector: 'text' });
 
     fireEvent.mouseEnter(searchLabel);
+
+    expect(curves[0]?.getAttribute('fill-opacity')).toBe('0.75');
+    expect(curves[1]?.getAttribute('fill-opacity')).toBe('0.75');
+    expect(curves[2]?.getAttribute('fill-opacity')).toBe('0.32');
+  });
+
+  it('restores the focused source after the pointer leaves another node', async () => {
+    render(<Example onCurveClick={() => {}} />);
+    const curves = await screen.findAllByRole('button', { name: 'Select Sankey curve' });
+    const searchNode = screen.getByLabelText('Search: 3 traces (75%)');
+    const referralNode = screen.getByLabelText('Referral: 1 trace (25%)');
+
+    fireEvent.focus(searchNode);
+    fireEvent.mouseEnter(referralNode);
+    fireEvent.mouseLeave(referralNode);
 
     expect(curves[0]?.getAttribute('fill-opacity')).toBe('0.75');
     expect(curves[1]?.getAttribute('fill-opacity')).toBe('0.75');
@@ -270,6 +463,44 @@ describe('SankeyChart', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Hide Region' }));
 
     expect(onVisibleColumnIdsChange).toHaveBeenCalledWith(['channel', 'outcome']);
+  });
+
+  describe('when node activation is configured', () => {
+    it('lifts node identity by mouse and keyboard', async () => {
+      const onNodeClick = vi.fn();
+      render(<Example onNodeClick={onNodeClick} />);
+      const searchNode = await screen.findByRole('button', { name: 'Search: 3 traces (75%)' });
+
+      fireEvent.click(searchNode);
+      fireEvent.keyDown(searchNode, { key: 'Enter' });
+      fireEvent.keyDown(searchNode, { key: ' ' });
+
+      expect(onNodeClick).toHaveBeenCalledTimes(3);
+      expect(onNodeClick).toHaveBeenLastCalledWith({
+        column: { id: 'channel', label: 'Channel' },
+        value: 'Search',
+      });
+    });
+
+    it('leaves ineligible nodes noninteractive', async () => {
+      const onNodeClick = vi.fn();
+      render(<Example onNodeClick={onNodeClick} isNodeClickable={selection => selection.value !== 'Referral'} />);
+
+      await screen.findByLabelText('Referral: 1 trace (25%)');
+
+      expect(screen.queryByRole('button', { name: 'Referral: 1 trace (25%)' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Search: 3 traces (75%)' })).not.toBeNull();
+    });
+  });
+
+  describe('when node activation is not configured', () => {
+    it('does not expose nodes as buttons', async () => {
+      render(<Example />);
+
+      await screen.findByLabelText('Search: 3 traces (75%)');
+
+      expect(screen.queryByRole('button', { name: 'Search: 3 traces (75%)' })).toBeNull();
+    });
   });
 
   it('lifts the selected link metadata and contributing records by mouse and keyboard', async () => {

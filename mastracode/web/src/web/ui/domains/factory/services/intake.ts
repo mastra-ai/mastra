@@ -2,21 +2,34 @@
  * Browser-side helpers for the intake source configuration (Settings › Intake).
  *
  * The config is stored per `(org, user)` on the server. GitHub uses
- * `repositoryIds` (connected repository UUIDs); Linear keeps `projectIds`
- * (Linear Project is the external provider concept). `null` id lists mean
+ * `sourceIds` (connected source ids); Linear keeps `sourceIds`
+ * (provider-owned source ids). `null` id lists mean
  * "nothing selected" — nothing syncs until the user picks entries.
  */
 
+export interface IntakeSelection {
+  enabled: boolean;
+  /** Source ids to sync; `null` = nothing selected. */
+  sourceIds: string[] | null;
+}
+
 export interface IntakeConfig {
-  github: {
-    enabled: boolean;
-    /** Connected GitHub repository ids to sync; `null` = nothing selected. */
-    repositoryIds: string[] | null;
-  };
-  linear: {
-    enabled: boolean;
-    /** Linear project ids to sync; `null` = nothing selected. */
-    projectIds: string[] | null;
+  github: IntakeSelection;
+  linear: IntakeSelection;
+}
+
+/**
+ * The server keeps intake config as a dynamic map keyed by integration id and
+ * only returns the integrations registered in the running deployment, so a key
+ * is absent whenever that integration isn't connected. Fill the fixed shape the
+ * UI relies on so reads like `config.github.enabled` never touch `undefined`.
+ * GitHub defaults to enabled (issues sync once a repo is picked); Linear stays
+ * off until it's connected and a project is selected.
+ */
+function normalizeIntakeConfig(raw: Partial<Record<string, IntakeSelection>> | null | undefined): IntakeConfig {
+  return {
+    github: raw?.github ?? { enabled: true, sourceIds: null },
+    linear: raw?.linear ?? { enabled: false, sourceIds: null },
   };
 }
 
@@ -37,8 +50,8 @@ async function requestIntakeConfig(baseUrl: string, init?: RequestInit): Promise
     }
     throw new Error(message);
   }
-  const { config } = (await res.json()) as { config: IntakeConfig };
-  return config;
+  const { config } = (await res.json()) as { config?: Partial<Record<string, IntakeSelection>> };
+  return normalizeIntakeConfig(config);
 }
 
 /** Read the caller's intake config (server falls back to the defaults). */

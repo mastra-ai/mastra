@@ -22,6 +22,7 @@ function workItem(overrides: Partial<WorkItem> & Pick<WorkItem, 'id' | 'source'>
     createdAt: '2026-07-17T00:00:00.000Z',
     updatedAt: '2026-07-17T00:00:00.000Z',
     ...rest,
+    revision: rest.revision ?? 1,
   };
 }
 
@@ -32,7 +33,7 @@ describe('Factory work item relationships', () => {
       source: 'github-issue',
       sessions: {
         work: {
-          projectPath: '/worktrees/factory-issue-24',
+          sessionId: '/worktrees/factory-issue-24',
           branch: 'factory/issue-24',
           threadId: 'thread-issue-24',
           startedBy: 'user-1',
@@ -57,7 +58,7 @@ describe('Factory work item relationships', () => {
       source: 'github-issue',
       sessions: {
         work: {
-          projectPath: '/worktrees/factory-shared',
+          sessionId: '/worktrees/factory-shared',
           branch: 'factory/shared',
           threadId: 'thread-shared',
           startedBy: 'user-1',
@@ -81,7 +82,7 @@ describe('Factory work item relationships', () => {
       source: 'github-issue',
       sessions: {
         work: {
-          projectPath: '/worktrees/factory-issue-24',
+          sessionId: '/worktrees/factory-issue-24',
           branch: 'factory/issue-24',
           threadId: 'thread-issue-24',
           startedBy: 'user-1',

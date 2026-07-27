@@ -27,7 +27,7 @@ export function useSaveIntakeConfigMutation() {
     mutationFn: (config: IntakeConfig) => saveIntakeConfig(baseUrl, config),
     onSuccess: saved => {
       queryClient.setQueryData(queryKeys.intakeConfig(), saved);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.linearIssues() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.linearIssuesAll() });
     },
   });
 }
