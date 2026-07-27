@@ -28,15 +28,15 @@ function ExperimentNameCell({ experiment }: { experiment: DatasetExperiment }) {
   if (!experiment.name) {
     return (
       <DataList.Cell height="compact" className="min-w-0">
-        <span className="block truncate text-ui-smd font-mono text-neutral3">{id}</span>
+        <span className="text-ui-smd text-neutral3 block truncate font-mono">{id}</span>
       </DataList.Cell>
     );
   }
 
   const label = (
     <span className="flex min-w-0 flex-col gap-0.5 py-0.5 text-left">
-      <span className="block truncate text-ui-md text-neutral4">{experiment.name}</span>
-      <span className="block truncate text-ui-sm font-mono text-neutral2">{id}</span>
+      <span className="text-ui-md text-neutral4 block truncate">{experiment.name}</span>
+      <span className="text-ui-sm text-neutral2 block truncate font-mono">{id}</span>
     </span>
   );
 

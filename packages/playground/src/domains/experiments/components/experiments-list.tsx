@@ -19,13 +19,13 @@ function ExperimentNameCell({ experiment }: { experiment: DatasetExperiment }) {
   const shortId = getShortId(experiment.id) ?? experiment.id;
 
   if (!experiment.name) {
-    return <span className="block truncate font-mono text-neutral4">{shortId}</span>;
+    return <span className="text-neutral4 block truncate font-mono">{shortId}</span>;
   }
 
   const label = (
     <span className="flex min-w-0 flex-col gap-0.5 py-0.5 text-left">
-      <span className="block truncate text-neutral4">{experiment.name}</span>
-      <span className="block truncate font-mono text-ui-sm text-neutral2">{shortId}</span>
+      <span className="text-neutral4 block truncate">{experiment.name}</span>
+      <span className="text-ui-sm text-neutral2 block truncate font-mono">{shortId}</span>
     </span>
   );
 

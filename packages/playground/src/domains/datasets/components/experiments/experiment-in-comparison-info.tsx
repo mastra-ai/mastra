@@ -44,7 +44,7 @@ export function ExperimentInComparisonInfo({ datasetId, experiment, type }: Expe
 
   const experimentLink = (
     <Button as={Link} href={`/datasets/${datasetId}/experiments/${experiment.id}`}>
-      <span className="truncate min-w-0">{displayName}</span>
+      <span className="min-w-0 truncate">{displayName}</span>
     </Button>
   );
 
