@@ -137,6 +137,7 @@ export function useWorkflowDraft(
       candidate?: WorkflowDraftCandidate,
       onCandidateChange?: (candidate: WorkflowDraftCandidate) => void,
       getToolBlockReason?: (toolId: string) => string | undefined,
+      autoFinalizeRepair?: boolean,
     ) =>
       createWorkflowDraftTools({
         getState: () => stateRef.current,
@@ -150,6 +151,7 @@ export function useWorkflowDraft(
         validationContext,
         isCurrentGeneration,
         getToolBlockReason,
+        autoFinalizeRepair,
         onResult,
         onCandidateChange,
       }),

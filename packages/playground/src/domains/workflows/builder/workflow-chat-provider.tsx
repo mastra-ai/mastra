@@ -35,6 +35,7 @@ export interface WorkflowChatProviderProps {
     candidate?: WorkflowDraftCandidate,
     onCandidateChange?: (candidate: WorkflowDraftCandidate) => void,
     getToolBlockReason?: (toolId: string) => string | undefined,
+    autoFinalizeRepair?: boolean,
   ) => ClientToolsInput;
   onGenerationFailure?: (failure: WorkflowGenerationFailure | null) => void;
   onCandidateChange?: (candidate: WorkflowDraftCandidate | undefined) => void;
@@ -127,7 +128,10 @@ function WorkflowChatSession({
         }
         if (isCheckpoint) generationStateRef.current.phase = 'checkpointed';
         if (isMutation) generationStateRef.current.phase = 'repairing';
-        if (isFinalize) {
+        if (
+          isFinalize ||
+          (toolId === 'checkpoint-workflow-candidate' && result.finalizedRevision === result.revision)
+        ) {
           generationStateRef.current.finalized = true;
           generationStateRef.current.phase = 'finalized';
         }
@@ -194,6 +198,7 @@ function WorkflowChatSession({
       candidate,
       updateCandidate,
       getToolBlockReason,
+      true,
     );
   }, [createTools, failGeneration, onGenerationFailure, updateCandidate]);
 

@@ -315,6 +315,7 @@ export interface WorkflowDraftToolStore {
   validationContext?: WorkflowDraftValidationContext;
   isCurrentGeneration?: () => boolean;
   getToolBlockReason?: (toolId: string) => string | undefined;
+  autoFinalizeRepair?: boolean;
   onResult?: (event: WorkflowDraftToolResult) => void;
   onCandidateChange?: (candidate: WorkflowDraftCandidate) => void;
 }
@@ -611,6 +612,17 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
         }
         publishCandidate();
         if (store.isCurrentGeneration?.() === false) return supersededResult;
+        if (result.ok && store.autoFinalizeRepair) {
+          await Promise.resolve();
+          if (store.isCurrentGeneration?.() === false) return supersededResult;
+          const finalized = store.finalize(result.state.revision);
+          if (!finalized.ok) {
+            candidate.issues = finalized.issues ?? [];
+            publishCandidate();
+          }
+          if (store.isCurrentGeneration?.() === false) return supersededResult;
+          return reportResult(store, 'checkpoint-workflow-candidate', finalized);
+        }
         return result.ok
           ? reportResult(store, 'checkpoint-workflow-candidate', result)
           : reportCandidateResult('checkpoint-workflow-candidate', result);

@@ -36,6 +36,7 @@ function createStore(
   isCurrentGeneration?: () => boolean,
   onResult?: (event: WorkflowDraftToolResult) => void,
   validationContext?: WorkflowDraftValidationContext,
+  autoFinalizeRepair?: boolean,
 ) {
   let state = createWorkflowDraftAuthoringState(id);
   const apply = (result: ReturnType<typeof checkpointWorkflowDraft>) => {
@@ -54,6 +55,7 @@ function createStore(
         mutateWorkflowDraftAuthoringState(candidateState, expectedRevision, mutation),
       validationContext,
       isCurrentGeneration,
+      autoFinalizeRepair,
       onResult,
     }),
   };
@@ -194,6 +196,62 @@ describe('workflow draft client tools', () => {
         { type: 'mapping', id: 'shape-input', mapConfig: JSON.stringify({ email: { value: 'ada@example.com' } }) },
         { type: 'tool', id: 'lookup', toolId: 'lookupCustomer' },
       ]);
+    });
+
+    it('automatically finalizes the exact accepted revision after a repair checkpoint when provider control is enabled', async () => {
+      const store = createStore('new-workflow', undefined, undefined, availableValidationContext, true);
+      await executeTool(store.tools['checkpoint-workflow-draft'], {
+        id: 'new-workflow',
+        inputSchema: {
+          type: 'object',
+          properties: { email: { type: 'string' } },
+          required: ['email'],
+          additionalProperties: false,
+        },
+        outputSchema: {
+          type: 'object',
+          properties: { customerId: { type: 'string' } },
+          required: ['customerId'],
+          additionalProperties: false,
+        },
+        graph: [{ type: 'tool', id: 'lookup', toolId: 'lookupCustomer' }],
+      });
+      await executeTool(store.tools['update-workflow-step'], {
+        stepId: 'lookup',
+        step: { type: 'tool', id: 'lookup', toolId: 'lookupCustomer', options: { retries: 1 } },
+      });
+
+      const result = await executeTool(store.tools['checkpoint-workflow-candidate'], { candidateRevision: 1 });
+
+      expect(result).toMatchObject({ success: true, lifecycle: 'ready', revision: 2, finalizedRevision: 2 });
+      expect(store.state).toMatchObject({ lifecycle: 'ready', revision: 2, finalizedRevision: 2 });
+    });
+
+    it('preserves the accepted repair checkpoint when its automatic finalize is superseded', async () => {
+      let freshnessChecks = 0;
+      const store = createStore(
+        'new-workflow',
+        () => ++freshnessChecks < 7,
+        undefined,
+        availableValidationContext,
+        true,
+      );
+      await executeTool(store.tools['checkpoint-workflow-draft'], {
+        id: 'new-workflow',
+        inputSchema: {},
+        outputSchema: {},
+        graph: [{ type: 'tool', id: 'lookup', toolId: 'lookupCustomer' }],
+      });
+      await executeTool(store.tools['update-workflow-step'], {
+        stepId: 'lookup',
+        step: { type: 'tool', id: 'lookup', toolId: 'lookupCustomer', options: { retries: 1 } },
+      });
+
+      const result = await executeTool(store.tools['checkpoint-workflow-candidate'], { candidateRevision: 1 });
+
+      expect(result).toEqual({ success: false, error: 'Submission was superseded.' });
+      expect(store.state).toMatchObject({ lifecycle: 'constructing', revision: 2 });
+      expect(store.state).not.toHaveProperty('finalizedRevision');
     });
 
     it('sets canonical predicates by branch step ID while preserving the accepted revision until checkpoint', async () => {

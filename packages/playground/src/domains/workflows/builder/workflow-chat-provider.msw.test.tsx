@@ -224,7 +224,9 @@ describe('WorkflowChatProvider', () => {
         ),
       );
       let reportResult: ((event: WorkflowDraftToolResult) => void) | undefined;
+      let isCurrentGeneration: (() => boolean) | undefined;
       let canExecute: ((toolId: string) => string | undefined) | undefined;
+      let autoFinalizeRepair = false;
 
       render(
         <Providers>
@@ -232,9 +234,11 @@ describe('WorkflowChatProvider', () => {
             threadId="workflow-builder-phase-enforcement"
             authoringState={createWorkflowDraftAuthoringState('phase-enforcement')}
             initialMessages={[]}
-            createTools={(_, onResult, __, ___, toolGuard) => {
+            createTools={(isCurrent, onResult, __, ___, toolGuard, shouldAutoFinalizeRepair) => {
+              isCurrentGeneration = isCurrent;
               reportResult = onResult;
               canExecute = toolGuard;
+              autoFinalizeRepair = shouldAutoFinalizeRepair ?? false;
               return {};
             }}
           >
@@ -280,12 +284,12 @@ describe('WorkflowChatProvider', () => {
         });
         reportResult?.({
           toolId: 'checkpoint-workflow-candidate',
-          result: { success: true, lifecycle: 'constructing', revision: 2, candidateRevision: 0 },
+          result: { success: true, lifecycle: 'ready', revision: 2, finalizedRevision: 2, candidateRevision: 0 },
         });
       });
 
-      expect(canExecute?.('finalize-workflow-draft')).toBeUndefined();
-      expect(canExecute?.('checkpoint-workflow-draft')).toContain('Call finalize-workflow-draft');
+      expect(autoFinalizeRepair).toBe(true);
+      expect(isCurrentGeneration?.()).toBe(false);
     });
   });
 
