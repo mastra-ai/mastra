@@ -31,11 +31,8 @@ function fakeStorage(): LibSQLFactoryStorage {
  * mocked — full-boot coverage lives in `../mastra/index.test.ts`.
  */
 
-/** The controller the mocked SDK mount hands back, so tests can observe what the factory attaches to it. */
-const mountedController = vi.hoisted(() => ({ setChannels: vi.fn() }));
-
 const prepareMock = vi.fn(async (config: Record<string, unknown>) => ({
-  base: { controller: mountedController },
+  base: '/agents',
   mastraArgs: { __capturedConfig: config },
   finalize: vi.fn(async () => {}),
 }));
@@ -317,19 +314,6 @@ describe('MastraFactory.prepare', () => {
     const config = await prepareFactory({ storage: fakeStorage(), pubsub });
     expect(config.pubsub).toBe(pubsub);
     expect(config.crossProcessPubSub).toBe(true);
-  });
-
-  it('attaches configured channels to the mounted controller', async () => {
-    const channels = { __brand: 'channels' } as never;
-    await prepareFactory({ storage: fakeStorage(), channels });
-    // Attached during prepare() — `new Mastra(...)` is what initializes
-    // channels, so wiring them after prepare() would silently never start.
-    expect(mountedController.setChannels).toHaveBeenCalledExactlyOnceWith(channels);
-  });
-
-  it('leaves the controller channel-less when no channels are configured', async () => {
-    await prepareFactory({ storage: fakeStorage() });
-    expect(mountedController.setChannels).not.toHaveBeenCalled();
   });
 
   it('calls provider.init once with the factory context', async () => {

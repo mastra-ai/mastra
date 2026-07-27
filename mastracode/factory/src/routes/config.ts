@@ -1099,8 +1099,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
             if (!resourceId) return c.json({ config: readStoredOMConfig(record) });
 
+            // Session sync is best-effort: the stored row is authoritative and
+            // new sessions hydrate from it, so a resourceId without a live
+            // session (e.g. settings page after a restart) still reads the
+            // stored config instead of failing.
             const session = await controller.getSessionByResource?.(resourceId, scope);
-            if (!session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
+            if (!session) return c.json({ config: readStoredOMConfig(record) });
             await hydrateSessionMemorySettings(session, record);
             return c.json({ config: readOMConfig(session) });
           } catch (error) {
@@ -1134,8 +1138,9 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           });
           if ('response' in context) return context.response;
           try {
+            // Best-effort session sync: persist regardless, apply to the live
+            // session only when one exists for the resourceId.
             const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
-            if (resourceId && !session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
             const otherRole = session ? (role === 'observer' ? session.om.reflector : session.om.observer) : undefined;
             const otherRoleCurrentModelId = otherRole?.modelId() ?? null;
             await session?.om[role].switchModel({ modelId });
@@ -1195,8 +1200,9 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           });
           if ('response' in context) return context.response;
           try {
+            // Best-effort session sync: persist regardless, apply to the live
+            // session only when one exists for the resourceId.
             const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
-            if (resourceId && !session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
             if (observation !== undefined && session) {
               await session.state.set({ observationThreshold: observation });
               await session.thread.setSetting({ key: 'observationThreshold', value: observation });
@@ -1243,8 +1249,9 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           });
           if ('response' in context) return context.response;
           try {
+            // Best-effort session sync: persist regardless, apply to the live
+            // session only when one exists for the resourceId.
             const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
-            if (resourceId && !session) return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
             if (session) {
               await session.state.set({ observeAttachments: value });
               await session.thread.setSetting({ key: 'observeAttachments', value });

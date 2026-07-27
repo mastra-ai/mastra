@@ -946,25 +946,6 @@ function BoardContent({
                         },
                       })
                     }
-                    onOpenSession={() =>
-                      start.mutate({
-                        branch: candidate.branch,
-                        threadTitle: candidate.threadTitle,
-                        workItem: {
-                          role: 'chat',
-                          stages: [candidate.column],
-                          source: candidate.source,
-                          sourceKey: candidate.sourceKey,
-                          parentWorkItemId:
-                            candidate.source === 'github-pr'
-                              ? inferredParentWorkItemId(candidate.metadata, allWorkItems)
-                              : undefined,
-                          title: candidate.title,
-                          url: candidate.url,
-                          metadata: candidate.metadata,
-                        },
-                      })
-                    }
                     onFile={() => handleDrop({ kind: 'candidate', candidate }, candidate.column)}
                     onTriage={candidate.issue ? () => triage.mutate(candidate.issue!) : undefined}
                   />
@@ -1386,7 +1367,7 @@ function WorkItemCard({
   retryingDecisionId?: string;
   onRetryDecision: (decisionId: string) => void;
   pendingRunRoles: ReadonlyMap<string, FactoryRunPhase | undefined>;
-  /** Title click when the card has no live session: open an empty session (no run). */
+  /** Card click fallback when the item has no run spec: open an empty session (no run). */
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onStartRun: (spec: ItemRunSpec, action: RunAction) => void;
   onMove: (toStage: string) => void;
@@ -1436,14 +1417,25 @@ function WorkItemCard({
           className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
         />
       ) : (
+        // Card click starts the default run (first unused action, e.g. Review
+        // for PRs) so clicking a card kicks off its work; cards with no run
+        // spec fall back to opening a plain chat session on the item's branch.
         <button
           type="button"
           draggable={false}
           disabled={runDisabled}
           aria-busy={pendingRunRoles.size > 0 || undefined}
-          aria-label={`Create thread for ${item.title}`}
+          aria-label={
+            runSpec !== null && runActions[0] !== undefined
+              ? `${runActions[0].label} ${item.title}`
+              : `Create thread for ${item.title}`
+          }
           className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
-          onClick={() => onCreateSession(itemSessionSpec(item))}
+          onClick={() =>
+            runSpec !== null && runActions[0] !== undefined
+              ? onStartRun(runSpec, runActions[0])
+              : onCreateSession(itemSessionSpec(item))
+          }
         />
       )}
       <div className="absolute top-2 right-2 z-20">
@@ -1590,7 +1582,6 @@ function CandidateCard({
   triageStarting,
   disabled,
   onRun,
-  onOpenSession,
   onFile,
   onTriage,
 }: {
@@ -1600,8 +1591,6 @@ function CandidateCard({
   disabled: boolean;
   /** Start a run; `prompt` undefined = the action's default prompt. */
   onRun: (action: RunAction, prompt?: string) => void;
-  /** Title click: materialize the card + open an empty session (no run). */
-  onOpenSession: () => void;
   /** File the candidate onto the board without starting a run. */
   onFile: () => void;
   /** Run first-contact issue triage without leaving the board. */
@@ -1638,7 +1627,9 @@ function CandidateCard({
             type="button"
             disabled={disabled}
             aria-busy={pendingRunRoles.has(defaultAction.role) || undefined}
-            onClick={onOpenSession}
+            // Title click starts the default run — same as the primary action
+            // button — so clicking a candidate always kicks off its work.
+            onClick={() => onRun(defaultAction)}
             className="text-ui-smd text-icon6 min-w-0 flex-1 truncate text-left font-semibold hover:underline disabled:opacity-60"
           >
             <SourceTitle source={candidate.source} title={candidate.title} />
