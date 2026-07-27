@@ -513,3 +513,68 @@ describe('transcript reducer error notices', () => {
     expect(errorNoticeText({ error: {} })).toBe('Run failed with an unknown error. Check the server logs for details.');
   });
 });
+
+describe('live user-signal events render the same as their persisted copy', () => {
+  const payload = {
+    id: 'sig-1',
+    type: 'user',
+    tagName: 'user',
+    contents: 'hello from slack',
+    createdAt: '2026-07-27T16:00:00.000Z',
+  };
+
+  /** The live event shape: signal payload as one data part, text inside `data.contents`. */
+  function liveUserSignal(): MastraDBMessage {
+    return {
+      id: 'sig-1',
+      role: 'signal',
+      createdAt: new Date(payload.createdAt),
+      content: {
+        format: 2,
+        parts: [{ type: 'data-user-message', data: payload }] as unknown as MastraMessagePart[],
+        metadata: { signal: payload },
+      },
+    };
+  }
+
+  function firstEntryParts(state: ReturnType<typeof createInitialTranscript>) {
+    const entry = state.entries.find(e => 'id' in e && e.id === 'sig-1');
+    return messageParts(entry);
+  }
+
+  it('gives the live data-user-message event a drawable text part', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: liveUserSignal() } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: liveUserSignal() } });
+
+    expect(firstEntryParts(state)).toEqual([{ type: 'text', text: 'hello from slack' }]);
+  });
+
+  it('does not blank the row when the live event replaces an already-rendered one', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+
+    // Persisted-shaped copy first, then the live data-part copy with the same id.
+    const persisted = signalMessage({ id: 'sig-1', type: 'user', tagName: 'user', text: 'hello from slack' });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: persisted } });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: liveUserSignal() } });
+
+    expect(firstEntryParts(state)).toEqual([{ type: 'text', text: 'hello from slack' }]);
+  });
+
+  it('leaves a persisted user signal untouched', () => {
+    const persisted = signalMessage({ id: 'sig-1', type: 'user', tagName: 'user', text: 'hello from slack' });
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: persisted } });
+
+    expect(firstEntryParts(state)).toEqual([{ type: 'text', text: 'hello from slack' }]);
+  });
+
+  it('keeps non-user signals alone', () => {
+    const reminder = signalMessage({ id: 'sig-2', type: 'system-reminder', tagName: 'reminder', text: 'stay on task' });
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: reminder } });
+
+    const entry = state.entries.find(e => 'id' in e && e.id === 'sig-2');
+    expect(messageParts(entry)).toEqual([{ type: 'text', text: 'stay on task' }]);
+  });
+});

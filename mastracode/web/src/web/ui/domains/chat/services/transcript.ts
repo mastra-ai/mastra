@@ -630,6 +630,48 @@ function prependOlderMessages(state: TranscriptState, messages: MastraDBMessage[
   return { ...state, entries: [...messagesToEntries(olderMessages), ...state.entries] };
 }
 
+/**
+ * A user signal reaches us in two shapes. The persisted message carries ordinary
+ * `text` parts, but the live `data-user-message` event carries the signal payload
+ * as a single data part and keeps the text inside `data.contents`. Only the first
+ * shape has a part the transcript knows how to draw, so a message that arrived
+ * from a channel rendered as an empty row until the thread was refetched.
+ *
+ * Project the data part onto the persisted shape so both paths render the same
+ * row — and so the live row does not visibly change when history catches up.
+ */
+function withRenderableSignalText(message: MastraDBMessage): MastraDBMessage {
+  const parts = message.content.parts ?? [];
+  const hasDrawableText = parts.some(part => part.type === 'text' && part.text.trim().length > 0);
+  if (hasDrawableText) return message;
+
+  const text = parts
+    .map(part => (part.type === 'data-user-message' ? signalContentsToText((part as { data?: unknown }).data) : ''))
+    .filter(Boolean)
+    .join('\n');
+  if (!text) return message;
+
+  return { ...message, content: { ...message.content, parts: [{ type: 'text', text }] } };
+}
+
+/** Signal `contents` is either a bare string or the array form produced by `partsToSignalContents`. */
+function signalContentsToText(data: unknown): string {
+  if (!data || typeof data !== 'object') return '';
+  const contents = (data as { contents?: unknown }).contents;
+  if (typeof contents === 'string') return contents;
+  if (!Array.isArray(contents)) return '';
+  return contents
+    .map(entry => {
+      if (typeof entry === 'string') return entry;
+      if (entry && typeof entry === 'object' && typeof (entry as { text?: unknown }).text === 'string') {
+        return (entry as { text: string }).text;
+      }
+      return '';
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
 function toMessageEntry(
   message: MastraDBMessage,
   options: { streaming?: boolean; steer?: boolean; runtimeTools?: Record<string, ToolCall> } = {},
@@ -644,7 +686,8 @@ function toMessageEntry(
     signal?.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
       ? (signal.attributes as Record<string, unknown>)
       : undefined;
-  const displayMessage = isUserSignal ? { ...message, role: 'user' as const } : message;
+  const normalized = isUserSignal ? withRenderableSignalText(message) : message;
+  const displayMessage = isUserSignal ? { ...normalized, role: 'user' as const } : normalized;
 
   return {
     kind: 'message',
