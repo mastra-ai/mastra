@@ -139,6 +139,32 @@ program
   .option('--debug', 'Enable debug logs', false)
   .action(startDevServer);
 
+const factoryCommand = program.command('factory').description('Manage Mastra Factory');
+
+factoryCommand
+  .command('dev')
+  .description('Start mastra server')
+  .option('-d, --dir <dir>', 'Path to your mastra folder')
+  .option('-r, --root <root>', 'Path to your root folder')
+  .option('-t, --tools <toolsDirs>', 'Comma-separated list of paths to tool files to include')
+  .option('-e, --env <env>', 'Custom env file to include in the dev server')
+  .option(
+    '-i, --inspect [host:port]',
+    'Start the dev server in inspect mode (optional: [host:]port, e.g., 0.0.0.0:9229)',
+  )
+  .option(
+    '-b, --inspect-brk [host:port]',
+    'Start the dev server in inspect mode and break at the beginning of the script (optional: [host:]port)',
+  )
+  .option(
+    '-c, --custom-args <args>',
+    'Comma-separated list of custom arguments to pass to the dev server. IE: --experimental-transform-types',
+  )
+  .option('-s, --https', 'Enable local HTTPS')
+  .option('--request-context-presets <file>', 'Path to request context presets JSON file')
+  .option('--debug', 'Enable debug logs', false)
+  .action(args => startDevServer({ ...args, factory: true }));
+
 program
   .command('build')
   .description('Build your Mastra project')

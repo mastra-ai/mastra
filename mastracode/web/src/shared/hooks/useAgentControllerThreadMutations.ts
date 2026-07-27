@@ -33,38 +33,6 @@ export function useCreateAgentControllerThreadMutation(args: AgentControllerThre
   });
 }
 
-export function useDeleteAgentControllerThreadMutation(args: AgentControllerThreadMutationArgs) {
-  const { session } = createAgentControllerClient(args);
-  const invalidateThreads = useThreadMutationInvalidation(args);
-
-  return useMutation({
-    mutationFn: (threadId: string) => requireAgentControllerSession(session).deleteThread(threadId),
-    onSuccess: invalidateThreads,
-  });
-}
-
-export function useRenameAgentControllerThreadMutation(args: AgentControllerThreadMutationArgs) {
-  const { session } = createAgentControllerClient(args);
-  const invalidateThreads = useThreadMutationInvalidation(args);
-
-  return useMutation({
-    mutationFn: ({ threadId, title }: { threadId: string; title: string }) =>
-      requireAgentControllerSession(session).renameThread(threadId, title),
-    onSuccess: invalidateThreads,
-  });
-}
-
-export function useCloneAgentControllerThreadMutation(args: AgentControllerThreadMutationArgs) {
-  const { session } = createAgentControllerClient(args);
-  const invalidateThreads = useThreadMutationInvalidation(args);
-
-  return useMutation({
-    mutationFn: (options?: { sourceThreadId?: string; title?: string }) =>
-      requireAgentControllerSession(session).cloneThread(options),
-    onSuccess: invalidateThreads,
-  });
-}
-
 export function useSwitchAgentControllerThreadMutation(args: AgentControllerThreadMutationArgs) {
   const { agentControllerId, resourceId, scope } = args;
   const queryClient = useQueryClient();

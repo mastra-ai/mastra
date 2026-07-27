@@ -97,7 +97,9 @@ export type WorkspaceSandboxResolver = (context: {
  * custom text from `requestContext` without resolving.
  */
 export type DynamicSandboxInstructions =
-  'placeholder' | 'resolve' | ((context: { requestContext: RequestContext }) => string);
+  | 'placeholder'
+  | 'resolve'
+  | ((context: { requestContext: RequestContext }) => string);
 
 /**
  * Produces a stable cache key (e.g. a thread or tenant id) for a resolver-backed

@@ -1,15 +1,12 @@
 import { useMutation, useMutationState, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router';
+import { useState } from 'react';
+import { useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { prepareWorkspaceSkill } from '../../web/ui/domains/chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../web/ui/domains/chat/services/constants';
-// Deep imports (not the workspaces barrel) to avoid provider/component cycles.
-import { useActiveFactoryContext } from '../../web/ui/domains/workspaces/context/ActiveFactoryProvider';
-import { deriveProjectPath, useCreateWorkspaceMutation } from './useWorkspaces';
-import type { Factory } from '../../web/ui/domains/workspaces/services/factories';
-import { isServerFactory } from '../../web/ui/domains/workspaces/services/factories';
+import { createUserSession } from '../../web/ui/domains/workspaces/services/github';
+import { useFactoryQuery } from './useFactories';
 import { startFactoryRun } from '../../web/ui/domains/factory/services/workItems';
 import type { WorkItemSource } from '../../web/ui/domains/factory/services/workItems';
 
@@ -28,15 +25,26 @@ export interface StartFactoryRunWorkItem {
 }
 
 export type FactoryRunInvocation =
-  { type: 'prompt'; prompt: string } | { type: 'skill'; skillName: string; arguments: string };
+  | { type: 'prompt'; prompt: string }
+  | { type: 'skill'; skillName: string; arguments: string };
 
 const factoryRunMutationKey = (resourceId: string, projectId: string | undefined) =>
   ['factory', 'start-run', resourceId, projectId] as const;
+
+/** Kickoff step the run is currently in, so cards can narrate the wait. */
+export type FactoryRunPhase = 'workspace' | 'kickoff' | 'opening';
 
 export interface PendingFactoryRun {
   id?: string;
   sourceKey: string | null;
   role: string;
+  /** Missing when the run was started by another hook instance. */
+  phase?: FactoryRunPhase;
+}
+
+/** Stable key identifying one card's run across the kickoff phases. */
+function runPhaseKey(run: { id?: string; sourceKey: string | null; role: string }): string {
+  return `${run.sourceKey ?? run.id ?? ''}:${run.role}`;
 }
 
 function toPendingFactoryRun(value: unknown): PendingFactoryRun | undefined {
@@ -61,60 +69,46 @@ export interface StartFactoryRunInput {
 }
 
 /**
- * Materialize the worktree in the browser, then hand session/thread creation,
+ * Create the durable Factory session, then hand session/thread creation,
  * binding, board persistence, and kickoff delivery to the server coordinator.
  * The coordinator commits exact authority before it dispatches any message.
  */
 export function useStartFactoryRun() {
-  const { activeFactory, resourceId, sessionEnabled } = useActiveFactoryContext();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const factoryQuery = useFactoryQuery(factoryId);
   const { baseUrl } = useApiConfig();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-
-  const createWorkspace = useCreateWorkspaceMutation(activeFactory, {
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-  });
+  const repository = factoryQuery.data?.repositories[0];
+  const [phases, setPhases] = useState<Record<string, FactoryRunPhase>>({});
 
   const mutation = useMutation({
-    mutationKey: factoryRunMutationKey(resourceId, activeFactory?.id),
+    mutationKey: factoryRunMutationKey(repository?.projectRepositoryId ?? '', factoryId),
     mutationFn: async ({ branch, threadTitle, threadTags, invocation, workItem }: StartFactoryRunInput) => {
-      const updatedFactory = await createWorkspace.mutateAsync(branch);
-      queryClient.setQueryData(queryKeys.factories(), (factories: Factory[] | undefined) =>
-        factories?.map(factory => (factory.id === updatedFactory.id ? updatedFactory : factory)),
-      );
-      const projectPath = deriveProjectPath(updatedFactory);
-      if (!projectPath) throw new Error('Could not resolve the new worktree path');
-      const factoryProjectId =
-        activeFactory && isServerFactory(activeFactory) ? activeFactory.binding.factoryProjectId : undefined;
-      if (!factoryProjectId || !workItem) throw new Error('Factory run requires a board work item');
+      if (!factoryId || !workItem) throw new Error('Factory run requires a board work item');
+      if (!repository) throw new Error('Select a repository before starting a Factory run');
+      const phaseKey = runPhaseKey({ id: workItem.id, sourceKey: workItem.sourceKey, role: workItem.role });
+      const setPhase = (phase: FactoryRunPhase) => setPhases(current => ({ ...current, [phaseKey]: phase }));
 
-      let kickoffMessage: string | null = null;
-      if (invocation?.type === 'skill') {
-        const skillArguments = `${invocation.arguments.trim()}\n\nPrepared workspace context:\n- Worktree: ${projectPath}\n- Branch: ${branch}`;
-        const prepared = await prepareWorkspaceSkill({
-          agentControllerId: AGENT_CONTROLLER_ID,
-          resourceId,
-          scope: projectPath,
-          name: invocation.skillName,
-          arguments: skillArguments,
-          baseUrl,
-        });
-        kickoffMessage = prepared.message;
-      } else if (invocation) {
-        kickoffMessage = invocation.prompt;
-      }
-
+      setPhase('workspace');
+      const userSession = await createUserSession(baseUrl, repository.projectRepositoryId, branch);
+      const sessionId = userSession.sessionId;
       const desiredStage = workItem.stages.length === 1 ? workItem.stages[0] : undefined;
       if (!desiredStage) throw new Error('Factory runs require one exclusive destination stage');
-      const prepared = await startFactoryRun(baseUrl, factoryProjectId, {
-        resourceId,
-        projectPath,
-        branch,
+
+      setPhase('kickoff');
+      const prepared = await startFactoryRun(baseUrl, factoryId, {
+        sessionId,
         threadTitle,
         threadTags,
         kickoffKey: crypto.randomUUID(),
-        kickoffMessage,
+        invocation:
+          invocation?.type === 'skill'
+            ? {
+                ...invocation,
+                arguments: `${invocation.arguments.trim()}\n\nPrepared workspace context:\n- Session: ${sessionId}\n- Branch: ${userSession.branch}`,
+              }
+            : invocation,
         destinationStage: desiredStage as 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done',
         workItem: {
           id: workItem.id,
@@ -131,20 +125,35 @@ export function useStartFactoryRun() {
         },
       });
 
+      setPhase('opening');
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, resourceId, projectPath),
+          queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, sessionId, undefined),
         }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryId) }),
       ]);
-      void navigate(`/threads/${prepared.threadId}`);
+      void navigate(`/factories/${factoryId}/workspaces/${sessionId}/threads/${prepared.threadId}`);
+    },
+    onSettled: (_result, _error, { workItem }) => {
+      if (!workItem) return;
+      const phaseKey = runPhaseKey({ id: workItem.id, sourceKey: workItem.sourceKey, role: workItem.role });
+      setPhases(current => {
+        if (!(phaseKey in current)) return current;
+        const { [phaseKey]: _cleared, ...rest } = current;
+        return rest;
+      });
     },
   });
 
   const pendingRuns = useMutationState({
-    filters: { mutationKey: factoryRunMutationKey(resourceId, activeFactory?.id), status: 'pending' },
+    filters: {
+      mutationKey: factoryRunMutationKey(repository?.projectRepositoryId ?? '', factoryId),
+      status: 'pending',
+    },
     select: pending => toPendingFactoryRun(pending.state.variables),
-  }).filter(run => run !== undefined);
+  })
+    .filter(run => run !== undefined)
+    .map(run => ({ ...run, phase: phases[runPhaseKey(run)] }));
 
-  return { start: mutation, pendingRuns, enabled: sessionEnabled };
+  return { start: mutation, pendingRuns, enabled: Boolean(factoryId && repository) };
 }

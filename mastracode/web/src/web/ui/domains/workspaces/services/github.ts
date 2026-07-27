@@ -13,6 +13,8 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
+export const USER_SESSION_BRANCH_PREFIX = 'user/';
+
 export interface GithubInstallation {
   installationId: number;
   accountLogin: string | null;
@@ -21,12 +23,16 @@ export interface GithubInstallation {
 
 /** Reason the GitHub feature is in its current state, returned by the server. */
 export type GithubStatusReason =
-  'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready';
+  | 'missing_config'
+  | 'auth_required'
+  | 'organization_required'
+  | 'not_connected'
+  | 'ready';
 
 /** Non-secret diagnostic snapshot of every GitHub feature gate. */
 export interface GithubFeatureDiagnostics {
   githubAppConfigured: boolean;
-  webAuthEnabled: boolean;
+  factoryAuthEnabled: boolean;
   appDbConfigured: boolean;
   stateSecretConfigured: boolean;
   sandboxEnabled: boolean;
@@ -50,6 +56,14 @@ export interface GithubStatus {
   organizationRequired?: boolean;
   /** Machine-readable reason for the current state; see {@link GithubStatusReason}. */
   reason?: GithubStatusReason;
+  /**
+   * Whether the signed-in user has personally authorized the GitHub App, so
+   * issues/PRs they originate are authored as them instead of the App bot.
+   * Absent on older servers that predate per-user connections.
+   */
+  userConnected?: boolean;
+  /** GitHub username backing the personal connection, when connected. */
+  userGithubUsername?: string | null;
   /** Non-secret feature-gate diagnostics from the server. */
   diagnostics?: GithubFeatureDiagnostics;
 }
@@ -92,9 +106,13 @@ export async function fetchGithubStatus(baseUrl: string): Promise<GithubStatus> 
   }
 }
 
+function currentPageRedirectTo(): string {
+  return encodeURIComponent(window.location.pathname);
+}
+
 /** Begin the GitHub App install/connect flow (full-page redirect). */
 export function connectGithub(baseUrl: string): void {
-  window.location.assign(`${baseUrl}/auth/github/connect`);
+  window.location.assign(`${baseUrl}/auth/github/connect?redirectTo=${currentPageRedirectTo()}`);
 }
 
 /**
@@ -104,7 +122,65 @@ export function connectGithub(baseUrl: string): void {
  * instantly and invisibly, which would make the manage button a silent no-op.
  */
 export function manageGithubConnection(baseUrl: string): void {
-  window.location.assign(`${baseUrl}/auth/github/connect?manage=1`);
+  window.location.assign(`${baseUrl}/auth/github/connect?manage=1&redirectTo=${currentPageRedirectTo()}`);
+}
+
+/**
+ * Begin the GitHub App *user authorization* flow for the signed-in user
+ * (full-page redirect). Unlike {@link connectGithub} this never installs the
+ * App into an account — it links the user's own GitHub identity so
+ * factory-originated issues and PRs are authored as them. The flow returns to
+ * the current path with `github_app_user_authorized=true`, and the fresh page
+ * load refetches `/web/github/status`.
+ */
+export function connectUserGithub(baseUrl: string): void {
+  window.location.assign(`${baseUrl}/auth/github/connect-user?redirectTo=${currentPageRedirectTo()}`);
+}
+
+/** `default` = the worker token every sandbox gets; `reviewer` = optional
+ * token review-board sessions use so PR reviews come from another account. */
+export type GithubPatKind = 'default' | 'reviewer';
+
+export interface GithubPatStatus {
+  configured: boolean;
+  reviewerConfigured: boolean;
+}
+
+/**
+ * Which GitHub Personal Access Tokens the org has configured for `gh` CLI
+ * use in sandboxes. The tokens themselves never reach the browser.
+ */
+export async function fetchGithubPatStatus(baseUrl: string): Promise<GithubPatStatus> {
+  const res = await fetch(`${baseUrl}/web/github/pat`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`Failed to load GitHub token status (${res.status})`);
+  return (await res.json()) as GithubPatStatus;
+}
+
+/** Save an org GitHub PAT (used only for `gh` CLI auth in sandboxes). */
+export async function saveGithubPat(baseUrl: string, token: string, kind: GithubPatKind = 'default'): Promise<void> {
+  const res = await fetch(`${baseUrl}/web/github/pat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ token, kind }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => undefined)) as { error?: string } | undefined;
+    throw new Error(body?.error ?? `Failed to save GitHub token (${res.status})`);
+  }
+}
+
+/** Remove an org GitHub PAT. */
+export async function deleteGithubPat(baseUrl: string, kind: GithubPatKind = 'default'): Promise<void> {
+  const res = await fetch(`${baseUrl}/web/github/pat?kind=${kind}`, {
+    method: 'DELETE',
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`Failed to remove GitHub token (${res.status})`);
 }
 
 /** List repos across the user's installations, optionally filtered by query. */
@@ -154,6 +230,8 @@ export interface LinkedRepositoryPayload {
 export interface FactoryProjectSnapshot extends FactoryProjectPayload {
   repositories: LinkedRepositoryPayload[];
 }
+
+export type FactoryProject = FactoryProjectSnapshot;
 
 async function readJsonOrThrow<T>(res: Response, failure: string): Promise<T> {
   if (!res.ok) throw new Error(`${failure} (${res.status})`);
@@ -508,79 +586,72 @@ async function postRepositoryGitOp<T>(
   return (await res.json()) as T;
 }
 
-export interface WorktreeResult {
-  worktreePath: string;
+export interface FactoryUserSession {
+  id: string;
+  sessionId: string;
+  projectRepositoryId: string;
+  orgId: string;
+  userId: string;
   branch: string;
   baseBranch: string;
-  resourceId: string;
+  sandboxId: string | null;
+  sandboxWorkdir: string | null;
+  materializedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
-export interface PersistedWorktree {
-  worktreePath: string;
-  branch: string;
-  baseBranch: string;
-}
-
-/** List the signed-in user's server-persisted worktrees for a project repository. */
-export async function listWorktrees(baseUrl: string, projectRepositoryId: string): Promise<PersistedWorktree[]> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/worktrees`, {
-    credentials: 'include',
+export async function listUserSessions(baseUrl: string, projectRepositoryId: string): Promise<FactoryUserSession[]> {
+  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/sessions`, {
     headers: { Accept: 'application/json' },
+    credentials: 'include',
   });
-  if (!res.ok) throw new Error(`Failed to list worktrees (${res.status})`);
-  const body = (await res.json()) as { worktrees: PersistedWorktree[] };
-  return body.worktrees;
+  if (!res.ok) throw new Error(`Failed to list sessions (${res.status})`);
+  return ((await res.json()) as { sessions: FactoryUserSession[] }).sessions;
 }
 
-/**
- * Create (or reuse) a git worktree + feature branch for a unit of work inside
- * the project's cloud sandbox. `baseBranch` defaults to the project's default
- * branch server-side when omitted.
- */
-export async function createWorktree(
+export async function createUserSession(
   baseUrl: string,
   projectRepositoryId: string,
   branch: string,
   baseBranch?: string,
-): Promise<WorktreeResult> {
-  return postRepositoryGitOp<WorktreeResult>(baseUrl, projectRepositoryId, 'worktree', { branch, baseBranch });
+): Promise<FactoryUserSession> {
+  const result = await postRepositoryGitOp<{ session: FactoryUserSession }>(baseUrl, projectRepositoryId, 'sessions', {
+    branch,
+    baseBranch,
+  });
+  return result.session;
 }
 
-export interface DeleteWorktreeResult {
-  removed: boolean;
-  branch: string;
-  worktreePath: string;
+export async function getUserSession(baseUrl: string, sessionId: string): Promise<FactoryUserSession> {
+  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`Failed to load session (${res.status})`);
+  return ((await res.json()) as { session: FactoryUserSession }).session;
 }
 
-/**
- * Delete a worktree's checkout (and local feature branch) from the project's
- * sandbox and drop its persisted row. Destructive: any uncommitted work in the
- * checkout is discarded, so callers must confirm with the user first.
- */
-export async function deleteWorktree(
-  baseUrl: string,
-  projectRepositoryId: string,
-  branch: string,
-): Promise<DeleteWorktreeResult> {
-  return postRepositoryGitOp<DeleteWorktreeResult>(baseUrl, projectRepositoryId, 'worktree/delete', { branch });
+export async function deleteUserSession(baseUrl: string, sessionId: string): Promise<void> {
+  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`Failed to delete session (${res.status})`);
 }
 
 export interface CommitResult {
   committed: boolean;
 }
 
-/**
- * Stage all changes and commit them inside the given worktree. `worktreePath`
- * is validated server-side against persisted worktrees; omit it to commit on the
- * base checkout. Resolves with `committed: false` when there was nothing to commit.
- */
+/** Stage and commit all changes in a Factory session workspace. */
 export async function commitChanges(
   baseUrl: string,
   projectRepositoryId: string,
   message: string,
-  worktreePath?: string,
+  sessionId: string,
 ): Promise<CommitResult> {
-  return postRepositoryGitOp<CommitResult>(baseUrl, projectRepositoryId, 'commit', { message, worktreePath });
+  return postRepositoryGitOp<CommitResult>(baseUrl, projectRepositoryId, 'commit', { message, sessionId });
 }
 
 export interface PushResult {
@@ -588,14 +659,14 @@ export interface PushResult {
   branch: string;
 }
 
-/** Push a branch back to GitHub from inside the sandbox (token minted server-side). */
+/** Push a Factory session branch back to GitHub (token minted server-side). */
 export async function pushBranch(
   baseUrl: string,
   projectRepositoryId: string,
   branch: string,
-  worktreePath?: string,
+  sessionId: string,
 ): Promise<PushResult> {
-  return postRepositoryGitOp<PushResult>(baseUrl, projectRepositoryId, 'push', { branch, worktreePath });
+  return postRepositoryGitOp<PushResult>(baseUrl, projectRepositoryId, 'push', { branch, sessionId });
 }
 
 export interface PullRequestResult {
@@ -611,9 +682,7 @@ export async function openPullRequest(
     title: string;
     body?: string;
     base?: string;
-    worktreePath?: string;
-    sessionId?: string;
-    threadId?: string;
+    sessionId: string;
   },
 ): Promise<PullRequestResult> {
   return postRepositoryGitOp<PullRequestResult>(baseUrl, projectRepositoryId, 'pr', args);

@@ -17,7 +17,6 @@ import type {
   UpdateVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
-import type { LibSQLLocalJournalMode } from '../types';
 import type { LibSQLVectorFilter } from './filter';
 import { LibSQLFilterTranslator } from './filter';
 import { buildFilterQuery } from './sql-builder';
@@ -47,12 +46,6 @@ export interface LibSQLVectorConfig {
    */
   initialBackoffMs?: number;
   /**
-   * SQLite journal mode for local file databases. Remote and in-memory databases
-   * keep their existing behavior.
-   * @default 'wal'
-   */
-  journalMode?: LibSQLLocalJournalMode;
-  /**
    * Over-fetch multiplier for vector_top_k queries when metadata filters are present.
    * Since vector_top_k doesn't support inline WHERE clauses, we fetch topK * this multiplier
    * candidates and post-filter. Higher values improve recall at the cost of more data scanned.
@@ -67,11 +60,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   private readonly initialBackoffMs: number;
   private readonly overFetchMultiplier: number;
   private readonly isMemoryDb: boolean;
-  private readonly isLocalFileDb: boolean;
-  private readonly journalMode: LibSQLLocalJournalMode;
-  private readonly pragmasReady: Promise<void>;
   private vectorIndexes: Promise<Set<string>>;
-  private closePromise?: Promise<void>;
 
   constructor({
     url,
@@ -80,15 +69,10 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     syncInterval,
     maxRetries = 5,
     initialBackoffMs = 100,
-    journalMode = 'wal',
     vectorTopKOverFetchMultiplier = 10,
     id,
   }: LibSQLVectorConfig & { id: string }) {
     super({ id });
-
-    if (journalMode !== 'wal' && journalMode !== 'delete') {
-      throw new Error("LibSQLVector: journalMode must be either 'wal' or 'delete'.");
-    }
 
     this.turso = createClient({
       url,
@@ -103,77 +87,38 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     }
     this.overFetchMultiplier = vectorTopKOverFetchMultiplier;
     this.isMemoryDb = url.includes(':memory:');
-    this.isLocalFileDb = url.startsWith('file:') && !this.isMemoryDb;
-    this.journalMode = journalMode;
-    this.pragmasReady = this.isLocalFileDb || this.isMemoryDb ? this.applyLocalPragmas() : Promise.resolve();
-    this.vectorIndexes = this.pragmasReady.then(() =>
-      this.isMemoryDb ? new Set<string>() : this.discoverVectorIndexes(),
-    );
-    // Public operations await pragmasReady directly. Mark this dependent promise
-    // handled so a rejected journal transition is not reported twice.
-    void this.vectorIndexes.catch(() => undefined);
-  }
 
-  private async applyLocalPragmas(): Promise<void> {
-    const journalMode = this.journalMode.toUpperCase();
-    try {
-      const result = await this.turso.execute(`PRAGMA journal_mode=${journalMode};`);
-
-      if (this.isLocalFileDb && this.journalMode === 'delete') {
-        const appliedMode = Object.values(result.rows[0] ?? {})[0];
-        if (typeof appliedMode !== 'string' || appliedMode.toLowerCase() !== 'delete') {
-          throw new Error(
-            `LibSQLVector: Failed to set PRAGMA journal_mode=DELETE; SQLite reported ${String(appliedMode)}.`,
-          );
-        }
-      }
-      this.logger.debug(`LibSQLVector: PRAGMA journal_mode=${journalMode} set.`);
-    } catch (err) {
-      if (this.isLocalFileDb && this.journalMode === 'delete') {
-        throw err;
-      }
-      this.logger.warn(`LibSQLVector: Failed to set PRAGMA journal_mode=${journalMode}.`, err);
+    if (url.includes(`file:`) || this.isMemoryDb) {
+      this.turso
+        .execute('PRAGMA journal_mode=WAL;')
+        .then(() => this.logger.debug('LibSQLStore: PRAGMA journal_mode=WAL set.'))
+        .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA journal_mode=WAL.', err));
+      this.turso
+        .execute('PRAGMA busy_timeout = 5000;')
+        .then(() => this.logger.debug('LibSQLStore: PRAGMA busy_timeout=5000 set.'))
+        .catch(err => this.logger.warn('LibSQLStore: Failed to set PRAGMA busy_timeout=5000.', err));
     }
 
-    try {
-      await this.turso.execute('PRAGMA busy_timeout=5000;');
-      this.logger.debug('LibSQLVector: PRAGMA busy_timeout=5000 set.');
-    } catch (err) {
-      this.logger.warn('LibSQLVector: Failed to set PRAGMA busy_timeout=5000.', err);
-    }
+    this.vectorIndexes = this.isMemoryDb ? Promise.resolve(new Set<string>()) : this.discoverVectorIndexes();
   }
 
   /**
    * Closes the underlying libsql client, releasing all OS file handles.
    *
-   * Local file databases configured for WAL are checkpointed and switched to
-   * journal_mode=DELETE so the -wal and -shm sidecar files are released
-   * promptly (mirrors LibSQLStore.close()). DELETE mode skips that work.
+   * For local file databases, first runs PRAGMA wal_checkpoint(TRUNCATE) and
+   * switches back to journal_mode=DELETE so the -wal and -shm sidecar files
+   * are released promptly (mirrors LibSQLStore.close()).
    *
    * Remote (Turso) databases skip the WAL pragmas and just close the client.
    *
    * Safe to call more than once; subsequent calls are no-ops.
    */
-  close(): Promise<void> {
-    if (!this.closePromise) {
-      this.closePromise = this.closeClient();
-    }
-    return this.closePromise;
-  }
-
-  private async closeClient(): Promise<void> {
+  async close(): Promise<void> {
     if (this.turso.closed) {
       return;
     }
 
-    let readinessError: unknown;
-    try {
-      await this.pragmasReady;
-    } catch (err) {
-      readinessError = err;
-    }
-
-    if (!readinessError && this.isLocalFileDb && this.journalMode === 'wal') {
+    if (this.turso.protocol === 'file' && !this.isMemoryDb) {
       try {
         await this.turso.execute('PRAGMA wal_checkpoint(TRUNCATE);');
         await this.turso.execute('PRAGMA journal_mode=DELETE;');
@@ -183,10 +128,6 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     }
 
     this.turso.close();
-
-    if (readinessError) {
-      throw readinessError;
-    }
   }
 
   private async discoverVectorIndexes(): Promise<Set<string>> {
@@ -296,7 +237,6 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     includeVector = false,
     minScore = -1, // Default to -1 to include all results (cosine similarity ranges from -1 to 1)
   }: LibSQLQueryVectorParams): Promise<QueryResult[]> {
-    await this.pragmasReady;
     // Validate topK parameter - throws MastraError directly
     validateTopK('LIBSQL', topK);
 
@@ -402,7 +342,6 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   }
 
   private async doUpsert({ indexName, vectors, metadata, ids }: UpsertVectorParams): Promise<string[]> {
-    await this.pragmasReady;
     // Validate input parameters
     validateUpsertInput('LIBSQL', vectors, metadata, ids);
 
@@ -465,7 +404,6 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   }
 
   private async doCreateIndex({ indexName, dimension }: CreateIndexParams): Promise<void> {
-    await this.pragmasReady;
     if (!Number.isInteger(dimension) || dimension <= 0) {
       throw new Error('Dimension must be a positive integer');
     }
@@ -508,7 +446,6 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   }
 
   private async doDeleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
-    await this.pragmasReady;
     const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
     await this.turso.execute({
       sql: `DROP TABLE IF EXISTS ${parsedIndexName}`,
@@ -518,7 +455,6 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   }
 
   async listIndexes(): Promise<string[]> {
-    await this.pragmasReady;
     try {
       const vectorTablesQuery = `
         SELECT name FROM sqlite_master 
@@ -549,7 +485,6 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
    * @returns A promise that resolves to the index statistics including dimension, count and metric
    */
   async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
-    await this.pragmasReady;
     try {
       const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
       // Get table info including column info
@@ -618,7 +553,6 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   }
 
   private async doUpdateVector(params: UpdateVectorParams<LibSQLVectorFilter>): Promise<void> {
-    await this.pragmasReady;
     const { indexName, update } = params;
     const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
 
@@ -787,7 +721,6 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   }
 
   private async doDeleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
-    await this.pragmasReady;
     const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
     await this.turso.execute({
       sql: `DELETE FROM ${parsedIndexName} WHERE vector_id = ?`,
@@ -800,7 +733,6 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   }
 
   private async doDeleteVectors({ indexName, filter, ids }: DeleteVectorsParams<LibSQLVectorFilter>): Promise<void> {
-    await this.pragmasReady;
     const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
 
     // Validate that exactly one of filter or ids is provided
@@ -930,7 +862,6 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   }
 
   private async _doTruncateIndex({ indexName }: DeleteIndexParams): Promise<void> {
-    await this.pragmasReady;
     await this.turso.execute({
       sql: `DELETE FROM ${parseSqlIdentifier(indexName, 'index name')}`,
       args: [],

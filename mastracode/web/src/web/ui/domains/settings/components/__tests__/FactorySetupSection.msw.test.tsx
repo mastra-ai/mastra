@@ -2,14 +2,13 @@
  * BDD coverage for Settings › General › Worktree setup.
  *
  * Drives the real FactorySetupSection through the fetch/save services and
- * React Query; only the network is mocked (MSW). Projects come from
- * localStorage, matching how the workspaces domain stores them.
+ * React Query; only the network is mocked (MSW).
  */
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
@@ -20,21 +19,27 @@ const SETTINGS_URL = `${TEST_BASE_URL}/web/github/projects/ghp-1/settings`;
 const FIELD = 'Setup command for mastra';
 
 function seedGithubProject() {
-  localStorage.setItem(
-    'mastracode-factories',
-    JSON.stringify([
-      {
-        id: 'project-gh',
-        name: 'mastra',
-        resourceId: 'resource-gh',
-        createdAt: 1,
-        binding: {
-          kind: 'factory',
-          factoryProjectId: 'fp-1',
-          repositories: [{ projectRepositoryId: 'ghp-1', slug: 'mastra', worktrees: [] }],
-        },
-      },
-    ]),
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'mastra' }] }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+      HttpResponse.json({
+        connections: [
+          {
+            id: 'conn-fp-1',
+            repositories: [
+              {
+                id: 'ghp-1',
+                branch: null,
+                sandboxWorkdir: null,
+                repository: { slug: 'mastra', defaultBranch: 'main' },
+              },
+            ],
+          },
+        ],
+      }),
+    ),
   );
 }
 
@@ -59,10 +64,6 @@ function renderSection() {
     </>,
   );
 }
-
-afterEach(() => {
-  localStorage.clear();
-});
 
 describe('FactorySetupSection', () => {
   it('given no github projects, when rendered, then the section is hidden', () => {
