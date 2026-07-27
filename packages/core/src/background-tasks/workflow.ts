@@ -98,7 +98,7 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       const onProgress = async (chunk: any) => {
         if (shouldThrottleProgress) {
           const now = Date.now();
-          if (lastProgressEmitMs !== undefined && now - lastProgressEmitMs < progressThrottleMs!) return;
+          if (lastProgressEmitMs !== undefined && now - lastProgressEmitMs < progressThrottleMs) return;
           lastProgressEmitMs = now;
         }
         await manager.publishLifecycleEvent('task.output', { ...task, chunk });
