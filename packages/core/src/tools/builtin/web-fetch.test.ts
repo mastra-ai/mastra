@@ -182,6 +182,19 @@ describe('webFetchTool', () => {
     });
   });
 
+  it.each(['http://[::1]/', 'http://[fc00::1]/', 'http://[::ffff:127.0.0.1]/'])(
+    'rejects private IPv6 literal %s before connecting',
+    async url => {
+      const result = await (webFetchTool as any).execute({ url }, {});
+
+      expect(mocks.httpRequest).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        content: 'Failed to fetch URL: URL resolves to a private or reserved address.',
+        isError: true,
+      });
+    },
+  );
+
   it('rejects private addresses returned by DNS lookup', async () => {
     mocks.dnsLookup.mockImplementation((_hostname, _options, callback) => callback(null, '127.0.0.1', 4));
     mockRequest(createResponse(['internal'], { statusCode: 200 }));

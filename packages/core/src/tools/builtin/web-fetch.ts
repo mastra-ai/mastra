@@ -49,12 +49,36 @@ function isBlockedIpv4(address: string): boolean {
   );
 }
 
+function isBlockedIpv4MappedIpv6(address: string): boolean {
+  if (!address.startsWith('::ffff:')) {
+    return false;
+  }
+
+  const mappedAddress = address.slice(7);
+  if (mappedAddress.includes('.')) {
+    return isBlockedIpv4(mappedAddress);
+  }
+
+  const [high = '', low = ''] = mappedAddress.split(':');
+  const highValue = Number.parseInt(high, 16);
+  const lowValue = Number.parseInt(low, 16);
+
+  if (Number.isNaN(highValue) || Number.isNaN(lowValue)) {
+    return false;
+  }
+
+  return isBlockedIpv4(
+    [highValue >> 8, highValue & 255, lowValue >> 8, lowValue & 255].map(part => part.toString()).join('.'),
+  );
+}
+
 function isBlockedIpv6(address: string): boolean {
   const normalizedAddress = address.toLowerCase();
 
   return (
     normalizedAddress === '::' ||
     normalizedAddress === '::1' ||
+    isBlockedIpv4MappedIpv6(normalizedAddress) ||
     normalizedAddress.startsWith('fc') ||
     normalizedAddress.startsWith('fd') ||
     normalizedAddress.startsWith('fe8') ||
@@ -66,16 +90,18 @@ function isBlockedIpv6(address: string): boolean {
 }
 
 function isBlockedIp(address: string): boolean {
-  if (address.startsWith('::ffff:')) {
-    return isBlockedIpv4(address.slice(7));
-  }
-
   const ipVersion = net.isIP(address);
   return ipVersion === 4 ? isBlockedIpv4(address) : ipVersion === 6 ? isBlockedIpv6(address) : false;
 }
 
+function normalizeHostname(hostname: string): string {
+  return hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
+}
+
 function assertAllowedUrl(url: URL): void {
-  if (isBlockedHostname(url.hostname) || isBlockedIp(url.hostname)) {
+  const hostname = normalizeHostname(url.hostname);
+
+  if (isBlockedHostname(hostname) || isBlockedIp(hostname)) {
     throw new WebFetchError('URL resolves to a private or reserved address.');
   }
 }
