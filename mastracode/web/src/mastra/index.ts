@@ -232,7 +232,6 @@ export const factory = new MastraFactory({
 // carrying the controller (via `agentControllers`), storage, and the assembled
 // `server` config (middleware + apiRoutes + cors).
 const prepared = await factory.prepare();
-
 export const mastra = new Mastra({
   ...prepared,
 });
