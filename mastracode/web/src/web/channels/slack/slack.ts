@@ -1,26 +1,14 @@
 import { AgentControllerChannels, type ChannelHandler, type ChannelHandlers } from '@mastra/core/channels';
-import type { Mastra } from '@mastra/core/mastra';
-import { createSlackAdapter, SlackProvider } from '@mastra/slack';
+import { createSlackAdapter } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
-
-/** Dependencies the Slack channel handlers close over, injected from the web entry. */
-interface SlackChannelDeps {
-  /**
-   * Accessor for the server-owned Mastra instance. Lazy (not the instance
-   * itself) because the provider is constructed inside the `new Mastra(...)`
-   * literal — the instance doesn't exist yet at construction, only later when
-   * a handler actually fires.
-   */
-  getMastra: () => Mastra | undefined;
-}
 
 /**
  * Build the "new session" handler for mention / direct-message events. A mention or
  * DM on a not-yet-subscribed thread starts a NEW session; once subscribed, later
  * events are follow-ups and don't re-announce.
  */
-function createNewSessionChatHandler({ getMastra }: SlackChannelDeps): ChannelHandler {
-  return async (thread, message, defaultHandler) => {
+function createNewSessionChatHandler(): ChannelHandler {
+  return async (thread, message, defaultHandler, ctx) => {
     // TODO: Check if the slack user id maps to a Mastra user, if not send a message to that user saying to auth with a link
     // TODO: if they do have a connected slack account, hydrate the req context with that Mastra user
 
@@ -47,7 +35,7 @@ function createNewSessionChatHandler({ getMastra }: SlackChannelDeps): ChannelHa
     // thread UUID the web UI routes on. Look up the internal thread that
     // the framework created for this channel conversation via the stored
     // channel metadata, then build the link from its real id + resourceId.
-    const store = await getMastra()?.getStorage()?.getStore('memory');
+    const store = await ctx?.mastra?.getStorage()?.getStore('memory');
     const { threads } = (await store?.listThreads({
       filter: {
         metadata: {
@@ -83,8 +71,8 @@ function createNewSessionChatHandler({ getMastra }: SlackChannelDeps): ChannelHa
     );
   };
 }
-const createHandlers = (getMastra: () => Mastra | undefined): ChannelHandlers => {
-  const newSessionChatHandler = createNewSessionChatHandler({ getMastra });
+const createHandlers = (): ChannelHandlers => {
+  const newSessionChatHandler = createNewSessionChatHandler();
 
   return {
     onSubscribedMessage: async (thread, message, defaultHandler) => {
@@ -99,16 +87,7 @@ const createHandlers = (getMastra: () => Mastra | undefined): ChannelHandlers =>
   };
 };
 
-/** Construct the Slack channel provider wired to the server-owned Mastra instance. */
-export function createSlackChannelProvider({ getMastra }: SlackChannelDeps): SlackProvider {
-  return new SlackProvider({
-    refreshToken: process.env.SLACK_APP_REFRESH_TOKEN,
-    baseUrl: process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL,
-    handlers: createHandlers(getMastra),
-  });
-}
-
-export function createAgentControllerSlackChannels({ getMastra }: SlackChannelDeps): AgentControllerChannels {
+export function createAgentControllerSlackChannels(): AgentControllerChannels {
   return new AgentControllerChannels({
     adapters: {
       slack: {
@@ -120,6 +99,6 @@ export function createAgentControllerSlackChannels({ getMastra }: SlackChannelDe
         }),
       },
     },
-    handlers: createHandlers(getMastra),
+    handlers: createHandlers(),
   });
 }

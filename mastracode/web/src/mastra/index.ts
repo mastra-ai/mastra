@@ -234,7 +234,7 @@ const prepared = await factory.prepare();
 // at construction, so only wire channels when the Slack app env is configured.
 const mcAgentController = prepared.agentControllers?.['code'];
 if (mcAgentController && process.env.SLACK_APP_SIGNING_SECRET) {
-  mcAgentController.setChannels(createAgentControllerSlackChannels({ getMastra: () => mcAgentController.getMastra() }));
+  mcAgentController.setChannels(createAgentControllerSlackChannels());
 }
 
 export const mastra = new Mastra({

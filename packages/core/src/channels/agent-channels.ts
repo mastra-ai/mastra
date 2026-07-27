@@ -40,6 +40,7 @@ import type {
   ChannelAdapterConfig,
   ChannelConfig,
   ChannelContext,
+  ChannelHandlerContext,
   ChannelHandlers,
   PostableMessage,
   ResolveResourceId,
@@ -418,10 +419,14 @@ export class AgentChannels {
       // Register handlers with optional overrides
       const { onDirectMessage, onMention, onSubscribedMessage } = this.handlerOverrides;
 
+      // Context handed to custom handlers so they can reach the resolved Mastra
+      // instance without being injected with an external accessor.
+      const handlerContext: ChannelHandlerContext = { mastra };
+
       if (onDirectMessage !== false) {
         chat.onDirectMessage((thread, message) => {
           if (typeof onDirectMessage === 'function') {
-            return onDirectMessage(thread, message, defaultHandler);
+            return onDirectMessage(thread, message, defaultHandler, handlerContext);
           }
           return defaultHandler(thread, message);
         });
@@ -430,7 +435,7 @@ export class AgentChannels {
       if (onMention !== false) {
         chat.onNewMention((thread, message) => {
           if (typeof onMention === 'function') {
-            return onMention(thread, message, defaultHandler);
+            return onMention(thread, message, defaultHandler, handlerContext);
           }
           return defaultHandler(thread, message);
         });
@@ -439,7 +444,7 @@ export class AgentChannels {
       if (onSubscribedMessage !== false) {
         chat.onSubscribedMessage((thread, message) => {
           if (typeof onSubscribedMessage === 'function') {
-            return onSubscribedMessage(thread, message, defaultHandler);
+            return onSubscribedMessage(thread, message, defaultHandler, handlerContext);
           }
           return defaultHandler(thread, message);
         });
