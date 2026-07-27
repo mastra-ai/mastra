@@ -574,6 +574,32 @@ describe('GitHub session workspace preparation', () => {
     );
   });
 
+  it('accepts the session owner whose active org differs but is a member of the session org', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a', {
+      organizationId: 'org-other',
+      workosId: 'user-1',
+      memberOrgIds: ['org-other', 'org-1'],
+    });
+
+    await expect(workspace({ requestContext })).resolves.toBeDefined();
+  });
+
+  it('rejects users whose memberships do not include the session org', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a', {
+      organizationId: 'org-other',
+      workosId: 'user-1',
+      memberOrgIds: ['org-other'],
+    });
+
+    await expect(workspace({ requestContext })).rejects.toThrow(/Factory session session-a is not available/);
+  });
+
   it('accepts session owners identified by provider-neutral id instead of workosId', async () => {
     const { workspace } = await createLocalFactory();
     addProject();

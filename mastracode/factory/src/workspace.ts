@@ -10,7 +10,7 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { LocalSandbox, LocalSkillSource, Workspace } from '@mastra/core/workspace';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
-import { getFactoryAuthUserId } from './auth.js';
+import { factoryUserMemberOfOrg, getFactoryAuthUserId } from './auth.js';
 import type { FactoryAuthUser } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
@@ -148,7 +148,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
 
     const user = requestContext.get('user') as FactoryAuthUser | undefined;
     const userId = getFactoryAuthUserId(user);
-    if (!user?.organizationId || !userId || user.organizationId !== session.orgId || userId !== session.userId) {
+    if (!user?.organizationId || !userId || !factoryUserMemberOfOrg(user, session.orgId) || userId !== session.userId) {
       throw new Error(`Factory session ${session.sessionId} is not available to the current user`);
     }
     if (!sandboxConfig || !github || !fleet) {

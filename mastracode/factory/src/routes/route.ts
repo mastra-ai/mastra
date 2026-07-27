@@ -27,6 +27,14 @@ export interface RouteAuth {
   ensureUser(c: Context): Promise<unknown>;
   /** Tenant identity for the request, when signed in. */
   tenant(c: Context): { orgId?: string; userId: string } | undefined;
+  /**
+   * True when the signed-in caller belongs to the organization — as their
+   * active org or via membership. Ownership checks on org-scoped rows use this
+   * instead of comparing `tenant().orgId` directly, so switching the active
+   * org elsewhere does not revoke access to rows under other member orgs.
+   * `ensureUser` must have been called first.
+   */
+  memberOfOrg(c: Context, organizationId: string): boolean;
   /** Fail-closed check that the caller administers the given organization. */
   isOrganizationAdmin(c: Context, organizationId: string): Promise<boolean>;
 }

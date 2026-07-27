@@ -48,6 +48,10 @@ const testAuth: RouteAuth = {
     const u = c.get('factoryAuthUser') as { workosId: string; organizationId?: string } | undefined;
     return u ? { orgId: u.organizationId, userId: u.workosId } : undefined;
   },
+  memberOfOrg: (c: any, organizationId: string) => {
+    const u = c.get('factoryAuthUser') as { workosId: string; organizationId?: string } | undefined;
+    return u?.organizationId === organizationId;
+  },
   isOrganizationAdmin: async () => true,
 };
 

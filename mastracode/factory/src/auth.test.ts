@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  factoryUserMemberOfOrg,
   getFactoryAuthOrgId,
   getFactoryAuthUser,
   getFactoryAuthUserId,
@@ -331,6 +332,35 @@ describe('org-tenant identity', () => {
     expect(getFactoryAuthOrgId({ workosId: 'user_1', organizationId: 'org_a' })).toBe('org_a');
     expect(getFactoryAuthOrgId({ workosId: 'user_1' })).toBeUndefined();
     expect(getFactoryAuthOrgId(undefined)).toBeUndefined();
+  });
+
+  it('factoryUserMemberOfOrg accepts the active org and any member org', () => {
+    expect(factoryUserMemberOfOrg({ workosId: 'u1', organizationId: 'org_a' }, 'org_a')).toBe(true);
+    expect(
+      factoryUserMemberOfOrg({ workosId: 'u1', organizationId: 'org_b', memberOrgIds: ['org_b', 'org_a'] }, 'org_a'),
+    ).toBe(true);
+    expect(factoryUserMemberOfOrg({ workosId: 'u1', organizationId: 'org_b', memberOrgIds: ['org_b'] }, 'org_a')).toBe(
+      false,
+    );
+    expect(factoryUserMemberOfOrg({ workosId: 'u1' }, 'org_a')).toBe(false);
+    expect(factoryUserMemberOfOrg(undefined, 'org_a')).toBe(false);
+  });
+
+  it('gate surfaces provider memberOrgIds on the resolved user', async () => {
+    mockAuthenticate.mockResolvedValue({
+      workosId: 'user_1',
+      organizationId: 'org_a',
+      memberOrgIds: ['org_a', 'org_b', 42],
+      email: 'u@e.com',
+    });
+    const app = new Hono();
+    mountFactoryAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
+    app.get('/web/whoami', c => c.json({ memberOrgIds: getFactoryAuthUser(c)?.memberOrgIds ?? null }));
+
+    const res = await app.request('/web/whoami', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+    // Non-string entries are dropped by the mapper.
+    expect(await res.json()).toEqual({ memberOrgIds: ['org_a', 'org_b'] });
   });
 
   it('gate stashes organizationId and factoryAuthTenant returns { orgId, userId }', async () => {

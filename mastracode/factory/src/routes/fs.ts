@@ -362,7 +362,7 @@ async function resolveAuthorizedSession(
   if (deps.auth.enabled()) {
     await deps.auth.ensureUser(c);
     const tenant = deps.auth.tenant(c);
-    if (!tenant || tenant.orgId !== session.orgId || tenant.userId !== session.userId) {
+    if (!tenant || !deps.auth.memberOfOrg(c, session.orgId) || tenant.userId !== session.userId) {
       throw new Error('Session is not available to the current user');
     }
   }

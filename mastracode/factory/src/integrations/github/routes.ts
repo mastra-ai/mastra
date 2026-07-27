@@ -1341,7 +1341,7 @@ function buildProjectGitRoutes({
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
         const session = await github.sourceControlStorage.sessions.getBySessionId(c.req.param('sessionId'));
-        if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
+        if (!session || !auth.memberOfOrg(loose(c), session.orgId) || session.userId !== resolved.tenant.userId) {
           return c.json({ error: 'Session not found' }, 404);
         }
         return c.json({ session });
@@ -1354,7 +1354,7 @@ function buildProjectGitRoutes({
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
         const session = await github.sourceControlStorage.sessions.getBySessionId(c.req.param('sessionId'));
-        if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
+        if (!session || !auth.memberOfOrg(loose(c), session.orgId) || session.userId !== resolved.tenant.userId) {
           return c.json({ error: 'Session not found' }, 404);
         }
         let sandbox: MaterializationSandbox | undefined;

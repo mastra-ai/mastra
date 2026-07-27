@@ -485,6 +485,13 @@ const testAuth: RouteAuth = {
     const u = c.get('factoryAuthUser') as { workosId: string; organizationId?: string } | undefined;
     return u ? { orgId: u.organizationId, userId: u.workosId } : undefined;
   },
+  memberOfOrg: (c: any, organizationId: string) => {
+    const u = c.get('factoryAuthUser') as
+      | { workosId: string; organizationId?: string; memberOrgIds?: string[] }
+      | undefined;
+    if (!u) return false;
+    return u.organizationId === organizationId || (u.memberOrgIds?.includes(organizationId) ?? false);
+  },
   isOrganizationAdmin: async () => true,
 };
 
@@ -579,7 +586,7 @@ subscriptionsRef = githubSignalSubscriptions;
 
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(
-  user: { workosId: string; organizationId?: string } | null,
+  user: { workosId: string; organizationId?: string; memberOrgIds?: string[] } | null,
   options: {
     controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
     runIssueTriage?: (input: any) => Promise<{ threadId?: string; projectPath?: string; branch?: string }>;
@@ -1772,6 +1779,24 @@ describe('Factory session routes', () => {
     });
     const sessionId = (await created.json()).session.sessionId;
     expect((await buildApp({ workosId: 'u2' }).request(`/web/user-sessions/${sessionId}`)).status).toBe(404);
+  });
+
+  it('loads the session when the owner is a member of its org but has another active org', async () => {
+    seedMaterializedProject();
+    const created = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/sessions', {
+      branch: 'feat/x',
+    });
+    const sessionId = (await created.json()).session.sessionId;
+
+    // Same user, active org switched elsewhere, still a member of org1.
+    const flapped = buildApp({ workosId: 'u1', organizationId: 'org2', memberOrgIds: ['org2', 'org1'] });
+    const loaded = await flapped.request(`/web/user-sessions/${sessionId}`);
+    expect(loaded.status).toBe(200);
+    expect((await loaded.json()).session.sessionId).toBe(sessionId);
+
+    // Without the membership the session stays hidden.
+    const stranger = buildApp({ workosId: 'u1', organizationId: 'org2', memberOrgIds: ['org2'] });
+    expect((await stranger.request(`/web/user-sessions/${sessionId}`)).status).toBe(404);
   });
 
   it('rejects invalid branch names', async () => {

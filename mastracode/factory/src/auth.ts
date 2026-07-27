@@ -51,6 +51,14 @@ export interface FactoryAuthUser {
    * isolated building instances. Absent for personal (no-org) accounts.
    */
   organizationId?: string;
+  /**
+   * Every organization the user is a member of, when the provider surfaces
+   * memberships (WorkOS-backed providers do). `organizationId` is only the
+   * *active* org on the provider session and can change out from under rows
+   * created earlier (org switcher on the platform); ownership checks should
+   * accept any member org via {@link factoryUserMemberOfOrg}.
+   */
+  memberOrgIds?: string[];
 }
 
 /**
@@ -123,6 +131,18 @@ export function getFactoryAuthOrgId(user: FactoryAuthUser | undefined): string |
 }
 
 /**
+ * True when the user belongs to `orgId` — either as the active organization on
+ * their session or via provider-reported membership (`memberOrgIds`). Org-scoped
+ * ownership checks use this instead of comparing the active org directly, so a
+ * user who switched their active org elsewhere keeps access to rows created
+ * under another org they are still a member of.
+ */
+export function factoryUserMemberOfOrg(user: FactoryAuthUser | undefined, orgId: string): boolean {
+  if (!user) return false;
+  return user.organizationId === orgId || (user.memberOrgIds?.includes(orgId) ?? false);
+}
+
+/**
  * Resolve the tenant identity `(orgId, userId)` from the authenticated user on
  * the context. Returns `undefined` when there is no signed-in user (auth
  * disabled or unauthenticated). `orgId` is `undefined` for personal accounts;
@@ -190,16 +210,21 @@ function toFactoryAuthUser(result: unknown): FactoryAuthUser | null {
     email?: unknown;
     name?: unknown;
     organizationId?: unknown;
+    memberOrgIds?: unknown;
   };
   const id = typeof flat.id === 'string' ? flat.id : undefined;
   const workosId = typeof flat.workosId === 'string' ? flat.workosId : undefined;
   if (!id && !workosId) return null;
+  const memberOrgIds = Array.isArray(flat.memberOrgIds)
+    ? flat.memberOrgIds.filter((orgId): orgId is string => typeof orgId === 'string')
+    : undefined;
   return {
     id,
     workosId,
     email: typeof flat.email === 'string' ? flat.email : undefined,
     name: typeof flat.name === 'string' ? flat.name : undefined,
     organizationId: typeof flat.organizationId === 'string' ? flat.organizationId : undefined,
+    memberOrgIds,
   };
 }
 
@@ -266,7 +291,7 @@ export async function isOrganizationAdmin(
   organizationId: string,
 ): Promise<boolean> {
   const user = await ensureFactoryAuthUser(provider, c);
-  if (!user || user.organizationId !== organizationId || !provider || !isOrganizationsProvider(provider)) {
+  if (!user || !factoryUserMemberOfOrg(user, organizationId) || !provider || !isOrganizationsProvider(provider)) {
     return false;
   }
   const userId = getFactoryAuthUserId(user);
@@ -289,6 +314,7 @@ export function createFactoryRouteAuth(provider: IMastraAuthProvider | undefined
     enabled: () => provider !== undefined,
     ensureUser: (c: Context) => ensureFactoryAuthUser(provider, c),
     tenant: (c: Context) => factoryAuthTenant(c),
+    memberOfOrg: (c: Context, organizationId: string) => factoryUserMemberOfOrg(getFactoryAuthUser(c), organizationId),
     isOrganizationAdmin: (c: Context, organizationId: string) => isOrganizationAdmin(provider, c, organizationId),
   };
 }
