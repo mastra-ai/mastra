@@ -70,20 +70,26 @@ import { VercelSandbox } from '@mastra/vercel';
 const worker = await deployWorkerToSandbox({
   sandbox: new VercelSandbox({ sandboxName: 'experiment-worker' }),
   dir: '.mastra/experiment-worker',
+  executionId: 'attempt-1',
+  mode: 'job',
   command: 'node',
   args: ['index.mjs'],
   env: { JOB_ID: 'job-123' },
+  input: { type: 'stdin', data: JSON.stringify({ requestId: 'request-123' }) },
   startupTimeoutMs: 10_000,
   executionTimeoutMs: 15 * 60_000,
   terminationGraceMs: 5_000,
 });
 
-console.log(await worker.status());
-console.log(await worker.logs());
+const stdout = await worker.readOutput('stdout', { offset: 0, maxBytes: 64 * 1024 });
+const stderr = await worker.readOutput('stderr', { offset: 0, maxBytes: 64 * 1024 });
+console.log(await worker.status(), stdout, stderr);
 await worker.cancel();
 ```
 
-Dependency installs are cached using the artifact's `package.json`, supported lockfiles, and install command. `stop()` snapshot-stops the provider sandbox; after waking it through the provider, `relaunch()` starts the recorded command only when it is not already running. `destroy()` permanently deletes the sandbox.
+Each caller-provided execution ID gets isolated runtime state. Input is bounded and may be delivered through stdin or staged at an artifact-relative file path. Stdout and stderr remain separate and are read as raw bytes with offsets, EOF, truncation, and interruption metadata; the deployer does not interpret their protocol.
+
+Dependency installs are serialized and cached using the artifact's `package.json`, supported lockfiles, and install command. `cancel()` sends TERM and then KILL to the process group when necessary. `stop()` snapshot-stops the provider sandbox without assuming process preservation. `relaunch({ executionId })` starts the recorded command under a new execution identity. `destroy()` retries permanent sandbox deletion and returns a typed result.
 
 Pass `wake: true` to resume a stopped server sandbox before returning — useful in a route handler that fronts the sandbox. If the server isn't healthy after the resume (some providers restore the filesystem but not processes), the wake relaunches it:
 

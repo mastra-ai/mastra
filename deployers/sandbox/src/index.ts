@@ -11,6 +11,9 @@ export type {
   SandboxDeploymentManifest,
   DeployToSandboxOptions,
   DeployWorkerToSandboxOptions,
+  SandboxWorkerInput,
   SandboxWorkerDeployment,
   SandboxWorkerStatus,
+  SandboxWorkerOutput,
+  SandboxDestroyResult,
 } from './types';

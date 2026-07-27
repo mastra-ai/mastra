@@ -25,8 +25,12 @@ export interface FakeSandboxOptions {
   installMarker?: string;
   /** Content returned when a command tails a deployment log. */
   serverLog?: string;
-  /** Status returned when worker lifecycle state is queried. Defaults to running. */
-  workerStatus?: 'running' | 'cancelled' | `exited ${number}` | 'unknown';
+  /** Serialized status returned when worker lifecycle state is queried. */
+  workerStatus?: string;
+  /** Base64-encoded worker output returned after the size header. */
+  workerOutput?: string;
+  /** Number of destroy attempts that fail before succeeding. */
+  destroyFailures?: number;
   /** Provide info returned from getInfo(). */
   info?: Partial<SandboxInfo>;
 }
@@ -83,6 +87,7 @@ export class FakeSandbox implements WorkspaceSandbox {
   }
   async destroy(): Promise<void> {
     this.destroyed++;
+    if (this.destroyed <= (this.opts.destroyFailures ?? 0)) throw new Error('transient destroy failure');
   }
 
   async getInfo(): Promise<SandboxInfo> {
@@ -108,8 +113,14 @@ export class FakeSandbox implements WorkspaceSandbox {
       stdout = this.opts.installMarker ?? '';
     } else if (script.startsWith('tail')) {
       stdout = this.opts.serverLog ?? '';
-    } else if (script.includes('kill -0') && script.includes('.mastra-worker.status')) {
-      stdout = this.opts.workerStatus ?? 'running';
+    } else if (script.includes('wc -c <') && script.includes('/stdout')) {
+      stdout = fakeWorkerOutput(script, this.opts.workerOutput ?? '');
+    } else if (script.includes('wc -c <') && script.includes('/stderr')) {
+      stdout = fakeWorkerOutput(script, this.opts.workerOutput ?? '');
+    } else if (script.includes('read worker status') || (script.includes('kill -0') && script.includes('/status'))) {
+      stdout = this.opts.workerStatus ?? workerStatusFromScript(script);
+    } else if (script.includes('status="$(cat') && script.includes('/status')) {
+      stdout = this.opts.workerStatus ?? workerStatusFromScript(script);
     } else if (script.includes('$HOME') || script.includes('${HOME')) {
       stdout = '/home/fake';
     }
@@ -122,6 +133,18 @@ export class FakeSandbox implements WorkspaceSandbox {
       executionTimeMs: 1,
     };
   }
+}
+
+function workerStatusFromScript(script: string): string {
+  const executionId = /\.mastra\/executions\/([A-Za-z0-9._-]+)/.exec(script)?.[1] ?? 'unknown';
+  return `running|${executionId}`;
+}
+
+function fakeWorkerOutput(script: string, output: string): string {
+  const offset = Number(/tail -c \+(\d+)/.exec(script)?.[1] ?? 1) - 1;
+  const maxBytes = Number(/head -c (\d+)/.exec(script)?.[1] ?? Buffer.byteLength(output));
+  const data = Buffer.from(output).subarray(offset, offset + maxBytes);
+  return `${Buffer.byteLength(output)}\n${data.toString('base64')}\n`;
 }
 
 /** Create a minimal prebuilt Mastra output dir (index.mjs + package.json) for tests. */
