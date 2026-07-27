@@ -1,0 +1,166 @@
+---
+title: "Reference: PIIRedactor | Processors"
+description: "API reference for PIIRedactor, a deterministic regex-based processor that detects and redacts pattern-shaped PII without any LLM calls."
+packages:
+  - "@mastra/core"
+---
+
+# PIIRedactor
+
+The `PIIRedactor` detects and redacts pattern-shaped personally identifiable information (PII) using regex only. It never calls an LLM, so message content can't leave the process through this processor. Detection is deterministic: the same input always produces the same redaction.
+
+For context-dependent PII such as names, addresses, and dates of birth, use the LLM-based [`PIIDetector()`](/reference/processors/pii-detector). For generic pattern filtering with custom rules, use [`RegexFilterProcessor`](/reference/processors/regex-filter-processor).
+
+## Usage example
+
+Redact emails and phone numbers in input messages:
+
+```typescript
+import { PIIRedactor } from '@mastra/core/processors'
+
+const redactor = new PIIRedactor({
+  detectionTypes: ['email', 'phone', 'credit-card'],
+  strategy: 'redact',
+  redactionMethod: 'mask',
+})
+```
+
+Block content containing PII instead of redacting it:
+
+```typescript
+import { PIIRedactor } from '@mastra/core/processors'
+
+const redactor = new PIIRedactor({
+  detectionTypes: ['ssn', 'credit-card', 'api-key'],
+  strategy: 'block',
+})
+```
+
+Attach to an agent:
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { PIIRedactor } from '@mastra/core/processors'
+
+const agent = new Agent({
+  id: 'my-agent',
+  name: 'my-agent',
+  model: '__GATEWAY_OPENAI_MODEL_NANO__',
+  processors: {
+    input: [
+      new PIIRedactor({
+        detectionTypes: ['email', 'phone'],
+        strategy: 'redact',
+      }),
+    ],
+  },
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'detectionTypes',
+    type: 'RegexDetectablePIIType[]',
+    description:
+      "PII types to detect. Only regex-detectable types are accepted: 'email', 'phone', 'credit-card', 'ssn', 'api-key', 'ip-address', 'url', 'uuid', 'crypto-wallet', 'iban'. The constructor throws for context-dependent types such as 'name', 'address', and 'date-of-birth', which require PIIDetector.",
+    isOptional: false,
+  },
+  {
+    name: 'strategy',
+    type: "'block' | 'warn' | 'filter' | 'redact'",
+    description:
+      "Strategy when PII is detected. 'block' aborts with a TripWire error. 'warn' logs a warning but passes content through unchanged. 'filter' removes flagged messages. 'redact' replaces detected PII with redacted versions.",
+    isOptional: true,
+    defaultValue: "'redact'",
+  },
+  {
+    name: 'redactionMethod',
+    type: "'mask' | 'hash' | 'remove' | 'placeholder'",
+    description:
+      "How detected values are rewritten. 'mask' replaces characters with asterisks. 'hash' replaces the value with a truncated SHA-256 hash. 'remove' deletes the value. 'placeholder' replaces the value with a type tag such as [EMAIL].",
+    isOptional: true,
+    defaultValue: "'mask'",
+  },
+  {
+    name: 'preserveFormat',
+    type: 'boolean',
+    description:
+      "Whether masking preserves the value's structure, for example ***-**-1234 for SSNs and X-masked digits for phone numbers.",
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'lastMessageOnly',
+    type: 'boolean',
+    description: 'When true, only the last message is checked instead of all messages.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: "'pii-redactor'",
+    description: 'Processor identifier.',
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: "'PII Redactor'",
+    description: 'Processor display name.',
+    isOptional: false,
+  },
+  {
+    name: 'processInput',
+    type: '(args: ProcessInputArgs) => ProcessInputResult',
+    description:
+      'Checks input messages for the configured PII types. Blocks, warns, filters, or redacts depending on strategy. Non-text message parts are preserved.',
+    isOptional: false,
+  },
+  {
+    name: 'processOutputStream',
+    type: '(args: ProcessOutputStreamArgs) => Promise<ChunkType | null | undefined>',
+    description:
+      'Checks streaming text chunks. A tail of recent characters is carried between chunks so PII split across chunk boundaries is still detected.',
+    isOptional: false,
+  },
+  {
+    name: 'processOutputResult',
+    type: '(args: ProcessOutputResultArgs) => ProcessorMessageResult',
+    description:
+      'Checks final output messages for the configured PII types. Blocks, warns, filters, or redacts depending on strategy.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Error behavior
+
+When the `block` strategy is active, `PIIRedactor` throws a `TripWire` error with `retry: false` when PII is detected. The TripWire metadata includes:
+
+- `processorId`: `'pii-redactor'`
+- `detectedTypes`: Array of detected PII type names
+- `detectionCount`: Number of detections
+- `strategy`: `'block'`
+
+The metadata never contains the matched values themselves, so logging the error can't leak the PII it caught.
+
+## Streaming behavior
+
+`PIIRedactor` carries a tail of recent characters between streaming chunks. This catches PII that's split across chunk boundaries, for example `test@` in one chunk and `example.com` in the next. Only the portion of a detection inside the current chunk can be rewritten; characters that streamed out in an earlier chunk are already delivered. When this partial redaction isn't acceptable, apply the processor to `processOutputResult` (final output messages), or buffer chunks first with [`BatchPartsProcessor`](/reference/processors/batch-parts-processor).
+
+## Comparison with other processors
+
+| Processor | Detection | LLM calls | Best for |
+| - | - | - | - |
+| `PIIRedactor` | Regex, deterministic | Never | Compliance setups where content must not leave the process |
+| [`PIIDetector()`](/reference/processors/pii-detector) | LLM-based | Yes | Context-dependent PII such as names and addresses |
+| [`RegexFilterProcessor`](/reference/processors/regex-filter-processor) | Regex, custom rules | Never | Generic pattern filtering with your own rules |

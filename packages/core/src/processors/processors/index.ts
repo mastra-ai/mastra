@@ -19,6 +19,8 @@ export {
   type PIICategoryScores,
   type PIIDetection,
 } from './pii-detector';
+export { PIIRedactor, type PIIRedactorOptions, type PIIRedactorTripwireMetadata } from './pii-redactor';
+export { REGEX_DETECTABLE_PII_TYPES, type PIIRedactionMethod, type RegexDetectablePIIType } from './pii-shared';
 export {
   LanguageDetector,
   type LanguageDetectorOptions,

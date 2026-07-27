@@ -193,6 +193,28 @@ export const privateAgent = new Agent({
 
 Visit [`PIIDetector()`](/reference/processors/pii-detector) reference for a full list of configuration options.
 
+### Redact PII without an LLM
+
+The `PIIRedactor()` detects and redacts pattern-shaped PII using regex only. It never calls an LLM, so message content can't leave the process through this processor. Use it when compliance rules forbid sending content to a model provider, or when you need deterministic redaction. For context-dependent types such as names and addresses, use `PIIDetector()` instead.
+
+```typescript {7-12} title="src/mastra/agents/regulated-agent.ts"
+import { PIIRedactor } from '@mastra/core/processors'
+
+export const regulatedAgent = new Agent({
+  id: 'regulated-agent',
+  name: 'Regulated Agent',
+  inputProcessors: [
+    new PIIRedactor({
+      detectionTypes: ['email', 'phone', 'credit-card'],
+      strategy: 'redact',
+      redactionMethod: 'mask',
+    }),
+  ],
+})
+```
+
+Visit [`PIIRedactor()`](/reference/processors/pii-redactor) reference for a full list of configuration options.
+
 ### Enforce cost limits
 
 The `CostGuardProcessor()` monitors cumulative estimated cost across the agentic loop, blocking or warning when a monetary limit is exceeded. It queries cost data from observability storage before each LLM call. Cost checks are approximate — metrics are persisted asynchronously, so fast-running agents may briefly exceed the configured limit before the guard triggers.

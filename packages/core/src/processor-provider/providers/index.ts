@@ -7,6 +7,9 @@ import { ModerationProcessor } from '../../processors/processors/moderation';
 import type { ModerationOptions } from '../../processors/processors/moderation';
 import type { PIIDetectorOptions } from '../../processors/processors/pii-detector';
 import { PIIDetector } from '../../processors/processors/pii-detector';
+import type { PIIRedactorOptions } from '../../processors/processors/pii-redactor';
+import { PIIRedactor } from '../../processors/processors/pii-redactor';
+import { REGEX_DETECTABLE_PII_TYPES } from '../../processors/processors/pii-shared';
 import { PromptInjectionDetector } from '../../processors/processors/prompt-injection-detector';
 import type { PromptInjectionOptions } from '../../processors/processors/prompt-injection-detector';
 import { SystemPromptScrubber } from '../../processors/processors/system-prompt-scrubber';
@@ -185,6 +188,28 @@ export const piiDetectorProvider: ProcessorProvider = {
 };
 
 // ---------------------------------------------------------------------------
+// 7b. pii-redactor
+// ---------------------------------------------------------------------------
+export const piiRedactorProvider: ProcessorProvider = {
+  info: {
+    id: 'pii-redactor',
+    name: 'PII Redactor',
+    description:
+      'Deterministically redacts pattern-shaped personally identifiable information using regex, without any LLM calls.',
+  },
+  configSchema: z.object({
+    detectionTypes: z.array(z.enum(REGEX_DETECTABLE_PII_TYPES)).min(1),
+    strategy: z.enum(['block', 'warn', 'filter', 'redact']).optional(),
+    redactionMethod: z.enum(['mask', 'hash', 'remove', 'placeholder']).optional(),
+    preserveFormat: z.boolean().optional(),
+  }),
+  availablePhases: ['processInput'] as ProcessorPhase[],
+  createProcessor(config) {
+    return new PIIRedactor(config as unknown as PIIRedactorOptions);
+  },
+};
+
+// ---------------------------------------------------------------------------
 // 8. language-detector
 // ---------------------------------------------------------------------------
 export const languageDetectorProvider: ProcessorProvider = {
@@ -247,6 +272,7 @@ export const BUILT_IN_PROCESSOR_PROVIDERS: Record<string, ProcessorProvider> = {
   moderation: moderationProvider,
   'prompt-injection-detector': promptInjectionDetectorProvider,
   'pii-detector': piiDetectorProvider,
+  'pii-redactor': piiRedactorProvider,
   'language-detector': languageDetectorProvider,
   'system-prompt-scrubber': systemPromptScrubberProvider,
 };

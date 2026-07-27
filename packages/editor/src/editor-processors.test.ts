@@ -841,6 +841,7 @@ describe('Stored Agents with Processor Providers', () => {
       expect(providers['moderation']).toBeDefined();
       expect(providers['prompt-injection-detector']).toBeDefined();
       expect(providers['pii-detector']).toBeDefined();
+      expect(providers['pii-redactor']).toBeDefined();
       expect(providers['language-detector']).toBeDefined();
       expect(providers['system-prompt-scrubber']).toBeDefined();
     });

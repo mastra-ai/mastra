@@ -1,4 +1,3 @@
-import * as crypto from 'node:crypto';
 import type { SharedV2ProviderOptions } from '@ai-sdk/provider-v5';
 import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../../agent';
@@ -16,57 +15,22 @@ import type { Processor } from '../index';
 import { REPROCESS_PART_KEY } from '../stream-reprocess';
 import { selectMessagesToCheck } from './message-selection';
 import type { LastMessageOnlyOption } from './message-selection';
+import {
+  applyPIIRedaction,
+  detectPIIWithPatterns,
+  LLM_ONLY_PII_TYPES,
+  PII_REGEX_CARRYOVER_SIZE,
+  redactPIIValue,
+} from './pii-shared';
+import type { PIIDetection, PIIDetectionResult } from './pii-shared';
 
-/**
- * PII categories for detection and redaction
- */
-export interface PIICategories {
-  email?: boolean;
-  phone?: boolean;
-  'credit-card'?: boolean;
-  ssn?: boolean;
-  'api-key'?: boolean;
-  'ip-address'?: boolean;
-  name?: boolean;
-  address?: boolean;
-  'date-of-birth'?: boolean;
-  url?: boolean;
-  uuid?: boolean;
-  'crypto-wallet'?: boolean;
-  iban?: boolean;
-  [customType: string]: boolean | undefined;
-}
-
-/**
- * Individual PII category score
- */
-export interface PIICategoryScore {
-  type: string;
-  score: number;
-}
-
-export type PIICategoryScores = PIICategoryScore[];
-
-/**
- * Individual PII detection with location and redaction info
- */
-export interface PIIDetection {
-  type: string;
-  value: string;
-  confidence: number;
-  start: number;
-  end: number;
-  redacted_value?: string | null; // Only present when strategy is 'redact'
-}
-
-/**
- * Result structure for PII detection (simplified for minimal tokens)
- */
-export interface PIIDetectionResult {
-  categories: PIICategoryScores | null;
-  detections: PIIDetection[] | null;
-  redacted_content?: string | null; // Only present when strategy is 'redact'
-}
+export type {
+  PIICategories,
+  PIICategoryScore,
+  PIICategoryScores,
+  PIIDetection,
+  PIIDetectionResult,
+} from './pii-shared';
 
 /**
  * Configuration options for PIIDetector
@@ -198,36 +162,8 @@ export class PIIDetector implements Processor<'pii-detector'> {
     'iban', // International Bank Account Numbers
   ];
 
-  /**
-   * Regex patterns for local (zero-cost) PII detection during streaming.
-   * These run instead of LLM calls in processOutputStream to eliminate
-   * per-chunk API costs and latency.
-   */
-  private static readonly PII_PATTERNS: Record<string, RegExp> = {
-    email: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
-    phone: /(?:\+?\d{1,3}[-.\ ]?)?\(?\d{3}\)?[-.\ ]?\d{3}[-.\ ]?\d{4}/g,
-    'credit-card': /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
-    ssn: /\b\d{3}-\d{2}-\d{4}\b/g,
-    'api-key':
-      /(?:(?:sk|pk)[-_](?:live|test|proj)[-_][A-Za-z0-9]{16,}|(?:api[_-]?key|apikey|api[_-]?secret)\s*[:=]\s*["']?[a-zA-Z0-9_\-]{20,}["']?)/gi,
-    'ip-address': /\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g,
-    url: /https?:\/\/[^\s<>"']+/gi,
-    uuid: /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
-    'crypto-wallet': /\b(?:0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-zA-HJ-NP-Z0-9]{39,59})\b/g,
-    iban: /\b[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}(?:[A-Z0-9]?){0,16}\b/g,
-  };
-
-  /** PII types that require LLM context and cannot be detected by regex */
-  private static readonly LLM_ONLY_TYPES = new Set(['name', 'address', 'date-of-birth']);
-
   /** Default character threshold for flushing the LLM buffer during streaming. */
   private static readonly DEFAULT_BUFFER_SIZE = 200;
-
-  /**
-   * Number of characters to carry over between chunks for regex detection.
-   * Ensures PII split across chunk boundaries (e.g. "test@" + "example.com") is caught.
-   */
-  private static readonly REGEX_CARRYOVER_SIZE = 128;
 
   constructor(options: PIIDetectorOptions) {
     this.detectionTypes = options.detectionTypes || PIIDetector.DEFAULT_DETECTION_TYPES;
@@ -497,114 +433,17 @@ export class PIIDetector implements Processor<'pii-detector'> {
    * Apply redaction method to content
    */
   private applyRedactionMethod(content: string, detections: PIIDetection[]): string {
-    let redacted = content;
-
-    // Sort detections by start position in reverse order to maintain indices
-    const sortedDetections = [...detections].sort((a, b) => b.start - a.start);
-
-    for (const detection of sortedDetections) {
-      const redactedValue = this.redactValue(detection.value, detection.type);
-      redacted = redacted.slice(0, detection.start) + redactedValue + redacted.slice(detection.end);
-    }
-
-    return redacted;
+    return applyPIIRedaction(content, detections, {
+      method: this.redactionMethod,
+      preserveFormat: this.preserveFormat,
+    });
   }
 
   /**
    * Redact individual PII value based on method and type
    */
   private redactValue(value: string, type: string): string {
-    switch (this.redactionMethod) {
-      case 'mask':
-        return this.maskValue(value, type);
-      case 'hash':
-        return this.hashValue(value);
-      case 'remove':
-        return '';
-      case 'placeholder':
-        return `[${type.toUpperCase()}]`;
-      default:
-        return this.maskValue(value, type);
-    }
-  }
-
-  /**
-   * Mask PII value while optionally preserving format
-   */
-  private maskValue(value: string, type: string): string {
-    if (!this.preserveFormat) {
-      return '*'.repeat(Math.min(value.length, 8));
-    }
-
-    switch (type) {
-      case 'email':
-        const emailParts = value.split('@');
-        if (emailParts.length === 2) {
-          const [local, domain] = emailParts;
-          const maskedLocal =
-            local && local.length > 2 ? local[0] + '*'.repeat(local.length - 2) + local[local.length - 1] : '***';
-          const domainParts = domain?.split('.');
-          const maskedDomain =
-            domainParts && domainParts.length > 1
-              ? '*'.repeat(domainParts[0]?.length ?? 0) + '.' + domainParts.slice(1).join('.')
-              : '***';
-          return `${maskedLocal}@${maskedDomain}`;
-        }
-        break;
-
-      case 'phone':
-        // Preserve format like XXX-XXX-1234 or (XXX) XXX-1234
-        return value.replace(/\d/g, (match, index) => {
-          // Keep last 4 digits
-          return index >= value.length - 4 ? match : 'X';
-        });
-
-      case 'credit-card':
-        // Show last 4 digits: ****-****-****-1234
-        return value.replace(/\d/g, (match, index) => {
-          return index >= value.length - 4 ? match : '*';
-        });
-
-      case 'ssn':
-        // Show last 4 digits: ***-**-1234
-        return value.replace(/\d/g, (match, index) => {
-          return index >= value.length - 4 ? match : '*';
-        });
-
-      case 'uuid':
-        // Mask UUID: ********-****-****-****-************
-        return value.replace(/[a-f0-9]/gi, '*');
-
-      case 'crypto-wallet':
-        // Show first 4 and last 4 characters: 1Lbc...X71
-        if (value.length > 8) {
-          return value.slice(0, 4) + '*'.repeat(value.length - 8) + value.slice(-4);
-        }
-        return '*'.repeat(value.length);
-
-      case 'iban':
-        // Show country code and last 4 digits: DE**************3000
-        if (value.length > 6) {
-          return value.slice(0, 2) + '*'.repeat(value.length - 6) + value.slice(-4);
-        }
-        return '*'.repeat(value.length);
-
-      default:
-        // Generic masking - show first and last character if long enough
-        if (value.length <= 3) {
-          return '*'.repeat(value.length);
-        }
-        return value[0] + '*'.repeat(value.length - 2) + value[value.length - 1];
-    }
-
-    return '*'.repeat(Math.min(value.length, 8));
-  }
-
-  /**
-   * Hash PII value using SHA256
-   */
-  private hashValue(value: string): string {
-    return `[HASH:${crypto.createHash('sha256').update(value).digest('hex').slice(0, 8)}]`;
+    return redactPIIValue(value, type, { method: this.redactionMethod, preserveFormat: this.preserveFormat });
   }
 
   /**
@@ -647,52 +486,16 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
    * here and handled by the LLM-based detectPII in processOutputResult.
    */
   private detectPIILocal(content: string): PIIDetectionResult {
-    const categories: PIICategoryScores = [];
-    const detections: PIIDetection[] = [];
-
-    for (const type of this.detectionTypes) {
-      if (PIIDetector.LLM_ONLY_TYPES.has(type)) continue;
-
-      const pattern = PIIDetector.PII_PATTERNS[type];
-      if (!pattern) continue;
-
-      // Reset lastIndex for /g patterns
-      pattern.lastIndex = 0;
-      let match;
-      while ((match = pattern.exec(content)) !== null) {
-        detections.push({
-          type,
-          value: match[0],
-          confidence: 1.0,
-          start: match.index,
-          end: match.index + match[0].length,
-          ...(this.strategy === 'redact' ? { redacted_value: this.redactValue(match[0], type) } : {}),
-        });
-      }
-    }
-
-    const detectedTypes = new Set(detections.map(d => d.type));
-    for (const type of detectedTypes) {
-      categories.push({ type, score: 1.0 });
-    }
-
-    let redacted_content: string | null | undefined;
-    if (this.strategy === 'redact' && detections.length > 0) {
-      redacted_content = this.applyRedactionMethod(content, detections);
-    } else if (this.strategy === 'redact') {
-      redacted_content = null;
-    }
-
-    return {
-      categories: categories.length > 0 ? categories : null,
-      detections: detections.length > 0 ? detections : null,
-      ...(this.strategy === 'redact' ? { redacted_content } : {}),
-    };
+    return detectPIIWithPatterns(
+      content,
+      this.detectionTypes,
+      this.strategy === 'redact' ? { method: this.redactionMethod, preserveFormat: this.preserveFormat } : undefined,
+    );
   }
 
   /** Whether any of the configured detection types require LLM-based analysis */
   private get hasLLMOnlyTypes(): boolean {
-    return this.detectionTypes.some(t => PIIDetector.LLM_ONLY_TYPES.has(t));
+    return this.detectionTypes.some(t => LLM_ONLY_PII_TYPES.has(t));
   }
 
   /**
@@ -855,7 +658,7 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
       const combined = tail + textContent;
       const regexResult = this.detectPIILocal(combined);
       // Update tail for next chunk
-      state._piiRegexTail = combined.slice(-PIIDetector.REGEX_CARRYOVER_SIZE);
+      state._piiRegexTail = combined.slice(-PII_REGEX_CARRYOVER_SIZE);
 
       // Only flag if PII overlaps with the new chunk (not just the carryover tail)
       const hasNewPII =
