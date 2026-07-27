@@ -1,5 +1,21 @@
 # @mastra/server
 
+## 1.53.0-alpha.3
+
+### Patch Changes
+
+- Fixed observability endpoints returning HTTP 500 when the observability storage domain is disabled (e.g. `domains: { observability: false }` on a composite store). The server now responds with HTTP 501 Not Implemented and a clear message — consistent with how other capability gaps (delta polling, workspace v1) are reported — so an intentionally disabled capability is no longer reported as an internal server failure. Fixes [#20157](https://github.com/mastra-ai/mastra/issues/20157). ([#20158](https://github.com/mastra-ai/mastra/pull/20158))
+
+- Updated dependencies:
+  - @mastra/core@1.53.0-alpha.3
+
+## 1.53.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`75f843d`](https://github.com/mastra-ai/mastra/commit/75f843d09f758223e6eeb321321bdcc5c7e779d0)]:
+  - @mastra/core@1.53.0-alpha.2
+
 ## 1.53.0-alpha.1
 
 ### Patch Changes

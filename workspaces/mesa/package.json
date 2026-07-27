@@ -26,7 +26,8 @@
     "test:watch": "vitest watch",
     "test": "pnpm test:unit",
     "test:cloud": "vitest run ./src/**/*.integration.test.ts",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {

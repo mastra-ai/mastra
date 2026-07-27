@@ -30,7 +30,8 @@
     "test:server": "vitest run ./src/server",
     "test:integration": "cd integration-tests && pnpm test:mcp",
     "test": "pnpm test:server && pnpm test:client && pnpm test:integration",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "keywords": [],
   "author": "",

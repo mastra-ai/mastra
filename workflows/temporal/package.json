@@ -1,6 +1,6 @@
 {
   "name": "@mastra/temporal",
-  "version": "0.2.10-alpha.1",
+  "version": "0.2.10-alpha.3",
   "description": "Mastra Temporal workflows integration - run Mastra workflows on the Temporal durable execution platform",
   "type": "module",
   "main": "dist/index.js",
@@ -39,7 +39,7 @@
     "test": "vitest run --no-isolate --retry=1",
     "test:unit": "vitest run --no-isolate --retry=1 --exclude='src/index.test.ts'",
     "test:integration": "vitest run --no-isolate --retry=1 src/index.test.ts",
-    "lint": "eslint .",
+    "lint": "oxlint . && eslint .",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit"
   },
