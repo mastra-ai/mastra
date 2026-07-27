@@ -829,26 +829,44 @@ export class AgentThreadStreamRuntime {
    * Evict SUSPENDED records parked longer than {@link AGENT_SUSPENDED_RUN_TTL_MS}.
    * Called lazily on each registration so cleanup is proportional to activity and
    * zero-cost when idle — mirrors the internal-workflow registry sweep. Bounds the
-   * lightweight records left behind by abandoned suspends and by resumes that land
-   * on a different instance (which never clean the origin instance's record).
+   * records left behind by abandoned suspends and by resumes that land on a
+   * different instance (which never clean the origin instance's record).
+   *
+   * When the expiring record is still the run's current record — an abandoned
+   * suspend, not one superseded by a same-instance resume — the teardown mirrors
+   * #watchThreadRunCompletion's terminal path: it clears run-level state, releases
+   * the cross-process lease, and publishes `run-completed` so remote subscribers
+   * stop treating the thread as blocked and drain any queued follow-up work. A
+   * superseded older stream just has its stream entry dropped; the resumed run
+   * keeps its lease, suspended marker, and active slot.
    */
-  #sweepStaleSuspendedRecords(state: AgentThreadRuntimeState) {
+  #sweepStaleSuspendedRecords(state: AgentThreadRuntimeState, pubsub: PubSub | undefined) {
     const now = Date.now();
     for (const [streamId, record] of state.threadRunsByStreamId) {
       if (record.lifecycle !== 'suspended' || record.suspendedAt === undefined) continue;
       if (now - record.suspendedAt <= AGENT_SUSPENDED_RUN_TTL_MS) continue;
       state.threadRunsByStreamId.delete(streamId);
       state.watchedThreadStreamIds.delete(streamId);
-      if (state.threadRunsById.get(record.runId) === record) {
-        state.threadRunsById.delete(record.runId);
-        state.threadKeysByRunId.delete(record.runId);
-      }
-      this.#clearSuspendedRun(state, record.runId);
+      // A same-instance resume re-registers the run under a newer streamId, so a
+      // record that is no longer the run's current record is just the superseded
+      // older stream: dropping its stream entry above is enough. Only the current
+      // record (an abandoned suspend) gets the full run-level teardown below.
+      if (state.threadRunsById.get(record.runId) !== record) continue;
       const staleKey = this.#threadKey(record.resourceId, record.threadId);
-      if (state.activeThreadRunIds.get(staleKey) === record.runId) {
+      state.threadRunsById.delete(record.runId);
+      state.threadKeysByRunId.delete(record.runId);
+      this.#clearSuspendedRun(state, record.runId);
+      // Stop renewing and release the cross-process lease, otherwise the run's
+      // lease-renewal timer keeps the thread owned forever on other instances.
+      this.#releaseThreadLease(pubsub, staleKey, record.runId);
+      if (
+        state.activeThreadRunIds.get(staleKey) === record.runId &&
+        state.activeThreadStreamIds.get(staleKey) === streamId
+      ) {
         state.activeThreadRunIds.delete(staleKey);
         state.activeThreadStreamIds.delete(staleKey);
       }
+      this.#publish(pubsub, staleKey, { type: 'run-completed', runId: record.runId, streamId });
     }
   }
 
@@ -862,7 +880,7 @@ export class AgentThreadStreamRuntime {
     if (!threadId) return;
 
     const state = this.#getState(pubsub);
-    this.#sweepStaleSuspendedRecords(state);
+    this.#sweepStaleSuspendedRecords(state, pubsub);
     const key = this.#threadKey(resourceId, threadId);
     const { streamId, streamSeq } = this.#nextStreamIdentity(state, output.runId);
     const {

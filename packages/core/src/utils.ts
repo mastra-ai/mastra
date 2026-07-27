@@ -32,13 +32,13 @@ export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, 
 
 /**
  * Read a positive-integer environment variable (e.g. a TTL in ms). Unset, empty,
- * non-numeric, or non-positive values fall back to `fallback`.
+ * non-numeric, fractional, or non-positive values fall back to `fallback`.
  */
 export function readPositiveIntEnv(name: string, fallback: number): number {
   const raw = process.env[name];
   if (!raw) return fallback;
   const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 /**
