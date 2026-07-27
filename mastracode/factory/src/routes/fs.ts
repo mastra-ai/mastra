@@ -145,6 +145,25 @@ function assertApprovedRenderedRoot(renderedRoot: string): string {
   return safeRoot;
 }
 
+/**
+ * Validate a plan path from a `submit_plan` suspension. Plans are Markdown
+ * files the agent writes inside the workspace (e.g. `.mastracode/plans/foo.md`),
+ * so the path must be workspace-relative (traversal is rejected by
+ * `assertRelativePath`) and carry a `.md` extension. Confining reads to Markdown
+ * keeps this a plan viewer rather than a general file-read primitive.
+ */
+function assertPlanPath(path: string): string {
+  const safePath = assertRelativePath(path, 'path');
+  if (!safePath.toLowerCase().endsWith('.md')) throw new Error('Plan path must be a Markdown (.md) file');
+  return safePath;
+}
+
+/** Extract a Node.js filesystem error code (e.g. `ENOENT`) without leaking the raw error. */
+function nodeErrorCode(error: unknown): string | undefined {
+  if (error instanceof Error && 'code' in error && typeof error.code === 'string') return error.code;
+  return undefined;
+}
+
 async function confinedWorkspacePath(
   root: string,
   workspacePath: string,
@@ -275,15 +294,16 @@ export async function listWorkspaceRenderedPath(
   };
 }
 
-export async function readWorkspaceFile(root: string, workspacePath: string, path: string): Promise<WorkspaceFile> {
-  const safePath = assertRelativePath(path, 'path');
-  const relativeRoot = safePath.split('/')[0] ?? '';
-  assertApprovedRenderedRoot(relativeRoot);
-  const {
-    workspace,
-    path: confinedPath,
-    relativePath,
-  } = await confinedWorkspaceRelativePath(root, workspacePath, path);
+/**
+ * Read a confined local file into a `WorkspaceFile`. The path must already be
+ * confined to the workspace by the caller (via `confinedWorkspaceRelativePath`).
+ * Binary/undecodable content is reported as `unsupported` rather than throwing.
+ */
+async function readConfinedWorkspaceFile(
+  workspace: string,
+  confinedPath: string,
+  relativePath: string,
+): Promise<WorkspaceFile> {
   const info = await lstat(confinedPath);
   if (info.isDirectory()) throw new Error('Path is a directory');
   if (!info.isFile()) throw new Error('Unsupported file type');
@@ -297,28 +317,47 @@ export async function readWorkspaceFile(root: string, workspacePath: string, pat
     await handle.close();
   }
 
+  const base = {
+    workspacePath: workspace,
+    path: relativePath,
+    name: relativePath.split('/').pop() ?? relativePath,
+    size: info.size,
+    updatedAt: info.mtime.toISOString(),
+  };
   try {
     const content = TEXT_DECODER.decode(contentBuffer);
-    return {
-      workspacePath: workspace,
-      path: relativePath,
-      name: relativePath.split('/').pop() ?? relativePath,
-      size: info.size,
-      updatedAt: info.mtime.toISOString(),
-      contentType: 'text',
-      content,
-      truncated: info.size > MAX_TEXT_FILE_BYTES,
-    };
+    return { ...base, contentType: 'text', content, truncated: info.size > MAX_TEXT_FILE_BYTES };
   } catch {
-    return {
-      workspacePath: workspace,
-      path: relativePath,
-      name: relativePath.split('/').pop() ?? relativePath,
-      size: info.size,
-      updatedAt: info.mtime.toISOString(),
-      contentType: 'unsupported',
-    };
+    return { ...base, contentType: 'unsupported' };
   }
+}
+
+export async function readWorkspaceFile(root: string, workspacePath: string, path: string): Promise<WorkspaceFile> {
+  const safePath = assertRelativePath(path, 'path');
+  const relativeRoot = safePath.split('/')[0] ?? '';
+  assertApprovedRenderedRoot(relativeRoot);
+  const {
+    workspace,
+    path: confinedPath,
+    relativePath,
+  } = await confinedWorkspaceRelativePath(root, workspacePath, path);
+  return readConfinedWorkspaceFile(workspace, confinedPath, relativePath);
+}
+
+/**
+ * Read a plan Markdown file confined to a local workspace. Unlike
+ * `readWorkspaceFile`, plans are not restricted to the approved rendered roots
+ * (they live under `.mastracode/plans/`), but the path is still workspace-
+ * relative and must be a `.md` file.
+ */
+export async function readWorkspacePlan(root: string, workspacePath: string, path: string): Promise<WorkspaceFile> {
+  assertPlanPath(path);
+  const {
+    workspace,
+    path: confinedPath,
+    relativePath,
+  } = await confinedWorkspaceRelativePath(root, workspacePath, path);
+  return readConfinedWorkspaceFile(workspace, confinedPath, relativePath);
 }
 
 export async function listArtifacts(root: string, workspacePath: string): Promise<ArtifactListing> {
@@ -450,15 +489,16 @@ export async function listSessionRenderedPath(
   return { workspacePath: session.sessionId, root: safeRoot, rootPath, entries };
 }
 
-/** Read a file under an approved rendered root inside a session's sandbox. */
-export async function readSessionWorkspaceFile(
+/**
+ * Read an already-confined relative path inside a session's sandbox into a
+ * `WorkspaceFile`. Reattaches to the sandbox and reports binary/undecodable
+ * content as `unsupported` instead of throwing.
+ */
+async function readSessionConfinedFile(
   fleet: SandboxFleet,
   session: SourceControlSession,
-  path: string,
+  safePath: string,
 ): Promise<WorkspaceFile> {
-  const safePath = assertRelativePath(path, 'path');
-  assertApprovedRenderedRoot(safePath.split('/')[0] ?? '');
-
   const handle = await sessionSandbox(fleet, session);
   if (!handle) throw new Error('Session workspace is not available');
   const { filesystem } = handle;
@@ -480,6 +520,27 @@ export async function readSessionWorkspaceFile(
   } catch {
     return { ...base, contentType: 'unsupported' };
   }
+}
+
+/** Read a file under an approved rendered root inside a session's sandbox. */
+export async function readSessionWorkspaceFile(
+  fleet: SandboxFleet,
+  session: SourceControlSession,
+  path: string,
+): Promise<WorkspaceFile> {
+  const safePath = assertRelativePath(path, 'path');
+  assertApprovedRenderedRoot(safePath.split('/')[0] ?? '');
+  return readSessionConfinedFile(fleet, session, safePath);
+}
+
+/** Read a plan Markdown file inside a Factory session's sandbox workdir. */
+export async function readSessionWorkspacePlan(
+  fleet: SandboxFleet,
+  session: SourceControlSession,
+  path: string,
+): Promise<WorkspaceFile> {
+  const safePath = assertPlanPath(path);
+  return readSessionConfinedFile(fleet, session, safePath);
 }
 
 export interface ResolvedCodebase {
@@ -517,6 +578,8 @@ export function resolveCodebase(projectPath: string): ResolvedCodebase {
 /**
  * Build the web filesystem routes as Mastra `apiRoutes`:
  *   - `GET /web/fs/list?path=...`        — browse directories (confined to root)
+ *   - `GET /web/workspace/plan?workspacePath=...&path=...` — read a plan Markdown
+ *     file from the project's sandbox (for `submit_plan` rendering)
  *   - `GET /web/codebase/resolve?path=...` — TUI-compatible codebase resourceId
  */
 export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDeps } = {}): ApiRoute[] {
@@ -605,6 +668,45 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
             message.includes('not available')
               ? 403
               : message.includes('directory')
+                ? 400
+                : message.includes('not found')
+                  ? 404
+                  : 500;
+          return c.json({ error: message }, status);
+        }
+      },
+    }),
+    registerApiRoute('/web/workspace/plan', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const workspacePath = c.req.query('workspacePath');
+        const path = c.req.query('path');
+        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
+        if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
+        try {
+          const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
+          if (session && sessionFs) {
+            return c.json(await readSessionWorkspacePlan(sessionFs.fleet, session, path));
+          }
+          return c.json(await readWorkspacePlan(root, workspacePath, path));
+        } catch (error) {
+          // Map filesystem errors by code and return generic text so raw fs
+          // messages (which embed absolute server paths) never reach the client.
+          const code = nodeErrorCode(error);
+          if (code === 'ENOENT') return c.json({ error: 'Plan file not found' }, 404);
+          if (code === 'EACCES' || code === 'EPERM') return c.json({ error: 'Access denied' }, 403);
+          if (code) return c.json({ error: 'Failed to read plan file' }, 500);
+
+          // Remaining errors are our own validation Errors with safe messages.
+          const message = error instanceof Error ? error.message : String(error);
+          const status =
+            message.includes('outside') ||
+            message.includes('relative') ||
+            message.includes('escapes') ||
+            message.includes('not available')
+              ? 403
+              : message.includes('directory') || message.includes('Markdown')
                 ? 400
                 : message.includes('not found')
                   ? 404

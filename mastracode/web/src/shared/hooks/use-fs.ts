@@ -59,3 +59,25 @@ export function useWorkspaceFile(
       ),
   });
 }
+
+/**
+ * Read a plan Markdown file (from a `submit_plan` suspension) out of the
+ * session's sandbox via `GET /web/workspace/plan`. `workspacePath` is the
+ * session id and `planPath` the workspace-relative `.md` path the agent
+ * submitted, so the approval UI can render the plan body instead of a bare path.
+ */
+export function useWorkspacePlan(
+  workspacePath: string | undefined,
+  planPath: string | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const { client } = useApiConfig();
+  return useQuery<WorkspaceFile>({
+    queryKey: queryKeys.workspacePlan(workspacePath, planPath),
+    enabled: Boolean(workspacePath && planPath && (options.enabled ?? true)),
+    queryFn: () =>
+      client.get<WorkspaceFile>(
+        `/web/workspace/plan?workspacePath=${encodeURIComponent(workspacePath ?? '')}&path=${encodeURIComponent(planPath ?? '')}`,
+      ),
+  });
+}
