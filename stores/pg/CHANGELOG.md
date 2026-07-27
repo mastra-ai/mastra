@@ -1,5 +1,16 @@
 # @mastra/pg
 
+## 1.17.1-alpha.0
+
+### Patch Changes
+
+- Improved Factory work-item concurrency by replacing distributed advisory locks with atomic claims, idempotent replay, and serializable relationship transactions. ([#20135](https://github.com/mastra-ai/mastra/pull/20135))
+
+- Hardened distributed lock cleanup so clients are destroyed when transaction rollback fails. ([#20135](https://github.com/mastra-ai/mastra/pull/20135))
+
+- Updated dependencies [[`73839cb`](https://github.com/mastra-ai/mastra/commit/73839cb58322679c170627d1015669ede5f619aa), [`8e4dc79`](https://github.com/mastra-ai/mastra/commit/8e4dc793dcf035ea506f9ce79f56d2d501a4be14), [`2db93cc`](https://github.com/mastra-ai/mastra/commit/2db93ccd0b872e4de7853a93383efe0647901df8), [`094ab61`](https://github.com/mastra-ai/mastra/commit/094ab6129a1a3ecf6eeb86decac17d5faea4e02a), [`fe80944`](https://github.com/mastra-ai/mastra/commit/fe80944f3ef6681fea6eae8200fce387b7bb3c2f), [`e51e166`](https://github.com/mastra-ai/mastra/commit/e51e166c52e220abc9b64554ce37359dca8544b1)]:
+  - @mastra/core@1.53.0-alpha.4
+
 ## 1.17.0
 
 ### Minor Changes
