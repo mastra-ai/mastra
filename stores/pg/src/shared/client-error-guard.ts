@@ -38,7 +38,9 @@ const GUARD_ATTACHED = Symbol.for('@mastra/pg.clientErrorGuardAttached');
 export function attachClientErrorHandler(client: PoolClient, logger?: ClientErrorLogger): () => void {
   // A real pg PoolClient is an EventEmitter, but guard against clients that
   // aren't (e.g. test doubles) so the guard never introduces a new failure.
-  if (typeof client.on !== 'function') {
+  // Require both add and remove so detach() can never leave a dangling listener
+  // (which would let a later reattach add a duplicate).
+  if (typeof client.on !== 'function' || typeof client.removeListener !== 'function') {
     return () => {};
   }
 
