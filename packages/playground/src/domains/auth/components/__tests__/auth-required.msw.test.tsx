@@ -35,7 +35,7 @@ function renderAuthRequired(pathname: string, capabilities: RouteResponse<'GET /
     </MastraReactProvider>,
   );
 
-  return onCapabilitiesRequest;
+  return { onCapabilitiesRequest, queryClient };
 }
 
 afterEach(() => cleanup());
@@ -43,8 +43,9 @@ afterEach(() => cleanup());
 describe('AuthRequired', () => {
   describe('when authentication is enabled without a login method', () => {
     it('renders Studio content on the Settings bootstrap route', async () => {
-      const onCapabilitiesRequest = renderAuthRequired('/settings', jwtAuthCapabilities);
+      const { onCapabilitiesRequest, queryClient } = renderAuthRequired('/settings', jwtAuthCapabilities);
 
+      await waitFor(() => expect(queryClient.getQueryState(['auth', 'capabilities'])?.status).toBe('success'));
       await waitFor(() => expect(onCapabilitiesRequest).toHaveBeenCalledOnce());
 
       expect(screen.getByText('Studio content')).not.toBeNull();
