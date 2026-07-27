@@ -445,11 +445,14 @@ describe('PosthogExporter', () => {
       ]);
     });
 
-    it('should not set $ai_tools when no tool definitions are present', async () => {
+    it.each([
+      ['absent', { model: 'gpt-4o', provider: 'openai' }],
+      ['empty', { model: 'gpt-4o', provider: 'openai', tools: [] }],
+    ])('should not set $ai_tools when tool definitions are %s', async (_case, attributes) => {
       const generation = createSpan({
         type: SpanType.MODEL_GENERATION,
         parentSpanId: 'parent-1',
-        attributes: { model: 'gpt-4o', provider: 'openai' },
+        attributes,
       });
 
       await exportSpanLifecycle(exporter, generation);

@@ -589,6 +589,7 @@ describe('getToolDefinitionsForTracing', () => {
 
     const result = getToolDefinitionsForTracing({
       tools: { get_weather: weatherTool as any },
+      toolChoice: undefined,
       activeTools: undefined,
     });
 
@@ -612,6 +613,7 @@ describe('getToolDefinitionsForTracing', () => {
 
     const result = getToolDefinitionsForTracing({
       tools: { search: providerTool as any },
+      toolChoice: undefined,
       activeTools: undefined,
     });
 
@@ -629,6 +631,7 @@ describe('getToolDefinitionsForTracing', () => {
 
     const result = getToolDefinitionsForTracing({
       tools: { a: makeTool('a') as any, b: makeTool('b') as any },
+      toolChoice: undefined,
       activeTools: ['b'],
     });
 
@@ -637,7 +640,26 @@ describe('getToolDefinitionsForTracing', () => {
   });
 
   it('returns undefined for missing or empty tool sets', () => {
-    expect(getToolDefinitionsForTracing({ tools: undefined, activeTools: undefined })).toBeUndefined();
-    expect(getToolDefinitionsForTracing({ tools: {}, activeTools: undefined })).toBeUndefined();
+    expect(
+      getToolDefinitionsForTracing({ tools: undefined, toolChoice: undefined, activeTools: undefined }),
+    ).toBeUndefined();
+    expect(getToolDefinitionsForTracing({ tools: {}, toolChoice: undefined, activeTools: undefined })).toBeUndefined();
+  });
+
+  it("returns undefined when toolChoice is 'none' (tools are stripped from the request)", () => {
+    const weatherTool = createTool({
+      id: 'get_weather',
+      description: 'Get the weather for a city',
+      inputSchema: z.object({ city: z.string() }),
+      execute: async () => 'sunny',
+    });
+
+    const result = getToolDefinitionsForTracing({
+      tools: { get_weather: weatherTool as any },
+      toolChoice: 'none',
+      activeTools: undefined,
+    });
+
+    expect(result).toBeUndefined();
   });
 });

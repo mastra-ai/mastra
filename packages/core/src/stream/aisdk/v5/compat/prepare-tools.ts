@@ -245,13 +245,17 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
  */
 export function getToolDefinitionsForTracing<TOOLS extends Record<string, Tool>>({
   tools,
+  toolChoice,
   activeTools,
 }: {
   tools: TOOLS | undefined;
+  toolChoice: ToolChoice<TOOLS> | undefined;
   activeTools: Array<keyof TOOLS> | undefined;
 }): ModelToolDefinition[] | undefined {
   try {
-    const { tools: prepared } = prepareToolsAndToolChoice({ tools, toolChoice: undefined, activeTools });
+    // Pass the real toolChoice through: 'none' strips tools from the provider
+    // request, and the span must not claim tools the model never received.
+    const { tools: prepared } = prepareToolsAndToolChoice({ tools, toolChoice, activeTools });
     if (!prepared?.length) return undefined;
     return prepared.map(tool =>
       tool.type === 'function'

@@ -164,7 +164,7 @@ export class MastraLLMVNext extends MastraBase {
     // Serialized once per generation so exporters can surface the tool schemas
     // the model received; skipped entirely when tracing is off.
     const toolDefinitions = parentSpan
-      ? getToolDefinitionsForTracing({ tools, activeTools: activeTools as string[] | undefined })
+      ? getToolDefinitionsForTracing({ tools, toolChoice, activeTools: activeTools as string[] | undefined })
       : undefined;
 
     const modelSpan = parentSpan?.createChildSpan({
