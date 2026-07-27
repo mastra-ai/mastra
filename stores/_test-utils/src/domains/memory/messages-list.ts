@@ -634,6 +634,22 @@ export function createMessagesListTest({ storage }: { storage: MastraStorage }) 
         expect(result.messages.map((m: any) => m.content.content)).toEqual(['Message 1', 'Message 2', 'Message 3']);
       });
 
+      it('should report no more pages when includes cover multiple queried threads', async () => {
+        const result = await memoryStorage.listMessages({
+          threadId: [thread.id, thread2.id],
+          perPage: 1,
+          include: messages.slice(1).map(message => ({
+            id: message.id,
+            withPreviousMessages: 0,
+            withNextMessages: 0,
+          })),
+        });
+
+        expect(result.total).toBe(6);
+        expect(result.messages).toHaveLength(6);
+        expect(result.hasMore).toBe(false);
+      });
+
       it('should work with perPage and date range', async () => {
         const dateThread = createSampleThread();
         await memoryStorage.saveThread({ thread: dateThread });

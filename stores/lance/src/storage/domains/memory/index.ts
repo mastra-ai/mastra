@@ -464,8 +464,11 @@ export class StoreMemoryLance extends MemoryStorage {
       // Sort all messages (paginated + included) for final output
       finalMessages = this._sortMessages(finalMessages, field, direction);
 
+      const threadIdSet = new Set(threadIds);
       const returnedThreadMessageIds = new Set(
-        finalMessages.filter(message => message.threadId === threadId).map(message => message.id),
+        finalMessages
+          .filter(message => message.threadId && threadIdSet.has(message.threadId))
+          .map(message => message.id),
       );
       const hasMore =
         perPageInput !== false &&
