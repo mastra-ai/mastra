@@ -571,4 +571,29 @@ describe('AgentControllerChannels', () => {
       });
     }, 30_000);
   });
+
+  describe('resolving Mastra from the bound controller', () => {
+    it('builds an outbound render context for a channel-backed thread', async () => {
+      // `AgentControllerChannels.__setAgent` is a deliberate no-op, so the base
+      // class's agent-based Mastra lookup resolves to undefined here. The
+      // controller-based override is what keeps the outbound path working:
+      // without it this returns null and the output processor silently stops
+      // rendering into the channel.
+      const { adapter, mastra, channels } = await createSetup({});
+      const chatThread = createChatThread(adapter, 'discord:t-render');
+
+      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hello'), mastra);
+
+      const memoryStore = await mastra.getStorage()!.getStore('memory');
+      const { threads } = await memoryStore!.listThreads({
+        filter: { metadata: { channel_externalThreadId: 'discord:t-render' } },
+        perPage: 1,
+      });
+      const mapped = threads[0];
+      expect(mapped, 'inbound dispatch mapped the chat thread to a Mastra thread').toBeDefined();
+
+      const renderContext = await channels.buildRenderContextForThread(mapped!.id);
+      expect(renderContext).not.toBeNull();
+    }, 30_000);
+  });
 });
