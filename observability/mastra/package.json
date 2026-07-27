@@ -1,6 +1,6 @@
 {
   "name": "@mastra/observability",
-  "version": "1.16.2-alpha.0",
+  "version": "1.16.2",
   "description": "Core observability package for Mastra - includes tracing and scoring features",
   "type": "module",
   "main": "dist/index.js",
@@ -27,7 +27,8 @@
     "build:watch": "pnpm build --watch",
     "test": "vitest run",
     "test:watch": "vitest watch",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "devDependencies": {

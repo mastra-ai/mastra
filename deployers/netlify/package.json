@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-netlify",
-  "version": "1.2.8-alpha.1",
+  "version": "1.2.10-alpha.1",
   "description": "",
   "type": "module",
   "files": [
@@ -26,7 +26,8 @@
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "keywords": [],
   "author": "",

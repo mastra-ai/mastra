@@ -14,6 +14,7 @@ import { deepMerge } from '../../utils';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
+import { beginGoalActivity, stopGoalActivity } from '../goal';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
@@ -1181,7 +1182,20 @@ export class DurableAgent<
           from: ChunkFrom.AGENT,
           payload: { id: workflowInput.agentId, messageId },
         });
-        return this.executeWorkflow(runId, workflowInput);
+        if (this.__getGoalConfig()) {
+          await beginGoalActivity({
+            mastra: this.#mastra,
+            agentId: workflowInput.agentId,
+            threadId,
+            runId,
+            requestContext: globalRunRegistry.get(runId)?.requestContext,
+          });
+        }
+        try {
+          return await this.executeWorkflow(runId, workflowInput);
+        } finally {
+          await stopGoalActivity({ agentId: workflowInput.agentId, runId });
+        }
       })
       .catch(error => {
         void this.emitError(runId, error);
@@ -1521,13 +1535,27 @@ export class DurableAgent<
         }
 
         const run = await workflow.createRun({ runId, pubsub: this.pubsub });
-        const result = await run.resume({
-          resumeData,
-          label: resolvedOptions.toolCallId,
-          requestContext,
-          actor: resolvedOptions.actor,
-          ...createObservabilityContext({ currentSpan: entry.resumeAgentSpan ?? entry.agentSpan }),
-        });
+        if (this.__getGoalConfig()) {
+          await beginGoalActivity({
+            mastra: this.#mastra,
+            agentId: this.id,
+            threadId: memoryInfo?.threadId,
+            runId,
+            requestContext,
+          });
+        }
+        let result;
+        try {
+          result = await run.resume({
+            resumeData,
+            label: resolvedOptions.toolCallId,
+            requestContext,
+            actor: resolvedOptions.actor,
+            ...createObservabilityContext({ currentSpan: entry.resumeAgentSpan ?? entry.agentSpan }),
+          });
+        } finally {
+          await stopGoalActivity({ agentId: this.id, runId });
+        }
         if (result?.status === 'failed') {
           const error = new Error((result as any).error?.message || 'Workflow resume failed');
           void this.emitError(runId, error);
@@ -2190,7 +2218,20 @@ export class DurableAgent<
           from: ChunkFrom.AGENT,
           payload: { id: workflowInput.agentId, messageId },
         });
-        return this.executeWorkflow(runId, workflowInput);
+        if (this.__getGoalConfig()) {
+          await beginGoalActivity({
+            mastra: this.#mastra,
+            agentId: workflowInput.agentId,
+            threadId,
+            runId,
+            requestContext: globalRunRegistry.get(runId)?.requestContext,
+          });
+        }
+        try {
+          return await this.executeWorkflow(runId, workflowInput);
+        } finally {
+          await stopGoalActivity({ agentId: workflowInput.agentId, runId });
+        }
       })
       .catch(error => {
         void this.emitError(runId, error);

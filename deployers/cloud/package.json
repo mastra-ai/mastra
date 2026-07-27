@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloud",
-  "version": "1.52.0-alpha.9",
+  "version": "1.53.0-alpha.3",
   "description": "",
   "type": "module",
   "files": [
@@ -27,7 +27,8 @@
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
-    "lint": "eslint .",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
     "prepack": "node scripts/sync-versions.mjs"
   },
   "keywords": [],

@@ -301,7 +301,11 @@ type Shared_Type_16 = {
   };
   /** Which processor phases to enable */
   enabledPhases: (
-    'processInput' | 'processInputStep' | 'processOutputStream' | 'processOutputResult' | 'processOutputStep'
+    | 'processInput'
+    | 'processInputStep'
+    | 'processOutputStream'
+    | 'processOutputResult'
+    | 'processOutputStep'
   )[];
 };
 
@@ -12892,6 +12896,8 @@ export type PatchStoredAgentsStoredAgentId_Body = {
     | undefined;
   /** Optional message describing the changes for the auto-created version */
   changeMessage?: string | undefined;
+  /** Immediately activate the auto-created version. Defaults to false when omitted. */
+  autoPublish?: boolean | undefined;
 };
 
 export type PatchStoredAgentsStoredAgentId_Response =
@@ -16563,7 +16569,11 @@ export type GetProcessorProviders_Response = {
     name: string;
     description?: string | undefined;
     availablePhases: (
-      'processInput' | 'processInputStep' | 'processOutputStream' | 'processOutputResult' | 'processOutputStep'
+      | 'processInput'
+      | 'processInputStep'
+      | 'processOutputStream'
+      | 'processOutputResult'
+      | 'processOutputStep'
     )[];
   }[];
 };
@@ -16596,7 +16606,11 @@ export type GetProcessorProvidersProviderId_Response = {
   name: string;
   description?: string | undefined;
   availablePhases: (
-    'processInput' | 'processInputStep' | 'processOutputStream' | 'processOutputResult' | 'processOutputStep'
+    | 'processInput'
+    | 'processInputStep'
+    | 'processOutputStream'
+    | 'processOutputResult'
+    | 'processOutputStep'
   )[];
   configSchema: {
     [key: string]: unknown;
@@ -19395,6 +19409,7 @@ export type PostAgentControllerControllerIdSessions_Body = {
         [key: string]: string;
       }
     | undefined;
+  threadId?: string | undefined;
   sessionScope?: string | undefined;
 };
 

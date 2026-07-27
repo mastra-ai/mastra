@@ -205,7 +205,7 @@ export const Multiple: Story = {
     const selectedCapabilities = capabilityOptions.filter(option => value.includes(option.value));
 
     return (
-      <div className="w-90 flex flex-col gap-3">
+      <div className="flex w-90 flex-col gap-3">
         <Combobox
           multiple
           options={capabilityOptions}
@@ -220,7 +220,7 @@ export const Multiple: Story = {
           {selectedCapabilities.map(option => (
             <span
               key={option.value}
-              className="rounded-full border border-border1 bg-surface3 px-2.5 py-1 text-ui-xs text-neutral4"
+              className="border-border1 bg-surface3 text-ui-xs text-neutral4 rounded-full border px-2.5 py-1"
             >
               {option.label}
             </span>

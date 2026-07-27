@@ -1,13 +1,11 @@
-const modeColors: Record<string, { background: string; foreground: string }> = {
-  build: { background: '#16c858', foreground: '#111827' },
-  plan: { background: '#7f45e0', foreground: '#ffffff' },
-  fast: { background: '#fdac53', foreground: '#111827' },
+import './composer.css';
+
+const modeColorClassNames: Record<string, string> = {
+  build: 'chat-mode-build',
+  plan: 'chat-mode-plan',
+  fast: 'chat-mode-fast',
 };
 
-export function getModeColor(modeId: string | undefined): string | undefined {
-  return modeId ? modeColors[modeId.toLowerCase()]?.background : undefined;
-}
-
-export function getModeForegroundColor(modeId: string | undefined): string | undefined {
-  return modeId ? modeColors[modeId.toLowerCase()]?.foreground : undefined;
+export function getModeColorClass(modeId: string | undefined): string | undefined {
+  return modeId ? modeColorClassNames[modeId.toLowerCase()] : undefined;
 }

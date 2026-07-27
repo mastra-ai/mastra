@@ -1,5 +1,5 @@
 /**
- * BDD coverage for the app-used git-operation mutation hooks (worktree/push).
+ * BDD coverage for the app-used Factory session and push mutation hooks.
  *
  * Drives the real `postRepositoryGitOp`-backed services + React Query mutations;
  * only the network is mocked (MSW). Handlers assert the request bodies so the
@@ -11,31 +11,39 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
-import type { GitOpError, PushResult, WorktreeResult } from '../../../web/ui/domains/workspaces/services/github';
-import { useCreateWorktreeMutation, usePushBranchMutation } from '../useGithubGitOps';
+import type { FactoryUserSession, GitOpError, PushResult } from '../../../web/ui/domains/workspaces/services/github';
+import { useCreateUserSessionMutation, usePushBranchMutation } from '../useGithubGitOps';
 
 const ORIGIN = TEST_BASE_URL;
 const PROJECT = 'ghp_1';
 const PROJECT_URL = `${ORIGIN}/web/github/projects/${PROJECT}`;
 
 describe('git operation mutation hooks', () => {
-  it('given a branch and base, when creating a worktree, then it posts them and resolves the worktree result', async () => {
-    const worktree: WorktreeResult = {
-      worktreePath: '/workspace/worktrees/feat-x',
+  it('given a branch and base, when creating a session, then it persists metadata without materializing a worktree', async () => {
+    const session: FactoryUserSession = {
+      id: 'stored-session',
+      sessionId: 'session-feat-x',
+      projectRepositoryId: PROJECT,
+      orgId: 'org-1',
+      userId: 'user-1',
       branch: 'feat-x',
       baseBranch: 'main',
-      resourceId: 'resource-feat-x',
+      sandboxId: null,
+      sandboxWorkdir: null,
+      materializedAt: null,
+      createdAt: '2026-07-22T00:00:00.000Z',
+      updatedAt: '2026-07-22T00:00:00.000Z',
     };
     server.use(
-      http.post(`${PROJECT_URL}/worktree`, async ({ request }) => {
+      http.post(`${PROJECT_URL}/sessions`, async ({ request }) => {
         expect(await request.json()).toEqual({ branch: 'feat-x', baseBranch: 'main' });
-        return HttpResponse.json(worktree);
+        return HttpResponse.json({ session });
       }),
     );
 
-    const { result, client } = renderHookWithProviders(() => useCreateWorktreeMutation());
+    const { result, client } = renderHookWithProviders(() => useCreateUserSessionMutation());
 
-    let resolved: WorktreeResult | undefined;
+    let resolved: FactoryUserSession | undefined;
     await act(async () => {
       resolved = await result.current.mutateAsync({
         projectRepositoryId: PROJECT,
@@ -45,14 +53,14 @@ describe('git operation mutation hooks', () => {
     });
     await waitForMutationsIdle(client);
 
-    expect(resolved).toEqual(worktree);
+    expect(resolved).toEqual(session);
   });
 
   it('given a branch, when pushing, then it resolves the pushed branch', async () => {
     const push: PushResult = { pushed: true, branch: 'feat-x' };
     server.use(
       http.post(`${PROJECT_URL}/push`, async ({ request }) => {
-        expect(await request.json()).toEqual({ branch: 'feat-x' });
+        expect(await request.json()).toEqual({ branch: 'feat-x', sessionId: 'session-feat-x' });
         return HttpResponse.json(push);
       }),
     );
@@ -61,7 +69,11 @@ describe('git operation mutation hooks', () => {
 
     let resolved: PushResult | undefined;
     await act(async () => {
-      resolved = await result.current.mutateAsync({ projectRepositoryId: PROJECT, branch: 'feat-x' });
+      resolved = await result.current.mutateAsync({
+        projectRepositoryId: PROJECT,
+        branch: 'feat-x',
+        sessionId: 'session-feat-x',
+      });
     });
     await waitForMutationsIdle(client);
 
@@ -70,12 +82,12 @@ describe('git operation mutation hooks', () => {
 
   it('given the server rejects with a 400 error body, when the mutation fails, then the error carries the code and status', async () => {
     server.use(
-      http.post(`${PROJECT_URL}/worktree`, () =>
+      http.post(`${PROJECT_URL}/sessions`, () =>
         HttpResponse.json({ error: 'invalid_branch', message: 'Invalid branch' }, { status: 400 }),
       ),
     );
 
-    const { result, client } = renderHookWithProviders(() => useCreateWorktreeMutation());
+    const { result, client } = renderHookWithProviders(() => useCreateUserSessionMutation());
 
     await act(async () => {
       await expect(
@@ -100,7 +112,11 @@ describe('git operation mutation hooks', () => {
 
     await act(async () => {
       await expect(
-        result.current.mutateAsync({ projectRepositoryId: PROJECT, branch: 'feat-x' }),
+        result.current.mutateAsync({
+          projectRepositoryId: PROJECT,
+          branch: 'feat-x',
+          sessionId: 'session-feat-x',
+        }),
       ).rejects.toMatchObject({
         status: 401,
         authRequired: true,

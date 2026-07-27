@@ -289,7 +289,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         onStartTextFilter={setAutoFocusFilterFieldId}
         hiddenFieldIds={hiddenCreatorFieldIds}
       />
-      <div className="flex h-form-default items-center gap-2 ml-auto">
+      <div className="h-form-default ml-auto flex items-center gap-2">
         {!branchesUnsupported && (
           <>
             <Switch
@@ -339,7 +339,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const pageTopArea = (
     <PageLayout.TopArea>
       <PageLayout.Row>
-        <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2 w-full">
+        <PageLayout.Column className="flex w-full flex-wrap items-start justify-start gap-2">
           {toolbarControls}
         </PageLayout.Column>
       </PageLayout.Row>

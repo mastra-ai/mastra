@@ -1,6 +1,6 @@
 {
   "name": "@mastra/apple-container",
-  "version": "0.3.0-alpha.0",
+  "version": "0.3.0",
   "description": "Apple container CLI sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -27,7 +27,8 @@
     "test:integration": "vitest run ./src/**/*.integration.test.ts",
     "test": "pnpm test:unit && pnpm test:integration",
     "test:cloud": "pnpm test:integration",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "devDependencies": {

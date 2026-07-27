@@ -1,152 +1,124 @@
 /**
- * BDD coverage for Settings › Model › Factory default model.
- *
- * The picker persists a default model on the server-backed Factory project
- * (`PATCH /web/factory/projects/:id`), which factory runs start on. Local
- * folder factories have no server project, so the picker does not render.
+ * BDD coverage for the Factory default model setting. The setting is
+ * mandatory: the picker offers only real models (no "Session default" clear
+ * option) and every pick PATCHes a concrete `defaultModelId` — there is no
+ * path back to an unset model.
  */
-import type { AgentControllerAvailableModel } from '@mastra/client-js';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterEach, describe, expect, it } from 'vitest';
+import { MemoryRouter, Route, Routes } from 'react-router';
+import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import { ActiveFactoryProvider } from '../../../workspaces';
+import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
+import type { AvailableModelOption } from '../../../../../../shared/hooks/useAvailableModels';
 import { FactoryDefaultModelSection } from '../FactoryDefaultModelSection';
 
-const models: AgentControllerAvailableModel[] = [
-  { id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true, useCount: 1 },
-  { id: 'anthropic/claude-sonnet', provider: 'anthropic', modelName: 'claude-sonnet', hasApiKey: true, useCount: 0 },
+const models: AvailableModelOption[] = [
+  { id: 'anthropic/claude-sonnet-4-5', provider: 'anthropic', modelName: 'claude-sonnet-4-5', hasApiKey: true },
+  { id: 'openai/gpt-5', provider: 'openai', modelName: 'gpt-5', hasApiKey: true },
 ];
-
-function seedLocalFactory() {
-  localStorage.setItem(
-    'mastracode-factories',
-    JSON.stringify([
-      {
-        id: 'factory-local',
-        name: 'Local Factory',
-        resourceId: 'resource-local',
-        createdAt: 1,
-        binding: { kind: 'local', path: '/tmp/local' },
-      },
-    ]),
-  );
-  localStorage.setItem('mastracode-active-factory', 'factory-local');
-}
-
-function seedServerFactory() {
-  localStorage.setItem(
-    'mastracode-factories',
-    JSON.stringify([
-      {
-        id: 'factory-server',
-        name: 'My Factory',
-        resourceId: 'resource-server',
-        createdAt: 1,
-        binding: {
-          kind: 'factory',
-          factoryProjectId: 'fp-1',
-          repositories: [{ projectRepositoryId: 'pr-1', slug: 'octo/hello', worktrees: [] }],
-        },
-      },
-    ]),
-  );
-  localStorage.setItem('mastracode-active-factory', 'factory-server');
-}
 
 function renderSection() {
   return renderWithProviders(
-    <ActiveFactoryProvider>
-      <FactoryDefaultModelSection models={models} />
-    </ActiveFactoryProvider>,
+    <MemoryRouter initialEntries={['/factories/fp-1/settings/model']}>
+      <Routes>
+        <Route path="/factories/:factoryId/settings/model" element={<FactoryDefaultModelSection models={models} />} />
+      </Routes>
+    </MemoryRouter>,
   );
 }
 
-/** Open the searchable combobox and pick an option (Base UI selects on pointer events). */
-async function pickOption(user: ReturnType<typeof userEvent.setup>, trigger: HTMLElement, name: RegExp) {
-  await user.click(trigger);
-  const option = await screen.findByRole('option', { name });
-  fireEvent.pointerDown(option, { pointerType: 'mouse' });
-  fireEvent.click(option, { detail: 1 });
+function stubProject(defaultModelId: string | null) {
+  const patchedBodies: unknown[] = [];
+  let saved = defaultModelId;
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
+      HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultModelId: saved } }),
+    ),
+    http.patch(`${TEST_BASE_URL}/web/factory/projects/fp-1`, async ({ request }) => {
+      const body = (await request.json()) as { defaultModelId: string | null };
+      patchedBodies.push(body);
+      saved = body.defaultModelId;
+      return HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultModelId: saved } });
+    }),
+  );
+  return { patchedBodies };
 }
 
-afterEach(() => {
-  localStorage.clear();
-});
-
 describe('FactoryDefaultModelSection', () => {
-  it('given a local factory, when rendered, then no default-model picker appears', async () => {
-    seedLocalFactory();
+  it('shows the saved default model and offers no way to clear it', async () => {
+    stubProject('anthropic/claude-sonnet-4-5');
+    const user = userEvent.setup();
 
     renderSection();
 
-    expect(screen.queryByLabelText('Factory default model')).not.toBeInTheDocument();
+    const combobox = screen.getByRole('combobox');
+    await waitFor(() => expect(combobox).toBeEnabled());
+    expect(combobox).toHaveTextContent('anthropic/claude-sonnet-4-5');
+
+    await user.click(combobox);
+    const options = await screen.findAllByRole('option');
+    expect(options.map(option => option.textContent)).toEqual([
+      expect.stringContaining('anthropic/claude-sonnet-4-5'),
+      expect.stringContaining('openai/gpt-5'),
+    ]);
+    expect(screen.queryByRole('option', { name: /session default/i })).not.toBeInTheDocument();
   });
 
-  it('given a server factory without a default model, when rendered, then the picker shows the session default', async () => {
-    seedServerFactory();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
-        HttpResponse.json({ project: { id: 'fp-1', name: 'My Factory', defaultModelId: null } }),
-      ),
-    );
+  it('saves a newly picked model with a concrete defaultModelId', async () => {
+    const { patchedBodies } = stubProject('anthropic/claude-sonnet-4-5');
+    const user = userEvent.setup();
 
     renderSection();
 
-    const picker = await screen.findByLabelText('Factory default model');
-    await waitFor(() => expect(picker).not.toBeDisabled());
-    expect(picker).toHaveTextContent('Session default');
+    const combobox = screen.getByRole('combobox');
+    await waitFor(() => expect(combobox).toBeEnabled());
+    await user.click(combobox);
+    const option = await screen.findByRole('option', { name: /openai\/gpt-5/ });
+    fireEvent.pointerDown(option, { pointerType: 'mouse' });
+    fireEvent.click(option, { detail: 1 });
+
+    await waitFor(() => expect(patchedBodies).toEqual([{ defaultModelId: 'openai/gpt-5' }]));
+    await waitFor(() => expect(screen.getByRole('combobox')).toHaveTextContent('openai/gpt-5'));
   });
 
-  it('given a server factory, when a model is picked, then it is persisted on the Factory project', async () => {
-    seedServerFactory();
-    const patches: unknown[] = [];
+  it('shows a saving spinner and disables the picker while the mutation is in flight', async () => {
+    let releasePatch!: () => void;
+    const patchGate = new Promise<void>(resolve => {
+      releasePatch = resolve;
+    });
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
-        HttpResponse.json({ project: { id: 'fp-1', name: 'My Factory', defaultModelId: null } }),
+        HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultModelId: 'anthropic/claude-sonnet-4-5' } }),
       ),
-      http.patch(`${TEST_BASE_URL}/web/factory/projects/fp-1`, async ({ request }) => {
-        const body = (await request.json()) as { defaultModelId: string | null };
-        patches.push(body);
-        return HttpResponse.json({ project: { id: 'fp-1', name: 'My Factory', defaultModelId: body.defaultModelId } });
+      http.patch(`${TEST_BASE_URL}/web/factory/projects/fp-1`, async () => {
+        await patchGate;
+        return HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultModelId: 'openai/gpt-5' } });
       }),
     );
     const user = userEvent.setup();
 
     renderSection();
 
-    const picker = await screen.findByLabelText('Factory default model');
-    await waitFor(() => expect(picker).not.toBeDisabled());
-    await pickOption(user, picker, /anthropic\/claude-sonnet/);
+    const combobox = screen.getByRole('combobox');
+    await waitFor(() => expect(combobox).toBeEnabled());
+    expect(screen.queryByLabelText('Saving default model')).not.toBeInTheDocument();
 
-    await waitFor(() => expect(patches).toEqual([{ defaultModelId: 'anthropic/claude-sonnet' }]));
-    await waitFor(() => expect(picker).toHaveTextContent('anthropic/claude-sonnet'));
-  });
+    await user.click(combobox);
+    const option = await screen.findByRole('option', { name: /openai\/gpt-5/ });
+    fireEvent.pointerDown(option, { pointerType: 'mouse' });
+    fireEvent.click(option, { detail: 1 });
 
-  it('given a persisted default model, when cleared, then null is sent to the server', async () => {
-    seedServerFactory();
-    const patches: unknown[] = [];
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
-        HttpResponse.json({ project: { id: 'fp-1', name: 'My Factory', defaultModelId: 'openai/gpt-4o-mini' } }),
-      ),
-      http.patch(`${TEST_BASE_URL}/web/factory/projects/fp-1`, async ({ request }) => {
-        const body = (await request.json()) as { defaultModelId: string | null };
-        patches.push(body);
-        return HttpResponse.json({ project: { id: 'fp-1', name: 'My Factory', defaultModelId: body.defaultModelId } });
-      }),
-    );
-    const user = userEvent.setup();
+    // While the popup is closing its search input (also role=combobox) may
+    // still be mounted, so assert on the trigger element directly.
+    expect(await screen.findByLabelText('Saving default model')).toBeInTheDocument();
+    expect(combobox).toBeDisabled();
 
-    renderSection();
+    releasePatch();
 
-    const picker = await screen.findByLabelText('Factory default model');
-    await waitFor(() => expect(picker).toHaveTextContent('openai/gpt-4o-mini'));
-    await pickOption(user, picker, /Session default/);
-
-    await waitFor(() => expect(patches).toEqual([{ defaultModelId: null }]));
+    await waitFor(() => expect(screen.queryByLabelText('Saving default model')).not.toBeInTheDocument());
+    await waitFor(() => expect(combobox).toHaveTextContent('openai/gpt-5'));
   });
 });

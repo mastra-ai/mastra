@@ -1,12 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
-import { createAgentControllerClient } from '../../web/ui/domains/chat/services/agentControllerClient';
+import {
+  createAgentControllerClient,
+  requireAgentControllerSession,
+} from '../../web/ui/domains/chat/services/agentControllerClient';
 
 interface UseAgentControllerSettingsArgs {
   agentControllerId: string;
   resourceId: string;
-  projectPath?: string;
+  scope?: string;
   baseUrl?: string;
   enabled?: boolean;
 }
@@ -14,23 +17,24 @@ interface UseAgentControllerSettingsArgs {
 export function useAgentControllerSettings({
   agentControllerId,
   resourceId,
-  projectPath,
+  scope,
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerSettingsArgs) {
   const { session } = createAgentControllerClient({
     agentControllerId,
     resourceId,
-    scope: projectPath,
+    scope,
     baseUrl,
     enabled,
   });
 
   return useQuery({
-    queryKey: queryKeys.agentControllerSettings(agentControllerId, resourceId, projectPath),
+    queryKey: queryKeys.agentControllerSettings(agentControllerId, resourceId, scope),
     queryFn: async () => {
-      const state = await session!.state();
-      return state.settings ?? null;
+      const state = await requireAgentControllerSession(session).state();
+      if (!state.settings) throw new Error('Session settings are unavailable');
+      return state.settings;
     },
     enabled: enabled && Boolean(session),
   });

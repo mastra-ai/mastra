@@ -9,6 +9,10 @@ import {
 } from '../../web/ui/domains/factory/services/factory';
 import type { GithubIssue } from '../../web/ui/domains/factory/services/factory';
 
+/** Board intake candidates come from external APIs (GitHub / Linear via the
+ * server) — poll on a gentler cadence than the DB-backed work-items list. */
+export const INTAKE_POLL_MS = 30_000;
+
 /**
  * Open issues for a GitHub project, loaded one page at a time as the list is
  * scrolled; disabled until a github project is active.
@@ -22,6 +26,11 @@ export function useProjectIssuesQuery(projectRepositoryId: string | undefined, l
     getNextPageParam: lastPage => lastPage.nextPage,
     enabled: Boolean(projectRepositoryId),
     select: data => data.pages.flatMap(page => page.issues),
+    // New intake must show up on the board without a reload. The endpoint
+    // proxies the live GitHub API (and a refetch replays every loaded page),
+    // so poll gently and refresh when the user returns to the tab.
+    refetchInterval: INTAKE_POLL_MS,
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -63,5 +72,8 @@ export function useProjectPullRequestsQuery(projectRepositoryId: string | undefi
     getNextPageParam: lastPage => lastPage.nextPage,
     enabled: Boolean(projectRepositoryId),
     select: data => data.pages.flatMap(page => page.pullRequests),
+    // Same intake-freshness contract as the issues feed above.
+    refetchInterval: INTAKE_POLL_MS,
+    refetchOnWindowFocus: true,
   });
 }

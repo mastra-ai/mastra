@@ -1,24 +1,43 @@
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
+import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 const cardVariants = cva(
   // Base styles
-  'duration-normal rounded-lg border border-border1 bg-surface2 transition-all ease-out-custom',
+  'duration-normal rounded-lg transition-all ease-out-custom motion-reduce:transition-none',
   {
     variants: {
+      appearance: {
+        outlined: 'border border-border1 bg-surface2',
+        surface: 'bg-surface3',
+      },
       elevation: {
         flat: '',
         raised: 'shadow-card',
         elevated: 'shadow-elevated',
       },
       interactive: {
-        true: 'active:scale-0.99 cursor-pointer hover:border-border2 hover:bg-surface3',
+        true: 'cursor-pointer active:scale-99',
         false: '',
       },
     },
+    compoundVariants: [
+      {
+        appearance: 'outlined',
+        interactive: true,
+        className: 'hover:border-border2 hover:bg-surface3',
+      },
+      {
+        appearance: 'surface',
+        interactive: true,
+        className:
+          'hover:bg-surface4 focus-visible:bg-surface4 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border2 active:bg-surface5',
+      },
+    ],
     defaultVariants: {
+      appearance: 'outlined',
       elevation: 'flat',
       interactive: false,
     },
@@ -31,21 +50,30 @@ export type CardProps = React.HTMLAttributes<HTMLDivElement> &
   };
 
 export const Card = React.forwardRef<HTMLDivElement, CardProps>(
-  ({ className, elevation, interactive, as, ...props }, ref) => {
-    const Component = as || 'div';
+  ({ className, appearance, elevation, interactive, as, ...props }, ref) => {
+    const Component = as || (interactive ? 'button' : 'div');
 
     return (
       <Component
         ref={ref}
-        className={cn(cardVariants({ elevation, interactive }), className)}
-        role={interactive ? 'button' : undefined}
-        tabIndex={interactive ? 0 : undefined}
+        type={Component === 'button' ? 'button' : undefined}
+        className={cn(cardVariants({ appearance, elevation, interactive }), className)}
         {...props}
       />
     );
   },
 );
 Card.displayName = 'Card';
+
+export type CardLinkProps = Omit<React.ComponentPropsWithoutRef<'a'>, 'href'> &
+  Omit<VariantProps<typeof cardVariants>, 'interactive'> & {
+    href: string;
+    LinkComponent?: LinkComponent;
+  };
+
+export function CardLink({ className, appearance, elevation, LinkComponent: Link = 'a', ...props }: CardLinkProps) {
+  return <Link className={cn(cardVariants({ appearance, elevation, interactive: true }), className)} {...props} />;
+}
 
 // Card Header component
 export type CardHeaderProps = React.HTMLAttributes<HTMLDivElement>;
@@ -76,11 +104,25 @@ export const CardDescription = React.forwardRef<HTMLParagraphElement, CardDescri
 CardDescription.displayName = 'CardDescription';
 
 // Card Content component
-export type CardContentProps = React.HTMLAttributes<HTMLDivElement>;
+const cardContentVariants = cva('', {
+  variants: {
+    density: {
+      default: 'p-4',
+      compact: 'p-3',
+    },
+  },
+  defaultVariants: {
+    density: 'default',
+  },
+});
 
-export const CardContent = React.forwardRef<HTMLDivElement, CardContentProps>(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn('p-4', className)} {...props} />
-));
+export type CardContentProps = React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof cardContentVariants>;
+
+export const CardContent = React.forwardRef<HTMLDivElement, CardContentProps>(
+  ({ className, density, ...props }, ref) => (
+    <div ref={ref} className={cn(cardContentVariants({ density }), className)} {...props} />
+  ),
+);
 CardContent.displayName = 'CardContent';
 
 // Card Footer component

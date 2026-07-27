@@ -58,6 +58,10 @@ export function useAgentControllerTranscript({
     dispatch({ type: 'localNotice', text, level });
   };
 
+  const prependOlder = (messages: MastraDBMessage[]) => {
+    dispatch({ type: 'prependOlder', messages });
+  };
+
   return {
     transcript,
     transcriptRef,
@@ -67,5 +71,6 @@ export function useAgentControllerTranscript({
     resolvePrompt,
     clearPending,
     pushNotice,
+    prependOlder,
   };
 }
