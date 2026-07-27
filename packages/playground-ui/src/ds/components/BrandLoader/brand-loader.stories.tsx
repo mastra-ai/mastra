@@ -49,7 +49,7 @@ export const AllSizes: Story = {
 
 export const OnSurface: Story = {
   render: () => (
-    <div className="flex h-64 w-96 items-center justify-center rounded-lg bg-surface2">
+    <div className="bg-surface2 flex h-64 w-96 items-center justify-center rounded-lg">
       <BrandLoader size="lg" />
     </div>
   ),
@@ -103,7 +103,7 @@ export const FullHeightPage: Story = {
     layout: 'fullscreen',
   },
   render: () => (
-    <div className="flex h-screen w-screen items-center justify-center bg-surface1">
+    <div className="bg-surface1 flex h-screen w-screen items-center justify-center">
       <BrandLoader size="lg" aria-label="Loading app" />
     </div>
   ),

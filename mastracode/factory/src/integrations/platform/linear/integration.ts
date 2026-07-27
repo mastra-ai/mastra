@@ -11,6 +11,7 @@ import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '.
 import { buildLinearAgentTools } from '../../linear/agent-tools.js';
 import type { LinearConnectionCheck, LinearIntegration } from '../../linear/integration.js';
 import { buildLinearRoutes } from '../../linear/routes.js';
+import { attachLinearRules } from '../../linear/rules.js';
 import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.js';
 import {
   logPlatformInfo,
@@ -364,6 +365,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         stateSigner: ctx.stateSigner,
         baseUrl: ctx.baseUrl,
         intake: ctx.storage.intake,
+        ingestFactoryIssues: attachLinearRules(ctx),
       }).filter(route => !route.path.startsWith('/auth/linear/')),
     ];
   }

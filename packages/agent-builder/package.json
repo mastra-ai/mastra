@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agent-builder",
-  "version": "1.1.7",
+  "version": "1.1.8-alpha.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -24,7 +24,8 @@
   ],
   "scripts": {
     "check": "tsc --noEmit",
-    "lint": "eslint .",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
     "build": "tsup --silent --config tsup.config.ts",
     "test": "vitest run"
   },

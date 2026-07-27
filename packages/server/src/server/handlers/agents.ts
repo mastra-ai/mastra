@@ -2025,7 +2025,8 @@ async function handleAgentMessageRoute({
   methodName: 'sendMessage' | 'queueMessage';
 }) {
   const idleStreamOptions = ifIdle?.streamOptions as
-    (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides }) | undefined;
+    | (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides })
+    | undefined;
   const bodyRequestContext = idleStreamOptions?.requestContext;
   const normalizedIdleStreamOptions = normalizePublicExecutionOptions(idleStreamOptions, serverRequestContext);
   const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);

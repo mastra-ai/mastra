@@ -88,7 +88,7 @@ function DatasetItemVersionsComparePage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-neutral4 text-center py-8">
+          <div className="text-neutral4 py-8 text-center">
             <p>Select at least two versions to compare.</p>
           </div>
         </MainContentContent>
@@ -234,8 +234,8 @@ function CompareVersionColumn({
 
   return (
     <Column>
-      <Column.Toolbar className="grid gap-4 grid-cols-[auto_1fr]">
-        <HistoryIcon className="w-6 h-6 opacity-50" />
+      <Column.Toolbar className="grid grid-cols-[auto_1fr] gap-4">
+        <HistoryIcon className="h-6 w-6 opacity-50" />
         <Select
           name={`compare-version-${idx}`}
           value={String(datasetVersion)}
