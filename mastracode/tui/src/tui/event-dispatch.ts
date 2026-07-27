@@ -2,7 +2,7 @@
  * Event dispatcher: maps AgentControllerEvent types to extracted handler functions.
  */
 import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
-import type { AgentControllerEvent, AgentControllerThread } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent, AgentControllerThread, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
@@ -60,6 +60,10 @@ function trackInteractivePrompt(
   ectx.analytics?.trackInteractivePrompt(promptType, properties);
 }
 
+function isMessageForCurrentThread(message: MastraDBMessage, state: TUIState): boolean {
+  return !message.threadId || message.threadId === state.session.thread.getId();
+}
+
 export async function dispatchEvent(
   event: AgentControllerEvent,
   ectx: EventHandlerContext,
@@ -108,10 +112,13 @@ export async function dispatchEvent(
       break;
 
     case 'message_start':
-      handleMessageStart(ectx, event.message);
+      if (isMessageForCurrentThread(event.message, state)) {
+        handleMessageStart(ectx, event.message);
+      }
       break;
 
     case 'message_update': {
+      if (!isMessageForCurrentThread(event.message, state)) break;
       // Only open the decode window when an assistant message carries actual
       // streamed text — tool-result-only updates (e.g. plan approval resume) and
       // user/system message updates must not count toward tokens/sec.
@@ -128,7 +135,9 @@ export async function dispatchEvent(
     }
 
     case 'message_end':
-      handleMessageEnd(ectx, event.message);
+      if (isMessageForCurrentThread(event.message, state)) {
+        handleMessageEnd(ectx, event.message);
+      }
       break;
 
     case 'tool_start':

@@ -366,6 +366,38 @@ describe('addUserMessage', () => {
     expect(state.messageComponentsById.get('notification-1')).toBeInstanceOf(NotificationComponent);
   });
 
+  it('renders one latest-position completion card for a stable background event id', () => {
+    const state = createState();
+    const message = createSignal({
+      id: 'background-task:task-1:completed',
+      type: 'notification',
+      tagName: 'notification',
+      contents: 'mastra_expert completed in background',
+      attributes: {
+        source: 'background-work',
+        kind: 'background-task-completed',
+        priority: 'low',
+        status: 'completed',
+      },
+      metadata: {
+        backgroundCompletion: {
+          eventId: 'background-task:task-1:completed',
+          taskId: 'task-1',
+          originRunId: 'run-1',
+          originToolCallId: 'call-1',
+          toolName: 'mastra_expert',
+          status: 'completed',
+        },
+      },
+    }).toDBMessage();
+
+    addUserMessage(state, message);
+    addUserMessage(state, message);
+
+    expect(state.messageComponentsById.get(message.id)).toBeInstanceOf(NotificationComponent);
+    expect(state.chatContainer.children.filter(child => child instanceof NotificationComponent)).toHaveLength(1);
+  });
+
   it.each(['work-deferred', 'work-awaited'] as const)(
     'preserves the background placeholder detail for %s without rendering a notification',
     tagName => {
@@ -906,6 +938,57 @@ describe('renderExistingMessages tasks', () => {
 });
 
 describe('renderExistingMessages tools', () => {
+  it('reconstructs authoritative background tool results alongside completion cards', async () => {
+    const toolMessage = assistantToolMessage('assistant-background-result', [
+      {
+        id: 'tool-background-result-1',
+        name: 'search_content',
+        args: { pattern: 'backgroundCompletion', path: 'mastracode/tui/src' },
+        result: 'mastracode/tui/src/tui/render-messages.ts:534: const backgroundWork = ...',
+      },
+    ]);
+    const completionMessage = createSignal({
+      id: 'background-task:task-result-1:completed',
+      type: 'notification',
+      tagName: 'notification',
+      contents: 'search_content completed in background',
+      attributes: {
+        source: 'background-work',
+        kind: 'background-task-completed',
+        priority: 'low',
+        status: 'completed',
+      },
+      metadata: {
+        backgroundCompletion: {
+          eventId: 'background-task:task-result-1:completed',
+          taskId: 'task-result-1',
+          originRunId: 'run-result-1',
+          originToolCallId: 'tool-background-result-1',
+          toolName: 'search_content',
+          status: 'completed',
+        },
+      },
+    }).toDBMessage();
+    const state = createState();
+    state.toolOutputExpanded = true;
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([toolMessage, completionMessage]) },
+    } as unknown as TUIState['session'];
+
+    await renderExistingMessages(state);
+
+    const rendered = state.chatContainer
+      .render(120)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('backgroundCompletion');
+    expect(rendered).toContain('render-messages.ts:534');
+    expect(rendered).toContain('search_content completed in background');
+    expect(state.pendingTools.has('tool-background-result-1')).toBe(false);
+    expect(state.chatContainer.children.filter(child => child instanceof NotificationComponent)).toHaveLength(1);
+  });
+
   it('reconstructs deferred background placeholders as pending tool rows', async () => {
     const message = assistantToolMessage('assistant-background-tool', [
       {

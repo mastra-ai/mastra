@@ -3,6 +3,8 @@ import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { createSignal } from '../agent/signals';
 import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type {
+  AgentSignalActiveBehavior,
+  AgentSignalIdleBehavior,
   AgentThreadSubscription,
   MastraBrowser,
   SendAgentNotificationSignalOptions,
@@ -2999,6 +3001,32 @@ export class Session<TState = unknown> {
     }
   }
 
+  /** Persist a signal to an explicit conversation without changing this session's current thread. */
+  sendSignalToThread(
+    input: AgentSignalInput,
+    target: { resourceId: string; threadId: string },
+  ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true }> } {
+    const signal = createSignal(input);
+    const accepted = Promise.resolve().then(async () => {
+      const result = this.machinery.getAgent().sendSignal(signal, {
+        ...target,
+        ifActive: { behavior: 'persist' },
+        ifIdle: { behavior: 'persist' },
+      });
+      await result.persisted;
+
+      if (this.identity.getResourceId() === target.resourceId && this.thread.getId() === target.threadId) {
+        const message = signal.toDBMessage(target);
+        this.emit({ type: 'message_start', message });
+        this.emit({ type: 'message_end', message });
+      }
+
+      return { accepted: true as const };
+    });
+
+    return { id: signal.id, type: signal.type, accepted };
+  }
+
   /**
    * Send a signal to this session's current agent/thread. Creates a thread when
    * the session is not yet bound. When a run is already active the signal is
@@ -3010,14 +3038,16 @@ export class Session<TState = unknown> {
       | AgentSignalInput
       | {
           content: AgentSignalContents;
-          ifActive?: { attributes?: AgentSignalAttributes };
-          ifIdle?: { attributes?: AgentSignalAttributes };
+          ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
+          ifIdle?: { behavior?: AgentSignalIdleBehavior; attributes?: AgentSignalAttributes };
           tracingContext?: TracingContext;
           tracingOptions?: TracingOptions;
           requestContext?: RequestContext;
           untilIdle?: boolean | { maxIdleMs?: number };
         },
     options?: {
+      ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
+      ifIdle?: { behavior?: AgentSignalIdleBehavior; attributes?: AgentSignalAttributes };
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
       requestContext?: RequestContext;
@@ -3038,8 +3068,8 @@ export class Session<TState = unknown> {
     const tracingOptions = options?.tracingOptions ?? contentOptions?.tracingOptions;
     const requestContextInput = options?.requestContext ?? contentOptions?.requestContext;
     const untilIdle = options?.untilIdle ?? contentOptions?.untilIdle;
-    const ifActive = 'content' in input ? input.ifActive : undefined;
-    const ifIdle = 'content' in input ? input.ifIdle : undefined;
+    const ifActive = options?.ifActive ?? ('content' in input ? input.ifActive : undefined);
+    const ifIdle = options?.ifIdle ?? ('content' in input ? input.ifIdle : undefined);
     const submittedRunId = this.run.getRunId();
     const submittedActiveRunId = this.stream.activeRunId();
     // After `abort()` the AbortController is cleared immediately but the run id
@@ -3066,19 +3096,30 @@ export class Session<TState = unknown> {
       await this.thread.ensureSubscription(threadId);
 
       if (submittedRunId && submittedActiveRunId && submittedIsRunning) {
-        this.approval.respond({
-          decision: 'decline',
-          declineContext: {
-            reason: 'interrupted_by_user_message',
-            message: 'The pending tool approval was declined because the user sent a new message.',
-          },
-        });
+        if (signal.type === 'user') {
+          this.approval.respond({
+            decision: 'decline',
+            declineContext: {
+              reason: 'interrupted_by_user_message',
+              message: 'The pending tool approval was declined because the user sent a new message.',
+            },
+          });
+        }
         const result = agent.sendSignal(signal, {
           resourceId: this.identity.getResourceId(),
           threadId,
           ifActive,
           ifIdle,
         });
+        if (ifActive?.behavior === 'persist') {
+          await result.persisted;
+          const message = signal.toDBMessage({
+            resourceId: this.identity.getResourceId(),
+            threadId,
+          });
+          this.emit({ type: 'message_start', message });
+          this.emit({ type: 'message_end', message });
+        }
         return { accepted: true as const, runId: await settleRunId(result) };
       }
 
@@ -3116,6 +3157,9 @@ export class Session<TState = unknown> {
         throw error;
       }
       void result.accepted.catch(() => {});
+      if (ifIdle?.behavior === 'persist') {
+        await result.persisted;
+      }
       return { accepted: true as const, runId: undefined };
     });
 

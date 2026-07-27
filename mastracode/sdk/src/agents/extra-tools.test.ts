@@ -128,9 +128,41 @@ describe('createDynamicTools – extraTools', () => {
 
     expect(tools.mastra_expert).not.toBe(mastraExpert);
     expect(tools.mastra_expert.background).toEqual({ enabled: true });
-    expect(tools.mastra_expert.execute).toBe(mastraExpert.execute);
+    expect(tools.mastra_expert.execute).not.toBe(mastraExpert.execute);
+    await expect(tools.mastra_expert.execute!({ question: 'How does this work?' })).resolves.toEqual({
+      answer: 'expert answer',
+    });
     expect(tools.other_plugin_tool).toBe(otherPluginTool);
     expect(tools.other_plugin_tool.background).toBeUndefined();
+  });
+
+  it('should serialize Alexandria expert executions', async () => {
+    const releases: Array<() => void> = [];
+    const started: string[] = [];
+    const mastraExpert = createTool({
+      id: 'mastra_expert',
+      description: 'Ask the Alexandria expert',
+      inputSchema: z.object({ question: z.string() }),
+      execute: async ({ question }) => {
+        started.push(question);
+        await new Promise<void>(resolve => releases.push(resolve));
+        return { answer: question };
+      },
+    });
+    const tools = await createDynamicTools(undefined, undefined, undefined, undefined, {
+      mastra_expert: mastraExpert,
+    })({ requestContext: makeRequestContext() });
+
+    const first = tools.mastra_expert.execute!({ question: 'first' });
+    const second = tools.mastra_expert.execute!({ question: 'second' });
+    await vi.waitFor(() => expect(started).toEqual(['first']));
+
+    releases.shift()?.();
+    await expect(first).resolves.toEqual({ answer: 'first' });
+    await vi.waitFor(() => expect(started).toEqual(['first', 'second']));
+
+    releases.shift()?.();
+    await expect(second).resolves.toEqual({ answer: 'second' });
   });
 
   it('should let extraTools win over pluginTools for embedding overrides', async () => {

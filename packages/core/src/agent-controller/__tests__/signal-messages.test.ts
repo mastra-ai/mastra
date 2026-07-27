@@ -18,6 +18,7 @@ function createAgentMock(activeRunId: () => string | null) {
     subscribeToThread: vi.fn(async () => createSubscription(activeRunId)),
     sendSignal: vi.fn(signal => ({
       accepted: Promise.resolve({ action: 'deliver' as const, runId: 'run-1' }),
+      persisted: Promise.resolve(),
       signal,
     })),
   };
@@ -62,6 +63,114 @@ describe('AgentController signal messages', () => {
         ifIdle: { attributes: { path: 'idle' } },
       }),
     );
+  });
+
+  it('persists an active notification signal without interrupting an armed approval', async () => {
+    let activeRunId: string | null = 'run-1';
+    const agent = createAgentMock(() => activeRunId);
+    const persisted = Promise.resolve();
+    agent.sendSignal.mockReturnValue({
+      accepted: Promise.resolve({ action: 'persist' as const }),
+      persisted,
+      signal: { id: 'completion-1', type: 'notification' },
+    } as any);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-notification-persist',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const threadId = session.thread.getId()!;
+    const subscription = createSubscription(() => activeRunId);
+
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'run-1' });
+    session.stream.attach({ subscription: subscription as any, key: `agent-1:resource-1:${threadId}` });
+    const events: any[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    let approvalSettled = false;
+    void session.approval.arm({ toolName: 'request_access' }).then(() => {
+      approvalSettled = true;
+    });
+
+    const result = session.sendSignal(
+      {
+        id: 'completion-1',
+        type: 'notification',
+        contents: 'background task completed',
+      },
+      {
+        ifActive: { behavior: 'persist' },
+        ifIdle: { behavior: 'persist' },
+      },
+    );
+
+    await expect(result.accepted).resolves.toEqual({ accepted: true, runId: undefined });
+    expect(approvalSettled).toBe(false);
+    expect(agent.sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'completion-1', type: 'notification' }),
+      expect.objectContaining({ ifActive: { behavior: 'persist' } }),
+    );
+    const signalMessages = events
+      .filter(event => event.type === 'message_end')
+      .map(event => event.message)
+      .filter(message => message.role === 'signal');
+    expect(signalMessages).toEqual([
+      expect.objectContaining({
+        id: 'completion-1',
+        role: 'signal',
+        content: expect.objectContaining({
+          metadata: expect.objectContaining({ signal: expect.objectContaining({ type: 'notification' }) }),
+        }),
+      }),
+    ]);
+  });
+
+  it('persists an explicit-thread signal without emitting it into the session current thread', async () => {
+    const agent = createAgentMock(() => null);
+    agent.sendSignal.mockReturnValue({
+      accepted: Promise.resolve({ action: 'persist' as const }),
+      persisted: Promise.resolve(),
+      signal: { id: 'completion-1', type: 'notification' },
+    } as any);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-explicit-thread',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    session.thread.set({ threadId: 'current-thread' });
+    const events: any[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+
+    const result = session.sendSignalToThread(
+      {
+        id: 'completion-1',
+        type: 'notification',
+        contents: 'background task completed',
+      },
+      { resourceId: 'resource-1', threadId: 'origin-thread' },
+    );
+
+    await expect(result.accepted).resolves.toEqual({ accepted: true });
+    expect(agent.sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'completion-1', type: 'notification' }),
+      {
+        resourceId: 'resource-1',
+        threadId: 'origin-thread',
+        ifActive: { behavior: 'persist' },
+        ifIdle: { behavior: 'persist' },
+      },
+    );
+    expect(events.filter(event => event.type === 'message_end')).toEqual([]);
   });
 
   it('declines an armed approval with interruption context before delivering a user signal', async () => {

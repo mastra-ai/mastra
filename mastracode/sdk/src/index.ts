@@ -46,6 +46,7 @@ import {
 } from '@mastra/observability';
 import { PostgresStore } from '@mastra/pg';
 
+import { createBackgroundCompletionCallbacks } from './agents/background-completion.js';
 import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
@@ -883,11 +884,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   }
 
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
-  const controller: AgentController<MastraCodeState> = new AgentController<MastraCodeState>({
+  let controller: AgentController<MastraCodeState>;
+  controller = new AgentController<MastraCodeState>({
     id: 'mastra-code',
     resourceId: project.resourceId,
     storage,
-    backgroundTasks: { enabled: true, recoverStaleTasksOnStart: false },
+    backgroundTasks: {
+      enabled: true,
+      recoverStaleTasksOnStart: false,
+      ...createBackgroundCompletionCallbacks(() => controller),
+    },
     observability,
     memory,
     pubsub: signalsPubSub,
