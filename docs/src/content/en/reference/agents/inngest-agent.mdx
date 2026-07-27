@@ -255,15 +255,14 @@ Returns: [`Promise<InngestAgentStreamResult>`](#inngestagentstreamresult)
 
 #### `generate(messages, options?)`
 
-Runs a response on Inngest's durable execution engine and resolves with a single `FullOutput`. If the run suspends, `generate()` resolves with `finishReason: 'suspended'`. Continue the run with [`resumeGenerate()`](#resumegeneraterunid-resumedata-options). Use [`stream()`](#streammessages-options) with `onSuspended` when the caller needs a suspension callback.
+Runs a response on Inngest's durable execution engine and resolves with a single `FullOutput`. If the run suspends, `generate()` resolves with `finishReason: 'suspended'`. The `runId` option is optional. If you omit it, `generate()` creates a run ID and returns it in `result.runId`. Continue the run with [`resumeGenerate()`](#resumegeneraterunid-resumedata-options). Use [`stream()`](#streammessages-options) with `onSuspended` when the caller needs a suspension callback.
 
 ```typescript
-const runId = crypto.randomUUID()
 const result = await durableAgent.generate('Delete the old records', {
-  runId,
   requireToolApproval: true,
 })
 
+result.runId // Generated automatically
 result.finishReason // 'suspended' when approval is required
 ```
 
@@ -274,7 +273,11 @@ Returns: `Promise<FullOutput<TOutput>>`
 Resumes a suspended `generate()` run and resolves with a single `FullOutput`.
 
 ```typescript
-const result = await durableAgent.resumeGenerate(runId, { approved: true })
+if (!result.runId) {
+  throw new Error('Run ID is missing')
+}
+
+const resumedResult = await durableAgent.resumeGenerate(result.runId, { approved: true })
 ```
 
 Returns: `Promise<FullOutput<TOutput>>`
