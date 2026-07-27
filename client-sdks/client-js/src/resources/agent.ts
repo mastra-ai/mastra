@@ -2077,7 +2077,7 @@ export class Agent extends BaseResource {
 
         const readableLines = lines.filter(line => line.trim() !== '[DONE]' && line.trim() !== 'data: [DONE]').join('\n\n');
         if (readableLines) {
-          controller.enqueue(new TextEncoder().encode(readableLines));
+          controller.enqueue(new TextEncoder().encode(`${readableLines}\n\n`));
         }
       };
 
