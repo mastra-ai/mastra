@@ -65,7 +65,7 @@ ANTHROPIC_API_KEY=...
 If both `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are configured, Studio can show both connected providers in its model controls.
 The preview agent uses OpenAI by default when it is configured, then falls back to Anthropic. To override the default agent model, set `MASTRA_PREVIEW_MODEL` to a placeholder token such as `__GATEWAY_ANTHROPIC_MODEL_SONNET__` or to a concrete `provider/model` ID.
 
-The build compiles the linked CLI and Vercel deployer workspace packages so the preview uses Studio assets from the current branch. The sample API uses a published `@mastra/core` version so Vercel does not depend on unpublished monorepo package versions. Vercel still deploys only the generated output for this example, not the full repository.
+All Mastra packages the example uses (`mastra`, `@mastra/deployer-vercel`, `@mastra/core`, `@mastra/memory`, `@mastra/editor`) are linked from the workspace, so the preview always runs the code from the current branch and no published version pin can drift out of the linked packages' peer ranges. Before the turbo build, `scripts/build-linked-workspace-deps.mjs` installs the linked packages' dependency graph at the repository root (with the pnpm version from the root `packageManager` field), so the build also succeeds when the turbo remote cache misses. Vercel still deploys only the generated output for this example, not the full repository.
 
 Vercel will use the generated `.vercel/output` folder. Studio is served at `/`, and the Mastra API is served under `/api/*`.
 
