@@ -29,7 +29,7 @@ const agent = new Agent({
 })
 
 export const agentController = new AgentController({
-  id: 'my-agent',
+  id: 'my-agent-controller',
   agent,
   storage: new LibSQLStore({ url: 'file:./data.db' }),
   modes: [
@@ -72,10 +72,10 @@ Controller channel webhooks follow the same pattern as agent channels, under an 
 /api/agent-controllers/<CONTROLLER_ID>/channels/<PLATFORM>/webhook
 ```
 
-For example, a Slack adapter on a controller with the `my-agent` ID uses:
+For example, a Slack adapter on a controller with the `my-agent-controller` ID uses:
 
 ```text
-/api/agent-controllers/my-agent/channels/slack/webhook
+/api/agent-controllers/my-agent-controller/channels/slack/webhook
 ```
 
 Point the platform's webhook, event, or interactions URL to this path. See [Webhook routes](/docs/capabilities/channels/overview#webhook-routes) for local tunneling and platform setup.

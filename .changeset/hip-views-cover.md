@@ -9,7 +9,7 @@ import { AgentController } from '@mastra/core/agent-controller';
 import { createSlackAdapter } from '@chat-adapter/slack';
 
 const agentController = new AgentController({
-  id: 'my-agent',
+  id: 'my-agent-controller',
   agent,
   modes,
   channels: {
