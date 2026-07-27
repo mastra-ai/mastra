@@ -148,9 +148,7 @@ describe('ThreadPage workspace preparation failure', () => {
     await userEvent.click(retry);
     expect(await screen.findByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
     expect(
-      screen.queryByText(
-        "Failed to prepare the workspace: git clone failed: could not create '/workspace/acme/app'",
-      ),
+      screen.queryByText("Failed to prepare the workspace: git clone failed: could not create '/workspace/acme/app'"),
     ).not.toBeInTheDocument();
   });
 });
