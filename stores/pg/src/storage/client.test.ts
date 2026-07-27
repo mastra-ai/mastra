@@ -38,9 +38,11 @@ describe('PoolAdapter checked-out client error handling', () => {
     // guard it is a no-op and the process survives.
     expect(() => client.emit('error', new Error('Connection terminated unexpectedly'))).not.toThrow();
 
-    // release() is left untouched (the guard is attached once per client).
+    // release() stays transparent: the guard detaches and forwards to the
+    // original release, which is restored afterwards.
     checkedOut.release();
     expect(client.release).toHaveBeenCalledOnce();
+    expect(checkedOut.listenerCount('error')).toBe(0);
   });
 
   it('tx() guards the transaction client for the duration of the callback', async () => {

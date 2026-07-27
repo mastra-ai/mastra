@@ -33,15 +33,15 @@ describe('attachClientErrorHandler', () => {
     expect(() => client.emit('error', new Error('Connection terminated unexpectedly'))).not.toThrow();
   });
 
-  it('is idempotent: re-attaching to the same client does not add a second listener', () => {
+  it('does not stack a second listener when re-attached within the same checkout', () => {
     const client = makeFakeClient();
 
     attachClientErrorHandler(client);
     attachClientErrorHandler(client);
     attachClientErrorHandler(client);
 
-    // Pooled clients are reused across checkouts; a single persistent listener
-    // covers every checkout without leaking one listener per checkout.
+    // A client is only checked out once at a time; repeated attaches before a
+    // release must not stack listeners.
     expect(client.listenerCount('error')).toBe(1);
   });
 
@@ -97,29 +97,62 @@ describe('connectWithClientErrorHandler', () => {
     expect(() => client.emit('error', new Error('backend died mid-checkout'))).not.toThrow();
   });
 
-  it('does not replace the client release function', async () => {
-    // The guard must be transparent to callers' `finally { client.release() }`
-    // and must not clobber `release` (pooled clients / test doubles reuse it).
+  it('detaches on release: forwards to the original release, then restores it', async () => {
+    // The guard scopes itself to the checkout: it wraps the checkout-specific
+    // release so `finally { client.release(err?) }` still works, forwards the
+    // caller's arguments to pg-pool's release, removes the listener, and
+    // restores the original release so the client is left untouched afterwards.
     const client = makeFakeClient();
     const originalRelease = client.release;
     const pool = makeFakePool(client);
 
     const checkedOut = await connectWithClientErrorHandler(pool);
-
-    expect(checkedOut.release).toBe(originalRelease);
-    checkedOut.release();
-    expect(originalRelease).toHaveBeenCalledOnce();
-    // The listener persists across release (it is attached once per client).
     expect(client.listenerCount('error')).toBe(1);
+
+    const releaseError = new Error('client is broken');
+    checkedOut.release(releaseError);
+
+    expect(originalRelease).toHaveBeenCalledOnce();
+    expect(originalRelease).toHaveBeenCalledWith(releaseError);
+    // Listener removed and original release restored (no permanent mutation).
+    expect(client.listenerCount('error')).toBe(0);
+    expect(checkedOut.release).toBe(originalRelease);
   });
 
-  it('is idempotent across repeated checkouts of the same pooled client', async () => {
+  it('preserves double-release semantics after detaching', async () => {
+    const client = makeFakeClient();
+    const originalRelease = client.release;
+    const pool = makeFakePool(client);
+
+    const checkedOut = await connectWithClientErrorHandler(pool);
+    checkedOut.release();
+    // A second release is forwarded straight to pg-pool's release, which owns
+    // the double-release handling — the guard does not swallow it.
+    checkedOut.release();
+
+    expect(originalRelease).toHaveBeenCalledTimes(2);
+  });
+
+  it('re-guards a reused pooled client on its next checkout with that checkout logger', async () => {
     const client = makeFakeClient();
     const pool = makeFakePool(client);
 
-    await connectWithClientErrorHandler(pool);
-    await connectWithClientErrorHandler(pool);
+    const firstWarn = vi.fn();
+    const first = await connectWithClientErrorHandler(pool, { warn: firstWarn });
+    first.release();
 
+    // After release the client is bare again — no leftover listener.
+    expect(client.listenerCount('error')).toBe(0);
+
+    const secondWarn = vi.fn();
+    const second = await connectWithClientErrorHandler(pool, { warn: secondWarn });
     expect(client.listenerCount('error')).toBe(1);
+
+    client.emit('error', new Error('backend died'));
+    // Only the current checkout's logger is used; the first is not retained.
+    expect(secondWarn).toHaveBeenCalledOnce();
+    expect(firstWarn).not.toHaveBeenCalled();
+
+    second.release();
   });
 });

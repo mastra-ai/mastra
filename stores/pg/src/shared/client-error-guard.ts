@@ -11,12 +11,12 @@ export interface ClientErrorLogger {
 const CHECKED_OUT_CLIENT_ERROR_MESSAGE =
   'checked-out pg client error (client is discarded and a recoverable error is surfaced instead of crashing the host process)';
 
-/** Marks a client that already has our error guard attached, to stay idempotent. */
+/** Marks a client that already has our error guard attached for the current checkout. */
 const GUARD_ATTACHED = Symbol.for('@mastra/pg.clientErrorGuardAttached');
 
 /**
- * Attach an `'error'` listener to a checked-out {@link PoolClient}, returning a
- * function that detaches it.
+ * Attach an `'error'` listener to a checked-out {@link PoolClient} for the
+ * lifetime of the checkout, returning a function that detaches it.
  *
  * node-postgres emits `'error'` on the **Client** (not the Pool) when a
  * checked-out client's backend connection dies while it is idle between
@@ -30,21 +30,30 @@ const GUARD_ATTACHED = Symbol.for('@mastra/pg.clientErrorGuardAttached');
  *   Error: Connection terminated unexpectedly
  *   ... Emitted 'error' event on Client instance ...
  *
- * Pool-level `'error'` handlers do NOT cover this case. This handler does. It
- * is attached at most once per client (pooled clients are reused across
- * checkouts, so a single persistent listener both covers every checkout and
- * avoids leaking a listener per checkout).
+ * Pool-level `'error'` handlers do NOT cover this case. This handler does.
+ *
+ * The guard's lifetime is scoped to the checkout: `pg-pool` assigns a fresh
+ * `release` to the client on every checkout, so we wrap *that* `release` and
+ * detach when it is called. On detach we remove our listener and restore the
+ * original `release`, so:
+ *   - the guard never runs alongside pg-pool's restored idle listener after
+ *     release (no double handling),
+ *   - a reused pooled client is re-guarded on its next checkout with that
+ *     checkout's logger (no stale logger), and
+ *   - clients from user-provided/shared pools are left exactly as they were.
+ * The original `release` is still invoked with the caller's arguments (e.g.
+ * `release(err)`), preserving normal and double-release semantics.
  */
 export function attachClientErrorHandler(client: PoolClient, logger?: ClientErrorLogger): () => void {
   // A real pg PoolClient is an EventEmitter, but guard against clients that
   // aren't (e.g. test doubles) so the guard never introduces a new failure.
-  // Require both add and remove so detach() can never leave a dangling listener
-  // (which would let a later reattach add a duplicate).
+  // Require both add and remove so detach() can never leave a dangling listener.
   if (typeof client.on !== 'function' || typeof client.removeListener !== 'function') {
     return () => {};
   }
 
   const guarded = client as PoolClient & { [GUARD_ATTACHED]?: boolean };
+  // Already guarded for the current checkout — don't stack a second listener.
   if (guarded[GUARD_ATTACHED]) {
     return () => {};
   }
@@ -61,19 +70,37 @@ export function attachClientErrorHandler(client: PoolClient, logger?: ClientErro
   guarded[GUARD_ATTACHED] = true;
   client.on('error', onError);
 
+  const originalRelease = typeof client.release === 'function' ? client.release : undefined;
+
   let detached = false;
-  return () => {
+  const detach = () => {
     if (detached) return;
     detached = true;
     client.removeListener('error', onError);
     guarded[GUARD_ATTACHED] = false;
+    if (originalRelease) {
+      client.release = originalRelease;
+    }
   };
+
+  // Wrap the checkout-specific release so the guard detaches exactly when this
+  // checkout ends, then delegates to pg-pool's release (which discards a dead
+  // client and re-attaches its own idle listener). Existing
+  // `finally { client.release(err?) }` call sites keep working unchanged.
+  if (originalRelease) {
+    client.release = function (this: PoolClient, ...args: Parameters<PoolClient['release']>) {
+      detach();
+      return (originalRelease as (...a: unknown[]) => unknown).apply(this, args);
+    } as PoolClient['release'];
+  }
+
+  return detach;
 }
 
 /**
  * Acquire a client from `pool` with a client-level `'error'` handler attached
- * (see {@link attachClientErrorHandler}). The handler is idempotent, so callers
- * do not need to detach it before `client.release()`; existing
+ * for the lifetime of the checkout (see {@link attachClientErrorHandler}). The
+ * guard detaches itself on `client.release()`, so existing
  * `finally { client.release() }` code keeps working unchanged.
  */
 export async function connectWithClientErrorHandler(pool: Pool, logger?: ClientErrorLogger): Promise<PoolClient> {
