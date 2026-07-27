@@ -27,7 +27,7 @@ describe('LibSQLStore.close()', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('checkpoints/truncates the WAL and closes the client for local file DBs', async () => {
+  it('closes the client without changing local database state', async () => {
     const dbPath = path.join(tmpDir, 'mastra.db');
     const store = new LibSQLStore({ id: 'close-local', url: `file:${dbPath}` });
     await store.init();
@@ -39,8 +39,8 @@ describe('LibSQLStore.close()', () => {
     await store.close();
 
     const executedSql = executedSqlFrom(executeSpy);
-    expect(executedSql).toContain('PRAGMA wal_checkpoint(TRUNCATE);');
-    expect(executedSql).toContain('PRAGMA journal_mode=DELETE;');
+    expect(executedSql).not.toContain('PRAGMA wal_checkpoint(TRUNCATE);');
+    expect(executedSql).not.toContain('PRAGMA journal_mode=DELETE;');
     expect(closeSpy).toHaveBeenCalledTimes(1);
     expect(client.closed).toBe(true);
   });
@@ -63,29 +63,37 @@ describe('LibSQLStore.close()', () => {
     expect(closeSpy).not.toHaveBeenCalled();
   });
 
-  it('runs WAL cleanup for an injected client that points at a local file', async () => {
+  it('does not change WAL mode or interrupt another store sharing the database', async () => {
+    const dbPath = path.join(tmpDir, 'shared.db');
+    const storeA = new LibSQLStore({ id: 'close-shared-a', url: `file:${dbPath}` });
+    const storeB = new LibSQLStore({ id: 'close-shared-b', url: `file:${dbPath}` });
+    await storeA.init();
+    await storeB.init();
+
+    const clientB = getClient(storeB);
+
+    try {
+      await clientB.execute('CREATE TABLE close_regression (id INTEGER PRIMARY KEY, value TEXT NOT NULL);');
+      await clientB.execute("INSERT INTO close_regression (id, value) VALUES (1, 'before-close');");
+
+      await storeA.close();
+
+      const journalMode = await clientB.execute('PRAGMA journal_mode;');
+      expect(journalMode.rows[0]?.journal_mode).toBe('wal');
+
+      await clientB.execute("INSERT INTO close_regression (id, value) VALUES (2, 'after-close');");
+      const rows = await clientB.execute('SELECT value FROM close_regression ORDER BY id;');
+      expect(rows.rows.map(row => row.value)).toEqual(['before-close', 'after-close']);
+    } finally {
+      await storeA.close();
+      await storeB.close();
+    }
+  });
+
+  it('closes injected local clients without WAL cleanup', async () => {
     const dbPath = path.join(tmpDir, 'injected.db');
     const client = createClient({ url: `file:${dbPath}` });
     const store = new LibSQLStore({ id: 'close-injected-local', client });
-    await store.init();
-
-    expect(client.protocol).toBe('file');
-
-    const executeSpy = vi.spyOn(client, 'execute');
-    const closeSpy = vi.spyOn(client, 'close');
-
-    await store.close();
-
-    expect(executedSqlFrom(executeSpy)).toContain('PRAGMA wal_checkpoint(TRUNCATE);');
-    expect(closeSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it('skips WAL pragmas for non-file (remote) clients', async () => {
-    const client = createClient({ url: `file:${path.join(tmpDir, 'remote.db')}` });
-    // Pretend this is a remote connection without touching the underlying file logic.
-    Object.defineProperty(client, 'protocol', { value: 'https', configurable: true });
-
-    const store = new LibSQLStore({ id: 'close-remote', client });
     await store.init();
 
     const executeSpy = vi.spyOn(client, 'execute');
@@ -97,37 +105,5 @@ describe('LibSQLStore.close()', () => {
     expect(executedSql).not.toContain('PRAGMA wal_checkpoint(TRUNCATE);');
     expect(executedSql).not.toContain('PRAGMA journal_mode=DELETE;');
     expect(closeSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it('still closes the client and warns when WAL checkpoint fails', async () => {
-    const dbPath = path.join(tmpDir, 'wal-fail.db');
-    const store = new LibSQLStore({ id: 'close-wal-fail', url: `file:${dbPath}` });
-    await store.init();
-
-    const client = getClient(store);
-    vi.spyOn(client, 'execute').mockRejectedValue(new Error('boom'));
-    const closeSpy = vi.spyOn(client, 'close');
-    const warnSpy = vi.spyOn((store as unknown as { logger: { warn: (...args: unknown[]) => void } }).logger, 'warn');
-
-    await expect(store.close()).resolves.toBeUndefined();
-
-    expect(warnSpy).toHaveBeenCalled();
-    expect(closeSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it('removes WAL sidecar files so the storage dir can be deleted', async () => {
-    const dbPath = path.join(tmpDir, 'sidecars.db');
-    const store = new LibSQLStore({ id: 'close-sidecars', url: `file:${dbPath}` });
-    await store.init();
-
-    // Force some writes so the WAL sidecar files exist.
-    const client = getClient(store);
-    await client.execute('CREATE TABLE IF NOT EXISTS t (id INTEGER PRIMARY KEY);');
-    await client.execute('INSERT INTO t (id) VALUES (1);');
-
-    await store.close();
-
-    expect(fs.existsSync(`${dbPath}-wal`)).toBe(false);
-    expect(fs.existsSync(`${dbPath}-shm`)).toBe(false);
   });
 });

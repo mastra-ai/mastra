@@ -58,8 +58,21 @@ if (!window.matchMedia) {
     }) as MediaQueryList;
 }
 
+if (!globalThis.ResizeObserver) {
+  globalThis.ResizeObserver = class ResizeObserver {
+    constructor(_callback: ResizeObserverCallback) {}
+    disconnect() {}
+    observe(_target: Element) {}
+    unobserve(_target: Element) {}
+  };
+}
+
 if (!Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
+}
+
+if (!Element.prototype.getAnimations) {
+  Object.defineProperty(Element.prototype, 'getAnimations', { configurable: true, value: () => [] });
 }
 
 // jsdom has no PointerEvent constructor; Base UI's Switch builds one on click.

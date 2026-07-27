@@ -5,6 +5,7 @@ import { resolveModelConfig } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import type { DatasetItemSource, DatasetItemToolMock, TargetType } from '@mastra/core/storage';
 import { z } from 'zod';
+import { isReservedRequestContextKey } from '../constants';
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
 import { successResponseSchema } from '../schemas/common';
@@ -59,6 +60,24 @@ function assertDatasetsAvailable(): void {
   }
 }
 
+/**
+ * Recovers the caller-provided request context for a dataset item.
+ *
+ * Server adapters overwrite the body's `requestContext` field with the live
+ * server `RequestContext` instance (so bodies cannot spoof auth context), after
+ * merging the body's entries into it. Persisting that live instance as item
+ * data stores internal server state and fails JSON/BSON serialization, so
+ * convert it back to the plain caller-provided entries (reserved `mastra__*`
+ * keys excluded) before it reaches storage.
+ */
+function toItemRequestContext(
+  requestContext: Record<string, unknown> | RequestContext | undefined,
+): Record<string, unknown> | undefined {
+  if (!(requestContext instanceof RequestContext)) return requestContext;
+  const entries = Object.entries(requestContext.toJSON()).filter(([key]) => !isReservedRequestContextKey(key));
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
 interface SchemaValidationLike extends Error {
   field: 'input' | 'groundTruth';
   errors: Array<{ path: string; code: string; message: string }>;
@@ -92,6 +111,7 @@ function getHttpStatusForMastraError(errorId: string): number {
       return 404;
     case 'EXPERIMENT_NO_ITEMS':
     case 'DATASET_ITEM_EXTERNAL_ID_INVALID':
+    case 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE':
       return 400;
     case 'DATASET_ITEM_IDENTITY_CONFLICT':
       return 409;
@@ -384,7 +404,7 @@ export const ADD_ITEM_ROUTE = createRoute({
           externalId?: string | null;
           input: unknown;
           groundTruth?: unknown;
-          requestContext?: Record<string, unknown>;
+          requestContext?: Record<string, unknown> | RequestContext;
           metadata?: Record<string, unknown>;
           source?: DatasetItemSource;
           expectedTrajectory?: unknown;
@@ -395,7 +415,7 @@ export const ADD_ITEM_ROUTE = createRoute({
         externalId: externalId ?? undefined,
         input,
         groundTruth,
-        requestContext,
+        requestContext: toItemRequestContext(requestContext),
         metadata,
         source,
         expectedTrajectory,
@@ -470,7 +490,7 @@ export const UPDATE_ITEM_ROUTE = createRoute({
       const { input, groundTruth, requestContext, metadata, expectedTrajectory, toolMocks } = params as {
         input?: unknown;
         groundTruth?: unknown;
-        requestContext?: Record<string, unknown>;
+        requestContext?: Record<string, unknown> | RequestContext;
         metadata?: Record<string, unknown>;
         expectedTrajectory?: unknown;
         toolMocks?: DatasetItemToolMock[];
@@ -485,7 +505,7 @@ export const UPDATE_ITEM_ROUTE = createRoute({
         itemId,
         input,
         groundTruth,
-        requestContext,
+        requestContext: toItemRequestContext(requestContext),
         metadata,
         expectedTrajectory,
         toolMocks,

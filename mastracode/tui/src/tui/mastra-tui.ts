@@ -160,6 +160,7 @@ export class MastraTUI {
   private caffeinateProcess: ChildProcess | null = null;
   private cleanupKeyHandlers?: () => void;
   private cleanupPluginReloadListener?: () => void;
+  private cleanupPluginUpdateListener?: () => void;
   private lastStreamError: string | null = null;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
@@ -561,6 +562,11 @@ export class MastraTUI {
       this.cleanupPluginReloadListener = undefined;
     }
 
+    if (this.cleanupPluginUpdateListener) {
+      this.cleanupPluginUpdateListener();
+      this.cleanupPluginUpdateListener = undefined;
+    }
+
     if (this.state.unsubscribe) {
       this.state.unsubscribe();
     }
@@ -597,6 +603,14 @@ export class MastraTUI {
           process.stderr.write(`[plugin runtime refresh] ${msg}\n`);
         }),
       );
+    }
+
+    if (this.state.pluginManager && !this.cleanupPluginUpdateListener) {
+      this.cleanupPluginUpdateListener = this.state.pluginManager.onGithubPluginsUpdated(pluginNames => {
+        if (pluginNames.length === 0) return;
+        const label = pluginNames.length === 1 ? 'Plugin' : 'Plugins';
+        showInfo(this.state, `${label} updated to the latest version: ${pluginNames.join(', ')}`);
+      });
     }
 
     // Load custom slash commands
@@ -649,7 +663,11 @@ export class MastraTUI {
         .initInBackground()
         .then(result => {
           for (const s of result.failed) {
-            showInfo(this.state, `MCP: Failed to connect to "${s.name}": ${s.error}`);
+            if (s.needsAuth) {
+              showInfo(this.state, `MCP: \u26a0 "${s.name}" needs authentication \u2192 run /mcp to authenticate`);
+            } else {
+              showInfo(this.state, `MCP: Failed to connect to "${s.name}": ${s.error}`);
+            }
           }
           for (const s of result.skipped) {
             showInfo(this.state, `MCP: Skipped "${s.name}": ${s.reason}`);

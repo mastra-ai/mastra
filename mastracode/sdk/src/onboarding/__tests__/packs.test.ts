@@ -4,7 +4,7 @@ import { PROVIDER_DEFAULT_MODELS } from '../../auth/storage.js';
 import { getAvailableModePacks } from '../packs.js';
 
 describe('getAvailableModePacks', () => {
-  it('uses GPT-5.5 for OpenAI plan and build modes while keeping fast on GPT-5.4 mini', () => {
+  it('uses GPT-5.6 for OpenAI plan and build modes while keeping fast on GPT-5.4 mini', () => {
     const packs = getAvailableModePacks({
       anthropic: false,
       openai: 'oauth',
@@ -15,8 +15,8 @@ describe('getAvailableModePacks', () => {
     });
 
     expect(packs.find(pack => pack.id === 'openai')?.models).toEqual({
-      plan: 'openai/gpt-5.5',
-      build: 'openai/gpt-5.5',
+      plan: 'openai/gpt-5.6',
+      build: 'openai/gpt-5.6',
       fast: 'openai/gpt-5.4-mini',
     });
   });

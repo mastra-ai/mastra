@@ -38,22 +38,28 @@ A local `.env` file is optional. Environment variables stored on the platform ar
   </StepItem>
 
   <StepItem>
-    The CLI runs a preflight check before anything ships. Storage that would fall back to a local file path blocks the deploy, because local files don't survive on the platform's ephemeral filesystem:
+    The CLI runs a preflight check before anything ships. Storage that would fall back to a local file path (which doesn't survive on the platform's ephemeral filesystem) would normally block the deploy:
 
     ```
-    [LOCAL_STORAGE_PATH] file:./mastra.db will be used at runtime because TURSO_DATABASE_URL is not set
+    file:./mastra.db will be used at runtime because TURSO_DATABASE_URL is not set
     ```
 
-    Attach a [hosted database](/docs/mastra-platform/database) that provides the missing variables:
+    Instead of erroring out, the CLI offers to fix it inline for you:
+
+    ```
+    Preflight needs TURSO_DATABASE_URL for the production environment. Create a managed turso database now and attach it? (Y/n)
+    ```
+
+    Accept the prompt and provisioning takes a few seconds — the database's connection variables are injected into your deploys automatically, with nothing to copy into an `.env` file. Decline it, or run in a non-interactive shell (CI, `--yes`), and the CLI falls back to the previous behavior: it prints the exact command to run yourself.
 
     ```bash
-    mastra env db create --kind turso
+    mastra env db create production --kind turso
     ```
 
-    Provisioning takes a few seconds. The database's connection variables are injected into your deploys automatically, with nothing to copy into an `.env` file.
+    The environment slug (`production` above) matches the environment the CLI would have deployed to — this is important because `mastra env db create` requires an environment argument in non-interactive shells when the project has more than one environment.
 
     :::note
-    If preflight reports a hard-coded local path instead (`Build contains a host-local storage URL`), guard it with an environment variable first so the file is only used during local development:
+    If preflight reports a hard-coded local path instead (`Build contains a host-local storage URL`), it can't offer the inline fix — guard the path with an environment variable first so the file is only used during local development:
 
     ```ts title="src/mastra/index.ts"
     new LibSQLStore({
@@ -100,7 +106,7 @@ Pass `--region` when a deploy creates a new environment to control where it runs
 mastra deploy --env production --region eu
 ```
 
-The region is fixed when the environment is created. Databases attached to an environment are placed near that environment's region automatically.
+The region is fixed when the environment is created. Databases attached to an environment are placed near that environment's region automatically, and observability data is routed to the ingest region that matches the environment's residency zone. See [Regions](/docs/mastra-platform/regions) for the full list of supported regions, database placement, and observability co-location.
 
 ## Preflight checks
 
@@ -162,6 +168,7 @@ mastra deploy --env production --yes
 ## Related
 
 - [Environments](/docs/mastra-platform/environments)
+- [Regions](/docs/mastra-platform/regions)
 - [Hosted databases](/docs/mastra-platform/database)
 - [`mastra deploy` CLI reference](/reference/cli/mastra#mastra-deploy)
 - [Configuration](/docs/mastra-platform/configuration)

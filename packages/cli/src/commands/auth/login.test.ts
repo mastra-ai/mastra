@@ -137,6 +137,29 @@ describe('login() server lifecycle', () => {
     ).rejects.toThrow();
   });
 
+  it('closes the callback server when login is aborted', async () => {
+    const { login } = await import('./credentials.js');
+    const controller = new AbortController();
+    const loginPromise = login(controller.signal);
+
+    await vi.waitFor(
+      () => {
+        extractPort();
+      },
+      { timeout: 5000 },
+    );
+    const port = extractPort();
+    controller.abort();
+
+    await expect(loginPromise).rejects.toMatchObject({ name: 'AbortError' });
+    await expect(
+      new Promise((resolve, reject) => {
+        const req = http.get(`http://127.0.0.1:${port}/`, resolve);
+        req.on('error', reject);
+      }),
+    ).rejects.toThrow();
+  });
+
   it('returns 400 when callback params are missing', async () => {
     const { login } = await import('./credentials.js');
 

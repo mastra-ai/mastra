@@ -9,7 +9,13 @@
  * `import type` keeps this module type-only — no server runtime code is pulled
  * into the shared/platform-agnostic bundle.
  */
-import type { CustomProviderInfo, ModelPackInfo, OMConfigInfo, ProviderInfo } from '../../web/config-routes.js';
+import type {
+  CustomProviderInfo,
+  ModelPackInfo,
+  OMConfigInfo,
+  ProviderInfo,
+  ProviderOMDefaultsResponse,
+} from '@mastra/factory/routes/config';
 import type {
   ArtifactEntry,
   ArtifactListing,
@@ -18,9 +24,9 @@ import type {
   WorkspaceFile,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
-} from '../../web/fs-routes.js';
+} from '@mastra/factory/routes/fs';
 
-export type { ProviderInfo, CustomProviderInfo, ModelPackInfo, OMConfigInfo };
+export type { ProviderInfo, CustomProviderInfo, ModelPackInfo, OMConfigInfo, ProviderOMDefaultsResponse };
 export type {
   ArtifactEntry,
   ArtifactListing,
@@ -55,6 +61,20 @@ export interface OMResponse {
 export interface SaveProviderKeyBody {
   key: string;
   envVar?: string;
+  scope?: 'user' | 'org';
+}
+
+export interface OAuthStartBody {
+  mode?: string;
+}
+
+export interface OAuthCompleteBody {
+  sessionId: string;
+  code: string;
+}
+
+export interface OAuthSessionBody {
+  sessionId: string;
 }
 
 export interface SaveCustomProviderBody {
@@ -101,6 +121,21 @@ export interface SaveProviderKeyResponse {
   ok: true;
   provider?: ProviderInfo;
 }
+
+export interface OAuthStartResponse {
+  sessionId: string;
+  kind: 'paste-code' | 'device-code';
+  url: string;
+  userCode?: string;
+  instructions: string;
+  expiresAt: number;
+  nextPollMs?: number;
+}
+
+export type OAuthPollResponse =
+  | { status: 'pending'; nextPollMs: number }
+  | { status: 'complete' }
+  | { status: 'failed'; error: string };
 
 export interface ActivateModelPackResponse {
   ok: true;

@@ -348,6 +348,87 @@ describe('Datasets Handlers', () => {
       expect((error as HTTPException).cause).toEqual({ field: 'externalId' });
     });
 
+    it('maps circular dataset item payloads to HTTP 400', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Circular Payload DS' });
+      const input: Record<string, unknown> = { q: 'cyclic' };
+      input.self = input;
+
+      const error = await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        input,
+      } as any).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect((error as HTTPException).status).toBe(400);
+      expect((error as HTTPException).message).toContain('items[0].input.self references items[0].input');
+    });
+
+    it('maps lossy dataset item payloads to HTTP 400', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Lossy Payload DS' });
+
+      const error = await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        input: { q: 'lossy', extra: undefined },
+      } as any).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect((error as HTTPException).status).toBe(400);
+      expect((error as HTTPException).message).toContain('undefined value at items[0].input.extra');
+    });
+
+    it('persists caller request context entries instead of the live server RequestContext', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Request Context DS' });
+
+      // Adapters merge the body's requestContext entries into the live server
+      // RequestContext and pass that instance to the handler in place of the
+      // body field. The handler must recover the caller entries (reserved
+      // mastra__* keys excluded) rather than persisting the live instance.
+      const serverContext = createTestServerContext({ mastra });
+      serverContext.requestContext.set('locale', 'fr-FR');
+      serverContext.requestContext.set('mastra__authMode', 'server');
+
+      const added = await ADD_ITEM_ROUTE.handler({
+        ...serverContext,
+        datasetId: dataset.id,
+        input: { q: 'ctx' },
+      } as any);
+
+      expect(added.requestContext).toEqual({ locale: 'fr-FR' });
+
+      // An empty live RequestContext must not persist an empty object.
+      const bare = await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        input: { q: 'no-ctx' },
+      } as any);
+      expect(bare.requestContext).toBeUndefined();
+    });
+
+    it('maps non-plain-object dataset item payloads to HTTP 400', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Non-Plain Payload DS' });
+
+      const error = await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        input: { q: 'date', createdAt: new Date('2026-01-01T00:00:00Z') },
+      } as any).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect((error as HTTPException).status).toBe(400);
+      expect((error as HTTPException).message).toContain('non-plain object (Date) at items[0].input.createdAt');
+    });
+
     it('maps incompatible externalId reuse in a batch to HTTP 409', async () => {
       const dataset = await mastra.datasets.create({ name: 'Batch Conflict DS' });
       await BATCH_INSERT_ITEMS_ROUTE.handler({

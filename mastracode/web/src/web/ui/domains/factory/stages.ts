@@ -10,6 +10,7 @@ export const BOARD_STAGES = [
   { id: 'execute', label: 'Building' },
   { id: 'review', label: 'Review' },
   { id: 'done', label: 'Done' },
+  { id: 'canceled', label: 'Canceled' },
 ] as const;
 
 export type BoardStageId = (typeof BOARD_STAGES)[number]['id'];

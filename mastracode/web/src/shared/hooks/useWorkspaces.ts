@@ -1,18 +1,17 @@
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { useToast } from '../../web/ui/ui/toast';
-import { createWorktree, deleteWorktree } from '../../web/ui/domains/workspaces/services/github';
-import type { Project, Worktree } from '../../web/ui/domains/workspaces/services/projects';
 import {
-  factoryWorktrees,
-  loadProjects,
-  removeWorktree,
-  selectedWorktree,
-  selectWorktree,
-  upsertWorktree,
-} from '../../web/ui/domains/workspaces/services/projects';
+  createUserSession,
+  deleteUserSession,
+  getUserSession,
+  listUserSessions,
+  USER_SESSION_BRANCH_PREFIX,
+} from '../../web/ui/domains/workspaces/services/github';
+import type { FactoryUserSession } from '../../web/ui/domains/workspaces/services/github';
 
 /**
  * The slice of the agent-controller session the delete mutation needs to
@@ -29,142 +28,117 @@ interface AgentControllerThreadsScope {
 }
 
 export interface WorkspacesData {
-  worktrees: Worktree[];
-  selected: Worktree | undefined;
+  workspaces: FactoryUserSession[];
+  userSessions: FactoryUserSession[];
 }
 
-function latestProject(project: Project): Project {
-  return loadProjects().find(stored => stored.id === project.id) ?? project;
-}
-
-export function deriveProjectPath(project: Project | null | undefined): string {
-  if (!project) return '';
-  // The repo-root checkout is not a chat target: everything runs in a
-  // worktree branched from HEAD, so a GitHub project without a selected
-  // workspace has no project path (and no enabled chat session).
-  if (project.source === 'github') return selectedWorktree(project)?.worktreePath ?? '';
-  return project.path ?? '';
-}
-
-function invalidateWorkspaceQueries(
-  queryClient: ReturnType<typeof useQueryClient>,
-  project: Project,
-  scope?: AgentControllerThreadsScope,
-) {
-  const projectPath = deriveProjectPath(latestProject(project));
-  void queryClient.invalidateQueries({ queryKey: queryKeys.workspaces(project.id) });
-  void queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
-  void queryClient.invalidateQueries({
-    queryKey: queryKeys.agentControllerThreads(scope?.agentControllerId, scope?.resourceId, projectPath),
-  });
-}
-
-function workspacesData(project: Project): WorkspacesData {
-  const current = latestProject(project);
+function splitSessions(sessions: FactoryUserSession[]): WorkspacesData {
   return {
-    // Factory workspaces only: user-session worktrees are listed by the
-    // User Sessions section, and the repo root is not a workspace at all.
-    worktrees: factoryWorktrees(current),
-    selected: selectedWorktree(current),
+    workspaces: sessions.filter(session => !session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)),
+    userSessions: sessions.filter(session => session.branch.startsWith(USER_SESSION_BRANCH_PREFIX)),
   };
 }
 
-export function useWorkspacesQuery(project: Project | null | undefined) {
-  const githubProject = project?.source === 'github' ? project : undefined;
+function invalidateSessionQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  projectRepositoryId: string | undefined,
+  scope?: AgentControllerThreadsScope,
+  projectPath?: string,
+) {
+  void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
+  if (projectPath) {
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.agentControllerThreads(scope?.agentControllerId, scope?.resourceId, projectPath),
+    });
+  }
+}
+
+export function useWorkspacesQuery(projectRepositoryId: string | undefined) {
+  const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.workspaces(project?.id),
-    queryFn: async (): Promise<WorkspacesData> => {
-      if (!githubProject) throw new Error('Workspaces query requires a GitHub project');
-      return workspacesData(githubProject);
-    },
-    enabled: !!githubProject,
-    initialData: githubProject ? () => workspacesData(githubProject) : undefined,
+    queryKey: queryKeys.sessions(projectRepositoryId),
+    queryFn: async (): Promise<WorkspacesData> => splitSessions(await listUserSessions(baseUrl, projectRepositoryId!)),
+    enabled: Boolean(projectRepositoryId),
   });
 }
 
-export function useSelectWorkspaceMutation(project: Project | null | undefined, scope?: AgentControllerThreadsScope) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    // Sessions are scoped per worktree, so selecting a worktree only updates
-    // the stored project — the UI re-derives the scope and addresses that
-    // worktree's own session (no rebinding of the previous session's state).
-    mutationFn: async (worktreePath: string) => {
-      if (!project) throw new Error('No active project');
-      return selectWorktree(latestProject(project), worktreePath);
-    },
-    onSuccess: updated => invalidateWorkspaceQueries(queryClient, updated, scope),
+export function useUserSessionQuery(sessionId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.userSession(sessionId),
+    queryFn: () => getUserSession(baseUrl, sessionId!),
+    enabled: Boolean(sessionId),
   });
 }
 
-export function useCreateWorkspaceMutation(project: Project | null | undefined, scope?: AgentControllerThreadsScope) {
+export function useCreateWorkspaceMutation(
+  factoryId: string | undefined,
+  projectRepositoryId: string | undefined,
+  scope?: AgentControllerThreadsScope,
+) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const navigate = useNavigate();
 
   return useMutation({
     mutationFn: async (branch: string) => {
       const trimmedBranch = branch.trim();
-      if (!project?.githubProjectId) throw new Error('No GitHub project selected');
-      const result = await createWorktree(baseUrl, project.githubProjectId, trimmedBranch);
-      const worktree: Worktree = {
-        branch: result.branch,
-        worktreePath: result.worktreePath,
-        baseBranch: result.baseBranch,
-      };
-      return selectWorktree(upsertWorktree(latestProject(project), worktree), worktree.worktreePath);
+      if (!factoryId) throw new Error('No Factory selected');
+      if (!projectRepositoryId) throw new Error('Connect a repository before creating a workspace');
+      return createUserSession(baseUrl, projectRepositoryId, trimmedBranch);
     },
-    onSuccess: updated => invalidateWorkspaceQueries(queryClient, updated, scope),
-    onError: error => toast(error instanceof Error ? error.message : 'Failed to create workspace', 'error'),
+    onSuccess: session => {
+      invalidateSessionQueries(queryClient, projectRepositoryId, scope, session.sessionId);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.userSession(session.sessionId) });
+      void navigate(`/factories/${factoryId}/workspaces/${session.sessionId}`);
+    },
+    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to create workspace'),
   });
 }
 
 /**
- * Delete a worktree: removes the sandbox checkout + branch server-side, deletes
- * every thread that ran inside it, drops it from the stored project, and — when
- * the deleted worktree was selected — falls back to the first remaining factory
- * workspace (the UI re-derives the scope and addresses that worktree's own
- * session), or to no selection when none remain.
- * Destructive; callers confirm with the user first.
+ * Delete a workspace: removes the sandbox checkout + branch server-side and
+ * deletes every thread that ran inside it. Destructive; callers confirm first.
  */
 export function useDeleteWorkspaceMutation(
-  project: Project | null | undefined,
+  factoryId: string | undefined,
+  projectRepositoryId: string | undefined,
   threadSession: WorkspaceThreadSession | null | undefined,
   scope?: AgentControllerThreadsScope,
 ) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
+  const navigate = useNavigate();
 
   return useMutation({
-    mutationFn: async (worktree: Worktree) => {
-      if (!project?.githubProjectId) throw new Error('No GitHub project selected');
-      await deleteWorktree(baseUrl, project.githubProjectId, worktree.branch);
+    mutationFn: async (workspace: FactoryUserSession) => {
+      if (!factoryId) throw new Error('No Factory selected');
+      if (!projectRepositoryId) throw new Error('Connect a repository before deleting a workspace');
+      await deleteUserSession(baseUrl, workspace.sessionId);
 
-      // Cascade: delete the threads scoped to this worktree. Re-list between
-      // rounds since the page size caps each fetch; bail after a sane number
-      // of rounds so a server hiccup can't loop forever.
       if (threadSession) {
         for (let round = 0; round < 20; round++) {
           const threads = await threadSession.listThreads({
             limit: 50,
-            tags: { projectPath: worktree.worktreePath },
+            tags: { projectPath: workspace.sessionId },
           });
           if (threads.length === 0) break;
           for (const thread of threads) await threadSession.deleteThread(thread.id);
         }
       }
 
-      const wasSelected = selectedWorktree(latestProject(project))?.worktreePath === worktree.worktreePath;
-      const updated = removeWorktree(latestProject(project), worktree.worktreePath);
-      return { updated, removedPath: worktree.worktreePath, wasSelected };
+      return workspace;
     },
-    onSuccess: ({ updated, removedPath }) => {
-      invalidateWorkspaceQueries(queryClient, updated, scope);
+    onSuccess: workspace => {
+      invalidateSessionQueries(queryClient, projectRepositoryId, scope, workspace.sessionId);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.userSession(workspace.sessionId) });
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerThreads(scope?.agentControllerId, scope?.resourceId, removedPath),
+        queryKey: queryKeys.agentControllerThreads(scope?.agentControllerId, scope?.resourceId, workspace.sessionId),
       });
+      void navigate(`/factories/${factoryId}`);
       toast('Workspace deleted');
     },
-    onError: error => toast(error instanceof Error ? error.message : 'Failed to delete workspace', 'error'),
+    onError: error => toast.error(error instanceof Error ? error.message : 'Failed to delete workspace'),
   });
 }

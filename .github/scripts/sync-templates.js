@@ -1,8 +1,8 @@
 import { Octokit } from '@octokit/rest';
-import fs from 'fs';
+import fs from 'node:fs';
 import * as fsExtra from 'fs-extra/esm';
-import path from 'path';
-import { execSync } from 'child_process';
+import path from 'node:path';
+import { execSync } from 'node:child_process';
 import dotenv from 'dotenv';
 
 dotenv.config();

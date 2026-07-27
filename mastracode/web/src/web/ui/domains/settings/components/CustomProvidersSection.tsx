@@ -108,7 +108,7 @@ export function CustomProvidersSection() {
       )}
 
       {draft && (
-        <div className="flex flex-col gap-3 rounded-lg border border-border1 p-3">
+        <div className="border-border1 flex flex-col gap-3 rounded-lg border p-3">
           <label className="flex flex-col gap-1">
             <Txt as="span" variant="ui-sm" className="text-icon5">
               Name
@@ -173,12 +173,12 @@ export function CustomProvidersSection() {
           No custom providers yet. Add one above.
         </Txt>
       ) : (
-        <ul role="list" className="flex flex-col divide-y divide-border1">
+        <ul role="list" className="divide-border1 flex flex-col divide-y">
           {providers.map(p => (
             <li key={p.id} role="listitem" className="flex items-center justify-between gap-3 py-2">
               <div className="flex min-w-0 flex-col gap-0.5">
                 <div className="flex items-center gap-2">
-                  <Txt as="span" variant="ui-md" className="truncate text-icon6">
+                  <Txt as="span" variant="ui-md" className="text-icon6 truncate">
                     {p.name}
                   </Txt>
                   {p.hasApiKey && (
@@ -187,7 +187,7 @@ export function CustomProvidersSection() {
                     </Badge>
                   )}
                 </div>
-                <Txt as="span" variant="ui-xs" className="truncate text-icon3">
+                <Txt as="span" variant="ui-xs" className="text-icon3 truncate">
                   {p.url}
                 </Txt>
                 {p.models.length > 0 && (

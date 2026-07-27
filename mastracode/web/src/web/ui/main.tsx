@@ -1,4 +1,5 @@
 import { ThemeProvider } from '@mastra/playground-ui/components/ThemeProvider';
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
@@ -10,7 +11,6 @@ import { createQueryClient } from '../../shared/query-client';
 import { createAppRouter } from './router';
 import '@mastra/playground-ui/style.css';
 import './tailwind.css';
-import { ToastProvider } from './ui';
 
 // The web app talks to the Mastra server same-origin (`baseUrl=""`): in prod
 // the server serves this build itself, and in dev Vite proxies `/api` + `/auth`
@@ -22,15 +22,18 @@ import { ToastProvider } from './ui';
 const queryClient = createQueryClient();
 const router = createAppRouter();
 
+if (import.meta.env.DEV && import.meta.env.VITE_REACT_GRAB === 'true') {
+  void import('react-grab');
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeProvider defaultTheme="dark" storageKey="mastracode.theme">
+    <ThemeProvider defaultTheme="system" storageKey="mastracode.theme">
       <TooltipProvider delayDuration={0}>
         <QueryClientProvider client={queryClient}>
           <ApiConfigProvider baseUrl="">
-            <ToastProvider>
-              <RouterProvider router={router} />
-            </ToastProvider>
+            <RouterProvider router={router} />
+            <Toaster position="bottom-right" />
           </ApiConfigProvider>
         </QueryClientProvider>
       </TooltipProvider>

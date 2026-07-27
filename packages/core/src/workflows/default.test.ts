@@ -1405,6 +1405,105 @@ describe('DefaultExecutionEngine.deserializeRequestContext', () => {
   });
 });
 
+describe('DefaultExecutionEngine.execute cancellation onFinish contract', () => {
+  it('should format returned steps and onFinish steps identically for canceled runs', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const requestContext = new RequestContext();
+    const abortController = new AbortController();
+
+    let onFinishResult: any = null;
+    const engine = new DefaultExecutionEngine({
+      mastra: undefined,
+      options: {
+        validateInputs: true,
+        shouldPersistSnapshot: () => false,
+        onFinish: (result: any) => {
+          onFinishResult = result;
+        },
+      } as any,
+    });
+
+    const persistSpy = vi.spyOn(engine as any, 'persistStepUpdate').mockResolvedValue(undefined);
+
+    // Inject metadata during step execution start to test stripping
+    vi.spyOn(engine, 'onStepExecutionStart').mockImplementation(async ({ stepInfo }) => {
+      stepInfo.metadata = { nestedRunId: 'nested-123', customField: 'keep-me' };
+    });
+
+    const step1 = {
+      id: 'step1',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async ({ inputData }: any) => {
+        // Trigger cancel during step 1 so step 2 is skipped and engine loop catches cancellation
+        abortController.abort();
+        // Return a payload matching input to test deduplication
+        return {
+          ...inputData,
+        };
+      },
+    };
+
+    const step2 = {
+      id: 'step2',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async () => {
+        return { data: 'should-not-run' };
+      },
+    };
+
+    const graph = {
+      id: 'test-graph',
+      steps: [
+        { type: 'step' as const, step: step1 },
+        { type: 'step' as const, step: step2 },
+      ],
+    };
+
+    const inputData = { data: 'test-input' };
+
+    const result = await engine.execute({
+      workflowId: 'test-workflow',
+      runId: 'test-run',
+      graph,
+      input: inputData,
+      serializedStepGraph: [],
+      pubsub,
+      requestContext,
+      abortController,
+      outputOptions: { includeState: true },
+    });
+
+    expect(result.status).toBe('canceled');
+    expect(result.runId).toBe('test-run');
+    expect(result.state).toBeDefined(); // Ensure state exists in output
+
+    // Top-level input is preserved
+    expect((result as any).input).toEqual(inputData);
+
+    expect(onFinishResult).toBeDefined();
+    expect(onFinishResult?.status).toBe('canceled');
+
+    // The returned steps and onFinish steps should be identically normalized
+    expect(result.steps).toEqual(onFinishResult?.steps);
+
+    // Payload deduplication: step1 output matches input, so payload should be removed
+    const step1Result = result.steps?.step1 as any;
+    expect(step1Result?.payload).toBeUndefined();
+
+    // Ensure raw nestedRunId is omitted from formatted steps, but other metadata is preserved
+    expect(step1Result?.metadata?.nestedRunId).toBeUndefined();
+    expect(step1Result?.metadata?.customField).toBe('keep-me');
+
+    // Verify raw persistence: persistStepUpdate receives the un-deduplicated payload and raw metadata
+    expect(persistSpy).toHaveBeenCalled();
+    const persistArgs = persistSpy.mock.calls[0][0] as any;
+    expect(persistArgs.stepResults.step1.payload).toEqual(inputData);
+    expect(persistArgs.stepResults.step1.metadata?.nestedRunId).toBe('nested-123');
+  });
+});
+
 describe('DefaultExecutionEngine.executeStepWithRetry', () => {
   it('does not retry when the step throws MastraNonRetryableError', async () => {
     const engine = new DefaultExecutionEngine({ mastra: undefined });

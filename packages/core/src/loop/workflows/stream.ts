@@ -1,5 +1,6 @@
 import { ReadableStream } from 'node:stream/web';
 import type { ToolSet } from '@internal/ai-sdk-v5';
+import { beginGoalActivity, stopGoalActivity } from '../../agent/goal';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { getErrorFromUnknown } from '../../error';
 import { ConsoleLogger } from '../../logger';
@@ -292,6 +293,17 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           requestContext.delete('__mastra_requireToolApproval');
         }
 
+        if (rest.goal) {
+          await beginGoalActivity({
+            mastra: rest.mastra,
+            agentId,
+            threadId: _internal?.threadId,
+            runId,
+            requestContext,
+            now: _internal?.now,
+          });
+        }
+
         const executionResult = resumeContext
           ? await run.resume({
               resumeData: resumeContext.resumeData,
@@ -356,6 +368,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         safeClose(controller);
       } finally {
+        await stopGoalActivity({ agentId, runId, now: _internal?.now });
         if (!keepRegisteredForResume) {
           rest.mastra?.__unregisterInternalWorkflow(agenticLoopWorkflow.id, runId);
         }
