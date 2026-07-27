@@ -122,6 +122,10 @@ describe('workflow draft client tools', () => {
         'checkpoint-workflow-draft',
         'checkpoint-workflow-candidate',
         'finalize-workflow-draft',
+        'insert-workflow-mapping-before',
+        'insert-workflow-mapping-after',
+        'set-workflow-mapping-source',
+        'set-workflow-predicate',
         'add-workflow-step',
         'update-workflow-step',
         'remove-workflow-step',
@@ -158,6 +162,66 @@ describe('workflow draft client tools', () => {
       const result = await executeTool(tools['get-tool-schema'], { registryKey: 'lookupCustomer' });
 
       expect(result).toEqual({ available: false, reason: 'catalog-unavailable' });
+    });
+
+    it('constructs typed mapping repairs without exposing ambiguous persisted descriptors', async () => {
+      const store = createStore('new-workflow', undefined, undefined, availableValidationContext);
+      const checkpoint = await executeTool(store.tools['checkpoint-workflow-draft'], {
+        id: 'new-workflow',
+        inputSchema: { type: 'object', properties: { email: { type: 'string' } }, required: ['email'] },
+        outputSchema: {},
+        graph: [{ type: 'tool', id: 'lookup', toolId: 'lookupCustomer' }],
+      });
+      expect(checkpoint).toMatchObject({ success: true, revision: 1 });
+
+      const inserted = await executeTool(store.tools['insert-workflow-mapping-before'], {
+        targetStepId: 'lookup',
+        mappingStepId: 'shape-input',
+        mapConfig: { email: { initData: true, path: 'email' } },
+      });
+      expect(inserted).toMatchObject({ success: true, candidateRevision: 1, baseAcceptedRevision: 1 });
+      await executeTool(store.tools['checkpoint-workflow-candidate'], { candidateRevision: 1 });
+
+      const repaired = await executeTool(store.tools['set-workflow-mapping-source'], {
+        mappingStepId: 'shape-input',
+        field: 'email',
+        source: { value: 'ada@example.com' },
+      });
+      expect(repaired).toMatchObject({ success: true, candidateRevision: 1, baseAcceptedRevision: 2 });
+      await executeTool(store.tools['checkpoint-workflow-candidate'], { candidateRevision: 1 });
+
+      expect(store.state.draft.graph).toEqual([
+        { type: 'mapping', id: 'shape-input', mapConfig: JSON.stringify({ email: { value: 'ada@example.com' } }) },
+        { type: 'tool', id: 'lookup', toolId: 'lookupCustomer' },
+      ]);
+    });
+
+    it('sets canonical predicates by branch step ID while preserving the accepted revision until checkpoint', async () => {
+      const store = createStore();
+      await executeTool(store.tools['checkpoint-workflow-draft'], {
+        id: 'new-workflow',
+        inputSchema: {},
+        outputSchema: {},
+        graph: [
+          {
+            type: 'conditional',
+            steps: [{ type: 'agent', id: 'urgent', agentId: 'supportAgent' }],
+            predicates: [{ op: 'truthy', value: { path: 'initData.urgent' } }],
+          },
+        ],
+      });
+
+      const repaired = await executeTool(store.tools['set-workflow-predicate'], {
+        targetStepId: 'urgent',
+        predicate: { op: 'eq', left: { path: 'initData.priority' }, right: { literal: 'urgent' } },
+      });
+      expect(repaired).toMatchObject({ success: true, candidateRevision: 1, baseAcceptedRevision: 1 });
+      expect(store.state.draft.graph[0]).toMatchObject({ predicates: [{ op: 'truthy' }] });
+
+      await executeTool(store.tools['checkpoint-workflow-candidate'], { candidateRevision: 1 });
+      expect(store.state.draft.graph[0]).toMatchObject({
+        predicates: [{ op: 'eq', left: { path: 'initData.priority' }, right: { literal: 'urgent' } }],
+      });
     });
 
     it('publishes candidateRevision as a required candidate-checkpoint input for the model', () => {

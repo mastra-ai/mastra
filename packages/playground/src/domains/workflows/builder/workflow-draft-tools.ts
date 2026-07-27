@@ -85,6 +85,16 @@ const mappingDescriptorInputSchema = z.union([
   z.object({ step: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]), path: z.string() }).strict(),
 ]);
 const mappingConfigInputSchema = z.record(z.string(), mappingDescriptorInputSchema);
+const mappingRepairInputSchema = z.object({
+  targetStepId: z.string().min(1),
+  mappingStepId: z.string().min(1),
+  mapConfig: mappingConfigInputSchema,
+});
+const mappingSourceRepairInputSchema = z.object({
+  mappingStepId: z.string().min(1),
+  field: z.string().min(1),
+  source: mappingDescriptorInputSchema,
+});
 const mappingStepInputSchema = z
   .object({
     type: z.literal('mapping'),
@@ -385,6 +395,14 @@ function getStepInputSchema(step: WorkflowDraftStep, context: WorkflowDraftValid
   return undefined;
 }
 
+function findTopLevelStepIndex(draft: WorkflowDraft, targetStepId: string) {
+  return draft.graph.findIndex(step => getStepId(step) === targetStepId);
+}
+
+function mappingStep(id: string, mapConfig: z.infer<typeof mappingConfigInputSchema>): WorkflowDraftStep {
+  return { type: 'mapping', id, mapConfig: JSON.stringify(mapConfig) };
+}
+
 function orderedSourceIds(draft: WorkflowDraft, targetStepId: string) {
   const ids: string[] = [];
   for (const step of draft.graph) {
@@ -617,6 +635,70 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
         if (store.isCurrentGeneration?.() === false) return supersededResult;
         return reportResult(store, 'finalize-workflow-draft', result);
       },
+    }),
+    'insert-workflow-mapping-before': createTool({
+      id: 'insert-workflow-mapping-before',
+      description: 'Insert a canonical typed mapping immediately before a top-level target step.',
+      inputSchema: mappingRepairInputSchema,
+      outputSchema: resultSchema,
+      execute: async ({ targetStepId, mappingStepId, mapConfig }) => {
+        const index = findTopLevelStepIndex(candidate.draft, targetStepId);
+        if (index < 0) return { success: false, error: `Top-level step "${targetStepId}" does not exist.` };
+        return executeMutation('insert-workflow-mapping-before', {
+          type: 'add-step',
+          step: mappingStep(mappingStepId, mapConfig),
+          index,
+        });
+      },
+    }),
+    'insert-workflow-mapping-after': createTool({
+      id: 'insert-workflow-mapping-after',
+      description: 'Insert a canonical typed mapping immediately after a top-level target step.',
+      inputSchema: mappingRepairInputSchema,
+      outputSchema: resultSchema,
+      execute: async ({ targetStepId, mappingStepId, mapConfig }) => {
+        const index = findTopLevelStepIndex(candidate.draft, targetStepId);
+        if (index < 0) return { success: false, error: `Top-level step "${targetStepId}" does not exist.` };
+        return executeMutation('insert-workflow-mapping-after', {
+          type: 'add-step',
+          step: mappingStep(mappingStepId, mapConfig),
+          index: index + 1,
+        });
+      },
+    }),
+    'set-workflow-mapping-source': createTool({
+      id: 'set-workflow-mapping-source',
+      description: 'Set one output field on an existing top-level mapping using exactly one canonical typed source.',
+      inputSchema: mappingSourceRepairInputSchema,
+      outputSchema: resultSchema,
+      execute: async ({ mappingStepId, field, source }) => {
+        const existing = candidate.draft.graph.find(
+          (step): step is Extract<WorkflowDraftStep, { type: 'mapping' }> =>
+            step.type === 'mapping' && step.id === mappingStepId,
+        );
+        if (!existing) return { success: false, error: `Top-level mapping "${mappingStepId}" does not exist.` };
+        let config: unknown;
+        try {
+          config = JSON.parse(existing.mapConfig);
+        } catch {
+          return { success: false, error: `Mapping "${mappingStepId}" does not contain valid JSON.` };
+        }
+        const parsed = mappingConfigInputSchema.safeParse(config);
+        if (!parsed.success) return { success: false, error: z.prettifyError(parsed.error) };
+        return executeMutation('set-workflow-mapping-source', {
+          type: 'update-step',
+          stepId: mappingStepId,
+          step: mappingStep(mappingStepId, { ...parsed.data, [field]: source }),
+        });
+      },
+    }),
+    'set-workflow-predicate': createTool({
+      id: 'set-workflow-predicate',
+      description: 'Replace the predicate for a conditional branch or loop body using canonical rooted operands.',
+      inputSchema: z.object({ targetStepId: z.string().min(1), predicate: predicateSchema }),
+      outputSchema: resultSchema,
+      execute: async ({ targetStepId, predicate }) =>
+        executeMutation('set-workflow-predicate', { type: 'set-predicate', targetStepId, predicate }),
     }),
     'add-workflow-step': createTool({
       id: 'add-workflow-step',

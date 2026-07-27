@@ -52,6 +52,11 @@ export type WorkflowDraftMutation =
     }
   | { type: 'add-step'; step: WorkflowDraftStep; index?: number }
   | { type: 'update-step'; stepId: string; step: WorkflowDraftStep }
+  | {
+      type: 'set-predicate';
+      targetStepId: string;
+      predicate: Extract<WorkflowDraftStep, { type: 'conditional' }>['predicates'][number];
+    }
   | { type: 'remove-step'; stepId: string };
 
 /**
@@ -326,6 +331,27 @@ function mutateWorkflowDraft(
         ...draft,
         graph: draft.graph.map(step => ('id' in step && step.id === mutation.stepId ? mutation.step : step)),
       };
+    case 'set-predicate': {
+      let found = false;
+      const graph = draft.graph.map(step => {
+        if (step.type === 'conditional') {
+          const index = step.steps.findIndex(child => child.id === mutation.targetStepId);
+          if (index < 0) return step;
+          found = true;
+          const predicates = [...step.predicates];
+          predicates[index] = mutation.predicate;
+          return { ...step, predicates };
+        }
+        if (step.type === 'loop' && step.step.id === mutation.targetStepId) {
+          found = true;
+          return { ...step, predicate: mutation.predicate };
+        }
+        return step;
+      });
+      return found
+        ? { ...draft, graph }
+        : mutationIssue(draft, 'targetStepId', `Step "${mutation.targetStepId}" does not have a predicate.`);
+    }
     case 'remove-step':
       if (!draft.graph.some(step => 'id' in step && step.id === mutation.stepId)) {
         return mutationIssue(draft, 'stepId', `Step "${mutation.stepId}" does not exist.`);
