@@ -764,4 +764,12 @@ describe('notification inbox', () => {
     expect(workflow.id).toBe('__mastra_notification_dispatcher');
     expect((workflow as any).getScheduleConfigs()).toEqual([]);
   });
+
+  it('does not persist dispatch run snapshots', () => {
+    const options = (createNotificationDispatchWorkflow() as any).options;
+
+    expect(options.shouldPersistSnapshot({ stepResults: {}, workflowStatus: 'success' })).toBe(false);
+    expect(options.shouldPersistSnapshot({ stepResults: {}, workflowStatus: 'running' })).toBe(false);
+    expect(options.deleteSnapshotOnFinish).toBe(true);
+  });
 });

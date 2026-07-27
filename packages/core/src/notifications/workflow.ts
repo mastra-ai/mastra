@@ -101,6 +101,13 @@ export function createNotificationDispatchWorkflow({
       delivered: z.number(),
       failed: z.number(),
     }),
+    options: {
+      // Dispatch runs are fire-and-forget and never resumed, and this workflow is
+      // scheduled every minute, so persisting their snapshots only accumulates
+      // dead rows in `mastra_workflow_snapshot`.
+      shouldPersistSnapshot: () => false,
+      deleteSnapshotOnFinish: true,
+    },
   })
     .then(dispatchStep)
     .commit();

@@ -485,6 +485,17 @@ export interface WorkflowOptions {
   }) => boolean;
 
   /**
+   * When true, the run row is deleted once the run reaches a terminal state that
+   * `shouldPersistSnapshot` opted out of persisting. Without it such runs leave
+   * behind whatever was last written (the `running` row every run starts with),
+   * which accumulates for frequently scheduled workflows.
+   *
+   * Only for runs that are never resumed or inspected after they finish; used by
+   * internal workflows such as the notification dispatcher.
+   */
+  deleteSnapshotOnFinish?: boolean;
+
+  /**
    * Transforms the run snapshot immediately before it is persisted.
    * Called at every snapshot persist site (both engines). Must be a pure
    * function returning JSON-safe data — the snapshot may cross a pubsub

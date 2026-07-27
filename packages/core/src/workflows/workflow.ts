@@ -1627,6 +1627,7 @@ export class Workflow<
     this.#options = {
       validateInputs: options.validateInputs ?? true,
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
+      deleteSnapshotOnFinish: options.deleteSnapshotOnFinish,
       pruneSnapshot: options.pruneSnapshot,
       tracingPolicy: options.tracingPolicy,
       onFinish: options.onFinish,

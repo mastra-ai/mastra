@@ -572,18 +572,24 @@ export class WorkflowEventProcessor extends EventProcessor {
           activeStepsPath: activeStepsPath,
         },
       });
-    } else if (parentWorkflow && finalStatus !== 'paused') {
-      // The nested run reached a terminal state its workflow opted not to
-      // persist (e.g. the internal `executionWorkflow` inside `agentic-loop`).
-      // A row may still exist from an earlier persisted phase — 'pending' at
-      // nested-run start or 'suspended' before a resume — and without the
-      // terminal update it would leak as a stale, resumable-looking record.
-      // Terminal runs can't be resumed, so drop the row entirely. Best-effort:
-      // a storage failure here must not abort run completion.
+    } else if ((parentWorkflow || workflow?.options?.deleteSnapshotOnFinish) && finalStatus !== 'paused') {
+      // The run reached a terminal state its workflow opted not to persist
+      // (e.g. the internal `executionWorkflow` inside `agentic-loop`, or a
+      // workflow marked `deleteSnapshotOnFinish` such as the notification
+      // dispatcher). A row may still exist from an earlier phase — 'pending' at
+      // nested-run start, 'running' written unconditionally by `Run.start()`, or
+      // 'suspended' before a resume — and without the terminal update it would
+      // leak as a stale, resumable-looking record. Terminal runs can't be
+      // resumed, so drop the row entirely. Best-effort: a storage failure here
+      // must not abort run completion.
       try {
         await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
       } catch (e) {
-        this.mastra.getLogger()?.warn('Failed to clean up nested workflow snapshot', { workflowId, runId, error: e });
+        this.mastra.getLogger()?.warn('Failed to clean up transient workflow snapshot', {
+          workflowId,
+          runId,
+          error: e,
+        });
       }
     }
 

@@ -220,6 +220,14 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
             defaultValue: '() => true',
           },
           {
+            name: 'deleteSnapshotOnFinish',
+            type: 'boolean',
+            description:
+              'Optional flag to delete the run row once the run reaches a terminal state that shouldPersistSnapshot opted out of persisting. Use it for runs that are never resumed or inspected after they finish, so frequently scheduled workflows do not accumulate rows.',
+            isOptional: true,
+            defaultValue: 'false',
+          },
+          {
             name: 'pruneSnapshot',
             type: '(params: { snapshot: WorkflowRunState; workflowStatus: WorkflowRunStatus }) => WorkflowRunState',
             description:
