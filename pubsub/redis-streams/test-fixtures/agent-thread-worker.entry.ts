@@ -276,6 +276,26 @@ async function main() {
       return;
     }
 
+    if (cmd.cmd === 'stream-plain') {
+      // Mirrors a plain (non-signal) `agent.stream()` call: the same pre-run
+      // cross-instance wait Agent.stream performs, then the stub stream (which
+      // itself mirrors the prepareRunOptions -> registerRun boundary). No
+      // sendSignal involved — this is the path an ordinary HTTP request takes.
+      const sigId: string = cmd.sigId;
+      try {
+        await runtime.waitForCrossAgentThreadRun(
+          agent as any,
+          { memory: { resource: RESOURCE_ID, thread: THREAD_ID } } as any,
+          pubsub,
+        );
+        emit({ type: 'plain-wait-resolved', sigId });
+        await agent.stream(sigId, { memory: { resource: RESOURCE_ID, thread: THREAD_ID } } as any);
+      } catch (err) {
+        emit({ type: 'command-error', cmd: cmd.cmd, error: String(err) });
+      }
+      return;
+    }
+
     if (cmd.cmd === 'abort-active') {
       const runId = defaultSubscription.activeRunId();
       emit({ type: 'abort-result', runId, aborted: defaultSubscription.abort() });
