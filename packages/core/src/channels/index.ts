@@ -23,6 +23,7 @@ export type {
   ChannelContext,
   ChannelHandler,
   ChannelHandlerConfig,
+  ChannelHandlerContext,
   ChannelHandlers,
   ChannelInstallationInfo,
   ChannelPlatformInfo,

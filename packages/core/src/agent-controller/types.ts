@@ -2,7 +2,7 @@ import type { Agent } from '../agent';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
-import type { ChannelConfig } from '../channels/types';
+import type { AgentControllerChannelsConfig } from '../channels/agent-controller-channels';
 import type { PubSub } from '../events/pubsub';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import type { LoopOptions } from '../loop/types';
@@ -213,7 +213,13 @@ export type AgentControllerStateSchema<T> = T;
  * Identifiers for the built-in controller tools that can be selectively disabled.
  */
 export type BuiltinToolId =
-  'ask_user' | 'submit_plan' | 'task_write' | 'task_update' | 'task_complete' | 'task_check' | 'subagent';
+  | 'ask_user'
+  | 'submit_plan'
+  | 'task_write'
+  | 'task_update'
+  | 'task_complete'
+  | 'task_check'
+  | 'subagent';
 
 export interface AgentControllerConfig<TState = {}> {
   /** Unique identifier for this controller instance */
@@ -254,7 +260,7 @@ export interface AgentControllerConfig<TState = {}> {
    * V1 expects manually constructed adapters and a long-lived server
    * (controller sessions are in-memory and don't survive restarts).
    */
-  channels?: ChannelConfig;
+  channels?: AgentControllerChannelsConfig;
 
   /** Default mode to enter when a thread has no persisted mode. */
   defaultModeId?: string;

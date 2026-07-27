@@ -16,7 +16,7 @@ import type {
   ChannelLinkStateSigner,
   FactoryProjectsStorage,
 } from '@mastra/factory';
-import { createSlackAdapter, SlackProvider } from '@mastra/slack';
+import { createSlackAdapter } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
 
 // Derive the thread/message types from the core handler signature rather than
@@ -185,11 +185,6 @@ function rawTeamId(rawPayload: unknown): string | undefined {
  */
 function slackTeamId(message: HandlerMessage): string | undefined {
   return rawTeamId(message.raw);
-}
-
-/** Resolve the public origin Slack's servers call back on (events/webhooks). */
-function channelsPublicUrl(): string | undefined {
-  return process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL;
 }
 
 /**
@@ -724,16 +719,6 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
     onDirectMessage: newSessionChatHandler,
   };
 };
-
-/** Construct the Slack channel provider wired to the server-owned Mastra instance. */
-export function createSlackChannelProvider(deps: SlackChannelDeps): SlackProvider {
-  return new SlackProvider({
-    refreshToken: process.env.SLACK_APP_REFRESH_TOKEN,
-    baseUrl: channelsPublicUrl(),
-    handlers: createHandlers(deps),
-    toolDisplay: 'hidden',
-  });
-}
 
 export function createAgentControllerSlackChannels(deps: SlackChannelDeps): AgentControllerChannels {
   const { accountLinks } = deps;

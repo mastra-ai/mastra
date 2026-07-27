@@ -28,7 +28,8 @@
     "pretest": "docker compose up -d --wait",
     "test": "vitest run",
     "posttest": "docker compose down",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "dependencies": {
     "redis": "5.12.1"

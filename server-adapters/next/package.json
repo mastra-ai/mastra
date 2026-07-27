@@ -1,6 +1,6 @@
 {
   "name": "@mastra/next",
-  "version": "0.2.9-alpha.0",
+  "version": "0.2.10-alpha.0",
   "description": "Mastra Next.js server adapter — drop your Mastra instance into a Next.js app",
   "type": "module",
   "main": "dist/index.js",
@@ -22,7 +22,8 @@
     "build": "tsup --silent --config tsup.config.ts",
     "build:watch": "pnpm build --watch",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {

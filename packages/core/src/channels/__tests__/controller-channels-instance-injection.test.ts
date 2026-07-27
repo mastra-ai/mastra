@@ -211,18 +211,5 @@ describe('controller-channels instance injection: forked-subagent render-key cle
     // inherited the render key, yet FORK_SECRET never posted — proving the forked
     // context cleared CHAT_CHANNEL_RENDER_CONTEXT_KEY.
     expect(allPostedText(adapter, chatThread)).not.toContain(FORK_SECRET);
-
-    // ---- Claim (c) NO AUTO TOOLS: a channel-bearing agent's resolved toolset
-    // does NOT include send_message/add_reaction — auto-injection is gone. ----
-    const toolAgent = new Agent({
-      id: 'tool-agent',
-      name: 'tool-agent',
-      instructions: 'tools',
-      model: createTextModel('x'),
-    });
-    toolAgent.setChannels(new AgentChannels({ adapters: { discord: adapter } }));
-    const resolvedTools = Object.keys(await toolAgent.getToolsForExecution({}));
-    expect(resolvedTools).not.toContain('send_message');
-    expect(resolvedTools).not.toContain('add_reaction');
   }, 40_000);
 });

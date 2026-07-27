@@ -16,7 +16,10 @@
  * source with an older stable package.
  *
  * Usage:
- *   node scripts/sync-template.mjs [--out <dir>]
+ *   node scripts/sync-template.mjs [--out <dir>] [--tag <dist-tag>]
+ *
+ * `--tag` pins every `link:` dep to one dist-tag instead, for registries that
+ * publish the whole workspace under a single tag (the E2E registry).
  *
  * Output defaults to `template-out/` next to this package (gitignored).
  * Publish flow: automated — the sync-softwarefactory-template workflow runs
@@ -41,6 +44,11 @@ function argValue(flag) {
 }
 const defaultOutDir = path.join(pkgRoot, 'template-out');
 const outDir = path.resolve(argValue('--out') ?? defaultOutDir);
+const pinTag = argValue('--tag'); // undefined = resolve from latest/alpha
+if (args.includes('--tag') && (!pinTag || pinTag.startsWith('--'))) {
+  console.error('sync-template: --tag requires a non-empty dist-tag value');
+  process.exit(1);
+}
 
 /** True when `candidate` is `parent` or nested inside it. */
 function containsPath(parent, candidate) {
@@ -176,6 +184,12 @@ function baseVersion(version) {
 }
 
 function resolveLinkedVersion(name, localVersion) {
+  // Snapshot registries version everything `0.0.0-<tag>-<timestamp>`, so the
+  // release-train match below can never hold.
+  if (pinTag) {
+    return { version: resolveTaggedVersion(name, pinTag), tag: pinTag };
+  }
+
   const localBase = baseVersion(localVersion);
 
   if (!localVersion.includes('-alpha.')) {
@@ -248,7 +262,9 @@ function transformPackageJson() {
   // Transitive runtime peers that must be declared as direct deps so npm
   // resolves them without needing pnpm's auto-install-peers behavior.
   // (In the monorepo dev setup pnpm provides them automatically.)
-  manifest.dependencies['@mastra/memory'] = resolveTaggedVersion('@mastra/memory', 'latest'); // peer of @mastra/playground-ui
+  // Under --tag, `latest` can belong to a different snapshot set on shared
+  // registries, which would install a second @mastra/memory copy.
+  manifest.dependencies['@mastra/memory'] = resolveTaggedVersion('@mastra/memory', pinTag ?? 'latest'); // peer of @mastra/playground-ui
   manifest.dependencies['react-is'] = '^19.0.0'; // peer of recharts (via @mastra/playground-ui)
 
   // Downgrade `typescript` from tsgo (v7) to classic (v5). The Mastra Factory

@@ -23,7 +23,8 @@
     "kimi-k3",
     "mimo-v2-5",
     "mimo-v2-5:free",
-    "minimax-m3"
+    "minimax-m3",
+    "qwen3-7-plus"
   ],
   "temperature": [
     "deepseek-v4-flash",

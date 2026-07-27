@@ -17,7 +17,7 @@ export function FactoryLayout() {
 
   if (isError) {
     return (
-      <div className="grid h-dvh w-full place-items-center bg-surface1 px-4">
+      <div className="bg-surface1 grid h-dvh w-full place-items-center px-4">
         <Notice variant="destructive">Could not load factories. Check the server connection and reload.</Notice>
       </div>
     );

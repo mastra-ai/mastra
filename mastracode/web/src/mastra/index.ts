@@ -20,7 +20,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
-import { ConsoleLogger, type LogLevelType } from '@mastra/core/logger';
 import { LocalSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector, PgFactoryStorage } from '@mastra/pg';
@@ -39,6 +38,7 @@ import {
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
+import { ConsoleLogger, type LogLevelType } from '@mastra/core/logger';
 import { createAgentControllerSlackChannels, createGithubSourceControl } from '../web/channels/slack/slack.js';
 import { createSlackConnectRoutes } from '../web/channels/slack/connect-route.js';
 
@@ -309,11 +309,8 @@ preparedArgs.server = {
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
 // in the entry file (see module docs). `prepare()` returns the constructor args
 // carrying the controller (via `agentControllers`), storage, and the assembled
-// `server` config (middleware + apiRoutes + cors). The Slack channels are
-// layered onto the controller above via `setChannels`, and the debug logger is
-// set here so channel rendering rides the same deployed instance while the
-// factory keeps owning the rest of the config.
-export const mastra: Mastra = new Mastra({
+// `server` config (middleware + apiRoutes + cors).
+export const mastra = new Mastra({
   ...preparedArgs,
   logger: new ConsoleLogger({ level: (process.env.LOG_LEVEL as LogLevelType) ?? 'debug' }),
 });
