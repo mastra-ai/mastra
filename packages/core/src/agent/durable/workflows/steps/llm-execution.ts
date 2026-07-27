@@ -566,9 +566,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               model: currentModel,
             });
             const llmPromptForModel =
-              currentModel.specificationVersion === 'v3' || currentModel.specificationVersion === 'v4'
-                ? messageList.get.all.aiV6.llmPrompt
-                : messageList.get.all.aiV5.llmPrompt;
+              currentModel.specificationVersion === 'v4'
+                ? messageList.get.all.aiV7.llmPrompt
+                : currentModel.specificationVersion === 'v3'
+                  ? messageList.get.all.aiV6.llmPrompt
+                  : messageList.get.all.aiV5.llmPrompt;
             let inputMessages = (await llmPromptForModel(messageListPromptArgs)) as LanguageModelV2Prompt;
 
             // Inject the auto-resume directive into the leading system message when
