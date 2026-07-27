@@ -30,6 +30,7 @@ import type {
   IntakeIssue,
   IntakeIssueDetail,
   ListIntakeIssuesInput,
+  UpdateIntakeIssueInput,
 } from '../../capabilities/intake.js';
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
@@ -494,6 +495,7 @@ export class LinearIntegration implements FactoryIntegration {
   }
 
   readonly intake: Intake = {
+    resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId }) => {
       const connection = await this.loadConnection(orgId);
       if (!connection) return [];
@@ -534,7 +536,26 @@ export class LinearIntegration implements FactoryIntegration {
     listIssues: input => this.#listIntakeIssues(input),
     getIssue: input => this.#getIntakeIssue(input),
     createComment: input => this.#createIntakeComment(input),
+    updateIssue: input => this.#updateIntakeIssue(input),
   };
+
+  /**
+   * Background-dispatch context: the org's OAuth connection with a fresh
+   * token. Linear work items store the issue UUID directly as `externalId`.
+   */
+  async #resolveIntakeDispatch({
+    orgId,
+    externalSource,
+  }: {
+    orgId: string;
+    externalSource: { type: string; externalId: string };
+  }): Promise<{ connection: IntegrationConnection; issueId: string } | null> {
+    if (externalSource.type !== 'issue') return null;
+    const connection = await this.loadConnection(orgId);
+    if (!connection) return null;
+    const accessToken = await this.getFreshAccessToken(connection);
+    return { connection: { type: 'oauth', accessToken }, issueId: externalSource.externalId };
+  }
   /**
    * The OAuth connect/callback flow round-trips a signed `state` through
    * Linear, so a multi-replica deploy needs a deployment-stable state secret.
@@ -657,6 +678,56 @@ export class LinearIntegration implements FactoryIntegration {
   async #createIntakeComment(input: CreateIntakeCommentInput): Promise<{ id: string; url: string } | null> {
     const accessToken = getLinearAccessToken(input.connection);
     return this.createIssueComment(accessToken, input.issueId, input.body);
+  }
+
+  async #updateIntakeIssue(input: UpdateIntakeIssueInput): Promise<IntakeIssue | null> {
+    const accessToken = getLinearAccessToken(input.connection);
+    const issue = await this.fetchIssueDetail(accessToken, input.issueId);
+    if (!issue) return null;
+    const teamKey = issue.team;
+    if (!teamKey) return null;
+    const states = await this.#listTeamWorkflowStates(accessToken, teamKey);
+    let targetState: { id: string; name: string; type: string } | null = null;
+    if (input.state.kind === 'byType') {
+      const wantedType = input.state.stateType;
+      targetState = states.find(state => state.type === wantedType) ?? null;
+    } else {
+      const wanted = input.state.name.toLowerCase();
+      targetState = states.find(state => state.name.toLowerCase() === wanted) ?? null;
+    }
+    if (!targetState) return null;
+    if (targetState.name === issue.state) {
+      return linearIssueToIntakeIssue(issue);
+    }
+    const data = await linearGraphql<{ issueUpdate: { success: boolean } }>(
+      accessToken,
+      `mutation UpdateIssueState($id: String!, $stateId: String!) {
+        issueUpdate(id: $id, input: { stateId: $stateId }) { success }
+      }`,
+      { id: issue.id, stateId: targetState.id },
+    );
+    if (!data.issueUpdate.success) {
+      throw new Error('Linear did not accept the issue update.');
+    }
+    const fresh = await this.fetchIssueDetail(accessToken, issue.id);
+    if (!fresh) return null;
+    return linearIssueToIntakeIssue(fresh);
+  }
+
+  async #listTeamWorkflowStates(
+    accessToken: string,
+    teamKey: string,
+  ): Promise<Array<{ id: string; name: string; type: string }>> {
+    const data = await linearGraphql<{
+      team: { states: { nodes: Array<{ id: string; name: string; type: string }> } } | null;
+    }>(
+      accessToken,
+      `query TeamStates($key: String!) {
+        team(id: $key) { states(first: 100) { nodes { id name type } } }
+      }`,
+      { key: teamKey },
+    );
+    return data.team?.states.nodes ?? [];
   }
 
   /** List the workspace's projects (for the Settings intake-source picker). */

@@ -92,11 +92,11 @@ export function ReviewItemCard({
             type="checkbox"
             checked={isSelected}
             onChange={onToggleSelect}
-            className="w-3.5 h-3.5 rounded border-border1 accent-accent1"
+            className="border-border1 accent-accent1 h-3.5 w-3.5 rounded"
           />
         )}
-        <button type="button" onClick={onToggleExpand} className="flex-1 text-left min-w-0">
-          <Txt variant="ui-xs" className="text-neutral4 truncate block">
+        <button type="button" onClick={onToggleExpand} className="min-w-0 flex-1 text-left">
+          <Txt variant="ui-xs" className="text-neutral4 block truncate">
             {inputPreview}
           </Txt>
         </button>
@@ -111,9 +111,9 @@ export function ReviewItemCard({
 
       {/* Rating + Tags + Remove row */}
       <TooltipProvider delayDuration={200}>
-        <div className="flex items-center gap-2 mt-2">
+        <div className="mt-2 flex items-center gap-2">
           {/* Rating: thumbs up / down */}
-          <div className="flex items-center gap-0.5 mr-1">
+          <div className="mr-1 flex items-center gap-0.5">
             <Button
               tooltip="Good — this result is acceptable"
               variant={item.rating === 'positive' ? 'default' : 'ghost'}
@@ -140,9 +140,9 @@ export function ReviewItemCard({
           </div>
 
           {/* Tags */}
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             {isCompleted ? (
-              <div className="flex gap-1 flex-wrap">
+              <div className="flex flex-wrap gap-1">
                 {item.tags.map(tag => (
                   <Badge key={tag} variant="default">
                     {tag}
@@ -156,7 +156,7 @@ export function ReviewItemCard({
 
           {/* Scores */}
           {item.scores && Object.keys(item.scores).length > 0 && (
-            <div className="flex items-center gap-1 mr-1">
+            <div className="mr-1 flex items-center gap-1">
               <Icon size="sm" className="text-neutral3">
                 <GaugeIcon />
               </Icon>
@@ -197,41 +197,41 @@ export function ReviewItemCard({
 
       {/* Expanded: full input/output + comment */}
       {isExpanded && (
-        <div className="mt-3 space-y-3 border-t border-border1 pt-3">
+        <div className="border-border1 mt-3 space-y-3 border-t pt-3">
           {item.experimentId && (
             <div className="flex items-center gap-1.5">
               <Txt variant="ui-xs" className="text-neutral3">
                 Experiment:
               </Txt>
-              <code className="text-[10px] font-mono text-neutral4 bg-surface2 px-1.5 py-0.5 rounded">
+              <code className="text-neutral4 bg-surface2 rounded px-1.5 py-0.5 font-mono text-[10px]">
                 {item.experimentId.slice(0, 8)}
               </code>
             </div>
           )}
           <div>
-            <Txt variant="ui-xs" className="text-neutral3 block font-semibold mb-1">
+            <Txt variant="ui-xs" className="text-neutral3 mb-1 block font-semibold">
               Input
             </Txt>
-            <pre className="text-xs text-neutral5 whitespace-pre-wrap bg-surface2 rounded p-2 overflow-auto max-h-40">
+            <pre className="text-neutral5 bg-surface2 max-h-40 overflow-auto rounded p-2 text-xs whitespace-pre-wrap">
               {formatUnknown(item.input)}
             </pre>
           </div>
           {item.output !== undefined && item.output !== null && (
             <div>
-              <Txt variant="ui-xs" className="text-neutral3 block font-semibold mb-1">
+              <Txt variant="ui-xs" className="text-neutral3 mb-1 block font-semibold">
                 Output
               </Txt>
-              <pre className="text-xs text-neutral5 whitespace-pre-wrap bg-surface2 rounded p-2 overflow-auto max-h-40">
+              <pre className="text-neutral5 bg-surface2 max-h-40 overflow-auto rounded p-2 text-xs whitespace-pre-wrap">
                 {formatUnknown(item.output)}
               </pre>
             </div>
           )}
           {Boolean(item.error) && (
             <div>
-              <Txt variant="ui-xs" className="text-neutral3 block font-semibold mb-1">
+              <Txt variant="ui-xs" className="text-neutral3 mb-1 block font-semibold">
                 Error
               </Txt>
-              <pre className="text-xs text-negative1 whitespace-pre-wrap bg-surface2 rounded p-2 overflow-auto max-h-20">
+              <pre className="text-negative1 bg-surface2 max-h-20 overflow-auto rounded p-2 text-xs whitespace-pre-wrap">
                 {formatUnknown(item.error)}
               </pre>
             </div>
@@ -239,7 +239,7 @@ export function ReviewItemCard({
           {/* Comment */}
           {!isCompleted && (
             <div>
-              <Txt variant="ui-xs" className="text-neutral3 block font-semibold mb-1">
+              <Txt variant="ui-xs" className="text-neutral3 mb-1 block font-semibold">
                 Comment
               </Txt>
               <Textarea
@@ -268,7 +268,7 @@ export function ReviewItemCard({
           )}
           {isCompleted && item.comment && (
             <div>
-              <Txt variant="ui-xs" className="text-neutral3 block font-semibold mb-1">
+              <Txt variant="ui-xs" className="text-neutral3 mb-1 block font-semibold">
                 Comment
               </Txt>
               <Txt variant="ui-xs" className="text-neutral4 block">

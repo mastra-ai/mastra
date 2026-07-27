@@ -17,7 +17,8 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "typecheck": "tsc --noEmit --incremental",
-    "lint": "eslint .",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
     "scaffold": "npx tsx scripts/scaffold-codemod.ts"
   },
   "keywords": [

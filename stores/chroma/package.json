@@ -25,7 +25,8 @@
     "pretest": "docker compose up -d --wait",
     "posttest": "docker compose down -v",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {

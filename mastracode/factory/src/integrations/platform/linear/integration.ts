@@ -4,7 +4,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
-import type { Intake, IntakeIssue, IntakeIssueDetail } from '../../../capabilities/intake.js';
+import type { Intake, IntakeIssue, IntakeIssueDetail, UpdateIntakeIssueInput } from '../../../capabilities/intake.js';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
@@ -12,7 +12,13 @@ import { buildLinearAgentTools } from '../../linear/agent-tools.js';
 import type { LinearConnectionCheck, LinearIntegration } from '../../linear/integration.js';
 import { buildLinearRoutes } from '../../linear/routes.js';
 import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.js';
-import { logPlatformInfo, PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from '../api-client.js';
+import {
+  logPlatformInfo,
+  logPlatformWarn,
+  PlatformApiClient,
+  PlatformApiError,
+  platformApiClientConfigFromEnv,
+} from '../api-client.js';
 
 type PageInfo = { hasNextPage: boolean; endCursor: string | null };
 type LinearUser = {
@@ -63,6 +69,13 @@ type LinearProject = {
   teams: Array<{ id: string; key: string; name: string }>;
 };
 type ProjectSource = { workspace: LinearWorkspace; project: LinearProject };
+type LinearWorkflowState = {
+  id: string;
+  name: string;
+  type: string;
+  position: number;
+  teamId: string;
+};
 
 const API_PREFIX = '/v1/server/linear';
 const PAGE_SIZE = 30;
@@ -84,8 +97,15 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   readonly #endpointHost: string;
   #projects: FactoryProjectsStorage | undefined;
   #auth: RouteAuth | undefined;
+  /**
+   * Per-instance workflow-state cache keyed by `${workspaceId}:${teamId}`. Scoped to the process
+   * lifetime; not shared across requests intentionally to keep failure modes simple (stale states
+   * clear on process restart). Populated lazily on first `updateIssue` per team.
+   */
+  readonly #workflowStatesByTeam = new Map<string, LinearWorkflowState[]>();
 
   readonly intake: Intake = {
+    resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async () => {
       const sources = await this.#listProjectSources();
       return sources.map(({ workspace, project }) => ({
@@ -156,6 +176,69 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         if (isNotFound(error)) return null;
         throw error;
       }
+    },
+    updateIssue: async (input: UpdateIntakeIssueInput): Promise<IntakeIssue | null> => {
+      requireLinearConnection(input.connection);
+      const located = await this.#findIssue(input.sourceId, input.issueId);
+      if (!located) return null;
+      const { workspaceId, issue } = located;
+
+      const target = input.state;
+      // Idempotency: skip the write entirely if the issue is already at the target state.
+      if (target.kind === 'byType' && issue.state.type === target.stateType) {
+        return parseIssue(issue);
+      }
+      if (target.kind === 'byName' && issue.state.name.toLowerCase() === target.name.toLowerCase()) {
+        return parseIssue(issue);
+      }
+
+      let states: LinearWorkflowState[];
+      try {
+        states = await this.#listWorkflowStates(workspaceId, issue.team.id);
+      } catch (error) {
+        if (isNotFound(error)) {
+          // Platform companion endpoint not deployed yet — degrade to policy skip so PR 1
+          // is standalone-mergeable ahead of the platform-side workflow-states route landing.
+          logPlatformWarn('Platform Linear: workflow-states endpoint not available; skipping updateIssue.', {
+            workspaceId,
+            teamId: issue.team.id,
+          });
+          return null;
+        }
+        throw error;
+      }
+      let matched: LinearWorkflowState | undefined;
+      if (target.kind === 'byType') {
+        matched = states
+          .slice()
+          .sort((a, b) => a.position - b.position)
+          .find(s => s.type === target.stateType);
+      } else {
+        const wanted = target.name.toLowerCase();
+        matched = states.find(s => s.name.toLowerCase() === wanted);
+      }
+      if (!matched) {
+        logPlatformWarn('Platform Linear: no workflow state matched target; skipping updateIssue.', {
+          workspaceId,
+          teamId: issue.team.id,
+          target,
+        });
+        return null;
+      }
+
+      try {
+        await this.#client.request<LinearIssue>(
+          'PATCH',
+          `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/issues/${encodeURIComponent(input.issueId)}`,
+          { stateId: matched.id },
+        );
+      } catch (error) {
+        if (isNotFound(error)) return null;
+        throw error;
+      }
+
+      const refreshed = await this.#findIssue(input.sourceId, input.issueId);
+      return refreshed ? parseIssue(refreshed.issue) : null;
     },
   };
 
@@ -235,6 +318,27 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
   async getFreshAccessToken(_connection: LinearConnectionRow): Promise<string> {
     return PLATFORM_MANAGED_CONNECTION_TOKEN;
+  }
+
+  /**
+   * Background-dispatch context: platform-managed connection token when the
+   * org has a connected workspace. Linear work items store the issue UUID
+   * directly as `externalId`.
+   */
+  async #resolveIntakeDispatch({
+    orgId,
+    externalSource,
+  }: {
+    orgId: string;
+    externalSource: { type: string; externalId: string };
+  }): Promise<{ connection: IntegrationConnection; issueId: string } | null> {
+    if (externalSource.type !== 'issue') return null;
+    const connection = await this.loadConnection(orgId);
+    if (!connection) return null;
+    return {
+      connection: { type: 'oauth', accessToken: PLATFORM_MANAGED_CONNECTION_TOKEN },
+      issueId: externalSource.externalId,
+    };
   }
 
   canPostComments(connection: LinearConnectionRow): boolean {
@@ -419,6 +523,18 @@ export class PlatformLinearIntegration implements FactoryIntegration {
       }
     }
     return null;
+  }
+
+  async #listWorkflowStates(workspaceId: string, teamId: string): Promise<LinearWorkflowState[]> {
+    const cacheKey = `${workspaceId}:${teamId}`;
+    const cached = this.#workflowStatesByTeam.get(cacheKey);
+    if (cached) return cached;
+    const result = await this.#client.request<{ workflowStates: LinearWorkflowState[]; pageInfo: PageInfo }>(
+      'GET',
+      `${API_PREFIX}/workspaces/${encodeURIComponent(workspaceId)}/workflow-states?teamId=${encodeURIComponent(teamId)}&first=100`,
+    );
+    this.#workflowStatesByTeam.set(cacheKey, result.workflowStates);
+    return result.workflowStates;
   }
 
   async #candidateWorkspaceIds(sourceId: string | undefined): Promise<string[]> {

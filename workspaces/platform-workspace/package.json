@@ -1,6 +1,6 @@
 {
   "name": "@mastra/platform-workspace",
-  "version": "0.2.0",
+  "version": "0.2.1-alpha.0",
   "description": "Mastra Platform workspace sandbox and filesystem providers",
   "type": "module",
   "main": "dist/index.js",
@@ -26,7 +26,8 @@
     "test:cloud": "vitest run --passWithNoTests ./src/**/*.integration.test.ts",
     "test:watch": "vitest watch",
     "test": "pnpm test:unit",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "devDependencies": {

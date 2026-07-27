@@ -16,7 +16,7 @@ import type { PlatformApiClient } from '../api-client.js';
 import { PlatformApiError } from '../api-client.js';
 
 const API_PREFIX = '/v1/server/github-app';
-const DEFAULT_POLL_INTERVAL_MS = 5_000;
+const DEFAULT_POLL_INTERVAL_MS = 20_000;
 const EVENT_PAGE_SIZE = 500;
 const MIN_LEASE_TTL_MS = 30_000;
 const CURSOR_ORG_ID = '__platform_github_event_worker__';
@@ -280,10 +280,16 @@ export class PlatformGithubEventWorker extends MastraWorker {
       if ('afterEventId' in cursor) query.set('afterEventId', cursor.afterEventId);
       else query.set('afterTimestamp', String(cursor.afterTimestamp));
 
+      const pollStartedAt = performance.now();
       const page = await this.#client.request<{ events: EventLogEntry[]; nextCursor: string | null }>(
         'GET',
         `${API_PREFIX}/repositories/${repositoryId}/events?${query}`,
       );
+      this.deps?.logger.info('Platform GitHub repository event poll completed', {
+        repositoryId,
+        eventCount: page.events.length,
+        latencyMs: Math.round(performance.now() - pollStartedAt),
+      });
       if (page.events.length === 0 || !page.nextCursor) return;
 
       for (const event of page.events) {

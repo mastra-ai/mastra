@@ -98,7 +98,7 @@ function DraftStart({
     <section className={draftStartClass} aria-labelledby="draft-start-heading">
       <div className="flex flex-col items-center gap-3 text-center">
         <BrandLockup />
-        <h1 id="draft-start-heading" className="m-0 text-2xl text-icon6">
+        <h1 id="draft-start-heading" className="text-icon6 m-0 text-2xl">
           What do you want to work on?
         </h1>
         <FactoryContext activeFactory={activeFactory} />
@@ -127,9 +127,9 @@ function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
 
 function BrandLockup() {
   return (
-    <div className="inline-flex items-center gap-2 text-icon3">
+    <div className="text-icon3 inline-flex items-center gap-2">
       <LogoWithoutText aria-hidden className="h-4 w-auto" />
-      <span className="text-ui-sm font-medium uppercase tracking-widest">Mastra Code</span>
+      <span className="text-ui-sm font-medium tracking-widest uppercase">Mastra Code</span>
     </div>
   );
 }
@@ -143,14 +143,14 @@ function FactoryContext({ activeFactory }: { activeFactory: FactoryProject | und
   const projectPath = sessionQuery.data?.sessionId;
   const gitBranch = repository?.gitBranch;
   return (
-    <div className="flex max-w-full items-center justify-center gap-1.5 text-ui-sm text-icon3">
+    <div className="text-ui-sm text-icon3 flex max-w-full items-center justify-center gap-1.5">
       <div className="flex min-w-0 items-center gap-1.5">
-        <FolderIcon size={13} className="shrink-0 text-icon2" />
+        <FolderIcon size={13} className="text-icon2 shrink-0" />
         <span className="shrink-0 font-medium">{activeFactory?.name ?? 'Factory'}</span>
         {projectPath && (
           <>
-            <span className="shrink-0 text-icon2">·</span>
-            <span className="min-w-0 truncate text-icon2" title={projectPath}>
+            <span className="text-icon2 shrink-0">·</span>
+            <span className="text-icon2 min-w-0 truncate" title={projectPath}>
               {projectPath}
             </span>
           </>
@@ -158,11 +158,11 @@ function FactoryContext({ activeFactory }: { activeFactory: FactoryProject | und
       </div>
       {gitBranch && (
         <>
-          <span aria-hidden className="shrink-0 text-icon2">
+          <span aria-hidden className="text-icon2 shrink-0">
             ·
           </span>
           <div className="flex min-w-0 items-center gap-1.5">
-            <GitBranch size={13} aria-hidden className="shrink-0 text-icon2" />
+            <GitBranch size={13} aria-hidden className="text-icon2 shrink-0" />
             <span className="min-w-0 truncate" title={gitBranch}>
               {gitBranch}
             </span>

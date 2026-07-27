@@ -400,8 +400,11 @@ async function startMastraCodeApp(
     }
   }
 
+  let stopped = false;
   return {
     async stop() {
+      if (stopped) return;
+      stopped = true;
       tui.stop();
       const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
       await Promise.allSettled([
@@ -410,6 +413,11 @@ async function startMastraCodeApp(
         result.controller.stopIntervals(),
         closeSignalsPubSub?.(),
       ]);
+      // Close storage last — checkpoints WAL and switches to DELETE journal
+      // mode for local libsql, mirroring the production asyncCleanup() path.
+      await result.storageMaintenance?.closeStorage?.().catch(() => {
+        // Best-effort during test shutdown.
+      });
     },
   };
 }
@@ -463,7 +471,13 @@ export async function runTerminalScenario(
         stopApp = app.stop;
       }
 
-      await withTerminalProcessOutput(terminal, () => scenario.run({ terminal: scenarioTerminal, runtime }));
+      runtime.stopApp = async () => {
+        await stopApp?.();
+      };
+
+      await withTerminalProcessOutput(terminal, () =>
+        scenario.run({ terminal: scenarioTerminal, runtime, dbPath: runConfig.context.dbPath }),
+      );
       return 0;
     } finally {
       await stopApp?.();

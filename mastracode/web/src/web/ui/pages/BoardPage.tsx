@@ -15,7 +15,6 @@ import {
   GitCompareArrows,
   GitPullRequest,
   Link2,
-  MessageSquareText,
   Plus,
   Stethoscope,
   Trash2,
@@ -48,8 +47,8 @@ import {
   useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
+  useWorkItemsQuery,
 } from '../../../shared/hooks/useWorkItems';
-import { useWorkItemsQuery } from '../../../shared/hooks/useWorkItems';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../domains/factory/services/decisions';
 import type { GithubIssue, GithubPullRequest } from '../domains/factory/services/factory';
 import type { LinearIssue } from '../domains/factory/services/linear';
@@ -1071,11 +1070,11 @@ function BoardColumnEmptyState({
 }) {
   const copy = boardColumnEmptyCopy(stage, kind, hasIntakeSource);
   return (
-    <div className="flex min-h-24 flex-col justify-center rounded-lg border border-dashed border-border1 px-4 py-4">
-      <Txt as="p" variant="ui-sm" className="m-0 font-medium text-icon4">
+    <div className="border-border1 flex min-h-24 flex-col justify-center rounded-lg border border-dashed px-4 py-4">
+      <Txt as="p" variant="ui-sm" className="text-icon4 m-0 font-medium">
         {copy.title}
       </Txt>
-      <Txt as="p" variant="ui-xs" className="mt-1 mb-0 max-w-60 leading-5 text-icon3">
+      <Txt as="p" variant="ui-xs" className="text-icon3 mt-1 mb-0 max-w-60 leading-5">
         {copy.description}
       </Txt>
     </div>
@@ -1091,7 +1090,7 @@ function ColumnTaskBadge({ count, total, label }: { count: number; total: number
     <span
       aria-label={`${count} of ${total} visible board tasks in ${label}`}
       title={`${count} of ${total} visible board tasks`}
-      className="flex h-6 min-w-12 shrink-0 items-center justify-center gap-1.5 rounded-full border border-border1 bg-surface2 px-2 text-ui-xs font-medium tabular-nums text-icon4"
+      className="border-border1 bg-surface2 text-ui-xs text-icon4 flex h-6 min-w-12 shrink-0 items-center justify-center gap-1.5 rounded-full border px-2 font-medium tabular-nums"
     >
       <svg viewBox="0 0 14 14" className="size-3.5 -rotate-90" aria-hidden>
         <circle cx="7" cy="7" r="5" fill="none" strokeWidth="2" className="stroke-border1" />
@@ -1160,13 +1159,18 @@ function BoardColumn({
   const [dragOver, setDragOver] = useState(false);
   const [dropLineTop, setDropLineTop] = useState(0);
   const cardListRef = useRef<HTMLDivElement>(null);
+  const collapsed = stage !== 'intake' && !loading && taskCount === 0;
 
   return (
     <section
       ref={laneRef}
-      aria-label={label}
+      aria-label={collapsed ? `${label}, empty` : label}
       data-testid={`board-column-${stage}`}
-      className="flex min-h-0 w-80 shrink-0 flex-col gap-4"
+      className={cn(
+        'flex min-h-0 shrink-0 flex-col transition-[width,background-color] motion-reduce:transition-none',
+        collapsed ? 'w-14 rounded-lg' : 'w-80 gap-4',
+        collapsed && dragOver && 'bg-surface2 ring-1 ring-border1',
+      )}
       onDragOver={event => {
         if (!event.dataTransfer.types.includes(CARD_MIME)) return;
         event.preventDefault();
@@ -1186,37 +1190,50 @@ function BoardColumn({
         if (payload) onDrop(payload, stage);
       }}
     >
-      <div className="flex min-h-8 items-start justify-between gap-2">
-        <div className="flex h-8 min-w-0 items-center gap-2">
-          <BoardStageIcon stage={stage} />
-          <Txt as="h2" variant="ui-smd" className="m-0 truncate font-semibold text-icon3">
+      {collapsed ? (
+        <div className="flex min-h-0 flex-1 flex-col items-center gap-3 py-1">
+          <span aria-hidden className="text-ui-xs text-icon3 flex h-8 items-center font-medium tabular-nums">
+            {taskCount}
+          </span>
+          <Txt as="h2" variant="ui-smd" className="text-icon3 m-0 font-semibold [writing-mode:vertical-rl]">
             {label}
           </Txt>
-          {loading ? (
-            <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
-          ) : (
-            <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
-          )}
         </div>
-        {headerAction && <div className="flex h-8 shrink-0 items-center">{headerAction}</div>}
-      </div>
-      {headerExtras}
-      {/* Cards scroll inside the swimlane; the page stays fixed. */}
-      <div className="min-h-16 flex-1">
-        <ScrollArea className="h-full">
-          <div ref={cardListRef} className="relative flex flex-col gap-2.5 pb-2">
-            {children}
-            <div
-              aria-hidden
-              style={{ top: dropLineTop }}
-              className={cn(
-                'pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-neutral1 transition-opacity motion-reduce:transition-none',
-                dragOver ? 'opacity-100' : 'opacity-0',
+      ) : (
+        <>
+          <div className="flex min-h-8 items-start justify-between gap-2">
+            <div className="flex h-8 min-w-0 items-center gap-2">
+              <BoardStageIcon stage={stage} />
+              <Txt as="h2" variant="ui-smd" className="text-icon3 m-0 truncate font-semibold">
+                {label}
+              </Txt>
+              {loading ? (
+                <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
+              ) : (
+                <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
               )}
-            />
+            </div>
+            {headerAction && <div className="flex h-8 shrink-0 items-center">{headerAction}</div>}
           </div>
-        </ScrollArea>
-      </div>
+          {headerExtras}
+          {/* Cards scroll inside the swimlane; the page stays fixed. */}
+          <div className="min-h-16 flex-1">
+            <ScrollArea className="h-full">
+              <div ref={cardListRef} className="relative flex flex-col gap-2.5 pb-2">
+                {children}
+                <div
+                  aria-hidden
+                  style={{ top: dropLineTop }}
+                  className={cn(
+                    'pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-neutral1 transition-opacity motion-reduce:transition-none',
+                    dragOver ? 'opacity-100' : 'opacity-0',
+                  )}
+                />
+              </div>
+            </ScrollArea>
+          </div>
+        </>
+      )}
     </section>
   );
 }
@@ -1241,11 +1258,11 @@ const STAGE_ICON_SOURCES: Partial<Record<BoardStageId, string>> = {
 
 function BoardStageIcon({ stage }: { stage: BoardStageId }) {
   if (stage === 'intake') return <ArrowRightCircleIcon className="shrink-0 text-[#939393]" />;
-  if (stage === 'review') return <GitPullRequest size={16} className="shrink-0 text-icon3" aria-hidden />;
+  if (stage === 'review') return <GitPullRequest size={16} className="text-icon3 shrink-0" aria-hidden />;
   const source = STAGE_ICON_SOURCES[stage];
   if (source) return <img src={source} alt="" aria-hidden className="size-4 shrink-0" />;
   const Icon = stage === 'done' ? CheckCircle2 : CircleX;
-  return <Icon size={16} className="shrink-0 text-icon3" aria-hidden />;
+  return <Icon size={16} className="text-icon3 shrink-0" aria-hidden />;
 }
 
 function ArrowRightCircleIcon({ size = 16, className }: { size?: number; className?: string }) {
@@ -1293,7 +1310,7 @@ function CardLabels({ labels }: { labels: readonly string[] }) {
       {visibleLabels.map(label => (
         <span
           key={label}
-          className="inline-flex h-6 max-w-full items-center gap-1 rounded-full border border-border1 px-2 text-ui-xs text-icon4"
+          className="border-border1 text-ui-xs text-icon4 inline-flex h-6 max-w-full items-center gap-1 rounded-full border px-2"
           title={label}
         >
           <span className={cn('size-1.5 shrink-0 rounded-full', labelDotClass(label))} aria-hidden />
@@ -1301,7 +1318,7 @@ function CardLabels({ labels }: { labels: readonly string[] }) {
         </span>
       ))}
       {hiddenCount > 0 && (
-        <span className="inline-flex h-6 items-center rounded-full border border-border1 px-2 text-ui-xs text-icon3">
+        <span className="border-border1 text-ui-xs text-icon3 inline-flex h-6 items-center rounded-full border px-2">
           +{hiddenCount}
         </span>
       )}
@@ -1411,34 +1428,25 @@ function WorkItemCard({
         runPending && 'opacity-70',
       )}
     >
-      <div className="absolute top-2 right-2 flex items-center gap-0.5">
-        {threadSession !== null ? (
-          <Button
-            as={Link}
-            to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
-            variant="ghost"
-            size="xs"
-            aria-label={`Open thread for ${item.title}`}
-            className="transition-opacity pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:pointer-events-auto pointer-fine:focus-visible:opacity-100 motion-reduce:transition-none"
-          >
-            <MessageSquareText aria-hidden />
-            Open thread
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            disabled={runDisabled}
-            aria-busy={pendingRunRoles.size > 0 || undefined}
-            aria-label={`Create thread for ${item.title}`}
-            className="transition-opacity pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 pointer-fine:focus-visible:pointer-events-auto pointer-fine:focus-visible:opacity-100 motion-reduce:transition-none"
-            onClick={() => onCreateSession(itemSessionSpec(item))}
-          >
-            <MessageSquareText aria-hidden />
-            New thread
-          </Button>
-        )}
+      {threadSession !== null ? (
+        <Link
+          to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
+          draggable={false}
+          aria-label={`Open thread for ${item.title}`}
+          className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+        />
+      ) : (
+        <button
+          type="button"
+          draggable={false}
+          disabled={runDisabled}
+          aria-busy={pendingRunRoles.size > 0 || undefined}
+          aria-label={`Create thread for ${item.title}`}
+          className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
+          onClick={() => onCreateSession(itemSessionSpec(item))}
+        />
+      )}
+      <div className="absolute top-2 right-2 z-20">
         <DropdownMenu>
           <DropdownMenu.Trigger
             render={
@@ -1468,6 +1476,14 @@ function WorkItemCard({
                   </DropdownMenu.Item>
                 );
               })}
+            {columnStage === 'intake' &&
+              item.url !== null &&
+              (item.source === 'github-issue' || item.source === 'linear-issue') && (
+                <DropdownMenu.Item render={<a href={item.url} target="_blank" rel="noreferrer" />}>
+                  <ArrowUpRight aria-hidden />
+                  <span>{externalLinkLabel(item.source)}</span>
+                </DropdownMenu.Item>
+              )}
             {itemStageOptions(item)
               .filter(stage => stage.id !== columnStage)
               .map(stage => (
@@ -1484,10 +1500,10 @@ function WorkItemCard({
         </DropdownMenu>
       </div>
       <div className="flex min-w-0 flex-col gap-1.5">
-        <span className="truncate pr-30 text-ui-xs text-icon2">{workItemMeta(item)}</span>
+        <span className="text-ui-xs text-icon2 truncate pr-8">{workItemMeta(item)}</span>
         <div className="flex min-w-0 items-center gap-1.5">
           <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
-          <span className="min-w-0 flex-1 truncate text-ui-smd font-semibold text-icon6">
+          <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
             <SourceTitle source={item.source} title={item.title} />
           </span>
         </div>
@@ -1507,7 +1523,7 @@ function WorkItemCard({
                 ? `/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`
                 : relationshipPath(related, factoryId)
             }
-            className="flex items-center gap-1 text-ui-xs text-icon4 hover:text-icon6 hover:underline"
+            className="text-ui-xs text-icon4 hover:text-icon6 relative z-20 flex items-center gap-1 hover:underline"
             aria-label={`Open ${relationText}`}
           >
             <Link2 size={11} aria-hidden />
@@ -1518,20 +1534,20 @@ function WorkItemCard({
       {otherStages.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           {otherStages.map(stage => (
-            <span key={stage} className="rounded-full border border-border1 px-2 py-0.5 text-ui-xs text-icon4">
+            <span key={stage} className="border-border1 text-ui-xs text-icon4 rounded-full border px-2 py-0.5">
               {itemStageLabel(item, stage)}
             </span>
           ))}
         </div>
       )}
       {evaluatingStage !== undefined && (
-        <span role="status" aria-live="polite" className="flex items-center gap-1.5 text-ui-xs text-icon4">
+        <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
           <Spinner size="sm" aria-hidden className="size-3" />
           {evaluatingStage === 'done' ? 'Marking done…' : `Moving to ${itemStageLabel(item, evaluatingStage)}…`}
         </span>
       )}
       {[...pendingRunRoles].map(([role, phase]) => (
-        <span key={role} role="status" aria-live="polite" className="flex items-center gap-1.5 text-ui-xs text-icon4">
+        <span key={role} role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
           <Spinner size="sm" aria-hidden className="size-3" />
           {runSpec?.actions.find(action => action.role === role)?.label ?? 'Starting run'} —{' '}
           {phase !== undefined ? RUN_PHASE_LABELS[phase] : 'starting…'}
@@ -1550,6 +1566,7 @@ function WorkItemCard({
               type="button"
               variant="outline"
               size="sm"
+              className="relative z-20"
               disabled={retryingDecisionId === decision.id}
               onClick={() => onRetryDecision(decision.id)}
             >
@@ -1611,10 +1628,10 @@ function CandidateCard({
           },
         })
       }
-      className="group flex cursor-grab flex-col gap-3 rounded-xl border border-border1/50 bg-neutral6/5 p-3 outline-none transition-colors hover:bg-surface3 active:cursor-grabbing"
+      className="group border-border1/50 bg-neutral6/5 hover:bg-surface3 flex cursor-grab flex-col gap-3 rounded-xl border p-3 transition-colors outline-none active:cursor-grabbing"
     >
       <div className="flex min-w-0 flex-col gap-1.5">
-        <span className="block truncate text-ui-xs text-icon2">{candidate.meta}</span>
+        <span className="text-ui-xs text-icon2 block truncate">{candidate.meta}</span>
         <div className="flex min-w-0 items-center gap-1.5">
           <Icon size={16} className={cn('shrink-0', candidate.iconClassName)} aria-hidden />
           <button
@@ -1622,7 +1639,7 @@ function CandidateCard({
             disabled={disabled}
             aria-busy={pendingRunRoles.has(defaultAction.role) || undefined}
             onClick={onOpenSession}
-            className="min-w-0 flex-1 truncate text-left text-ui-smd font-semibold text-icon6 hover:underline disabled:opacity-60"
+            className="text-ui-smd text-icon6 min-w-0 flex-1 truncate text-left font-semibold hover:underline disabled:opacity-60"
           >
             <SourceTitle source={candidate.source} title={candidate.title} />
           </button>
@@ -1631,7 +1648,7 @@ function CandidateCard({
             target="_blank"
             rel="noreferrer"
             aria-label={externalLinkLabel(candidate.source)}
-            className="shrink-0 text-icon3 transition-[opacity,translate] hover:text-icon5 focus-visible:translate-x-0 focus-visible:translate-y-0 focus-visible:opacity-100 pointer-fine:-translate-x-1 pointer-fine:translate-y-1 pointer-fine:opacity-0 pointer-fine:group-hover:translate-x-0 pointer-fine:group-hover:translate-y-0 pointer-fine:group-hover:opacity-100 motion-reduce:transition-none"
+            className="text-icon3 hover:text-icon5 shrink-0 transition-[opacity,translate] focus-visible:translate-x-0 focus-visible:translate-y-0 focus-visible:opacity-100 motion-reduce:transition-none pointer-fine:-translate-x-1 pointer-fine:translate-y-1 pointer-fine:opacity-0 pointer-fine:group-hover:translate-x-0 pointer-fine:group-hover:translate-y-0 pointer-fine:group-hover:opacity-100"
           >
             <ArrowUpRight size={12} aria-hidden />
           </a>

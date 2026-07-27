@@ -103,6 +103,104 @@ describe('LinearIntegration capability surface', () => {
     });
   });
 
+  it('resolves a byType target to a workflow state and issues a Linear mutation', async () => {
+    const linear = integration();
+    const detail: LinearIssueDetail = {
+      ...issue,
+      description: null,
+      comments: [],
+    };
+    vi.spyOn(linear, 'fetchIssueDetail').mockResolvedValue(detail);
+    const graphql = vi.fn(async (_url: string, init: RequestInit | undefined) => {
+      const body = JSON.parse(String(init?.body)) as { query: string; variables?: Record<string, unknown> };
+      if (body.query.includes('TeamStates')) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              team: {
+                states: {
+                  nodes: [
+                    { id: 'state-todo', name: 'Todo', type: 'unstarted' },
+                    { id: 'state-done', name: 'Done', type: 'completed' },
+                  ],
+                },
+              },
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      return new Response(JSON.stringify({ data: { issueUpdate: { success: true } } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    vi.stubGlobal('fetch', graphql);
+
+    await linear.intake.updateIssue({
+      connection,
+      issueId: 'issue-1',
+      state: { kind: 'byType', stateType: 'completed' },
+    });
+
+    const updateCall = graphql.mock.calls.find(call =>
+      String((call[1] as RequestInit).body).includes('UpdateIssueState'),
+    );
+    expect(updateCall).toBeDefined();
+    const updatePayload = JSON.parse(String((updateCall![1] as RequestInit).body)) as {
+      variables: { id: string; stateId: string };
+    };
+    expect(updatePayload.variables).toEqual({ id: 'issue-1', stateId: 'state-done' });
+  });
+
+  it('skips the mutation when the current state already matches the target', async () => {
+    const linear = integration();
+    const detail: LinearIssueDetail = { ...issue, description: null, comments: [] };
+    vi.spyOn(linear, 'fetchIssueDetail').mockResolvedValue(detail);
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            data: { team: { states: { nodes: [{ id: 'state-todo', name: 'Todo', type: 'unstarted' }] } } },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await linear.intake.updateIssue({
+      connection,
+      issueId: 'issue-1',
+      state: { kind: 'byName', name: 'Todo' },
+    });
+    expect(result).toMatchObject({ state: 'Todo' });
+    // Only the team-states query was made — no mutation.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns null when no workflow state matches the target', async () => {
+    const linear = integration();
+    const detail: LinearIssueDetail = { ...issue, description: null, comments: [] };
+    vi.spyOn(linear, 'fetchIssueDetail').mockResolvedValue(detail);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ data: { team: { states: { nodes: [] } } } }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
+    );
+    await expect(
+      linear.intake.updateIssue({
+        connection,
+        issueId: 'issue-1',
+        state: { kind: 'byType', stateType: 'completed' },
+      }),
+    ).resolves.toBeNull();
+  });
+
   it('rejects an installation connection instead of silently misusing it', async () => {
     const linear = integration();
     await expect(
@@ -111,6 +209,43 @@ describe('LinearIntegration capability surface', () => {
         sourceIds: [],
       }),
     ).rejects.toThrow('Linear capabilities require an OAuth connection.');
+  });
+
+  it('resolves dispatch context from the org OAuth connection with a fresh token', async () => {
+    const linear = integration();
+    vi.spyOn(linear, 'loadConnection').mockResolvedValue({ id: 'conn-1' } as never);
+    vi.spyOn(linear, 'getFreshAccessToken').mockResolvedValue('fresh-token');
+
+    await expect(
+      linear.intake.resolveIntakeDispatch!({
+        orgId: 'org-1',
+        externalSource: { type: 'issue', externalId: 'issue-uuid-1' },
+      }),
+    ).resolves.toEqual({
+      connection: { type: 'oauth', accessToken: 'fresh-token' },
+      issueId: 'issue-uuid-1',
+    });
+  });
+
+  it('returns null dispatch context for non-issue sources or missing connections', async () => {
+    const linear = integration();
+    const loadConnection = vi.spyOn(linear, 'loadConnection').mockResolvedValue(null);
+
+    await expect(
+      linear.intake.resolveIntakeDispatch!({
+        orgId: 'org-1',
+        externalSource: { type: 'pull-request', externalId: 'x' },
+      }),
+    ).resolves.toBeNull();
+    expect(loadConnection).not.toHaveBeenCalled();
+
+    await expect(
+      linear.intake.resolveIntakeDispatch!({
+        orgId: 'org-1',
+        externalSource: { type: 'issue', externalId: 'issue-uuid-1' },
+      }),
+    ).resolves.toBeNull();
+    expect(loadConnection).toHaveBeenCalledWith('org-1');
   });
 
   it('provides intake without claiming source-control support', () => {

@@ -3,7 +3,7 @@
  * card must announce where it is going ("Moving to Planning…") instead of
  * silently waiting, and drop the status once the server answers.
  */
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, matchRoutes, RouterProvider } from 'react-router';
@@ -186,19 +186,76 @@ describe('Board card pending states', () => {
     await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
   });
 
-  it('shows a dedicated thread link while keeping the work item title static', async () => {
+  it('uses the whole card as the thread link without rendering a separate thread action', async () => {
     stubBoardEndpoints();
     renderWorkBoard();
 
     const titleText = await screen.findByText('Fix login bug');
+    const card = titleText.closest<HTMLElement>('[data-testid="work-item-card"]');
+    if (!card) throw new Error('Expected the title inside its work item card');
     expect(titleText.closest('a, button')).toBeNull();
-    const threadLink = screen.getByRole('link', { name: 'Open thread for Fix login bug' });
+
+    const threadLink = within(card).getByRole('link', { name: 'Open thread for Fix login bug' });
+    expect(within(card).queryByText('Open thread')).not.toBeInTheDocument();
     expect(threadLink).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
     );
     const matches = matchRoutes(createAppRoutes(), threadLink.getAttribute('href') ?? '');
     expect(matches?.at(-1)?.route.path).toBe('threads/:threadId');
+  });
+
+  it('opens GitHub and Linear intake issues in their external provider', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            {
+              ...workItem,
+              id: 'github-item',
+              factoryProjectId: FACTORY_ID,
+              title: 'GitHub intake issue',
+              stages: ['intake'],
+              sessions: {},
+              externalSource: {
+                integrationId: 'github',
+                type: 'issue',
+                externalId: '42',
+                url: 'https://github.com/acme/app/issues/42',
+              },
+            },
+            {
+              ...workItem,
+              id: 'linear-item',
+              factoryProjectId: FACTORY_ID,
+              title: 'Linear intake issue',
+              stages: ['intake'],
+              sessions: {},
+              externalSource: {
+                integrationId: 'linear',
+                type: 'issue',
+                externalId: 'ENG-42',
+                url: 'https://linear.app/acme/issue/ENG-42/linear-intake-issue',
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for GitHub intake issue' }));
+    const githubLink = await screen.findByRole('menuitem', { name: 'Open in GitHub' });
+    expect(githubLink).toHaveAttribute('href', 'https://github.com/acme/app/issues/42');
+    expect(githubLink).toHaveAttribute('target', '_blank');
+    await user.keyboard('{Escape}');
+
+    await user.click(screen.getByRole('button', { name: 'Actions for Linear intake issue' }));
+    const linearLink = await screen.findByRole('menuitem', { name: 'Open in Linear' });
+    expect(linearLink).toHaveAttribute('href', 'https://linear.app/acme/issue/ENG-42/linear-intake-issue');
+    expect(linearLink).toHaveAttribute('target', '_blank');
   });
 
   it('ignores a card dropped back into its current column', async () => {
@@ -218,5 +275,26 @@ describe('Board card pending states', () => {
 
     expect(transitionRequests).toEqual([]);
     expect(currentColumn).toContainElement(card);
+  });
+
+  it('moves a card when it is dropped into a collapsed empty column', async () => {
+    const { transitionGate, transitionRequests } = stubBoardEndpoints();
+    renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    const planningColumn = screen.getByTestId('board-column-planning');
+    expect(planningColumn).toHaveAccessibleName('Planning, empty');
+    const dataTransfer = createDataTransfer();
+
+    fireEvent.dragStart(card, { dataTransfer });
+    fireEvent.dragOver(planningColumn, { dataTransfer });
+    expect(dataTransfer.dropEffect).toBe('move');
+    fireEvent.drop(planningColumn, { dataTransfer });
+
+    await waitFor(() => expect(transitionRequests).toEqual([ITEM_ID]));
+    expect(within(planningColumn).getByTestId('work-item-card')).toHaveTextContent('Fix login bug');
+
+    transitionGate.resolve();
+    await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
   });
 });
