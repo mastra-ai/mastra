@@ -1072,6 +1072,26 @@ describe('repos route', () => {
     expect(res.status).toBe(500);
     expect(tables.installations).toHaveLength(1);
   });
+
+  it('lists multiple installations concurrently', async () => {
+    install(7, 'octo');
+    install(8, 'other');
+    let inFlight = 0;
+    let maxInFlight = 0;
+    vi.mocked(listInstallationRepos).mockImplementation(async (installationId: number) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise(resolve => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return defaultImpl(installationId);
+    });
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+
+    expect(res.status).toBe(200);
+    // Serial listing would never overlap; the route must fan out.
+    expect(maxInFlight).toBe(2);
+  });
 });
 
 describe('auth scoping', () => {

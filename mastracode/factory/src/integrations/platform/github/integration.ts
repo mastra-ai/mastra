@@ -26,6 +26,7 @@ import type {
   PullRequest,
   PullRequestComment,
   PullRequestRef,
+  RepositoryAccess,
   Review,
   ReviewComment,
   ReviewRef,
@@ -136,6 +137,18 @@ type GithubReviewComment = GithubComment & {
 
 const PAGE_SIZE = 30;
 const API_PREFIX = '/v1/server';
+/**
+ * How long an installation's repository listing may be reused. The repos
+ * route and token minting both call it — often several times within one UI
+ * interaction — and each call is a full Platform round trip.
+ */
+const INSTALLATION_REPOS_CACHE_TTL_MS = 30_000;
+/**
+ * How long a minted repository-scoped token may be reused. GitHub
+ * installation tokens live ~60 minutes; 5 minutes keeps a wide validity
+ * margin while collapsing the per-session-materialization mint round trip.
+ */
+const REPOSITORY_ACCESS_CACHE_TTL_MS = 5 * 60_000;
 const REPOSITORY_TOKEN_PERMISSIONS = {
   contents: 'write',
   issues: 'write',
@@ -158,6 +171,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly #pollingIntervalMs: number | undefined;
   #storage: SourceControlStorageHandle | undefined;
   #integrationStorage: GithubSubscriptionStorage | undefined;
+  /** installationId → cached repository listing (TTL-bounded). */
+  readonly #installationReposCache = new Map<number, { repos: RepoSummary[]; expiresAt: number }>();
+  /** `orgId:repositoryId` → cached repository access (TTL-bounded). */
+  readonly #repositoryAccessCache = new Map<string, { access: RepositoryAccess; expiresAt: number }>();
 
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
@@ -308,6 +325,14 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         ),
       ),
     getRepositoryAccess: async ({ orgId, repositoryId }) => {
+      // Every session materialization requests access; reuse a recent grant
+      // instead of re-minting through the Platform each time. The TTL keeps
+      // a wide margin under GitHub's ~60min installation-token lifetime.
+      const cacheKey = `${orgId}:${repositoryId}`;
+      const cached = this.#repositoryAccessCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) return cached.access;
+      this.#repositoryAccessCache.delete(cacheKey);
+
       const repository = await this.storage.repositories.get({ orgId, id: repositoryId });
       if (!repository) throw new Error('Version-control repository not found.');
       const cloneUrl = `https://github.com/${repository.slug}.git`;
@@ -321,10 +346,15 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         `${API_PREFIX}/github-app/installations/${installationId}/token`,
         { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
       );
-      return {
+      const access: RepositoryAccess = {
         cloneUrl,
         authorization: { scheme: 'bearer', token: token.token },
       };
+      this.#repositoryAccessCache.set(cacheKey, {
+        access,
+        expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
+      });
+      return access;
     },
     listPullRequests: input => this.#listPullRequests(input),
     getPullRequest: input => this.#getPullRequest(input),
@@ -653,6 +683,13 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   async listInstallationRepos(installationId: number): Promise<RepoSummary[]> {
+    // Hot in two places — the repos route and token minting (which re-lists
+    // only to validate the 1–10 repo rule). A short TTL collapses repeat
+    // Platform round trips within one UI interaction.
+    const cached = this.#installationReposCache.get(installationId);
+    if (cached && cached.expiresAt > Date.now()) return cached.repos;
+    this.#installationReposCache.delete(installationId);
+
     const result = await this.#client.request<{
       repositories: Array<{
         id: number;
@@ -663,7 +700,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         defaultBranch: string;
       }>;
     }>('GET', `${API_PREFIX}/github-app/installations/${installationId}/repositories`);
-    return result.repositories.map(repository => ({ ...repository, installationId }));
+    const repos = result.repositories.map(repository => ({ ...repository, installationId }));
+    this.#installationReposCache.set(installationId, {
+      repos,
+      expiresAt: Date.now() + INSTALLATION_REPOS_CACHE_TTL_MS,
+    });
+    return repos;
   }
 
   async mintInstallationToken(installationId: number): Promise<string> {
