@@ -1116,8 +1116,33 @@ async function prepareProject(options: {
   userId: string;
   onProgress?: ProgressFn;
 }): Promise<EnsureResult> {
-  const { github, fleet, project, userId, onProgress } = options;
-  const sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
+  const { github, fleet, userId, onProgress } = options;
+  // Self-heal a sandbox provider switch. The project row snapshots
+  // sandboxProvider/sandboxWorkdir at link time, so when the server's provider
+  // later changes (platform ↔ local) the stored workdir points into the old
+  // provider's filesystem (e.g. `/workspace/…` on a macOS host, where the
+  // clone dies on the read-only root volume). Recompute against the current
+  // fleet and persist so every later open uses the corrected target.
+  let project = options.project;
+  if (project.sandboxProvider !== fleet.provider) {
+    const sandboxWorkdir = fleet.computeWorkdir(project.repository.slug);
+    await github.sourceControlStorage.projectRepositories.update({
+      orgId: project.installation.orgId,
+      id: project.id,
+      input: { sandboxProvider: fleet.provider, sandboxWorkdir },
+    });
+    project = { ...project, sandboxProvider: fleet.provider, sandboxWorkdir };
+  }
+  let sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
+  // The per-user binding inherits its workdir at creation time — re-point it
+  // (and force a re-clone) whenever the project's workdir has since moved.
+  if (sandboxRow.sandboxWorkdir !== project.sandboxWorkdir) {
+    await github.sourceControlStorage.sandboxes.setWorkdir({
+      id: sandboxRow.id,
+      sandboxWorkdir: project.sandboxWorkdir,
+    });
+    sandboxRow = { ...sandboxRow, sandboxWorkdir: project.sandboxWorkdir, materializedAt: null };
+  }
   const access = await github.versionControl.getRepositoryAccess({
     orgId: project.installation.orgId,
     repositoryId: project.repository.id,

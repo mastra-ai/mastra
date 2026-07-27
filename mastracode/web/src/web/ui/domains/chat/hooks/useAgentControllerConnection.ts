@@ -15,6 +15,8 @@ interface UseAgentControllerConnectionArgs {
   agentControllerId: string;
   resourceId: string;
   scope?: string;
+  /** Exact thread id to bind on session creation (see ChatSessionContextApi). */
+  sessionThreadId?: string;
   factorySessionState?: FactorySessionState;
   baseUrl?: string;
   enabled?: boolean;
@@ -25,6 +27,7 @@ export function useAgentControllerConnection({
   agentControllerId,
   resourceId,
   scope,
+  sessionThreadId,
   factorySessionState,
   baseUrl = '',
   enabled = true,
@@ -45,6 +48,7 @@ export function useAgentControllerConnection({
     agentControllerId,
     resourceId,
     scope,
+    sessionThreadId,
     factorySessionState,
     baseUrl,
     enabled,

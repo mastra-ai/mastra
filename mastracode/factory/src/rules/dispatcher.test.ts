@@ -948,11 +948,13 @@ describe('FactoryDecisionDispatcher', () => {
         },
       },
     });
+    const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
+      primeCredentials,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -966,6 +968,11 @@ describe('FactoryDecisionDispatcher', () => {
 
     expect(delivered).toEqual(['factory-kickoff:kickoff-1']);
     expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
+    // Kickoff wake runs build the Factory workspace, which requires the
+    // authenticated session owner on the request context.
+    expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    const kickoffOptions = sendNotificationSignal.mock.calls[0]![1];
+    expect(kickoffOptions?.requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });
 

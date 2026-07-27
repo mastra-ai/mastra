@@ -238,7 +238,12 @@ describe('materializeRepo', () => {
   });
 
   it('pulls (not clones) on re-open', async () => {
-    const sandbox = new FakeSandbox();
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      return OK;
+    });
     await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok-xyz');
 
     const joined = sandbox.calls.join('\n');
@@ -246,6 +251,29 @@ describe('materializeRepo', () => {
     expect(joined).toContain('pull --ff-only');
     expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(false);
     expect(joined).toContain('https://x-access-token:tok-xyz@github.com/octocat/hello.git');
+  });
+
+  it('re-clones when the DB says materialized but the sandbox disk was wiped', async () => {
+    // A platform/remote sandbox can expire and come back with an empty disk
+    // while the binding row still says `materializedAt`. Trusting the row made
+    // every `git -C <workdir>` fail with "cannot change to ...: No such file
+    // or directory" and the workspace never recovered. Disk is the truth: no
+    // checkout on disk means clone, regardless of the row.
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return {
+          exitCode: 128,
+          stdout: '',
+          stderr: "fatal: cannot change to '/workspace/hello': No such file or directory",
+        };
+      }
+      return OK;
+    });
+    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok-abc');
+
+    expect(sandbox.calls.some(c => c.includes('git clone'))).toBe(true);
+    expect(sandbox.calls.some(c => c.includes('pull --ff-only'))).toBe(false);
+    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
   it('pulls (not clones) when the DB says first open but the workdir already holds this repo', async () => {
@@ -343,6 +371,9 @@ describe('materializeRepo', () => {
   it('scrubs the tokenized remote even when the pull fails on re-open', async () => {
     const sandbox = new FakeSandbox(script => {
       if (script === 'git --version') return OK;
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
       if (script.includes('pull --ff-only')) {
         return { exitCode: 1, stdout: '', stderr: 'fatal: not a fast-forward' };
       }
@@ -366,6 +397,32 @@ describe('materializeRepo', () => {
     expect(scrub).not.toContain('tok-secret');
     // The repo is not marked materialized when the pull failed.
     expect(dbUpdates.some(u => 'materializedAt' in u)).toBe(false);
+  });
+
+  it('surfaces the pull failure (not the scrub failure) when both fail', async () => {
+    // Regression: the scrub in the `finally` used to throw over the in-flight
+    // clone/pull error, hiding the actionable failure (e.g. "cannot change to
+    // <workdir>") behind "Failed to scrub installation token".
+    const sandbox = new FakeSandbox(script => {
+      if (script === 'git --version') return OK;
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      if (script.includes('pull --ff-only')) {
+        return { exitCode: 1, stdout: '', stderr: 'fatal: not a fast-forward' };
+      }
+      if (script.includes('remote set-url origin') && !script.includes('x-access-token')) {
+        return { exitCode: 1, stdout: '', stderr: 'error: could not write config' };
+      }
+      return OK;
+    });
+
+    const err = await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok').catch(
+      e => e,
+    );
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(String(err.message)).toContain('not a fast-forward');
+    expect(String(err.message)).not.toContain('scrub');
   });
 
   it('surfaces a scrub failure on the success path when the remote reset fails', async () => {

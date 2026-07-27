@@ -16,6 +16,15 @@ interface UseAgentControllerSessionInitArgs {
    * tag so the server side can round-trip it.
    */
   scope?: string;
+  /**
+   * The session's conventional thread id (=== its sessionId for factory and
+   * user workspaces). When set, session creation is an exact-thread
+   * get-or-create: it binds the existing thread or (re)creates it with this
+   * id, healing sessions whose thread provisioning was interrupted or whose
+   * backing storage was reset. Without it, a missing thread would silently
+   * bind the session to a fresh random-id thread the route can never load.
+   */
+  sessionThreadId?: string;
   factorySessionState?: FactorySessionState;
   baseUrl?: string;
   enabled?: boolean;
@@ -25,6 +34,7 @@ export function useAgentControllerSessionInit({
   agentControllerId,
   resourceId,
   scope,
+  sessionThreadId,
   factorySessionState,
   baseUrl = '',
   enabled = true,
@@ -42,10 +52,14 @@ export function useAgentControllerSessionInit({
       ...queryKeys.agentControllerConnection(agentControllerId, resourceId, scope),
       'init',
       factorySessionState,
+      sessionThreadId ?? null,
     ],
     queryFn: async () => {
       const activeSession = requireAgentControllerSession(session);
-      const created = await activeSession.create({ tags: scope ? { projectPath: scope } : undefined });
+      const created = await activeSession.create({
+        tags: scope ? { projectPath: scope } : undefined,
+        threadId: sessionThreadId,
+      });
       // Factory sessions have no scope but still need their state seeded —
       // server-side gates (the transition tool, factory-phase processor)
       // resolve the session address from `factoryProjectId` in state.

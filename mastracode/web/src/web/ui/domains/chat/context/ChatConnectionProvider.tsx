@@ -14,11 +14,13 @@ export function ChatConnectionProvider({
   children: ReactNode;
   onEvent: (event: AgentControllerEvent) => void;
 }) {
-  const { resourceId, projectPath, factorySessionState, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { resourceId, projectPath, sessionThreadId, factorySessionState, sessionEnabled, baseUrl } =
+    useChatSessionContext();
   const connection = useAgentControllerConnection({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
     scope: projectPath,
+    sessionThreadId,
     factorySessionState,
     baseUrl,
     enabled: sessionEnabled,
