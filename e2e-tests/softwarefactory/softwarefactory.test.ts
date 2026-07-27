@@ -147,6 +147,8 @@ describe('softwarefactory template', () => {
             // Bound each attempt: a hung request would otherwise stall the
             // poll loop past its deadline and lose the collected diagnostics.
             const res = await fetch(`http://${host}:${port}${path}`, { signal: AbortSignal.timeout(10_000) });
+            // callers only read ok/status — release the socket immediately
+            void res.body?.cancel().catch(() => {});
             lastProbe.set(path, `${host} -> ${res.status}`);
             if (res.ok) return res;
           } catch (error) {
@@ -177,7 +179,7 @@ describe('softwarefactory template', () => {
         const probes = [...lastProbe].map(([path, outcome]) => `${path} ${outcome}`).join(', ');
         killDev();
         const result = await dev;
-        const detail = exited ? 'process exited' : probes || 'no probe completed';
+        const detail = [exited && 'process exited', probes].filter(Boolean).join('; ') || 'no probe completed';
         throw new Error(`Dev server did not become ready on port ${port} (${detail}).\n${result.all ?? ''}`);
       }
 

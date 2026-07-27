@@ -45,6 +45,10 @@ function argValue(flag) {
 const defaultOutDir = path.join(pkgRoot, 'template-out');
 const outDir = path.resolve(argValue('--out') ?? defaultOutDir);
 const pinTag = argValue('--tag'); // undefined = resolve from latest/alpha
+if (args.includes('--tag') && (!pinTag || pinTag.startsWith('--'))) {
+  console.error('sync-template: --tag requires a non-empty dist-tag value');
+  process.exit(1);
+}
 
 /** True when `candidate` is `parent` or nested inside it. */
 function containsPath(parent, candidate) {
