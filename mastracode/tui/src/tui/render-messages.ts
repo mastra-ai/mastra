@@ -36,6 +36,7 @@ import { ToolExecutionComponentEnhanced } from './components/tool-execution-enha
 import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
 import {
   getAssistantRenderParts,
+  getBackgroundCompletionView,
   getBackgroundWorkLifecycleView,
   getMessageText,
   getNotificationSummaryView,
@@ -48,7 +49,12 @@ import {
   isSignalMessage,
 } from './db-message-parts.js';
 import type { AssistantRenderPart } from './db-message-parts.js';
-import { formatToolResult, isBackgroundToolPlaceholder, isTaskMutationTool } from './handlers/tool.js';
+import {
+  formatToolResult,
+  getBackgroundToolTaskId,
+  isBackgroundToolPlaceholder,
+  isTaskMutationTool,
+} from './handlers/tool.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme } from './theme.js';
 
@@ -534,7 +540,11 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
     const backgroundWork = getBackgroundWorkLifecycleView(message);
     if (backgroundWork) {
       const component = state.pendingTools.get(backgroundWork.originToolCallId);
-      if (backgroundWork.taskId) component?.setBackgroundTaskId?.(backgroundWork.taskId);
+      const subagentComponent = state.pendingSubagents.get(backgroundWork.originToolCallId);
+      if (backgroundWork.taskId) {
+        component?.setBackgroundTaskId?.(backgroundWork.taskId);
+        subagentComponent?.setBackgroundTaskId(backgroundWork.taskId);
+      }
       if (component && (backgroundWork.tagName === 'work-completed' || backgroundWork.tagName === 'work-failed')) {
         const status =
           backgroundWork.tagName === 'work-completed'
@@ -547,13 +557,18 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
     }
 
     const notification = getNotificationView(message);
+    const backgroundCompletion = getBackgroundCompletionView(message);
     const component = new NotificationComponent({
       message: notification.message,
       source: notification.source,
       kind: notification.kind,
       priority: notification.priority,
       status: notification.status,
+      backgroundCompletion,
     });
+    if (backgroundCompletion) {
+      state.allToolComponents.push(component as any);
+    }
     addChildBeforeFollowUps(state, component);
     state.messageComponentsById.set(message.id, component);
     state.ui.requestRender();
@@ -878,6 +893,15 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
   state.pendingSignalMessageComponentsById.clear();
   state.allShellComponents = [];
 
+  const backgroundTasksByToolCallId = new Map<string, string>();
+  for (const message of messages) {
+    if (message.role !== 'signal') continue;
+    const completion = getBackgroundCompletionView(message);
+    if (completion) {
+      backgroundTasksByToolCallId.set(completion.originToolCallId, completion.taskId);
+    }
+  }
+
   // Local accumulator for detecting task clears during visible history reconstruction.
   // Startup only replays task state from the bounded message window. If no task
   // snapshot exists in that window, keep the existing display-state snapshot.
@@ -995,7 +1019,16 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
                 icons: pluginRenderConfig.icons,
               },
             );
-            subComponent.finish(isErr ?? false, 0, rawResult);
+            const backgroundTaskId =
+              getBackgroundToolTaskId(resultValue) ?? backgroundTasksByToolCallId.get(part.toolCallId);
+            if (backgroundTaskId) {
+              subComponent.setBackgroundTaskId(backgroundTaskId);
+            }
+            if (isBackgroundPlaceholder) {
+              state.pendingSubagents.set(part.toolCallId, subComponent);
+            } else {
+              subComponent.finish(isErr ?? false, 0, rawResult);
+            }
             insertChatComponentWithBoundarySpacing(state.chatContainer, subComponent);
             state.allToolComponents.push(subComponent as any);
             continue;

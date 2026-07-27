@@ -88,6 +88,17 @@ export const backgroundSubagentsScenario = {
       );
     }
 
+    await runtime.waitForOutputText(/background_probe failed in background/i, terminal, 10_000);
+    const compactOutput = terminal.serialize().view;
+    check(
+      !compactOutput.includes('invocation · {"label":"failed","fail":true}'),
+      `Expected completion-card invocation details to remain collapsed initially.\n${compactOutput}`,
+    );
+
+    terminal.write('\x05');
+    await runtime.waitForOutputText(/invocation · \{"label":"failed","fail":true\}/i, terminal, 10_000);
+    await runtime.waitForOutputText(/failure · .*BACKGROUND_PROBE_FAILURE:failed/i, terminal, 10_000);
+
     terminal.keyCtrlC();
   },
   verifyAimockRequests(requests) {

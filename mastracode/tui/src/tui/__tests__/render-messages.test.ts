@@ -1080,6 +1080,64 @@ describe('renderExistingMessages subagents', () => {
     expect(rendered).toContain('remembered answer');
   });
 
+  it('replays a completed background plugin subagent with provenance and authoritative result', async () => {
+    const toolMessage = assistantToolMessage('assistant-plugin-background', [
+      {
+        id: 'tool-background-plugin-1',
+        name: 'mastra_expert',
+        args: { question: 'Audit background execution' },
+        result: 'Authoritative Alexandria audit',
+        isError: false,
+      },
+    ]);
+    const completionMessage = createSignal({
+      id: 'background-task:task-plugin-1:completed',
+      type: 'notification',
+      tagName: 'notification',
+      contents: 'mastra_expert completed in background',
+      attributes: { source: 'background-work', status: 'completed' },
+      metadata: {
+        backgroundCompletion: {
+          eventId: 'background-task:task-plugin-1:completed',
+          taskId: 'task-plugin-1',
+          originRunId: 'run-plugin-1',
+          originToolCallId: 'tool-background-plugin-1',
+          toolName: 'mastra_expert',
+          status: 'completed',
+        },
+      },
+    }).toDBMessage();
+    const state = createState();
+    state.pluginManager = {
+      getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria' })),
+    } as unknown as TUIState['pluginManager'];
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([toolMessage, completionMessage]) },
+    } as unknown as TUIState['session'];
+    state.controller = { session: state.session } as unknown as TUIState['controller'];
+
+    await renderExistingMessages(state);
+
+    const subagent = state.chatContainer.children.find(
+      child => child instanceof SubagentExecutionComponent,
+    ) as SubagentExecutionComponent;
+    const collapsed = subagent
+      .render(120)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(collapsed).toContain('background · task-plugin-1');
+    expect(collapsed).not.toContain('Authoritative Alexandria audit');
+
+    subagent.setExpanded(true);
+    const expanded = subagent
+      .render(120)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(expanded).toContain('Authoritative Alexandria audit');
+    expect(state.pendingSubagents.has('tool-background-plugin-1')).toBe(false);
+  });
+
   it('uses the current model id for persisted forked subagents when no metadata tag is present', async () => {
     const message = assistantToolMessage('assistant-1', [
       {

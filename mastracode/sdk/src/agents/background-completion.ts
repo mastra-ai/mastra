@@ -5,6 +5,25 @@ interface BackgroundCompletionRouter {
   getSessionByResource(resourceId: string): Promise<Session<unknown> | undefined>;
 }
 
+const MAX_DETAIL_LENGTH = 1_000;
+
+function summarizeDetail(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  let text: string;
+  if (typeof value === 'string') {
+    text = value;
+  } else if (value instanceof Error) {
+    text = value.message;
+  } else {
+    try {
+      text = JSON.stringify(value);
+    } catch {
+      text = String(value);
+    }
+  }
+  return text.length > MAX_DETAIL_LENGTH ? `${text.slice(0, MAX_DETAIL_LENGTH)}…` : text;
+}
+
 async function persistBackgroundCompletion(
   controller: BackgroundCompletionRouter,
   task: BackgroundTask,
@@ -36,6 +55,8 @@ async function persistBackgroundCompletion(
           originToolCallId: task.toolCallId,
           toolName: task.toolName,
           status,
+          argsSummary: summarizeDetail(task.args),
+          errorSummary: status === 'failed' ? summarizeDetail(task.error) : undefined,
         },
       },
     },

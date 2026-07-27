@@ -346,6 +346,31 @@ export function getBackgroundWorkLifecycleView(message: MastraDBMessage): Backgr
   };
 }
 
+export interface BackgroundCompletionView {
+  taskId: string;
+  originToolCallId: string;
+  toolName?: string;
+  status?: string;
+  argsSummary?: string;
+  errorSummary?: string;
+}
+
+export function getBackgroundCompletionView(message: MastraDBMessage): BackgroundCompletionView | undefined {
+  const metadata = asRecord(getSignalView(message).metadata) ?? {};
+  const completion = asRecord(metadata.backgroundCompletion);
+  const taskId = asString(completion?.taskId);
+  const originToolCallId = asString(completion?.originToolCallId);
+  if (!taskId || !originToolCallId) return undefined;
+  return {
+    taskId,
+    originToolCallId,
+    toolName: asString(completion?.toolName),
+    status: asString(completion?.status),
+    argsSummary: asString(completion?.argsSummary),
+    errorSummary: asString(completion?.errorSummary),
+  };
+}
+
 export interface NotificationView {
   message: string;
   source?: string;

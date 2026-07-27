@@ -61,6 +61,8 @@ describe('createBackgroundCompletionCallbacks', () => {
               originToolCallId: 'call-1',
               toolName: 'mastra_expert',
               status,
+              argsSummary: '{"question":"test"}',
+              errorSummary: undefined,
             },
           },
         },

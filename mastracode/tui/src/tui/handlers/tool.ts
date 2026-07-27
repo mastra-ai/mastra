@@ -305,8 +305,12 @@ function isToolResultError(result: unknown): boolean {
   return typeof result === 'object' && result !== null && (result as Record<string, unknown>).isError === true;
 }
 
+export function getBackgroundToolTaskId(result: unknown): string | undefined {
+  return formatToolResult(result).match(/^Background task started\. Task ID: ([^.\s]+)/)?.[1];
+}
+
 export function isBackgroundToolPlaceholder(result: unknown): boolean {
-  return formatToolResult(result).startsWith('Background task started. Task ID:');
+  return getBackgroundToolTaskId(result) !== undefined;
 }
 
 export function formatToolResult(result: unknown): string {
@@ -763,10 +767,16 @@ export function handleToolEnd(ctx: EventHandlerContext, toolCallId: string, resu
   if (subagentComponent) {
     const resultText = formatToolResult(result);
     if (pluginSubagentToolCallIds.has(toolCallId)) {
-      subagentComponent.finish(isError, 0, resultText);
-      state.pendingSubagents.delete(toolCallId);
-      pluginSubagentToolCallIds.delete(toolCallId);
-      flushRender(state);
+      const backgroundTaskId = !isError ? getBackgroundToolTaskId(result) : undefined;
+      if (backgroundTaskId) {
+        subagentComponent.setBackgroundTaskId(backgroundTaskId);
+        flushRender(state);
+      } else {
+        subagentComponent.finish(isError, 0, resultText);
+        state.pendingSubagents.delete(toolCallId);
+        pluginSubagentToolCallIds.delete(toolCallId);
+        flushRender(state);
+      }
     } else {
       // We'll need to wait for subagent_end to set this
       // Store it temporarily
