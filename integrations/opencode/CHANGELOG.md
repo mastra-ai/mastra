@@ -1,5 +1,14 @@
 # @mastra/opencode
 
+## 0.1.11-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`0dca9d0`](https://github.com/mastra-ai/mastra/commit/0dca9d0b1356024a53b72ea6f040db528b126caa)]:
+  - @mastra/core@1.54.0-alpha.0
+  - @mastra/libsql@1.18.0-alpha.0
+  - @mastra/memory@1.24.0-alpha.0
+
 ## 0.1.10
 
 ### Patch Changes
