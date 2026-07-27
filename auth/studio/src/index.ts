@@ -689,7 +689,9 @@ export class MastraAuthStudio
         permissions: data.permissions,
         memberOrgIds: data.memberOrgIds,
       };
-      this.cacheVerification(cacheKey, user);
+      // Don't pin brand-new users in the no-org state: org bootstrap runs on
+      // the next request, which must re-read /auth/me to see the new org.
+      if (user.organizationId) this.cacheVerification(cacheKey, user);
       return user;
     } catch (error) {
       this.logger.error('verifySessionCookie: fetch to shared API failed', {
@@ -745,7 +747,9 @@ export class MastraAuthStudio
         role: data.role,
         memberOrgIds: data.memberOrgIds,
       };
-      this.cacheVerification(cacheKey, user);
+      // Same no-org guard as verifySessionCookie: cache only after the user's
+      // organization bootstrap has completed.
+      if (user.organizationId) this.cacheVerification(cacheKey, user);
       return user;
     } catch (error) {
       this.logger.error('verifyBearerToken: fetch to shared API failed', {

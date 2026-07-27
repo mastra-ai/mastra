@@ -742,6 +742,15 @@ describe('runWorktreeSetup', () => {
       vi.useRealTimers();
     }
   });
+
+  it('forwards the hang-guard budget to the provider so it can kill the process', async () => {
+    const sandbox = new FakeSandbox();
+    const spy = vi.spyOn(sandbox, 'executeCommand');
+
+    await runWorktreeSetup(sandbox, '/workspace/worktrees/feat-x', 'pnpm i');
+
+    expect(spy).toHaveBeenCalledWith('sh', ['-c', expect.any(String)], { timeout: 15 * 60_000 });
+  });
 });
 
 describe('createPullRequest', () => {

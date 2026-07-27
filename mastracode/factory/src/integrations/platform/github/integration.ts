@@ -149,6 +149,23 @@ const INSTALLATION_REPOS_CACHE_TTL_MS = 30_000;
  * margin while collapsing the per-session-materialization mint round trip.
  */
 const REPOSITORY_ACCESS_CACHE_TTL_MS = 5 * 60_000;
+/**
+ * Upper bound for both TTL caches. Entries expire lazily on re-access, so
+ * without a hard cap keys that stop being queried would accumulate for the
+ * integration's (long) lifetime. Insertion-order eviction — matches the
+ * bounded verification cache in `@mastra/auth-studio`.
+ */
+const MAX_CACHE_ENTRIES = 1000;
+
+function setBounded<K, V>(cache: Map<K, V>, key: K, value: V): void {
+  cache.delete(key);
+  cache.set(key, value);
+  if (cache.size > MAX_CACHE_ENTRIES) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+}
+
 const REPOSITORY_TOKEN_PERMISSIONS = {
   contents: 'write',
   issues: 'write',
@@ -350,7 +367,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         cloneUrl,
         authorization: { scheme: 'bearer', token: token.token },
       };
-      this.#repositoryAccessCache.set(cacheKey, {
+      setBounded(this.#repositoryAccessCache, cacheKey, {
         access,
         expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
       });
@@ -701,7 +718,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       }>;
     }>('GET', `${API_PREFIX}/github-app/installations/${installationId}/repositories`);
     const repos = result.repositories.map(repository => ({ ...repository, installationId }));
-    this.#installationReposCache.set(installationId, {
+    setBounded(this.#installationReposCache, installationId, {
       repos,
       expiresAt: Date.now() + INSTALLATION_REPOS_CACHE_TTL_MS,
     });

@@ -3,4 +3,9 @@
 '@mastra/auth-studio': patch
 ---
 
-Speed up Factory hot paths: cache verified Studio auth credentials (30s TTL) with bounded verify fetches, parallelize GitHub repository sync with Platform response caching, deduplicate concurrent session workspace materialization with sandbox command timeouts, and bound dispatcher lease scans with queue-table indexes. Adds boot/auth timing instrumentation.
+Speed up Factory hot paths:
+
+- Much lower latency on authenticated requests — successful auth verifications are cached briefly instead of hitting the platform on every request, and auth calls can no longer hang indefinitely
+- Faster GitHub repository listing and connecting
+- Opening the same session concurrently no longer provisions duplicate sandboxes, and stuck sandbox commands now fail with a clear error instead of hanging
+- Factory run dispatching stays fast as work-item history grows

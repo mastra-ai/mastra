@@ -128,7 +128,9 @@ async function sh(
     timer.unref?.();
   });
   try {
-    return await Promise.race([sandbox.executeCommand('sh', ['-c', script]), hangGuard]);
+    // Forward the budget to the provider too so it can terminate the wedged
+    // process; the race stays as the outer guard for providers that ignore it.
+    return await Promise.race([sandbox.executeCommand('sh', ['-c', script], { timeout: timeoutMs }), hangGuard]);
   } finally {
     clearTimeout(timer);
   }

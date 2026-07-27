@@ -485,7 +485,8 @@ export class MastraFactory {
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
-      GithubIntegration | undefined;
+      | GithubIntegration
+      | undefined;
     const workItemsReady = storage.isDomainReady('work-items');
     const transitionService = workItemsReady
       ? new FactoryTransitionService({ rules, storage: workItemsStorage })
@@ -551,178 +552,181 @@ export class MastraFactory {
     // MCP, providers) — identical to the terminal app. Agent state lives in
     // the storage backend's Mastra store alongside the Factory app tables —
     // one shared database for all users, separated by `resourceId` scoping.
-    const controllerMountStart = performance.now();
-    const prepared = await prepareAgentControllerMount({
-      controllerId: CONTROLLER_ID,
-      workspace: createWorkspaceFactory({
-        ...(this.#config.sandbox ? { sandbox: this.#config.sandbox } : {}),
-        ...(githubIntegration ? { github: githubIntegration } : {}),
-        ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
-        fleet,
-      }),
-      disableGithubSignals: true,
-      // Memory settings live in the factory's `memory-settings` app table (per
-      // org/user), so the host machine's TUI settings.json must not seed them.
-      disableSettingsOmSeed: true,
-      storage: storage.getMastraStorage(),
-      ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
-      ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
-      ...(vector ? { vector } : {}),
-      ...(toolIntegrations.length > 0 || (workItemsStorage && transitionService)
-        ? {
-            extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
-              const tools: IntegrationTools = {};
-              const toolOwners = new Map<string, string>();
-              const mergeTools = (ownerId: string, contributed: IntegrationTools) => {
-                for (const [name, tool] of Object.entries(contributed)) {
-                  const owner = toolOwners.get(name);
-                  if (owner) {
-                    throw new Error(
-                      `MastraFactory: integration tool '${name}' from '${ownerId}' conflicts with '${owner}'.`,
-                    );
-                  }
-                  toolOwners.set(name, ownerId);
-                  tools[name] = tool;
-                }
-              };
-              if (workItemsStorage && transitionService) {
-                mergeTools(
-                  'factory',
-                  await createFactoryTransitionTools({ requestContext, storage: workItemsStorage, transitionService }),
-                );
-              }
-              for (const { integration, ready, ensureReady } of toolIntegrations) {
-                if (!ready && ensureReady) {
-                  try {
-                    await ensureReady();
-                  } catch {
-                    continue;
-                  }
-                }
-                if (integration.agentTools) {
-                  mergeTools(integration.id, await integration.agentTools({ requestContext }));
-                }
-                if (integration.sessionTools) {
-                  mergeTools(integration.id, integration.sessionTools({ requestContext }));
-                }
-              }
-              return tools;
-            },
-          }
-        : {}),
-      postToolObserver: async (toolContext: IntegrationPostToolContext) => {
-        const requestContext = (toolContext.context as { requestContext?: RequestContext } | undefined)?.requestContext;
-        if (requestContext) {
-          await observeAgentGitAction({
-            audit: auditDomain,
-            toolContext: { ...toolContext, context: requestContext },
-          });
-        }
-        await Promise.all(
-          integrations.map(async integration => {
-            if (!integration.postToolObserver) return;
-            try {
-              await integration.postToolObserver({ toolContext, requestContext });
-            } catch (error) {
-              console.warn(`[factory] Integration '${integration.id}' post-tool observer failed:`, error);
-            }
-          }),
-        );
-      },
-      ...(pubsub ? { pubsub, crossProcessPubSub: true } : {}),
-      buildApiRoutes: ({ controller, authStorage }: BuildApiRoutesDeps) => [
-        // Public `/auth/*` routes (login/callback/logout/me). Folded in as
-        // `apiRoutes` (not plain Hono routes) because the entry can't touch the
-        // Hono app the deployer generates. `requiresAuth: false`; the gate
-        // skips `/auth/*`.
-        ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : []),
-        // Custom `/web/*` routes (fs / config / integrations / factory / audit).
-        ...assembleFactoryApiRoutes({
-          controllerId: CONTROLLER_ID,
-          controller,
-          auth: routeAuth,
-          authStorage,
-          audit: auditDomain,
-          publicOrigin,
-          stateSigner,
+    const prepared = await timedPhase('prepare.controllerMount', () =>
+      prepareAgentControllerMount({
+        controllerId: CONTROLLER_ID,
+        workspace: createWorkspaceFactory({
+          ...(this.#config.sandbox ? { sandbox: this.#config.sandbox } : {}),
+          ...(githubIntegration ? { github: githubIntegration } : {}),
+          ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           fleet,
-          factoryStorage: storage,
-          integrationStorage,
-          sourceControlStorage,
-          domains,
-          integrations: integrationRegistrations,
-          intakeReady,
-          factoryReady,
-          rules,
-          factoryTransitionService: transitionService,
-          onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
-            this.#dispatcher ??= new FactoryDecisionDispatcher({
-              controller,
-              transitionService: runtimeTransitionService,
-              storage: storage.getDomain<WorkItemsStorage>('work-items'),
-              reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
-              prepareBinding,
-              primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
-            });
-          },
         }),
-        ...projectRoutes.routes(),
-        ...auditDomain.routes(),
-      ],
-      buildServerConfig: () => {
-        const cors = allowedOrigins.length ? { cors: { origin: allowedOrigins, credentials: true } } : {};
-        // Log route errors with method/path/stack and answer with structured
-        // JSON instead of an opaque `Internal Server Error`. Applied by the
-        // deployer to both the top-level app and the custom-route sub-app.
-        const onError = { onError: handleServerError };
-        // Same-origin SPA: when a vite build is present (see resolveUiDistDir),
-        // serve it at `/` from this server. Mounted last so the auth gate (when
-        // enabled) covers it; it always passes `/api`, `/web`, `/auth` through.
-        const uiDist = resolveUiDistDir();
-        const spa = uiDist ? [createSpaStaticMiddleware(uiDist)] : [];
-        if (!auth) {
-          // Auth disabled: no gate. Still prime the sentinel-local custom
-          // provider snapshot so model calls see DB rows, then SPA + CORS.
+        disableGithubSignals: true,
+        // Memory settings live in the factory's `memory-settings` app table (per
+        // org/user), so the host machine's TUI settings.json must not seed them.
+        disableSettingsOmSeed: true,
+        storage: storage.getMastraStorage(),
+        ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
+        ...(factoryProcessor ? { inputProcessors: [factoryProcessor] } : {}),
+        ...(vector ? { vector } : {}),
+        ...(toolIntegrations.length > 0 || (workItemsStorage && transitionService)
+          ? {
+              extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
+                const tools: IntegrationTools = {};
+                const toolOwners = new Map<string, string>();
+                const mergeTools = (ownerId: string, contributed: IntegrationTools) => {
+                  for (const [name, tool] of Object.entries(contributed)) {
+                    const owner = toolOwners.get(name);
+                    if (owner) {
+                      throw new Error(
+                        `MastraFactory: integration tool '${name}' from '${ownerId}' conflicts with '${owner}'.`,
+                      );
+                    }
+                    toolOwners.set(name, ownerId);
+                    tools[name] = tool;
+                  }
+                };
+                if (workItemsStorage && transitionService) {
+                  mergeTools(
+                    'factory',
+                    await createFactoryTransitionTools({
+                      requestContext,
+                      storage: workItemsStorage,
+                      transitionService,
+                    }),
+                  );
+                }
+                for (const { integration, ready, ensureReady } of toolIntegrations) {
+                  if (!ready && ensureReady) {
+                    try {
+                      await ensureReady();
+                    } catch {
+                      continue;
+                    }
+                  }
+                  if (integration.agentTools) {
+                    mergeTools(integration.id, await integration.agentTools({ requestContext }));
+                  }
+                  if (integration.sessionTools) {
+                    mergeTools(integration.id, integration.sessionTools({ requestContext }));
+                  }
+                }
+                return tools;
+              },
+            }
+          : {}),
+        postToolObserver: async (toolContext: IntegrationPostToolContext) => {
+          const requestContext = (toolContext.context as { requestContext?: RequestContext } | undefined)
+            ?.requestContext;
+          if (requestContext) {
+            await observeAgentGitAction({
+              audit: auditDomain,
+              toolContext: { ...toolContext, context: requestContext },
+            });
+          }
+          await Promise.all(
+            integrations.map(async integration => {
+              if (!integration.postToolObserver) return;
+              try {
+                await integration.postToolObserver({ toolContext, requestContext });
+              } catch (error) {
+                console.warn(`[factory] Integration '${integration.id}' post-tool observer failed:`, error);
+              }
+            }),
+          );
+        },
+        ...(pubsub ? { pubsub, crossProcessPubSub: true } : {}),
+        buildApiRoutes: ({ controller, authStorage }: BuildApiRoutesDeps) => [
+          // Public `/auth/*` routes (login/callback/logout/me). Folded in as
+          // `apiRoutes` (not plain Hono routes) because the entry can't touch the
+          // Hono app the deployer generates. `requiresAuth: false`; the gate
+          // skips `/auth/*`.
+          ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : []),
+          // Custom `/web/*` routes (fs / config / integrations / factory / audit).
+          ...assembleFactoryApiRoutes({
+            controllerId: CONTROLLER_ID,
+            controller,
+            auth: routeAuth,
+            authStorage,
+            audit: auditDomain,
+            publicOrigin,
+            stateSigner,
+            fleet,
+            factoryStorage: storage,
+            integrationStorage,
+            sourceControlStorage,
+            domains,
+            integrations: integrationRegistrations,
+            intakeReady,
+            factoryReady,
+            rules,
+            factoryTransitionService: transitionService,
+            onFactoryRuntime: ({ transitionService: runtimeTransitionService, prepareBinding }) => {
+              this.#dispatcher ??= new FactoryDecisionDispatcher({
+                controller,
+                transitionService: runtimeTransitionService,
+                storage: storage.getDomain<WorkItemsStorage>('work-items'),
+                reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
+                prepareBinding,
+                primeCredentials: tenant => primeTenantCredentials({ tenant, credentials: modelCredentialsStorage }),
+              });
+            },
+          }),
+          ...projectRoutes.routes(),
+          ...auditDomain.routes(),
+        ],
+        buildServerConfig: () => {
+          const cors = allowedOrigins.length ? { cors: { origin: allowedOrigins, credentials: true } } : {};
+          // Log route errors with method/path/stack and answer with structured
+          // JSON instead of an opaque `Internal Server Error`. Applied by the
+          // deployer to both the top-level app and the custom-route sub-app.
+          const onError = { onError: handleServerError };
+          // Same-origin SPA: when a vite build is present (see resolveUiDistDir),
+          // serve it at `/` from this server. Mounted last so the auth gate (when
+          // enabled) covers it; it always passes `/api`, `/web`, `/auth` through.
+          const uiDist = resolveUiDistDir();
+          const spa = uiDist ? [createSpaStaticMiddleware(uiDist)] : [];
+          if (!auth) {
+            // Auth disabled: no gate. Still prime the sentinel-local custom
+            // provider snapshot so model calls see DB rows, then SPA + CORS.
+            return {
+              middleware: [
+                createCustomProvidersPrimer({ auth: routeAuth, storage: customProvidersStorage, authEnabled: false }),
+                ...spa,
+              ],
+              ...cors,
+              ...onError,
+            };
+          }
+
+          // Ordered middleware. The deployer applies these AFTER its context
+          // middleware sets `c.set('mastra', mastra)` and BEFORE routes, so:
+          //   1. gate   — validates the auth session, stashes the user, and 401s /
+          //               redirects unauthenticated requests. Skips public `/auth/*`.
+          //   2. primers — hydrate the caller's model-credential and custom
+          //               provider snapshots so the request's first model call
+          //               resolves tenant credentials and custom providers.
+          //   3. spa    — serves the built UI for everything the server doesn't own.
+          // `auth` also lands on `server.auth` so the core auth middleware (and
+          // Studio's dual-auth routing — see `studio.auth` on the returned args)
+          // authenticates core `/api/*` routes with the same provider.
           return {
+            auth,
             middleware: [
-              createCustomProvidersPrimer({ auth: routeAuth, storage: customProvidersStorage, authEnabled: false }),
+              createFactoryAuthGate(auth),
+              createTenantCredentialPrimer({ auth: routeAuth, credentials: modelCredentialsStorage }),
+              createCustomProvidersPrimer({
+                auth: routeAuth,
+                storage: customProvidersStorage,
+                authEnabled: Boolean(auth),
+              }),
               ...spa,
             ],
             ...cors,
             ...onError,
           };
-        }
-
-        // Ordered middleware. The deployer applies these AFTER its context
-        // middleware sets `c.set('mastra', mastra)` and BEFORE routes, so:
-        //   1. gate   — validates the auth session, stashes the user, and 401s /
-        //               redirects unauthenticated requests. Skips public `/auth/*`.
-        //   2. primers — hydrate the caller's model-credential and custom
-        //               provider snapshots so the request's first model call
-        //               resolves tenant credentials and custom providers.
-        //   3. spa    — serves the built UI for everything the server doesn't own.
-        // `auth` also lands on `server.auth` so the core auth middleware (and
-        // Studio's dual-auth routing — see `studio.auth` on the returned args)
-        // authenticates core `/api/*` routes with the same provider.
-        return {
-          auth,
-          middleware: [
-            createFactoryAuthGate(auth),
-            createTenantCredentialPrimer({ auth: routeAuth, credentials: modelCredentialsStorage }),
-            createCustomProvidersPrimer({
-              auth: routeAuth,
-              storage: customProvidersStorage,
-              authEnabled: Boolean(auth),
-            }),
-            ...spa,
-          ],
-          ...cors,
-          ...onError,
-        };
-      },
-    });
-    process.stderr.write(
-      `[factory:timing] prepare.controllerMount ${Math.round(performance.now() - controllerMountStart)}ms\n`,
+        },
+      }),
     );
 
     this.#prepared = prepared;

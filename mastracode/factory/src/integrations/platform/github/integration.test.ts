@@ -617,6 +617,28 @@ describe('PlatformGithubIntegration', () => {
     }
   });
 
+  it('evicts the oldest installation listing once the cache bound is reached', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json({ repositories: [] }));
+      const integration = createIntegration(fetchImpl);
+
+      // Fill the cache past its 1000-entry bound; installation 1 is oldest.
+      for (let installationId = 1; installationId <= 1001; installationId++) {
+        await integration.listInstallationRepos(installationId);
+      }
+      expect(fetchImpl).toHaveBeenCalledTimes(1001);
+
+      // Installation 1 was evicted (refetches); a recent entry is still cached.
+      await integration.listInstallationRepos(1);
+      expect(fetchImpl).toHaveBeenCalledTimes(1002);
+      await integration.listInstallationRepos(1001);
+      expect(fetchImpl).toHaveBeenCalledTimes(1002);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('reuses repository access grants within the cache TTL', async () => {
     vi.useFakeTimers();
     try {

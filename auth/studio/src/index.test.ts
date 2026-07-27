@@ -298,6 +298,34 @@ describe('MastraAuthStudio', () => {
       }
     });
 
+    it('should not cache users whose org bootstrap has not completed', async () => {
+      // First response: brand-new user, no organization yet. Caching it would
+      // pin the no-org state for the TTL and delay org bootstrap pickup.
+      const noOrgMe = { ...mockMeResponse, organizationId: undefined };
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(noOrgMe), { status: 200 }));
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+
+      const first = await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=new-user' }));
+      const second = await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=new-user' }));
+
+      expect(first?.organizationId).toBeUndefined();
+      expect(second?.organizationId).toBe(mockMeResponse.organizationId);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not cache bearer users whose org bootstrap has not completed', async () => {
+      const noOrgVerify = { ...mockVerifyResponse, organizationId: undefined };
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(noOrgVerify), { status: 200 }));
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockVerifyResponse), { status: 200 }));
+
+      const first = await auth.authenticateToken('new-user-token', mockRequest());
+      const second = await auth.authenticateToken('new-user-token', mockRequest());
+
+      expect(first?.organizationId).toBeUndefined();
+      expect(second?.organizationId).toBe(mockVerifyResponse.organizationId);
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
     it('should not cache failed verifications', async () => {
       fetchSpy.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
       fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
