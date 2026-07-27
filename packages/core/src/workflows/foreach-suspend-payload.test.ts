@@ -68,7 +68,8 @@ describe('foreach: suspendPayload preservation across resumes', () => {
       runId,
     });
     const stepCtx = snapshot?.context?.['approval-step'] as
-      { suspendPayload?: { __workflow_meta?: { foreachOutput?: any[] } } } | undefined;
+      | { suspendPayload?: { __workflow_meta?: { foreachOutput?: any[] } } }
+      | undefined;
     return {
       snapshot,
       foreachOutput: stepCtx?.suspendPayload?.__workflow_meta?.foreachOutput ?? [],

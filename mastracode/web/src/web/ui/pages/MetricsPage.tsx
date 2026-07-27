@@ -95,10 +95,10 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 pb-8">
       <header className="flex flex-col gap-1 pt-1">
-        <Txt as="h1" variant="header-sm" className="m-0 text-icon6">
+        <Txt as="h1" variant="header-sm" className="text-icon6 m-0">
           Metrics
         </Txt>
-        <Txt as="p" variant="ui-sm" className="m-0 max-w-2xl text-icon3">
+        <Txt as="p" variant="ui-sm" className="text-icon3 m-0 max-w-2xl">
           See how work moves through the Factory and where it needs attention.
         </Txt>
       </header>
@@ -172,7 +172,7 @@ function useAgentsRunningCount(): number {
 
 function MetricsLoading() {
   return (
-    <div className="grid gap-5 border-t border-border1 pt-7" aria-label="Loading Factory metrics">
+    <div className="border-border1 grid gap-5 border-t pt-7" aria-label="Loading Factory metrics">
       <div className="flex items-center justify-between gap-4">
         <Skeleton className="h-4 w-32" />
         <Skeleton className="h-6 w-16 rounded-full" />
@@ -204,13 +204,13 @@ function FlowOverview({
     metrics.transitions.total === 0 ? EM_DASH : `${Math.round((automatedMoves / metrics.transitions.total) * 100)}%`;
 
   return (
-    <section className="flex flex-col gap-5 border-t border-border1 pt-7">
+    <section className="border-border1 flex flex-col gap-5 border-t pt-7">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <Txt as="h2" variant="ui-md" className="m-0 font-medium text-icon6">
+          <Txt as="h2" variant="ui-md" className="text-icon6 m-0 font-medium">
             Delivery flow
           </Txt>
-          <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+          <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
             Completed work over time, with the Factory's current operating state.
           </Txt>
         </div>
@@ -224,14 +224,14 @@ function FlowOverview({
               Completed
             </Txt>
             <div className="mt-0.5 flex items-baseline gap-2">
-              <span className="text-header-xl font-medium tabular-nums text-icon6">{completed}</span>
+              <span className="text-header-xl text-icon6 font-medium tabular-nums">{completed}</span>
               <Txt as="span" variant="ui-xs" className="text-icon3">
                 {averagePerDay.toLocaleString(undefined, { maximumFractionDigits: 1 })} per day
               </Txt>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 text-ui-xs text-icon3">
-            <CircleCheck aria-hidden="true" className="size-3.5 text-positive1" />
+          <div className="text-ui-xs text-icon3 flex items-center gap-1.5">
+            <CircleCheck aria-hidden="true" className="text-positive1 size-3.5" />
             Daily completions
           </div>
         </div>
@@ -244,7 +244,7 @@ function FlowOverview({
         />
       </div>
 
-      <dl className="m-0 grid grid-cols-2 gap-x-5 gap-y-4 border-t border-border1 pt-4 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-border1">
+      <dl className="border-border1 lg:divide-border1 m-0 grid grid-cols-2 gap-x-5 gap-y-4 border-t pt-4 lg:grid-cols-4 lg:gap-0 lg:divide-x">
         <OverviewReadout
           icon={<Clock3 aria-hidden="true" />}
           label="Median cycle time"
@@ -295,12 +295,12 @@ function OverviewReadout({
 }) {
   return (
     <div className="flex min-w-0 flex-col lg:px-4 lg:first:pl-0 lg:last:pr-0">
-      <dt className="flex items-center gap-1.5 text-ui-xs text-icon3 [&>svg]:size-3.5">
+      <dt className="text-ui-xs text-icon3 flex items-center gap-1.5 [&>svg]:size-3.5">
         {icon}
         {label}
       </dt>
-      <dd className="m-0 mt-1 text-header-sm font-medium tabular-nums text-icon6">{value}</dd>
-      <Txt as="span" variant="ui-xs" className="mt-0.5 text-icon3">
+      <dd className="text-header-sm text-icon6 m-0 mt-1 font-medium tabular-nums">{value}</dd>
+      <Txt as="span" variant="ui-xs" className="text-icon3 mt-0.5">
         {detail}
       </Txt>
     </div>
@@ -319,13 +319,13 @@ function MetricsSection({
   children: ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-4 border-t border-border1 pt-7">
+    <section className="border-border1 flex flex-col gap-4 border-t pt-7">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <Txt as="h2" variant="ui-md" className="m-0 font-medium text-icon6">
+          <Txt as="h2" variant="ui-md" className="text-icon6 m-0 font-medium">
             {title}
           </Txt>
-          <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+          <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
             {description}
           </Txt>
         </div>
@@ -346,7 +346,7 @@ function StageAutomation({ metrics }: { metrics: FactoryMetrics }) {
   // had a completed pass in the window.
   if (metrics.stageAutomation.length === 0) {
     return (
-      <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+      <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
         No completed stage passes in this window yet.
       </Txt>
     );
@@ -373,18 +373,18 @@ function StageAutomation({ metrics }: { metrics: FactoryMetrics }) {
         const automated = row?.automated ?? 0;
         const pct = exits === 0 ? null : Math.round((automated / exits) * 100);
         return (
-          <li key={stage} className="grid gap-1.5 border-b border-border1 py-3 first:pt-0 last:border-b-0 last:pb-0">
+          <li key={stage} className="border-border1 grid gap-1.5 border-b py-3 first:pt-0 last:border-b-0 last:pb-0">
             <div className="flex items-baseline justify-between gap-3">
-              <Txt as="span" variant="ui-sm" className="font-medium text-icon5">
+              <Txt as="span" variant="ui-sm" className="text-icon5 font-medium">
                 {stageLabel(stage)}
               </Txt>
-              <Txt as="span" variant="ui-xs" className="text-right tabular-nums text-icon3">
+              <Txt as="span" variant="ui-xs" className="text-icon3 text-right tabular-nums">
                 {pct === null ? 'No completed passes' : `${pct}% automated · ${automated}/${exits}`}
               </Txt>
             </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-surface4" aria-hidden="true">
+            <div className="bg-surface4 h-1.5 overflow-hidden rounded-full" aria-hidden="true">
               {pct !== null && automated > 0 ? (
-                <div className="h-full rounded-full bg-accent1" style={{ width: `${Math.max(2, pct)}%` }} />
+                <div className="bg-accent1 h-full rounded-full" style={{ width: `${Math.max(2, pct)}%` }} />
               ) : null}
             </div>
             {row && automated > 0 ? (
@@ -412,7 +412,7 @@ function outcomeSummary(outcomes: FactoryMetrics['stageAutomation'][number]['out
 function AgingWipTable({ metrics }: { metrics: FactoryMetrics }) {
   if (metrics.agingWip.length === 0) {
     return (
-      <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+      <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
         Nothing in flight — the board is clear.
       </Txt>
     );
@@ -422,7 +422,7 @@ function AgingWipTable({ metrics }: { metrics: FactoryMetrics }) {
       {metrics.agingWip.map(item => (
         <li
           key={`${item.id}:${item.stage}`}
-          className="flex min-w-0 flex-col gap-2 border-b border-border1 py-3 first:pt-0 last:border-b-0 last:pb-0 sm:flex-row sm:items-center"
+          className="border-border1 flex min-w-0 flex-col gap-2 border-b py-3 first:pt-0 last:border-b-0 last:pb-0 sm:flex-row sm:items-center"
         >
           <div className="min-w-0 flex-1">
             {item.url ? (
@@ -430,14 +430,14 @@ function AgingWipTable({ metrics }: { metrics: FactoryMetrics }) {
                 href={item.url}
                 target="_blank"
                 rel="noreferrer"
-                className="block truncate text-ui-sm font-medium text-icon5 no-underline hover:text-icon6 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent1"
+                className="text-ui-sm text-icon5 hover:text-icon6 focus-visible:outline-accent1 block truncate font-medium no-underline hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2"
               >
                 {item.title}
               </a>
             ) : (
-              <span className="block truncate text-ui-sm font-medium text-icon5">{item.title}</span>
+              <span className="text-ui-sm text-icon5 block truncate font-medium">{item.title}</span>
             )}
-            <Txt as="span" variant="ui-xs" className="mt-0.5 block text-icon3">
+            <Txt as="span" variant="ui-xs" className="text-icon3 mt-0.5 block">
               In this stage {relativeTime(item.enteredAt) || 'just now'}
             </Txt>
           </div>
@@ -452,7 +452,7 @@ function SourceMix({ metrics }: { metrics: FactoryMetrics }) {
   const total = metrics.sourceMix.reduce((sum, entry) => sum + entry.count, 0);
   if (total === 0) {
     return (
-      <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+      <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
         No items created in this window.
       </Txt>
     );
@@ -464,15 +464,15 @@ function SourceMix({ metrics }: { metrics: FactoryMetrics }) {
         return (
           <li key={entry.source} className="grid gap-1.5">
             <div className="flex items-baseline justify-between gap-3">
-              <Txt as="span" variant="ui-sm" className="font-medium text-icon5">
+              <Txt as="span" variant="ui-sm" className="text-icon5 font-medium">
                 {SOURCE_LABELS[entry.source] ?? entry.source}
               </Txt>
-              <Txt as="span" variant="ui-xs" className="tabular-nums text-icon3">
+              <Txt as="span" variant="ui-xs" className="text-icon3 tabular-nums">
                 {entry.count} · {percentage}%
               </Txt>
             </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-surface4" aria-hidden="true">
-              <div className="h-full rounded-full bg-accent3" style={{ width: `${Math.max(2, percentage)}%` }} />
+            <div className="bg-surface4 h-1.5 overflow-hidden rounded-full" aria-hidden="true">
+              <div className="bg-accent3 h-full rounded-full" style={{ width: `${Math.max(2, percentage)}%` }} />
             </div>
           </li>
         );

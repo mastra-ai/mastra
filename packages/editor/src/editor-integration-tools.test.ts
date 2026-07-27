@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import type {
@@ -28,9 +28,11 @@ function createMockToolProvider(
 ): ToolProvider {
   return {
     info: { id, name: `${id} provider`, description: `Provider ${id}` },
-    listToolkits: vi.fn(async (): Promise<ToolProviderListResult<ToolProviderToolkit>> => ({
-      data: toolkits,
-    })),
+    listToolkits: vi.fn(
+      async (): Promise<ToolProviderListResult<ToolProviderToolkit>> => ({
+        data: toolkits,
+      }),
+    ),
     listTools: vi.fn(
       async (options?: ListToolProviderToolsOptions): Promise<ToolProviderListResult<ToolProviderToolInfo>> => {
         let tools = Object.entries(toolMap).map(([slug, t]) => ({

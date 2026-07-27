@@ -282,6 +282,6 @@ export async function handleCacheOperation(ctx: MutationCtx<any>, request: Cache
   return { ok: false, error: `Unsupported operation ${(request as any).op}` };
 }
 
-export const mastraCache = mutationGeneric(async (ctx, request: CacheRequest): Promise<CacheResponse> =>
-  handleCacheOperation(ctx, request),
+export const mastraCache = mutationGeneric(
+  async (ctx, request: CacheRequest): Promise<CacheResponse> => handleCacheOperation(ctx, request),
 );

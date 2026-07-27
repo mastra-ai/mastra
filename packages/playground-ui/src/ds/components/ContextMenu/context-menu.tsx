@@ -119,7 +119,7 @@ const ContextMenuCheckboxItem = React.forwardRef<HTMLDivElement, ContextMenuPrim
       className={cn(itemClass, 'w-full', className)}
       {...props}
     >
-      <div className="flex size-4 items-center justify-center rounded-sm border border-border2">
+      <div className="border-border2 flex size-4 items-center justify-center rounded-sm border">
         <ContextMenuPrimitive.CheckboxItemIndicator>
           <CheckIcon />
         </ContextMenuPrimitive.CheckboxItemIndicator>

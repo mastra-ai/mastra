@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voyageai",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "VoyageAI embeddings integration for Mastra - text, multimodal, and contextualized chunk embeddings",
   "license": "Apache-2.0",
   "type": "module",
@@ -38,7 +38,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "voyageai": "^0.2.1"
+    "voyageai": "^0.3.1"
   },
   "peerDependencies": {
     "zod": "^3.25.0 || ^4.0.0"

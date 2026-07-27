@@ -41,7 +41,8 @@ export const requestSandboxAccessTool = createTool({
   execute: async ({ path: requestedPath, reason }: RequestSandboxAccessInput, context: any) => {
     try {
       const agentControllerCtx = context?.requestContext?.get('controller') as
-        AgentControllerRequestContext<MastraCodeState> | undefined;
+        | AgentControllerRequestContext<MastraCodeState>
+        | undefined;
 
       // Resolve to absolute path (expand ~ first since Node path APIs don't handle it)
       const expanded = expandTilde(requestedPath);

@@ -38,6 +38,7 @@ import type { FactoryProjectsStorage } from '../../storage/domains/projects/base
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { buildLinearAgentTools } from './agent-tools.js';
 import { buildLinearRoutes } from './routes.js';
+import { attachLinearRules } from './rules.js';
 import type { LinearConnectionRow, LinearStorageHandle, UpsertLinearConnectionInput } from './storage.js';
 
 const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql';
@@ -972,7 +973,7 @@ export class LinearIntegration implements FactoryIntegration {
       stateSigner: ctx.stateSigner,
       baseUrl: ctx.baseUrl,
       intake: ctx.storage.intake,
-      hooks: ctx.hooks,
+      ingestFactoryIssues: attachLinearRules(ctx),
     });
   }
 

@@ -2542,7 +2542,8 @@ export interface operations {
               serverEnabled: boolean;
               latestDeployId: string | null;
               latestDeployStatus:
-                ('queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown') | null;
+                | ('queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown')
+                | null;
               latestDeployCreatedAt: string | null;
               latestServerDeployStatus: string | null;
               customServerApiUrl: string | null;
@@ -2608,7 +2609,8 @@ export interface operations {
               serverEnabled: boolean;
               latestDeployId: string | null;
               latestDeployStatus:
-                ('queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown') | null;
+                | ('queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown')
+                | null;
               latestDeployCreatedAt: string | null;
               latestServerDeployStatus: string | null;
               customServerApiUrl: string | null;
@@ -2670,7 +2672,8 @@ export interface operations {
               serverEnabled: boolean;
               latestDeployId: string | null;
               latestDeployStatus:
-                ('queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown') | null;
+                | ('queued' | 'starting' | 'running' | 'stopped' | 'failed' | 'cancelled' | 'unknown')
+                | null;
               latestDeployCreatedAt: string | null;
               latestServerDeployStatus: string | null;
               customServerApiUrl: string | null;
