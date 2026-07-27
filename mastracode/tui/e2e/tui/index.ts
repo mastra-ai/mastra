@@ -43,6 +43,7 @@ import { githubSignalsNotificationReloadScenario } from './github-signals-notifi
 import { githubSignalsPollingInboxScenario } from './github-signals-polling-inbox.js';
 import { githubSignalsUnsubscribeReloadScenario } from './github-signals-unsubscribe-reload.js';
 import { goalApiErrorStopsLoopScenario } from './goal-api-error-stops-loop.js';
+import { goalDurationToolApprovalScenario } from './goal-duration-tool-approval.js';
 import { goalJudgeOmModelIsolationScenario } from './goal-judge-om-model-isolation.js';
 import { goalJudgeSingleRenderScenario } from './goal-judge-single-render.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
@@ -53,6 +54,8 @@ import { loginDialogMaskedInputScenario } from './login-dialog-masked-input.js';
 import { loginPreservesModelPackScenario } from './login-preserves-model-pack.js';
 import { mcpHttpToolCallScenario } from './mcp-http-tool-call.js';
 import { mcpLongRunningToolScenario } from './mcp-long-running-tool.js';
+import { mcpOauthAuthenticateScenario } from './mcp-oauth-authenticate.js';
+import { mcpOauthCancelScenario } from './mcp-oauth-cancel.js';
 import { mcpReloadConfigScenario } from './mcp-reload-config.js';
 import { mcpSelectorReconnectScenario } from './mcp-selector-reconnect.js';
 import { mcpServerConfigScenario } from './mcp-server-config.js';
@@ -201,6 +204,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'github-signals-polling-inbox': githubSignalsPollingInboxScenario,
   'github-signals-unsubscribe-reload': githubSignalsUnsubscribeReloadScenario,
   'goal-api-error-stops-loop': goalApiErrorStopsLoopScenario,
+  'goal-duration-tool-approval': goalDurationToolApprovalScenario,
   'goal-judge-om-model-isolation': goalJudgeOmModelIsolationScenario,
   'goal-judge-single-render': goalJudgeSingleRenderScenario,
   'controller-api-config': controllerApiConfigScenario,
@@ -214,6 +218,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'modal-and-shell': modalAndShellScenario,
   'mcp-http-tool-call': mcpHttpToolCallScenario,
   'mcp-long-running-tool': mcpLongRunningToolScenario,
+  'mcp-oauth-authenticate': mcpOauthAuthenticateScenario,
+  'mcp-oauth-cancel': mcpOauthCancelScenario,
   'mcp-reload-config': mcpReloadConfigScenario,
   'mcp-selector-reconnect': mcpSelectorReconnectScenario,
   'mcp-server-config': mcpServerConfigScenario,

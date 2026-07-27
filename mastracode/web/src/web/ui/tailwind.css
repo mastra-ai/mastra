@@ -34,10 +34,66 @@
  * @theme so Tailwind emits them alongside the utility. */
 @theme inline {
   --animate-queue-health-stripes: queue-health-stripes 1.2s linear infinite;
+  --animate-factory-ticket-move: factory-ticket-move 7s ease-in-out infinite;
+  --animate-factory-ticket-appear: factory-ticket-appear 7s ease-out infinite;
 
   @keyframes queue-health-stripes {
     to {
       background-position: 16px 0;
+    }
+  }
+
+  @keyframes factory-ticket-move {
+    0%,
+    6% {
+      opacity: 0;
+      transform: translateY(12px);
+      background-color: var(--surface3);
+    }
+    14%,
+    34% {
+      opacity: 1;
+      transform: translateY(0);
+      background-color: var(--surface3);
+    }
+    46%,
+    66% {
+      opacity: 1;
+      transform: translateX(calc(100% + 2.25rem));
+      background-color: color-mix(in oklab, var(--accent1) 18%, var(--surface3));
+    }
+    78%,
+    92% {
+      opacity: 1;
+      transform: translateX(calc(200% + 4.5rem));
+      background-color: color-mix(in oklab, var(--accent3) 22%, var(--surface3));
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(calc(200% + 4.5rem));
+      background-color: color-mix(in oklab, var(--accent3) 22%, var(--surface3));
+    }
+  }
+
+  @keyframes factory-ticket-appear {
+    0%,
+    16% {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    24%,
+    34% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    46%,
+    92% {
+      opacity: 1;
+      transform: translateY(-4.75rem);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(-4.75rem);
     }
   }
 }

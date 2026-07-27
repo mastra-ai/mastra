@@ -24,7 +24,8 @@
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "dependencies": {
     "@lancedb/lancedb": "^0.22.3",

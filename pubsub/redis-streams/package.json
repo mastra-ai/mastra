@@ -28,13 +28,14 @@
     "pretest": "docker compose up -d --wait",
     "test": "vitest run",
     "posttest": "docker compose down",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "dependencies": {
     "redis": "5.12.1"
   },
   "devDependencies": {
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.111",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.114",
     "@copilotkit/aimock": "^1.29.0",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",

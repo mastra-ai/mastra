@@ -55,6 +55,7 @@ const asHandledStreamChunk = (chunk: unknown): HandledStreamChunk | undefined =>
 };
 
 interface SendDeps {
+  model?: string;
   requestContext?: Record<string, unknown>;
   agentVersionId?: string;
   threadId?: string;
@@ -72,6 +73,7 @@ interface UseChatSendHandlerArgs {
   agentVersionId?: string;
   threadId?: string;
   modelSettingsArgs: Record<string, unknown>;
+  model?: string;
   chatWithNetwork?: boolean;
   chatWithGenerate?: boolean;
   maxSteps?: number;
@@ -118,6 +120,7 @@ export const useChatSendHandler = ({
   agentVersionId,
   threadId,
   modelSettingsArgs,
+  model,
   chatWithNetwork,
   chatWithGenerate,
   maxSteps,
@@ -146,6 +149,7 @@ export const useChatSendHandler = ({
     agentVersionId,
     threadId,
     modelSettingsArgs,
+    model,
     chatWithNetwork,
     chatWithGenerate,
     maxSteps,
@@ -157,6 +161,7 @@ export const useChatSendHandler = ({
     agentVersionId,
     threadId,
     modelSettingsArgs,
+    model,
     chatWithNetwork,
     chatWithGenerate,
     maxSteps,
@@ -246,6 +251,7 @@ export const useChatSendHandler = ({
             requestContext: requestContextInstance,
             threadId: deps.threadId,
             modelSettings: deps.modelSettingsArgs,
+            model: deps.model,
             signal: controller.signal,
             tracingOptions: deps.tracingOptions,
             onNetworkChunk: async (chunk: any) => {
@@ -266,6 +272,7 @@ export const useChatSendHandler = ({
             requestContext: requestContextInstance,
             threadId: deps.threadId,
             modelSettings: deps.modelSettingsArgs,
+            model: deps.model,
             signal: controller.signal,
             tracingOptions: deps.tracingOptions,
           });
@@ -280,6 +287,7 @@ export const useChatSendHandler = ({
             requestContext: requestContextInstance,
             threadId: deps.threadId,
             modelSettings: deps.modelSettingsArgs,
+            model: deps.model,
             tracingOptions: deps.tracingOptions,
             onChunk: async (chunk: any) => {
               if (chunk.type === 'finish') {

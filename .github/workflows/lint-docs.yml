@@ -200,7 +200,7 @@ jobs:
 
       - name: Check formatting
         working-directory: ./docs
-        run: pnpm prettier --check .
+        run: pnpm format:check
 
       - name: Lint with remark
         working-directory: ./docs

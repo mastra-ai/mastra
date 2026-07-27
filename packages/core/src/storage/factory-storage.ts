@@ -238,6 +238,16 @@ export abstract class FactoryStorageDomain extends StorageDomain {
     return this.#storage;
   }
 
+  /**
+   * Initialize this domain (via its owning storage) if it hasn't been yet.
+   * Lets consumers holding a domain handle run the same fail-soft readiness
+   * check as {@link FactoryStorage.ensureDomainReady} without also needing a
+   * reference to the storage backend.
+   */
+  ensureReady(): Promise<void> {
+    return this.storage.ensureDomainReady(this.name);
+  }
+
   protected get ops(): FactoryStorageOps {
     return this.storage.ops;
   }
@@ -324,6 +334,13 @@ export abstract class FactoryStorage {
 
   /** The generic query surface domains are written against. */
   abstract readonly ops: FactoryStorageOps;
+
+  /**
+   * Run a group of app-table operations atomically. The callback receives an
+   * ops instance bound to the transaction; callers must not use `this.ops`
+   * inside it.
+   */
+  abstract withTransaction<T>(fn: (ops: FactoryStorageOps) => Promise<T>): Promise<T>;
 
   /** Release the backend's connections (tests, shutdown). */
   abstract close(): Promise<void>;

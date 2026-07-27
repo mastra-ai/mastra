@@ -1,10 +1,16 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { ComponentProps, CSSProperties, KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { ResponsiveContainer, Sankey as RechartsSankey } from 'recharts';
-import { getSankeyChartCurveSelection } from './sankey-chart-utils';
-import type { SankeyChartCurveSelection } from './sankey-chart-utils';
+import {
+  getSankeyChartCurveSelection,
+  getSankeyChartNodeSelection,
+  getSankeyChartNodeWeights,
+} from './sankey-chart-utils';
+import type { SankeyChartCurveSelection, SankeyChartNodeSelection } from './sankey-chart-utils';
 import { useSankeyRenderContext } from './sankey-context';
 import { nodeColor, nodeColorVivid } from './sankeyColor';
+import { useSankeyChartMeasurements } from './use-sankey-chart-measurements';
 import { Colors } from '@/ds/tokens';
 import { cn } from '@/lib/utils';
 
@@ -13,6 +19,8 @@ export type SankeyChartProps = {
   className?: string;
   margin?: ComponentProps<typeof RechartsSankey>['margin'];
   onCurveClick?: (selection: SankeyChartCurveSelection) => void;
+  onNodeClick?: (selection: SankeyChartNodeSelection) => void;
+  isNodeClickable?: (selection: SankeyChartNodeSelection) => boolean;
 };
 
 export function SankeyChart({
@@ -20,12 +28,25 @@ export function SankeyChart({
   className,
   margin = { top: 64, right: 160, bottom: 12, left: 160 },
   onCurveClick,
+  onNodeClick,
+  isNodeClickable,
 }: SankeyChartProps) {
-  const { graph, enabledColumns, hueMap } = useSankeyRenderContext();
+  const { graph, enabledColumns, hueMap, usesFixedGeometry } = useSankeyRenderContext();
+  const { chartContainerRef, fixedGeometry } = useSankeyChartMeasurements({
+    graph,
+    height,
+    margin,
+    usesFixedGeometry,
+  });
   const [hoveredSourceName, setHoveredSourceName] = useState<string>();
+  const [focusedSourceName, setFocusedSourceName] = useState<string>();
+  const activeSourceName = hoveredSourceName ?? focusedSourceName;
   const firstColumnId = enabledColumns[0]?.id;
-  const total = graph.links.reduce(
-    (sum, link) => (link.sourceNode.column.id === firstColumnId ? sum + link.value : sum),
+  const lastColumnId = enabledColumns.at(-1)?.id;
+  const nodeWeights = getSankeyChartNodeWeights(graph);
+  const total = graph.nodes.reduce(
+    (sum, node) =>
+      node.column.id === firstColumnId ? sum + (node.displayValue ?? nodeWeights.get(node.id) ?? 0) : sum,
     0,
   );
 
@@ -33,13 +54,13 @@ export function SankeyChart({
     <div className={cn('min-w-0', className)}>
       {graph.links.length === 0 ? (
         <div
-          className="flex items-center justify-center rounded-md border border-border1 text-ui-sm text-neutral3"
+          className="border-border1 text-ui-sm text-neutral3 flex items-center justify-center rounded-md border"
           style={{ height }}
         >
           Select at least two columns with data to display a flow
         </div>
       ) : (
-        <div style={{ height }}>
+        <div ref={chartContainerRef} style={{ height }}>
           <ResponsiveContainer
             width="100%"
             height="100%"
@@ -55,24 +76,49 @@ export function SankeyChart({
                 const showColumnLabel = node
                   ? graph.nodes.findIndex(candidate => candidate.column.id === node.column.id) === props.index
                   : false;
+                const nodeGeometry = node ? fixedGeometry?.nodes.get(node.id) : undefined;
+                const selection = node ? getSankeyChartNodeSelection(node) : undefined;
+                const clickable = Boolean(
+                  onNodeClick && selection && (isNodeClickable === undefined || isNodeClickable(selection)),
+                );
                 return (
                   <SankeyNode
                     {...props}
+                    x={nodeGeometry?.x ?? props.x}
+                    y={nodeGeometry?.y ?? props.y}
+                    height={nodeGeometry?.height ?? props.height}
                     hueMap={hueMap}
                     columnLabel={node?.column.label}
+                    label={node?.label}
+                    nodeValue={node?.displayValue}
+                    layoutValue={nodeGeometry ? undefined : node ? nodeWeights.get(node.id) : undefined}
                     total={total}
                     showColumnLabel={showColumnLabel}
+                    isFirstColumn={node?.column.id === firstColumnId}
+                    isLastColumn={node?.column.id === lastColumnId}
+                    onFocusChange={setFocusedSourceName}
                     onHoverChange={setHoveredSourceName}
+                    clickable={clickable}
+                    onSelect={() => {
+                      if (selection && clickable) onNodeClick?.(selection);
+                    }}
                   />
                 );
               }}
               link={(props: SankeyLinkRendererProps) => {
                 const link = graph.links[props.index];
+                const linkGeometry = link ? fixedGeometry?.links.get(link.id) : undefined;
                 return (
                   <SankeyLink
                     {...props}
+                    sourceY={linkGeometry?.sourceY ?? props.sourceY}
+                    targetY={linkGeometry?.targetY ?? props.targetY}
+                    sourceWidth={linkGeometry?.sourceWidth}
+                    targetWidth={linkGeometry?.targetWidth}
                     hueMap={hueMap}
-                    highlighted={String(props.payload.source.name ?? '') === hoveredSourceName}
+                    highlighted={String(props.payload.source.name ?? '') === activeSourceName}
+                    displayValue={link?.displayValue}
+                    layoutValue={link?.value}
                     onHoverChange={setHoveredSourceName}
                     clickable={onCurveClick !== undefined}
                     onSelect={() => {
@@ -113,9 +159,17 @@ type SankeyLinkRendererProps = {
 type SankeyNodeProps = SankeyNodeRendererProps & {
   hueMap: Record<string, number>;
   columnLabel?: string;
+  label?: string;
+  nodeValue?: number;
+  layoutValue?: number;
   total: number;
   showColumnLabel: boolean;
+  isFirstColumn: boolean;
+  isLastColumn: boolean;
+  clickable: boolean;
+  onFocusChange: (sourceName: string | undefined) => void;
   onHoverChange: (sourceName: string | undefined) => void;
+  onSelect: () => void;
 };
 
 function SankeyNode({
@@ -126,46 +180,152 @@ function SankeyNode({
   payload,
   hueMap,
   columnLabel,
+  label,
+  nodeValue,
+  layoutValue,
   total,
   showColumnLabel,
+  isFirstColumn,
+  isLastColumn,
+  clickable,
+  onFocusChange,
   onHoverChange,
+  onSelect,
 }: SankeyNodeProps) {
   const name = typeof payload.name === 'string' || typeof payload.name === 'number' ? String(payload.name) : '';
-  const numericValue = typeof payload.value === 'number' ? payload.value : Number(payload.value);
+  const displayLabel = label ?? name;
+  const descriptionIndex = displayLabel.indexOf('\n');
+  const visibleDisplayLabel = descriptionIndex >= 0 ? displayLabel.slice(0, descriptionIndex) : displayLabel;
+  const description = descriptionIndex >= 0 ? displayLabel.slice(descriptionIndex + 1) : undefined;
+  const accessibleLabel = displayLabel.replaceAll('\n', '. ');
+  const visibleLabel = truncateNodeLabel(visibleDisplayLabel);
+  const tooltipId = useId();
+  const [isHovered, setIsHovered] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState<{
+    left: number;
+    top: number;
+    placement: 'above' | 'below';
+  }>();
+  const numericValue = nodeValue ?? (typeof payload.value === 'number' ? payload.value : Number(payload.value));
   const value = Number.isFinite(numericValue) ? String(numericValue) : '';
   const percentage = total > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / total) * 100) : 0;
-  const labelX = x + width / 2;
+  const visibleHeight = scaleSankeyDimension(height, numericValue, layoutValue);
+  const visibleY = y + (height - visibleHeight) / 2;
+  const textAnchor = isFirstColumn ? 'start' : isLastColumn ? 'end' : 'middle';
+  const labelX = isFirstColumn ? x : isLastColumn ? x + width : x + width / 2;
   const columnLabelX = x + width / 2;
   const hue = hueMap[name] ?? 0;
+  const isTooltipVisible = Boolean(description && tooltipPosition && (isHovered || isFocused));
+  const showTooltipAt = (target: SVGGElement) => {
+    const rect = target.getBoundingClientRect();
+    const placement = rect.top < 120 ? 'below' : 'above';
+    setTooltipPosition({
+      left: Math.min(Math.max(rect.left, 16), Math.max(window.innerWidth - 336, 16)),
+      top: placement === 'above' ? rect.top - 8 : rect.bottom + 8,
+      placement,
+    });
+  };
+  const handleKeyDown = (event: KeyboardEvent<SVGGElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    onSelect();
+  };
 
   return (
-    <g onMouseEnter={() => onHoverChange(name)} onMouseLeave={() => onHoverChange(undefined)}>
-      {showColumnLabel && columnLabel ? (
-        <text x={columnLabelX} y={18} textAnchor="middle" fill={nodeColor(hue)} fontSize={12} fontWeight={600}>
-          {columnLabel}
-        </text>
-      ) : null}
-      <rect x={x} y={y} width={width} height={height} rx={3} fill={nodeColor(hue)} />
-      <text
-        x={labelX}
-        y={y - 24}
-        textAnchor="middle"
-        fill={Colors.neutral5}
-        fontSize={11}
-        fontFamily="var(--font-mono)"
+    <>
+      <g
+        aria-describedby={description ? tooltipId : undefined}
+        aria-label={`${accessibleLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
+        className="focus-visible:[&>rect]:stroke-neutral6 outline-hidden focus-visible:[&>rect]:stroke-2"
+        onClick={clickable ? onSelect : undefined}
+        onKeyDown={clickable ? handleKeyDown : undefined}
+        role={clickable ? 'button' : undefined}
+        onFocus={event => {
+          onFocusChange(name);
+          setIsFocused(true);
+          showTooltipAt(event.currentTarget);
+        }}
+        onBlur={() => {
+          onFocusChange(undefined);
+          setIsFocused(false);
+        }}
+        onMouseEnter={event => {
+          onHoverChange(name);
+          setIsHovered(true);
+          showTooltipAt(event.currentTarget);
+        }}
+        onMouseLeave={() => {
+          onHoverChange(undefined);
+          setIsHovered(false);
+        }}
+        style={{ cursor: clickable ? 'pointer' : undefined }}
+        tabIndex={0}
       >
-        {name}
-      </text>
-      <text x={labelX} y={y - 8} textAnchor="middle" fill={Colors.neutral3} fontSize={9.5}>
-        {value} ({percentage}%)
-      </text>
-    </g>
+        <title>{displayLabel}</title>
+        {showColumnLabel && columnLabel ? (
+          <text x={columnLabelX} y={18} textAnchor="middle" fill={nodeColor(hue)} fontSize={12} fontWeight={600}>
+            {columnLabel}
+          </text>
+        ) : null}
+        <rect x={x} y={visibleY} width={width} height={visibleHeight} rx={3} fill={nodeColor(hue)} />
+        <text
+          x={labelX}
+          y={y - 24}
+          textAnchor={textAnchor}
+          fill={Colors.neutral5}
+          fontSize={11}
+          fontFamily="var(--font-mono)"
+        >
+          {visibleLabel}
+        </text>
+        <text x={labelX} y={y - 8} textAnchor={textAnchor} fill={Colors.neutral3} fontSize={9.5}>
+          {value} ({percentage}%)
+        </text>
+      </g>
+      {description && isTooltipVisible && tooltipPosition
+        ? createPortal(
+            <div
+              aria-label={`${visibleDisplayLabel}: ${description}`}
+              className="border-border1 bg-surface5 text-neutral6 shadow-elevated pointer-events-none fixed z-50 rounded-md border p-2 text-xs leading-4"
+              id={tooltipId}
+              role="tooltip"
+              style={{
+                left: tooltipPosition.left,
+                maxWidth: 'min(20rem, calc(100vw - 2rem))',
+                top: tooltipPosition.top,
+                transform: tooltipPosition.placement === 'above' ? 'translateY(-100%)' : undefined,
+                width: 'max-content',
+              }}
+            >
+              <div className="font-medium">{visibleDisplayLabel}</div>
+              <div className="text-neutral4 whitespace-pre-wrap">{description}</div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
+}
+
+function scaleSankeyDimension(size: number, displayValue: number | undefined, layoutValue: number | undefined) {
+  if (displayValue === undefined || layoutValue === undefined || layoutValue <= 0) return size;
+  return size * Math.min(Math.max(displayValue / layoutValue, 0), 1);
+}
+
+function truncateNodeLabel(label: string) {
+  const maximumLength = 23;
+  if (label.length <= maximumLength) return label;
+  return `${label.slice(0, maximumLength - 1).trimEnd()}…`;
 }
 
 type SankeyLinkProps = SankeyLinkRendererProps & {
   hueMap: Record<string, number>;
   highlighted: boolean;
+  displayValue?: number;
+  layoutValue?: number;
+  sourceWidth?: number;
+  targetWidth?: number;
   clickable: boolean;
   onHoverChange: (sourceName: string | undefined) => void;
   onSelect: () => void;
@@ -183,16 +343,22 @@ function SankeyLink({
   payload,
   hueMap,
   highlighted,
+  displayValue,
+  layoutValue,
+  sourceWidth,
+  targetWidth,
   clickable,
   onHoverChange,
   onSelect,
 }: SankeyLinkProps) {
-  const halfWidth = Math.max(0, linkWidth) / 2;
+  const visibleWidth = scaleSankeyDimension(linkWidth, displayValue, layoutValue);
+  const sourceHalfWidth = Math.max(0, sourceWidth ?? visibleWidth) / 2;
+  const targetHalfWidth = Math.max(0, targetWidth ?? visibleWidth) / 2;
   const path = [
-    `M${sourceX},${sourceY - halfWidth}`,
-    `C${sourceControlX},${sourceY - halfWidth} ${targetControlX},${targetY - halfWidth} ${targetX},${targetY - halfWidth}`,
-    `L${targetX},${targetY + halfWidth}`,
-    `C${targetControlX},${targetY + halfWidth} ${sourceControlX},${sourceY + halfWidth} ${sourceX},${sourceY + halfWidth}`,
+    `M${sourceX},${sourceY - sourceHalfWidth}`,
+    `C${sourceControlX},${sourceY - sourceHalfWidth} ${targetControlX},${targetY - targetHalfWidth} ${targetX},${targetY - targetHalfWidth}`,
+    `L${targetX},${targetY + targetHalfWidth}`,
+    `C${targetControlX},${targetY + targetHalfWidth} ${sourceControlX},${sourceY + sourceHalfWidth} ${sourceX},${sourceY + sourceHalfWidth}`,
     'Z',
   ].join(' ');
   const sourceName = String(payload.source.name ?? '');

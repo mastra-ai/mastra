@@ -99,7 +99,7 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
   }
 
   if (!agent) {
-    return <div className="text-center py-4">Agent not found</div>;
+    return <div className="py-4 text-center">Agent not found</div>;
   }
 
   if (!isSettingsView && !threadId) {

@@ -2,22 +2,22 @@
  * Browser-side helper for the Factory queue-health threshold endpoint.
  *
  * The thresholds are server-side, project-scoped config (seconds) read by the
- * Overview page to bucket work-item ages; the chart's aggregation itself runs
+ * Metrics page's queue-health section to bucket work-item ages; the chart's aggregation itself runs
  * client-side (its active-work input is browser-only). Mirrors the thin
  * `services/metrics.ts` fetcher shape.
  */
 
-import type { QueueHealthConfig } from '../../../../storage/domains/queue-health/base';
+import type { QueueHealthConfig } from '@mastra/factory/storage/domains/queue-health/base';
 
 /** Fetch the org's age-threshold config for a project (defaults when unset). */
-export async function fetchQueueHealthThresholds(baseUrl: string, githubProjectId: string): Promise<QueueHealthConfig> {
-  const res = await fetch(
-    `${baseUrl}/web/factory/repositories/${encodeURIComponent(githubProjectId)}/health/thresholds`,
-    {
-      headers: { Accept: 'application/json' },
-      credentials: 'include',
-    },
-  );
+export async function fetchQueueHealthThresholds(
+  baseUrl: string,
+  factoryProjectId: string,
+): Promise<QueueHealthConfig> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/health/thresholds`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {

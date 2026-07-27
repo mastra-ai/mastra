@@ -263,6 +263,46 @@ class MyFGAProvider implements IFGAProvider {
 }
 ```
 
+## System actors
+
+Autonomous and scheduled agents run without an end user. Mark these calls with an actor signal so FGA can tell them apart from user requests:
+
+- `true` or `{ actorKind: 'system' }` identifies an anonymous system actor.
+- The object form can also carry `agentId`, `permissions`, and `scope` to identify and constrain the acting agent.
+
+By default, a trusted actor skips the user-centric `require()` check after a tenant-scope check. To enforce per-agent least privilege, implement the optional `requireActor` method on your provider. It receives the actor and the same `FGACheckParams` as `require`, and throws `FGADeniedError` to deny. When your provider doesn't implement `requireActor`, the trusted-actor bypass is preserved, so adding it is backward compatible.
+
+```typescript
+import { FGADeniedError } from '@mastra/core/auth/ee'
+import type { ActorSignal, FGACheckParams, IFGAProvider } from '@mastra/core/auth/ee'
+
+class MyFGAProvider implements IFGAProvider {
+  // ...check, require, filterAccessible...
+
+  async requireActor(actor: ActorSignal, params: FGACheckParams): Promise<void> {
+    const agentId = actor === true ? undefined : actor.agentId
+    // Resolve the agent's real grants from a trusted source keyed by agentId.
+    const granted = await this.grantsForAgent(agentId)
+    const required = Array.isArray(params.permission) ? params.permission : [params.permission]
+    if (!required.some(permission => granted.includes(permission))) {
+      throw new FGADeniedError(null, params.resource, params.permission)
+    }
+  }
+}
+```
+
+### Trust requirements
+
+The actor signal is trusted input, so construct it server-side:
+
+- Treat `actor` as a per-call signal. Durable workflows forward it when a run starts, but don't restore the initial actor on resume. Pass it explicitly on every trusted resume, or resolve a fresh actor through agent `defaultOptions`. Without a current actor, user authorization applies and a missing user fails closed.
+- Mastra strips `actor` from execution options handled by its built-in agent HTTP routes. Set it in server-side code, for example a scheduled job or a workflow, never from client input.
+- Establish tenant scope server-side. Built-in agent HTTP routes ignore a client-supplied `organizationId` in the request context, and the trusted-actor path requires an `organizationId` to be set.
+- Durable resume keeps its existing request-context recovery and merge behavior. This doesn't make a persisted actor trusted for a later workflow segment.
+- The tenant-scope check confirms that a trusted `organizationId` exists. It doesn't verify that `actor.agentId` belongs to that organization. When that relationship matters, verify it in `requireActor` using authoritative provider data.
+- Treat `actor.permissions` as a claim, not a grant. A provider that enforces least privilege resolves the agent's authoritative permissions from a trusted source, for example a manifest or your FGA backend keyed by `agentId`, rather than trusting the inline values.
+- Once a provider implements `requireActor`, errors from that method stop execution. Mastra doesn't fall back to organization-only authorization.
+
 ## Related
 
 - [Authentication overview](/docs/server/auth)

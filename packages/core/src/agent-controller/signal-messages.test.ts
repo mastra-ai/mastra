@@ -297,6 +297,22 @@ describe('AgentController signal messages', () => {
     expect(session.getCurrentRunId()).toBeNull();
   });
 
+  it('uses explicit request context when a prebuilt signal starts an idle run', async () => {
+    const storage = new InMemoryStore();
+    const { controller, session } = await createController(storage);
+    const requestContext = new RequestContext();
+    requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    const buildToolsets = vi.spyOn(controller as any, 'buildToolsets');
+
+    const signal = session.sendSignal(
+      { id: 'factory-skill-1', type: 'user', tagName: 'user', contents: 'investigate' },
+      { requestContext },
+    );
+    await signal.accepted;
+
+    expect(buildToolsets).toHaveBeenCalledWith(session, requestContext);
+  });
+
   it('sends active text signals without building idle stream options', async () => {
     const storage = new InMemoryStore();
     const agent = new Agent({

@@ -49,8 +49,8 @@ export function ExperimentInComparisonInfo({ datasetId, experiment, type }: Expe
   );
 
   return (
-    <div className={`grid border-2 border-border1 rounded-lg p-5 gap-3 ${customStyle}`}>
-      <div className="flex items-center gap-3 w-full overflow-clip">
+    <div className={`border-border1 grid gap-3 rounded-lg border-2 p-5 ${customStyle}`}>
+      <div className="flex w-full items-center gap-3 overflow-clip">
         {type === 'contender' && (
           <Chip size="small" color={color}>
             {label}
@@ -74,7 +74,7 @@ export function ExperimentInComparisonInfo({ datasetId, experiment, type }: Expe
         )}
       </div>
 
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-ui-sm text-neutral3">
+      <div className="text-ui-sm text-neutral3 flex flex-wrap gap-x-4 gap-y-1">
         {experiment.name && (
           <TextAndIcon>
             <HashIcon /> {shortId}

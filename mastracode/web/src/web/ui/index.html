@@ -3,29 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/mastra.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/mastra.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MastraCode — Web</title>
+    <meta name="theme-color" content="#0f0f0f" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Mastra Factory</title>
     <script>
       // Apply the persisted/system theme class before paint to avoid a flash.
       // Mirrors @mastra/playground-ui's ThemeProvider, which keys off the
       // `.dark`/`.light` class on <html> and stores the raw theme string
       // ('dark' | 'light' | 'system') under `mastracode.theme`.
       (function () {
+        var system = 'dark';
         try {
-          var stored = localStorage.getItem('mastracode.theme');
-          var resolved;
-          if (stored === 'dark' || stored === 'light') {
-            resolved = stored;
-          } else if (stored === 'system') {
-            resolved =
-              window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-          } else {
-            // No stored preference: match ThemeProvider's defaultTheme="dark".
-            resolved = 'dark';
+          if (typeof window.matchMedia === 'function') {
+            system = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
           }
+          var stored = localStorage.getItem('mastracode.theme');
+          var resolved = stored === 'dark' || stored === 'light' ? stored : system;
           document.documentElement.classList.add(resolved);
         } catch (e) {
-          document.documentElement.classList.add('dark');
+          document.documentElement.classList.add(system);
         }
       })();
     </script>

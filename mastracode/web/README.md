@@ -1,6 +1,6 @@
 # mastracode-web
 
-The Mastra Code web surface: API routes (config/fs/GitHub/Linear), a deployable Mastra entry (`src/mastra/index.ts`), and the SPA UI. Built on [`@mastra/code-sdk`](../sdk). One factory storage backend persists agent state (threads, messages, and memory) and web app data. When `APP_DATABASE_URL` is set, a separate `PgVector` uses the same PostgreSQL database for recall search; explicit local development and test runs use the SDK's local LibSQL database without vector storage.
+The Mastra Code web surface: API routes (config/fs/GitHub/Linear), a deployable Mastra entry (`src/mastra/index.ts`), and the SPA UI. Built on [`@mastra/code-sdk`](../sdk). One factory storage backend persists agent state (threads, messages, and memory) and web app data. When `DATABASE_URL` is set, a separate `PgVector` uses the same PostgreSQL database for recall search; explicit local development and test runs use the SDK's local LibSQL database without vector storage. (`APP_DATABASE_URL` is honored as a deprecated fallback.)
 
 This is a **standalone pnpm project** (own lockfile, not a monorepo workspace member). For development, the monorepo-provided packages (`@mastra/*`, `mastra`) are consumed via `link:` specs pointing at the monorepo directories, so you always develop against local source. For builds, `scripts/monorepo-deps.mjs` temporarily pins those deps to the exact versions found in the monorepo (see below).
 
@@ -20,8 +20,16 @@ pnpm install
 pnpm web:dev
 ```
 
-- API server (`mastra dev`) on **:4111**, env loaded/validated by varlock from `.env` against `.env.schema` (package root).
+- API server (`mastra factory dev`) on **:4111**, env loaded/validated by varlock from `.env` against `.env.schema` (package root).
 - Vite SPA on **:5173**, proxying `/api`, `/web`, and `/auth/` to the API server.
+
+To test the production-like, same-origin setup on port 5173 with one long-running process, build the SPA once and serve it from the Factory API server:
+
+```bash
+pnpm web:dev:prod
+```
+
+This mode does not provide UI HMR. Run `pnpm web:dev` for normal UI development.
 
 Local development works without PostgreSQL: the full web surface uses the SDK's local LibSQL database. To exercise the PostgreSQL backend and distributed-lock path, run `pnpm web:dev:github` (Docker Compose on port 54329).
 
@@ -32,8 +40,8 @@ pnpm web:build
 ```
 
 1. `prebuild` — builds the linked monorepo packages via turbo.
-2. Vite builds the SPA to `src/mastra/public/ui/`.
-3. `scripts/monorepo-deps.mjs run -- mastra build --dir src/mastra` — pins the `link:` deps to the **exact versions found in the monorepo** (read from each linked package's `package.json`), runs the build, then always restores the `link:` specs (also on failure/Ctrl-C). The build bundles the API server to `.mastra/output/` and copies `public/` (including the SPA) into it automatically.
+2. Vite builds the SPA to `src/mastra/public/factory/`.
+3. `scripts/monorepo-deps.mjs run -- mastra build --dir src/mastra` — pins the `link:` deps to the **exact versions found in the monorepo** (read from each linked package's `package.json`), runs the build, then always restores the `link:` specs (also on failure/Ctrl-C). The build calls `build:ui` (step 2) automatically when a Factory entry is detected, bundles the API server to `.mastra/output/`, and copies `public/` (including the SPA) into it automatically.
 4. The server serves the SPA same-origin at `/` (see `src/web/spa-static.ts`).
 
 The deploy output's `package.json` therefore pins the exact monorepo versions of `@mastra/*`, so a production deploy `npm install`s them straight from npm — those versions must be published (CI releases alphas). **Known limitation:** until `@mastra/code-sdk` has a proper npm release (changeset queued), the build's final output-deps install step fails on `@mastra/code-sdk@0.0.0`; the bundle, SPA, and output `package.json` are still produced correctly before that step.
@@ -59,28 +67,75 @@ pnpm web:ui:test  # UI MSW tests (e2e/web-ui)
 
 ## Factories, bindings, and repositories
 
-In the Web UI a **Factory** is the top-level product entity the user creates and selects. Each Factory has a browser-owned identity (`Factory.id`) and a single **binding**:
+In the Web UI, a **Factory** is the top-level product entity that a user creates and selects. Each Factory has one binding:
 
-- **Local folder** — path on the host machine; sessions use the resolved `resourceId` from `GET /web/codebase/resolve`.
-- **Connected GitHub repository** — org-owned row in `github_projects`, identified by `githubProjectId` / `github_project_id` at the persistence boundary.
+- **Local folder**: A path on the host machine. Sessions use the `resourceId` resolved by `GET /web/codebase/resolve`.
+- **Server Factory**: A persisted Factory project identified by `factoryProjectId`. It can contain one or more connected repositories. Repository-specific operations use each repository's `projectRepositoryId`.
 
-Board, metrics, audit, sandboxes, worktrees, and PR subscriptions stay **repository-scoped** via `githubProjectId`. A Factory is not a multi-repository aggregate, and there is no server-side `factories` table yet. GitHub-backed Factories can use the Factory Board; local Factories are still Factories, but Board/metrics/audit require a GitHub connection.
+Factory work items belong to the Factory project. Sandboxes, worktrees, GitHub issue and pull request feeds, and pull request subscriptions belong to a connected repository. Private HTTP routes reflect that split. Work items use `/web/factory/projects/:factoryProjectId/*`, while GitHub provider operations use `/web/github/projects/:projectRepositoryId/*`.
 
-Session continuity with the TUI intentionally keeps the SDK names `projectPath` and `detectProject`. Those refer to the execution workspace path / codebase detection protocol, not the product Factory entity. Private HTTP routes use precise nouns: `/web/codebase/resolve`, `/web/github/repositories/*`, `/web/factory/repositories/:id/*`.
+Session continuity with the terminal user interface (TUI) keeps the Software Development Kit (SDK) names `projectPath` and `detectProject`. These names refer to the execution workspace path and codebase detection protocol, not the Factory product entity.
 
-Intake source config is asymmetric by provider: GitHub selections are `repositoryIds` (connected repository UUIDs); Linear selections remain `projectIds` because Linear Project is an external provider concept.
+Intake source config is asymmetric by provider. GitHub selections use `repositoryIds`, which contain connected repository UUIDs. Linear selections use `projectIds` because a Linear Project is an external provider concept.
 
-Browser state uses `mastracode-factories` / `mastracode-active-factory` only. Prerelease `mastracode-projects` keys are not read.
+Browser state uses `mastracode-factories`. The active Factory comes from the `/factories/:factoryId/**` URL, and prerelease `mastracode-projects` keys aren't read.
+
+## Work and Review workflows
+
+Server-backed Factories split repository work across two boards:
+
+- **Work** (`/factories/:factoryId/work`): Shows manual work items, GitHub issues, and Linear issues. Its stages are **Intake**, **Triage**, **Planning**, **Building**, **Review**, and **Done**.
+- **Review** (`/factories/:factoryId/review`): Shows GitHub pull requests only. Its stages are **Intake**, **Reviewing**, and **Done**.
+
+Open GitHub issues appear as **Work** intake candidates. Open pull requests appear as **Review** intake candidates. Adding a candidate to a board creates or updates its persisted Factory work item. The source type determines which board owns that item, so a GitHub issue can't appear on **Review** and a pull request can't appear on **Work**.
+
+When a Factory pull request branch matches a related work session branch, the Review item stores the Work item as its parent. The Work card links to the Review session, and the Review card links back to the Work session. The same reciprocal links appear in the session header. Links to a thread are shown only while its referenced worktree still exists; the related board item remains available after worktree deletion.
 
 ## Workspace skill invocation
 
 The private Web API can activate a user-invocable skill on an existing scoped AgentController session with `POST /web/agent-controller/:controllerId/skills/invoke`. The Web Factory packages workflow skills such as `understand-issue` and `understand-pr` as ordinary, read-only `SKILL.md` files and adds them only to workspaces created by `MastraFactory`; the shared SDK and TUI workspace resolver do not load them. The route resolves every ID through the session workspace, uses the same `<skill name="…">` activation envelope as `/skill/<name>` in the TUI, and returns an error without dispatching when the skill is missing. Authenticated requests may target only the caller's personal session or a Factory worktree owned by that organization user.
 
-## Factory Overview
+## Factory metrics
 
-For GitHub projects with a connected repo, the sidebar Factory section leads with an **Overview** tab (`/factory/overview`, above Board) — the factory's at-a-glance landing page. Its centerpiece is the **Queue Health Chart**: one horizontal bar per stage (intake → triage → planning → execute → review), segmented by task age (green / amber / orange / red, proportional to count) with a diagonal-stripe overlay on the portion where agent work is actively running. Clicking a segment filters a drill-down task list below the chart. Age comes from each item's open `stageHistory` entry (falling back to `createdAt`); the active signal reuses the same `useWorkspaceActivity` worktree-activity poll that drives the sidebar dots. Aggregation runs client-side via the pure `computeQueueHealth()` (`src/web/ui/domains/factory/queue-health.ts`).
+The **Metrics** page at `/factories/:factoryId/metrics` shows queue health for the active Factory. The Queue Health Chart contains one horizontal bar per Work stage. Each bar is segmented by item age and overlays diagonal stripes where agent work is active. Selecting a segment filters the item list below the chart. Age comes from the open `stageHistory` entry and falls back to `createdAt`. The pure `computeQueueHealth()` function in `src/web/ui/domains/factory/queue-health.ts` performs the client-side aggregation.
 
-The age thresholds are server-side, per-project config (seconds), served by `GET /web/factory/repositories/:id/health/thresholds` and stored in the `queue-health` factory storage domain (`queue_health_settings` table) keyed by `(org_id, github_project_id)`. Defaults are `[14400, 86400, 259200]` (4h / 24h / 72h); `saveConfig` rejects a non-ascending or empty `thresholdsSeconds`. Thresholds live in seconds so fast-moving automated flows can represent sub-minute buckets.
+Queue age thresholds are server-side Factory project config in seconds. `GET /web/factory/projects/:factoryProjectId/health/thresholds` reads them from the `queue-health` storage domain. The `queue_health_settings` table keys records by `(org_id, factory_project_id)`. Defaults are `[14400, 86400, 259200]` (4h, 24h, and 72h). `saveConfig` rejects empty or non-ascending `thresholdsSeconds` values.
+
+## Factory rules
+
+`MastraFactory` accepts one authoritative `rules` tree for Work and Review stage entry and exit, completed tool results, and normalized GitHub events. Construct it with `defaultFactoryRules()` so every deployment policy has an explicit version:
+
+```ts
+import { MastraFactory } from './src/web/factory-entry.js';
+import { defaultFactoryRules } from './src/web/factory/rules/index.js';
+
+const rules = defaultFactoryRules({
+  version: '2026-07-18.1',
+  overrides: {
+    review: {
+      intake: {
+        pullRequest: {
+          onEnter: context =>
+            context.actor.type === 'github' && !context.actor.trusted
+              ? { type: 'reject', code: 'forbidden', reason: 'A trusted author is required.' }
+              : undefined,
+        },
+      },
+    },
+    tools: {
+      submit_plan: {
+        onResult: () => undefined,
+      },
+    },
+  },
+});
+
+const factory = new MastraFactory({ rules });
+```
+
+Overrides replace the exact `onEnter`, `onExit`, `onResult`, or `onEvent` leaf; they never compose implicitly with another handler. The version is configuration identity for persisted evaluations and audits, not an event-deduplication key, and Mastra never hashes function source.
+
+Rules are trusted deployment code. They receive normalized, bounded context rather than storage handles, credentials, worktree paths, or raw webhook payloads. Each handler returns one bounded `FactoryRuleDecision` or `void`: a typed rejection, transition, linked-item upsert, skill invocation, bound-session message, or notification. Every returned decision is validated and redacted before persistence; external effects are deferred rather than executed inside rule evaluation.
 
 ## GitHub pull request notifications
 
@@ -90,4 +145,4 @@ Configure the GitHub App webhook URL as `https://your-host/web/github/webhook`, 
 
 ## Environment
 
-See `.env.schema` (package root; varlock validates `.env` against it). Local development needs no variables and runs auth-less with local LibSQL storage; non-local deployments require `APP_DATABASE_URL`. WorkOS auth requires both `WORKOS_API_KEY` and `WORKOS_CLIENT_ID`; alternatively set `BETTER_AUTH_SECRET`. GitHub needs the complete `GITHUB_APP_*` group plus auth; Linear needs `LINEAR_CLIENT_ID` and `LINEAR_CLIENT_SECRET`; Railway sandboxes need `RAILWAY_API_TOKEN`. `MASTRACODE_PUBLIC_URL` controls the WorkOS (`/auth/callback`), GitHub App (`/auth/github/callback`), and Linear callback URLs.
+See `.env.schema` (package root; varlock validates `.env` against it). Local development needs no variables and runs auth-less with local LibSQL storage; non-local deployments require `DATABASE_URL` (or the deprecated `APP_DATABASE_URL`). WorkOS auth requires both `WORKOS_API_KEY` and `WORKOS_CLIENT_ID`; alternatively set `BETTER_AUTH_SECRET`. GitHub needs the complete `GITHUB_APP_*` group plus auth; Linear needs `LINEAR_CLIENT_ID` and `LINEAR_CLIENT_SECRET`; Railway sandboxes need `RAILWAY_API_TOKEN`. `MASTRACODE_PUBLIC_URL` controls the WorkOS (`/auth/callback`), GitHub App (`/auth/github/callback`), and Linear callback URLs.

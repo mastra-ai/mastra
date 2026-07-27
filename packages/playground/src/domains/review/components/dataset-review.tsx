@@ -435,14 +435,14 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
 
   if (isLoadingReview) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <Spinner className="w-6 h-6" />
+      <div className="flex flex-1 items-center justify-center">
+        <Spinner className="h-6 w-6" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-1 min-h-0 overflow-hidden">
+    <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* Analyze config dialog */}
       <Dialog open={showAnalyzeDialog} onOpenChange={setShowAnalyzeDialog}>
         <DialogContent>
@@ -453,11 +453,11 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs mb-1 block">Provider</Label>
+                <Label className="mb-1 block text-xs">Provider</Label>
                 <LLMProviders value={analyzeProvider} onValueChange={setAnalyzeProvider} />
               </div>
               <div>
-                <Label className="text-xs mb-1 block">Model</Label>
+                <Label className="mb-1 block text-xs">Model</Label>
                 <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} />
               </div>
             </div>
@@ -471,7 +471,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                 onChange={e => setAnalyzePrompt(e.target.value)}
                 placeholder="E.g., Focus on safety issues and factual errors..."
                 rows={3}
-                className="text-xs mt-1"
+                className="mt-1 text-xs"
               />
             </div>
           </div>
@@ -480,7 +480,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
               Cancel
             </Button>
             <Button onClick={handleAnalyze} disabled={!analyzeProvider || !analyzeModel || isAnalyzing}>
-              {isAnalyzing ? <Spinner className="w-4 h-4 mr-1" /> : null}
+              {isAnalyzing ? <Spinner className="mr-1 h-4 w-4" /> : null}
               Analyze
             </Button>
           </DialogFooter>
@@ -489,7 +489,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
 
       {/* Proposal confirmation dialog */}
       <Dialog open={showProposalDialog} onOpenChange={setShowProposalDialog}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Review Proposed Tags</DialogTitle>
             <DialogDescription>
@@ -510,15 +510,15 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                         )
                       }
                     />
-                    <div className="flex-1 min-w-0">
-                      <Txt variant="ui-xs" className="text-neutral4 truncate block">
+                    <div className="min-w-0 flex-1">
+                      <Txt variant="ui-xs" className="text-neutral4 block truncate">
                         {item
                           ? typeof item.input === 'string'
                             ? item.input.slice(0, 100)
                             : JSON.stringify(item.input).slice(0, 100)
                           : proposal.itemId}
                       </Txt>
-                      <div className="flex gap-1 flex-wrap mt-1.5">
+                      <div className="mt-1.5 flex flex-wrap gap-1">
                         {proposal.tags.map((tag, ti) => (
                           <ProposalTag
                             key={`${tag}-${ti}`}
@@ -564,8 +564,8 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
       <div
         className={cn('grid w-full h-full grid-cols-1 gap-4 overflow-y-auto', featuredItem && 'grid-cols-[1fr_1fr]')}
       >
-        <div className="grid gap-8 content-start w-full overflow-y-auto">
-          <div className="flex items-center justify-between w-full flex-wrap gap-4 gap-x-6">
+        <div className="grid w-full content-start gap-8 overflow-y-auto">
+          <div className="flex w-full flex-wrap items-center justify-between gap-4 gap-x-6">
             {/* Filters (left) */}
             <div className="flex items-center gap-3">
               <DropdownMenu>
@@ -704,7 +704,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                   <DropdownMenu.Trigger asChild>
                     <Button disabled={isAnalyzing}>
                       {isAnalyzing ? (
-                        <Spinner className="w-4 h-4" />
+                        <Spinner className="h-4 w-4" />
                       ) : (
                         <Icon size="sm">
                           <ChevronDown />
@@ -740,12 +740,12 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
           </div>
 
           {isLoadingDisplay ? (
-            <div className="flex-1 flex items-center justify-center">
-              <Spinner className="w-6 h-6" />
+            <div className="flex flex-1 items-center justify-center">
+              <Spinner className="h-6 w-6" />
             </div>
           ) : displayItems.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center px-8">
+            <div className="flex flex-1 items-center justify-center">
+              <div className="px-8 text-center">
                 <Txt variant="ui-sm" className="text-neutral3 block">
                   {showCompleted ? 'No completed reviews yet' : 'No items to review'}
                 </Txt>
@@ -784,7 +784,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                 const rowCells = (
                   <>
                     {/* Input preview */}
-                    <DataList.Cell height="compact" className="min-w-0 text-neutral4">
+                    <DataList.Cell height="compact" className="text-neutral4 min-w-0">
                       <span className="block truncate">{truncateInput(item.input, 200)}</span>
                     </DataList.Cell>
 

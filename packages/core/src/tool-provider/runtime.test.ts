@@ -96,6 +96,104 @@ describe('resolveStoredToolProviders — resolveConnectionAuthorId branches', ()
   });
 });
 
+describe('resolveStoredToolProviders — connectionless caller-supplied tools', () => {
+  it('materializes selected tools without a pinned connection', async () => {
+    const managementToolId = 'COMPOSIO_MANAGE_CONNECTIONS';
+    const resolveToolsVNext = vi.fn(async (_opts: ResolveToolsOpts) => ({
+      [managementToolId]: {
+        id: 'provider-internal-id',
+        description: 'Create or manage connections to user apps',
+        execute: async () => ({ success: true }),
+      },
+    }));
+    const provider: ToolProvider = {
+      ...makeStubProvider().provider,
+      defaultScope: 'caller-supplied',
+      resolveToolsVNext,
+    };
+    const toolProviders: ToolProviders = {
+      composio: {
+        tools: {
+          [managementToolId]: { toolkit: 'composio' },
+        },
+        connections: {},
+      },
+    };
+
+    const resolved = await resolveStoredToolProviders(toolProviders, () => provider, {
+      requestContext: { [MASTRA_RESOURCE_ID_KEY]: 'tenant-user-1' },
+      authorId: 'agent-author',
+    });
+
+    expect(resolved[managementToolId]).toBeDefined();
+    expect(resolved[managementToolId]?.id).toBe(managementToolId);
+    expect(resolveToolsVNext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolSlugs: [managementToolId],
+        connectionId: 'tenant-user-1',
+        authorId: 'tenant-user-1',
+        scope: 'caller-supplied',
+        requestContext: { [MASTRA_RESOURCE_ID_KEY]: 'tenant-user-1' },
+      }),
+    );
+  });
+
+  it('derives the toolkit from legacy dot-prefixed tool slugs', async () => {
+    const legacyToolId = 'composio.manage_connections';
+    const resolveToolsVNext = vi.fn(async (_opts: ResolveToolsOpts) => ({
+      [legacyToolId]: {
+        id: legacyToolId,
+        description: 'Create or manage connections to user apps',
+        execute: async () => ({ success: true }),
+      },
+    }));
+    const provider: ToolProvider = {
+      ...makeStubProvider().provider,
+      defaultScope: 'caller-supplied',
+      resolveToolsVNext,
+    };
+    const toolProviders: ToolProviders = {
+      composio: {
+        tools: {
+          [legacyToolId]: {},
+        },
+        connections: {},
+      },
+    };
+
+    const resolved = await resolveStoredToolProviders(toolProviders, () => provider, {
+      requestContext: { [MASTRA_RESOURCE_ID_KEY]: 'tenant-user-1' },
+    });
+
+    expect(resolved[legacyToolId]).toBeDefined();
+    expect(resolveToolsVNext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolSlugs: [legacyToolId],
+        scope: 'caller-supplied',
+      }),
+    );
+  });
+
+  it('keeps requiring a pinned connection for providers without caller-supplied scope', async () => {
+    const { provider, resolveToolsVNext } = makeStubProvider();
+    const toolProviders: ToolProviders = {
+      composio: {
+        tools: {
+          'gmail.fetch_emails': { toolkit: 'gmail' },
+        },
+        connections: {},
+      },
+    };
+
+    const resolved = await resolveStoredToolProviders(toolProviders, () => provider, {
+      authorId: 'agent-author',
+    });
+
+    expect(resolved).toEqual({});
+    expect(resolveToolsVNext).not.toHaveBeenCalled();
+  });
+});
+
 describe('buildConnectionSuffix', () => {
   it('uppercases a plain alphanumeric label', () => {
     const used = new Set<string>();

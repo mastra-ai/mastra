@@ -1,6 +1,6 @@
 {
   "name": "@internal/llm-recorder",
-  "version": "0.0.50",
+  "version": "0.0.52",
   "description": "LLM response recording and replay for tests",
   "type": "module",
   "private": true,
@@ -34,7 +34,8 @@
   "scripts": {
     "build": "tsup --config tsup.config.ts",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "keywords": [],
   "author": "",
