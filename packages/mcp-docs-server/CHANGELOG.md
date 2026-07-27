@@ -1,5 +1,12 @@
 # @mastra/mcp-docs-server
 
+## 1.2.10-alpha.7
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.53.0-alpha.3
+
 ## 1.2.10-alpha.5
 
 ### Patch Changes

@@ -6,6 +6,8 @@
     "thinkingmachines/inkling"
   ],
   "temperature": [
+    "MiniMaxAI/MiniMax-M2.5",
+    "deepseek-ai/DeepSeek-V3.1",
     "deepseek-ai/DeepSeek-V4-Pro",
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",

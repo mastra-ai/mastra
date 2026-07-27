@@ -1,5 +1,13 @@
 # mastra
 
+## 1.20.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/deployer@1.53.0-alpha.3
+  - @mastra/core@1.53.0-alpha.3
+
 ## 1.20.2-alpha.3
 
 ### Patch Changes
