@@ -223,6 +223,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/hyper',
+          label: 'Charm Hyper',
+        },
+        {
+          type: 'doc',
           id: 'providers/chutes',
           label: 'Chutes',
         },
