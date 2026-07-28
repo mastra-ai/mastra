@@ -17,6 +17,8 @@ const ARCHIVE = '.mastra-worker.tar.gz';
 const RUNTIME_DIR = '.mastra/executions';
 const INSTALL_MARKER = '.mastra-install-hash';
 const INSTALL_LOCK = '.mastra-install-lock';
+const ARTIFACT_LOCK = '.mastra-artifact-lock';
+const EXECUTION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const DEFAULT_INPUT_LIMIT = 16 * 1024 * 1024;
 const DEFAULT_OUTPUT_READ_LIMIT = 1024 * 1024;
 
@@ -71,8 +73,12 @@ export async function deployWorkerToSandbox(options: DeployWorkerToSandboxOption
   const tarball = await createTarball(dir);
   const installHash = await hashInstallInputs(dir, installCommand);
 
+  const artifactLock = `${remoteDir}/${ARTIFACT_LOCK}`;
+  let artifactLockAcquired = false;
   try {
     await runInSandbox(sandbox, `mkdir -p ${shellQuote(remoteDir)}`);
+    await acquireLock(sandbox, artifactLock, options.installTimeoutMs, 'worker artifact');
+    artifactLockAcquired = true;
     await uploadFile(sandbox, archive, tarball);
     await runInSandbox(
       sandbox,
@@ -81,6 +87,13 @@ export async function deployWorkerToSandbox(options: DeployWorkerToSandboxOption
     );
   } catch (error) {
     throw workerPhaseError('upload', error);
+  } finally {
+    if (artifactLockAcquired) {
+      await runInSandbox(sandbox, `rm -rf ${shellQuote(artifactLock)}`, {
+        allowFailure: true,
+        label: 'release worker artifact lock',
+      });
+    }
   }
 
   try {
@@ -98,9 +111,7 @@ function validateOptions(options: DeployWorkerToSandboxOptions): void {
       `Sandbox provider "${options.sandbox.provider}" does not support executeCommand, which is required for worker deploys.`,
     );
   }
-  if (!options.executionId || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(options.executionId)) {
-    throw new Error('Worker executionId must contain only letters, numbers, dots, underscores, and hyphens.');
-  }
+  validateExecutionId(options.executionId);
   if (!options.command || /[\0\r\n]/.test(options.command)) {
     throw new Error('Worker command must be a non-empty executable path.');
   }
@@ -109,7 +120,7 @@ function validateOptions(options: DeployWorkerToSandboxOptions): void {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) throw new Error(`Invalid worker environment variable name: ${key}`);
   }
   validateRelativePath(options.workingDirectory ?? '.', 'workingDirectory');
-  if (options.input?.type === 'file') validateRelativePath(options.input.path, 'input file path');
+  validateInput(options.input);
   for (const [name, value] of [
     ['inputLimitBytes', options.inputLimitBytes],
     ['startupTimeoutMs', options.startupTimeoutMs],
@@ -127,6 +138,31 @@ function validateRelativePath(value: string, label: string): void {
   }
 }
 
+function validateInput(input: SandboxWorkerInput | undefined): void {
+  if (input?.type === 'file') validateRelativePath(input.path, 'input file path');
+}
+
+async function acquireLock(
+  sandbox: WorkspaceSandbox,
+  lock: string,
+  timeout: number | undefined,
+  label: string,
+): Promise<void> {
+  const timeoutMs = timeout ?? 600_000;
+  const attempts = Math.max(1, Math.ceil(timeoutMs / 1000));
+  await runInSandbox(
+    sandbox,
+    [
+      'i=0',
+      `while ! mkdir ${shellQuote(lock)} 2>/dev/null; do`,
+      `  if [ "$i" -ge ${attempts} ]; then echo ${shellQuote(`${label} lock timeout`)} >&2; exit 1; fi`,
+      '  sleep 1; i=$((i + 1))',
+      'done',
+    ].join('\n'),
+    { timeout: timeoutMs, label: `acquire ${label} lock` },
+  );
+}
+
 async function installDependencies(
   sandbox: WorkspaceSandbox,
   remoteDir: string,
@@ -137,25 +173,26 @@ async function installDependencies(
   if (!installHash) return;
   const marker = `${remoteDir}/${INSTALL_MARKER}`;
   const lock = `${remoteDir}/${INSTALL_LOCK}`;
-  const attempts = Math.max(1, Math.ceil((timeout ?? 600_000) / 100));
-  const script = [
-    'i=0',
-    `while ! mkdir ${shellQuote(lock)} 2>/dev/null; do`,
-    `  if [ "$i" -ge ${attempts} ]; then echo 'dependency install lock timeout' >&2; exit 1; fi`,
-    '  sleep 0.1; i=$((i + 1))',
-    'done',
-    `trap 'rm -rf ${shellQuote(lock)}' EXIT INT TERM`,
-    `current="$(cat ${shellQuote(marker)} 2>/dev/null || true)"`,
-    `if [ "$current" != ${shellQuote(installHash)} ]; then`,
-    `  cd ${shellQuote(remoteDir)} && ${installCommand}`,
-    `  printf %s ${shellQuote(installHash)} > ${shellQuote(`${marker}.tmp`)}`,
-    `  mv ${shellQuote(`${marker}.tmp`)} ${shellQuote(marker)}`,
-    'fi',
-  ].join('\n');
-  await runInSandbox(sandbox, script, {
-    timeout: timeout ?? 600_000,
-    label: 'install worker dependencies',
-  });
+  await acquireLock(sandbox, lock, timeout, 'dependency install');
+  try {
+    const script = [
+      `current="$(cat ${shellQuote(marker)} 2>/dev/null || true)"`,
+      `if [ "$current" != ${shellQuote(installHash)} ]; then`,
+      `  cd ${shellQuote(remoteDir)} && ${installCommand}`,
+      `  printf %s ${shellQuote(installHash)} > ${shellQuote(`${marker}.tmp`)}`,
+      `  mv ${shellQuote(`${marker}.tmp`)} ${shellQuote(marker)}`,
+      'fi',
+    ].join('\n');
+    await runInSandbox(sandbox, script, {
+      timeout: timeout ?? 600_000,
+      label: 'install worker dependencies',
+    });
+  } finally {
+    await runInSandbox(sandbox, `rm -rf ${shellQuote(lock)}`, {
+      allowFailure: true,
+      label: 'release dependency install lock',
+    });
+  }
 }
 
 async function createExecution(
@@ -215,6 +252,7 @@ function deployment(
     destroy: options => destroyWithRetry(config.sandbox, options),
     relaunch: async options => {
       if (options.executionId === executionId) throw new Error('Relaunch requires a new executionId.');
+      validateInput(options.input);
       return createExecution(config, options.executionId, options.input);
     },
   };
@@ -247,9 +285,9 @@ function buildExecutionScript(
     .join(' ');
   const executable = [shellQuote(config.command), ...config.args.map(shellQuote)].join(' ');
   const target = `${envPrefix ? `env ${envPrefix} ` : ''}${executable}`;
-  const graceAttempts = Math.max(1, Math.ceil(config.terminationGraceMs / 100));
+  const graceAttempts = Math.max(1, Math.ceil(config.terminationGraceMs / 1000));
   const state = (value: string) =>
-    `tmp=${shellQuote(`${paths.status}.tmp.$$`)}; printf '%s\\n' ${shellQuote(value)} > "$tmp"; mv "$tmp" ${shellQuote(paths.status)}`;
+    `tmp=${shellQuote(`${paths.status}.tmp.$$`)}; printf '%s\\n' ${shellQuote(value)} > "$tmp"; mv "$tmp" ${shellQuote(paths.status)};`;
 
   return [
     '#!/bin/sh',
@@ -270,9 +308,9 @@ function buildExecutionScript(
     `trap 'cancelled=1; kill -TERM -"$child" 2>/dev/null || kill -TERM "$child" 2>/dev/null || true' TERM INT`,
     ...(config.executionTimeoutMs
       ? [
-          `(sleep ${config.executionTimeoutMs / 1000}; if kill -0 "$child" 2>/dev/null; then ${state(
+          `(sleep ${Math.max(1, Math.ceil(config.executionTimeoutMs / 1000))}; if kill -0 "$child" 2>/dev/null; then ${state(
             `timed_out|${paths.executionId}|execution`,
-          )} kill -TERM -"$child" 2>/dev/null || kill -TERM "$child" 2>/dev/null || true; i=0; while kill -0 "$child" 2>/dev/null && [ "$i" -lt ${graceAttempts} ]; do sleep 0.1; i=$((i + 1)); done; kill -KILL -"$child" 2>/dev/null || kill -KILL "$child" 2>/dev/null || true; fi) &`,
+          )} kill -TERM -"$child" 2>/dev/null || kill -TERM "$child" 2>/dev/null || true; i=0; while kill -0 "$child" 2>/dev/null && [ "$i" -lt ${graceAttempts} ]; do sleep 1; i=$((i + 1)); done; kill -KILL -"$child" 2>/dev/null || kill -KILL "$child" 2>/dev/null || true; fi) &`,
           'watchdog=$!',
         ]
       : []),
@@ -390,7 +428,7 @@ async function cancelExecution(
 ): Promise<SandboxWorkerStatus> {
   const current = await readWorkerStatus(config.sandbox, executionId, paths);
   if (current.state !== 'running' && current.state !== 'starting') return current;
-  const attempts = Math.max(1, Math.ceil(config.terminationGraceMs / 100));
+  const attempts = Math.max(1, Math.ceil(config.terminationGraceMs / 1000));
   const terminal = timeoutPhase ? `timed_out|${executionId}|startup` : `cancelled|${executionId}|TERM`;
   await runInSandbox(
     config.sandbox,
@@ -401,7 +439,7 @@ async function cancelExecution(
       `actual="$(if [ -r "/proc/$pid/stat" ]; then awk '{print $22}' "/proc/$pid/stat"; fi)"`,
       '[ -n "$expected" ] && [ "$expected" != "$actual" ] && exit 0',
       'kill -TERM -"$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true',
-      `i=0; while kill -0 "$pid" 2>/dev/null && [ "$i" -lt ${attempts} ]; do sleep 0.1; i=$((i + 1)); done`,
+      `i=0; while kill -0 "$pid" 2>/dev/null && [ "$i" -lt ${attempts} ]; do sleep 1; i=$((i + 1)); done`,
       'kill -KILL -"$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true',
       `tmp=${shellQuote(`${paths.status}.tmp.$$`)}; printf '%s\\n' ${shellQuote(terminal)} > "$tmp"; mv "$tmp" ${shellQuote(paths.status)}`,
       `rm -f ${shellQuote(paths.pid)} ${shellQuote(paths.pidToken)}`,
@@ -520,7 +558,7 @@ function executionPaths(remoteDir: string, executionId: string) {
 }
 
 function validateExecutionId(executionId: string): void {
-  if (!executionId || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(executionId)) {
+  if (!executionId || !EXECUTION_ID_PATTERN.test(executionId)) {
     throw new Error('Worker executionId must contain only letters, numbers, dots, underscores, and hyphens.');
   }
 }

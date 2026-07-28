@@ -154,10 +154,11 @@ function workerStatusFromScript(script: string): string {
 }
 
 function fakeWorkerOutput(script: string, output: string): string {
+  const bytes = Buffer.from(output, 'base64');
   const offset = Number(/tail -c \+(\d+)/.exec(script)?.[1] ?? 1) - 1;
-  const maxBytes = Number(/head -c (\d+)/.exec(script)?.[1] ?? Buffer.byteLength(output));
-  const data = Buffer.from(output).subarray(offset, offset + maxBytes);
-  return `${Buffer.byteLength(output)}\n${data.toString('base64')}\n`;
+  const maxBytes = Number(/head -c (\d+)/.exec(script)?.[1] ?? bytes.byteLength);
+  const data = bytes.subarray(offset, offset + maxBytes);
+  return `${bytes.byteLength}\n${data.toString('base64')}\n`;
 }
 
 /** Create a minimal prebuilt Mastra output dir (index.mjs + package.json) for tests. */

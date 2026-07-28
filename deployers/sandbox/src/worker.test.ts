@@ -88,16 +88,16 @@ describe('deployWorkerToSandbox', () => {
     const sandbox = new FakeSandbox({
       withNetworking: false,
       workerStatus: 'exited|attempt-1|0|',
-      workerOutput: 'worker-output',
+      workerOutput: Buffer.from('worker-output').toString('base64'),
     });
     const deployment = await deploy(sandbox, { mode: 'job' });
 
-    const output = await deployment.readOutput('stdout', { maxBytes: 6 });
-    expect(Buffer.from(output.data).toString()).toBe('worker');
+    const output = await deployment.readOutput('stdout', { offset: 3, maxBytes: 6 });
+    expect(Buffer.from(output.data).toString()).toBe('ker-ou');
     expect(output).toMatchObject({
       stream: 'stdout',
-      offset: 0,
-      nextOffset: 6,
+      offset: 3,
+      nextOffset: 9,
       totalBytes: 13,
       eof: false,
       truncated: true,
@@ -213,9 +213,11 @@ describe('deployWorkerToSandbox', () => {
     const sandbox = new FakeSandbox({ withNetworking: false });
     await deploy(sandbox);
 
-    const install = sandbox.commands.find(command => command.includes('.mastra-install-lock'));
-    expect(install).toContain('while ! mkdir');
-    expect(install).toContain('current="$(cat');
+    const lock = sandbox.commands.find(
+      command => command.includes('.mastra-install-lock') && command.includes('while ! mkdir'),
+    );
+    const install = sandbox.commands.find(command => command.includes('current="$(cat'));
+    expect(lock).toContain('sleep 1');
     expect(install).toContain('.mastra-install-hash.tmp');
     expect(install).toContain('mv');
   });
@@ -231,7 +233,14 @@ describe('deployWorkerToSandbox', () => {
     );
 
     expect(deployments.map(deployment => deployment.executionId)).toEqual(['attempt-a', 'attempt-b']);
-    expect(sandbox.commands.filter(command => command.includes('.mastra-install-lock'))).toHaveLength(2);
+    expect(
+      sandbox.commands.filter(
+        command => command.includes('.mastra-artifact-lock') && command.includes('while ! mkdir'),
+      ),
+    ).toHaveLength(2);
+    expect(
+      sandbox.commands.filter(command => command.includes('.mastra-install-lock') && command.includes('while ! mkdir')),
+    ).toHaveLength(2);
     expect(sandbox.writtenFiles.flat().some(file => file.path.endsWith('/attempt-a/launch.sh'))).toBe(true);
     expect(sandbox.writtenFiles.flat().some(file => file.path.endsWith('/attempt-b/launch.sh'))).toBe(true);
   });
@@ -241,6 +250,12 @@ describe('deployWorkerToSandbox', () => {
     const deployment = await deploy(sandbox);
 
     await expect(deployment.relaunch({ executionId: 'attempt-1' })).rejects.toThrow('new executionId');
+    await expect(
+      deployment.relaunch({
+        executionId: 'attempt-2',
+        input: { type: 'file', path: '../escape', data: 'unsafe' },
+      }),
+    ).rejects.toThrow('must stay within the deployed artifact root');
     const relaunched = await deployment.relaunch({ executionId: 'attempt-2' });
     expect(relaunched.executionId).toBe('attempt-2');
     expect(sandbox.writtenFiles.flat().some(file => file.path.endsWith('/attempt-2/launch.sh'))).toBe(true);
