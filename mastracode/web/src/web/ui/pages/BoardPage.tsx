@@ -1469,14 +1469,12 @@ function WorkItemCard({
                   </DropdownMenu.Item>
                 );
               })}
-            {columnStage === 'intake' &&
-              item.url !== null &&
-              (item.source === 'github-issue' || item.source === 'linear-issue') && (
-                <DropdownMenu.Item render={<a href={item.url} target="_blank" rel="noreferrer" />}>
-                  <ArrowUpRight aria-hidden />
-                  <span>{externalLinkLabel(item.source)}</span>
-                </DropdownMenu.Item>
-              )}
+            {item.url !== null && (
+              <DropdownMenu.Item render={<a href={item.url} target="_blank" rel="noreferrer" />}>
+                <ArrowUpRight aria-hidden />
+                <span>{externalLinkLabel(item.source)}</span>
+              </DropdownMenu.Item>
+            )}
             {itemStageOptions(item)
               .filter(stage => stage.id !== columnStage)
               .map(stage => (

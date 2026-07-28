@@ -208,6 +208,40 @@ describe('Board card pending states', () => {
     expect(matches?.at(-1)?.route.path).toBe('threads/:threadId');
   });
 
+  it('offers "Open in GitHub" on review-board PR cards past intake', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            {
+              ...workItem,
+              id: 'pr-item',
+              factoryProjectId: FACTORY_ID,
+              title: 'Fix flaky retry',
+              stages: ['review'],
+              sessions: {},
+              externalSource: {
+                integrationId: 'github',
+                type: 'pull-request',
+                externalId: '77',
+                url: 'https://github.com/acme/app/pull/77',
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/review`] });
+    renderWithProviders(<RouterProvider router={router} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Actions for Fix flaky retry' }));
+    const githubLink = await screen.findByRole('menuitem', { name: 'Open in GitHub' });
+    expect(githubLink).toHaveAttribute('href', 'https://github.com/acme/app/pull/77');
+    expect(githubLink).toHaveAttribute('target', '_blank');
+  });
+
   it('opens GitHub and Linear intake issues in their external provider', async () => {
     stubBoardEndpoints();
     server.use(
