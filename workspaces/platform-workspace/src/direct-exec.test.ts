@@ -222,6 +222,60 @@ describe('execViaLease', () => {
     });
   });
 
+  it('enforces a handshake deadline when no caller timeout is set, so a stalled connect cannot hang the promise', async () => {
+    vi.useFakeTimers();
+    try {
+      // Factory returns a socket that NEVER fires onopen/onmessage/onclose —
+      // the caller has no timeoutMs, so only the internal handshake deadline
+      // can unblock the promise. If it's missing, the promise hangs forever.
+      const { factory } = scriptedFactory(() => {
+        /* deliberately do nothing */
+      });
+
+      const promise = execViaLease(LEASE, { command: 'never', webSocketFactory: factory });
+      // Advance past the 30s handshake deadline defined in direct-exec.ts.
+      await vi.advanceTimersByTimeAsync(30_000);
+      const result = await promise;
+
+      // Handshake deadline is transport failure, NOT timeout — timedOut stays
+      // false so the caller can distinguish "stalled connect" from "ran too long".
+      expect(result).toEqual({
+        exitCode: null,
+        stdout: '',
+        stderr: '',
+        truncated: false,
+        timedOut: false,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears the handshake deadline once the socket opens (no false transport failure on long-running exec without timeout)', async () => {
+    vi.useFakeTimers();
+    try {
+      const { factory, sockets } = scriptedFactory(socket => {
+        socket.fireOpen();
+        // Never send an exit frame — a real long-running exec might legitimately
+        // take longer than the handshake deadline. If we forgot to clear the
+        // deadline in onopen, this would resolve with exitCode=null after 30s.
+      });
+
+      const promise = execViaLease(LEASE, { command: 'sleep 3600', webSocketFactory: factory });
+      // Push well past the handshake deadline; the promise must NOT settle.
+      await vi.advanceTimersByTimeAsync(60_000);
+      // Race with a microtask sentinel so we can assert `promise` is still pending.
+      const sentinel = Symbol('pending');
+      const winner = await Promise.race([promise, Promise.resolve(sentinel)]);
+      expect(winner).toBe(sentinel);
+      // Clean up: fire exit so the promise resolves before the test tears down fake timers.
+      sockets[0]!.fireText(JSON.stringify({ type: 'exit', data: { exit_code: 0 } }));
+      await promise;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('enforces timeoutMs by closing the socket and returning timedOut=true, exit=124', async () => {
     vi.useFakeTimers();
     try {

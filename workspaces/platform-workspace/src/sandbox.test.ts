@@ -573,6 +573,105 @@ describe('PlatformSandbox', () => {
       // "endpoint not present" signal.
       expect(fetchMock).toHaveBeenCalledTimes(2);
     });
+
+    it('drops the cached lease and falls through to /exec when the WS closes without an exit frame', async () => {
+      // Simulates a mid-handshake drop / expired token / provider hiccup:
+      // lease mint succeeds but the direct-exec socket closes before an exit
+      // frame arrives. We should discard the (possibly stale) lease, fall
+      // through to the proxy /exec path for THIS call, and re-mint on the
+      // next call so we don't fall through forever on a transient blip.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.first' }))
+        .mockResolvedValueOnce(
+          json({ exitCode: 0, stdout: 'via-proxy', stderr: '', timedOut: false, truncated: false }),
+        )
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.second' }));
+      const sockets: FakeSocket[] = [];
+      let call = 0;
+      const factory: DirectExecWebSocketFactory = (endpoint, subprotocols) => {
+        const socket = new FakeSocket(endpoint, subprotocols);
+        sockets.push(socket);
+        const isFirst = ++call === 1;
+        queueMicrotask(() => {
+          socket.onopen?.({});
+          if (isFirst) {
+            // First exec: close without an exit frame — transport failure.
+            socket.onclose?.({ code: 1006, reason: 'abnormal' });
+          } else {
+            // Second exec: normal exit.
+            socket.onmessage?.({ data: JSON.stringify({ type: 'exit', data: { exit_code: 0 } }) });
+          }
+        });
+        return socket;
+      };
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+      });
+
+      await sandbox._start();
+      const first = await sandbox.executeCommand('echo one');
+      const second = await sandbox.executeCommand('echo two');
+
+      // First call fell through to /exec after the WS drop.
+      expect(first).toMatchObject({ exitCode: 0, stdout: 'via-proxy' });
+      // Second call re-minted a fresh lease (jwt.second) and succeeded direct.
+      expect(second).toMatchObject({ exitCode: 0 });
+      // Fetch sequence: provision, first lease, /exec fallback, second lease.
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec');
+      expect(String(fetchMock.mock.calls[3]![0])).toBe(
+        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
+      );
+      // Two sockets opened (both direct-exec attempts); the second used the fresh JWT.
+      expect(sockets).toHaveLength(2);
+      expect(sockets[1]!.subprotocols[1]).toBe('jwt.second');
+    });
+
+    it('coalesces concurrent lease mints on a cold cache into a single POST /exec-lease', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      // Delay the lease response so both execs hit `_ensureLease` before it resolves.
+      let releaseLease!: () => void;
+      const leasePromise = new Promise<Response>(resolve => {
+        releaseLease = () => resolve(leaseResponse());
+      });
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockImplementationOnce(() => leasePromise);
+      const { factory } = fakeExecSocket({ exitCode: 0 });
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+      });
+
+      await sandbox._start();
+      // Fire two execs in parallel before the lease mint resolves.
+      const both = Promise.all([sandbox.executeCommand('echo one'), sandbox.executeCommand('echo two')]);
+      // Let both calls reach `_ensureLease`, then release the shared mint.
+      await new Promise(r => setTimeout(r, 0));
+      releaseLease();
+      const [first, second] = await both;
+
+      expect(first).toMatchObject({ exitCode: 0 });
+      expect(second).toMatchObject({ exitCode: 0 });
+      // Provision + exactly one shared mint (no duplicate) — proves coalescing.
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(String(fetchMock.mock.calls[1]![0])).toBe(
+        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
+      );
+    });
   });
 
   describe('clone', () => {

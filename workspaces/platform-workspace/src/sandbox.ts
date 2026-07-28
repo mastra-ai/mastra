@@ -180,11 +180,19 @@ export class PlatformSandbox extends MastraSandbox {
   private _createdAt: Date | null = null;
   private readonly _webSocketFactory?: DirectExecWebSocketFactory;
   /**
-   * Cached exec lease for this sandbox. `null` while unmounted. Invalidated
-   * when `expiresAt - LEASE_REFRESH_MARGIN_MS < now`, or when the WS
-   * handshake fails with a close code Railway uses for expired tokens.
+   * Cached exec lease for this sandbox. `null` before the first exec and
+   * after {@link destroy}. Refreshed when `expiresAt - LEASE_REFRESH_MARGIN_MS < now`
+   * (see {@link _ensureLease}); a lease without a disclosed `expiresAt`
+   * is refreshed on every call.
    */
   private _lease: (ExecLease & { expiresAtMs: number | null }) | null = null;
+  /**
+   * In-flight mint request; concurrent `_ensureLease` callers on a cold or
+   * near-expiry cache all await this single promise so we don't burn N
+   * `POST /exec-lease` round-trips when the sandbox is doing N parallel execs.
+   * Cleared (regardless of success or failure) when the request settles.
+   */
+  private _leaseInFlight: Promise<ExecLease & { expiresAtMs: number | null }> | null = null;
   /**
    * Tri-state feature detection for the platform's exec-lease endpoint:
    *   undefined — not yet tried (default; try direct on first exec)
@@ -392,7 +400,17 @@ export class PlatformSandbox extends MastraSandbox {
       ...(effectiveTimeout != null && effectiveTimeout > 0 && { timeoutMs: effectiveTimeout }),
       ...(this._webSocketFactory && { webSocketFactory: this._webSocketFactory }),
     });
-    const exitCode = result.exitCode ?? (result.timedOut ? 124 : 1);
+    // `null` exitCode without `timedOut` means the socket closed without an
+    // exit frame — i.e. a transport failure (handshake stalled, mid-stream
+    // drop, expired token). Drop the cached lease so the next call re-mints,
+    // and return `null` to let the caller fall through to the proxy /exec
+    // path. Timed-out and normal-exit results still return synthesised /
+    // real exit codes as before.
+    if (result.exitCode === null && !result.timedOut) {
+      this._lease = null;
+      return null;
+    }
+    const exitCode = result.exitCode ?? 124;
     return {
       success: exitCode === 0,
       exitCode,
@@ -456,24 +474,37 @@ export class PlatformSandbox extends MastraSandbox {
     if (this._lease && this._lease.expiresAtMs !== null && this._lease.expiresAtMs - LEASE_REFRESH_MARGIN_MS > now) {
       return this._lease;
     }
+    // Coalesce concurrent mints on a cold/expired cache.
+    if (this._leaseInFlight) return this._leaseInFlight;
     if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
-    const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}/exec-lease`, {
-      method: 'POST',
-    });
-    const json = (await response.json()) as ExecLeaseResponse;
-    const expiresAtMs = json.expiresAt ? Date.parse(json.expiresAt) : null;
-    const lease = {
-      jwt: json.jwt,
-      wsEndpoint: json.wsEndpoint,
-      subprotocol: json.subprotocol,
-      expiresAt: json.expiresAt,
-      // Guard against `Date.parse` returning NaN for malformed values by
-      // treating them as "no expiry known", which forces a mint every call
-      // rather than silently caching a broken lease forever.
-      expiresAtMs: expiresAtMs !== null && !Number.isNaN(expiresAtMs) ? expiresAtMs : null,
-    };
-    this._lease = lease;
-    return lease;
+    const sandboxId = this._sandboxId;
+    const inFlight = (async () => {
+      const response = await this._client.request(`/sandbox/${encodeURIComponent(sandboxId)}/exec-lease`, {
+        method: 'POST',
+      });
+      const json = (await response.json()) as ExecLeaseResponse;
+      const expiresAtMs = json.expiresAt ? Date.parse(json.expiresAt) : null;
+      const lease = {
+        jwt: json.jwt,
+        wsEndpoint: json.wsEndpoint,
+        subprotocol: json.subprotocol,
+        expiresAt: json.expiresAt,
+        // Guard against `Date.parse` returning NaN for malformed values by
+        // treating them as "no expiry known", which forces a mint every call
+        // rather than silently caching a broken lease forever.
+        expiresAtMs: expiresAtMs !== null && !Number.isNaN(expiresAtMs) ? expiresAtMs : null,
+      };
+      this._lease = lease;
+      return lease;
+    })();
+    this._leaseInFlight = inFlight;
+    try {
+      return await inFlight;
+    } finally {
+      // Clear on both success and failure so a failed mint doesn't wedge
+      // future callers into awaiting the same rejected promise forever.
+      if (this._leaseInFlight === inFlight) this._leaseInFlight = null;
+    }
   }
 
   async getInfo(): Promise<SandboxInfo> {

@@ -16,6 +16,14 @@
 const STDOUT_FRAME = 1;
 /** Byte-0 tag on binary WS frames for stderr output. */
 const STDERR_FRAME = 3;
+/**
+ * Upper bound on how long we'll wait for the WebSocket to open when the
+ * caller didn't supply a `timeoutMs`. Guards against a stalled TLS/WS
+ * handshake leaving the promise unresolved forever. Not applied once the
+ * socket has opened — a caller with no timeout has opted in to unbounded
+ * command runtime, just not to unbounded connection setup.
+ */
+const HANDSHAKE_DEADLINE_MS = 30_000;
 
 /**
  * Minimal WebSocket surface this module depends on. Matches both the browser
@@ -85,7 +93,8 @@ export interface DirectExecResult {
 
 const DEFAULT_WS_FACTORY: DirectExecWebSocketFactory = (endpoint, subprotocols) => {
   const WS = (globalThis as { WebSocket?: unknown }).WebSocket as
-    (new (url: string, protocols: string[]) => DirectExecWebSocket) | undefined;
+    | (new (url: string, protocols: string[]) => DirectExecWebSocket)
+    | undefined;
   if (!WS) {
     throw new Error(
       'Direct exec requires a WebSocket implementation. Node 22+ provides one globally; on older runtimes, pass webSocketFactory explicitly.',
@@ -115,14 +124,26 @@ export function execViaLease(lease: ExecLease, options: DirectExecOptions): Prom
     let settled = false;
     let opened = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const socket = factory(lease.wsEndpoint, [lease.subprotocol, lease.jwt]);
-    socket.binaryType = 'arraybuffer';
+    let handshakeTimer: ReturnType<typeof setTimeout> | undefined;
 
     const settle = () => {
       if (settled) return;
       settled = true;
       if (timer) clearTimeout(timer);
+      if (handshakeTimer) clearTimeout(handshakeTimer);
+      // Flush any bytes still buffered in the decoders. A stream:true decode
+      // holds trailing partial multi-byte sequences until the next chunk, so
+      // without a flush the final char(s) of a UTF-8 stream can be dropped.
+      const stdoutTail = stdoutDecoder.decode();
+      if (stdoutTail) {
+        stdout += stdoutTail;
+        options.onStdout?.(stdoutTail);
+      }
+      const stderrTail = stderrDecoder.decode();
+      if (stderrTail) {
+        stderr += stderrTail;
+        options.onStderr?.(stderrTail);
+      }
       try {
         socket.close(1000, '');
       } catch {
@@ -131,8 +152,36 @@ export function execViaLease(lease: ExecLease, options: DirectExecOptions): Prom
       resolve({ exitCode, stdout, stderr, truncated: false, timedOut });
     };
 
+    // Arm the timeout BEFORE we open the socket so a stalled handshake can't
+    // leave the promise pending. Callers with a positive `timeoutMs` get the
+    // wall-clock cap they asked for; callers without one still get a
+    // connect-only deadline that clears once the socket opens.
+    if (options.timeoutMs !== undefined && options.timeoutMs > 0) {
+      timer = setTimeout(() => {
+        timedOut = true;
+        // 124 matches the proxy's `/exec` semantics (coreutils `timeout`
+        // exit code) so callers that switch on exitCode see the same value.
+        if (exitCode === null) exitCode = 124;
+        settle();
+      }, options.timeoutMs);
+    } else {
+      handshakeTimer = setTimeout(() => {
+        // Never opened → treat as a transport failure. Leave exitCode=null
+        // so the caller can distinguish this from a normal exit; do not
+        // set timedOut (that flag is reserved for the wall-clock case).
+        if (!opened) settle();
+      }, HANDSHAKE_DEADLINE_MS);
+    }
+
+    const socket = factory(lease.wsEndpoint, [lease.subprotocol, lease.jwt]);
+    socket.binaryType = 'arraybuffer';
+
     socket.onopen = () => {
       opened = true;
+      if (handshakeTimer) {
+        clearTimeout(handshakeTimer);
+        handshakeTimer = undefined;
+      }
       const data: Record<string, unknown> = { command: options.command };
       if (options.cwd) data.cwd = options.cwd;
       if (options.env && Object.keys(options.env).length > 0) data.env = options.env;
@@ -140,16 +189,6 @@ export function execViaLease(lease: ExecLease, options: DirectExecOptions): Prom
       // We never stream stdin for one-shot exec; the SDK does this too, and
       // omitting it can leave the exec hanging waiting on EOF.
       socket.send(JSON.stringify({ type: 'stdin_close' }));
-
-      if (options.timeoutMs !== undefined && options.timeoutMs > 0) {
-        timer = setTimeout(() => {
-          timedOut = true;
-          // 124 matches the proxy's `/exec` semantics (coreutils `timeout`
-          // exit code) so callers that switch on exitCode see the same value.
-          if (exitCode === null) exitCode = 124;
-          settle();
-        }, options.timeoutMs);
-      }
     };
 
     socket.onmessage = event => {
