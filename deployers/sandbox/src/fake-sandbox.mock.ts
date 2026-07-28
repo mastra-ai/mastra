@@ -27,6 +27,8 @@ export interface FakeSandboxOptions {
   serverLog?: string;
   /** Serialized status returned when worker lifecycle state is queried. */
   workerStatus?: string;
+  /** Serialized statuses returned in order when worker lifecycle state is queried. */
+  workerStatuses?: string[];
   /** Base64-encoded worker output returned after the size header. */
   workerOutput?: string;
   /** Number of destroy attempts that fail before succeeding. */
@@ -57,6 +59,7 @@ export class FakeSandbox implements WorkspaceSandbox {
   readonly processes?: SandboxProcessManager;
 
   private readonly opts: FakeSandboxOptions;
+  private workerStatusIndex = 0;
 
   constructor(opts: FakeSandboxOptions = {}) {
     this.opts = opts;
@@ -118,9 +121,9 @@ export class FakeSandbox implements WorkspaceSandbox {
     } else if (script.includes('wc -c <') && script.includes('/stderr')) {
       stdout = fakeWorkerOutput(script, this.opts.workerOutput ?? '');
     } else if (script.includes('read worker status') || (script.includes('kill -0') && script.includes('/status'))) {
-      stdout = this.opts.workerStatus ?? workerStatusFromScript(script);
+      stdout = this.nextWorkerStatus(script);
     } else if (script.includes('status="$(cat') && script.includes('/status')) {
-      stdout = this.opts.workerStatus ?? workerStatusFromScript(script);
+      stdout = this.nextWorkerStatus(script);
     } else if (script.includes('$HOME') || script.includes('${HOME')) {
       stdout = '/home/fake';
     }
@@ -132,6 +135,16 @@ export class FakeSandbox implements WorkspaceSandbox {
       stderr: '',
       executionTimeMs: 1,
     };
+  }
+
+  private nextWorkerStatus(script: string): string {
+    const statuses = this.opts.workerStatuses;
+    if (statuses?.length) {
+      const status = statuses[Math.min(this.workerStatusIndex, statuses.length - 1)]!;
+      this.workerStatusIndex++;
+      return status;
+    }
+    return this.opts.workerStatus ?? workerStatusFromScript(script);
   }
 }
 

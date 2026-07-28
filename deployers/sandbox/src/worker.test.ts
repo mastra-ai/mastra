@@ -120,6 +120,29 @@ describe('deployWorkerToSandbox', () => {
     });
   });
 
+  it('terminates the process group and reports a startup timeout', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false, workerStatus: 'starting|attempt-1' });
+
+    await expect(deploy(sandbox, { startupTimeoutMs: 1 })).rejects.toThrow('timed_out during startup');
+    const signalCommand = sandbox.commands.find(command => command.includes('kill -TERM -"$pid"'));
+    expect(signalCommand).toContain('kill -KILL -"$pid"');
+    expect(signalCommand).toContain('timed_out|attempt-1|startup');
+  });
+
+  it('preserves an execution-timeout terminal outcome', async () => {
+    const sandbox = new FakeSandbox({
+      withNetworking: false,
+      workerStatuses: ['running|attempt-1', 'timed_out|attempt-1|execution'],
+    });
+    const deployment = await deploy(sandbox, { executionTimeoutMs: 25 });
+
+    expect(await deployment.status()).toEqual({ state: 'timed_out', executionId: 'attempt-1', phase: 'execution' });
+    const script = sandbox.writtenFiles.flat().find(file => file.path.endsWith('/attempt-1/launch.sh'));
+    const content = String(script!.content);
+    expect(content).toContain('timed_out|attempt-1|execution');
+    expect(content).toContain('case "$current" in timed_out*)');
+  });
+
   it('uses process-group TERM then KILL and makes repeated cancellation terminal', async () => {
     const sandbox = new FakeSandbox({ withNetworking: false });
     const deployment = await deploy(sandbox);
@@ -127,6 +150,21 @@ describe('deployWorkerToSandbox', () => {
     expect(await deployment.cancel()).toEqual({ state: 'cancelled', executionId: 'attempt-1', signal: 'TERM' });
     expect(sandbox.commands.at(-1)).toContain('kill -TERM -"$pid"');
     expect(sandbox.commands.at(-1)).toContain('kill -KILL -"$pid"');
+    expect(sandbox.commands.at(-1)).toContain('expected="$');
+    expect(sandbox.commands.at(-1)).toContain('expected" != "$actual');
+  });
+
+  it('rejects stale process identity without signaling another process', async () => {
+    const sandbox = new FakeSandbox({
+      withNetworking: false,
+      workerStatuses: ['running|attempt-1', 'stale|attempt-1'],
+    });
+    const deployment = await deploy(sandbox);
+    const commandCount = sandbox.commands.length;
+
+    expect(await deployment.cancel()).toEqual({ state: 'unknown', executionId: 'attempt-1' });
+    expect(sandbox.commands).toHaveLength(commandCount + 1);
+    expect(sandbox.commands.at(-1)).not.toContain('kill -TERM -"$pid"');
   });
 
   it('does not inspect or wake a stopped provider unless requested', async () => {
@@ -142,6 +180,20 @@ describe('deployWorkerToSandbox', () => {
     expect(sandbox.started).toBe(0);
     expect(await deployment.status({ wake: true })).toEqual({ state: 'running', executionId: 'attempt-1' });
     expect(sandbox.started).toBe(1);
+  });
+
+  it('reports a destroyed provider without executing an inspection command', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    const deployment = await deploy(sandbox);
+    sandbox.status = 'destroyed';
+    const commandCount = sandbox.commands.length;
+
+    expect(await deployment.status()).toEqual({
+      state: 'provider_unavailable',
+      executionId: 'attempt-1',
+      providerState: 'destroyed',
+    });
+    expect(sandbox.commands).toHaveLength(commandCount);
   });
 
   it('retries destroy and reports success or exhaustion', async () => {
@@ -163,8 +215,25 @@ describe('deployWorkerToSandbox', () => {
 
     const install = sandbox.commands.find(command => command.includes('.mastra-install-lock'));
     expect(install).toContain('while ! mkdir');
+    expect(install).toContain('current="$(cat');
     expect(install).toContain('.mastra-install-hash.tmp');
     expect(install).toContain('mv');
+  });
+
+  it('keeps concurrent deployments isolated while sharing the dependency-install lock', async () => {
+    const sandbox = new FakeSandbox({ withNetworking: false });
+    const dir = await makeBuildDir(tmpdir());
+
+    const deployments = await Promise.all(
+      ['attempt-a', 'attempt-b'].map(executionId =>
+        deployWorkerToSandbox({ sandbox, dir, executionId, command: 'node', args: ['index.mjs'] }),
+      ),
+    );
+
+    expect(deployments.map(deployment => deployment.executionId)).toEqual(['attempt-a', 'attempt-b']);
+    expect(sandbox.commands.filter(command => command.includes('.mastra-install-lock'))).toHaveLength(2);
+    expect(sandbox.writtenFiles.flat().some(file => file.path.endsWith('/attempt-a/launch.sh'))).toBe(true);
+    expect(sandbox.writtenFiles.flat().some(file => file.path.endsWith('/attempt-b/launch.sh'))).toBe(true);
   });
 
   it('relaunches under a new execution ID and rejects identity reuse', async () => {
