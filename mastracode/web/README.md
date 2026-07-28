@@ -100,12 +100,16 @@ pnpm --dir mastracode/web check
 
 UI tests live in `factory-ui`; backend tests live in `factory`.
 
-## Build and deploy
+## Build and run
 
 ```shell
 pnpm --dir mastracode/web build
 pnpm --dir mastracode/web start
-pnpm --dir mastracode/web deploy
 ```
 
-Authenticate with `mastra auth login` before deploying.
+## Deploy
+
+```shell
+mastra auth login
+pnpm --dir mastracode/web deploy
+```
