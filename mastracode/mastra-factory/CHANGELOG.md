@@ -1,5 +1,14 @@
 # create-factory
 
+## 0.1.3-alpha.1
+
+### Patch Changes
+
+- Generated Factory projects now use the Factory UI bundled with the Mastra CLI instead of including editable browser source and its build dependencies. ([#20246](https://github.com/mastra-ai/mastra/pull/20246))
+
+- Updated dependencies:
+  - mastra@1.20.3-alpha.1
+
 ## 0.1.3-alpha.0
 
 ### Patch Changes
