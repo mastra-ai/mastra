@@ -2,6 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { defaultFactoryRules } from '../../../rules/defaults.js';
 import type { IntegrationContext } from '../../base.js';
 
 import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
@@ -586,6 +587,93 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
+  it('reuses installation repository listings within the cache TTL', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () =>
+        json({
+          repositories: [
+            { id: 101, owner: 'acme', name: 'app', fullName: 'acme/app', private: true, defaultBranch: 'main' },
+          ],
+        }),
+      );
+      const integration = createIntegration(fetchImpl);
+
+      const first = await integration.listInstallationRepos(7);
+      const second = await integration.listInstallationRepos(7);
+      expect(second).toBe(first);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+      // A different installation is a different cache entry.
+      await integration.listInstallationRepos(8);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+
+      // Expired entries are refetched.
+      vi.advanceTimersByTime(31_000);
+      await integration.listInstallationRepos(7);
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('evicts the oldest installation listing once the cache bound is reached', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json({ repositories: [] }));
+      const integration = createIntegration(fetchImpl);
+
+      // Fill the cache past its 1000-entry bound; installation 1 is oldest.
+      for (let installationId = 1; installationId <= 1001; installationId++) {
+        await integration.listInstallationRepos(installationId);
+      }
+      expect(fetchImpl).toHaveBeenCalledTimes(1001);
+
+      // Installation 1 was evicted (refetches); a recent entry is still cached.
+      await integration.listInstallationRepos(1);
+      expect(fetchImpl).toHaveBeenCalledTimes(1002);
+      await integration.listInstallationRepos(1001);
+      expect(fetchImpl).toHaveBeenCalledTimes(1002);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reuses repository access grants within the cache TTL', async () => {
+    vi.useFakeTimers();
+    try {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockImplementation(async () => json({ token: 'ghs_scoped', expiresAt: '2026-07-21T18:00:00Z' }));
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage: sourceControl.forIntegration('github') });
+      const installation = await integration.versionControl.registerInstallation({
+        orgId: 'org-1',
+        userId: 'user-1',
+        installation: { externalId: '7', accountName: 'acme', accountType: 'Organization' },
+      });
+      const [repository] = await integration.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: installation.id,
+        repositories: [{ externalId: '101', slug: 'acme/app', defaultBranch: 'main' }],
+      });
+
+      const input = { orgId: 'org-1', repositoryId: repository!.id };
+      const first = await integration.versionControl.getRepositoryAccess(input);
+      const second = await integration.versionControl.getRepositoryAccess(input);
+      expect(second).toBe(first);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+      // Expired grants re-mint through the platform.
+      vi.advanceTimersByTime(5 * 60_000 + 1_000);
+      await integration.versionControl.getRepositoryAccess(input);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('exposes platform-backed routes and session tools without local callback or webhook routes', async () => {
     const seed = await createPlatformStorageForTests();
     const integration = createIntegration();
@@ -638,11 +726,12 @@ describe('PlatformGithubIntegration', () => {
       mode: 'platform',
       endpointHost: 'platform.example.com',
       polling: { enabled: true },
+      reconcile: { enabled: true },
     });
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
   });
 
-  it('forwards polled issues to the Factory ingestion hook', async () => {
+  it('attaches GitHub rules to polled issue ingress', async () => {
     const seed = await createPlatformStorageForTests();
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
@@ -679,7 +768,7 @@ describe('PlatformGithubIntegration', () => {
       sandboxProvider: 'local',
       sandboxWorkdir: '/tmp/app',
     });
-    const ingestGithubEvent = vi.fn(async () => ({ status: 'committed' as const }));
+    const onEvent = vi.fn();
     const context = {
       auth: fakeAuth(),
       fleet: { enabled: false },
@@ -691,7 +780,13 @@ describe('PlatformGithubIntegration', () => {
       },
       controller: {},
       stateSigner: {},
-      hooks: { ingestGithubEvent },
+      rules: {
+        config: defaultFactoryRules({
+          version: 'test-rules',
+          overrides: { github: { issueOpened: { onEvent } } },
+        }),
+        workItems: seed.workItems,
+      },
     } as unknown as IntegrationContext;
     integration.initialize?.({ storage: context.storage.generic });
     integration.versionControl.initialize({ storage: sourceControl });
@@ -705,11 +800,11 @@ describe('PlatformGithubIntegration', () => {
     const response = await app.request(`/web/github/projects/${projectRepository.id}/issues`);
 
     expect(response.status).toBe(200);
-    expect(ingestGithubEvent).toHaveBeenCalledOnce();
-    expect(ingestGithubEvent).toHaveBeenCalledWith(
+    expect(onEvent).toHaveBeenCalledOnce();
+    expect(onEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         deliveryId: 'poll:101:issue:12:2026-07-01T00:00:00Z',
-        event: 'issues',
+        event: 'issueOpened',
       }),
     );
   });
@@ -914,6 +1009,7 @@ describe('PlatformGithubIntegration', () => {
   it('can disable polling and resolves collaborator permissions through the platform API', async () => {
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS', '9000');
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED', 'false');
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       json({
         permission: 'maintain',
@@ -932,6 +1028,19 @@ describe('PlatformGithubIntegration', () => {
       mode: 'platform',
       endpointHost: 'platform.example.com',
       polling: { enabled: false, intervalMs: 9_000 },
+      reconcile: { enabled: false },
+    });
+  });
+
+  it('keeps the reconcile worker alive when polling is disabled but reconcile stays enabled', () => {
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
+    const integration = createIntegration();
+
+    const workers = integration.workers({ controller: {}, storage: { generic: {} } } as unknown as IntegrationContext);
+    expect(workers).toHaveLength(1);
+    expect(integration.diagnostics()).toMatchObject({
+      polling: { enabled: false },
+      reconcile: { enabled: true },
     });
   });
 

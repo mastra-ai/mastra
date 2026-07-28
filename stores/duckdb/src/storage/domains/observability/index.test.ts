@@ -2299,4 +2299,123 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(result.feedback[0]!.feedbackId).toBe('feedback-retry-1');
     });
   });
+
+  // ==========================================================================
+  // Slow-path (post-aggregation) trace listing
+  //
+  // These paths paginate on a narrow reconstruction that only includes the
+  // columns the active filters/order reference, then fully reconstruct the
+  // page rows. The tests guard that every filter key which can land in the
+  // post-agg set has its columns wired up in POSTAGG_FILTER_COLUMNS and that
+  // page rows still carry full span payloads.
+  // ==========================================================================
+
+  describe('slow-path trace listing', () => {
+    const slowBase = {
+      parentSpanId: null,
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      entityType: EntityType.AGENT,
+      entityId: 'agent-slow',
+      entityName: 'Slow Agent',
+      userId: null,
+      organizationId: null,
+      resourceId: null,
+      runId: null,
+      sessionId: null,
+      threadId: null,
+      requestId: null,
+      environment: null,
+      source: null,
+      serviceName: null,
+      attributes: null,
+      links: null,
+      error: null,
+    } as const;
+
+    beforeEach(async () => {
+      await storage.batchCreateSpans({
+        records: [
+          {
+            ...slowBase,
+            traceId: 'slow-a',
+            spanId: 'root-a',
+            name: 'root-a',
+            scope: { core: '1.0.0' },
+            metadata: { env: 'prod' },
+            tags: ['keep'],
+            input: { prompt: 'hello a' },
+            output: { text: 'bye a' },
+            startedAt: new Date('2026-03-01T00:00:00Z'),
+            endedAt: new Date('2026-03-01T00:00:05Z'),
+          },
+          {
+            ...slowBase,
+            traceId: 'slow-b',
+            spanId: 'root-b',
+            name: 'root-b',
+            scope: { core: '2.0.0' },
+            metadata: { env: 'dev' },
+            tags: ['drop'],
+            input: { prompt: 'hello b' },
+            output: { text: 'bye b' },
+            startedAt: new Date('2026-03-01T01:00:00Z'),
+            endedAt: new Date('2026-03-01T01:00:01Z'),
+          },
+        ],
+      });
+    });
+
+    it('filters by scope and returns full payloads on the page rows', async () => {
+      const result = await storage.listTraces({ filters: { scope: { core: '1.0.0' } } });
+
+      expect(result.pagination.total).toBe(1);
+      expect(result.spans.map(s => s.traceId)).toEqual(['slow-a']);
+      // The page row must be a full reconstruction, not the narrow filter row.
+      expect(result.spans[0]!.input).toEqual({ prompt: 'hello a' });
+      expect(result.spans[0]!.output).toEqual({ text: 'bye a' });
+      expect(result.spans[0]!.scope).toEqual({ core: '1.0.0' });
+    });
+
+    it('every post-agg filter key and order field has its reconstruct columns wired up', async () => {
+      // Each of these forces the slow path. A key missing from
+      // POSTAGG_FILTER_COLUMNS would throw a DuckDB binder error here.
+      const cases: { filters?: Record<string, unknown>; orderBy?: { field: string; direction: string } }[] = [
+        { filters: { status: 'success' } },
+        { filters: { status: 'error' } },
+        { filters: { status: 'running' } },
+        { filters: { endedAt: { start: new Date('2026-03-01T00:00:00Z') } } },
+        { filters: { tags: ['keep'] } },
+        { filters: { metadata: { env: 'prod' } } },
+        { filters: { scope: { core: '1.0.0' } } },
+        { filters: { hasChildError: false } },
+        { orderBy: { field: 'endedAt', direction: 'DESC' } },
+        // Combinations
+        { filters: { status: 'success', tags: ['keep'], metadata: { env: 'prod' }, scope: { core: '1.0.0' } } },
+      ];
+
+      for (const args of cases) {
+        await expect(storage.listTraces(args), JSON.stringify(args)).resolves.toBeTruthy();
+      }
+    });
+
+    it('orders by endedAt across the narrow pagination and full reconstruction', async () => {
+      const result = await storage.listTraces({ orderBy: { field: 'endedAt', direction: 'DESC' } });
+
+      // slow-b ended later than slow-a despite both pages being reconstructed
+      // from a time-bounded scan anchored at the earliest page row.
+      expect(result.spans.map(s => s.traceId)).toEqual(['slow-b', 'slow-a']);
+      expect(result.spans.every(s => s.input !== null && s.output !== null)).toBe(true);
+    });
+
+    it('delta poll at head short-circuits with an empty page and stable cursor', async () => {
+      const bootstrap = await storage.listTraces({ mode: 'delta' });
+      expect(bootstrap.deltaCursor).toBeTruthy();
+
+      const atHead = await storage.listTraces({ mode: 'delta', after: bootstrap.deltaCursor! });
+      expect(atHead.spans).toEqual([]);
+      expect(atHead.delta).toEqual({ limit: 10, hasMore: false });
+      expect(atHead.deltaCursor).toBe(bootstrap.deltaCursor);
+    });
+  });
 });

@@ -19,6 +19,7 @@ packages:
   - "@mastra/voice-speechify"
   - "@mastra/voice-inworld"
   - "@mastra/voice-xai-realtime"
+  - "@mastra/livekit"
 ---
 
 import { AudioPlayback } from "@site/src/components/AudioPlayback";
@@ -808,6 +809,10 @@ For detailed configuration options and advanced features, check out [Speech to S
   </TabItem>
 </Tabs>
 
+### Realtime voice
+
+Run live calls a user can talk over, in the browser or over the phone. Mastra hands the audio loop to LiveKit, which covers voice activity detection, semantic turn detection, and barge-in, while your agent generates each reply with its own model, tools, and memory. For setup and configuration options, check out [Realtime voice](./realtime-voice).
+
 ## Voice configuration
 
 Each voice provider can be configured with different models and options. Below are the detailed configuration options for all supported providers:
@@ -1285,5 +1290,6 @@ For more information on the CompositeVoice, refer to the [CompositeVoice Referen
 - [AWS Nova Sonic Voice](/reference/voice/aws-nova-sonic)
 - [Deepgram Voice](/reference/voice/deepgram)
 - [Inworld Voice](/reference/voice/inworld)
+- [LiveKit](/reference/voice/livekit)
 - [PlayAI Voice](/reference/voice/playai)
 - [Voice Examples](https://github.com/mastra-ai/voice-examples)

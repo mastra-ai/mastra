@@ -384,7 +384,17 @@ type ChannelHandler = (
   thread: Thread,
   message: Message,
   defaultHandler: (thread: Thread, message: Message) => Promise<void>,
+  ctx?: ChannelHandlerContext,
 ) => Promise<void>
+```
+
+`ctx` carries the resolved `mastra` instance, so a handler can reach storage or other registered primitives without being passed an external accessor:
+
+```typescript
+onDirectMessage: async (thread, message, defaultHandler, ctx) => {
+  const store = await ctx?.mastra?.getStorage()?.getStore('memory')
+  await defaultHandler(thread, message)
+}
 ```
 
 ## Resource ID resolution

@@ -16,7 +16,12 @@ import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
-import { checkoutSessionBranch, materializeRepo, runWorktreeSetup } from './integrations/github/sandbox.js';
+import {
+  checkoutSessionBranch,
+  MaterializeError,
+  materializeRepo,
+  runWorktreeSetup,
+} from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
 import type { SandboxBindingStore, SandboxFleet } from './sandbox/fleet.js';
@@ -128,6 +133,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     string,
     { inject: (token: string) => void; patKind: GithubPatKind; ghToken: string }
   >();
+  // Concurrent requests for the same session (thread list + activity polling +
+  // chat) must not each provision a sandbox and clone the repository. The
+  // first caller materializes; followers await the same promise.
+  const inflightMaterializations = new Map<string, Promise<Workspace>>();
 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const effectiveSkillExtension = skillExtension ?? factorySkillExtension;
@@ -167,8 +176,22 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const workdir = isLocalSandbox
       ? fleet.computeLocalSessionWorkdir(repoFullName, session.id)
       : (session.sandboxWorkdir ?? projectRepository.sandboxWorkdir);
+    // The system prompt derives its working directory from `state.projectPath`
+    // and falls back to the server's own process.cwd() when unset — which
+    // points the agent at the host checkout (and lets it run `git checkout`
+    // there instead of in its session workdir). Pin it to the session workdir.
+    // During createSession this seeds the session's initial state (the
+    // workspace resolves before the session is built); on later requests it
+    // self-heals live state.
+    if (ctx && workdir && ctx.getState()?.projectPath !== workdir) {
+      await ctx.setState({ projectPath: workdir, projectName: repoFullName });
+    }
     const binding: SandboxBindingStore = {
-      sandboxId: session.sandboxId,
+      // Read through to the session row so teardown after a fresh provision
+      // sees the just-persisted id instead of a stale snapshot.
+      get sandboxId() {
+        return session.sandboxId;
+      },
       checkpointName: checkpointNameForSession(session.id),
       setSandboxId: async id => {
         await storage.sessions.setSandbox({ id: session.id, sandboxId: id, sandboxWorkdir: workdir });
@@ -211,76 +234,124 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // Not registered yet.
     }
 
-    const access = await github.versionControl.getRepositoryAccess({
-      orgId: session.orgId,
-      repositoryId: repository.id,
-    });
-    const token = access.authorization?.token;
-    if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
+    const materialize = async (): Promise<Workspace> => {
+      const access = await github.versionControl.getRepositoryAccess({
+        orgId: session.orgId,
+        repositoryId: repository.id,
+      });
+      const token = access.authorization?.token;
+      if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
 
-    // The `gh` CLI needs a PAT when the org configured one (installation
-    // tokens 403 on integration-restricted endpoints); git clone/checkout
-    // below keep using the minted installation token. Review-board sessions
-    // (run-binding role `review`) authenticate `gh` as the reviewer account
-    // when a reviewer token is configured; everything else — including
-    // sessions with no resolvable run binding — uses the worker token.
-    let patKind: GithubPatKind = 'default';
-    if (workItems) {
+      // The `gh` CLI needs a PAT when the org configured one (installation
+      // tokens 403 on integration-restricted endpoints); git clone/checkout
+      // below keep using the minted installation token. Review-board sessions
+      // (run-binding role `review`) authenticate `gh` as the reviewer account
+      // when a reviewer token is configured; everything else — including
+      // sessions with no resolvable run binding — uses the worker token.
+      let patKind: GithubPatKind = 'default';
+      if (workItems) {
+        try {
+          const address = getFactorySessionAddress(requestContext);
+          const runBinding = address ? await workItems.findRunBindingBySession(address) : null;
+          if (runBinding?.role === 'review' && runBinding.orgId === session.orgId) patKind = 'reviewer';
+        } catch {
+          // No resolvable binding — worker token.
+        }
+      }
+      const ghCliToken = (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? token;
+
+      const ensureSandbox = () =>
+        fleet.ensureSandbox(
+          binding,
+          { GH_TOKEN: ghCliToken },
+          undefined,
+          isLocalSandbox ? { workingDirectory: workdir } : {},
+        );
+      const runMaterialize = (target: Awaited<ReturnType<typeof ensureSandbox>>) =>
+        materializeRepo({
+          row: { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },
+          repoInfo: { repoFullName: repoFullName, defaultBranch: repository.defaultBranch },
+          sandbox: target,
+          token,
+          storage: storage.sessions,
+        });
+      const isGitMissing = (error: unknown) => error instanceof MaterializeError && error.code === 'git-missing';
+
+      let sandbox = await ensureSandbox();
       try {
-        const address = getFactorySessionAddress(requestContext);
-        const runBinding = address ? await workItems.findRunBindingBySession(address) : null;
-        if (runBinding?.role === 'review' && runBinding.orgId === session.orgId) patKind = 'reviewer';
-      } catch {
-        // No resolvable binding — worker token.
+        await runMaterialize(sandbox);
+      } catch (error) {
+        if (!isGitMissing(error)) throw error;
+        // A sandbox without git was booted from a bare base image (e.g. the
+        // platform proxy falls back to a clean Debian base when its template
+        // build fails). That VM can never materialize a repo, and its id is
+        // already persisted on the binding — tear it down so re-opens stop
+        // reattaching to the poisoned sandbox, then retry once on a fresh VM.
+        await fleet.teardownSandbox(binding, sandbox);
+        sandbox = await ensureSandbox();
+        try {
+          await runMaterialize(sandbox);
+        } catch (retryError) {
+          // Still bare — the provider's template is persistently broken.
+          // Clear the binding so a later manual retry provisions fresh.
+          if (isGitMissing(retryError)) await fleet.teardownSandbox(binding, sandbox);
+          throw retryError;
+        }
       }
-    }
-    const ghCliToken = (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? token;
+      await checkoutSessionBranch(sandbox, workdir, {
+        branch: session.branch,
+        baseBranch: session.baseBranch || projectRepository.branch || repository.defaultBranch,
+        token,
+        repoFullName: repoFullName,
+      });
+      if (projectRepository.setupCommand) await runWorktreeSetup(sandbox, workdir, projectRepository.setupCommand);
 
-    const sandbox = await fleet.ensureSandbox(
-      binding,
-      { GH_TOKEN: ghCliToken },
-      undefined,
-      isLocalSandbox ? { workingDirectory: workdir } : {},
-    );
-    await materializeRepo({
-      row: { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },
-      repoInfo: { repoFullName: repoFullName, defaultBranch: repository.defaultBranch },
-      sandbox,
-      token,
-      storage: storage.sessions,
-    });
-    await checkoutSessionBranch(sandbox, workdir, {
-      branch: session.branch,
-      baseBranch: session.baseBranch || projectRepository.branch || repository.defaultBranch,
-      token,
-      repoFullName: repoFullName,
-    });
-    if (projectRepository.setupCommand) await runWorktreeSetup(sandbox, workdir, projectRepository.setupCommand);
+      const injectGithubToken = (freshToken: string) => {
+        if (!sandbox.setEnvironmentVariable) {
+          throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
+        }
+        sandbox.setEnvironmentVariable('GH_TOKEN', freshToken);
+        const registered = githubTokenInjectors.get(workspaceId);
+        if (registered) registered.ghToken = freshToken;
+      };
+      githubTokenInjectors.set(workspaceId, { inject: injectGithubToken, patKind, ghToken: ghCliToken });
+      registerGithubTokenInjector(requestContext, injectGithubToken);
+      registerGithubPatKind(requestContext, patKind);
 
-    const injectGithubToken = (freshToken: string) => {
-      if (!sandbox.setEnvironmentVariable) {
-        throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
-      }
-      sandbox.setEnvironmentVariable('GH_TOKEN', freshToken);
-      const registered = githubTokenInjectors.get(workspaceId);
-      if (registered) registered.ghToken = freshToken;
+      const filesystem = new SandboxFilesystem({ sandbox, workdir });
+      const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
+      const skillPaths = [...(effectiveSkillExtension?.paths ?? []), ...projectSkillPaths];
+      return new Workspace({
+        id: workspaceId,
+        name: 'Mastra Code Factory Session Workspace',
+        filesystem,
+        sandbox: sandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
+        tools: MASTRACODE_WORKSPACE_TOOLS,
+        skills: skillPaths,
+        skillSource: effectiveSkillExtension?.createSource(filesystem, projectSkillPaths) ?? filesystem,
+      });
     };
-    githubTokenInjectors.set(workspaceId, { inject: injectGithubToken, patKind, ghToken: ghCliToken });
-    registerGithubTokenInjector(requestContext, injectGithubToken);
-    registerGithubPatKind(requestContext, patKind);
 
-    const filesystem = new SandboxFilesystem({ sandbox, workdir });
-    const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
-    const skillPaths = [...(effectiveSkillExtension?.paths ?? []), ...projectSkillPaths];
-    return new Workspace({
-      id: workspaceId,
-      name: 'Mastra Code Factory Session Workspace',
-      filesystem,
-      sandbox: sandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
-      tools: MASTRACODE_WORKSPACE_TOOLS,
-      skills: skillPaths,
-      skillSource: effectiveSkillExtension?.createSource(filesystem, projectSkillPaths) ?? filesystem,
-    });
+    // Dedupe concurrent materializations of the same workspace: followers
+    // await the leader's promise instead of provisioning a second sandbox,
+    // then bind the shared token injector into their own request context.
+    const inflight = inflightMaterializations.get(workspaceId);
+    if (inflight) {
+      const workspace = await inflight;
+      const registered = githubTokenInjectors.get(workspaceId);
+      if (registered) {
+        registerGithubTokenInjector(requestContext, registered.inject);
+        registerGithubPatKind(requestContext, registered.patKind);
+      }
+      return workspace;
+    }
+    const materialization = materialize();
+    inflightMaterializations.set(workspaceId, materialization);
+    try {
+      return await materialization;
+    } finally {
+      inflightMaterializations.delete(workspaceId);
+    }
   };
 }
 

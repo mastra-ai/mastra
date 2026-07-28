@@ -6,9 +6,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { format, isThisYear, isToday } from 'date-fns';
 import { Play } from 'lucide-react';
+import { ExperimentNameLabel } from '@/domains/experiments/components/experiment-name-label';
 
 const experimentsListColumns = [
-  { name: 'experimentId', label: 'ID', size: '7rem' },
+  { name: 'experiment', label: 'Experiment', size: 'minmax(9rem,1fr)' },
   { name: 'status', label: 'Status', size: '5rem' },
   { name: 'targetType', label: 'Type', size: '6rem' },
   { name: 'target', label: 'Target', size: 'minmax(0,1fr)' },
@@ -71,7 +72,9 @@ export function DatasetExperimentsList({
 
         const rowCells = (
           <>
-            <DataList.IdCell id={experiment.id} />
+            <DataList.Cell height="compact" className="min-w-0">
+              <ExperimentNameLabel experiment={experiment} />
+            </DataList.Cell>
             <DataList.Cell height="compact">
               {experiment.status && (
                 <Tooltip>
