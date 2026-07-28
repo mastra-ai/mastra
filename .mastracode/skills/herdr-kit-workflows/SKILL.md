@@ -26,13 +26,22 @@ Activate this skill when the user asks to install or configure Herdr Kit, change
 
 ```sh
 plugin_file=$(mktemp)
+capabilities_file=$(mktemp)
+data_file=
+cleanup() { rm -f "$plugin_file" "$capabilities_file" ${data_file:+"$data_file"}; }
+trap cleanup EXIT
 if ! herdr plugin list --plugin herdr-kit --json > "$plugin_file"; then
     exit 1
 fi
 if ! plugin_root=$(python3 - "$plugin_file" <<'PY'
 import json, sys
-plugins = json.load(open(sys.argv[1]))["result"]["plugins"]
-plugin = next((p for p in plugins if p.get("plugin_id") == "herdr-kit"), None)
+p = json.load(open(sys.argv[1]))
+if not isinstance(p, dict) or p.get("error") is not None:
+    raise SystemExit(p.get("error") if isinstance(p, dict) else "Malformed herdr plugin list response")
+result = p.get("result")
+if not isinstance(result, dict) or not isinstance(result.get("plugins"), list):
+    raise SystemExit("Malformed herdr plugin list response")
+plugin = next((item for item in result["plugins"] if item.get("plugin_id") == "herdr-kit"), None)
 if not plugin or not plugin.get("enabled") or not plugin.get("plugin_root"):
     raise SystemExit("Enabled herdr-kit plugin root is unavailable")
 print(plugin["plugin_root"])
@@ -41,18 +50,24 @@ PY
     exit 1
 fi
 manager_cli="$plugin_root/herdr-kit"
-capabilities_file=$(mktemp)
-"$manager_cli" capabilities > "$capabilities_file"
+if ! "$manager_cli" capabilities > "$capabilities_file"; then
+    exit 1
+fi
 python3 - "$capabilities_file" <<'PY'
 import json, sys
 p = json.load(open(sys.argv[1]))
+if not isinstance(p, dict) or p.get("error") is not None:
+    raise SystemExit(p.get("error") if isinstance(p, dict) else "Malformed herdr-kit capabilities response")
 if p.get("protocol_version") != 1:
     raise SystemExit(f"Unsupported herdr-kit protocol: {p.get('protocol_version')}")
-print(json.dumps(p.get("operations", {}), indent=2))
+operations = p.get("operations")
+if not isinstance(operations, dict):
+    raise SystemExit("Malformed herdr-kit capabilities response")
+print(json.dumps(operations, indent=2))
 PY
 ```
 
-Before each operation, require its capability to be present and `available: true`.
+Before each operation, require its capability to be present and `available: true`. Before any command using `--request`, also require that operation's `request_schema` to equal the request file's `schema_version` (`1` below).
 
 ## Detect and update an outdated plugin
 
@@ -61,7 +76,7 @@ The skill describes the current Herdr Kit public contract, but the enabled plugi
 Inspect the discovered plugin's `source.kind` from `herdr plugin list`:
 
 - For a GitHub-installed plugin, update it with `herdr plugin install mastra-ai/herdr-kit -y`, reinstall the official integration with `herdr integration install mastracode`, and run `herdr server reload-config`.
-- For a locally linked plugin, do not replace it with a GitHub installation. Report the linked `plugin_root`. If it is a clean checkout of `mastra-ai/herdr-kit` on its normal branch, fast-forward it with `git -C "$plugin_root" pull --ff-only`, then reload Herdr. If it is dirty, detached, on a feature branch, or cannot be verified as that repository, stop and ask before modifying it.
+- For a locally linked plugin, do not replace it with a GitHub installation. Report the linked `plugin_root`. Before pulling, verify that `git -C "$plugin_root" remote get-url origin` identifies exactly `mastra-ai/herdr-kit`, the current branch matches the normal branch advertised by `refs/remotes/origin/HEAD`, and `git -C "$plugin_root" status --porcelain` is empty. Only after all checks pass may you run `git -C "$plugin_root" pull --ff-only` and reload Herdr. If the remote or repository identity is different, the normal branch cannot be verified, or the checkout is dirty, detached, or on a feature branch, stop and ask before modifying it.
 
 After any update, repeat plugin discovery and capability negotiation from scratch. Continue only when the required operation is present and `available: true`; otherwise report the remaining incompatibility exactly. Do not update merely because a newer release exists—update when setup is requested or the requested workflow requires an interface the enabled plugin does not provide.
 
@@ -121,18 +136,31 @@ List, open/focus, or remove scope:
 
 ```sh
 data_file=$(mktemp)
-"$manager_cli" manager query > "$data_file"
+if ! "$manager_cli" manager query > "$data_file"; then
+    exit 1
+fi
 python3 - "$data_file" <<'PY'
 import json, sys
 p = json.load(open(sys.argv[1]))
+if not isinstance(p, dict) or p.get("error") is not None:
+    raise SystemExit(p.get("error") if isinstance(p, dict) else "Malformed manager query response")
 if p.get("protocol_version") != 1:
     raise SystemExit(f"Unsupported manager protocol: {p.get('protocol_version')}")
-inventory = p.get("inventory", {})
+inventory = p.get("inventory")
+if not isinstance(inventory, dict):
+    raise SystemExit("Malformed manager query response")
 if inventory.get("schema_version") != 1:
     raise SystemExit(f"Unsupported manager inventory schema: {inventory.get('schema_version')}")
-errors = inventory.get("summary", {}).get("errors", [])
+summary = inventory.get("summary")
+if not isinstance(summary, dict):
+    raise SystemExit("Malformed manager query response")
+errors = summary.get("errors", [])
+if not isinstance(errors, list):
+    raise SystemExit("Malformed manager query response")
 if errors:
     raise SystemExit("Manager inventory error: " + "; ".join(map(str, errors)))
+if not isinstance(inventory.get("items"), list):
+    raise SystemExit("Malformed manager query response")
 print(json.dumps(inventory, indent=2))
 PY
 ```
@@ -173,7 +201,7 @@ Confirm that each queried item has `manager: "review"` and `location: "remote on
 "$manager_cli" review materialize --request review-materialize.json
 ```
 
-The manager validates current PR identity/head, opens the registered primary repository workspace if necessary, creates the canonical linked review worktree, and verifies manager state. Multi-item requests belong in one request file.
+The manager validates current PR identity/head, opens the registered primary repository workspace if necessary, creates the canonical linked review worktree, and verifies manager state. Multi-item requests belong in one request file. After command success, run a fresh authoritative `manager query` and require every requested Review record to have the expected materialized location/path and the confirmed head SHA, plus matching revision or checkout generation when those fields are present. Treat command success alone as insufficient; fail closed if any postcondition cannot be confirmed.
 
 ## Materialize Work worktrees
 
@@ -190,7 +218,7 @@ Confirm that each queried item has `manager: "work"` and `location: "remote only
 "$manager_cli" work materialize --request work-materialize.json
 ```
 
-The registered primary checkout must already exist. The manager may open it in Herdr, but must not clone during materialization.
+The registered primary checkout must already exist. The manager may open it in Herdr, but must not clone during materialization. After command success, run a fresh authoritative `manager query` and require every requested Work record to have the expected materialized location/path, confirmed head SHA, and authoritative revision and checkout generation corresponding to the resulting checkout. Treat command success alone as insufficient; fail closed if any postcondition cannot be confirmed.
 
 ## Dematerialize managed worktrees
 
