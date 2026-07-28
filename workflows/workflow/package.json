@@ -22,6 +22,12 @@
         "default": "./dist/workflows/index.js"
       }
     },
+    "./executor": {
+      "import": {
+        "types": "./dist/executor.d.ts",
+        "default": "./dist/executor.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

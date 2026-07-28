@@ -14,6 +14,13 @@ import type { MastraStreamEventLike } from './walker';
  * durable step proxies, so an import written here never reaches the sandbox
  * bundle. A static `import '../executor.js'` would drag `@mastra/core` — and
  * its Node builtins — into the workflow VM.
+ *
+ * The dynamic form is necessary but not sufficient: it only defers anything
+ * while `../executor` is still a separate module in the built output. The
+ * bundler inlines it by default, which hoists the executor's `@mastra/core`
+ * imports to the top of this file and puts them out of erasure's reach, so
+ * `tsup.config.ts` marks the specifier external to prevent that. Keep the
+ * specifier extensionless and keep the two in step if either moves.
  */
 
 /**
@@ -45,10 +52,7 @@ executeMastraOp.maxRetries = 0;
  * `getWritable()` only yields a live stream inside a step; in workflow mode it
  * returns an inert handle.
  */
-export async function emitMastraEvents(
-  _runId: string,
-  events: MastraStreamEventLike[],
-): Promise<void> {
+export async function emitMastraEvents(_runId: string, events: MastraStreamEventLike[]): Promise<void> {
   'use step';
   if (!events.length) {
     return;
