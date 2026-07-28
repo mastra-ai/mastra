@@ -186,12 +186,12 @@ describe('AddItemDialog', () => {
       renderDialog();
 
       fireEvent.change(screen.getByRole<HTMLInputElement>('spinbutton', { name: /item timeout/i }), {
-        target: { value: '15000' },
+        target: { value: '1800000' },
       });
       submitDialog();
 
       await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
-      expect(capture).toHaveBeenCalledWith(expect.objectContaining({ timeout: 15_000 }));
+      expect(capture).toHaveBeenCalledWith(expect.objectContaining({ timeout: 1_800_000 }));
     });
   });
 
@@ -213,8 +213,8 @@ describe('AddItemDialog', () => {
     });
   });
 
-  describe('when the item timeout is not a positive whole number', () => {
-    it.each(['0', '-1', '1.5'])('rejects %s before making a request', async timeout => {
+  describe('when the item timeout is outside the supported range', () => {
+    it.each(['0', '-1', '1.5', '1800001'])('rejects %s before making a request', async timeout => {
       const capture = vi.fn();
       server.use(
         http.post(`${BASE_URL}/api/datasets/dataset-1/items`, async ({ request }) => {
@@ -230,7 +230,11 @@ describe('AddItemDialog', () => {
       });
       submitDialog();
 
-      await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Item timeout must be a positive whole number'));
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(
+          'Item timeout must be a positive integer no greater than 1,800,000 milliseconds (30 minutes)',
+        ),
+      );
       expect(capture).not.toHaveBeenCalled();
     });
   });

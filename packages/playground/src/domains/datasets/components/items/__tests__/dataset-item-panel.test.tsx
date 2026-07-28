@@ -101,17 +101,17 @@ describe('DatasetItemPanel', () => {
       server.use(
         http.patch(`${BASE_URL}/api/datasets/ds-1/items/item-1`, async ({ request }) => {
           capture(await request.json());
-          return HttpResponse.json({ ...itemWithTimeout, timeout: 30_000 });
+          return HttpResponse.json({ ...itemWithTimeout, timeout: 1_800_000 });
         }),
       );
       renderPanel(itemWithTimeout);
 
       const timeout = await openEditForm();
-      fireEvent.change(timeout, { target: { value: '30000' } });
+      fireEvent.change(timeout, { target: { value: '1800000' } });
       fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
       await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
-      expect(capture).toHaveBeenCalledWith(expect.objectContaining({ timeout: 30_000 }));
+      expect(capture).toHaveBeenCalledWith(expect.objectContaining({ timeout: 1_800_000 }));
     });
   });
 
@@ -145,15 +145,15 @@ describe('DatasetItemPanel', () => {
 
       await waitFor(() =>
         expect(toast.error).toHaveBeenCalledWith(
-          'An existing item timeout cannot be cleared; enter a positive whole number',
+          'An existing item timeout cannot be cleared; enter a positive integer no greater than 30 minutes',
         ),
       );
       expect(capture).not.toHaveBeenCalled();
     });
   });
 
-  describe('when the edited timeout is not a positive whole number', () => {
-    it.each(['0', '-1', '1.5'])('rejects %s before making a request', async timeoutValue => {
+  describe('when the edited timeout is outside the supported range', () => {
+    it.each(['0', '-1', '1.5', '1800001'])('rejects %s before making a request', async timeoutValue => {
       const capture = vi.fn();
       server.use(
         http.patch(`${BASE_URL}/api/datasets/ds-1/items/item-1`, async ({ request }) => {
@@ -167,7 +167,11 @@ describe('DatasetItemPanel', () => {
       fireEvent.change(timeout, { target: { value: timeoutValue } });
       fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
-      await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Item timeout must be a positive whole number'));
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(
+          'Item timeout must be a positive integer no greater than 1,800,000 milliseconds (30 minutes)',
+        ),
+      );
       expect(capture).not.toHaveBeenCalled();
     });
   });
