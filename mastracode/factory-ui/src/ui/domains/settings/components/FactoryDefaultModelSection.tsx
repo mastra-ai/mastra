@@ -6,6 +6,7 @@ import { useFactoryProjectQuery, useSetFactoryDefaultModelMutation } from '../..
 import { useParams } from 'react-router';
 
 import { ModelCombobox } from './ModelCombobox';
+import { SharedCredentialNotice } from './SharedCredentialNotice';
 
 /**
  * Factory default model. Persisted on the Factory project itself; factory
@@ -36,6 +37,7 @@ export function FactoryDefaultModelSection({ models }: { models: AvailableModelO
             {error instanceof Error ? error.message : String(error)}
           </Txt>
         )}
+        <SharedCredentialNotice modelId={defaultModelId || undefined} />
       </div>
       <div className="flex w-full max-w-72 items-center gap-2">
         {setDefaultModel.isPending && (
