@@ -69,12 +69,9 @@ export function showFormattedError(
 
   const lines: Text[] = [new Text(theme.fg('error', errorText), 1, 0)];
 
-  // Add helpful hints based on error type
   const isObservationalMemoryError = /observational memory|\bOM (?:observation|reflection)/i.test(error.message);
   const omRole = /reflect/i.test(error.message) ? state.session.om.reflector : state.session.om.observer;
-  const hint = getErrorHint(parsed.type, {
-    observationalMemoryModelId: isObservationalMemoryError ? omRole.modelId() : undefined,
-  });
+  const hint = withOMGuidance(getErrorHint(parsed.type), isObservationalMemoryError ? omRole.modelId() : undefined);
   if (hint) {
     lines.push(new Text(theme.fg('muted', `  Hint: ${hint}`), 1, 0));
   }
@@ -84,11 +81,14 @@ export function showFormattedError(
   state.ui.requestRender();
 }
 
-function getErrorHint(errorType: string, options: { observationalMemoryModelId?: string } = {}): string | null {
-  if (options.observationalMemoryModelId) {
-    return `Observational Memory is using ${options.observationalMemoryModelId}. Use /memory to choose another OM model, or /login to authenticate its provider`;
-  }
+function withOMGuidance(typeHint: string | null, omModelId: string | undefined): string | null {
+  if (!omModelId) return typeHint;
+  return [`Observational Memory is using ${omModelId}`, typeHint, 'Use /memory to choose another OM model']
+    .filter(Boolean)
+    .join('. ');
+}
 
+function getErrorHint(errorType: string): string | null {
   switch (errorType) {
     case 'auth':
       return 'Use /login to authenticate with a provider';

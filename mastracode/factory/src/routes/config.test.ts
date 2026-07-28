@@ -695,7 +695,7 @@ describe('OM routes with a tenant', () => {
     });
   });
 
-  it('uses the shared Codex OM default policy', async () => {
+  it('reads the OpenAI OM default through a Codex credential', async () => {
     await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'openai-codex', {
       type: 'api_key',
       key: 'sk-openai',
@@ -710,6 +710,42 @@ describe('OM routes with a tenant', () => {
     expect((await res.json()).config).toMatchObject({
       observerModelId: 'openai/gpt-5.4-mini',
       reflectorModelId: 'openai/gpt-5.4-mini',
+    });
+  });
+
+  it('prefers the low-cost OM pack over the selected factory model', async () => {
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'google', {
+      type: 'api_key',
+      key: 'sk-google',
+    });
+
+    const res = await postJson(buildApp(makeOmSession(), { provider: 'google' }), '/web/config/om/provider-defaults', {
+      providerId: 'google',
+      factoryModelId: 'google/gemini-3.5-pro',
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config).toMatchObject({
+      observerModelId: 'google/gemini-3.5-flash',
+      reflectorModelId: 'google/gemini-3.5-flash',
+    });
+  });
+
+  it('keeps the selected factory model for providers without an OM pack', async () => {
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'xai', {
+      type: 'api_key',
+      key: 'sk-xai',
+    });
+
+    const res = await postJson(buildApp(makeOmSession(), { provider: 'xai' }), '/web/config/om/provider-defaults', {
+      providerId: 'xai',
+      factoryModelId: 'xai/grok-4.5',
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config).toMatchObject({
+      observerModelId: 'xai/grok-4.5',
+      reflectorModelId: 'xai/grok-4.5',
     });
   });
 

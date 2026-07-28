@@ -177,13 +177,7 @@ function normalizeOMProviderId(providerId: string): string {
   return providerId === 'openai-codex' ? 'openai' : providerId;
 }
 
-/**
- * Resolve the default OM model for a connected provider.
- *
- * Providers with a dedicated low-cost OM pack use that pack. Other providers
- * use the selected provider model as a custom OM default, preserving the
- * existing Factory contract for custom and newly-added providers.
- */
+/** A provider's low-cost OM pack, or a custom pack on `fallbackModelId` when it has none. */
 export function resolveProviderOMDefault(providerId: string, fallbackModelId = DEFAULT_OM_MODEL_ID): OMPack {
   const normalizedProviderId = normalizeOMProviderId(providerId);
   const builtin = BUILTIN_OM_PACKS.find(pack => pack.providerId === normalizedProviderId);
@@ -229,12 +223,7 @@ export function getAvailableOmPacks(access: ProviderAccess): OMPack[] {
   return packs;
 }
 
-/**
- * Pick the best reachable built-in OM pack.
- *
- * An explicitly preferred provider wins, then OAuth-backed providers, then
- * API-key providers in the stable built-in pack order.
- */
+/** Best reachable built-in OM pack: preferred provider, then OAuth, then built-in order. */
 export function selectPreferredOMPack(access: ProviderAccess, preferredProviderId?: string): OMPack | undefined {
   const available = getAvailableOmPacks(access).filter(pack => pack.id !== 'custom');
 

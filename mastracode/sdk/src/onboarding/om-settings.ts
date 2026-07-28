@@ -9,26 +9,21 @@ import { loadSettings, saveSettings } from './settings.js';
 
 /** Whether the user has already chosen any persisted OM model or pack. */
 export function hasExplicitOMConfiguration(settings: GlobalSettings): boolean {
-  return Boolean(
-    settings.onboarding.omPackId ||
-    settings.models.activeOmPackId ||
-    settings.models.omModelOverride ||
-    settings.models.observerModelOverride ||
-    settings.models.reflectorModelOverride,
-  );
+  const { activeOmPackId, omModelOverride, observerModelOverride, reflectorModelOverride } = settings.models;
+  if (omModelOverride || observerModelOverride || reflectorModelOverride) return true;
+
+  // 'custom' without a model is what onboarding persists when no provider was
+  // reachable — a forced non-choice, not a preference worth preserving.
+  return [settings.onboarding.omPackId, activeOmPackId].some(packId => packId && packId !== 'custom');
 }
 
-/**
- * Seed a provider-aware OM pack without replacing an existing user choice.
- *
- * Returns true when settings changed.
- */
+/** Seed a built-in OM pack unless the user already chose one; true when settings changed. */
 export function applyOMDefaultIfUnconfigured(settings: GlobalSettings, pack: OMPack): boolean {
   if (hasExplicitOMConfiguration(settings)) return false;
 
   settings.onboarding.omPackId = pack.id;
   settings.models.activeOmPackId = pack.id;
-  settings.models.omModelOverride = pack.id === 'custom' ? pack.modelId : null;
+  settings.models.omModelOverride = null;
   return true;
 }
 

@@ -117,9 +117,15 @@ describe('provider-aware OM defaults', () => {
   });
 
   it('prefers the matching reachable provider over earlier packs', () => {
-    const pack = selectPreferredOMPack(providerAccess({ google: 'apikey', openai: 'oauth' }), 'openai-codex');
+    const pack = selectPreferredOMPack(providerAccess({ anthropic: 'oauth', openai: 'oauth' }), 'openai-codex');
 
     expect(pack).toMatchObject({ id: 'openai', modelId: 'openai/gpt-5.4-mini' });
+  });
+
+  it('ignores a selected provider that is not reachable', () => {
+    const pack = selectPreferredOMPack(providerAccess({ anthropic: 'oauth' }), 'openai-codex');
+
+    expect(pack).toMatchObject({ id: 'anthropic', modelId: 'anthropic/claude-haiku-4-5' });
   });
 
   it('prefers OAuth access when no provider is selected', () => {

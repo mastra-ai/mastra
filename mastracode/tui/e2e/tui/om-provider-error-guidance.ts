@@ -64,7 +64,9 @@ export const omProviderErrorGuidanceScenario = {
     );
 
     await runtime.waitForScreenText(/Observational Memory is using google\/gemini-3.5-flash/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Use \/memory to choose another OM model, or \/login/i, terminal, 8_000);
+    // \s+ between words: the hint wraps across terminal lines
+    await runtime.waitForScreenText(/Use\s+\/login\s+to\s+authenticate\s+with\s+a\s+provider/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Use\s+\/memory\s+to\s+choose\s+another\s+OM\s+model/i, terminal, 8_000);
 
     terminal.keyCtrlC();
   },

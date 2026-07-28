@@ -136,6 +136,23 @@ describe('explicit OM configuration', () => {
     expect(hasExplicitOMConfiguration(settings)).toBe(true);
   });
 
+  it('ignores a custom pack that carries no model', () => {
+    const settings = createSettings();
+    settings.onboarding.omPackId = 'custom';
+    settings.models.activeOmPackId = 'custom';
+
+    expect(hasExplicitOMConfiguration(settings)).toBe(false);
+  });
+
+  it('treats a custom pack with a model as explicit configuration', () => {
+    const settings = createSettings();
+    settings.onboarding.omPackId = 'custom';
+    settings.models.activeOmPackId = 'custom';
+    settings.models.omModelOverride = 'xai/grok-4.5';
+
+    expect(hasExplicitOMConfiguration(settings)).toBe(true);
+  });
+
   it('applies a provider default while OM is untouched', () => {
     const settings = createSettings();
     const pack = {

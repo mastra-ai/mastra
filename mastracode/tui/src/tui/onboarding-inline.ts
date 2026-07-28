@@ -511,15 +511,16 @@ export class OnboardingInlineComponent extends Box implements Focusable {
     box.addChild(new Text(theme.fg('dim', 'https://mastra.ai/docs/memory/observational-memory'), 0, 0));
     box.addChild(new Spacer(1));
 
-    const selectedOmId = this.options.previous?.omPackId ?? this.selectedOmPack?.id ?? null;
+    const prevOmId = this.options.previous?.omPackId ?? null;
     const items: SelectItem[] = omPacks.map(p => ({
       value: p.id,
-      label: `  ${p.name}  ${theme.fg('dim', p.description)}${p.id === selectedOmId ? theme.fg('dim', ' (current)') : ''}`,
+      label: `  ${p.name}  ${theme.fg('dim', p.description)}${p.id === prevOmId ? theme.fg('dim', ' (current)') : ''}`,
     }));
 
     this.selectList = new SelectList(items, items.length, getSelectListTheme());
 
-    // Pre-select the previously chosen OM pack
+    // Pre-select the previous choice, or the pack matching the connected provider
+    const selectedOmId = prevOmId ?? this.selectedOmPack?.id ?? null;
     const selectedOmIdx = selectedOmId ? omPacks.findIndex(p => p.id === selectedOmId) : -1;
     if (selectedOmIdx > 0) this.selectList.setSelectedIndex(selectedOmIdx);
 

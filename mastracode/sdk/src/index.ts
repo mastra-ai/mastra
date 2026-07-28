@@ -817,11 +817,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const builtinPacks = getAvailableModePacks(startupAccess);
   const builtinOmPacks = getAvailableOmPacks(startupAccess);
   const effectiveDefaults = resolveModelDefaults(globalSettings, builtinPacks);
+  const activeProviderId = effectiveDefaults.build?.split('/')[0];
   const preferredOmModel = hasExplicitOMConfiguration(globalSettings)
     ? undefined
-    : selectPreferredOMPack(startupAccess, globalSettings.models.activeModelPackId ?? undefined)?.modelId;
-  const effectiveObserverModel = resolveOmRoleModel(globalSettings, 'observer', builtinOmPacks) ?? preferredOmModel;
-  const effectiveReflectorModel = resolveOmRoleModel(globalSettings, 'reflector', builtinOmPacks) ?? preferredOmModel;
+    : selectPreferredOMPack(startupAccess, activeProviderId)?.modelId;
+  const effectiveObserverModel = resolveOmRoleModel(globalSettings, 'observer', builtinOmPacks) || preferredOmModel;
+  const effectiveReflectorModel = resolveOmRoleModel(globalSettings, 'reflector', builtinOmPacks) || preferredOmModel;
   const effectiveObservationThreshold = globalSettings.models.omObservationThreshold ?? undefined;
   const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
   const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;

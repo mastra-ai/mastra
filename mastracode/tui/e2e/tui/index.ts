@@ -77,6 +77,7 @@ import { omProviderErrorGuidanceScenario } from './om-provider-error-guidance.js
 import { omSettingsScenario } from './om-settings.js';
 import { omStatusIndicatorScenario } from './om-status-indicator.js';
 import { omThresholdPersistenceScenario } from './om-threshold-persistence.js';
+import { onboardingOmFollowsLoginScenario } from './onboarding-om-follows-login.js';
 import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
 import { persistentGoalCommandsScenario } from './persistent-goal-commands.js';
 import { persistentGoalJudgeDecisionScenario } from './persistent-goal-judge-decision.js';
@@ -242,6 +243,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'om-settings': omSettingsScenario,
   'om-status-indicator': omStatusIndicatorScenario,
   'om-threshold-persistence': omThresholdPersistenceScenario,
+  'onboarding-om-follows-login': onboardingOmFollowsLoginScenario,
   'openai-strict-schema': openaiStrictSchemaScenario,
   'persistent-goal-commands': persistentGoalCommandsScenario,
   'persistent-goal-judge-decision': persistentGoalJudgeDecisionScenario,

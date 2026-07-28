@@ -109,6 +109,7 @@ export type ScenarioName =
   | 'om-provider-error-guidance'
   | 'om-status-indicator'
   | 'om-threshold-persistence'
+  | 'onboarding-om-follows-login'
   | 'quiet-settings'
   | 'quiet-streaming-preview-height'
   | 'quiet-tool-history-parity'
