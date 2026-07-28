@@ -1,15 +1,15 @@
 import { expect, test } from '@playwright/test';
 import { resetStorage } from '../__utils__/reset-storage';
 import { selectFixture } from '../__utils__/select-fixture';
-import { canonicalWorkflowScenarios } from './workflow-builder-prompt-suite-oracle';
+import { portableWorkflowScenarios } from './workflow-builder-portable-prompt-suite';
 
-// FEATURE: Registry-backed Workflow Builder prompt lifecycle
-// USER STORY: A Studio user can submit prompts that compose registered tools, agents, and workflows, then revisit the saved workflow.
-// BEHAVIOR UNDER TEST: Streamed checkpoint/Finalize calls produce saveable definitions whose graph and chat survive reload.
-test.describe('Workflow Builder registry-backed prompt lifecycle', () => {
+// FEATURE: Portable Workflow Builder prompt lifecycle
+// USER STORY: A Studio user can author and revisit workflows that do not depend on the instance registry.
+// BEHAVIOR UNDER TEST: Portable mapping-only definitions finalize, persist, and restore their authoring conversation.
+test.describe('Workflow Builder portable prompt lifecycle', () => {
   test.setTimeout(90_000);
 
-  for (const scenario of canonicalWorkflowScenarios) {
+  for (const scenario of portableWorkflowScenarios) {
     test.describe(`when the ${scenario.id} prompt is submitted`, () => {
       test('persists the finalized workflow and authoring conversation across reload', async ({ page }) => {
         await resetStorage();

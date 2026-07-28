@@ -187,8 +187,8 @@ const scenarios = [
   },
 ] as const;
 
-describe('Mastra Code shared Workflow Builder prompt lifecycle', () => {
-  describe('when generated definitions are saved and executed through the workflow tools', () => {
+describe('Mastra Code registry-backed Workflow Builder prompt lifecycle', () => {
+  describe('when definitions represent prompts that compose registered instance resources', () => {
     it.each(scenarios)(
       'persists and runs $id with the expected output',
       async ({ definition, expected, id, input }) => {
