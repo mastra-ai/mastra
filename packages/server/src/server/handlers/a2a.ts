@@ -23,7 +23,7 @@ import { convertToCoreMessage, normalizeError, createSuccessResponse } from '../
 import { DefaultPushNotificationSender } from '../a2a/push-notification-sender';
 import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
 import type { InMemoryTaskStore } from '../a2a/store';
-import { applyUpdateToTask, createTaskContext, loadOrCreateTask } from '../a2a/tasks';
+import { applyUpdateToTask, loadOrCreateTask } from '../a2a/tasks';
 import {
   a2aAgentIdPathParams,
   agentExecutionBodySchema,
@@ -558,6 +558,129 @@ function getTaskArtifactUpdates({ previous, next }: { previous: Task; next: Task
   }));
 }
 
+async function executeMessageSend({
+  requestId,
+  message,
+  metadata,
+  currentData,
+  taskStore,
+  pushNotificationSender,
+  agent,
+  agentId,
+  logger,
+  requestContext,
+}: {
+  requestId: number | string;
+  message: MessageSendParams['message'];
+  metadata: MessageSendParams['metadata'];
+  currentData: Task;
+  taskStore: InMemoryTaskStore;
+  pushNotificationSender: DefaultPushNotificationSender;
+  agent: Agent;
+  agentId: string;
+  logger?: IMastraLogger;
+  requestContext: RequestContext;
+}) {
+  const { contextId } = message;
+
+  try {
+    // Pass contextId as threadId for memory persistence across A2A conversations
+    // Allow user to pass resourceId via metadata, fall back to agentId
+    const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
+    const result = await agent.generate([convertToCoreMessage(message)], {
+      runId: currentData.id,
+      requestContext,
+      ...(contextId ? { threadId: contextId, resourceId } : {}),
+    });
+
+    const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
+    if (latestTask?.status.state === 'canceled') {
+      return createSuccessResponse(requestId, latestTask);
+    }
+    currentData = latestTask ?? currentData;
+
+    const artifactUpdate = createArtifactUpdate({
+      taskId: currentData.id,
+      contextId: currentData.contextId,
+      text: result.text,
+      data: result.object as Record<string, unknown> | undefined,
+    });
+
+    if (artifactUpdate) {
+      currentData = applyUpdateToTask(currentData, artifactUpdate);
+    }
+
+    const previousTask = currentData;
+    currentData = applyUpdateToTask(currentData, {
+      state: 'completed',
+      message: undefined,
+    });
+
+    // Store execution details in task metadata
+    currentData.metadata = {
+      ...currentData.metadata,
+      execution: {
+        toolCalls: result.toolCalls,
+        toolResults: result.toolResults,
+        usage: result.usage,
+        finishReason: result.finishReason,
+      },
+    };
+
+    await saveTaskAndMaybeSendPushNotification({
+      taskStore,
+      pushNotificationSender,
+      previousTask,
+      nextTask: currentData,
+      agentId,
+      logger,
+    });
+  } catch (handlerError) {
+    const latestTask = await taskStore.load({ agentId, taskId: currentData.id });
+    if (latestTask?.status.state === 'canceled') {
+      return createSuccessResponse(requestId, latestTask);
+    }
+    currentData = latestTask ?? currentData;
+
+    // If handler throws, apply 'failed' status, save, and rethrow
+    const failureStatusUpdate: Omit<TaskStatus, 'timestamp'> = {
+      state: 'failed',
+      message: {
+        messageId: crypto.randomUUID(),
+        role: 'agent',
+        parts: [
+          {
+            kind: 'text',
+            text: `Handler failed: ${handlerError instanceof Error ? handlerError.message : String(handlerError)}`,
+          },
+        ],
+        kind: 'message',
+      },
+    };
+    const previousTask = currentData;
+    currentData = applyUpdateToTask(currentData, failureStatusUpdate);
+
+    try {
+      await saveTaskAndMaybeSendPushNotification({
+        taskStore,
+        pushNotificationSender,
+        previousTask,
+        nextTask: currentData,
+        agentId,
+        logger,
+      });
+    } catch (saveError) {
+      // @ts-expect-error saveError is an unknown error
+      logger?.error(`Failed to save task ${currentData.id} after handler error:`, saveError?.message);
+    }
+
+    return normalizeError(handlerError, requestId, currentData.id, logger); // Rethrow original error
+  }
+
+  // The loop finished, send the final task state
+  return createSuccessResponse(requestId, currentData);
+}
+
 export async function handleMessageSend({
   requestId,
   params,
@@ -584,6 +707,10 @@ export async function handleMessageSend({
   const { message, metadata } = params;
   const { contextId } = message;
   const taskId = message.taskId || crypto.randomUUID();
+  const existingTask = await taskStore.load({ agentId, taskId });
+  if (params.configuration?.blocking === false && existingTask?.status.state === 'working') {
+    return createSuccessResponse(requestId, existingTask);
+  }
   const {
     pushNotificationStore: resolvedPushNotificationStore,
     pushNotificationSender: resolvedPushNotificationSender,
@@ -592,7 +719,6 @@ export async function handleMessageSend({
     pushNotificationSender,
   });
 
-  // Load or create task
   let currentData = await loadOrCreateTask({
     taskId,
     taskStore,
@@ -609,97 +735,44 @@ export async function handleMessageSend({
     });
   }
 
-  // Use the new TaskContext definition, passing history
-  const context = createTaskContext({
-    task: currentData,
-    userMessage: message,
-    history: currentData.history || [],
-    activeCancellations: taskStore.activeCancellations,
+  currentData = applyUpdateToTask(currentData, {
+    state: 'working',
+    message: {
+      messageId: crypto.randomUUID(),
+      kind: 'message',
+      role: 'agent',
+      parts: [{ kind: 'text', text: 'Generating response...' }],
+    },
+  });
+  await saveTaskAndMaybeSendPushNotification({
+    taskStore,
+    pushNotificationSender: resolvedPushNotificationSender,
+    nextTask: currentData,
+    agentId,
+    logger,
   });
 
-  try {
-    // Pass contextId as threadId for memory persistence across A2A conversations
-    // Allow user to pass resourceId via metadata, fall back to agentId
-    const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
-    const result = await agent.generate([convertToCoreMessage(message)], {
-      runId: taskId,
-      requestContext,
-      ...(contextId ? { threadId: contextId, resourceId } : {}),
+  const execution = executeMessageSend({
+    requestId,
+    message,
+    metadata,
+    currentData,
+    taskStore,
+    pushNotificationSender: resolvedPushNotificationSender,
+    agent,
+    agentId,
+    logger,
+    requestContext,
+  });
+
+  if (params.configuration?.blocking === false) {
+    void execution.catch(error => {
+      logger?.error(`Unexpected background failure for A2A task ${currentData.id}`, error);
     });
-
-    const artifactUpdate = createArtifactUpdate({
-      taskId: currentData.id,
-      contextId: currentData.contextId,
-      text: result.text,
-      data: result.object as Record<string, unknown> | undefined,
-    });
-
-    if (artifactUpdate) {
-      currentData = applyUpdateToTask(currentData, artifactUpdate);
-    }
-
-    currentData = applyUpdateToTask(currentData, {
-      state: 'completed',
-      message: undefined,
-    });
-
-    // Store execution details in task metadata
-    currentData.metadata = {
-      ...currentData.metadata,
-      execution: {
-        toolCalls: result.toolCalls,
-        toolResults: result.toolResults,
-        usage: result.usage,
-        finishReason: result.finishReason,
-      },
-    };
-
-    await saveTaskAndMaybeSendPushNotification({
-      taskStore,
-      pushNotificationSender: resolvedPushNotificationSender,
-      previousTask: context.task,
-      nextTask: currentData,
-      agentId,
-      logger,
-    });
-    context.task = currentData;
-  } catch (handlerError) {
-    // If handler throws, apply 'failed' status, save, and rethrow
-    const failureStatusUpdate: Omit<TaskStatus, 'timestamp'> = {
-      state: 'failed',
-      message: {
-        messageId: crypto.randomUUID(),
-        role: 'agent',
-        parts: [
-          {
-            kind: 'text',
-            text: `Handler failed: ${handlerError instanceof Error ? handlerError.message : String(handlerError)}`,
-          },
-        ],
-        kind: 'message',
-      },
-    };
-    currentData = applyUpdateToTask(currentData, failureStatusUpdate);
-
-    try {
-      await saveTaskAndMaybeSendPushNotification({
-        taskStore,
-        pushNotificationSender: resolvedPushNotificationSender,
-        previousTask: context.task,
-        nextTask: currentData,
-        agentId,
-        logger,
-      });
-    } catch (saveError) {
-      // @ts-expect-error saveError is an unknown error
-      logger?.error(`Failed to save task ${currentData.id} after handler error:`, saveError?.message);
-    }
-
-    return normalizeError(handlerError, requestId, currentData.id, logger); // Rethrow original error
+    return createSuccessResponse(requestId, currentData);
   }
 
-  // The loop finished, send the final task state
-  return createSuccessResponse(requestId, currentData);
+  return execution;
 }
 
 export async function handleTaskGet({

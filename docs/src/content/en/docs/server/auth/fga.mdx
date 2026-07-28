@@ -263,6 +263,10 @@ class MyFGAProvider implements IFGAProvider {
 }
 ```
 
+:::note
+See the [`IFGAProvider` reference](/reference/auth/fga) for every method, parameter, and the `ActorSignal` type.
+:::
+
 ## System actors
 
 Autonomous and scheduled agents run without an end user. Mark these calls with an actor signal so FGA can tell them apart from user requests:
@@ -305,5 +309,6 @@ The actor signal is trusted input, so construct it server-side:
 
 ## Related
 
+- [`IFGAProvider` reference](/reference/auth/fga)
 - [Authentication overview](/docs/server/auth)
 - [WorkOS authentication](/docs/server/auth/workos)
