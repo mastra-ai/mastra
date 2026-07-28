@@ -4179,6 +4179,9 @@ importers:
       '@commander-js/extra-typings':
         specifier: ^14.0.0
         version: 14.0.0(commander@14.0.3)
+      '@internal/factory-ui':
+        specifier: workspace:*
+        version: link:../../mastracode/factory-ui
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
