@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 44.0.0-alpha.2
+
+### Patch Changes
+
+- Fixed Sankey chart labels overlapping between neighbouring columns on narrow charts. Node names and column headers are now measured against the space each column actually has, and a label that no longer fits is clipped with an ellipsis. Hovering a clipped label still shows its full text. ([#20289](https://github.com/mastra-ai/mastra/pull/20289))
+
+- Updated dependencies [[`a211d09`](https://github.com/mastra-ai/mastra/commit/a211d09185dc65a746534914cf38b67f21ee9bac), [`2dd1681`](https://github.com/mastra-ai/mastra/commit/2dd168133bebbeb4ea15e8bcf775faad43017865), [`05db566`](https://github.com/mastra-ai/mastra/commit/05db566fcbdcbf33d0bffca0c72ec30129e2e3ca), [`8124754`](https://github.com/mastra-ai/mastra/commit/8124754ae89fbc69f8136d1df4a91904d0f84c4e)]:
+  - @mastra/core@1.54.0-alpha.2
+  - @mastra/client-js@1.35.0-alpha.2
+  - @mastra/react@1.3.3-alpha.2
+
 ## 44.0.0-alpha.1
 
 ### Patch Changes

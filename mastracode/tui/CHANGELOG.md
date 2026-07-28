@@ -1,5 +1,21 @@
 # mastracode
 
+## 0.32.3-alpha.2
+
+### Patch Changes
+
+- Fixed observational memory staying on the Gemini default after you sign in to Anthropic or OpenAI. First-run setup and `/login` now select the small, cheap OM model of the provider you just connected, and the TUI tells you when it does. An OM model you picked yourself is never replaced. ([#20291](https://github.com/mastra-ai/mastra/pull/20291))
+
+  Providers with no cheap OM model (GitHub Copilot, xAI) no longer pin observation and reflection to their full-size coding model — OM stays open so a later login can set it.
+
+  When an OM run fails, the hint names the model OM is using and keeps the advice for the actual failure, so an authentication error still points at `/login` and a rate limit still tells you to wait, alongside `/memory` to switch OM models.
+
+- Updated dependencies [[`a211d09`](https://github.com/mastra-ai/mastra/commit/a211d09185dc65a746534914cf38b67f21ee9bac), [`f014c26`](https://github.com/mastra-ai/mastra/commit/f014c26f3445118b684e286ee5819b46dfa943a0), [`05db566`](https://github.com/mastra-ai/mastra/commit/05db566fcbdcbf33d0bffca0c72ec30129e2e3ca), [`05db566`](https://github.com/mastra-ai/mastra/commit/05db566fcbdcbf33d0bffca0c72ec30129e2e3ca), [`8dadb6a`](https://github.com/mastra-ai/mastra/commit/8dadb6abfe449b7f8b129663671cc614f2cceeef), [`e075db9`](https://github.com/mastra-ai/mastra/commit/e075db9715c836bae5dfc37c50248492af397c3b), [`8124754`](https://github.com/mastra-ai/mastra/commit/8124754ae89fbc69f8136d1df4a91904d0f84c4e)]:
+  - @mastra/core@1.54.0-alpha.2
+  - @mastra/code-sdk@1.1.0-alpha.2
+  - @mastra/pg@1.18.0-alpha.2
+  - @mastra/libsql@1.18.0-alpha.1
+
 ## 0.32.3-alpha.1
 
 ### Patch Changes

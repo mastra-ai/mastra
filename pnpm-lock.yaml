@@ -1618,8 +1618,8 @@ importers:
         specifier: ^1.1.2
         version: 1.1.2(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(clsx@2.1.1)(lucide-react@1.23.0(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@mastra/docusaurus-plugin-kapa':
-        specifier: ^1.2.0
-        version: 1.2.0(@docusaurus/theme-common@3.10.1(@docusaurus/plugin-content-docs@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3))(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(clsx@2.1.1)(lucide-react@1.23.0(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        specifier: ^1.2.1
+        version: 1.2.1(@docusaurus/theme-common@3.10.1(@docusaurus/plugin-content-docs@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3))(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(clsx@2.1.1)(lucide-react@1.23.0(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@mdx-js/react':
         specifier: ^3.1.1
         version: 3.1.1(@types/react@19.2.17)(react@19.2.7)
@@ -1720,6 +1720,9 @@ importers:
       '@docusaurus/types':
         specifier: ^3.10.1
         version: 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@mastra/lint-docs':
+        specifier: ^1.1.1
+        version: 1.1.1(oxfmt@0.59.0)(prettier@3.9.5)
       '@playwright/test':
         specifier: ^1.58.2
         version: 1.61.1
@@ -1756,51 +1759,12 @@ importers:
       postcss:
         specifier: ^8.5.8
         version: 8.5.16
-      prettier:
-        specifier: 3.9.5
-        version: 3.9.5
-      prettier-plugin-tailwindcss:
-        specifier: ^0.7.2
-        version: 0.7.2(prettier@3.9.5)
-      remark:
-        specifier: ^15.0.1
-        version: 15.0.1
       remark-cli:
         specifier: ^12.0.1
         version: 12.0.1
-      remark-frontmatter:
-        specifier: ^5.0.0
-        version: 5.0.0
       remark-gfm:
         specifier: ^4.0.1
         version: 4.0.1
-      remark-lint:
-        specifier: ^10.0.1
-        version: 10.0.1
-      remark-lint-heading-increment:
-        specifier: ^4.0.1
-        version: 4.0.1
-      remark-lint-no-emphasis-as-heading:
-        specifier: ^4.0.1
-        version: 4.0.1
-      remark-lint-no-undefined-references:
-        specifier: ^5.0.2
-        version: 5.0.2
-      remark-lint-ordered-list-marker-value:
-        specifier: ^4.0.1
-        version: 4.0.1
-      remark-lint-unordered-list-marker-style:
-        specifier: ^4.0.1
-        version: 4.0.1
-      remark-mdx:
-        specifier: ^3.1.1
-        version: 3.1.1
-      remark-preset-lint-consistent:
-        specifier: ^6.0.1
-        version: 6.0.1
-      remark-preset-lint-recommended:
-        specifier: ^7.0.1
-        version: 7.0.1
       tailwind-merge:
         specifier: ^3.5.0
         version: 3.5.0
@@ -15033,8 +14997,8 @@ packages:
       react: ^19.0.0
       react-dom: ^19.0.0
 
-  '@mastra/docusaurus-plugin-kapa@1.2.0':
-    resolution: {integrity: sha512-N1f/v+pnM8K4bCa1QiPbtz2AwChXoj8Cz84l+DKDT1LMx1l8oFSLb4HkCgrKBGMLdyBNkywnFfrjEqNL33zgQg==}
+  '@mastra/docusaurus-plugin-kapa@1.2.1':
+    resolution: {integrity: sha512-hTClKR1RTcdvhQ+NWEfaRG2QfqSloLPBPaBTHHzPw/fatFCbTz5gdPKcWwoavKVhIf9b+ILl/tEZK3tl+2Nksg==}
     peerDependencies:
       '@docusaurus/theme-common': ^3.9.2
       '@docusaurus/types': ^3.9.2
@@ -15042,6 +15006,19 @@ packages:
       lucide-react: ^1.8.0
       react: ^19.0.0
       react-dom: ^19.0.0
+
+  '@mastra/lint-docs@1.1.1':
+    resolution: {integrity: sha512-47Y2OKf4aBOG7jekl5M5iKxLy1N4trHqV/t/i+Ib1//hZ6DwKWxFzvWVB56wKJ0ChmABKHowuTM3xQAXJvr45w==}
+    engines: {node: '>=22.13.0'}
+    hasBin: true
+    peerDependencies:
+      oxfmt: ^0.59.0
+      prettier: ^3.8.3
+    peerDependenciesMeta:
+      oxfmt:
+        optional: true
+      prettier:
+        optional: true
 
   '@mastra/schema-compat@1.1.0':
     resolution: {integrity: sha512-2v8nTaAC/279jHs0ux2Emp+lNgBFq3QeNbZCGSHFeeBhbqqM5aWJCPY2Xgw8Z/dY3mTpFxBbmXQz3oRyYStnqg==}
@@ -38403,7 +38380,7 @@ snapshots:
       - '@types/react'
       - '@types/react-dom'
 
-  '@mastra/docusaurus-plugin-kapa@1.2.0(@docusaurus/theme-common@3.10.1(@docusaurus/plugin-content-docs@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3))(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(clsx@2.1.1)(lucide-react@1.23.0(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
+  '@mastra/docusaurus-plugin-kapa@1.2.1(@docusaurus/theme-common@3.10.1(@docusaurus/plugin-content-docs@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3))(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(clsx@2.1.1)(lucide-react@1.23.0(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@docusaurus/theme-common': 3.10.1(@docusaurus/plugin-content-docs@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3))(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -38415,6 +38392,29 @@ snapshots:
       react-dom: 19.2.7(react@19.2.7)
       streamdown: 2.5.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       use-stick-to-bottom: 1.1.6(react@19.2.7)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@mastra/lint-docs@1.1.1(oxfmt@0.59.0)(prettier@3.9.5)':
+    dependencies:
+      remark: 15.0.1
+      remark-frontmatter: 5.0.0
+      remark-gfm: 4.0.1
+      remark-lint-heading-increment: 4.0.1
+      remark-lint-no-emphasis-as-heading: 4.0.1
+      remark-lint-no-undefined-references: 5.0.2
+      remark-lint-ordered-list-marker-value: 4.0.1
+      remark-lint-unordered-list-marker-style: 4.0.1
+      remark-mdx: 3.1.1
+      remark-preset-lint-consistent: 6.0.1
+      remark-preset-lint-recommended: 7.0.1
+      tinyglobby: 0.2.17
+      unist-util-visit: 5.1.0
+      vfile: 6.0.3
+      vfile-reporter: 8.1.1
+    optionalDependencies:
+      oxfmt: 0.59.0
+      prettier: 3.9.5
     transitivePeerDependencies:
       - supports-color
 

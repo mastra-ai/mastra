@@ -1,5 +1,22 @@
 # @mastra/client-js
 
+## 1.35.0-alpha.2
+
+### Patch Changes
+
+- Added the `name` and `description` fields to the `DatasetExperiment` type. The server already returned these values, so you can now read an experiment's name and description directly from `listDatasetExperiments`, `listExperiments`, and `getDatasetExperiment` — no cast needed. ([#19256](https://github.com/mastra-ai/mastra/pull/19256))
+
+  ```ts
+  const { experiments } = await client.listDatasetExperiments(datasetId);
+
+  for (const experiment of experiments) {
+    console.log(experiment.name, experiment.description);
+  }
+  ```
+
+- Updated dependencies [[`a211d09`](https://github.com/mastra-ai/mastra/commit/a211d09185dc65a746534914cf38b67f21ee9bac), [`05db566`](https://github.com/mastra-ai/mastra/commit/05db566fcbdcbf33d0bffca0c72ec30129e2e3ca), [`8124754`](https://github.com/mastra-ai/mastra/commit/8124754ae89fbc69f8136d1df4a91904d0f84c4e)]:
+  - @mastra/core@1.54.0-alpha.2
+
 ## 1.35.0-alpha.1
 
 ### Patch Changes
