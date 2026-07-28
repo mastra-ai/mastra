@@ -1,0 +1,6 @@
+{
+  "files": ["src/web/ui/index.html"],
+  "insertBefore": "</body>",
+  "commentSyntax": "html",
+  "cspChecked": true
+}

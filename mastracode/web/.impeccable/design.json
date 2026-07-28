@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-23T09:53:45Z",
+  "title": "Design System: Mastra Code Factory",
+  "extensions": {
+    "colorMeta": {
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Carbon Canvas",
+        "canonical": "oklch(0% 0 0deg)",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(25% 0 0)", "oklch(37% 0 0)", "oklch(50% 0 0)", "oklch(62% 0 0)", "oklch(74% 0 0)", "oklch(86% 0 0)", "oklch(95% 0 0)"]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Instrument Panel",
+        "canonical": "oklch(16% 0 0deg)",
+        "tonalRamp": ["oklch(15% 0 0)", "oklch(25% 0 0)", "oklch(37% 0 0)", "oklch(50% 0 0)", "oklch(62% 0 0)", "oklch(74% 0 0)", "oklch(86% 0 0)", "oklch(95% 0 0)"]
+      },
+      "signal-green": {
+        "role": "primary",
+        "displayName": "Signal Green",
+        "canonical": "oklch(0.723 0.219 149.579)",
+        "tonalRamp": ["oklch(0.15 0.05 150)", "oklch(0.27 0.09 150)", "oklch(0.39 0.13 150)", "oklch(0.51 0.17 150)", "oklch(0.63 0.21 150)", "oklch(0.73 0.20 150)", "oklch(0.84 0.14 150)", "oklch(0.95 0.06 150)"]
+      },
+      "alert-red": {
+        "role": "secondary",
+        "displayName": "Alert Red",
+        "canonical": "oklch(0.637 0.237 25.331)",
+        "tonalRamp": ["oklch(0.15 0.05 25)", "oklch(0.27 0.10 25)", "oklch(0.39 0.15 25)", "oklch(0.51 0.20 25)", "oklch(0.64 0.24 25)", "oklch(0.74 0.19 25)", "oklch(0.84 0.13 25)", "oklch(0.95 0.05 25)"]
+      },
+      "comparison-blue": {
+        "role": "secondary",
+        "displayName": "Comparison Blue",
+        "canonical": "oklch(0.623 0.214 259.815)",
+        "tonalRamp": ["oklch(0.15 0.05 260)", "oklch(0.27 0.09 260)", "oklch(0.39 0.14 260)", "oklch(0.51 0.18 260)", "oklch(0.62 0.21 260)", "oklch(0.73 0.17 260)", "oklch(0.84 0.11 260)", "oklch(0.95 0.04 260)"]
+      },
+      "warning-amber": {
+        "role": "tertiary",
+        "displayName": "Warning Amber",
+        "canonical": "oklch(0.769 0.188 70.08)",
+        "tonalRamp": ["oklch(0.15 0.04 70)", "oklch(0.27 0.08 70)", "oklch(0.39 0.11 70)", "oklch(0.51 0.14 70)", "oklch(0.63 0.17 70)", "oklch(0.77 0.19 70)", "oklch(0.86 0.13 70)", "oklch(0.95 0.05 70)"]
+      }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "Page and primary section titles." },
+      "title": { "displayName": "Title", "purpose": "Panel headings and strong labels." },
+      "body": { "displayName": "Body", "purpose": "Descriptions, rows, and supporting context." },
+      "label": { "displayName": "Operational Label", "purpose": "Identifiers, metadata, and compact status annotations." }
+    },
+    "shadows": [
+      { "name": "main-frame", "value": "var(--shadow-main-frame)", "purpose": "Ambient application-frame separation, primarily in light mode." },
+      { "name": "dialog", "value": "var(--shadow-dialog)", "purpose": "Dialogs, popovers, and floating overlays only." },
+      { "name": "focus-ring", "value": "var(--shadow-focus-ring)", "purpose": "Keyboard focus paired with a visible border change." }
+    ],
+    "motion": [
+      { "name": "state-change", "value": "200ms cubic-bezier(0.33, 1, 0.68, 1)", "purpose": "Hover, focus, selection, and disclosure transitions." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "2xl", "value": "1536px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The screen's main action; high contrast and compact.",
+      "html": "<button class=\"ds-btn-primary\">Apply</button>",
+      "css": ".ds-btn-primary{border:1px solid transparent;border-radius:9999px;background:var(--neutral6);color:var(--surface1);padding:8px 12px;font:500 .8125rem/1.5 system-ui,sans-serif;cursor:pointer;transition:background-color 200ms cubic-bezier(.33,1,.68,1),border-color 200ms cubic-bezier(.33,1,.68,1)}.ds-btn-primary:hover{background:color-mix(in oklab,var(--neutral6) 90%,transparent)}.ds-btn-primary:active{background:color-mix(in oklab,var(--neutral6) 80%,transparent)}.ds-btn-primary:focus-visible{outline:2px solid var(--accent1);outline-offset:2px}"
+    },
+    {
+      "name": "Default Button",
+      "kind": "button",
+      "refersTo": "button-default",
+      "description": "Neutral action with clear hover and press feedback.",
+      "html": "<button class=\"ds-btn-default\">Compare</button>",
+      "css": ".ds-btn-default{border:1px solid var(--border2);border-radius:9999px;background:var(--surface3);color:var(--neutral6);padding:8px 12px;font:400 .8125rem/1.5 system-ui,sans-serif;cursor:pointer;transition:background-color 200ms cubic-bezier(.33,1,.68,1),border-color 200ms cubic-bezier(.33,1,.68,1)}.ds-btn-default:hover{background:var(--surface5)}.ds-btn-default:active{background:var(--surface6)}.ds-btn-default:focus-visible{outline:2px solid var(--accent1);outline-offset:2px}"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input-default",
+      "description": "Pill-shaped field with tonal focus feedback.",
+      "html": "<input class=\"ds-input\" value=\"Factory metrics\" aria-label=\"Example input\" />",
+      "css": ".ds-input{width:100%;border:1px solid var(--border2);border-radius:9999px;background:var(--surface3);color:var(--neutral6);padding:8px 12px;font:400 .8125rem/1.5 system-ui,sans-serif;transition:background-color 200ms cubic-bezier(.33,1,.68,1),border-color 200ms cubic-bezier(.33,1,.68,1)}.ds-input:hover{background:var(--surface4)}.ds-input:focus-visible{border-color:var(--accent1);outline:2px solid color-mix(in oklab,var(--accent1) 18%,transparent);outline-offset:1px}"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "description": "A semantic status label that pairs text with color.",
+      "html": "<span class=\"ds-badge\"><span class=\"ds-badge-dot\" aria-hidden=\"true\"></span>Active</span>",
+      "css": ".ds-badge{display:inline-flex;align-items:center;gap:4px;height:24px;border:1px solid color-mix(in oklab,var(--notice-success) 20%,transparent);border-radius:9999px;background:color-mix(in oklab,var(--notice-success) 20%,transparent);color:var(--notice-success-fg);padding:0 8px;font:400 .625rem/1.6 ui-monospace,monospace}.ds-badge-dot{width:6px;height:6px;border-radius:9999px;background:currentColor}"
+    },
+    {
+      "name": "Dashboard Panel",
+      "kind": "card",
+      "refersTo": "dashboard-panel",
+      "description": "A flat tonal container for one coherent operational readout.",
+      "html": "<section class=\"ds-panel\"><h3>Queue health</h3><p>4 items need attention</p></section>",
+      "css": ".ds-panel{border:1px solid var(--border1);border-radius:14px;background:var(--surface-overlay-soft);color:var(--neutral6);padding:12px 16px;font-family:system-ui,sans-serif}.ds-panel h3{margin:0;font-size:.875rem;line-height:1.43;font-weight:500}.ds-panel p{margin:6px 0 0;color:var(--neutral3);font-size:.75rem;line-height:1.5}"
+    },
+    {
+      "name": "Navigation Item",
+      "kind": "nav",
+      "description": "Quiet by default, explicit on hover and current selection.",
+      "html": "<a class=\"ds-nav-item\" href=\"#\" aria-current=\"page\">Metrics</a>",
+      "css": ".ds-nav-item{display:flex;min-height:36px;align-items:center;border-radius:6px;color:var(--neutral4);padding:0 12px;text-decoration:none;font:400 .75rem/1.5 system-ui,sans-serif;transition:background-color 200ms cubic-bezier(.33,1,.68,1),color 200ms cubic-bezier(.33,1,.68,1)}.ds-nav-item:hover{background:var(--sidebar-nav-hover);color:var(--neutral6)}.ds-nav-item[aria-current=page]{background:var(--sidebar-nav-active);color:var(--neutral6);font-weight:500}.ds-nav-item:focus-visible{outline:2px solid var(--accent1);outline-offset:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Factory Instrument Panel",
+    "overview": "The interface behaves like a well-made instrument panel: operational state is immediately readable, controls are familiar, and every accent communicates status, selection, or movement. Dense information is organized through hierarchy and alignment rather than decorative containers. The system is crisp, restrained, and adaptive across dark and light themes.",
+    "keyCharacteristics": [
+      "Compact but never cramped",
+      "Tonal surface layering with quiet borders",
+      "Tabular, aligned data for rapid comparison",
+      "Signal colors used only for state and emphasis",
+      "Responsive state transitions with reduced-motion support"
+    ],
+    "rules": [
+      { "name": "The Signal Rarity Rule", "body": "Accent colors identify state, selection, or data series; they never decorate neutral content.", "section": "colors" },
+      { "name": "The Dual-Encoding Rule", "body": "Every status color is paired with a label, icon, pattern, or position so meaning survives color-vision differences.", "section": "colors" },
+      { "name": "The Readout Rule", "body": "Quantitative values use tabular numerals, deliberate alignment, and a tighter hierarchy than editorial display type.", "section": "typography" },
+      { "name": "The Tonal-First Rule", "body": "If a resting panel needs a shadow to be understood, its hierarchy or spacing is wrong.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do lead with Factory flow, bottlenecks, and active work before secondary breakdowns.",
+      "Do align quantitative values with tabular numerals and consistent units.",
+      "Do use Signal Green, Alert Red, Comparison Blue, and Warning Amber only for semantic state or data comparison.",
+      "Do preserve WCAG AA contrast, keyboard reachability, visible focus, reduced motion, and color-independent meaning."
+    ],
+    "donts": [
+      "Don't build presentation-only executive dashboards or decorative marketing analytics.",
+      "Don't turn operational screens into dense terminal-style monitoring consoles.",
+      "Don't use glass effects, oversized rounded cards, or repetitive grids of visually identical stat cards.",
+      "Don't add decorative gradients, accent side stripes, or large soft shadows to resting panels.",
+      "Don't encode status through color alone or suppress labels to make charts look cleaner."
+    ]
+  }
+}
