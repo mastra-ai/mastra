@@ -216,7 +216,7 @@ export async function POST(request: Request) {
 }
 ```
 
-For a step suspended inside a `.foreach()`, append the item index to the token, as in `mastra:${runId}:${stepId}:${index}`.
+For a step suspended inside a `.foreach()`, append the item index to the token, as in `mastra:${runId}:${stepId}:${index}`. The index counts from zero across the whole input array, so `:2` is the third item no matter what concurrency you set.
 
 Use `run.resume()` to wait for the run's next stopping point and get the `WorkflowResult` back. It requires `step`, because that's what the token is built from.
 
