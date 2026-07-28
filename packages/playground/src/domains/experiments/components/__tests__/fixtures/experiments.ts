@@ -26,7 +26,7 @@ const base: DatasetExperiment = {
   updatedAt: '2026-07-01T10:05:00.000Z',
 };
 
-/** Two named experiments plus one unnamed one, to exercise labels and search. */
+/** Two named experiments, one unnamed and one blank-named, to exercise labels and search. */
 export const experiments: DatasetExperiment[] = [
   base,
   {
@@ -42,5 +42,13 @@ export const experiments: DatasetExperiment[] = [
     name: undefined,
     description: undefined,
     createdAt: '2026-07-01T12:00:00.000Z',
+  },
+  // nothing rejects an empty name server-side
+  {
+    ...base,
+    id: 'b1a11c00-0000-0000-0000-000000000004',
+    name: '',
+    description: undefined,
+    createdAt: '2026-07-01T13:00:00.000Z',
   },
 ];

@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 import { PROVIDER_DEFAULT_MODELS } from '../../auth/storage.js';
-import { getAvailableModePacks, getAvailableOmPacks, resolveProviderOMDefault, type ProviderAccess } from '../packs.js';
+import {
+  getAvailableModePacks,
+  getAvailableOmPacks,
+  resolveProviderOMDefault,
+  selectPreferredOMPack,
+  type ProviderAccess,
+} from '../packs.js';
 
 function providerAccess(overrides: Partial<ProviderAccess> = {}): ProviderAccess {
   return {
@@ -131,5 +137,31 @@ describe('OM packs', () => {
     expect(getAvailableOmPacks(providerAccess())).toEqual([
       { id: 'custom', name: 'Custom', description: 'Choose any available model', modelId: '' },
     ]);
+  });
+});
+
+describe('selectPreferredOMPack', () => {
+  it('prefers the matching reachable provider over earlier packs', () => {
+    const pack = selectPreferredOMPack(providerAccess({ anthropic: 'oauth', openai: 'oauth' }), 'openai-codex');
+
+    expect(pack).toMatchObject({ id: 'openai', modelId: 'openai/gpt-5.4-mini' });
+  });
+
+  it('ignores a selected provider that is not reachable', () => {
+    const pack = selectPreferredOMPack(providerAccess({ anthropic: 'oauth' }), 'openai-codex');
+
+    expect(pack).toMatchObject({ id: 'anthropic', modelId: 'anthropic/claude-haiku-4-5' });
+  });
+
+  it('prefers OAuth access when no provider is selected', () => {
+    const pack = selectPreferredOMPack(providerAccess({ google: 'apikey', anthropic: 'oauth' }));
+
+    expect(pack).toMatchObject({ id: 'anthropic', modelId: 'anthropic/claude-haiku-4-5' });
+  });
+
+  it('falls back to the first reachable API-key pack', () => {
+    const pack = selectPreferredOMPack(providerAccess({ google: 'apikey', deepseek: 'apikey' }));
+
+    expect(pack).toMatchObject({ id: 'gemini', modelId: 'google/gemini-3.5-flash' });
   });
 });
