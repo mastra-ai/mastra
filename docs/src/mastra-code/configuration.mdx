@@ -237,7 +237,7 @@ Connect to a remote MCP server via URL. Requires a `url` field. The optional `he
 
 #### HTTP OAuth
 
-HTTP servers can also use OAuth when the server supports MCP authorization. Add an `oauth` object with a `redirectUrl`. Mastra Code stores OAuth client data and tokens in the app data directory.
+HTTP servers can also use OAuth when the server supports MCP authorization. Add an `oauth` object, optionally with a `redirectUrl` (it defaults to a stable loopback URL when omitted). Mastra Code stores OAuth client data and tokens in the app data directory.
 
 Mastra Code passes this configuration to `@mastra/mcp` when connecting. The redirect URL must use HTTPS unless it is a loopback HTTP URL, and it must be handled by a callback endpoint that can complete the OAuth flow for that server.
 
@@ -274,6 +274,24 @@ Use `clientId` and `clientSecret` when the MCP server requires a pre-registered 
 ```
 
 Do not commit real `clientSecret` values to a repository. Prefer a project-local or global config file that is not shared.
+
+Use `callbackPort` as a shorthand for the redirect URL. It synthesizes `http://localhost:<callbackPort>/callback`, the convention Claude Code and Codex use, so configs written for those clients (such as the one in Slack's official MCP server docs) work verbatim:
+
+```json title=".mastracode/mcp.json"
+{
+  "mcpServers": {
+    "slack": {
+      "url": "https://mcp.slack.com/mcp",
+      "oauth": {
+        "clientId": "1601185624273.8899143856786",
+        "callbackPort": 3118
+      }
+    }
+  }
+}
+```
+
+`callbackPort` and `redirectUrl` are mutually exclusive. Setting both is a configuration error. Pick a port that is normally free on your machine. When the preferred port is busy, the callback server falls back to the next sequential port, and a provider that only registered the original redirect URL will reject the fallback.
 
 #### Startup behavior
 

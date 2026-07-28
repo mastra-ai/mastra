@@ -1044,7 +1044,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           resourceId,
           stepResults: lastOutput.stepResults,
           serializedStepGraph: params.serializedStepGraph,
-          executionContext: lastExecutionContext!,
+          executionContext: lastExecutionContext,
           workflowStatus: 'paused',
           requestContext: currentRequestContext,
         });

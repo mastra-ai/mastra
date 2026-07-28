@@ -1,6 +1,6 @@
 {
   "name": "@mastra/rag",
-  "version": "2.4.2-alpha.0",
+  "version": "2.4.2",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -28,7 +28,8 @@
     "build:watch": "pnpm build:lib --watch",
     "vitest": "vitest",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "author": "",
   "license": "Apache-2.0",

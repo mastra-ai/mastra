@@ -459,21 +459,20 @@ export type ResponsesStreamEvent =
   | ResponsesCompletedEvent;
 
 type WithoutMethods<T> = {
-  [
-    K in keyof T as T[K] extends (...args: any[]) => any
+  [K in keyof T as T[K] extends (...args: any[]) => any
+    ? never
+    : T[K] extends { (): any }
       ? never
-      : T[K] extends { (): any }
+      : T[K] extends undefined | ((...args: any[]) => any)
         ? never
-        : T[K] extends undefined | ((...args: any[]) => any)
-          ? never
-          : K
-  ]: T[K];
+        : K]: T[K];
 };
 
 export type NetworkStreamParams<OUTPUT = undefined> = {
   messages: MessageListInput;
+  model?: string;
   tracingOptions?: TracingOptions;
-} & MultiPrimitiveExecutionOptions<OUTPUT>;
+} & Omit<MultiPrimitiveExecutionOptions<OUTPUT>, 'model'>;
 
 export interface GetAgentResponse {
   id: string;
@@ -536,24 +535,32 @@ export interface GetAgentBrowserSessionResponse {
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
+  model?: string;
   output?: T;
   experimental_output?: T;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
-  Omit<AgentGenerateOptions<any>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
+  Omit<
+    AgentGenerateOptions<any>,
+    'model' | 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'
+  >
 >;
 
 export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
+  model?: string;
   output?: T;
   experimental_output?: T;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
-  Omit<AgentStreamOptions<any>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
+  Omit<
+    AgentStreamOptions<any>,
+    'model' | 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'
+  >
 >;
 
 export type StructuredOutputOptions<OUTPUT = undefined> = Omit<
@@ -563,11 +570,15 @@ export type StructuredOutputOptions<OUTPUT = undefined> = Omit<
   schema: PublicSchema<OUTPUT>;
 };
 export type StreamParamsBase<OUTPUT = undefined> = {
+  model?: string;
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<AgentExecutionOptions<OUTPUT>, 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'>
+  Omit<
+    AgentExecutionOptions<OUTPUT>,
+    'model' | 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
+  >
 >;
 export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = StreamParamsBase<OUTPUT>;
 export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {
@@ -1251,7 +1262,8 @@ export interface StoredAgentSkillConfig {
  * Can reference a stored workspace by ID or provide inline workspace config.
  */
 export type StoredWorkspaceRef =
-  { type: 'id'; workspaceId: string } | { type: 'inline'; config: Record<string, unknown> };
+  | { type: 'id'; workspaceId: string }
+  | { type: 'inline'; config: Record<string, unknown> };
 
 export interface StoredBrowserConfig {
   provider: string;
@@ -1490,6 +1502,8 @@ export interface UpdateStoredAgentParams {
   requestContextSchema?: Record<string, unknown>;
   /** Optional message describing the changes for the auto-created version */
   changeMessage?: string;
+  /** Immediately activate the auto-created version. Defaults to false when omitted. */
+  autoPublish?: boolean;
 }
 
 /**
@@ -2541,7 +2555,11 @@ export type ToolProviderHealthResponse = GeneratedResponse<'GET /tool-providers/
  * Distinct from ProcessorPhase which uses the short/unprefixed form for processor endpoints.
  */
 export type ProcessorProviderPhase =
-  'processInput' | 'processInputStep' | 'processOutputStream' | 'processOutputResult' | 'processOutputStep';
+  | 'processInput'
+  | 'processInputStep'
+  | 'processOutputStream'
+  | 'processOutputResult'
+  | 'processOutputStep';
 
 export interface ProcessorProviderInfo {
   id: string;
@@ -3004,7 +3022,13 @@ export interface DeletePromptBlockVersionResponse {
 }
 
 export type BackgroundTaskStatus =
-  'pending' | 'running' | 'suspended' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
+  | 'pending'
+  | 'running'
+  | 'suspended'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'timed_out';
 
 export type BackgroundTaskDateColumn = 'createdAt' | 'startedAt' | 'completedAt';
 
@@ -3110,7 +3134,14 @@ export interface WorkflowSchedule {
 export type ScheduleResponse = AgentSchedule | WorkflowSchedule;
 
 export type ScheduleTriggerOutcome =
-  'published' | 'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped' | 'aborted' | 'failed';
+  | 'published'
+  | 'succeeded'
+  | 'delivered'
+  | 'persisted'
+  | 'discarded'
+  | 'skipped'
+  | 'aborted'
+  | 'failed';
 
 export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain' | 'manual';
 

@@ -70,18 +70,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.48
   },
   {
-    "model": "fireworks-ai/accounts/fireworks/models/glm-5p1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 202800,
-    "maxOutput": 131072,
-    "inputCost": 1.4,
-    "outputCost": 4.4
-  },
-  {
     "model": "fireworks-ai/accounts/fireworks/models/glm-5p2",
     "imageInput": false,
     "audioInput": false,
@@ -142,6 +130,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4
   },
   {
+    "model": "fireworks-ai/accounts/fireworks/models/kimi-k3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 3,
+    "outputCost": 15
+  },
+  {
     "model": "fireworks-ai/accounts/fireworks/models/minimax-m2p7",
     "imageInput": false,
     "audioInput": false,
@@ -155,9 +155,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "fireworks-ai/accounts/fireworks/models/minimax-m3",
-    "imageInput": false,
+    "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 512000,
@@ -176,18 +176,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.4,
     "outputCost": 1.6
-  },
-  {
-    "model": "fireworks-ai/accounts/fireworks/routers/glm-5p1-fast",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 202800,
-    "maxOutput": 131072,
-    "inputCost": 2.8,
-    "outputCost": 8.8
   },
   {
     "model": "fireworks-ai/accounts/fireworks/routers/glm-5p2-fast",
@@ -236,6 +224,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262000,
     "inputCost": 1.9,
     "outputCost": 8
+  },
+  {
+    "model": "fireworks-ai/accounts/fireworks/routers/kimi-k3-fast",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 4.5,
+    "outputCost": 22.5
   }
 ]}
 />
@@ -268,7 +268,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "fireworks-ai/accounts/fireworks/routers/kimi-k2p7-code-fast"
+      ? "fireworks-ai/accounts/fireworks/routers/kimi-k3-fast"
       : "fireworks-ai/accounts/fireworks/models/deepseek-v4-flash";
   }
 });

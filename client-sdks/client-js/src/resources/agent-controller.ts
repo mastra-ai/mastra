@@ -398,14 +398,21 @@ export class AgentControllerSession extends BaseResource {
   /**
    * Create or resume this session. Pass `tags` to scope initial thread
    * selection — a thread is a resume candidate only when its metadata matches
-   * every tag. Required when sessions share a resourceId (e.g. git worktrees
-   * using a `{ projectPath }` tag) so each resumes its own thread instead of the
-   * most recent thread across the whole resource.
+   * every tag. Pass `threadId` to bind the session to one exact thread,
+   * creating it with that id when it does not exist.
    */
-  create(options?: { tags?: Record<string, string> }): Promise<CreateAgentControllerSessionResponse> {
+  create(options?: {
+    tags?: Record<string, string>;
+    threadId?: string;
+  }): Promise<CreateAgentControllerSessionResponse> {
     return this.request(`/agent-controller/${encodeURIComponent(this.controllerId)}/sessions`, {
       method: 'POST',
-      body: { resourceId: this.resourceId, tags: options?.tags, sessionScope: this.scope },
+      body: {
+        resourceId: this.resourceId,
+        tags: options?.tags,
+        threadId: options?.threadId,
+        sessionScope: this.scope,
+      },
     });
   }
 

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dsql",
-  "version": "1.1.2",
+  "version": "1.2.0-alpha.0",
   "description": "Amazon Aurora DSQL storage provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -24,7 +24,8 @@
     "test": "vitest run",
     "test:perf": "NODE_OPTIONS='--max-old-space-size=16384' vitest run -c vitest.perf.config.ts",
     "test:watch": "vitest watch",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
@@ -37,7 +38,7 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@microsoft/api-extractor": "^7.58.9",
+    "@microsoft/api-extractor": "^7.58.12",
     "@types/node": "22.20.1",
     "@types/pg": "^8.11.14",
     "@vitest/coverage-v8": "catalog:",

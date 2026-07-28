@@ -1,5 +1,5 @@
 {
-  "attachment": ["kimi-k2.6", "qwen3.5-flash", "qwen3.6-flash"],
+  "attachment": ["kimi-k2.6", "qwen3.5-flash", "qwen3.6-flash", "qwen3.7-plus"],
   "temperature": [
     "MiniMax-M2.5",
     "MiniMax/MiniMax-M2.7",

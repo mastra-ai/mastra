@@ -15,6 +15,7 @@ import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
 import { createStep } from '../../../../workflows/workflow';
+import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
 import type { SaveQueueManager } from '../../../save-queue';
 import { DurableStepIds } from '../../constants';
@@ -554,6 +555,9 @@ export function createDurableToolCallStep() {
           required: ['approved'],
         });
 
+        // Persist active goal time before exposing the approval wait.
+        await stopGoalActivity({ agentId: initData.agentId, runId });
+
         // Emit approval chunk via PubSub (mirrors base agent's controller.enqueue)
         if (pubsub) {
           await emitChunkEvent(pubsub, runId, {
@@ -740,6 +744,8 @@ export function createDurableToolCallStep() {
               },
               required: ['approved'],
             });
+
+            await stopGoalActivity({ agentId: initData.agentId, runId });
 
             if (pubsub) {
               await emitChunkEvent(pubsub, runId, {
@@ -1159,6 +1165,13 @@ export function createDurableToolCallStep() {
           ...(approvalGrant ?? {}),
         };
       } catch (error) {
+        // Re-throw FGA authorization errors instead of swallowing them —
+        // an authorization denial must fail the run, not be serialized as a
+        // recoverable tool error for the LLM to retry (mirrors the
+        // non-durable tool-call step).
+        if (error instanceof Error && error.name === 'FGADeniedError') {
+          throw error;
+        }
         const toolError = serializeError(error);
 
         // Emit tool-error chunk (non-fatal — error result is returned regardless)

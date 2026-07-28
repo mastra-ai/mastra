@@ -28,7 +28,8 @@
     "test": "GCS_ENDPOINT=http://localhost:4443 TEST_GCS_BUCKET=test-bucket vitest run ./src/**/*.integration.test.ts",
     "posttest": "docker compose down -v",
     "test:cloud": "vitest run ./src/**/*.integration.test.ts",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {

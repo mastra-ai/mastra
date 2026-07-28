@@ -1546,6 +1546,16 @@ describe('Agent.stream', () => {
     global.fetch = vi.fn();
   });
 
+  it('serializes a request-scoped model override', async () => {
+    const agent = new TestAgent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue(new Response('data: [DONE]\n\n', { status: 200 }));
+    agent['request'] = mockRequest as (typeof agent)['request'];
+
+    await agent.stream('test message', { model: 'google/gemini-2.5-flash' });
+
+    expect(mockRequest.mock.calls[0][1].body.model).toBe('google/gemini-2.5-flash');
+  });
+
   it('should transform params.structuredOutput.schema using zodToJsonSchema when provided', async () => {
     const agent = new TestAgent(mockClientOptions, 'test-agent');
     const mockRequest = vi.fn().mockResolvedValue(new Response('data: [DONE]\n\n', { status: 200 }));

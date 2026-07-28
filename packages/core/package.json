@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.52.0-alpha.9",
+  "version": "1.54.0-alpha.1",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -847,13 +847,14 @@
   "scripts": {
     "check": "tsc --noEmit",
     "typecheck": "tsc --noEmit -p tsconfig.build.json",
-    "lint": "eslint .",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
     "build:lib": "tsup --silent --config tsup.config.ts --no-dts",
     "build:patch-commonjs": "node ../../scripts/commonjs-tsc-fixer.js",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "generate:providers": "tsx scripts/generate-providers.ts",
-    "generate:model-router": "tsx scripts/generate-providers.ts && tsx scripts/generate-model-docs.ts && cd ../.. && pnpm prettier:changed",
+    "generate:model-router": "tsx scripts/generate-providers.ts && tsx scripts/generate-model-docs.ts && cd ../.. && pnpm oxfmt:changed",
     "test:unit": "vitest run --exclude '**/tool-builder/**'",
     "test": "npm run test:unit"
   },
@@ -873,7 +874,7 @@
     "@sindresorhus/slugify": "^2.2.1",
     "@standard-schema/spec": "^1.1.0",
     "ajv": "^8.20.0",
-    "chat": "^4.29.0",
+    "chat": "^4.34.0",
     "croner": "^10.0.1",
     "dotenv": "^17.3.1",
     "execa": "^9.6.1",
