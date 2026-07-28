@@ -568,27 +568,29 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
     // route a web-started run navigates to; chat-only threads keep the literal
     // `channel` segment (the real resource rides the `?resourceId=` override).
     // Unrouted senders fall back to the factory-agnostic /threads/ redirect.
-    const workspaceSegment = internalThread.resourceId.startsWith('channel:')
-      ? 'channel'
-      : encodeURIComponent(internalThread.resourceId);
+    // One predicate drives both the path segment and the query param, so the
+    // two can never disagree about what the URL already carries.
+    const isChatOnly = internalThread.resourceId.startsWith('channel:');
+    const workspaceSegment = isChatOnly ? 'channel' : encodeURIComponent(internalThread.resourceId);
     const threadPath = gate.routed
       ? `/factories/${encodeURIComponent(gate.routed.factoryProjectId)}/workspaces/${workspaceSegment}/threads/${encodeURIComponent(internalThread.id)}`
       : `/threads/${internalThread.id}`;
 
+    // The param is an override for a URL that can't otherwise name its
+    // resource. A routed repo-backed thread already spells the resourceId out
+    // as its workspace segment, so appending it again is duplication the app
+    // ignores. Chat-only threads need it (their segment is the literal string
+    // `channel`), and so does the unrouted fallback, which has no workspace
+    // segment at all — `ChannelThreadRedirect` forwards the search through.
+    const needsResourceParam = isChatOnly || !gate.routed;
+    const url = needsResourceParam
+      ? `${process.env.MASTRACODE_PUBLIC_URL}${threadPath}?resourceId=${encodeURIComponent(internalThread.resourceId)}`
+      : `${process.env.MASTRACODE_PUBLIC_URL}${threadPath}`;
+
     await thread.post(
       Card({
         title: 'New Mastra Code session started.',
-        children: [
-          CardText('A new session has been created.'),
-          Actions([
-            LinkButton({
-              url: `${process.env.MASTRACODE_PUBLIC_URL}${threadPath}?resourceId=${encodeURIComponent(
-                internalThread.resourceId,
-              )}`,
-              label: 'View Session',
-            }),
-          ]),
-        ],
+        children: [CardText('A new session has been created.'), Actions([LinkButton({ url, label: 'View Session' })])],
       }),
     );
   };

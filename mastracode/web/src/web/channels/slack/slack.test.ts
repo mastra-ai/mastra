@@ -554,7 +554,7 @@ describe('View Session card link', () => {
     return thread;
   }
 
-  it('a repo-backed thread deep-links to the user-session workspace route', async () => {
+  it('a repo-backed thread deep-links to the user-session workspace route with no resourceId param', async () => {
     process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
     const deps = makeCardDeps({ internalThread: { id: 'uuid-thread-1', resourceId: 'us-42' } });
     const handlers = createHandlers(deps as any);
@@ -565,9 +565,28 @@ describe('View Session card link', () => {
     expect(thread.post).toHaveBeenCalledTimes(1);
     const card = thread.post.mock.calls[0][0];
     const actions = card.children.find((c: any) => c.type === 'actions');
+    // The workspace segment already IS the resourceId — the param would duplicate it.
     expect(actions.children[0].url).toBe(
-      'https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uuid-thread-1?resourceId=us-42',
+      'https://mc.example.com/factories/fp-1/workspaces/us-42/threads/uuid-thread-1',
     );
+    expect(actions.children[0].url).not.toContain('resourceId=');
+  });
+
+  it('an unrouted repo-backed thread keeps the param, having no workspace segment to carry it', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    // Repo-backed resourceId AND no routing: isolates the `!gate.routed` half of
+    // the predicate, which the chat-only unrouted case below cannot distinguish.
+    const { projects: _unused, ...deps } = makeCardDeps({
+      internalThread: { id: 'uuid-thread-1', resourceId: 'us-42' },
+    });
+    const handlers = createHandlers(deps as any);
+    const thread = makeCardThread();
+
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx());
+
+    const card = thread.post.mock.calls[0][0];
+    const actions = card.children.find((c: any) => c.type === 'actions');
+    expect(actions.children[0].url).toBe('https://mc.example.com/threads/uuid-thread-1?resourceId=us-42');
   });
 
   it('a chat-only thread keeps the channel workspace segment', async () => {
