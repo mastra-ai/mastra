@@ -89,7 +89,7 @@
     "@docusaurus/module-type-aliases": "^3.10.1",
     "@docusaurus/tsconfig": "^3.10.1",
     "@docusaurus/types": "^3.10.1",
-    "@mastra/lint-docs": "^1.1.0",
+    "@mastra/lint-docs": "^1.1.1",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/fs-extra": "^11.0.4",

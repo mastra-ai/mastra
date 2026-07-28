@@ -1721,8 +1721,8 @@ importers:
         specifier: ^3.10.1
         version: 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@mastra/lint-docs':
-        specifier: ^1.1.0
-        version: 1.1.0(oxfmt@0.59.0)(prettier@3.9.5)
+        specifier: ^1.1.1
+        version: 1.1.1(oxfmt@0.59.0)(prettier@3.9.5)
       '@playwright/test':
         specifier: ^1.58.2
         version: 1.61.1
@@ -15007,12 +15007,12 @@ packages:
       react: ^19.0.0
       react-dom: ^19.0.0
 
-  '@mastra/lint-docs@1.1.0':
-    resolution: {integrity: sha512-SYVCJfjw+n49TfmvkmNF+rCn7LCpRVHF4skNh6pz5RgxZiKqzO1F5sxfPK6EbjqdrnllqM5PJf1Lzhm83XQslA==}
+  '@mastra/lint-docs@1.1.1':
+    resolution: {integrity: sha512-47Y2OKf4aBOG7jekl5M5iKxLy1N4trHqV/t/i+Ib1//hZ6DwKWxFzvWVB56wKJ0ChmABKHowuTM3xQAXJvr45w==}
     engines: {node: '>=22.13.0'}
     hasBin: true
     peerDependencies:
-      oxfmt: ^0.61.0
+      oxfmt: ^0.59.0
       prettier: ^3.8.3
     peerDependenciesMeta:
       oxfmt:
@@ -38395,7 +38395,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@mastra/lint-docs@1.1.0(oxfmt@0.59.0)(prettier@3.9.5)':
+  '@mastra/lint-docs@1.1.1(oxfmt@0.59.0)(prettier@3.9.5)':
     dependencies:
       remark: 15.0.1
       remark-frontmatter: 5.0.0
