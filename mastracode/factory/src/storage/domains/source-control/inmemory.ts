@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type {
+  ConfiguredExternalRepositoryKey,
   CreateProjectSourceControlConnectionInput,
   CreateSourceControlSessionInput,
   ExternalRepositoryProjectTarget,
@@ -188,6 +189,22 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       (await this.connections.get({ orgId, id: connectionId }))
         ? this.projectRepositoriesRows.filter(row => row.connectionId === connectionId)
         : [],
+    listConfiguredExternalKeys: async (): Promise<ConfiguredExternalRepositoryKey[]> => {
+      const keys = new Map<string, ConfiguredExternalRepositoryKey>();
+      for (const connection of this.connectionsRows.filter(row => row.integrationId === this.integrationId)) {
+        const installation = this.installationsRows.find(row => row.id === connection.installationId);
+        if (!installation) continue;
+        for (const link of this.projectRepositoriesRows.filter(row => row.connectionId === connection.id)) {
+          const repository = this.repositoriesRows.find(row => row.id === link.repositoryId);
+          if (!repository) continue;
+          keys.set(`${installation.externalId}\u0000${repository.externalId}`, {
+            installationExternalId: installation.externalId,
+            repositoryExternalId: repository.externalId,
+          });
+        }
+      }
+      return [...keys.values()];
+    },
     listByExternalRepository: async ({
       installationExternalId,
       repositoryExternalId,

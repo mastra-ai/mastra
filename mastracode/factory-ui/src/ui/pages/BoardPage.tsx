@@ -16,6 +16,7 @@ import {
   GitCompareArrows,
   GitPullRequest,
   Link2,
+  MessagesSquare,
   Plus,
   Stethoscope,
   Trash2,
@@ -1492,14 +1493,12 @@ function WorkItemCard({
                     </DropdownMenu.Item>
                   );
                 })}
-              {columnStage === 'intake' &&
-                item.url !== null &&
-                (item.source === 'github-issue' || item.source === 'linear-issue') && (
-                  <DropdownMenu.Item render={<a href={item.url} target="_blank" rel="noreferrer" />}>
-                    <ArrowUpRight aria-hidden />
-                    <span>{externalLinkLabel(item.source)}</span>
-                  </DropdownMenu.Item>
-                )}
+              {item.url !== null && (
+                <DropdownMenu.Item render={<a href={item.url} target="_blank" rel="noreferrer" />}>
+                  <ArrowUpRight aria-hidden />
+                  <span>{externalLinkLabel(item.source)}</span>
+                </DropdownMenu.Item>
+              )}
               {itemStageOptions(item)
                 .filter(stage => stage.id !== columnStage)
                 .map(stage => (
@@ -1525,6 +1524,12 @@ function WorkItemCard({
           </div>
         </div>
         <CardLabels labels={labels} />
+        {threadSession !== null && (
+          <span className="text-ui-xs text-accent1 flex items-center gap-1">
+            <MessagesSquare size={11} aria-hidden />
+            <span className="truncate">Session · {threadSession.branch}</span>
+          </span>
+        )}
         {relatedItems.map(related => {
           const relationText = relationshipLabel(related);
           const relatedLiveSessions = Object.fromEntries(

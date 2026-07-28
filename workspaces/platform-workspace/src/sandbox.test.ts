@@ -75,6 +75,81 @@ describe('PlatformSandbox', () => {
     expect(body.id).toBe('mc-project-42');
   });
 
+  it('retries sandbox creation when the proxy returns a transient 5xx', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          json({ error: { message: 'Internal server error', type: 'internal_error' } }, { status: 500 }),
+        )
+        .mockResolvedValueOnce(json({ id: 'sbx_after_retry', createdAt: '2026-06-26T00:00:00.000Z' }));
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+
+      const started = sandbox._start();
+      await vi.advanceTimersByTimeAsync(2_000);
+      await started;
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not retry sandbox creation on non-transient errors', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(json({ error: { message: 'Environment not found', type: 'not_found' } }, { status: 404 }));
+
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+
+    await expect(sandbox._start()).rejects.toThrow('not_found');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives up sandbox creation after exhausting transient retries', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      // Fresh Response per call — a shared instance would fail on the second
+      // body read instead of exercising the retry path.
+      const fetchMock = vi
+        .fn()
+        .mockImplementation(async () =>
+          json({ error: { message: 'Internal server error', type: 'internal_error' } }, { status: 500 }),
+        );
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+
+      const started = sandbox._start();
+      const assertion = expect(started).rejects.toThrow('internal_error');
+      await vi.advanceTimersByTimeAsync(10_000);
+      await assertion;
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('reattaches when constructed with a sandbox id', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi
@@ -125,6 +200,57 @@ describe('PlatformSandbox', () => {
     expect(String(fetchMock.mock.calls[2]![0])).toBe(
       'https://proxy.test/v1/projects/proj_123/sandbox/sbx_recreated/exec',
     );
+  });
+
+  it('creates a fresh sandbox when the reattached sandbox record is destroyed', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    vi.stubEnv('MASTRA_ENVIRONMENT_ID', 'env_from_process');
+    const fetchMock = vi
+      .fn()
+      // Idle GC keeps the record around with destroyedAt set — not reattachable.
+      .mockResolvedValueOnce(
+        json({ id: 'sbx_stale', createdAt: '2026-06-26T00:00:00.000Z', destroyedAt: '2026-06-27T00:00:00.000Z' }),
+      )
+      .mockResolvedValueOnce(json({ id: 'sbx_recreated', createdAt: '2026-06-28T00:00:00.000Z' }))
+      .mockResolvedValueOnce(json({ exitCode: 0, stdout: 'ok', stderr: '' }));
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      sandboxId: 'sbx_stale',
+      fetch: fetchMock,
+    });
+
+    await sandbox._start();
+    await sandbox.executeCommand('pwd');
+
+    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+    expect(String(fetchMock.mock.calls[2]![0])).toBe(
+      'https://proxy.test/v1/projects/proj_123/sandbox/sbx_recreated/exec',
+    );
+  });
+
+  it('exposes the platform-assigned sandbox id via getInfo metadata for reattach persistence', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      // The platform ignores the advisory id in the POST body and assigns its own.
+      .mockResolvedValueOnce(json({ id: 'sbx_platform_uuid', createdAt: '2026-06-26T00:00:00.000Z' }))
+      .mockResolvedValueOnce(json({ id: 'sbx_platform_uuid', createdAt: '2026-06-26T00:00:00.000Z', status: 'ready' }));
+
+    const sandbox = new PlatformSandbox({
+      id: 'local-construction-id',
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+
+    await sandbox._start();
+    const info = await sandbox.getInfo();
+
+    // Callers persisting a reattach id (the Factory fleet reads metadata.sandboxId)
+    // must get the id the proxy recognizes, not the local construction id.
+    expect(info.metadata?.sandboxId).toBe('sbx_platform_uuid');
   });
 
   it('clears sandbox state on destroy so stale IDs cannot leak to later calls', async () => {

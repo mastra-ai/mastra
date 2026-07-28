@@ -17,6 +17,9 @@ export const server = setupServer(
   // Ambient model catalog for settings pickers; tests with model-specific
   // assertions override it with `server.use(...)`.
   http.get('*/web/config/models', () => HttpResponse.json({ models: [] })),
+  // Ambient provider catalog (read by the NewPage credential guard wherever
+  // it renders); credential-specific tests override it with `server.use(...)`.
+  http.get('*/web/config/providers', () => HttpResponse.json({ providers: [] })),
   http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [] })),
   http.get('*/web/factory/projects/:id/source-control-connections', () => HttpResponse.json({ connections: [] })),
   http.get('*/web/github/projects/:projectRepositoryId/worktrees', () => HttpResponse.json({ worktrees: [] })),
