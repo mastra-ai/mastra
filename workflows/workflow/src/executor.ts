@@ -11,7 +11,7 @@ import type {
 } from '@mastra/core/workflows';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
 import { getWorkflowMetadata, getWritable } from 'workflow';
-import { MASTRA_EVENT_NAMESPACE } from './constants';
+import { FINALIZE_IDENTITY, MASTRA_EVENT_NAMESPACE } from './constants';
 import { requireRegisteredWorkflow } from './registry';
 import { readSdkRunId, withSdkRunId } from './snapshot';
 import type { MastraOp, MastraOpRequest, MastraOpResponse, SerializedOpError } from './types';
@@ -163,6 +163,23 @@ function resolveCallable(graph: ExecutionGraph, op: MastraOp): ResolvedCallable 
 export async function runMastraOp(request: MastraOpRequest): Promise<MastraOpResponse> {
   const startedAt = Date.now();
   const state: Record<string, unknown> = { ...(request.state ?? {}) };
+
+  // Terminal write. No graph node to resolve, and no user code to run.
+  if (request.op.kind === 'finalize') {
+    await persistSnapshot(request, state, request.op.status, {
+      result: request.op.result,
+      error: request.op.error,
+    });
+    return {
+      identity: FINALIZE_IDENTITY,
+      status: 'success',
+      output: undefined,
+      state,
+      startedAt,
+      endedAt: Date.now(),
+    };
+  }
+
   // Only known once the callable resolves; until then the op's own address is
   // the best identity available, which is what a resolution failure reports.
   let identity = opIdentity(request.op, '<unresolved>');
@@ -238,7 +255,10 @@ export async function runMastraOp(request: MastraOpRequest): Promise<MastraOpRes
 
     if (suspended) {
       const suspendedAt = Date.now();
-      await persistSnapshot(request, state, 'suspended');
+      // Record which step is waiting, not just that something is: readers of
+      // the snapshot — the playground, and anything building a resume UI — need
+      // the step id to know what to ask for.
+      await persistSnapshot(request, state, 'suspended', { suspendedPaths: { [id]: request.op.path } });
       return { identity, status: 'suspended', suspendPayload: suspended.payload, state, startedAt, suspendedAt };
     }
     if (bailed) {
@@ -279,6 +299,15 @@ async function persistSnapshot(
   request: MastraOpRequest,
   state: Record<string, unknown>,
   status: WorkflowRunState['status'],
+  /**
+   * Extra snapshot fields for this write: the terminal outcome that only the
+   * `finalize` op has, and the suspended step that only a suspend has.
+   */
+  outcome: {
+    result?: unknown;
+    error?: SerializedOpError;
+    suspendedPaths?: Record<string, number[]>;
+  } = {},
 ): Promise<void> {
   try {
     const workflow = requireRegisteredWorkflow(request.workflowId);
@@ -297,12 +326,14 @@ async function persistSnapshot(
         {
           runId: request.runId,
           status,
+          ...(outcome.result === undefined ? {} : { result: outcome.result as WorkflowRunState['result'] }),
+          ...(outcome.error === undefined ? {} : { error: outcome.error as WorkflowRunState['error'] }),
           value: state as WorkflowRunState['value'],
           context: request.stepResults as WorkflowRunState['context'],
           activePaths: [],
           activeStepsPath: {},
           waitingPaths: {},
-          suspendedPaths: {},
+          suspendedPaths: outcome.suspendedPaths ?? {},
           resumeLabels: {},
           serializedStepGraph: workflow.serializedStepGraph as SerializedStepFlowEntry[],
           timestamp: Date.now(),

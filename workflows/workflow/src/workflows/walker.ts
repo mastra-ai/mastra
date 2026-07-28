@@ -1,3 +1,4 @@
+import { FINALIZE_IDENTITY } from '../constants';
 import type {
   MastraOp,
   MastraOpRequest,
@@ -10,12 +11,13 @@ import type {
 /**
  * Deterministic walker over a Mastra serialized step graph.
  *
- * This module runs inside the Workflow SDK's sandbox, so it deliberately has
- * no runtime imports — only erased `import type`s. Every effect it needs
- * (running a Mastra callable, sleeping, waiting on a hook, emitting events) is
- * injected through {@link WalkerEffects}. That keeps both `@mastra/core` and
- * Node builtins out of the workflow bundle and makes the walk unit-testable
- * without a workflow runtime.
+ * This module runs inside the Workflow SDK's sandbox, so its only runtime
+ * import is `../constants`, which is import-free for exactly this reason;
+ * everything else it takes from the package is an erased `import type`. Every
+ * effect it needs (running a Mastra callable, sleeping, waiting on a hook,
+ * emitting events) is injected through {@link WalkerEffects}. That keeps both
+ * `@mastra/core` and Node builtins out of the workflow bundle and makes the
+ * walk unit-testable without a workflow runtime.
  */
 
 /** Effects the walker needs from its host runtime. */
@@ -104,9 +106,7 @@ class StepFailureSignal {
  * index because several copies of one step can be suspended at once.
  */
 export function suspendToken(runId: string, stepId: string, foreachIndex?: number): string {
-  return foreachIndex === undefined
-    ? `mastra:${runId}:${stepId}`
-    : `mastra:${runId}:${stepId}:${foreachIndex}`;
+  return foreachIndex === undefined ? `mastra:${runId}:${stepId}` : `mastra:${runId}:${stepId}:${foreachIndex}`;
 }
 
 function unsupported(feature: string): Error {
@@ -137,10 +137,7 @@ export function toSerializedError(error: unknown): SerializedOpError {
  * rejection, so the Workflow SDK run itself completes and callers read the Mastra
  * status off the return value.
  */
-export async function runMastraGraph(
-  params: WalkerParams,
-  effects: WalkerEffects,
-): Promise<MastraRunnerResult> {
+export async function runMastraGraph(params: WalkerParams, effects: WalkerEffects): Promise<MastraRunnerResult> {
   const graph = (params.serializedStepGraph ?? []) as SerializedEntry[];
   const state: Record<string, unknown> = { ...(params.initialState ?? {}) };
   const stepResults: Record<string, unknown> = {};
@@ -360,9 +357,7 @@ export async function runMastraGraph(
           target = new Date(entry.date as string).getTime();
         } else if (entry.fn) {
           target = new Date(
-            (await invokeValue({ kind: 'sleep-until-date', path }, inputData, entry.id)) as
-              | string
-              | number,
+            (await invokeValue({ kind: 'sleep-until-date', path }, inputData, entry.id)) as string | number,
           ).getTime();
         } else {
           target = Date.now();
@@ -376,9 +371,7 @@ export async function runMastraGraph(
 
       case 'parallel': {
         const outputs = await Promise.all(
-          entry.steps.map((branch, branchIndex) =>
-            runStep(branch.step, [...path, branchIndex], inputData),
-          ),
+          entry.steps.map((branch, branchIndex) => runStep(branch.step, [...path, branchIndex], inputData)),
         );
         const merged: Record<string, unknown> = {};
         entry.steps.forEach((branch, branchIndex) => {
@@ -390,11 +383,7 @@ export async function runMastraGraph(
       case 'conditional': {
         const truthy = await Promise.all(
           entry.serializedConditions.map((_condition, conditionIndex) =>
-            invokeValue(
-              { kind: 'condition', path, conditionIndex },
-              inputData,
-              `condition_${conditionIndex}`,
-            ),
+            invokeValue({ kind: 'condition', path, conditionIndex }, inputData, `condition_${conditionIndex}`),
           ),
         );
         const merged: Record<string, unknown> = {};
@@ -433,11 +422,7 @@ export async function runMastraGraph(
         let concurrency = entry.opts?.concurrency ?? 1;
         if (entry.opts?.fn) {
           concurrency = Number(
-            await invokeValue(
-              { kind: 'foreach-concurrency', path },
-              inputData,
-              `${entry.step.id}_concurrency`,
-            ),
+            await invokeValue({ kind: 'foreach-concurrency', path }, inputData, `${entry.step.id}_concurrency`),
           );
         }
         const width = Number.isFinite(concurrency) ? Math.max(1, Math.floor(concurrency)) : 1;
@@ -450,9 +435,7 @@ export async function runMastraGraph(
         for (let offset = 0; offset < items.length; offset += width) {
           const batch = items.slice(offset, offset + width);
           const settled = await Promise.all(
-            batch.map((item, withinBatch) =>
-              runStep(entry.step, path, item, offset + withinBatch),
-            ),
+            batch.map((item, withinBatch) => runStep(entry.step, path, item, offset + withinBatch)),
           );
           outputs.push(...settled);
         }
@@ -471,9 +454,7 @@ export async function runMastraGraph(
     }
   }
 
-  await effects.emit([
-    { type: 'workflow-start', runId: params.runId, payload: { runId: params.runId } },
-  ]);
+  await effects.emit([{ type: 'workflow-start', runId: params.runId, payload: { runId: params.runId } }]);
 
   let finish: MastraRunnerResult;
   try {
@@ -514,6 +495,39 @@ export async function runMastraGraph(
         input: params.inputData,
       };
     }
+  }
+
+  // Record the terminal state in storage before announcing the finish, so a
+  // client that reads storage the moment it sees `workflow-finish` sees the
+  // settled run rather than the last `running` write a step left behind.
+  //
+  // Storage mirroring is best-effort — the event log is the source of truth for
+  // execution — so a failure here must not turn a finished run into a failed
+  // one. `persistSnapshot()` already swallows its own errors; this catch covers
+  // the step invocation around it.
+  try {
+    const response = await effects.runOp({
+      workflowId: params.workflowId,
+      runId: params.runId,
+      resourceId: params.resourceId,
+      op:
+        finish.status === 'failed'
+          ? { kind: 'finalize', status: 'failed', error: finish.error }
+          : { kind: 'finalize', status: 'success', result: finish.result },
+      inputData: undefined,
+      state,
+      initData,
+      stepResults,
+      requestContext: params.requestContext ?? [],
+    });
+    if (response.identity !== FINALIZE_IDENTITY) {
+      throw new Error(
+        `Workflow replay diverged: expected "${FINALIZE_IDENTITY}" at the end of the walk, ` +
+          `but the recorded result was for "${response.identity}".`,
+      );
+    }
+  } catch {
+    // Left to the event log; see above.
   }
 
   // `state` and `steps` ride along so a client watching the stream can build a

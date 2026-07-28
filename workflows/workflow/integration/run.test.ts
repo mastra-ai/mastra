@@ -115,6 +115,31 @@ describe('WorkflowSdkRun resuming from another process', () => {
     expect(readSdkRunId(snapshot)).toBe(sdkRunIdOf(run));
   });
 
+  it('leaves the stored snapshot in a terminal state once the run settles', async () => {
+    const run = await chainWorkflow.createRun();
+    const result = await run.start({ inputData: { value: 1 } });
+    expect(result.status).toBe('success');
+
+    // Steps persist `running` as they go and nothing runs after the walk, so
+    // the run's own last write has to be the terminal one. Otherwise a finished
+    // run reads as still running from `getWorkflowRunById()` and the playground
+    // — which is what happens if the walker stops issuing its `finalize` op.
+    const snapshot = await loadSnapshot('chain-workflow', run.runId);
+    expect(snapshot?.status).toBe('success');
+  });
+
+  it('names the waiting step on the snapshot while a run is suspended', async () => {
+    const run = await suspendWorkflow.createRun();
+    const suspended = await run.start({ inputData: { value: 1 } });
+    expect(suspended.status).toBe('suspended');
+
+    // "Suspended" on its own is not actionable: a resume needs the step id, and
+    // this is where another process reads it from.
+    const snapshot = await loadSnapshot('suspend-workflow', run.runId);
+    expect(snapshot?.status).toBe('suspended');
+    expect(Object.keys(snapshot?.suspendedPaths ?? {})).toEqual(['approval']);
+  });
+
   it('resumes and returns the final result from a cold Run', async () => {
     const run = await suspendWorkflow.createRun();
     const suspended = await run.start({ inputData: { value: 1 } });

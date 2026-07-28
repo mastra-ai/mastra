@@ -48,6 +48,24 @@ export type MastraOp =
   | { kind: 'foreach-concurrency'; path: MastraOpPath };
 
 /**
+ * Records the run's terminal state in Mastra storage.
+ *
+ * Unlike every other op this one addresses no graph node — it runs once, after
+ * the walk, and touches only storage. It exists because steps persist
+ * `running` as they go and nothing runs after the walk: without a final write
+ * a finished run stays `running` in storage forever, so `getWorkflowRunById()`
+ * and the playground never see it settle. The write has to be driven from
+ * inside the durable workflow because `startAsync()` returns while the run is
+ * still going and its caller is gone by the time the run ends.
+ */
+export type MastraFinalizeOp = {
+  kind: 'finalize';
+  status: 'success' | 'failed';
+  result?: unknown;
+  error?: SerializedOpError;
+};
+
+/**
  * Everything the host needs to run one op.
  *
  * This crosses the sandbox boundary and lands in the Workflow SDK event log, so every
@@ -58,7 +76,7 @@ export interface MastraOpRequest {
   workflowId: string;
   runId: string;
   resourceId?: string;
-  op: MastraOp;
+  op: MastraOp | MastraFinalizeOp;
   /** Input for this op — the previous entry's output, or a foreach element. */
   inputData: unknown;
   /** Run state as of this call. The host returns the (possibly updated) state. */

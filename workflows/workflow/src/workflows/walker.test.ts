@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { MastraOpRequest, MastraOpResponse } from '../types';
+import { FINALIZE_IDENTITY } from '../constants';
+import type { MastraFinalizeOp, MastraOp, MastraOpRequest, MastraOpResponse } from '../types';
 import { runMastraGraph, suspendToken, type MastraStreamEventLike, type WalkerEffects } from './walker';
 
 /**
@@ -11,34 +12,56 @@ import { runMastraGraph, suspendToken, type MastraStreamEventLike, type WalkerEf
  * in `integration/`.
  */
 
+/** A request for an op that addresses a graph node — everything but `finalize`. */
+type GraphOpRequest = MastraOpRequest & { op: MastraOp };
+
 /** Mirrors the identity string the host executor produces. */
-function identityFor(request: MastraOpRequest, resolvedId: string): string {
+function identityFor(request: GraphOpRequest, resolvedId: string): string {
   return `${request.op.kind}@${request.op.path.join('.')}#${resolvedId}`;
 }
 
 interface HarnessOptions {
   /** Resolves the id the host would report for an op, mirroring the real graph. */
-  resolveId: (request: MastraOpRequest) => string;
+  resolveId: (request: GraphOpRequest) => string;
   /** Produces the outcome for an op. Defaults to echoing the input. */
-  respond?: (request: MastraOpRequest) => Partial<MastraOpResponse> | undefined;
+  respond?: (request: GraphOpRequest) => Partial<MastraOpResponse> | undefined;
 }
 
 function harness({ resolveId, respond }: HarnessOptions) {
-  const ops: MastraOpRequest[] = [];
+  const ops: GraphOpRequest[] = [];
+  /** Terminal storage writes, kept apart so `ops` stays the graph walk alone. */
+  const finalizeOps: MastraFinalizeOp[] = [];
   const events: MastraStreamEventLike[] = [];
   const sleeps: number[] = [];
   const resumes: string[] = [];
 
   const effects: WalkerEffects = {
     async runOp(request) {
-      ops.push(structuredClone(request));
+      // The terminal write addresses no node, so the real executor answers it
+      // without touching the graph. The harness mirrors that.
+      if (request.op.kind === 'finalize') {
+        finalizeOps.push(structuredClone(request.op));
+        return {
+          identity: FINALIZE_IDENTITY,
+          status: 'success',
+          output: undefined,
+          state: request.state,
+          startedAt: 0,
+          endedAt: 1,
+        } as MastraOpResponse;
+      }
+
+      // Narrowing `request.op` above does not narrow `request` itself, which is
+      // what the callbacks below are typed against.
+      const graphRequest = request as GraphOpRequest;
+      ops.push(structuredClone(graphRequest));
       const base = {
-        identity: identityFor(request, resolveId(request)),
+        identity: identityFor(graphRequest, resolveId(graphRequest)),
         state: request.state,
         startedAt: 0,
         endedAt: 1,
       };
-      const override = respond?.(request);
+      const override = respond?.(graphRequest);
       return { status: 'success', output: request.inputData, ...base, ...override } as MastraOpResponse;
     },
     async sleepMs(ms) {
@@ -54,7 +77,7 @@ function harness({ resolveId, respond }: HarnessOptions) {
     },
   };
 
-  return { effects, ops, events, sleeps, resumes };
+  return { effects, ops, finalizeOps, events, sleeps, resumes };
 }
 
 const baseParams = {
@@ -275,6 +298,58 @@ describe('runMastraGraph', () => {
 
     expect(result.status).toBe('failed');
     expect(result.error?.message).toBe('kaboom');
+  });
+
+  it('records the terminal state so a finished run stops looking like it is running', async () => {
+    const { effects, finalizeOps } = harness({
+      resolveId: () => 'only',
+      respond: () => ({ status: 'success', output: { done: true } }),
+    });
+
+    const result = await runMastraGraph(
+      { ...baseParams, serializedStepGraph: [{ type: 'step', step: { id: 'only' } }] },
+      effects,
+    );
+
+    expect(result.status).toBe('success');
+    // Steps only ever persist `running`, so without this write storage keeps
+    // reporting a finished run as still going.
+    expect(finalizeOps).toEqual([{ kind: 'finalize', status: 'success', result: { done: true } }]);
+  });
+
+  it('records a failure as the terminal state, carrying the error', async () => {
+    const { effects, finalizeOps } = harness({
+      resolveId: () => 'boom',
+      respond: () => ({ status: 'failed', error: { message: 'kaboom' } }),
+    });
+
+    await runMastraGraph({ ...baseParams, serializedStepGraph: [{ type: 'step', step: { id: 'boom' } }] }, effects);
+
+    expect(finalizeOps).toHaveLength(1);
+    expect(finalizeOps[0]).toMatchObject({ kind: 'finalize', status: 'failed', error: { message: 'kaboom' } });
+  });
+
+  it('finishes the run even if the terminal write fails', async () => {
+    const { effects } = harness({
+      resolveId: () => 'only',
+      respond: () => ({ status: 'success', output: { done: true } }),
+    });
+    const runOp = effects.runOp;
+    effects.runOp = async request => {
+      if (request.op.kind === 'finalize') {
+        throw new Error('storage is down');
+      }
+      return runOp(request);
+    };
+
+    const result = await runMastraGraph(
+      { ...baseParams, serializedStepGraph: [{ type: 'step', step: { id: 'only' } }] },
+      effects,
+    );
+
+    // Storage mirroring is best-effort; the event log is the source of truth.
+    expect(result.status).toBe('success');
+    expect(result.result).toEqual({ done: true });
   });
 
   it('sleeps for a static duration without calling the host', async () => {
