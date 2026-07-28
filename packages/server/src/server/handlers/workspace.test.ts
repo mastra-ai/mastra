@@ -499,6 +499,40 @@ describe('Workspace Handlers', () => {
       ).rejects.toThrow('database unreachable');
       expect(resolver).toHaveBeenCalledTimes(1);
     });
+
+    it('should fall through to the agent workspace lookup when the resolver reports not-found', async () => {
+      // Agents can own a workspace that was never registered via
+      // `Mastra.addWorkspace` (e.g. the auto-registration on
+      // `agent.getWorkspace()` hasn't run yet). A configured resolver that
+      // returns `undefined` for that id must not short-circuit the agent
+      // iteration, otherwise a GET would 404 despite the agent owning it.
+      const agentWorkspace = createWorkspace('agent-owned-ws', { name: 'Agent Owned Workspace' });
+      const agent = new Agent({
+        name: 'lonely-agent',
+        instructions: 'test',
+        model: { provider: 'openai', name: 'gpt-4o' } as any,
+        workspace: agentWorkspace,
+      });
+
+      const resolver = vi.fn(async () => undefined);
+      const mastra = new Mastra({
+        logger: false,
+        resolveWorkspaceById: resolver,
+        agents: { lonelyAgent: agent },
+      });
+
+      const result = await GET_WORKSPACE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'agent-owned-ws',
+      });
+
+      expect(result).toMatchObject({
+        isWorkspaceConfigured: true,
+        id: 'agent-owned-ws',
+        name: 'Agent Owned Workspace',
+      });
+      expect(resolver).toHaveBeenCalled();
+    });
   });
 
   // ===========================================================================

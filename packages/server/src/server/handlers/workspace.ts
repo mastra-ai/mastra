@@ -163,34 +163,34 @@ async function getWorkspaceById(mastra: any, workspaceId: string): Promise<Works
   }
 
   // Prefer the async resolver — it consults the registry first and falls back
-  // to the configured `resolveWorkspaceById` hook on a miss.
+  // to the configured `resolveWorkspaceById` hook on a miss. It always throws
+  // `MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND` on a miss (rather than returning
+  // undefined), so we catch that specific error and fall through to the agent
+  // iteration below; any other error is a real operational failure and must
+  // propagate rather than be masked as a nonexistent workspace.
   if (typeof mastra.resolveWorkspaceById === 'function') {
     try {
       return await mastra.resolveWorkspaceById(workspaceId);
     } catch (err) {
-      // Only the documented "workspace not found" error should degrade to a
-      // `undefined` (which callers surface as a 404). Any other resolver
-      // failure — network/DB error, resolver bug — is an operational problem
-      // and must propagate so it's visible in logs and to the caller, rather
-      // than being masked as a nonexistent workspace.
       if ((err as { id?: string })?.id !== 'MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND') {
         throw err;
       }
-      return undefined;
+      // Fall through to the agent fallback below: an agent may own a
+      // workspace that wasn't registered via `addWorkspace` and therefore
+      // isn't visible to the sync registry / lazy resolver.
     }
-  }
-
-  // Sync registry lookup (older @mastra/core versions without the lazy resolver)
-  if (typeof mastra.getWorkspaceById === 'function') {
+  } else if (typeof mastra.getWorkspaceById === 'function') {
+    // Older @mastra/core without the lazy resolver: sync registry lookup only.
     try {
       return mastra.getWorkspaceById(workspaceId);
     } catch {
-      // Workspace not found in registry
-      return undefined;
+      // Not in the registry — fall through to the agent iteration.
     }
   }
 
-  // Fallback: Search through agents for the workspace (older @mastra/core versions)
+  // Search through agents for the workspace. This covers agents that own a
+  // workspace but never registered it via `Mastra.addWorkspace`, so neither
+  // the sync registry nor the configured resolver can find it.
   const agents = mastra.listAgents?.() ?? {};
   for (const agent of Object.values(agents)) {
     if ((agent as any).hasOwnWorkspace?.()) {
