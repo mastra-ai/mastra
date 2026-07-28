@@ -144,8 +144,14 @@ function requireWorkspaceV1Support(): void {
 /**
  * Get a workspace by ID from Mastra's workspace registry.
  *
- * Backwards compatible: Falls back to searching through agents if
- * mastra.getWorkspaceById() is not available (older @mastra/core versions).
+ * Prefers the async `resolveWorkspaceById` when available so hosts of dynamic
+ * per-session workspaces (e.g. `@mastra/factory`) can re-materialize a
+ * workspace shim on demand — this is what keeps sessions addressable after a
+ * container restart or on a fresh replica, where the in-memory registry is
+ * empty even though the underlying sandbox is still reachable.
+ *
+ * Backwards compatible: falls through to the sync `getWorkspaceById`, and then
+ * to iterating agents, if the newer methods are not present on `@mastra/core`.
  */
 async function getWorkspaceById(mastra: any, workspaceId: string): Promise<Workspace | undefined> {
   requireWorkspaceV1Support();
@@ -156,7 +162,18 @@ async function getWorkspaceById(mastra: any, workspaceId: string): Promise<Works
     return globalWorkspace;
   }
 
-  // Try direct registry lookup if available (newer @mastra/core versions)
+  // Prefer the async resolver — it consults the registry first and falls back
+  // to the configured `resolveWorkspaceById` hook on a miss.
+  if (typeof mastra.resolveWorkspaceById === 'function') {
+    try {
+      return await mastra.resolveWorkspaceById(workspaceId);
+    } catch {
+      // Workspace not found (registry miss and either no resolver or resolver returned undefined)
+      return undefined;
+    }
+  }
+
+  // Sync registry lookup (older @mastra/core versions without the lazy resolver)
   if (typeof mastra.getWorkspaceById === 'function') {
     try {
       return mastra.getWorkspaceById(workspaceId);

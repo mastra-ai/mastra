@@ -457,6 +457,29 @@ describe('Workspace Handlers', () => {
         },
       });
     });
+
+    it('should materialize the workspace via resolveWorkspaceById on a registry miss', async () => {
+      // Simulates the shipyard prod scenario: the process restarted, the in-memory
+      // registry is empty, but the underlying (durable) sandbox is still reachable
+      // and the host can rebuild the workspace shim from its own state.
+      const lazyWorkspace = createWorkspace('mfw-abc-xyz-web-factory', { name: 'Lazy Factory Workspace' });
+      const resolver = vi.fn(async (id: string) => (id === 'mfw-abc-xyz-web-factory' ? lazyWorkspace : undefined));
+
+      const mastra = new Mastra({ logger: false, resolveWorkspaceById: resolver });
+
+      const result = await GET_WORKSPACE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workspaceId: 'mfw-abc-xyz-web-factory',
+      });
+
+      expect(result).toMatchObject({
+        isWorkspaceConfigured: true,
+        id: 'mfw-abc-xyz-web-factory',
+        name: 'Lazy Factory Workspace',
+      });
+      expect(resolver).toHaveBeenCalledTimes(1);
+      expect(mastra.listWorkspaces()['mfw-abc-xyz-web-factory']?.source).toBe('resolver');
+    });
   });
 
   // ===========================================================================
