@@ -110,6 +110,22 @@ const duckdb = new DuckDBStore({ path: ':memory:' })
     isOptional: true,
     defaultValue: "'mastra.duckdb'",
   },
+  {
+    name: 'memoryLimit',
+    type: 'string',
+    description:
+      "Maximum memory DuckDB may use, such as '2GB' or '512MB'. Larger-than-memory operations spill to disk for file-backed databases. Raise this for dedicated analytical workloads.",
+    isOptional: true,
+    defaultValue: "'2GB'",
+  },
+  {
+    name: 'threads',
+    type: 'number',
+    description:
+      'Number of threads DuckDB may use. Lower this to keep queries from monopolizing all cores of a shared application server.',
+    isOptional: true,
+    defaultValue: 'one per CPU core',
+  },
 ]}
 />
 

@@ -11,6 +11,7 @@ import type { ApiRoute, IMastraAuthProvider, ISessionProvider } from '@mastra/co
 import type { Context, Hono } from 'hono';
 
 import type { RouteAuth } from './routes/route.js';
+import { timedAboveThreshold } from './timing.js';
 
 /**
  * Provider-neutral factory auth gating for the MastraCode web server.
@@ -21,8 +22,8 @@ import type { RouteAuth } from './routes/route.js';
  * server is placed behind it: unauthenticated browser navigations are
  * redirected to the SPA's `/signin` page, API/XHR calls receive a 401, and a
  * small set of public routes stay reachable while signed out — the provider's
- * `/auth/*` routes plus `/auth/me`, the `/signin` page and its `/assets/*`
- * bundle. When no provider is active, `mountFactoryAuth` is a no-op and the server
+ * `/auth/*` routes plus `/auth/me`, the `/signin` page, its `/assets/*` bundle,
+ * and the SPA manifest metadata. When no provider is active, `mountFactoryAuth` is a no-op and the server
  * behaves exactly as it does without auth.
  *
  * Provider specifics stay in the providers (`@mastra/auth-workos`,
@@ -637,14 +638,24 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     if (c.req.method === 'POST' && path === '/web/github/webhook') {
       return next();
     }
-    // The SPA sign-in page and the static bundle it needs must be reachable
-    // while signed out; no user is stashed, so `/api/*` stays protected.
-    if (path === '/signin' || path.startsWith('/assets/')) {
+    // The SPA sign-in page, its static bundle, and browser-fetched metadata
+    // must be reachable while signed out; no user is stashed, so `/api/*`
+    // stays protected.
+    if (
+      path === '/signin' ||
+      path.startsWith('/assets/') ||
+      path === '/manifest.webmanifest' ||
+      path === '/mastra.svg'
+    ) {
       return next();
     }
 
     const token = getBearerToken(c.req.header('Authorization'));
-    const user = await authenticateRequest(provider, token, c.req.raw);
+    // A slow verification here delays EVERY protected request — surface
+    // outliers so auth-backend latency is attributable from server logs.
+    const user = await timedAboveThreshold('auth.gate.authenticate', 1_000, () =>
+      authenticateRequest(provider, token, c.req.raw),
+    );
 
     if (user) {
       // Bootstrap a personal org for no-org accounts so the org id resolves on

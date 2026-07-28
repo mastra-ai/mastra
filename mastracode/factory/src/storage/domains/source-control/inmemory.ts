@@ -302,6 +302,10 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     },
     getById: async ({ id }: { id: string }): Promise<ProjectRepositorySandbox | null> =>
       this.sandboxesRows.find(row => row.id === id) ?? null,
+    setWorkdir: async ({ id, sandboxWorkdir }: { id: string; sandboxWorkdir: string }): Promise<void> => {
+      const row = this.sandboxesRows.find(candidate => candidate.id === id);
+      if (row) Object.assign(row, { sandboxWorkdir, materializedAt: null });
+    },
     setSandboxId: async ({ id, sandboxId }: { id: string; sandboxId: string }): Promise<void> => {
       const row = this.sandboxesRows.find(candidate => candidate.id === id);
       if (row) row.sandboxId = sandboxId;

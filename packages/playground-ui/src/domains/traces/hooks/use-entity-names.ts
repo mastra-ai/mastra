@@ -31,7 +31,9 @@ export const useEntityNames = ({ entityType, rootOnly = false }: UseEntityNamesO
         }
 
         const responses = await Promise.all(
-          ROOT_ENTITY_TYPE_OPTIONS.map(option => client.getEntityNames({ entityType: option.entityType })),
+          ROOT_ENTITY_TYPE_OPTIONS.map(option =>
+            client.getEntityNames({ entityType: option.entityType as EntityType }),
+          ),
         );
 
         return {

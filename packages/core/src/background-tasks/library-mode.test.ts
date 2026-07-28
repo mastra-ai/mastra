@@ -238,12 +238,14 @@ describe('background tasks in library mode (no startWorkers)', () => {
     await mastra.stopWorkers();
   });
 
-  it('creates no background-task manager when the instance opted out via workers: false', () => {
-    // `workers: false` means the consumer of the background-tasks topic lives
-    // in a separate worker process — this instance never creates a manager,
-    // so there is no lazy-start surface to trigger.
+  it('creates a producer-only background-task manager when workers: false', () => {
+    // `workers: false` means the consumer lives in a separate worker process.
+    // The manager is still created in producer mode so this instance can
+    // dispatch tasks, but it never subscribes to the dispatch topic.
     const mastra = makeLibraryModeMastra({ workers: false });
-    expect(mastra.backgroundTaskManager).toBeUndefined();
+    const manager = mastra.backgroundTaskManager;
+    expect(manager).toBeDefined();
+    expect(manager!.config.mode).toBe('producer');
   });
 
   it('does not lazily start execution workers excluded by the MASTRA_WORKERS filter', async () => {

@@ -95,9 +95,45 @@ export function shellQuote(value: string): string {
   return `'` + value.split(`'`).join(`'\\''`) + `'`;
 }
 
-/** Run a shell script in the sandbox via `sh -c`. */
-async function sh(sandbox: MaterializationSandbox, script: string): Promise<SandboxCommandResult> {
-  return sandbox.executeCommand('sh', ['-c', script]);
+/**
+ * Default hang guard for sandbox shell commands. Generous by design — large
+ * clones and dependency installs legitimately take minutes; the guard exists
+ * so a wedged sandbox surfaces a failure instead of hanging the request that
+ * triggered materialization forever.
+ */
+const DEFAULT_COMMAND_TIMEOUT_MS = 15 * 60_000;
+/** Branch checkout only fetches one ref — a much tighter budget applies. */
+export const CHECKOUT_COMMAND_TIMEOUT_MS = 5 * 60_000;
+
+interface ShOptions {
+  /** Override the hang-guard budget for this command. */
+  timeoutMs?: number;
+  /** Human-readable phase name included in the timeout error. */
+  phase?: string;
+}
+
+/** Run a shell script in the sandbox via `sh -c`, bounded by a hang guard. */
+async function sh(
+  sandbox: MaterializationSandbox,
+  script: string,
+  options: ShOptions = {},
+): Promise<SandboxCommandResult> {
+  const timeoutMs = options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const hangGuard = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const phase = options.phase ? ` during ${options.phase}` : '';
+      reject(new Error(`Sandbox command timed out after ${Math.round(timeoutMs / 1000)}s${phase}.`));
+    }, timeoutMs);
+    timer.unref?.();
+  });
+  try {
+    // Forward the budget to the provider too so it can terminate the wedged
+    // process; the race stays as the outer guard for providers that ignore it.
+    return await Promise.race([sandbox.executeCommand('sh', ['-c', script], { timeout: timeoutMs }), hangGuard]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Error raised when the sandbox cannot materialize the repo (actionable). */
@@ -183,12 +219,17 @@ export async function materializeRepo(options: {
 
   const authUrl = tokenUrl(repo, token);
 
-  // The DB's `materializedAt` can drift from disk — a fresh per-user binding
-  // row over an already-populated workdir (local dev DB resets, repaired
-  // rows, earlier flows) would make `git clone` fail on the non-empty
-  // directory. Re-detect an existing checkout of this repo and pull instead.
-  const alreadyMaterialized = Boolean(sandboxRow.materializedAt) || (await hasExistingCheckout(sandbox, workdir, repo));
+  // The DB's `materializedAt` can drift from disk in both directions: a fresh
+  // binding row over an already-populated workdir (local dev DB resets,
+  // repaired rows, earlier flows) must pull instead of failing `git clone` on
+  // the non-empty directory, and a stale `materializedAt` over an empty
+  // sandbox (an expired/recreated VM whose disk was wiped) must re-clone
+  // instead of running `git -C <workdir>` against a directory that no longer
+  // exists. Disk is the source of truth: detect the checkout instead of
+  // trusting the row.
+  const alreadyMaterialized = await hasExistingCheckout(sandbox, workdir, repo);
 
+  let succeeded = false;
   try {
     if (!alreadyMaterialized) {
       // 2a. First open: shallow-clone the default branch into the workdir. A
@@ -201,6 +242,7 @@ export async function materializeRepo(options: {
       const clone = await sh(
         sandbox,
         `git clone --depth=1 --single-branch --branch ${shellQuote(repoInfo.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,
+        { phase: 'repository clone' },
       );
       if (clone.exitCode !== 0) {
         throw classifyGitFailure(clone, 'clone-failed');
@@ -212,17 +254,19 @@ export async function materializeRepo(options: {
       if (setUrl.exitCode !== 0) {
         throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
       }
-      const pull = await sh(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`);
+      const pull = await sh(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`, { phase: 'repository pull' });
       if (pull.exitCode !== 0) {
         throw classifyGitFailure(pull, 'pull-failed');
       }
     }
+    succeeded = true;
   } finally {
     // 3. Always scrub the token from the remote so it isn't left in the VM's
     // git config, even when the clone/pull above failed partway through. This
-    // is best-effort on the failure path (the workdir may not exist yet after a
-    // failed clone); on the success path the scrub must succeed or we surface it.
-    await scrubRemote(sandbox, workdir, repo, alreadyMaterialized);
+    // is best-effort on the failure path (the workdir may not even exist, and
+    // a scrub error must never mask the primary failure); on the success path
+    // the scrub must succeed or we surface it.
+    await scrubRemote(sandbox, workdir, repo, succeeded);
   }
 
   // 4. Mark materialized.
@@ -265,6 +309,7 @@ export async function checkoutSessionBranch(
     const fetch = await sh(
       sandbox,
       `git -C ${shellQuote(workdir)} fetch origin ${shellQuote(baseBranch)} && git -C ${shellQuote(workdir)} checkout -b ${shellQuote(branch)} FETCH_HEAD`,
+      { timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS, phase: 'branch checkout' },
     );
     if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'clone-failed');
   } finally {
@@ -293,7 +338,8 @@ async function hasExistingCheckout(
  * Reset the git remote back to the tokenless URL. On a successful clone/pull the
  * workdir always has a `.git`, so a non-zero exit code here means the token may
  * still be persisted — surface it. On the failure path the workdir may not exist
- * (e.g. a failed clone), so a non-zero exit is tolerated.
+ * (e.g. a failed clone), so a non-zero exit is tolerated — and never masks the
+ * primary failure being thrown through the `finally`.
  */
 async function scrubRemote(
   sandbox: MaterializationSandbox,
@@ -667,7 +713,7 @@ export async function runWorktreeSetup(
   worktreePath: string,
   command: string,
 ): Promise<void> {
-  const result = await sh(sandbox, `cd ${shellQuote(worktreePath)} && { ${command}\n}`);
+  const result = await sh(sandbox, `cd ${shellQuote(worktreePath)} && { ${command}\n}`, { phase: 'worktree setup' });
   if (result.exitCode !== 0) {
     const detail = (result.stderr.trim() || result.stdout.trim()).slice(-2000);
     throw new WorktreeError(`Setup command failed (exit ${result.exitCode}): ${detail}`, 'setup-failed');

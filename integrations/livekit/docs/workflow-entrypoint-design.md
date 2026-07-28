@@ -362,7 +362,7 @@ Phase 1 — **Workflow entrypoint (this doc's core):**
      filtering; `resultText` fallback; cancel → `run.cancel()`; error propagation vs. silent
      barge-in.
    - `bridge.test.ts`: agent path unchanged; generator seam delegates correctly.
-6. Docs: `README.md` workflow section + `docs/voice/livekit.mdx` / `reference/voice/livekit.mdx`;
+6. Docs: `README.md` workflow section + `docs/voice/realtime-voice.mdx` / `reference/voice/livekit.mdx`;
    add a changeset (minor — additive).
 
 Phase 2 — **Transcript-fidelity memory (follow-up):** subscribe to LiveKit transcript events in

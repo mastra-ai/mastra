@@ -443,6 +443,6 @@ See the example's own [`README.md`](https://github.com/mastra-ai/mastra/tree/mai
 
 ## Documentation
 
-- [Using LiveKit with Mastra](https://mastra.ai/docs/voice/livekit)
+- [Realtime voice](https://mastra.ai/docs/voice/realtime-voice)
 - [`@mastra/livekit` reference](https://mastra.ai/reference/voice/livekit)
 - [LiveKit Agents docs](https://docs.livekit.io/agents/)

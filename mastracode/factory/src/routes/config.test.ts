@@ -630,12 +630,12 @@ describe('OM routes with a tenant', () => {
   }
 
   function buildApp(
-    session: ReturnType<typeof makeOmSession>,
-    opts: { withStorage?: boolean; authEnabled?: boolean } = {},
+    session: ReturnType<typeof makeOmSession> | null,
+    opts: { withStorage?: boolean; authEnabled?: boolean; provider?: string } = {},
   ) {
     const controller = {
-      ...makeAgentController([{ provider: 'anthropic', hasApiKey: true }]),
-      getSessionByResource: async () => session,
+      ...makeAgentController([{ provider: opts.provider ?? 'anthropic', hasApiKey: true }]),
+      getSessionByResource: async () => session ?? undefined,
     };
     const app = new Hono();
     if (opts.authEnabled !== false) {
@@ -692,6 +692,60 @@ describe('OM routes with a tenant', () => {
     await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
       observerModelId: 'anthropic/claude-haiku-4-5',
       reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+  });
+
+  it('reads the OpenAI OM default through a Codex credential', async () => {
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'openai-codex', {
+      type: 'api_key',
+      key: 'sk-openai',
+    });
+
+    const res = await postJson(buildApp(makeOmSession(), { provider: 'openai' }), '/web/config/om/provider-defaults', {
+      providerId: 'openai',
+      factoryModelId: 'openai/gpt-5.6',
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config).toMatchObject({
+      observerModelId: 'openai/gpt-5.4-mini',
+      reflectorModelId: 'openai/gpt-5.4-mini',
+    });
+  });
+
+  it('prefers the low-cost OM pack over the selected factory model', async () => {
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'google', {
+      type: 'api_key',
+      key: 'sk-google',
+    });
+
+    const res = await postJson(buildApp(makeOmSession(), { provider: 'google' }), '/web/config/om/provider-defaults', {
+      providerId: 'google',
+      factoryModelId: 'google/gemini-3.5-pro',
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config).toMatchObject({
+      observerModelId: 'google/gemini-3.5-flash',
+      reflectorModelId: 'google/gemini-3.5-flash',
+    });
+  });
+
+  it('keeps the selected factory model for providers without an OM pack', async () => {
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'xai', {
+      type: 'api_key',
+      key: 'sk-xai',
+    });
+
+    const res = await postJson(buildApp(makeOmSession(), { provider: 'xai' }), '/web/config/om/provider-defaults', {
+      providerId: 'xai',
+      factoryModelId: 'xai/grok-4.5',
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config).toMatchObject({
+      observerModelId: 'xai/grok-4.5',
+      reflectorModelId: 'xai/grok-4.5',
     });
   });
 
@@ -802,6 +856,35 @@ describe('OM routes with a tenant', () => {
       observerModelId: 'anthropic/claude-fable-5',
       observationThreshold: 25000,
       reflectionThreshold: 45000,
+      observeAttachments: false,
+    });
+  });
+
+  it('falls back to the stored row when the resourceId has no live session', async () => {
+    // The settings page addresses the factory-level resource, which has no
+    // live agent-controller session after a restart or before any chat. The
+    // stored row is authoritative and new sessions hydrate from it, so reads
+    // and writes must succeed session-less instead of 404ing.
+    const app = buildApp(null);
+
+    const initial = await app.request('/web/config/om?resourceId=r1');
+    expect(initial.status).toBe(200);
+    expect((await initial.json()).config.observerModelId).toBe(DEFAULT_OM_MODEL_ID);
+
+    expect(
+      (await putJson(app, '/web/config/om/observer/model', { resourceId: 'r1', modelId: 'anthropic/claude-fable-5' }))
+        .status,
+    ).toBe(200);
+    expect(
+      (await putJson(app, '/web/config/om/thresholds', { resourceId: 'r1', observationThreshold: 25000 })).status,
+    ).toBe(200);
+    expect((await putJson(app, '/web/config/om/observe-attachments', { resourceId: 'r1', value: false })).status).toBe(
+      200,
+    );
+
+    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
+      observerModelId: 'anthropic/claude-fable-5',
+      observationThreshold: 25000,
       observeAttachments: false,
     });
   });
