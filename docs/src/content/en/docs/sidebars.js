@@ -1053,6 +1053,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'mastra-platform/trace-intelligence',
+          label: 'Trace Intelligence',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'mastra-platform/studio',
           label: 'Studio',
         },
