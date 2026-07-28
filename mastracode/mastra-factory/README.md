@@ -6,7 +6,7 @@
 npm create factory
 ```
 
-It clones the public [`softwarefactory-template`](https://github.com/mastra-ai/softwarefactory-template), installs dependencies, and initializes Git. Run `create-factory --help` for options.
+It clones the public [`softwarefactory-template`](https://github.com/mastra-ai/softwarefactory-template), installs dependencies, and initializes Git. Run `npm create factory -- --help` for options.
 
 ## Development
 
