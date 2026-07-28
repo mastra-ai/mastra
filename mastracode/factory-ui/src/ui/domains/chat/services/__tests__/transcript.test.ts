@@ -515,12 +515,22 @@ describe('transcript reducer error notices', () => {
 });
 
 describe('live user-signal events render the same as their persisted copy', () => {
+  /**
+   * `agent-channels` stamps this on every inbound channel message, and
+   * `toDataPart` carries it onto the live event — it is what marks the signal
+   * as Slack-origin rather than composer-origin.
+   */
+  const slackProviderOptions = {
+    mastra: { channels: { slack: { author: { userId: 'U123', userName: 'caleb' } } } },
+  };
+
   const payload = {
     id: 'sig-1',
     type: 'user',
     tagName: 'user',
     contents: 'hello from slack',
     createdAt: '2026-07-27T16:00:00.000Z',
+    providerOptions: slackProviderOptions,
   };
 
   /** The live event shape: signal payload as one data part, text inside `data.contents`. */
@@ -533,6 +543,27 @@ describe('live user-signal events render the same as their persisted copy', () =
         format: 2,
         parts: [{ type: 'data-user-message', data: payload }] as unknown as MastraMessagePart[],
         metadata: { signal: payload },
+      },
+    };
+  }
+
+  /** The same live shape for a message typed into the web composer: no channel provenance. */
+  function liveComposerSignal(): MastraDBMessage {
+    const composerPayload = {
+      id: 'sig-web',
+      type: 'user',
+      tagName: 'user',
+      contents: 'hello from the composer',
+      createdAt: '2026-07-27T16:00:00.000Z',
+    };
+    return {
+      id: 'sig-web',
+      role: 'signal',
+      createdAt: new Date(composerPayload.createdAt),
+      content: {
+        format: 2,
+        parts: [{ type: 'data-user-message', data: composerPayload }] as unknown as MastraMessagePart[],
+        metadata: { signal: composerPayload },
       },
     };
   }
@@ -567,6 +598,32 @@ describe('live user-signal events render the same as their persisted copy', () =
     state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message: persisted } });
 
     expect(firstEntryParts(state)).toEqual([{ type: 'text', text: 'hello from slack' }]);
+  });
+
+  /**
+   * Regression: the composer already renders an optimistic local echo under a
+   * `local-…` id. The streamed signal event carries the signal's own id, so the
+   * two cannot dedupe — drawing both showed the message twice. Only channel
+   * messages get the drawable-text projection.
+   */
+  it('leaves a composer-origin live event undrawable so the local echo stays the only bubble', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, { type: 'localUser', text: 'hello from the composer' });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: liveComposerSignal() },
+    });
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_end', message: liveComposerSignal() } });
+
+    const drawable = state.entries.filter(
+      entry =>
+        entry.kind === 'message' &&
+        (entry.message.content.parts ?? []).some(
+          part => part.type === 'text' && part.text.includes('hello from the composer'),
+        ),
+    );
+    expect(drawable).toHaveLength(1);
+    expect(drawable[0] && 'id' in drawable[0] ? drawable[0].id : '').toMatch(/^local-/);
   });
 
   it('keeps non-user signals alone', () => {
