@@ -61,6 +61,18 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
       <PageLayout.Row>
         <PageLayout.Column>
           <DataKeysAndValues numOfCol={2}>
+            {experiment.name && (
+              <>
+                <DataKeysAndValues.Key>Name</DataKeysAndValues.Key>
+                <DataKeysAndValues.Value>{experiment.name}</DataKeysAndValues.Value>
+              </>
+            )}
+            {experiment.description && (
+              <>
+                <DataKeysAndValues.Key>Description</DataKeysAndValues.Key>
+                <DataKeysAndValues.Value>{experiment.description}</DataKeysAndValues.Value>
+              </>
+            )}
             <DataKeysAndValues.Key>Created at</DataKeysAndValues.Key>
             <DataKeysAndValues.Value>
               {format(new Date(experiment.createdAt), "MMM d, yyyy 'at' h:mm a")}
