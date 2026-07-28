@@ -922,6 +922,37 @@ describe('Hono Server Adapter', () => {
       expect(data).toEqual({ echo: { test: 'data' } });
     });
 
+    it('enforces body size limits on custom DELETE routes', async () => {
+      const app = new Hono();
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+        customApiRoutes: [
+          registerApiRoute('/delete-body', {
+            method: 'DELETE',
+            handler: async c => c.json(await c.req.json()),
+          }),
+        ],
+        bodyLimitOptions: {
+          maxSize: 50,
+          onError: () => new Response(JSON.stringify({ error: 'Body limit exceeded' }), { status: 413 }),
+        },
+      });
+
+      await adapter.init();
+
+      const response = await app.request(
+        new Request('http://localhost/delete-body', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: 'a'.repeat(100) }),
+        }),
+      );
+
+      expect(response.status).toBe(413);
+      await expect(response.json()).resolves.toEqual({ error: 'Body limit exceeded' });
+    });
+
     it('should propagate request abort signals to custom API route handlers', async () => {
       const signalAbort = vi.fn();
       let routeSignal: AbortSignal | undefined;

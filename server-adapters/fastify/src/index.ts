@@ -708,10 +708,11 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     };
 
     // Add body limit if configured
-    const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
+    const shouldApplyBodyLimit =
+      this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
     const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
 
-    const config = shouldApplyBodyLimit && maxSize ? { bodyLimit: maxSize } : undefined;
+    const bodyLimit = shouldApplyBodyLimit && maxSize ? maxSize : undefined;
 
     // Handle ALL method by registering for each HTTP method
     // Fastify doesn't support 'ALL' method natively like Express
@@ -725,7 +726,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             method,
             url: fastifyPath,
             handler,
-            config,
+            bodyLimit,
           });
         } catch (err) {
           // Skip duplicate route errors - can happen if route is registered multiple times
@@ -740,7 +741,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         method: route.method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
         url: fastifyPath,
         handler,
-        config,
+        bodyLimit,
       });
     }
   }
@@ -867,16 +868,22 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         await this.writeCustomRouteResponse(response, reply.raw, request.abortSignal);
       };
 
+      const shouldApplyBodyLimit =
+        this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
+      const maxSize = this.bodyLimitOptions?.maxSize;
+      const bodyLimit = shouldApplyBodyLimit && maxSize ? maxSize : undefined;
+
       if (route.method === 'ALL') {
         const methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] as const;
         for (const method of methods) {
-          this.app.route({ method, url: route.path, handler: fastifyHandler });
+          this.app.route({ method, url: route.path, handler: fastifyHandler, bodyLimit });
         }
       } else {
         this.app.route({
           method: route.method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
           url: route.path,
           handler: fastifyHandler,
+          bodyLimit,
         });
       }
     }

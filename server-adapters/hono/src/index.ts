@@ -395,7 +395,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     const prefix = prefixParam ?? this.prefix ?? '';
 
     // Determine if body limits should be applied
-    const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
+    const shouldApplyBodyLimit =
+      this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
 
     // Get the body size limit for this route (route-specific or default)
     const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
@@ -743,8 +744,20 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         return response;
       };
 
+      const shouldApplyBodyLimit =
+        this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
+      const maxSize = this.bodyLimitOptions?.maxSize;
+      const middlewares =
+        shouldApplyBodyLimit && maxSize
+          ? [
+              bodyLimit({
+                maxSize,
+                onError: this.bodyLimitOptions!.onError as any,
+              }),
+            ]
+          : [];
       const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all';
-      this.app[method](route.path, routeHandler);
+      this.app[method](route.path, ...middlewares, routeHandler);
     }
   }
 

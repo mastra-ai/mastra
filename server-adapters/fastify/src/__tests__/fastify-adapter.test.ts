@@ -934,6 +934,35 @@ describe('Fastify Server Adapter', () => {
       expect(data).toEqual({ message: 'Hello from custom route!' });
       await app.close();
     });
+
+    it('enforces body size limits on custom DELETE routes', async () => {
+      const app = Fastify();
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+        customApiRoutes: [
+          registerApiRoute('/custom/delete-body', {
+            method: 'DELETE',
+            handler: async c => c.json(await c.req.json()),
+          }),
+        ],
+        bodyLimitOptions: {
+          maxSize: 50,
+          onError: () => ({ error: 'Body limit exceeded' }),
+        },
+      });
+
+      await adapter.init();
+      const address = await app.listen({ port: 0 });
+      const response = await fetch(`${address}/custom/delete-body`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: 'a'.repeat(100) }),
+      });
+
+      expect(response.status).toBe(413);
+      await app.close();
+    });
   });
 
   describe('Custom route stream disconnect handling', () => {

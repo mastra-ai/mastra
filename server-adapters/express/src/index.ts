@@ -419,7 +419,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     const prefix = prefixParam ?? this.prefix ?? '';
 
     // Determine if body limits should be applied
-    const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
+    const shouldApplyBodyLimit =
+      this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
 
     // Get the body size limit for this route (route-specific or default)
     const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
@@ -632,6 +633,20 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       );
       const shouldRunCustomRouteAuth = isProtectedCustomRoute(path, method, this.customRouteAuthConfig);
       const shouldRunCustomRouteFGA = !!matchedRoute?.route.fga;
+      const maxSize = this.bodyLimitOptions?.maxSize;
+
+      if (
+        matchedRoute &&
+        maxSize &&
+        ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method.toUpperCase()) &&
+        parseInt(req.headers['content-length'] ?? '0', 10) > maxSize
+      ) {
+        try {
+          return res.status(413).json(this.bodyLimitOptions!.onError({ error: 'Request body too large' }));
+        } catch {
+          return res.status(413).json({ error: 'Request body too large' });
+        }
+      }
 
       if (shouldRunCustomRouteAuth || shouldRunCustomRouteFGA) {
         const serverRoute: ServerRoute = {
