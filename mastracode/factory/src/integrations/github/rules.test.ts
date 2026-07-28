@@ -188,7 +188,7 @@ describe('GithubRules', () => {
           (input: { id: string; contents: string }, options: { requestContext: { get(key: string): unknown } }) => {
             if (!threadId) throw new Error('Signal delivered before thread persistence.');
             deliveredSignals.push({ ...input, threadId, user: options.requestContext.get('user') });
-            return { accepted: Promise.resolve({ accepted: true }) };
+            return { accepted: Promise.resolve({ accepted: true, action: 'wake' }) };
           },
         ),
         state: { set: vi.fn(async () => {}) },
