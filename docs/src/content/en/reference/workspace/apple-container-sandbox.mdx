@@ -353,14 +353,14 @@ const sandbox = new AppleContainerSandbox({
 
 These options are only applied when a new container is created. If the sandbox reconnects to an existing container with the same name, destroy and recreate the sandbox to apply changed runtime options.
 Apple `--tmpfs` accepts container paths only, such as `/tmp`; it doesn't accept Docker-style option specs like `/tmp:rw,size=256m`.
-When `readonlyRootfs` is enabled, make sure `workingDir` points to a path supplied by the image, a bind mount, or a writable tmpfs.
+When `readonlyRootfs` is enabled, make sure `workingDir` points to a path supplied by the image or a bind mount. A writable tmpfs is also supported.
 
 ## Security model
 
 `AppleContainerSandbox` runs local containers through the host Apple `container` service. Treat constructor options as trusted server-side configuration:
 
 - `volumes`, `mounts`, and `publishedSockets` can expose host paths to containerized code.
-- `publishedPorts` can expose in-container services on the host or network; bind to `127.0.0.1` when only local access is intended.
+- `publishedPorts` can expose in-container services on the host or network. Bind to `127.0.0.1` when only local access is intended.
 - `ssh` forwards the host SSH agent socket.
 - `capAdd` and `virtualization` can expand what containerized code can do.
 - `containerBinary` is a constructor-only escape hatch for trusted code and isn't part of the serializable editor provider schema.
