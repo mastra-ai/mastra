@@ -24,8 +24,10 @@ Resolve the enabled plugin root through Herdr, not from the current repository:
 
 ```sh
 plugin_file=$(mktemp)
-herdr plugin list --plugin herdr-kit --json > "$plugin_file"
-plugin_root=$(python3 - "$plugin_file" <<'PY'
+if ! herdr plugin list --plugin herdr-kit --json > "$plugin_file"; then
+    exit 1
+fi
+if ! plugin_root=$(python3 - "$plugin_file" <<'PY'
 import json, sys
 plugins = json.load(open(sys.argv[1]))["result"]["plugins"]
 plugin = next((p for p in plugins if p.get("plugin_id") == "herdr-kit"), None)
@@ -33,7 +35,9 @@ if not plugin or not plugin.get("enabled") or not plugin.get("plugin_root"):
     raise SystemExit("Enabled herdr-kit plugin root is unavailable")
 print(plugin["plugin_root"])
 PY
-)
+); then
+    exit 1
+fi
 manager_cli="$plugin_root/herdr-kit"
 ```
 
@@ -80,7 +84,7 @@ For Review Manager records, use the structured review metadata when reasoning ab
 
 - `reviews.your_latest_review_at` and `reviews.your_latest_review_sha` identify the user's latest submitted review and reviewed commit.
 - `reviews.events` provides submitted review events with actors, states, timestamps, commit SHAs, and compact bodies.
-- `reviews.comments` and `reviews.unresolved_threads` provide available comment and unresolved-discussion timing.
+- `reviews.comments` and `reviews.unresolved_threads` provide available comment and unresolved-discussion timing. Compare each item's timestamp with `reviews.your_latest_review_at`: only later items are follow-up feedback, and the result remains unknown when either timestamp is unavailable.
 - `reviews.commits_since_your_review` identifies commits submitted after the user's latest review.
 - Compare event timestamps rather than assuming PR-wide `activity_at` occurred after the user's review. A missing timestamp or event remains unknown.
 
