@@ -15,6 +15,12 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
+const anotherItemWithTimeout = {
+  ...itemWithTimeout,
+  id: 'item-2',
+  timeout: 30_000,
+} satisfies DatasetItem;
+
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
@@ -32,15 +38,27 @@ const renderPanel = (item: DatasetItem) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(
+  const renderPanelWithItem = (currentItem: DatasetItem) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <DatasetItemPanel datasetId="ds-1" item={item} items={[item]} onItemChange={() => {}} onClose={() => {}} />
+          <DatasetItemPanel
+            datasetId="ds-1"
+            item={currentItem}
+            items={[currentItem]}
+            onItemChange={() => {}}
+            onClose={() => {}}
+          />
         </MemoryRouter>
       </QueryClientProvider>
-    </MastraReactProvider>,
+    </MastraReactProvider>
   );
+  const rendered = render(renderPanelWithItem(item));
+
+  return {
+    ...rendered,
+    rerenderPanel: (nextItem: DatasetItem) => rendered.rerender(renderPanelWithItem(nextItem)),
+  };
 };
 
 async function openEditForm() {
@@ -112,6 +130,28 @@ describe('DatasetItemPanel', () => {
 
       await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
       expect(capture).toHaveBeenCalledWith(expect.objectContaining({ timeout: 1_800_000 }));
+    });
+  });
+
+  describe('when item data changes during editing', () => {
+    it('resets drafts when a different item is selected', async () => {
+      const { rerenderPanel } = renderPanel(itemWithTimeout);
+
+      const timeout = await openEditForm();
+      fireEvent.change(timeout, { target: { value: '25000' } });
+      rerenderPanel(anotherItemWithTimeout);
+
+      expect(screen.getByRole<HTMLInputElement>('spinbutton', { name: /item timeout/i }).value).toBe('30000');
+    });
+
+    it('preserves drafts when the same item is refetched', async () => {
+      const { rerenderPanel } = renderPanel(itemWithTimeout);
+
+      const timeout = await openEditForm();
+      fireEvent.change(timeout, { target: { value: '25000' } });
+      rerenderPanel({ ...itemWithTimeout, metadata: { refetched: true } });
+
+      expect(screen.getByRole<HTMLInputElement>('spinbutton', { name: /item timeout/i }).value).toBe('25000');
     });
   });
 

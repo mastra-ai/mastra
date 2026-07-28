@@ -59,8 +59,8 @@ export { DatasetItemHeader } from './components/dataset-detail/dataset-item-head
 export type { DatasetItemHeaderProps } from './components/dataset-detail/dataset-item-header';
 export { DatasetItemContent } from './components/dataset-detail/dataset-item-content';
 export type { DatasetItemContentProps } from './components/dataset-detail/dataset-item-content';
-export { EditModeContent } from './components/dataset-detail/dataset-item-form';
-export type { EditModeContentProps } from './components/dataset-detail/dataset-item-form';
+export { DatasetItemEditForm, EditModeContent } from './components/dataset-detail/dataset-item-form';
+export type { DatasetItemEditFormProps, EditModeContentProps } from './components/dataset-detail/dataset-item-form';
 export { ItemPageToolbar } from './components/dataset-detail/item-page-toolbar';
 export type { ItemPageToolbarProps } from './components/dataset-detail/item-page-toolbar';
 
