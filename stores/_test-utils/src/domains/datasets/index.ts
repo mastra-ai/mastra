@@ -784,21 +784,35 @@ export function createDatasetsTests({
         expect(newRow!.isDeleted).toBe(false);
       });
 
-      it('deleteItem closes old row and inserts tombstone', async () => {
+      it('deleteItem closes old rows and preserves scorer IDs on tombstones', async () => {
         const ds = await datasetsStorage.createDataset({ name: 'scd2-delete' });
-        const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'bye' } });
+        const items = [
+          await datasetsStorage.addItem({
+            datasetId: ds.id,
+            input: { q: 'selected' },
+            scorerIds: ['quality'],
+          }),
+          await datasetsStorage.addItem({
+            datasetId: ds.id,
+            input: { q: 'disabled' },
+            scorerIds: [],
+          }),
+        ];
 
-        await datasetsStorage.deleteItem({ id: item.id, datasetId: ds.id });
+        for (const item of items) {
+          await datasetsStorage.deleteItem({ id: item.id, datasetId: ds.id });
 
-        const current = await datasetsStorage.getItemById({ id: item.id });
-        expect(current).toBeNull();
+          const current = await datasetsStorage.getItemById({ id: item.id });
+          expect(current).toBeNull();
 
-        const history = await datasetsStorage.getItemHistory(item.id);
-        expect(history).toHaveLength(2);
+          const history = await datasetsStorage.getItemHistory(item.id);
+          expect(history).toHaveLength(2);
 
-        const tombstone = history.find(h => h.isDeleted);
-        expect(tombstone).toBeDefined();
-        expect(tombstone!.validTo).toBeNull(); // tombstone is the "current" version
+          const tombstone = history.find(h => h.isDeleted);
+          expect(tombstone).toBeDefined();
+          expect(tombstone!.validTo).toBeNull(); // tombstone is the "current" version
+          expect(tombstone!.scorerIds).toEqual(item.scorerIds);
+        }
       });
 
       it('deleteItem tombstone inherits tenancy from parent dataset', async () => {
@@ -826,7 +840,10 @@ export function createDatasetsTests({
         });
         const items = await datasetsStorage.batchInsertItems({
           datasetId: ds.id,
-          items: [{ input: { q: 'a' } }, { input: { q: 'b' } }],
+          items: [
+            { input: { q: 'selected' }, scorerIds: ['quality'] },
+            { input: { q: 'disabled' }, scorerIds: [] },
+          ],
         });
 
         await datasetsStorage.batchDeleteItems({
@@ -840,6 +857,7 @@ export function createDatasetsTests({
           expect(tombstone).toBeDefined();
           expect(tombstone!.organizationId).toBe('org_batch');
           expect(tombstone!.projectId).toBe('proj_batch');
+          expect(tombstone!.scorerIds).toEqual(item.scorerIds);
         }
       });
 
