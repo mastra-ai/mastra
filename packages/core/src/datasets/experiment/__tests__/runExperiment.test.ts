@@ -456,6 +456,30 @@ describe('runExperiment', () => {
       expect(sharedScorer.run).toHaveBeenCalledTimes(2);
     });
 
+    it('does not resolve dataset scorer IDs when every item has an override', async () => {
+      const task = vi.fn().mockResolvedValue('output');
+      const getScorerById = vi.fn().mockImplementation(() => {
+        throw new Error('Scorer not found');
+      });
+      const localMastra = { ...mastra, getScorerById } as unknown as Mastra;
+      const dataset = await datasetsStorage.createDataset({
+        name: 'Ignored dataset scorer',
+        scorerIds: ['missing-dataset'],
+      });
+      await datasetsStorage.addItem({
+        datasetId: dataset.id,
+        input: { prompt: 'disabled' },
+        scorerIds: [],
+      });
+
+      const result = await runExperiment(localMastra, { datasetId: dataset.id, task });
+
+      expect(result.status).toBe('completed');
+      expect(result.results[0].scores).toEqual([]);
+      expect(task).toHaveBeenCalledTimes(1);
+      expect(getScorerById).not.toHaveBeenCalled();
+    });
+
     it('runs no scorers when no source is configured', async () => {
       const result = await runExperiment(mastra, {
         data: [{ input: { prompt: 'test' } }],
@@ -544,8 +568,26 @@ describe('runExperiment', () => {
       expect(persisted.results.find(item => item.itemId === 'stale-item')?.error).toEqual(staleResult.error);
     });
 
-    it('retains compatibility behavior for missing run and dataset scorer IDs', async () => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    it('rejects experiment setup when a selected run-level scorer ID is missing', async () => {
+      const task = vi.fn().mockResolvedValue('output');
+      const localMastra = {
+        ...mastra,
+        getScorerById: vi.fn().mockImplementation(() => {
+          throw new Error('Scorer not found');
+        }),
+      } as unknown as Mastra;
+
+      await expect(
+        runExperiment(localMastra, {
+          data: [{ input: { prompt: 'run' } }],
+          task,
+          scorers: ['missing-run'],
+        }),
+      ).rejects.toThrow('Scorer not found');
+      expect(task).not.toHaveBeenCalled();
+    });
+
+    it('rejects experiment setup when a selected dataset scorer ID is missing', async () => {
       const task = vi.fn().mockResolvedValue('output');
       const localMastra = {
         ...mastra,
@@ -559,21 +601,8 @@ describe('runExperiment', () => {
       });
       await datasetsStorage.addItem({ datasetId: dataset.id, input: { prompt: 'dataset' } });
 
-      const datasetResult = await runExperiment(localMastra, { datasetId: dataset.id, task });
-      const runResult = await runExperiment(localMastra, {
-        data: [{ input: { prompt: 'run' } }],
-        task,
-        scorers: ['missing-run'],
-      });
-
-      expect(datasetResult.results[0].error).toBeNull();
-      expect(datasetResult.results[0].scores).toEqual([]);
-      expect(runResult.results[0].error).toBeNull();
-      expect(runResult.results[0].scores).toEqual([]);
-      expect(task).toHaveBeenCalledTimes(2);
-      expect(warn).toHaveBeenCalledWith('Scorer not found: missing-dataset');
-      expect(warn).toHaveBeenCalledWith('Scorer not found: missing-run');
-      warn.mockRestore();
+      await expect(runExperiment(localMastra, { datasetId: dataset.id, task })).rejects.toThrow('Scorer not found');
+      expect(task).not.toHaveBeenCalled();
     });
   });
 

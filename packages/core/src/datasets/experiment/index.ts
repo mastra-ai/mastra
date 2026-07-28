@@ -309,13 +309,10 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   const runLevelScorers = hasRunLevelScorers ? resolveScorers(mastra, flatScorerInput) : [];
   const runLevelStepScorers = hasRunLevelScorers ? resolveStepScorers(mastra, stepsConfigInput) : {};
   const resolveItemScorers = createItemScorerResolver(mastra);
-  let datasetScorers: MastraScorer<any, any, any, any>[] | undefined;
-  const getDatasetScorers = () => {
-    if (!datasetScorers) {
-      datasetScorers = resolveScorers(mastra, [...new Set(datasetRecord?.scorerIds ?? [])]);
-    }
-    return datasetScorers;
-  };
+  const hasItemsUsingDatasetScorers = !hasRunLevelScorers && items.some(item => item.scorerIds === undefined);
+  const datasetScorers = hasItemsUsingDatasetScorers
+    ? resolveScorers(mastra, [...new Set(datasetRecord?.scorerIds ?? [])])
+    : [];
 
   // 5. Create experiment record (if storage available and not pre-created)
   if (experimentsStore) {
@@ -390,7 +387,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             };
           }
         } else {
-          itemScorers = getDatasetScorers();
+          itemScorers = datasetScorers;
         }
 
         // Compose per-item signal (timeout + run-level abort)
