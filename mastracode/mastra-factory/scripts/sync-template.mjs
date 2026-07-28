@@ -176,6 +176,15 @@ function writePackageJson() {
     engines: webManifest.engines,
   };
 
+  // Transitive runtime peer that must be declared as a direct dep so npm
+  // resolves it without needing pnpm's auto-install-peers behavior.
+  const { version: memoryVersion, tag: memoryTag } = resolveLinkedVersion(
+    '@mastra/memory',
+    linkedPackageVersion('@mastra/memory', 'packages/memory'),
+  );
+  manifest.dependencies['@mastra/memory'] = memoryVersion;
+  console.log(`  ✓ @mastra/memory@${memoryVersion} (${memoryTag})`);
+
   fs.writeFileSync(path.join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
