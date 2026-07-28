@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Renamed the Signals workspace and route to Intelligence and clarified trace signal terminology throughout the experience.
+Clarified the trace intelligence terminology in the Signals empty state.
