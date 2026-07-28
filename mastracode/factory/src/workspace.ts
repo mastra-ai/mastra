@@ -176,6 +176,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const workdir = isLocalSandbox
       ? fleet.computeLocalSessionWorkdir(repoFullName, session.id)
       : (session.sandboxWorkdir ?? projectRepository.sandboxWorkdir);
+    // The system prompt derives its working directory from `state.projectPath`
+    // and falls back to the server's own process.cwd() when unset — which
+    // points the agent at the host checkout (and lets it run `git checkout`
+    // there instead of in its session workdir). Pin it to the session workdir.
+    // During createSession this seeds the session's initial state (the
+    // workspace resolves before the session is built); on later requests it
+    // self-heals live state.
+    if (ctx && workdir && ctx.getState()?.projectPath !== workdir) {
+      await ctx.setState({ projectPath: workdir, projectName: repoFullName });
+    }
     const binding: SandboxBindingStore = {
       // Read through to the session row so teardown after a fresh provision
       // sees the just-persisted id instead of a stale snapshot.

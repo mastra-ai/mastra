@@ -95,11 +95,15 @@ function createGithubRequestContext(
   user: Record<string, unknown> = { organizationId: 'org-1', workosId: 'user-1' },
 ) {
   const requestContext = createRequestContext('/unused');
+  const state: Record<string, unknown> = { factoryProjectId: projectId };
   requestContext.set('controller', {
     modeId: 'build',
     resourceId: sessionId,
     threadId: sessionId,
-    getState: () => ({ factoryProjectId: projectId }),
+    getState: () => state,
+    setState: async (updates: Record<string, unknown>) => {
+      Object.assign(state, updates);
+    },
     session: { id: sessionId },
   });
   requestContext.set('user', user);
@@ -373,6 +377,21 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.runWorktreeSetup).toHaveBeenCalledTimes(2);
     expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe(workdirA);
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
+  });
+
+  it('pins the session workdir into controller state so the agent prompt never points at the host checkout', async () => {
+    const { root, workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({ requestContext });
+
+    const ctx = requestContext.get('controller') as {
+      getState: () => { projectPath?: string; projectName?: string };
+    };
+    expect(ctx.getState().projectPath).toBe(path.join(root, 'github-sessions', 'octocat', 'hello', 'session-a'));
+    expect(ctx.getState().projectName).toBe('octocat/hello');
   });
 
   it('tears down a git-less sandbox and retries once on a fresh one', async () => {
