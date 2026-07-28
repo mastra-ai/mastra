@@ -1,5 +1,16 @@
 # @mastra/playground-ui
 
+## 44.0.0-alpha.3
+
+### Patch Changes
+
+- Clarified the trace intelligence terminology in the Signals empty state. ([#20268](https://github.com/mastra-ai/mastra/pull/20268))
+
+- Updated dependencies [[`29c584a`](https://github.com/mastra-ai/mastra/commit/29c584a13a88831e5ed1fdeb0ff8e82eae180433)]:
+  - @mastra/core@1.54.0-alpha.3
+  - @mastra/client-js@1.35.0-alpha.3
+  - @mastra/react@1.3.3-alpha.3
+
 ## 44.0.0-alpha.2
 
 ### Patch Changes

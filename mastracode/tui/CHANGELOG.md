@@ -1,5 +1,17 @@
 # mastracode
 
+## 0.32.3-alpha.3
+
+### Patch Changes
+
+- Fixed `!` shell commands in Mastra Code: typing `!<command>` while the agent is still working now runs the command locally in your terminal instead of being sent to the model as a message. ([#20269](https://github.com/mastra-ai/mastra/pull/20269))
+
+- The Mastra Code input prompt now switches to `!` when you start a message with `!`, matching the existing `/` and `@` affordances, so it is clear the line will run as a shell command. ([#20269](https://github.com/mastra-ai/mastra/pull/20269))
+
+- Updated dependencies [[`29c584a`](https://github.com/mastra-ai/mastra/commit/29c584a13a88831e5ed1fdeb0ff8e82eae180433)]:
+  - @mastra/core@1.54.0-alpha.3
+  - @mastra/code-sdk@1.1.0-alpha.3
+
 ## 0.32.3-alpha.2
 
 ### Patch Changes

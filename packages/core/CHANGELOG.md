@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.54.0-alpha.3
+
+### Patch Changes
+
+- Fixed xAI model router strings to use the Responses API so provider tools like web search work without manually creating an xAI model instance. ([#20306](https://github.com/mastra-ai/mastra/pull/20306))
+
 ## 1.54.0-alpha.2
 
 ### Patch Changes
