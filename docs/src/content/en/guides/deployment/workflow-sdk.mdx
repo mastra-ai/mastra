@@ -270,10 +270,6 @@ Flow control options available on Inngest workflows, such as `concurrency`, `rat
 
 The `workflows/mastra.ts` file is required, both to compile the runner and to register your workflows at run time. See [Registering the runner](#registering-the-runner).
 
-The runner's step ids include the `@mastra/workflow` version, so a run that suspended under one version can't resume under another. On Vercel this doesn't surface, because each run is pinned to the deployment that started it: runs in flight finish on the version they started on, and only new runs pick up an upgrade.
-
-The local and Postgres backends don't distinguish one version of your app from another, so a run there resumes against whatever code is loaded now. Upgrade while a run is suspended and the resume fails with `Step "..." is not registered in the current deployment`. Despite the wording, that isn't a bundling problem. Start a fresh run. The same applies to any package that ships steps.
-
 ## Related
 
 - [Workflow runners](/docs/deployment/workflow-runners)
