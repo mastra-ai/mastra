@@ -48,6 +48,7 @@ vi.mock('../../analytics/index', () => ({
 
 vi.mock('../auth/credentials.js', () => ({
   getToken: vi.fn(),
+  LoginCancelledError: class LoginCancelledError extends Error {},
 }));
 
 vi.mock('../auth/orgs.js', () => ({
@@ -611,41 +612,27 @@ describe('managed observability', () => {
     });
   });
 
-  it('continues creation when Ctrl+C cancels platform authentication before materialization', async () => {
+  it('continues creation when any key skips platform authentication', async () => {
     const { create } = await import('./create');
     const prompts = await import('@clack/prompts');
     const credentials = await import('../auth/credentials.js');
     const observability = await import('../init/observability-provision');
     const { publishStagedProject } = await import('./utils');
-    let finishVersionResolution: ((tag: string) => void) | undefined;
-    let authSignal: AbortSignal | undefined;
 
     vi.mocked(prompts.select)
       .mockResolvedValueOnce('openai')
       .mockResolvedValueOnce('skip')
       .mockResolvedValueOnce('yes');
-    vi.mocked(credentials.getToken).mockImplementationOnce(
-      signal =>
-        new Promise((_resolve, reject) => {
-          authSignal = signal;
-          signal?.addEventListener('abort', () => reject(new Error('authentication aborted')), { once: true });
-        }),
-    );
+    vi.mocked(credentials.getToken).mockRejectedValueOnce(new credentials.LoginCancelledError());
 
-    const createPromise = create({
-      projectName: 'my-project',
-      resolveVersionTag: () =>
-        new Promise(resolve => {
-          finishVersionResolution = resolve;
-        }),
-    });
+    await expect(
+      create({
+        projectName: 'my-project',
+        resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+      }),
+    ).resolves.toBeUndefined();
 
-    await vi.waitFor(() => expect(credentials.getToken).toHaveBeenCalledOnce());
-    process.emit('SIGINT');
-    expect(authSignal?.aborted).toBe(true);
-    finishVersionResolution?.('latest');
-
-    await expect(createPromise).resolves.toBeUndefined();
+    expect(credentials.getToken).toHaveBeenCalledWith(expect.any(AbortSignal), { skipOnInput: true });
     expect(prompts.log.info).toHaveBeenCalledWith('Skipping Mastra platform setup.');
     expect(publishStagedProject).toHaveBeenCalledOnce();
     expect(observability.provisionObservabilityProject).not.toHaveBeenCalled();
@@ -653,12 +640,10 @@ describe('managed observability', () => {
     expect(prompts.outro).toHaveBeenCalledOnce();
   });
 
-  it('continues materialization when Ctrl+C cancels Mastra platform setup', async () => {
+  it('cancels creation when Ctrl+C is pressed during Mastra platform setup', async () => {
     const { create } = await import('./create');
     const prompts = await import('@clack/prompts');
     const orgs = await import('../auth/orgs.js');
-    const observability = await import('../init/observability-provision');
-    const initUtils = await import('../init/utils.js');
     const skills = await import('../init/skills-install');
     const commandUtils = await import('../utils.js');
     const { installDependencies } = await import('../../utils/clone-template');
@@ -694,15 +679,12 @@ describe('managed observability', () => {
     process.emit('SIGINT');
     finishInstall?.();
 
-    await expect(createPromise).resolves.toBeUndefined();
-    expect(prompts.log.info).toHaveBeenCalledWith('Skipping Mastra platform setup.');
-    expect(publishStagedProject).toHaveBeenCalledOnce();
-    expect(skills.installMastraSkills).toHaveBeenCalledOnce();
-    expect(commandUtils.gitInit).toHaveBeenCalledOnce();
-    expect(observability.provisionObservabilityProject).not.toHaveBeenCalled();
-    expect(initUtils.writeObservabilityEnv).not.toHaveBeenCalled();
-    expect(prompts.cancel).not.toHaveBeenCalled();
-    expect(prompts.outro).toHaveBeenCalledOnce();
+    await expect(createPromise).rejects.toMatchObject({ name: 'CreateCancelledError' });
+    expect(prompts.cancel).toHaveBeenCalledWith('Operation cancelled');
+    expect(publishStagedProject).not.toHaveBeenCalled();
+    expect(skills.installMastraSkills).not.toHaveBeenCalled();
+    expect(commandUtils.gitInit).not.toHaveBeenCalled();
+    expect(prompts.outro).not.toHaveBeenCalled();
   });
 });
 

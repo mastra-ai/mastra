@@ -1,5 +1,113 @@
 # mastracode
 
+## 0.32.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`ce93a3c`](https://github.com/mastra-ai/mastra/commit/ce93a3c114ea1cbfbd576f3db41d7c26c9844f5b), [`5718a22`](https://github.com/mastra-ai/mastra/commit/5718a229281dcfd36bcd1f42a242e3717e510a33), [`5807d3a`](https://github.com/mastra-ai/mastra/commit/5807d3ae1d259b8b7d6df7e5bf2b485c694af9c8), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`273bb71`](https://github.com/mastra-ai/mastra/commit/273bb71e82e74b656f3906288239429899398c0c), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`5718a22`](https://github.com/mastra-ai/mastra/commit/5718a229281dcfd36bcd1f42a242e3717e510a33), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`d1b7e3a`](https://github.com/mastra-ai/mastra/commit/d1b7e3a978a309a5653eeaa490d2d6c7c53bd093), [`c093146`](https://github.com/mastra-ai/mastra/commit/c0931466404d3c521308ea119cb165bb7e695155), [`d1b7e3a`](https://github.com/mastra-ai/mastra/commit/d1b7e3a978a309a5653eeaa490d2d6c7c53bd093)]:
+  - @mastra/core@1.54.0-alpha.1
+  - @mastra/pg@1.18.0-alpha.1
+  - @mastra/duckdb@1.5.2-alpha.0
+  - @mastra/observability@1.16.3-alpha.0
+  - @mastra/code-sdk@1.0.3-alpha.1
+  - @mastra/mcp@1.15.0
+
+## 0.32.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`0dca9d0`](https://github.com/mastra-ai/mastra/commit/0dca9d0b1356024a53b72ea6f040db528b126caa)]:
+  - @mastra/core@1.54.0-alpha.0
+  - @mastra/libsql@1.18.0-alpha.0
+  - @mastra/memory@1.24.0-alpha.0
+  - @mastra/pg@1.18.0-alpha.0
+  - @mastra/code-sdk@1.0.3-alpha.0
+
+## 0.32.2
+
+### Patch Changes
+
+- Improved Factory board cards with hover-revealed thread actions, top-right action menus, correct workspace links, and impact-free same-column drops. ([#20095](https://github.com/mastra-ai/mastra/pull/20095))
+
+- Fixed settings pages to use native page scrolling while keeping navigation visible. ([#20094](https://github.com/mastra-ai/mastra/pull/20094))
+
+- Fixed Factory page loader hang after uninstalling the GitHub App. The source-control-connections endpoint now skips connections whose installation was pruned instead of 500-ing, so the UI hydrates and the user can re-link their repos through the normal flow. ([#20106](https://github.com/mastra-ai/mastra/pull/20106))
+
+- Redesigned the Factory onboarding LLM step as a sign-in style screen. ([#20089](https://github.com/mastra-ai/mastra/pull/20089))
+
+  - Providers with browser sign-in (Anthropic, OpenAI, GitHub Copilot, xAI) now appear as top-level buttons with their logos; clicking one starts sign-in directly.
+  - An OR divider leads into a searchable API key provider list; results are capped in height and scroll, and picking an unconnected provider opens the API key dialog directly.
+  - Once a provider is connected, the step focuses on choosing the Factory default model, with a full-width finish button and a Change provider option.
+
+- Fixed local database corruption on exit by closing storage connections during TUI shutdown. The signal handler (SIGINT, SIGTERM, SIGHUP) now calls storage close, which checkpoints and truncates WAL files and switches back to DELETE journal mode before the process exits. Previously, abrupt termination left WAL sidecars un-checkpointed, which could corrupt the local SQLite database on the next open. ([#20110](https://github.com/mastra-ai/mastra/pull/20110))
+
+- Improved MastraCode page layouts so reports use native scrolling and chat content fills the viewport without inherited padding. ([#20094](https://github.com/mastra-ai/mastra/pull/20094))
+
+- Updated dependencies [[`c8d8a01`](https://github.com/mastra-ai/mastra/commit/c8d8a010ee2efe2b7bf4d07707382c34c87b14e4), [`f497717`](https://github.com/mastra-ai/mastra/commit/f497717304ad76043f689711ccc044f0cd51ba41), [`df6a9ce`](https://github.com/mastra-ai/mastra/commit/df6a9ce87214f7aadb2edfe62f67605fe998a0a4), [`73839cb`](https://github.com/mastra-ai/mastra/commit/73839cb58322679c170627d1015669ede5f619aa), [`371cf60`](https://github.com/mastra-ai/mastra/commit/371cf6075cef88ac6919a08d59a82e485397364a), [`8e4dc79`](https://github.com/mastra-ai/mastra/commit/8e4dc793dcf035ea506f9ce79f56d2d501a4be14), [`0f92ed4`](https://github.com/mastra-ai/mastra/commit/0f92ed4173a480f617c6a0af6d51af100b42bdfc), [`2db93cc`](https://github.com/mastra-ai/mastra/commit/2db93ccd0b872e4de7853a93383efe0647901df8), [`094ab61`](https://github.com/mastra-ai/mastra/commit/094ab6129a1a3ecf6eeb86decac17d5faea4e02a), [`fe80944`](https://github.com/mastra-ai/mastra/commit/fe80944f3ef6681fea6eae8200fce387b7bb3c2f), [`cadd3a2`](https://github.com/mastra-ai/mastra/commit/cadd3a276f8e0026e3c84cffe935538419cb890c), [`9fdb1b5`](https://github.com/mastra-ai/mastra/commit/9fdb1b50c39742e1a01b319a864754c90e7aa947), [`263d2ca`](https://github.com/mastra-ai/mastra/commit/263d2cac80ba3b03b9c0f008db6f1f1b9eb0278c), [`8e4dc79`](https://github.com/mastra-ai/mastra/commit/8e4dc793dcf035ea506f9ce79f56d2d501a4be14), [`75f843d`](https://github.com/mastra-ai/mastra/commit/75f843d09f758223e6eeb321321bdcc5c7e779d0), [`e51e166`](https://github.com/mastra-ai/mastra/commit/e51e166c52e220abc9b64554ce37359dca8544b1)]:
+  - @mastra/core@1.53.0
+  - @mastra/code-sdk@1.0.2
+  - @mastra/pg@1.17.1
+  - @mastra/libsql@1.17.1
+
+## 0.32.2-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`f497717`](https://github.com/mastra-ai/mastra/commit/f497717304ad76043f689711ccc044f0cd51ba41), [`73839cb`](https://github.com/mastra-ai/mastra/commit/73839cb58322679c170627d1015669ede5f619aa), [`8e4dc79`](https://github.com/mastra-ai/mastra/commit/8e4dc793dcf035ea506f9ce79f56d2d501a4be14), [`2db93cc`](https://github.com/mastra-ai/mastra/commit/2db93ccd0b872e4de7853a93383efe0647901df8), [`094ab61`](https://github.com/mastra-ai/mastra/commit/094ab6129a1a3ecf6eeb86decac17d5faea4e02a), [`fe80944`](https://github.com/mastra-ai/mastra/commit/fe80944f3ef6681fea6eae8200fce387b7bb3c2f), [`9fdb1b5`](https://github.com/mastra-ai/mastra/commit/9fdb1b50c39742e1a01b319a864754c90e7aa947), [`8e4dc79`](https://github.com/mastra-ai/mastra/commit/8e4dc793dcf035ea506f9ce79f56d2d501a4be14), [`e51e166`](https://github.com/mastra-ai/mastra/commit/e51e166c52e220abc9b64554ce37359dca8544b1)]:
+  - @mastra/code-sdk@1.0.2-alpha.4
+  - @mastra/core@1.53.0-alpha.4
+  - @mastra/pg@1.17.1-alpha.0
+  - @mastra/libsql@1.17.1-alpha.1
+
+## 0.32.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.53.0-alpha.3
+  - @mastra/code-sdk@1.0.2-alpha.3
+
+## 0.32.2-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`75f843d`](https://github.com/mastra-ai/mastra/commit/75f843d09f758223e6eeb321321bdcc5c7e779d0)]:
+  - @mastra/core@1.53.0-alpha.2
+  - @mastra/code-sdk@1.0.2-alpha.2
+
+## 0.32.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`c8d8a01`](https://github.com/mastra-ai/mastra/commit/c8d8a010ee2efe2b7bf4d07707382c34c87b14e4), [`371cf60`](https://github.com/mastra-ai/mastra/commit/371cf6075cef88ac6919a08d59a82e485397364a), [`263d2ca`](https://github.com/mastra-ai/mastra/commit/263d2cac80ba3b03b9c0f008db6f1f1b9eb0278c)]:
+  - @mastra/core@1.53.0-alpha.1
+  - @mastra/code-sdk@1.0.2-alpha.1
+
+## 0.32.2-alpha.0
+
+### Patch Changes
+
+- Improved Factory board cards with hover-revealed thread actions, top-right action menus, correct workspace links, and impact-free same-column drops. ([#20095](https://github.com/mastra-ai/mastra/pull/20095))
+
+- Fixed settings pages to use native page scrolling while keeping navigation visible. ([#20094](https://github.com/mastra-ai/mastra/pull/20094))
+
+- Fixed Factory page loader hang after uninstalling the GitHub App. The source-control-connections endpoint now skips connections whose installation was pruned instead of 500-ing, so the UI hydrates and the user can re-link their repos through the normal flow. ([#20106](https://github.com/mastra-ai/mastra/pull/20106))
+
+- Redesigned the Factory onboarding LLM step as a sign-in style screen. ([#20089](https://github.com/mastra-ai/mastra/pull/20089))
+
+  - Providers with browser sign-in (Anthropic, OpenAI, GitHub Copilot, xAI) now appear as top-level buttons with their logos; clicking one starts sign-in directly.
+  - An OR divider leads into a searchable API key provider list; results are capped in height and scroll, and picking an unconnected provider opens the API key dialog directly.
+  - Once a provider is connected, the step focuses on choosing the Factory default model, with a full-width finish button and a Change provider option.
+
+- Fixed local database corruption on exit by closing storage connections during TUI shutdown. The signal handler (SIGINT, SIGTERM, SIGHUP) now calls storage close, which checkpoints and truncates WAL files and switches back to DELETE journal mode before the process exits. Previously, abrupt termination left WAL sidecars un-checkpointed, which could corrupt the local SQLite database on the next open. ([#20110](https://github.com/mastra-ai/mastra/pull/20110))
+
+- Improved MastraCode page layouts so reports use native scrolling and chat content fills the viewport without inherited padding. ([#20094](https://github.com/mastra-ai/mastra/pull/20094))
+
+- Updated dependencies [[`df6a9ce`](https://github.com/mastra-ai/mastra/commit/df6a9ce87214f7aadb2edfe62f67605fe998a0a4), [`0f92ed4`](https://github.com/mastra-ai/mastra/commit/0f92ed4173a480f617c6a0af6d51af100b42bdfc), [`cadd3a2`](https://github.com/mastra-ai/mastra/commit/cadd3a276f8e0026e3c84cffe935538419cb890c)]:
+  - @mastra/core@1.52.2-alpha.0
+  - @mastra/libsql@1.17.1-alpha.0
+  - @mastra/code-sdk@1.0.2-alpha.0
+
 ## 0.32.1
 
 ### Patch Changes

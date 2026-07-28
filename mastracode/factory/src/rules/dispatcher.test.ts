@@ -147,6 +147,49 @@ describe('FactoryDecisionDispatcher', () => {
     expect(left.length + right.length).toBe(1);
   });
 
+  it('claims a pending decision even when many older terminal rows exist', async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    // Terminal rows accumulate forever; they must be excluded from the bounded
+    // candidate window instead of crowding out the claimable row.
+    const base = new Date('2029-01-01T00:00:00Z');
+    for (let i = 0; i < 60; i++) {
+      await seed.storage.ops.insertOne('factory_deferred_decisions', {
+        org_id: 'org-1',
+        factory_project_id: PROJECT_ID,
+        evaluation_id: `eval-${i}`,
+        idempotency_key: `done-${i}`,
+        effect_ordinal: 0,
+        effect_hash: `hash-${i}`,
+        causal_chain: [],
+        decision: { type: 'sendMessage', role: 'work', message: 'done', idempotencyKey: `done-${i}` },
+        status: 'succeeded',
+        attempts: 1,
+        available_at: base,
+        completed_at: base,
+        created_at: new Date(base.getTime() + i),
+        updated_at: base,
+      });
+    }
+    await queueDecision(storage, {
+      type: 'sendMessage',
+      role: 'work',
+      message: 'Review completion.',
+      idempotencyKey: 'message-1',
+    });
+    const now = new Date('2030-01-01T00:00:00Z');
+
+    const claimed = await storage.claimDeferredDecisions({
+      ownerId: 'owner',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 30_000),
+      limit: 1,
+    });
+
+    expect(claimed).toHaveLength(1);
+    expect(claimed[0]!.idempotencyKey).toBe('message-1');
+  });
+
   it('recovers an expired lease and fences the stale owner', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await queueDecision(storage, {
@@ -948,11 +991,13 @@ describe('FactoryDecisionDispatcher', () => {
         },
       },
     });
+    const primeCredentials = vi.fn(async () => {});
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
       transitionService,
       storage,
       ownerId: 'worker-1',
+      primeCredentials,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -966,6 +1011,11 @@ describe('FactoryDecisionDispatcher', () => {
 
     expect(delivered).toEqual(['factory-kickoff:kickoff-1']);
     expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
+    // Kickoff wake runs build the Factory workspace, which requires the
+    // authenticated session owner on the request context.
+    expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    const kickoffOptions = sendNotificationSignal.mock.calls[0]![1];
+    expect(kickoffOptions?.requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });
 

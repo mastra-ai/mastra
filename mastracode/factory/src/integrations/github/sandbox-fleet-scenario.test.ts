@@ -354,7 +354,6 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
         createdAt: now,
       },
     ];
-    process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
     // A default fleet makes fleet.enabled true.
     fleet = makeFleet();
 
@@ -363,10 +362,6 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
     fleet.setFactory(({ providerSandboxId }) => new FakeSandbox(providerSandboxId ?? 'fresh'));
 
     ({ buildGithubRoutes } = await import('./routes.js'));
-  });
-
-  afterEach(() => {
-    delete process.env.MASTRACODE_DISTRIBUTED_LOCK;
   });
 
   function buildApp(workosId: string) {
