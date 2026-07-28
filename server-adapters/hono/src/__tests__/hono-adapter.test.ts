@@ -922,14 +922,14 @@ describe('Hono Server Adapter', () => {
       expect(data).toEqual({ echo: { test: 'data' } });
     });
 
-    it('enforces body size limits on custom DELETE routes', async () => {
+    it('enforces body size limits on DELETE requests to custom ALL routes', async () => {
       const app = new Hono();
       const adapter = new MastraServer({
         app,
         mastra: new Mastra({}),
         customApiRoutes: [
           registerApiRoute('/delete-body', {
-            method: 'DELETE',
+            method: 'ALL',
             handler: async c => c.json(await c.req.json()),
           }),
         ],

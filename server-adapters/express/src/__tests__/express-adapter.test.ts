@@ -1231,10 +1231,10 @@ describe('Express Server Adapter', () => {
       expect(data).toEqual({ message: 'Hello from custom route!' });
     });
 
-    it('enforces body size limits on DELETE requests with a body', async () => {
+    it('enforces body size limits on DELETE requests to ALL routes', async () => {
       const customRoutes = [
         registerApiRoute('/test-delete-body', {
-          method: 'DELETE',
+          method: 'ALL',
           handler: async c => {
             const body = await c.req.json();
             return c.json({ received: body });

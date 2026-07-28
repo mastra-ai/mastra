@@ -935,14 +935,14 @@ describe('Fastify Server Adapter', () => {
       await app.close();
     });
 
-    it('enforces body size limits on custom DELETE routes', async () => {
+    it('enforces body size limits on DELETE requests to custom ALL routes', async () => {
       const app = Fastify();
       const adapter = new MastraServer({
         app,
         mastra: new Mastra({}),
         customApiRoutes: [
           registerApiRoute('/custom/delete-body', {
-            method: 'DELETE',
+            method: 'ALL',
             handler: async c => c.json(await c.req.json()),
           }),
         ],
