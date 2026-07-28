@@ -171,7 +171,7 @@ Also worth knowing:
 
 The integration keeps a hard line between two runtimes.
 
-A single generic `"use workflow"` function, `mastraRunner`, is the only durable workflow. It receives your workflow's **serialized step graph** as run input and walks it deterministically inside the Workflow SDK's sandbox. That walker (`src/workflows/walker.ts`) has no runtime imports at all — every effect it needs is injected — which is what keeps `@mastra/core` and Node builtins out of the sandbox bundle.
+A single generic `"use workflow"` function, `mastraRunner`, is the only durable workflow. It receives your workflow's **serialized step graph** as run input and walks it deterministically inside the Workflow SDK's sandbox. Every effect that walker (`src/workflows/walker.ts`) needs is injected, and its only runtime import is `constants.ts`, which imports nothing itself — that is what keeps `@mastra/core` and Node builtins out of the sandbox bundle.
 
 Every piece of your code — step `execute` bodies, `.branch()` predicates, loop conditions, sleep resolvers — runs on the host through a `"use step"` dispatcher, which resolves the live `Workflow` object from a registry and invokes the real function with a Mastra execution context.
 
