@@ -154,6 +154,45 @@ describe('PIIRedactor', () => {
       expect(textPart && 'text' in textPart ? textPart.text : '').toBe('reach me at [EMAIL]');
     });
 
+    it('redacts PII that only the flattened content carries', async () => {
+      const redactor = new PIIRedactor({ detectionTypes: ['email'], redactionMethod: 'placeholder' });
+      const message: MastraDBMessage = {
+        id: 'msg-1',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [{ type: 'text' as const, text: 'nothing sensitive here' }],
+          content: 'nothing sensitive here, but also test@example.com',
+        },
+        createdAt: new Date(),
+      };
+
+      const result = (await redactor.processInput(createInputArgs([message]))) as MastraDBMessage[];
+
+      expect(result[0]!.content.content).toBe('nothing sensitive here, but also [EMAIL]');
+    });
+
+    it('reports one detection when a part and the flattened content hold the same text', async () => {
+      const redactor = new PIIRedactor({ detectionTypes: ['email'], strategy: 'block' });
+      const message: MastraDBMessage = {
+        id: 'msg-1',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [{ type: 'text' as const, text: 'leak test@example.com' }],
+          content: 'leak test@example.com',
+        },
+        createdAt: new Date(),
+      };
+
+      try {
+        await redactor.processInput(createInputArgs([message]));
+        expect.fail('Expected TripWire');
+      } catch (error) {
+        expect((error as TripWire<any>).options.metadata).toMatchObject({ detectionCount: 1 });
+      }
+    });
+
     it('returns messages unchanged when no PII is found', async () => {
       const redactor = new PIIRedactor({ detectionTypes: ['email', 'phone'] });
       const messages = [createMessage('nothing sensitive here')];
@@ -218,6 +257,28 @@ describe('PIIRedactor', () => {
 
       expect(result).toBe(messages);
       expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('email'));
+    });
+
+    it('block catches PII that only the flattened content carries', async () => {
+      const redactor = new PIIRedactor({ detectionTypes: ['email'], strategy: 'block' });
+      const message: MastraDBMessage = {
+        id: 'msg-1',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [{ type: 'text' as const, text: 'all clear' }],
+          content: 'all clear, and test@example.com',
+        },
+        createdAt: new Date(),
+      };
+
+      try {
+        await redactor.processInput(createInputArgs([message]));
+        expect.fail('Expected TripWire');
+      } catch (error) {
+        expect(error).toBeInstanceOf(TripWire);
+        expect((error as TripWire<any>).options.metadata).toMatchObject({ detectedTypes: ['email'] });
+      }
     });
 
     it('filter drops flagged messages and keeps clean ones', async () => {

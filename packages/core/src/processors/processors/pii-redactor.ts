@@ -250,8 +250,14 @@ export class PIIRedactor implements Processor<'pii-redactor', PIIRedactorTripwir
 
   /**
    * Pull the scannable text out of a message: a plain string content, each
-   * text part, or the flattened `content.content` fallback when no text part
-   * exists. Non-text parts are ignored.
+   * text part, and the flattened `content.content`. Non-text parts are ignored.
+   *
+   * `content.content` is scanned even when text parts exist, because
+   * `redactMessage` rewrites it in that case too. Skipping it here would let a
+   * flattened string that carries PII the parts don't go undetected, which
+   * leaves the message unflagged and untouched under every strategy. It is
+   * skipped only when a part already covers the exact same text, so the normal
+   * case does not report the same detection twice.
    */
   private extractSegments(message: MastraDBMessage): string[] {
     // At runtime, content may be a plain string even though MastraDBMessage types it as MastraMessageContentV2
@@ -266,8 +272,9 @@ export class PIIRedactor implements Processor<'pii-redactor', PIIRedactorTripwir
         }
       }
     }
-    if (segments.length === 0 && typeof message.content?.content === 'string') {
-      segments.push(message.content.content);
+    const flattened = message.content?.content;
+    if (typeof flattened === 'string' && !segments.includes(flattened)) {
+      segments.push(flattened);
     }
     return segments;
   }
