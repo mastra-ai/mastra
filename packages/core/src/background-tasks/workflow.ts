@@ -36,21 +36,18 @@ const WORKFLOW_STATUS_TO_PERSIST = ['suspended', 'pending', 'paused', 'waiting']
 /**
  * Builds the per-task workflow that owns executor + retries.
  *
- * The default execution engine is intentional: dispatch may arrive over a
- * cross-process PubSub, but invocation-bound executors must remain in the
- * originating manager process. Evented workflow dispatch would introduce a
- * second competing-consumer hop that could move execution to another process.
+ * Uses the standard (default) execution engine so the workflow runs entirely
+ * in-process on whichever background-task worker calls `run.start()`. This is
+ * critical for distributed deployments: routing through the evented pipeline
+ * would introduce another competing-consumer hop that could move execution to
+ * an orchestration worker or API process without the internal workflow or
+ * invocation-bound task context registered.
  *
  * Shape: outer workflow runs an inner `[run-attempt, classify-outcome]`
  * workflow inside a `dountil` loop. `run-attempt` invokes the executor and
  * categorises the outcome; `classify-outcome` persists final state, advances
  * retry bookkeeping, and decides whether the loop is done. The dountil
  * predicate exits on `done === true`.
- *
- * The nested-workflow-as-loop-body path lives in
- * `processWorkflowEnd → processWorkflowLoop` and was fixed in PR #16312.
- * Suspend/resume routes through the runtime's nested-workflow auto-detect
- * (`processWorkflowStepRun` resume branch).
  *
  * Step bodies close over `manager` directly — the bg-tasks layer is the only
  * consumer of the `@internal` private fields.
@@ -75,9 +72,14 @@ export function buildBackgroundTaskWorkflow(manager: BackgroundTaskManager) {
       //      wins when present.
       //   2. Static executor registered by tool name. Used by remote workers
       //      that received the dispatch via PubSub and don't have access to
-      //      the producer's per-task closure.
+      //      the producer's per-task closure. Agent-owned executors are
+      //      namespaced as `agentId:toolName` to avoid cross-agent collisions;
+      //      we try the namespaced key first, then fall back to the plain key.
       const ctx = manager.taskContexts.get(taskId);
-      const executor = ctx?.executor ?? manager.getStaticExecutor(task.toolName);
+      const executor =
+        ctx?.executor ??
+        (task.agentId ? manager.getStaticExecutor(`${task.agentId}:${task.toolName}`) : undefined) ??
+        manager.getStaticExecutor(task.toolName);
       if (!executor) {
         const errorInfo = {
           message:

@@ -131,6 +131,7 @@ export function useStartFactoryRun() {
           queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, sessionId, undefined),
         }),
         queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository.projectRepositoryId) }),
       ]);
       void navigate(`/factories/${factoryId}/workspaces/${sessionId}/threads/${prepared.threadId}`);
     },

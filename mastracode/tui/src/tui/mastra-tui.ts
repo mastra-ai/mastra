@@ -11,6 +11,7 @@ import { getOAuthProviders } from '@mastra/code-sdk/auth/storage';
 import {
   getAvailableModePacks,
   getAvailableOmPacks,
+  selectPreferredOMPack,
   ONBOARDING_VERSION,
   loadSettings,
   saveSettings,
@@ -57,6 +58,7 @@ import { navigateToBackgroundCompletion } from './global-background-notices.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import { askModalQuestion } from './modal-question.js';
+import { applyOMModelToSession, seedOMDefaultAfterLogin } from './om-defaults.js';
 import type { OnboardingResult } from './onboarding-inline.js';
 import { OnboardingInlineComponent } from './onboarding-inline.js';
 import { showModalOverlay } from './overlay.js';
@@ -1392,6 +1394,7 @@ export class MastraTUI {
           } else {
             showInfo(this.state, `Successfully logged in to ${providerName}`);
           }
+          await seedOMDefaultAfterLogin(this.state, providerId, message => showInfo(this.state, message));
 
           resolve();
         })
@@ -1423,6 +1426,7 @@ export class MastraTUI {
     const savedSettings = loadSettings();
     const modePacks = getAvailableModePacks(access, savedSettings.customModelPacks);
     const omPacks = getAvailableOmPacks(access);
+    const preferredOmPack = selectPreferredOMPack(access, savedSettings.models.activeModelPackId ?? undefined);
 
     let prevModePackId = savedSettings.onboarding.modePackId;
     if (prevModePackId === 'custom' && savedSettings.models.activeModelPackId?.startsWith('custom:')) {
@@ -1442,6 +1446,7 @@ export class MastraTUI {
         authProviders,
         modePacks,
         omPacks,
+        preferredOmPackId: preferredOmPack?.id,
         hasProviderAccess,
         previous,
         onComplete: async (result: OnboardingResult) => {
@@ -1467,7 +1472,9 @@ export class MastraTUI {
               const updatedAccess = await this.buildProviderAccess();
               const updatedHasAccess = Object.values(updatedAccess).some(Boolean);
               component.updateModePacks(getAvailableModePacks(updatedAccess, savedSettings.customModelPacks));
-              component.updateOmPacks(getAvailableOmPacks(updatedAccess));
+              const updatedOmPacks = getAvailableOmPacks(updatedAccess);
+              const preferred = selectPreferredOMPack(updatedAccess, providerId);
+              component.updateOmPacks(updatedOmPacks, preferred?.id);
               component.updateHasProviderAccess(updatedHasAccess);
             } catch (err) {
               console.error('Failed to refresh provider access after login:', err);
@@ -1540,15 +1547,17 @@ export class MastraTUI {
       }
     }
 
-    const omPack = result.omPack;
-    void this.state.session.state.set({ observerModelId: omPack.modelId, reflectorModelId: omPack.modelId });
-    void this.state.session.state.set({ yolo: result.yolo });
+    // With no reachable provider the OM step only offers an empty custom pack;
+    // recording that non-choice would block every later provider-aware seed.
+    const omPack = result.omPack.modelId ? result.omPack : undefined;
+    if (omPack) await applyOMModelToSession(this.state, omPack.modelId);
+    await this.state.session.state.set({ yolo: result.yolo });
 
     const settings = loadSettings();
     settings.onboarding.completedAt = new Date().toISOString();
     settings.onboarding.skippedAt = null;
     settings.onboarding.version = ONBOARDING_VERSION;
-    settings.onboarding.omPackId = omPack.id;
+    settings.onboarding.omPackId = omPack?.id ?? null;
 
     const modeDefaults: Record<string, string> = {};
     for (const mode of modes) {
@@ -1579,8 +1588,8 @@ export class MastraTUI {
       await this.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: activeModePackId });
     }
 
-    settings.models.activeOmPackId = omPack.id;
-    settings.models.omModelOverride = omPack.id === 'custom' ? omPack.modelId : null;
+    settings.models.activeOmPackId = omPack?.id ?? null;
+    settings.models.omModelOverride = omPack?.id === 'custom' ? omPack.modelId : null;
     // Clear any per-role overrides from prior /om use so the newly-selected
     // pack (or custom modelId above) applies to both observer and reflector.
     settings.models.observerModelOverride = null;

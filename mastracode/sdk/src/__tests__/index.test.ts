@@ -252,6 +252,11 @@ vi.mock('../mcp/index.js', () => ({
 vi.mock('../onboarding/packs.js', () => ({
   getAvailableModePacks: getAvailableModePacksMock,
   getAvailableOmPacks: getAvailableOmPacksMock,
+  selectPreferredOMPack: vi.fn(() => undefined),
+}));
+
+vi.mock('../onboarding/om-settings.js', () => ({
+  hasExplicitOMConfiguration: vi.fn(() => false),
 }));
 
 vi.mock('../onboarding/settings.js', () => ({
