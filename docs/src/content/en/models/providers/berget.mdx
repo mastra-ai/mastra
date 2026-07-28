@@ -16,22 +16,22 @@ BERGET_API_KEY=your-api-key
 ```
 
 ```typescript title="src/mastra/agents/my-agent.ts" {7}
-import { Agent } from '@mastra/core/agent'
+import { Agent } from "@mastra/core/agent";
 
 const agent = new Agent({
-  id: 'my-agent',
-  name: 'My Agent',
-  instructions: 'You are a helpful assistant',
-  model: 'berget/google/gemma-4-31B-it',
-})
+  id: "my-agent",
+  name: "My Agent",
+  instructions: "You are a helpful assistant",
+  model: "berget/google/gemma-4-31B-it"
+});
 
 // Generate a response
-const response = await agent.generate('Hello!')
+const response = await agent.generate("Hello!");
 
 // Stream a response
-const stream = await agent.stream('Tell me a story')
+const stream = await agent.stream("Tell me a story");
 for await (const chunk of stream) {
-  console.log(chunk)
+  console.log(chunk);
 }
 ```
 
@@ -46,113 +46,113 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    model: 'berget/google/gemma-4-31B-it',
-    imageInput: true,
-    audioInput: true,
-    videoInput: true,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 128000,
-    maxOutput: 8192,
-    inputCost: 0.275,
-    outputCost: 0.55,
+    "model": "berget/google/gemma-4-31B-it",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.275,
+    "outputCost": 0.55
   },
   {
-    model: 'berget/meta-llama/Llama-3.3-70B-Instruct',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 128000,
-    maxOutput: 8192,
-    inputCost: 0.99,
-    outputCost: 0.99,
+    "model": "berget/meta-llama/Llama-3.3-70B-Instruct",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.99,
+    "outputCost": 0.99
   },
   {
-    model: 'berget/mistralai/Mistral-Medium-3.5-128B',
-    imageInput: true,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 262144,
-    maxOutput: 131072,
-    inputCost: 1.65,
-    outputCost: 5.5,
+    "model": "berget/mistralai/Mistral-Medium-3.5-128B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": 1.65,
+    "outputCost": 5.5
   },
   {
-    model: 'berget/mistralai/Mistral-Small-3.2-24B-Instruct-2506',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 32000,
-    maxOutput: 8192,
-    inputCost: 0.33,
-    outputCost: 0.33,
+    "model": "berget/mistralai/Mistral-Small-3.2-24B-Instruct-2506",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 32000,
+    "maxOutput": 8192,
+    "inputCost": 0.33,
+    "outputCost": 0.33
   },
   {
-    model: 'berget/moonshotai/Kimi-K2.6',
-    imageInput: true,
-    audioInput: false,
-    videoInput: true,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 262144,
-    maxOutput: 262144,
-    inputCost: 0.83,
-    outputCost: 3.85,
+    "model": "berget/moonshotai/Kimi-K2.6",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.83,
+    "outputCost": 3.85
   },
   {
-    model: 'berget/moonshotai/Kimi-K3',
-    imageInput: true,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 327680,
-    maxOutput: 32768,
-    inputCost: 3,
-    outputCost: 15,
+    "model": "berget/moonshotai/Kimi-K3",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 327680,
+    "maxOutput": 32768,
+    "inputCost": 3,
+    "outputCost": 15
   },
   {
-    model: 'berget/openai/gpt-oss-120b',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 128000,
-    maxOutput: 8192,
-    inputCost: 0.22,
-    outputCost: 0.83,
+    "model": "berget/openai/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.22,
+    "outputCost": 0.83
   },
   {
-    model: 'berget/zai-org/GLM-4.7',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 128000,
-    maxOutput: 8192,
-    inputCost: 0.77,
-    outputCost: 2.75,
+    "model": "berget/zai-org/GLM-4.7",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": 0.77,
+    "outputCost": 2.75
   },
   {
-    model: 'berget/zai-org/GLM-5.2',
-    imageInput: false,
-    audioInput: false,
-    videoInput: false,
-    toolUsage: true,
-    reasoning: true,
-    contextWindow: 524288,
-    maxOutput: 32768,
-    inputCost: 1.54,
-    outputCost: 4.84,
-  },
+    "model": "berget/zai-org/GLM-5.2",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 524288,
+    "maxOutput": 32768,
+    "inputCost": 1.54,
+    "outputCost": 4.84
+  }
 ]}
 />
 
@@ -162,28 +162,32 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
-  id: 'custom-agent',
-  name: 'custom-agent',
+  id: "custom-agent",
+  name: "custom-agent",
   model: {
-    url: 'https://api.berget.ai/v1',
-    id: 'berget/google/gemma-4-31B-it',
+    url: "https://api.berget.ai/v1",
+    id: "berget/google/gemma-4-31B-it",
     apiKey: process.env.BERGET_API_KEY,
     headers: {
-      'X-Custom-Header': 'value',
-    },
-  },
-})
+      "X-Custom-Header": "value"
+    }
+  }
+});
 ```
 
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
 const agent = new Agent({
-  id: 'dynamic-agent',
-  name: 'Dynamic Agent',
+  id: "dynamic-agent",
+  name: "Dynamic Agent",
   model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === 'complex'
-    return useAdvanced ? 'berget/zai-org/GLM-5.2' : 'berget/google/gemma-4-31B-it'
-  },
-})
+    const useAdvanced = requestContext.task === "complex";
+    return useAdvanced
+      ? "berget/zai-org/GLM-5.2"
+      : "berget/google/gemma-4-31B-it";
+  }
+});
 ```
+
+
