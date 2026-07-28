@@ -61,7 +61,11 @@ function pin() {
     }
   }
   fs.writeFileSync(packageJsonPath, `${JSON.stringify(manifest, null, 2)}\n`);
-  console.log(changes.length ? `monorepo-deps: pinned exact monorepo versions\n${changes.join('\n')}` : 'monorepo-deps: already pinned');
+  console.log(
+    changes.length
+      ? `monorepo-deps: pinned exact monorepo versions\n${changes.join('\n')}`
+      : 'monorepo-deps: already pinned',
+  );
 }
 
 async function run(command) {

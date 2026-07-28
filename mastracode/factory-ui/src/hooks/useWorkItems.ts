@@ -9,11 +9,7 @@ import {
   transitionWorkItem,
   updateWorkItem,
 } from '../ui/domains/factory/services/workItems';
-import type {
-  CreateWorkItemInput,
-  UpdateWorkItemInput,
-  WorkItem,
-} from '../ui/domains/factory/services/workItems';
+import type { CreateWorkItemInput, UpdateWorkItemInput, WorkItem } from '../ui/domains/factory/services/workItems';
 
 /** The org's persisted work items (kanban cards) for a project. */
 export function useWorkItemsQuery(factoryProjectId: string | undefined) {

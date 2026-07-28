@@ -2,10 +2,7 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
-import {
-  useFactoryProjectQuery,
-  useSetFactoryDefaultModelMutation,
-} from '../../../../hooks/useFactoryDefaultModel';
+import { useFactoryProjectQuery, useSetFactoryDefaultModelMutation } from '../../../../hooks/useFactoryDefaultModel';
 import { useParams } from 'react-router';
 
 import { ModelCombobox } from './ModelCombobox';

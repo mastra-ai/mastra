@@ -15,11 +15,7 @@ import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../api/types';
 import { useApplyProviderOMDefaults } from '../../../../hooks/use-om';
-import {
-  useCancelProviderOAuth,
-  useProvidersQuery,
-  useStartProviderOAuth,
-} from '../../../../hooks/use-providers';
+import { useCancelProviderOAuth, useProvidersQuery, useStartProviderOAuth } from '../../../../hooks/use-providers';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useSetFactoryDefaultModelMutation } from '../../../../hooks/useFactoryDefaultModel';
 import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
