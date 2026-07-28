@@ -159,7 +159,21 @@ const result = await thread.listMessages({
 const result = await thread.listMessages({
   orderBy: { field: 'createdAt', direction: 'ASC' },
 })
+
+// Get messages with shallow metadata filters
+const result = await thread.listMessages({
+  filter: {
+    metadata: {
+      category: 'billing',
+      escalated: true,
+      priority: 2,
+      archivedAt: null,
+    },
+  },
+})
 ```
+
+Metadata filters match shallow scalar values only: `string`, finite `number`, `boolean`, and `null`. Every key-value pair must match with AND semantics. `null` matches an explicit `null` value, not a missing metadata key. Metadata keys must start with a letter or underscore, may contain only alphanumeric characters and underscores, must be 128 characters or fewer, and can't use reserved prototype keys such as `__proto__`, `constructor`, or `prototype`. Performance depends on the server storage backend, and arbitrary metadata filters may scan candidate messages.
 
 ### Delete Messages
 

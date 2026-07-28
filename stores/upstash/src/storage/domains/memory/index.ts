@@ -12,6 +12,8 @@ import {
   createStorageErrorId,
   ensureDate,
   filterByDateRange,
+  storageMessageMatchesMetadataFilter,
+  validateStorageMetadataFilter,
 } from '@mastra/core/storage';
 import type {
   StorageResourceType,
@@ -693,6 +695,7 @@ export class StoreMemoryUpstash extends MemoryStorage {
     const perPage = normalizePerPage(perPageInput, 40);
     // When perPage is false (get all), ignore page offset
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     try {
       if (page < 0) {
@@ -776,6 +779,10 @@ export class StoreMemoryUpstash extends MemoryStorage {
         filter?.dateRange,
       );
 
+      messagesData = messagesData.filter(message =>
+        storageMessageMatchesMetadataFilter(message.content, metadataFilter),
+      );
+
       // Always sort messages by the sort field/direction before pagination
       // This ensures consistent ordering whether orderBy is explicit or uses the default (createdAt ASC)
       messagesData = this._sortMessages(messagesData, field, direction);
@@ -817,12 +824,13 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // This is critical when `include` parameter brings in messages from semantic recall
       finalMessages = this._sortMessages(finalMessages, field, direction);
 
-      // Calculate hasMore based on pagination window
-      // If all thread messages have been returned (through pagination or include), hasMore = false
-      // Otherwise, check if there are more pages in the pagination window
-      const returnedThreadMessageIds = new Set(finalMessages.filter(m => m.threadId === threadId).map(m => m.id));
-      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = perPageInput !== false && !allThreadMessagesReturned && end < total;
+      const returnedThreadMessageIds = new Set(
+        finalMessages.filter(message => message.threadId === threadId).map(message => message.id),
+      );
+      const hasMore =
+        perPageInput !== false &&
+        (metadataFilter || returnedThreadMessageIds.size < total) &&
+        offset + paginatedMessages.length < total;
 
       return {
         messages: finalMessages,

@@ -7,12 +7,15 @@ packages:
 
 # Memory.recall()
 
-the `.recall()` method retrieves messages from a specific thread, with support for pagination, filtering options, and semantic search.
+The `Memory.recall()` method retrieves messages from a specific thread, with support for pagination, filtering options, and semantic search.
 
 ## Usage example
 
 ```typescript
-await memory?.recall({ threadId: 'user-123' })
+const { messages } = await memory.recall({
+  threadId: 'thread-123',
+  perPage: 20,
+})
 ```
 
 ## Parameters
@@ -60,9 +63,9 @@ await memory?.recall({ threadId: 'user-123' })
   },
   {
     name: 'filter',
-    type: '{ dateRange?: { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean } }',
+    type: '{ dateRange?: { start?: Date; end?: Date; startExclusive?: boolean; endExclusive?: boolean }; metadata?: Record<string, string | number | boolean | null> }',
     description:
-      'Filter options for message retrieval. Currently supports `dateRange` to filter messages by creation date. Use `startExclusive` or `endExclusive` to exclude boundary dates (useful for cursor-based pagination).',
+      'Filter options for message retrieval. `dateRange` filters messages by creation date. `metadata` filters shallow message metadata by exact scalar key-value pairs using AND semantics. Metadata values can be strings, finite numbers, booleans, or null.',
     isOptional: true,
   },
   {
@@ -119,6 +122,28 @@ await memory?.recall({ threadId: 'user-123' })
   },
 ]}
 />
+
+## Metadata filtering
+
+Use `filter.metadata` to match shallow scalar metadata stored on messages:
+
+```typescript
+const { messages } = await memory.recall({
+  threadId: 'thread-123',
+  filter: {
+    metadata: {
+      category: 'billing',
+      escalated: true,
+      priority: 2,
+      archivedAt: null,
+    },
+  },
+})
+```
+
+All metadata entries are combined with AND semantics. A message must match every key and value with exact type equality. `null` matches metadata that is explicitly set to `null`; it doesn't match a missing key.
+
+Metadata filters only support shallow scalar values: `string`, finite `number`, `boolean`, and `null`. Nested objects, arrays, `NaN`, and infinities are not supported. Metadata keys must start with a letter or underscore, may contain only alphanumeric characters and underscores, must be 128 characters or fewer, and can't use reserved prototype keys such as `__proto__`, `constructor`, or `prototype`. Performance depends on the storage backend. Arbitrary metadata filters may require scanning candidate messages, so narrow the query with `threadId`, `resourceId`, or `dateRange` when possible.
 
 ## Returns
 
