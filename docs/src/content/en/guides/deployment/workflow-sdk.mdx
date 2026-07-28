@@ -200,6 +200,54 @@ DATABASE_URL=postgres://user:password@host:5432/database
 
 See the [Workflow SDK deploying guide](https://workflow-sdk.dev/v5/docs/deploying) for the full list of backends and their configuration.
 
+### Resuming a suspended run
+
+A suspended step parks on a hook whose token is derived from the Mastra run and step ids, so both ways of resuming work from any process.
+
+Use `resumeHook()` to release the hook and return right away, or when the process has no Mastra instance to hand. It resolves as soon as the hook is released, which suits a route handler that acknowledges the request and lets the client poll for the outcome.
+
+```ts title="app/api/approve/route.ts"
+import { resumeHook } from 'workflow/api'
+
+export async function POST(request: Request) {
+  const { runId, stepId, data } = await request.json()
+  await resumeHook(`mastra:${runId}:${stepId}`, data)
+  return new Response(null, { status: 202 })
+}
+```
+
+For a step suspended inside a `.foreach()`, append the item index to the token, as in `mastra:${runId}:${stepId}:${index}`.
+
+Use `run.resume()` to wait for the run's next stopping point and get the `WorkflowResult` back. It requires `step`, because that's what the token is built from.
+
+```ts
+const result = await run.resume({
+  step: 'approval',
+  resumeData: { approved: true },
+})
+```
+
+Awaiting the outcome means Mastra has to map its own run id to the Workflow SDK one, and that mapping lives in storage. Give the Mastra instance storage if you resume, watch, or cancel from anywhere other than the process that started the run, which on serverless is the usual case:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+import { incrementWorkflow } from './workflows'
+
+export const mastra = new Mastra({
+  workflows: { incrementWorkflow },
+  storage: new LibSQLStore({
+    id: 'libsql-storage',
+    url: process.env.DATABASE_URL!,
+    authToken: process.env.DATABASE_AUTH_TOKEN,
+  }),
+})
+```
+
+Point storage at a hosted database rather than a file URL. Serverless filesystems are ephemeral, so a local file leaves each invocation with its own empty copy of the mapping. Any [storage adapter](/reference/storage/libsql) works.
+
+Without storage, `resume()`, `watch()`, and `cancel()` throw from any process that didn't start the run, with an error naming storage and the `resumeHook()` fallback above.
+
 ## Constraints and notes
 
 `@mastra/workflow` is experimental and covers most, but not all, of the Mastra workflow API.
