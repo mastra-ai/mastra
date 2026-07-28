@@ -5,6 +5,8 @@ packages:
   - "@mastra/core"
   - "@mastra/redis-streams"
   - "@mastra/google-cloud-pubsub"
+  - "@mastra/pg"
+  - "@mastra/libsql"
 ---
 
 # Workers
@@ -77,7 +79,7 @@ This setup needs no external infrastructure beyond your storage adapter. It does
 
 To run workers separately, configure a distributed [PubSub](/docs/server/pubsub) backend and use the `MASTRA_WORKERS` environment variable to control which workers start in each process.
 
-The following example uses Redis Streams:
+The following example uses Redis Streams with PostgreSQL:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
@@ -94,22 +96,24 @@ export const mastra = new Mastra({
 })
 ```
 
-The following example uses Google Cloud Pub/Sub:
+The following example uses Google Cloud Pub/Sub with LibSQL:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import { GoogleCloudPubSub } from '@mastra/google-cloud-pubsub'
-import { PostgresStore } from '@mastra/pg'
+import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
-  storage: new PostgresStore({
-    connectionString: process.env.DATABASE_URL!,
+  storage: new LibSQLStore({
+    url: process.env.DATABASE_URL!,
   }),
   pubsub: new GoogleCloudPubSub({
     projectId: process.env.GCP_PROJECT_ID!,
   }),
 })
 ```
+
+Any [supported storage backend](#prerequisites-for-split-deployments) works — swap `PostgresStore` or `LibSQLStore` with your preferred backend.
 
 Run the same build artifact in multiple containers, each with a different `MASTRA_WORKERS` value:
 
@@ -127,7 +131,13 @@ The [worker deployment guide](/docs/deployment/worker-deployment) walks through 
 Split worker deployments require:
 
 - **Distributed PubSub**: [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub) are the supported backends. The default in-memory PubSub can't deliver events across processes.
-- **Shared storage**: All processes must connect to the same database. [`PostgresStore`](/reference/storage/postgresql) is recommended.
+- **Shared storage**: All processes must connect to the same database. The storage backend must support the `workflows`, `backgroundTasks`, and `schedules` domains. The following backends support all three:
+  - [`PostgresStore`](/reference/storage/postgresql)
+  - [`LibSQLStore`](/reference/storage/libsql)
+  - [`MySQLStore`](/reference/storage/mysql)
+  - [`MongoDBStore`](/reference/storage/mongodb)
+  - [`SpannerStore`](/reference/storage/spanner)
+  - [`ConvexStore`](/reference/storage/convex)
 - **Network connectivity**: The orchestration worker must be able to reach the API over HTTP for step execution in fully split setups.
 
 ## Network architecture
@@ -137,7 +147,7 @@ Workers are internal infrastructure. They are not exposed to end users and do no
 In a split deployment:
 
 - **The API server is the only public-facing process.** It serves all client HTTP requests — REST endpoints, agent interactions, workflow triggers, and any custom routes.
-- **Workers connect outbound only.** They pull events from the distributed PubSub backend and read/write to PostgreSQL. They do not accept inbound traffic from clients.
+- **Workers connect outbound only.** They pull events from the distributed PubSub backend and read/write to the shared storage database. They do not accept inbound traffic from clients.
 - **The orchestration worker calls the API internally.** It sends step execution requests to the API over the container network using `MASTRA_STEP_EXECUTION_URL`. This is internal service-to-service communication, not a public endpoint.
 
 ```
@@ -152,7 +162,7 @@ In a split deployment:
         └─────┬─────┘ └───┬────┘ └─────────┬──────────┘
               │            │                │
          ┌────▼────────────▼────────────────▼────┐
-         │      PubSub backend + PostgreSQL       │
+         │      PubSub backend + Storage DB        │
          └───────────────────────────────────────┘
 ```
 

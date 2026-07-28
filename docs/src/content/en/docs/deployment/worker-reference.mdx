@@ -5,6 +5,8 @@ packages:
   - "@mastra/core"
   - "@mastra/redis-streams"
   - "@mastra/google-cloud-pubsub"
+  - "@mastra/pg"
+  - "@mastra/libsql"
 ---
 
 # Worker reference
@@ -187,6 +189,21 @@ Executes background tool calls dispatched by agents.
 - **PubSub topic**: `background-tasks`
 - **Consumer group**: `background-task-workers`
 - **Horizontally scalable**: Multiple instances share the consumer group
+
+## Supported storage backends
+
+Workers require a storage backend that implements the `workflows`, `backgroundTasks`, and `schedules` domains. The following backends support all three:
+
+| Backend | Package |
+| - | - |
+| PostgreSQL | [`@mastra/pg`](/reference/storage/postgresql) |
+| LibSQL | [`@mastra/libsql`](/reference/storage/libsql) |
+| MySQL | [`@mastra/mysql`](/reference/storage/mysql) |
+| MongoDB | [`@mastra/mongodb`](/reference/storage/mongodb) |
+| Spanner | [`@mastra/spanner`](/reference/storage/spanner) |
+| Convex | [`@mastra/convex`](/reference/storage/convex) |
+
+Other storage backends (Upstash, DynamoDB, Cloudflare D1, ClickHouse, Redis) support workflows and some worker features, but are missing the `schedules` domain required by the scheduler worker. If you don't use scheduled workflows, they may still work for orchestration and background tasks.
 
 ## Related
 

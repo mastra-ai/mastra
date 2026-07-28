@@ -6,6 +6,7 @@ packages:
   - "@mastra/redis-streams"
   - "@mastra/google-cloud-pubsub"
   - "@mastra/pg"
+  - "@mastra/libsql"
 ---
 
 # Worker deployment
@@ -59,7 +60,7 @@ Use this when:
 - Your workflows are long-running and shouldn't be lost on restart
 - You don't yet need to scale components independently
 
-The following example uses Redis Streams:
+The following example uses Redis Streams with PostgreSQL:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
@@ -76,22 +77,24 @@ export const mastra = new Mastra({
 })
 ```
 
-The following example uses Google Cloud Pub/Sub:
+The following example uses Google Cloud Pub/Sub with LibSQL:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import { GoogleCloudPubSub } from '@mastra/google-cloud-pubsub'
-import { PostgresStore } from '@mastra/pg'
+import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
-  storage: new PostgresStore({
-    connectionString: process.env.DATABASE_URL!,
+  storage: new LibSQLStore({
+    url: process.env.DATABASE_URL!,
   }),
   pubsub: new GoogleCloudPubSub({
     projectId: process.env.GCP_PROJECT_ID!,
   }),
 })
 ```
+
+Any [storage backend that supports workers](/docs/deployment/workers#prerequisites-for-split-deployments) works — PostgreSQL, LibSQL, MySQL, MongoDB, Spanner, or Convex.
 
 ### Fully split
 
@@ -114,8 +117,8 @@ Each worker type runs as its own process or container. The API handles HTTP requ
   └────┬────────────────────────────────────────────────────┘
        │
   ┌────▼──────────────┐    ┌───────────────┐
-  │ Background Task   │    │  PostgreSQL   │
-  │ Worker            │    │  (Storage)    │
+  │ Background Task   │    │   Storage DB  │
+  │ Worker            │    │  (shared)     │
   │ WORKERS=          │    └───────────────┘
   │ backgroundTasks   │
   └───────────────────┘
@@ -136,7 +139,7 @@ The rest of this guide walks through a fully split deployment using Docker Compo
 
 The same `Mastra` configuration runs in every container. The `MASTRA_WORKERS` environment variable controls which workers start in each process.
 
-The following example uses Redis Streams:
+The following example uses Redis Streams with PostgreSQL:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
@@ -153,22 +156,24 @@ export const mastra = new Mastra({
 })
 ```
 
-For Google Cloud Pub/Sub, replace the PubSub backend:
+For Google Cloud Pub/Sub, replace the PubSub backend. You can also swap the storage — this example uses LibSQL:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import { GoogleCloudPubSub } from '@mastra/google-cloud-pubsub'
-import { PostgresStore } from '@mastra/pg'
+import { LibSQLStore } from '@mastra/libsql'
 
 export const mastra = new Mastra({
-  storage: new PostgresStore({
-    connectionString: process.env.DATABASE_URL!,
+  storage: new LibSQLStore({
+    url: process.env.DATABASE_URL!,
   }),
   pubsub: new GoogleCloudPubSub({
     projectId: process.env.GCP_PROJECT_ID!,
   }),
 })
 ```
+
+Any [storage backend that supports workers](/docs/deployment/workers#prerequisites-for-split-deployments) works here — PostgreSQL, LibSQL, MySQL, MongoDB, Spanner, or Convex.
 
 ### Build the application
 
@@ -182,7 +187,7 @@ This produces a self-contained `.mastra/output/` directory. See [Deploy a Mastra
 
 ### Docker Compose
 
-The following `docker-compose.yml` runs the fully split topology with Redis Streams. It defines six services: PostgreSQL, Redis, the API, and three workers. For Google Cloud Pub/Sub, remove the Redis service and replace `REDIS_URL` with your GCP project credentials.
+The following `docker-compose.yml` runs the fully split topology with Redis Streams and PostgreSQL. It defines six services: PostgreSQL, Redis, the API, and three workers. For Google Cloud Pub/Sub, remove the Redis service and replace `REDIS_URL` with your GCP project credentials. You can also swap PostgreSQL for any [supported storage backend](/docs/deployment/workers#prerequisites-for-split-deployments) — update the database service and `DATABASE_URL` accordingly.
 
 ```yaml title="docker-compose.yml"
 services:
