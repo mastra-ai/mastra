@@ -595,3 +595,140 @@ describe('View Session card link', () => {
     );
   });
 });
+
+describe('Slack thread work-item intake', () => {
+  function makeIntakeDeps({
+    link = { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' } as {
+      orgId?: string;
+      userId: string;
+      defaultFactoryProjectId?: string;
+    } | null,
+    internalThread = { id: 'uuid-thread-1', resourceId: 'us-42' } as { id: string; resourceId: string } | null,
+    projects = makeProjects([{ id: 'fp-1' }]) as any,
+    upsert = vi.fn().mockResolvedValue({ created: true }),
+  } = {}) {
+    const accountLinks = {
+      getAccountLink: vi.fn().mockResolvedValue(link),
+      setDefaultFactory: vi.fn().mockResolvedValue(true),
+    } as any;
+    const store = {
+      listThreads: vi.fn().mockResolvedValue({ threads: internalThread ? [internalThread] : [] }),
+    };
+    const mastra = { getStorage: () => ({ getStore: () => Promise.resolve(store) }) };
+    const workItems = { upsert } as any;
+    return { accountLinks, projects, mastra, workItems, upsert };
+  }
+
+  function makeIntakeThread() {
+    const thread = makeThread();
+    thread.id = 'slack:C-1:1700.42';
+    thread.isSubscribed = vi.fn().mockResolvedValue(false);
+    thread.post = vi.fn();
+    return thread;
+  }
+
+  it('a routed DM creates an execute-stage work item bound to the Factory session', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const deps = makeIntakeDeps();
+    const handlers = createHandlers(deps as any);
+    const thread = makeIntakeThread();
+
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
+
+    expect(deps.upsert).toHaveBeenCalledTimes(1);
+    const call = deps.upsert.mock.calls[0][0];
+    expect(call.factoryProjectId).toBe('fp-1');
+    expect(call.orgId).toBe('org-1');
+    expect(call.userId).toBe('user-1');
+    expect(call.input.stages).toEqual(['execute']);
+    expect(call.input.externalSource.integrationId).toBe('slack');
+    expect(call.input.externalSource.type).toBe('slack-thread');
+    expect(call.input.externalSource.externalId).toBe('slack:C-1:1700.42');
+    expect(call.input.sessions.chat.sessionId).toBe('us-42');
+    expect(call.input.sessions.chat.branch).toBe('slack/1700-42');
+    expect(call.input.sessions.chat.threadId).toBe('uuid-thread-1');
+
+    // The work-item url and the card's button url read one shared deepLink —
+    // assert they are byte-identical so the two can never drift.
+    const card = thread.post.mock.calls[0][0];
+    const actions = card.children.find((c: any) => c.type === 'actions');
+    expect(call.input.externalSource.url).toBe(actions.children[0].url);
+  });
+
+  it('a routed @-mention also creates an execute-stage work item (no per-origin split)', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const deps = makeIntakeDeps();
+    const handlers = createHandlers(deps as any);
+    const thread = makeIntakeThread();
+
+    await handlers.onMention!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
+
+    expect(deps.upsert).toHaveBeenCalledTimes(1);
+    const call = deps.upsert.mock.calls[0][0];
+    expect(call.input.stages).toEqual(['execute']);
+    expect(call.input.externalSource.type).toBe('slack-thread');
+  });
+
+  it('upserts in preserve mode so a repeat message never resurrects a moved card', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const deps = makeIntakeDeps();
+    const handlers = createHandlers(deps as any);
+    const thread = makeIntakeThread();
+
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
+
+    expect(deps.upsert.mock.calls[0][0].reuseMode).toBe('preserve');
+  });
+
+  it('an unrouted sender creates no work item', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    // No projects domain → gate passes without routing (gate.routed absent).
+    const { projects: _unused, ...deps } = makeIntakeDeps();
+    const handlers = createHandlers(deps as any);
+    const thread = makeIntakeThread();
+
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
+
+    expect(deps.upsert).not.toHaveBeenCalled();
+  });
+
+  it('a routed follow-up (already subscribed) creates no work item', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const deps = makeIntakeDeps();
+    const handlers = createHandlers(deps as any);
+    const thread = makeIntakeThread();
+    thread.isSubscribed = vi.fn().mockResolvedValue(true);
+
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
+
+    expect(deps.upsert).not.toHaveBeenCalled();
+  });
+
+  it('a chat-only (channel:) resourceId creates the item with no session binding', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const deps = makeIntakeDeps({ internalThread: { id: 'uuid-thread-1', resourceId: 'channel:slack:C-1:1700.42' } });
+    const handlers = createHandlers(deps as any);
+    const thread = makeIntakeThread();
+
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
+
+    expect(deps.upsert).toHaveBeenCalledTimes(1);
+    const call = deps.upsert.mock.calls[0][0];
+    expect(call.input.stages).toEqual(['execute']);
+    expect(call.input.sessions).toBeUndefined();
+  });
+
+  it('a work-item failure is swallowed and does not abort the run (card still posts)', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const upsert = vi.fn().mockRejectedValue(new Error('db down'));
+    const deps = makeIntakeDeps({ upsert });
+    const handlers = createHandlers(deps as any);
+    const thread = makeIntakeThread();
+
+    await expect(handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra))).resolves.toBeUndefined();
+
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalled();
+  });
+});
