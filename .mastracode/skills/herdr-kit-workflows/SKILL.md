@@ -150,7 +150,7 @@ Synchronize the complete current scope:
 Synchronize only authoritative selected records by freezing their keys from the latest query:
 
 ```json
-{"schema_version":1,"items":[{"key":"AUTHORITATIVE_MANAGER_KEY"}]}
+{ "schema_version": 1, "items": [{ "key": "AUTHORITATIVE_MANAGER_KEY" }] }
 ```
 
 ```sh
@@ -165,7 +165,7 @@ Inspect the JSON result and report every failed, removed, or synchronized record
 Confirm that each queried item has `manager: "review"` and `location: "remote only"`. Show the user its repository/PR, title, key, `head_sha`, target path, freshness, and warnings. After exact confirmation, freeze key and head:
 
 ```json
-{"schema_version":1,"items":[{"key":"OWNER/REPOSITORY#NUMBER","head_sha":"CONFIRMED_HEAD_SHA"}]}
+{ "schema_version": 1, "items": [{ "key": "OWNER/REPOSITORY#NUMBER", "head_sha": "CONFIRMED_HEAD_SHA" }] }
 ```
 
 ```sh
@@ -179,7 +179,10 @@ The manager validates current PR identity/head, opens the registered primary rep
 Confirm that each queried item has `manager: "work"` and `location: "remote only"`. Show its key, repository/PR, title, `revision`, `head_sha`, registered repository state, target path, and warnings. Freeze the exact values:
 
 ```json
-{"schema_version":1,"items":[{"key":"REPOSITORY_ID:PR_NUMBER","revision":7,"head_sha":"CONFIRMED_HEAD_SHA"}]}
+{
+  "schema_version": 1,
+  "items": [{ "key": "REPOSITORY_ID:PR_NUMBER", "revision": 7, "head_sha": "CONFIRMED_HEAD_SHA" }]
+}
 ```
 
 ```sh
@@ -195,7 +198,17 @@ Dematerialization removes only manager-owned linked worktree resources after saf
 For Review, freeze key, path, and head:
 
 ```json
-{"schema_version":1,"items":[{"key":"OWNER/REPOSITORY#NUMBER","path":"/confirmed/review/path","head_sha":"CONFIRMED_HEAD_SHA","allow_warnings":false}]}
+{
+  "schema_version": 1,
+  "items": [
+    {
+      "key": "OWNER/REPOSITORY#NUMBER",
+      "path": "/confirmed/review/path",
+      "head_sha": "CONFIRMED_HEAD_SHA",
+      "allow_warnings": false
+    }
+  ]
+}
 ```
 
 ```sh
@@ -205,7 +218,17 @@ For Review, freeze key, path, and head:
 For Work, freeze key, record revision, and checkout generation:
 
 ```json
-{"schema_version":1,"items":[{"key":"checkout:REPOSITORY_ID:PATH_HASH","revision":8,"checkout_generation":"CONFIRMED_GENERATION","allow_warnings":false}]}
+{
+  "schema_version": 1,
+  "items": [
+    {
+      "key": "checkout:REPOSITORY_ID:PATH_HASH",
+      "revision": 8,
+      "checkout_generation": "CONFIRMED_GENERATION",
+      "allow_warnings": false
+    }
+  ]
+}
 ```
 
 ```sh
