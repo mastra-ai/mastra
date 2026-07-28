@@ -133,10 +133,14 @@ import '../src/mastra'
 
 It does two things:
 
-- The `export *` re-exports the library's `"use workflow"` runner from a path inside your own source tree. The compiler [derives workflow and step ids from the source file it processes](https://workflow-sdk.dev/v5/docs/how-it-works/code-transform), and ids for code imported straight from a package embed the package name and version, such as `step//@mastra/workflow@0.1.0//...`. Without the re-export, every upgrade of `@mastra/workflow` changes every id and breaks replay for runs that are still in flight. Re-exporting derives the ids from your own source tree instead, where they stay stable across upgrades.
+- The `export *` makes the library's `"use workflow"` runner and its `"use step"` functions reachable from your own application code. The [compiler](https://workflow-sdk.dev/v5/docs/how-it-works/code-transform) discovers directive files by following imports out of your source tree, so without this file the runner and its steps are never compiled or registered.
 - The side-effect `import '../src/mastra'` loads your Mastra instance in the process that handles workflow execution. Steps resolve the live workflow object from a registry by id, so if your definitions never load in that process, every step fails with an error naming this import as the fix.
 
-The compiler discovers any file that contains the directives. A `workflows/` directory at the project root is the convention used in the Workflow SDK's own guides. Adjust the relative import if your Mastra entry file lives elsewhere. For more on this pattern, see [Publishing libraries](https://workflow-sdk.dev/v5/cookbook/advanced/publishing-libraries).
+A `workflows/` directory at the project root is the convention used in the Workflow SDK's own guides. Adjust the relative import if your Mastra entry file lives elsewhere. For more on how libraries ship workflows, see [Publishing libraries](https://workflow-sdk.dev/v5/cookbook/advanced/publishing-libraries).
+
+:::warning
+The re-export doesn't move step ids into your source tree. Steps shipped by `@mastra/workflow` keep ids that embed the package name and version, so upgrading the package changes them. See [Constraints and notes](#constraints-and-notes).
+:::
 
 ## Running workflows
 
@@ -220,7 +224,9 @@ Flow control options available on Inngest workflows, such as `concurrency`, `rat
 
 `.map()` data mapping isn't blocked, but it's untested. Treat it as unverified.
 
-The `workflows/mastra.ts` file is required, both for stable workflow ids and for runtime registration. See [Registering the runner](#registering-the-runner).
+The `workflows/mastra.ts` file is required, both to compile the runner and to register your workflows at run time. See [Registering the runner](#registering-the-runner).
+
+Upgrading `@mastra/workflow` breaks runs that are still in flight. Ids for steps shipped inside a package embed the package name and version, so a new version of the package produces new step ids, and runs recorded against the old ids can't replay. Let in-flight runs finish, including suspended ones waiting on a hook, before you upgrade.
 
 ## Related
 
