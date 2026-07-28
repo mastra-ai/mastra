@@ -9,11 +9,15 @@ function createMockState() {
     chatContainer: { clear: vi.fn() },
     pendingTools: { clear: vi.fn() },
     pendingTaskToolIds: { clear: vi.fn() },
+    pendingSubagents: new Map([['subagent', {}]]),
+    pendingSignalMessageComponentsById: new Map([['signal', {}]]),
+    followUpComponents: [{}],
     allToolComponents: [{}],
     allSlashCommandComponents: [{}],
     allSystemReminderComponents: [{}],
     messageComponentsById: new Map([['a', {}]]),
     allShellComponents: [{}],
+    globalBackgroundNotice: { setActivities: vi.fn() },
     taskProgress: { updateTasks: vi.fn() },
     taskToolInsertIndex: 5,
     session: {
@@ -76,11 +80,16 @@ describe('handleNewCommand', () => {
 
     expect(state.chatContainer.clear).toHaveBeenCalled();
     expect(state.pendingTools.clear).toHaveBeenCalled();
+    expect(state.pendingTaskToolIds.clear).toHaveBeenCalled();
+    expect(state.pendingSubagents.size).toBe(0);
+    expect(state.pendingSignalMessageComponentsById.size).toBe(0);
+    expect(state.followUpComponents).toEqual([]);
     expect(state.allToolComponents).toEqual([]);
     expect(state.allSlashCommandComponents).toEqual([]);
     expect(state.allSystemReminderComponents).toEqual([]);
     expect(state.messageComponentsById.size).toBe(0);
     expect(state.allShellComponents).toEqual([]);
+    expect(state.globalBackgroundNotice.setActivities).toHaveBeenCalledWith([]);
     expect(state.session.state.set).toHaveBeenCalledWith({
       tasks: [],
       activePlan: null,

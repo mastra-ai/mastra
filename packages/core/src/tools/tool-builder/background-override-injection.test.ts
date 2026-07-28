@@ -84,6 +84,7 @@ describe('CoreToolBuilder background override injection', () => {
       const properties = extractJsonProperties(tool);
       expect(properties).toHaveProperty('query');
       expect(properties).toHaveProperty('_background');
+      expect(properties._background.properties.disposition.enum).toEqual(['foreground', 'deferred', 'awaited']);
     });
 
     // The JSON Schema fallback used to replace the original Zod v3 schema with
@@ -175,6 +176,7 @@ describe('CoreToolBuilder background override injection', () => {
       const properties = extractJsonProperties(tool);
       expect(properties).toHaveProperty('query');
       expect(properties).toHaveProperty('_background');
+      expect(properties._background.properties.disposition.enum).toEqual(['foreground', 'deferred', 'awaited']);
     });
   });
 
@@ -206,6 +208,7 @@ describe('CoreToolBuilder background override injection', () => {
       const properties = extractJsonProperties(tool);
       expect(properties).toHaveProperty('query');
       expect(properties).toHaveProperty('_background');
+      expect(properties._background.properties.disposition.enum).toEqual(['foreground', 'deferred', 'awaited']);
     });
   });
 

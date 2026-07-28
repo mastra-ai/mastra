@@ -136,6 +136,157 @@ describe('createToolCallStep background task stream replay', () => {
       },
     });
   });
+
+  it('awaits the exact background task until its authoritative result is reconciled', async () => {
+    const order: string[] = [];
+    const controller = { enqueue: vi.fn() };
+    const flushMessages = vi.fn(async () => {
+      order.push('flushed');
+    });
+    const messageList = {
+      ...createMessageList(),
+      updateToolInvocation: vi.fn(() => {
+        order.push('reconciled');
+        return true;
+      }),
+      updateMessageMetadataByToolCallId: vi.fn(),
+    } as unknown as MessageList;
+    let completeTask!: () => void;
+    const taskCompleted = new Promise<void>(resolve => {
+      completeTask = resolve;
+    });
+    const backgroundTaskManager = {
+      enqueue: vi.fn(async (_payload: any, context: any) => {
+        void (async () => {
+          await context.onResult({
+            status: 'completed',
+            taskId: 'task-awaited',
+            toolCallId: 'call-awaited',
+            toolName: 'background-tool',
+            agentId: 'agent-1',
+            runId: 'current-run',
+            result: { answer: 42 },
+            startedAt: new Date(),
+            completedAt: new Date(),
+          });
+          order.push('terminal');
+          completeTask();
+        })();
+        return { task: { id: 'task-awaited' }, fallbackToSync: false };
+      }),
+      waitForNextTask: vi.fn(async () => {
+        await taskCompleted;
+        return { id: 'task-awaited', status: 'completed', result: { answer: 42 } };
+      }),
+      cancel: vi.fn(),
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+    };
+    const tools = {
+      'background-tool': {
+        backgroundConfig: { enabled: true },
+        execute: vi.fn(),
+      },
+    } as any;
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'current-run',
+      streamState: { serialize: vi.fn() },
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+        saveQueueManager: { flushMessages },
+        threadId: 'thread-1',
+      },
+    } as any);
+
+    const result = await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: {
+          toolCallId: 'call-awaited',
+          toolName: 'background-tool',
+          args: { query: 'meaning', _background: { disposition: 'awaited' } },
+        },
+      }),
+    );
+
+    expect(result).toMatchObject({ result: { answer: 42 } });
+    expect(backgroundTaskManager.waitForNextTask).toHaveBeenCalledWith(['task-awaited'], undefined);
+    expect(order).toEqual(['reconciled', 'flushed', 'terminal']);
+    expect(tools['background-tool'].execute).not.toHaveBeenCalled();
+  });
+
+  it('awaits failed background work until the failure is reconciled', async () => {
+    const order: string[] = [];
+    const messageList = {
+      ...createMessageList(),
+      updateToolInvocation: vi.fn(() => {
+        order.push('reconciled');
+        return true;
+      }),
+      updateMessageMetadataByToolCallId: vi.fn(),
+    } as unknown as MessageList;
+    let completeTask!: () => void;
+    const taskCompleted = new Promise<void>(resolve => {
+      completeTask = resolve;
+    });
+    const backgroundTaskManager = {
+      enqueue: vi.fn(async (_payload: any, context: any) => {
+        void (async () => {
+          await context.onResult({
+            status: 'failed',
+            taskId: 'task-failed',
+            toolCallId: 'call-failed',
+            toolName: 'background-tool',
+            agentId: 'agent-1',
+            runId: 'current-run',
+            error: { message: 'lookup failed' },
+            startedAt: new Date(),
+            completedAt: new Date(),
+          });
+          order.push('terminal');
+          completeTask();
+        })();
+        return { task: { id: 'task-failed' }, fallbackToSync: false };
+      }),
+      waitForNextTask: vi.fn(async () => {
+        await taskCompleted;
+        return { id: 'task-failed', status: 'failed', error: { message: 'lookup failed' } };
+      }),
+      cancel: vi.fn(),
+      listTasks: vi.fn(async () => ({ tasks: [], total: 0 })),
+    };
+    const toolCallStep = createToolCallStep({
+      tools: {
+        'background-tool': { backgroundConfig: { enabled: true }, execute: vi.fn() },
+      } as any,
+      messageList,
+      controller: { enqueue: vi.fn() },
+      runId: 'current-run',
+      streamState: { serialize: vi.fn() },
+      _internal: {
+        backgroundTaskManager,
+        backgroundTaskManagerConfig: { enabled: true },
+        agentBackgroundConfig: { tools: 'all' },
+      },
+    } as any);
+
+    const result = await toolCallStep.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: {
+          toolCallId: 'call-failed',
+          toolName: 'background-tool',
+          args: { query: 'missing', _background: { disposition: 'awaited' } },
+        },
+      }),
+    );
+
+    expect(result as any).toMatchObject({ error: expect.objectContaining({ message: 'lookup failed' }) });
+    expect(order).toEqual(['reconciled', 'terminal']);
+  });
 });
 
 describe('createToolCallStep tool execution error handling', () => {

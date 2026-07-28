@@ -199,6 +199,11 @@ export interface SerializableDurableOptions {
   skipBgTaskWait?: boolean;
   /** When true, background tasks are disabled for this run (the registry will not receive a BackgroundTaskManager). */
   disableBackgroundTasks?: boolean;
+  /** Execution-scoped background dispatch policy for delegated agents. */
+  backgroundTaskPolicy?: {
+    allowToolDispatch: boolean;
+    allowDelegationDispatch: boolean;
+  };
   /** Tracing options forwarded to the agent/model spans (metadata, tags, requestContextKeys, parentSpanId, hideInput/hideOutput, traceId). */
   tracingOptions?: TracingOptions;
   /**

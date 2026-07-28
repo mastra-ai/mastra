@@ -10,13 +10,20 @@ import type { PubSubDeliveryMode } from './pubsub';
 import type { Event, EventCallback, SubscribeOptions } from './types';
 
 type ClientFrame =
-  | { type: 'subscribe'; topic: string }
-  | { type: 'unsubscribe'; topic: string }
+  | { type: 'subscribe'; topic: string; group?: string }
+  | { type: 'unsubscribe'; topic: string; group?: string }
   | { type: 'publish'; topic: string; event: Omit<Event, 'id' | 'createdAt'>; localOnly?: boolean }
   | { type: 'ack'; id?: string }
   | { type: 'nack'; id?: string };
 
-type ServerFrame = { type: 'event'; topic: string; event: Event } | { type: 'subscribed'; topic: string };
+type ServerFrame =
+  | { type: 'event'; topic: string; event: Event; group?: string }
+  | { type: 'subscribed'; topic: string; group?: string };
+
+type LocalSubscription = {
+  callback: EventCallback;
+  group?: string;
+};
 
 type UnixSocketPubSubOptions = {
   maxRemoteClientQueuedBytes?: number;
@@ -124,6 +131,10 @@ function nextTick(): Promise<void> {
   return new Promise(resolve => setImmediate(resolve));
 }
 
+function membershipKey(topic: string, group?: string): string {
+  return JSON.stringify([topic, group ?? null]);
+}
+
 function readFrames(socket: net.Socket, onFrame: (frame: any) => void) {
   let buffer = '';
   socket.setEncoding('utf8');
@@ -151,7 +162,9 @@ export class UnixSocketPubSub extends PubSub {
   #isBroker = false;
   #closed = false;
   #starting?: Promise<void>;
-  #callbacks = new Map<string, Set<EventCallback>>();
+  #subscriptions = new Map<string, Map<EventCallback, LocalSubscription>>();
+  #localGroupCursors = new Map<string, number>();
+  #brokerGroupCursors = new Map<string, number>();
   #subscribeWaiters = new Map<string, SubscribeWaiter[]>();
   #brokerClients = new Map<net.Socket, BrokerClient>();
   #pendingWrites = new Set<Promise<void>>();
@@ -215,41 +228,50 @@ export class UnixSocketPubSub extends PubSub {
   }
 
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
-    if (options?.group) {
-      throw new Error('UnixSocketPubSub does not support grouped subscriptions yet');
+    const subscriptions = this.#subscriptions.get(topic) ?? new Map<EventCallback, LocalSubscription>();
+    const existing = subscriptions.get(cb);
+    if (existing && existing.group === options?.group) return;
+    if (existing) {
+      await this.unsubscribe(topic, cb);
     }
 
-    const callbacks = this.#callbacks.get(topic) ?? new Set<EventCallback>();
-    const hadCallback = callbacks.has(cb);
+    const group = options?.group;
+    const hadMembership = this.#hasLocalMembership(topic, group);
     const wasConnected = Boolean(this.#clientSocket && !this.#clientSocket.destroyed);
-    callbacks.add(cb);
-    this.#callbacks.set(topic, callbacks);
+    subscriptions.set(cb, { callback: cb, group });
+    this.#subscriptions.set(topic, subscriptions);
 
     try {
       await this.#ensureStarted();
-      if (!this.#isBroker && !hadCallback && wasConnected) {
-        await this.#sendSubscribeToBroker(topic);
+      if (!this.#isBroker && !hadMembership && wasConnected) {
+        await this.#sendSubscribeToBroker(topic, group);
       }
     } catch (error) {
-      if (!hadCallback) {
-        callbacks.delete(cb);
-        if (callbacks.size === 0) {
-          this.#callbacks.delete(topic);
-        }
+      subscriptions.delete(cb);
+      if (subscriptions.size === 0) {
+        this.#subscriptions.delete(topic);
       }
       throw error;
     }
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
-    const callbacks = this.#callbacks.get(topic);
-    callbacks?.delete(cb);
-    if (callbacks?.size === 0) {
-      this.#callbacks.delete(topic);
-      if (!this.#isBroker && this.#clientSocket && !this.#clientSocket.destroyed) {
-        await this.#sendToBroker({ type: 'unsubscribe', topic });
-        await nextTick();
-      }
+    const subscriptions = this.#subscriptions.get(topic);
+    const subscription = subscriptions?.get(cb);
+    if (!subscription) return;
+
+    subscriptions!.delete(cb);
+    if (subscriptions!.size === 0) {
+      this.#subscriptions.delete(topic);
+    }
+    if (
+      !this.#hasLocalMembership(topic, subscription.group) &&
+      !this.#isBroker &&
+      this.#clientSocket &&
+      !this.#clientSocket.destroyed
+    ) {
+      await this.#sendToBroker({ type: 'unsubscribe', topic, group: subscription.group });
+      await nextTick();
     }
   }
 
@@ -257,17 +279,43 @@ export class UnixSocketPubSub extends PubSub {
     await Promise.allSettled([...this.#pendingWrites]);
   }
 
+  #hasLocalMembership(topic: string, group?: string): boolean {
+    return [...(this.#subscriptions.get(topic)?.values() ?? [])].some(subscription => subscription.group === group);
+  }
+
+  #localGroups(topic: string): string[] {
+    return [
+      ...new Set(
+        [...(this.#subscriptions.get(topic)?.values() ?? [])]
+          .map(subscription => subscription.group)
+          .filter((group): group is string => Boolean(group)),
+      ),
+    ];
+  }
+
   async close(): Promise<void> {
     this.#closed = true;
-    this.#callbacks.clear();
+    this.#subscriptions.clear();
+    this.#localGroupCursors.clear();
+    this.#brokerGroupCursors.clear();
 
     this.#clientSocket?.destroy();
     this.#clientSocket = undefined;
     this.#rejectSubscribeWaiters(new Error('UnixSocketPubSub is closed'));
 
-    for (const client of [...this.#brokerClients.values()]) {
-      this.#removeBrokerClient(client);
-    }
+    const clientClosures = [...this.#brokerClients.values()].map(
+      client =>
+        new Promise<void>(resolve => {
+          if (client.socket.destroyed) {
+            this.#removeBrokerClient(client);
+            resolve();
+            return;
+          }
+          client.socket.once('close', resolve);
+          this.#removeBrokerClient(client);
+        }),
+    );
+    await Promise.allSettled(clientClosures);
 
     if (this.#server) {
       await new Promise<void>(resolve => this.#server?.close(() => resolve()));
@@ -395,8 +443,11 @@ export class UnixSocketPubSub extends PubSub {
   }
 
   async #resubscribeClient() {
-    for (const topic of this.#callbacks.keys()) {
-      await this.#sendSubscribeToBroker(topic);
+    for (const [topic, subscriptions] of this.#subscriptions) {
+      const groups = new Set([...subscriptions.values()].map(subscription => subscription.group));
+      for (const group of groups) {
+        await this.#sendSubscribeToBroker(topic, group);
+      }
     }
   }
 
@@ -487,38 +538,39 @@ export class UnixSocketPubSub extends PubSub {
     }
   }
 
-  async #sendSubscribeToBroker(topic: string): Promise<void> {
+  async #sendSubscribeToBroker(topic: string, group?: string): Promise<void> {
+    const key = membershipKey(topic, group);
     let waiter: SubscribeWaiter | undefined;
     const subscribed = new Promise<void>((resolve, reject) => {
       waiter = { resolve, reject };
-      const waiters = this.#subscribeWaiters.get(topic) ?? [];
+      const waiters = this.#subscribeWaiters.get(key) ?? [];
       waiters.push(waiter);
-      this.#subscribeWaiters.set(topic, waiters);
+      this.#subscribeWaiters.set(key, waiters);
     });
     try {
-      await this.#sendToBroker({ type: 'subscribe', topic });
+      await this.#sendToBroker({ type: 'subscribe', topic, group });
     } catch (error) {
-      this.#removeSubscribeWaiter(topic, waiter);
+      this.#removeSubscribeWaiter(key, waiter);
       throw error;
     }
     await subscribed;
   }
 
-  #removeSubscribeWaiter(topic: string, waiter: SubscribeWaiter | undefined) {
+  #removeSubscribeWaiter(key: string, waiter: SubscribeWaiter | undefined) {
     if (!waiter) return;
-    const waiters = this.#subscribeWaiters.get(topic);
+    const waiters = this.#subscribeWaiters.get(key);
     if (!waiters) return;
     const nextWaiters = waiters.filter(item => item !== waiter);
     if (nextWaiters.length === 0) {
-      this.#subscribeWaiters.delete(topic);
+      this.#subscribeWaiters.delete(key);
       return;
     }
-    this.#subscribeWaiters.set(topic, nextWaiters);
+    this.#subscribeWaiters.set(key, nextWaiters);
   }
 
-  #settleSubscribeWaiters(topic: string, error?: Error) {
-    const waiters = this.#subscribeWaiters.get(topic);
-    this.#subscribeWaiters.delete(topic);
+  #settleSubscribeWaiters(key: string, error?: Error) {
+    const waiters = this.#subscribeWaiters.get(key);
+    this.#subscribeWaiters.delete(key);
     if (error) {
       waiters?.forEach(waiter => waiter.reject(error));
       return;
@@ -543,10 +595,14 @@ export class UnixSocketPubSub extends PubSub {
     readFrames(socket, frame => {
       const clientFrame = frame as ClientFrame;
       if (clientFrame.type === 'subscribe') {
-        client.subscriptions.add(clientFrame.topic);
-        this.#enqueueBrokerClientWrite(client, { type: 'subscribed', topic: clientFrame.topic });
+        client.subscriptions.add(membershipKey(clientFrame.topic, clientFrame.group));
+        this.#enqueueBrokerClientWrite(client, {
+          type: 'subscribed',
+          topic: clientFrame.topic,
+          group: clientFrame.group,
+        });
       } else if (clientFrame.type === 'unsubscribe') {
-        client.subscriptions.delete(clientFrame.topic);
+        client.subscriptions.delete(membershipKey(clientFrame.topic, clientFrame.group));
       } else if (clientFrame.type === 'publish') {
         void this.#publishFromBroker(clientFrame.topic, clientFrame.event, client, clientFrame.localOnly);
       }
@@ -598,13 +654,17 @@ export class UnixSocketPubSub extends PubSub {
 
   #handleServerFrame(frame: ServerFrame) {
     if (frame.type === 'subscribed') {
-      this.#settleSubscribeWaiters(frame.topic);
+      this.#settleSubscribeWaiters(membershipKey(frame.topic, frame.group));
       return;
     }
     if (frame.type !== 'event') return;
     // `createdAt` is already a Date — the codec rehydrates it during JSON.parse
     // in `readFrames`. No ad-hoc conversion needed.
-    this.#deliverLocal(frame.topic, frame.event);
+    if (frame.group) {
+      this.#deliverLocalGroup(frame.topic, frame.group, frame.event);
+    } else {
+      this.#deliverLocalFanout(frame.topic, frame.event);
+    }
   }
 
   async #publishFromBroker(
@@ -620,58 +680,95 @@ export class UnixSocketPubSub extends PubSub {
       deliveryAttempt: 1,
     };
 
-    this.#deliverLocal(topic, brokerEvent);
+    this.#deliverLocalFanout(topic, brokerEvent);
 
-    // Skip serialization entirely when no remote clients could receive the event.
-    if (this.#brokerClients.size === 0) return;
-
-    // `localOnly` events are scoped to the publishing instance.
-    // When the publisher is the broker, the `#deliverLocal` above is enough.
-    // When the publisher is a remote client, relay the event back ONLY to
-    // that client so its subscription callback fires, but do NOT fan out to
-    // other clients — their WEP would just drop the event via `#ownsWorkflow`
-    // and the multi-MB payload would waste socket/kernel buffer for nothing.
+    // `localOnly` events are scoped to the publishing instance. Client-side
+    // localOnly publishes bypass the broker entirely, so this branch only
+    // protects compatibility with older clients that may still send the flag.
     if (localOnly) {
-      if (sourceClient && sourceClient.subscriptions.has(topic) && !sourceClient.socket.destroyed) {
+      if (sourceClient && sourceClient.subscriptions.has(membershipKey(topic)) && !sourceClient.socket.destroyed) {
         this.#enqueueBrokerClientWrite(sourceClient, { type: 'event', topic, event: brokerEvent });
       }
       return;
     }
 
-    let frame: ServerFrame | undefined;
+    const fanoutFrame: ServerFrame = { type: 'event', topic, event: brokerEvent };
     for (const client of this.#brokerClients.values()) {
-      if (!client.subscriptions.has(topic) || client.socket.destroyed) continue;
-      // Lazily build the frame only when we know at least one client needs it.
-      frame ??= { type: 'event', topic, event: brokerEvent };
-      this.#enqueueBrokerClientWrite(client, frame);
+      if (!client.subscriptions.has(membershipKey(topic)) || client.socket.destroyed) continue;
+      this.#enqueueBrokerClientWrite(client, fanoutFrame);
+    }
+
+    const groups = new Set(this.#localGroups(topic));
+    for (const client of this.#brokerClients.values()) {
+      for (const subscription of client.subscriptions) {
+        const [subscriptionTopic, group] = JSON.parse(subscription) as [string, string | null];
+        if (subscriptionTopic === topic && group) groups.add(group);
+      }
+    }
+
+    for (const group of groups) {
+      const members: Array<'local' | BrokerClient> = [];
+      if (this.#hasLocalMembership(topic, group)) members.push('local');
+      for (const client of this.#brokerClients.values()) {
+        if (client.subscriptions.has(membershipKey(topic, group)) && !client.socket.destroyed) members.push(client);
+      }
+      if (members.length === 0) continue;
+      const key = membershipKey(topic, group);
+      const cursor = this.#brokerGroupCursors.get(key) ?? 0;
+      const member = members[cursor % members.length]!;
+      this.#brokerGroupCursors.set(key, (cursor + 1) % members.length);
+      if (member === 'local') {
+        this.#deliverLocalGroup(topic, group, brokerEvent);
+      } else {
+        this.#enqueueBrokerClientWrite(member, { type: 'event', topic, event: brokerEvent, group });
+      }
     }
   }
 
   #deliverLocal(topic: string, event: Event) {
-    const callbacks = this.#callbacks.get(topic);
-    if (!callbacks) return;
-    for (const cb of callbacks) {
-      this.#invokeLocalCallback(topic, event, cb, 0);
+    this.#deliverLocalFanout(topic, event);
+    for (const group of this.#localGroups(topic)) {
+      this.#deliverLocalGroup(topic, group, event);
     }
   }
 
-  #invokeLocalCallback(topic: string, event: Event, cb: EventCallback, attempt: number) {
+  #deliverLocalFanout(topic: string, event: Event) {
+    for (const subscription of this.#subscriptions.get(topic)?.values() ?? []) {
+      if (subscription.group) continue;
+      this.#invokeLocalCallback(topic, event, subscription.callback, subscription.group, 0);
+    }
+  }
+
+  #deliverLocalGroup(topic: string, group: string, event: Event) {
+    const members = [...(this.#subscriptions.get(topic)?.values() ?? [])].filter(
+      subscription => subscription.group === group,
+    );
+    if (members.length === 0) return;
+    const key = membershipKey(topic, group);
+    const cursor = this.#localGroupCursors.get(key) ?? 0;
+    const member = members[cursor % members.length]!;
+    this.#localGroupCursors.set(key, (cursor + 1) % members.length);
+    this.#invokeLocalCallback(topic, event, member.callback, group, 0);
+  }
+
+  #invokeLocalCallback(topic: string, event: Event, cb: EventCallback, group: string | undefined, attempt: number) {
     let nacked = false;
     const nack = async () => {
       if (nacked || this.#closed) return;
       nacked = true;
       if (attempt >= MAX_LOCAL_REDELIVERIES) return;
-      const stillSubscribed = this.#callbacks.get(topic)?.has(cb);
-      if (!stillSubscribed) return;
+      const currentSubscription = this.#subscriptions.get(topic)?.get(cb);
+      if (!currentSubscription || currentSubscription.group !== group) return;
       const timer = setTimeout(
         () => {
           if (this.#closed) return;
-          if (!this.#callbacks.get(topic)?.has(cb)) return;
+          const currentSubscription = this.#subscriptions.get(topic)?.get(cb);
+          if (!currentSubscription || currentSubscription.group !== group) return;
           const redeliveredEvent: Event = {
             ...event,
             deliveryAttempt: (event.deliveryAttempt ?? 1) + 1,
           };
-          this.#invokeLocalCallback(topic, redeliveredEvent, cb, attempt + 1);
+          this.#invokeLocalCallback(topic, redeliveredEvent, cb, group, attempt + 1);
         },
         REDELIVERY_DELAY_MS * (attempt + 1),
       );

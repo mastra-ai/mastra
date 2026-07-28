@@ -1123,6 +1123,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
               const processInputStepResult = await processorRunner.runProcessInputStep({
                 messageList,
+                runId,
                 stepNumber: inputData.output?.steps?.length || 0,
                 ...createObservabilityContext(stepTracingContext),
                 requestContext,

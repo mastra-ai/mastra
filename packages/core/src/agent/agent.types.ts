@@ -648,6 +648,12 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   /** Whether to disable background tasks for this execution */
   disableBackgroundTasks?: boolean;
 
+  /** @internal Execution-scoped background dispatch policy for delegated agents. */
+  backgroundTaskPolicy?: {
+    allowToolDispatch: boolean;
+    allowDelegationDispatch: boolean;
+  };
+
   /**
    * When set, keeps the stream open across background-task continuations.
    * The agent will automatically re-invoke the LLM when background tasks

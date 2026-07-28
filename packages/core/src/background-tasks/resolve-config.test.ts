@@ -35,6 +35,30 @@ describe('resolveBackgroundConfig', () => {
     expect(resolved.runInBackground).toBe(false);
   });
 
+  it('keeps an eligible tool foreground when the call does not explicitly opt in', () => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: {},
+      toolName: 'research',
+      toolConfig: { enabled: true },
+      agentConfig: undefined,
+      managerConfig: { enabled: true },
+    });
+
+    expect(resolved).toMatchObject({ runInBackground: false, disposition: 'foreground' });
+  });
+
+  it('keeps an agent-eligible tool foreground when the call does not explicitly opt in', () => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: {},
+      toolName: 'research',
+      toolConfig: undefined,
+      agentConfig: { tools: { research: true } },
+      managerConfig: { enabled: true },
+    });
+
+    expect(resolved).toMatchObject({ runInBackground: false, disposition: 'foreground' });
+  });
+
   it('honors LLM override when the tool itself opted in', () => {
     const resolved = resolveBackgroundConfig({
       llmBgOverrides: { enabled: true },
@@ -80,6 +104,33 @@ describe('resolveBackgroundConfig', () => {
       managerConfig: { enabled: true },
     });
 
-    expect(resolved.runInBackground).toBe(false);
+    expect(resolved).toMatchObject({ runInBackground: false, disposition: 'foreground' });
+  });
+
+  it.each(['foreground', 'deferred', 'awaited'] as const)('resolves the %s per-call disposition', disposition => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: { disposition },
+      toolName: 'research',
+      toolConfig: { enabled: true },
+      agentConfig: undefined,
+      managerConfig: { enabled: true },
+    });
+
+    expect(resolved).toMatchObject({
+      runInBackground: disposition !== 'foreground',
+      disposition,
+    });
+  });
+
+  it('ignores a disposition override when the tool has not opted in', () => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: { disposition: 'awaited' },
+      toolName: 'calculator',
+      toolConfig: undefined,
+      agentConfig: undefined,
+      managerConfig: { enabled: true },
+    });
+
+    expect(resolved).toMatchObject({ runInBackground: false, disposition: 'foreground' });
   });
 });

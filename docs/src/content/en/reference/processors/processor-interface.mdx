@@ -379,6 +379,12 @@ processInputStep?<TTripwireMetadata = unknown>(
     isOptional: false,
   },
   {
+    name: 'runId',
+    type: 'string',
+    description: 'ID of the active agent run.',
+    isOptional: true,
+  },
+  {
     name: 'stepNumber',
     type: 'number',
     description: 'Current step number (0-indexed). Step 0 is the initial LLM call.',

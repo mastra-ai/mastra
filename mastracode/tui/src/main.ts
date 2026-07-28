@@ -134,6 +134,7 @@ async function tuiMain(pipedInput?: string | null) {
     version: getCurrentVersion(),
     inlineQuestions: true,
     githubSignals: result.githubSignals,
+    backgroundCompletionEvents: result.backgroundCompletionEvents,
     ...(pipedInput ? { initialMessage: `The following was piped via stdin:\n\n${pipedInput}` } : {}),
   });
   tui.run().catch(error => {

@@ -4116,6 +4116,7 @@ export class Agent<
         const memory = await this.getMemory({ requestContext });
         const result = await runner.runProcessInputStep({
           messageList,
+          runId,
           stepNumber,
           steps: [],
           ...observabilityContext,
@@ -4979,7 +4980,10 @@ export class Agent<
                           }
                         : {}),
                       ...subAgentAbortOptions,
-                      disableBackgroundTasks: true,
+                      backgroundTaskPolicy: {
+                        allowToolDispatch: true,
+                        allowDelegationDispatch: false,
+                      },
                     })
                   : await resolvedAgent.generate(messagesForSubAgent, {
                       requestContext,
@@ -5001,7 +5005,10 @@ export class Agent<
                           }
                         : {}),
                       ...subAgentAbortOptions,
-                      disableBackgroundTasks: true,
+                      backgroundTaskPolicy: {
+                        allowToolDispatch: true,
+                        allowDelegationDispatch: false,
+                      },
                     });
 
                 const agentResponseMessages = generateResult.response.dbMessages ?? [];
@@ -5121,7 +5128,10 @@ export class Agent<
                           }
                         : {}),
                       ...subAgentAbortOptions,
-                      disableBackgroundTasks: true,
+                      backgroundTaskPolicy: {
+                        allowToolDispatch: true,
+                        allowDelegationDispatch: false,
+                      },
                     })
                   : await resolvedAgent.stream(messagesForSubAgent, {
                       requestContext,
@@ -5146,7 +5156,10 @@ export class Agent<
                           }
                         : {}),
                       ...subAgentAbortOptions,
-                      disableBackgroundTasks: true,
+                      backgroundTaskPolicy: {
+                        allowToolDispatch: true,
+                        allowDelegationDispatch: false,
+                      },
                     });
 
                 let requireToolApproval;
@@ -5479,7 +5492,9 @@ export class Agent<
         // Derive a ToolBackgroundConfig from the sub-agent's tools/config so the
         // parent can dispatch the entire sub-agent invocation as a background task
         // when appropriate.
-        const subAgentBackgroundConfig = await this.deriveSubAgentBackgroundConfig(agent, requestContext);
+        const subAgentBackgroundConfig = backgroundTaskEnabled
+          ? await this.deriveSubAgentBackgroundConfig(agent, requestContext)
+          : undefined;
 
         const options: ToolOptions = {
           name: `agent-${agentName}`,
@@ -5809,6 +5824,7 @@ export class Agent<
     hooks?: ToolHooks;
     delegation?: DelegationConfig;
     methodType?: AgentMethodType;
+    backgroundTaskPolicy?: AgentExecutionOptionsBase<any>['backgroundTaskPolicy'];
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
     const defaultOptions = await this.getDefaultOptions({ requestContext });
@@ -5844,6 +5860,7 @@ export class Agent<
       // survive when callers pass a partial per-call delegation override.
       delegation: mergedOptions.delegation,
       methodType: options.methodType ?? 'stream',
+      backgroundTaskPolicy: mergedOptions.backgroundTaskPolicy,
     });
   }
 
@@ -5864,6 +5881,7 @@ export class Agent<
     autoResumeSuspendedTools,
     delegation,
     backgroundTaskEnabled,
+    backgroundTaskPolicy,
     inputProcessors,
     hooks,
     ...rest
@@ -5880,6 +5898,10 @@ export class Agent<
     autoResumeSuspendedTools?: boolean;
     delegation?: DelegationConfig;
     backgroundTaskEnabled?: boolean;
+    backgroundTaskPolicy?: {
+      allowToolDispatch: boolean;
+      allowDelegationDispatch: boolean;
+    };
     inputProcessors?: InputProcessorOrWorkflow[];
     hooks?: ToolHooks;
   } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
@@ -5949,6 +5971,7 @@ export class Agent<
       ...observabilityContext,
       autoResumeSuspendedTools,
       delegation,
+      backgroundTaskEnabled: backgroundTaskPolicy?.allowDelegationDispatch ?? backgroundTaskEnabled,
     });
 
     const workflowTools = await this.listWorkflowTools({
@@ -6993,7 +7016,7 @@ export class Agent<
       toolCallId: options.toolCallId,
       workspace,
       toolPayloadTransform,
-      ...(options.disableBackgroundTasks
+      ...(options.disableBackgroundTasks || options.backgroundTaskPolicy?.allowToolDispatch === false
         ? {}
         : {
             backgroundTaskManager: this.#mastra?.backgroundTaskManager,
