@@ -167,8 +167,15 @@ async function getWorkspaceById(mastra: any, workspaceId: string): Promise<Works
   if (typeof mastra.resolveWorkspaceById === 'function') {
     try {
       return await mastra.resolveWorkspaceById(workspaceId);
-    } catch {
-      // Workspace not found (registry miss and either no resolver or resolver returned undefined)
+    } catch (err) {
+      // Only the documented "workspace not found" error should degrade to a
+      // `undefined` (which callers surface as a 404). Any other resolver
+      // failure — network/DB error, resolver bug — is an operational problem
+      // and must propagate so it's visible in logs and to the caller, rather
+      // than being masked as a nonexistent workspace.
+      if ((err as { id?: string })?.id !== 'MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND') {
+        throw err;
+      }
       return undefined;
     }
   }

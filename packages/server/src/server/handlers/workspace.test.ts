@@ -480,6 +480,25 @@ describe('Workspace Handlers', () => {
       expect(resolver).toHaveBeenCalledTimes(1);
       expect(mastra.listWorkspaces()['mfw-abc-xyz-web-factory']?.source).toBe('resolver');
     });
+
+    it('should propagate non-404 resolver errors (e.g. DB/network failures) instead of masking them as "not configured"', async () => {
+      // A resolver blowup is an operational problem, not a "workspace doesn't
+      // exist" signal. If we swallowed it as `undefined`, prod outages would
+      // silently surface as 404s and be near-impossible to diagnose.
+      const resolver = vi.fn(async () => {
+        throw new Error('database unreachable');
+      });
+
+      const mastra = new Mastra({ logger: false, resolveWorkspaceById: resolver });
+
+      await expect(
+        GET_WORKSPACE_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          workspaceId: 'mfw-abc-xyz-web-factory',
+        }),
+      ).rejects.toThrow('database unreachable');
+      expect(resolver).toHaveBeenCalledTimes(1);
+    });
   });
 
   // ===========================================================================

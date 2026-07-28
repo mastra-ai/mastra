@@ -139,6 +139,28 @@ describe('Mastra lazy workspace resolver', () => {
       expect(resolver).toHaveBeenCalledTimes(2);
     });
 
+    it('does not cache a synchronously-throwing resolver — the next call re-invokes it', async () => {
+      // Regression guard: without a microtask deferral, a sync-throwing resolver
+      // would settle its promise before it was written into the in-flight map,
+      // leaving a stale rejected promise cached and poisoning every retry.
+      const workspace = createWorkspace('sync-throw-workspace');
+      let attempt = 0;
+      const resolver = vi.fn(((_id: string) => {
+        attempt += 1;
+        if (attempt === 1) {
+          throw new Error('sync boom');
+        }
+        return workspace;
+      }) as (id: string) => Workspace);
+
+      const mastra = new Mastra({ logger: false, resolveWorkspaceById: resolver });
+
+      await expect(mastra.resolveWorkspaceById('sync-throw-workspace')).rejects.toThrow('sync boom');
+      const result = await mastra.resolveWorkspaceById('sync-throw-workspace');
+      expect(result).toBe(workspace);
+      expect(resolver).toHaveBeenCalledTimes(2);
+    });
+
     it('does not cache when the resolver returns undefined — the next call re-invokes it', async () => {
       const workspace = createWorkspace('appears-later');
       let attempt = 0;

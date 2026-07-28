@@ -3172,17 +3172,22 @@ export class Mastra<
     }
 
     const existing = this.#inFlightWorkspaceResolutions.get(id);
-    const pending =
-      existing ??
-      (async () => {
+    let pending = existing;
+
+    if (!pending) {
+      // Defer resolver invocation by one microtask so the in-flight promise is
+      // registered in `#inFlightWorkspaceResolutions` *before* the resolver
+      // runs. Without this deferral, a synchronously-throwing resolver would
+      // trigger `finally` (deleting a not-yet-set entry) *before* the outer
+      // `.set()` writes the rejected promise into the map — poisoning every
+      // subsequent call for the same id with a stale rejection.
+      pending = Promise.resolve().then(async () => {
         try {
           return await this.#workspaceResolver!(id, { mastra: this });
         } finally {
           this.#inFlightWorkspaceResolutions.delete(id);
         }
-      })();
-
-    if (!existing) {
+      });
       this.#inFlightWorkspaceResolutions.set(id, pending);
     }
 
