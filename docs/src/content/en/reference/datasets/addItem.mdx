@@ -50,7 +50,7 @@ console.log(item.id)
     type: 'number',
     isOptional: true,
     description:
-      "Execution timeout override in milliseconds. This value takes precedence over the experiment's `itemTimeout` fallback.",
+      "Execution timeout override in milliseconds. Use a positive integer from 1 to 1,800,000 (30 minutes). This value takes precedence over the experiment's `itemTimeout` fallback.",
   },
   {
     name: 'metadata',
@@ -103,7 +103,7 @@ console.log(item.id)
             name: 'timeout',
             type: 'number',
             isOptional: true,
-            description: 'Execution timeout override in milliseconds.',
+            description: 'Execution timeout override in milliseconds, from 1 to 1,800,000 (30 minutes).',
           },
           {
             name: 'metadata',

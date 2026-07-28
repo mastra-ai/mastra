@@ -23,6 +23,8 @@ import {
 } from './datasets';
 import { createTestServerContext } from './test-utils';
 
+const MAX_EXPERIMENT_ITEM_TIMEOUT_MS = 30 * 60 * 1000;
+
 describe('Datasets Handlers', () => {
   let mockStorage: InMemoryStore;
   let mastra: Mastra;
@@ -697,20 +699,36 @@ describe('Datasets Handlers', () => {
       );
     });
 
-    it('validates timeout values as positive integers', () => {
-      expect(addItemBodySchema.safeParse({ input: {}, timeout: 1 }).success).toBe(true);
+    it('validates timeout values as positive integers up to 30 minutes', () => {
+      expect(addItemBodySchema.safeParse({ input: {}, timeout: MAX_EXPERIMENT_ITEM_TIMEOUT_MS }).success).toBe(true);
       expect(addItemBodySchema.safeParse({ input: {}, timeout: 0 }).success).toBe(false);
+      expect(addItemBodySchema.safeParse({ input: {}, timeout: MAX_EXPERIMENT_ITEM_TIMEOUT_MS + 1 }).success).toBe(
+        false,
+      );
       expect(updateItemBodySchema.safeParse({ timeout: 1.5 }).success).toBe(false);
+      expect(updateItemBodySchema.safeParse({ timeout: MAX_EXPERIMENT_ITEM_TIMEOUT_MS + 1 }).success).toBe(false);
       expect(batchInsertItemsBodySchema.safeParse({ items: [{ input: {}, timeout: -1 }] }).success).toBe(false);
+      expect(
+        batchInsertItemsBodySchema.safeParse({
+          items: [{ input: {}, timeout: MAX_EXPERIMENT_ITEM_TIMEOUT_MS + 1 }],
+        }).success,
+      ).toBe(false);
       expect(
         triggerExperimentBodySchema.safeParse({
           targetType: 'agent',
           targetId: 'agent-1',
-          itemTimeout: 5_000,
+          itemTimeout: MAX_EXPERIMENT_ITEM_TIMEOUT_MS,
         }).success,
       ).toBe(true);
       expect(
         triggerExperimentBodySchema.safeParse({ targetType: 'agent', targetId: 'agent-1', itemTimeout: 0 }).success,
+      ).toBe(false);
+      expect(
+        triggerExperimentBodySchema.safeParse({
+          targetType: 'agent',
+          targetId: 'agent-1',
+          itemTimeout: MAX_EXPERIMENT_ITEM_TIMEOUT_MS + 1,
+        }).success,
       ).toBe(false);
     });
   });

@@ -55,7 +55,7 @@ const updated = await dataset.updateItem({
     type: 'number',
     isOptional: true,
     description:
-      "Updated execution timeout override in milliseconds. This value takes precedence over the experiment's `itemTimeout` fallback.",
+      "Updated execution timeout override in milliseconds. Use a positive integer from 1 to 1,800,000 (30 minutes). This value takes precedence over the experiment's `itemTimeout` fallback.",
   },
   {
     name: 'metadata',
