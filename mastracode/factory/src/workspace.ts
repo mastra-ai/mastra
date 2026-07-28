@@ -16,7 +16,12 @@ import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
-import { checkoutSessionBranch, MaterializeError, materializeRepo, runWorktreeSetup } from './integrations/github/sandbox.js';
+import {
+  checkoutSessionBranch,
+  MaterializeError,
+  materializeRepo,
+  runWorktreeSetup,
+} from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
 import type { SandboxBindingStore, SandboxFleet } from './sandbox/fleet.js';
