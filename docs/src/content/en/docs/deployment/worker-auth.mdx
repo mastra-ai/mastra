@@ -7,7 +7,7 @@ packages:
 
 # Worker authentication
 
-When workers run in separate processes from the API, they communicate over HTTP. The orchestration worker calls the API's step execution endpoint, and push-mode brokers (like Google Cloud Pub/Sub) deliver events to the API's event endpoint. Both endpoints require authentication when an auth provider is configured.
+When workers run in separate processes from the API, they communicate over HTTP. The orchestration worker calls the API's step execution endpoint to run workflow steps on the API server. Separately, push-mode PubSub brokers (like Google Cloud Pub/Sub in push mode) can deliver events directly to the API's event endpoint — this is a distinct integration path from the pull-mode worker flow where workers pull events from the broker themselves. Both HTTP endpoints require authentication when an auth provider is configured.
 
 ## How it works
 

@@ -187,7 +187,7 @@ This produces a self-contained `.mastra/output/` directory. See [Deploy a Mastra
 
 ### Docker Compose
 
-The following `docker-compose.yml` runs the fully split topology with Redis Streams and PostgreSQL. It defines six services: PostgreSQL, Redis, the API, and three workers. For Google Cloud Pub/Sub, remove the Redis service and replace `REDIS_URL` with your GCP project credentials. You can also swap PostgreSQL for any [supported storage backend](/docs/deployment/workers#prerequisites-for-split-deployments) — update the database service and `DATABASE_URL` accordingly.
+The following `docker-compose.yml` runs the fully split topology with Redis Streams and PostgreSQL. It defines six services: PostgreSQL, Redis, the API, and three workers. For Google Cloud Pub/Sub, remove the Redis service and its `REDIS_URL` variable, and add your GCP project credentials (e.g., `GCP_PROJECT_ID`) instead. You can also swap PostgreSQL for any [supported storage backend](/docs/deployment/workers#prerequisites-for-split-deployments) — update the database service and `DATABASE_URL` accordingly.
 
 ```yaml title="docker-compose.yml"
 services:
@@ -230,6 +230,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:4111/api/agents']
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   orchestration-worker:
     build: ./app
@@ -240,7 +245,7 @@ services:
       MASTRA_STEP_EXECUTION_URL: http://api:4111/api
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
 
   scheduler-worker:
     build: ./app
@@ -250,7 +255,7 @@ services:
       MASTRA_WORKERS: scheduler
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
 
   background-task-worker:
     build: ./app
@@ -260,7 +265,7 @@ services:
       MASTRA_WORKERS: backgroundTasks
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
 
 volumes:
   pgdata:

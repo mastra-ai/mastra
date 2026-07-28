@@ -168,7 +168,7 @@ The scheduler auto-enables when any workflow declares a `schedule` config. See [
 
 ### OrchestrationWorker
 
-Processes workflow events from the PubSub `workflows` topic. Requires a pull-capable PubSub like `@mastra/redis-streams` or `@mastra/google-cloud-pubsub`.
+Processes workflow events from the PubSub `workflows` topic. Requires a pull-capable PubSub like `@mastra/redis-streams` or `@mastra/google-cloud-pubsub` configured with a pull subscription.
 
 - **Name**: `orchestration`
 - **PubSub topic**: `workflows`
@@ -192,7 +192,7 @@ Executes background tool calls dispatched by agents.
 
 ## Supported storage backends
 
-Workers require a storage backend that implements the `workflows`, `backgroundTasks`, and `schedules` domains. The following backends support all three:
+A deployment running all worker types requires a storage backend that implements the `workflows`, `backgroundTasks`, and `schedules` domains. The `schedules` domain is specifically required by the SchedulerWorker — if you don't use scheduled workflows, backends without it can still support orchestration and background tasks. The following backends support all three:
 
 | Backend | Package |
 | - | - |
@@ -203,7 +203,7 @@ Workers require a storage backend that implements the `workflows`, `backgroundTa
 | Spanner | [`@mastra/spanner`](/reference/storage/spanner) |
 | Convex | [`@mastra/convex`](/reference/storage/convex) |
 
-Other storage backends (Upstash, DynamoDB, Cloudflare D1, ClickHouse, Redis) support workflows and some worker features, but are missing the `schedules` domain required by the scheduler worker. If you don't use scheduled workflows, they may still work for orchestration and background tasks.
+Other storage backends (Upstash, DynamoDB, Cloudflare D1, ClickHouse, Redis) support workflows and some worker features, but are missing the `schedules` domain. They can still be used for orchestration and background task workers if you don't deploy the scheduler.
 
 ## Related
 
