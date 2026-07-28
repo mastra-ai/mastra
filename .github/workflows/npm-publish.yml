@@ -189,6 +189,9 @@ jobs:
         id: check_files
         shell: bash
         run: |
+          git fetch origin main
+          git merge --ff-only origin/main
+
           if [[ -f .changeset/pre.json ]]; then
             echo "files_exists=true" >> "$GITHUB_OUTPUT"
           else
@@ -220,8 +223,6 @@ jobs:
       - name: Exit prerelease mode
         if: steps.check_files.outputs.files_exists == 'true'
         run: |
-          git fetch origin main
-          git merge --ff-only origin/main
           pnpm changeset-cli pre exit
           pnpm changeset-cli version
           git add -A
