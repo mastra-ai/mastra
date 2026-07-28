@@ -17,7 +17,7 @@ Two internal endpoints are involved:
 
 | Endpoint | Used by | Purpose |
 | - | - | - |
-| `POST /api/workflows/:id/runs/:runId/steps/execute` | Orchestration worker via `HttpRemoteStrategy` | Execute a workflow step on the API |
+| `POST /api/workflows/:workflowId/runs/:runId/steps/execute` | Orchestration worker via `HttpRemoteStrategy` | Execute a workflow step on the API |
 | `POST /api/workflows/events` | Push-mode brokers (GCP Pub/Sub, SNS) | Deliver workflow events to the API |
 
 Both routes have `requiresAuth: true`. When no auth provider is configured, they are publicly accessible.

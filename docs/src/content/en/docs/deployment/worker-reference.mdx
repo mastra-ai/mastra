@@ -48,16 +48,6 @@ A bearer token sent by the orchestration worker when calling the API's step exec
 MASTRA_WORKER_AUTH_TOKEN=sk-worker-secret-token
 ```
 
-### `MASTRA_EVENTED_EXECUTION`
-
-When set to `"true"`, workflows use the evented execution engine by default, routing step execution through PubSub events rather than running in-process.
-
-```
-MASTRA_EVENTED_EXECUTION=true
-```
-
-This is automatically set when a pull-capable PubSub (like Redis Streams) is configured and the orchestration worker is present.
-
 ## CLI commands
 
 ### `mastra worker build`
