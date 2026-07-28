@@ -9,6 +9,7 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { Pencil } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { MAX_EXPERIMENT_ITEM_TIMEOUT_MS } from '../../constants';
 import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 
 interface SchemaValidationError {
@@ -261,13 +262,18 @@ export function DatasetItemEditForm({ item, onSuccess, onCancel }: DatasetItemEd
     let parsedTimeout: number | undefined;
     if (timeoutValue.trim()) {
       const timeout = Number(timeoutValue);
-      if (!Number.isFinite(timeout) || !Number.isInteger(timeout) || timeout <= 0) {
-        toast.error('Item timeout must be a positive whole number');
+      if (
+        !Number.isFinite(timeout) ||
+        !Number.isInteger(timeout) ||
+        timeout <= 0 ||
+        timeout > MAX_EXPERIMENT_ITEM_TIMEOUT_MS
+      ) {
+        toast.error('Item timeout must be a positive integer no greater than 1,800,000 milliseconds (30 minutes)');
         return;
       }
       parsedTimeout = timeout;
     } else if (item.timeout !== undefined) {
-      toast.error('An existing item timeout cannot be cleared; enter a positive whole number');
+      toast.error('An existing item timeout cannot be cleared; enter a positive integer no greater than 30 minutes');
       return;
     }
 
@@ -350,12 +356,14 @@ export function DatasetItemEditForm({ item, onSuccess, onCancel }: DatasetItemEd
       <div className="space-y-2">
         <Label htmlFor="edit-item-timeout">Item timeout (ms, optional)</Label>
         <p className="text-xs text-muted-foreground">
-          Overrides the experiment-level item timeout. Enter a positive whole number of milliseconds.
+          Overrides the experiment-level item timeout. Enter a positive integer from 1 to 1,800,000 milliseconds (30
+          minutes).
         </p>
         <Input
           id="edit-item-timeout"
           type="number"
           min={1}
+          max={MAX_EXPERIMENT_ITEM_TIMEOUT_MS}
           step={1}
           value={timeoutValue}
           onChange={event => setTimeoutValue(event.target.value)}
