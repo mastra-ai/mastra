@@ -1,5 +1,5 @@
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
-import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import type { MastraLanguageModel, MastraLegacyLanguageModel } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
@@ -116,6 +116,7 @@ interface DurablePreparationAgent {
     hooks?: ToolHooks;
     delegation?: DelegationConfig;
     methodType?: AgentMethodType;
+    activeModel?: MastraLanguageModel | MastraLegacyLanguageModel;
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
@@ -466,7 +467,15 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     }
   }
 
-  // 7. Convert tools to CoreTool format for execution
+  // 7. Get model (and model list if configured)
+  const model = await typedAgent.getModel({ requestContext });
+  if (!model) {
+    throw new Error('Agent model not available');
+  }
+
+  const modelList = await typedAgent.getModelList(requestContext);
+
+  // 8. Convert tools to CoreTool format for execution
   let tools: Record<string, CoreTool> = {};
   try {
     tools = await typedAgent.getToolsForExecution({
@@ -481,18 +490,11 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       hooks: execOptions?.hooks,
       delegation: execOptions?.delegation,
       methodType,
+      activeModel: model,
     });
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error converting tools: ${error}`);
   }
-
-  // 8. Get model (and model list if configured)
-  const model = await typedAgent.getModel({ requestContext });
-  if (!model) {
-    throw new Error('Agent model not available');
-  }
-
-  const modelList = await typedAgent.getModelList(requestContext);
 
   // 8b. Get scorers configuration
   const overrideScorers = (execOptions as any)?.scorers;

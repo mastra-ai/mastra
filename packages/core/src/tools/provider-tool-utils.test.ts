@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createWebSearchProviderTool } from './builtin/web-search';
 import { findProviderToolByName, inferProviderExecuted } from './provider-tool-utils';
 
 describe('inferProviderExecuted', () => {
@@ -61,16 +62,11 @@ describe('findProviderToolByName', () => {
 
   it('should match versioned Anthropic tools by their name property', () => {
     const toolsWithAnthropic = {
-      anthropicSearch: {
-        type: 'provider-defined' as const,
-        id: 'anthropic.web_search_20250305',
-        name: 'web_search',
-        args: {},
-      },
+      anthropicSearch: createWebSearchProviderTool('anthropic'),
     } as any;
-    // The model returns 'web_search' but getProviderToolName would return 'web_search_20250305'
+    // The model returns 'web_search' but getProviderToolName would return 'web_search_20250305'.
     expect(findProviderToolByName(toolsWithAnthropic, 'web_search')).toBe(toolsWithAnthropic.anthropicSearch);
-    // The versioned name should still match via getProviderToolName
+    // The versioned name should still match via getProviderToolName.
     expect(findProviderToolByName(toolsWithAnthropic, 'web_search_20250305')).toBe(toolsWithAnthropic.anthropicSearch);
   });
 });

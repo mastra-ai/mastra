@@ -55,6 +55,7 @@ import type { AgentSkillsInput } from '../skills/types';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { AgentChunkType, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, ToolHooks, VercelTool, VercelToolV5 } from '../tools';
+import type { WebSearchToolPlaceholder } from '../tools/builtin/web-search';
 import type { ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
@@ -105,7 +106,7 @@ export type ZodSchema = ZodSchemaV3 | ZodTypev4;
  */
 export type ToolsInput = Record<
   string,
-  ToolAction<any, any, any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool
+  ToolAction<any, any, any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool | WebSearchToolPlaceholder
 >;
 
 export type AgentInstructions = SystemMessage;

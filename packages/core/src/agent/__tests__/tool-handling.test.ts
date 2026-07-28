@@ -6,7 +6,9 @@ import {
 } from '@internal/ai-v6/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { MastraError } from '../../error';
 import { RequestContext } from '../../request-context';
+import { createTool, webSearchTool } from '../../tools';
 import { Agent } from '../agent';
 import { getSingleDummyResponseModel } from './mock-model';
 
@@ -605,6 +607,92 @@ function toolhandlingTests(version: 'v1' | 'v2' | 'v3' | 'v4') {
     });
   });
 }
+
+describe('webSearchTool agent resolution', () => {
+  it('resolves the sentinel by value and preserves the user tool key', async () => {
+    const agent = new Agent({
+      id: 'web-search-agent',
+      name: 'web-search-agent',
+      instructions: 'Search the web.',
+      model: 'openai/gpt-5-mini',
+      tools: {
+        searchTheWeb: webSearchTool,
+      },
+    });
+
+    const tools = await agent.getToolsForExecution({ requestContext: new RequestContext() });
+
+    expect(tools.searchTheWeb).toMatchObject({
+      type: 'provider-defined',
+      id: 'openai.web_search',
+      name: 'web_search',
+    });
+    expect(tools.searchTheWeb.execute).toBeUndefined();
+  });
+
+  it('resolves router-string providers from the active model override', async () => {
+    const agent = new Agent({
+      id: 'web-search-agent',
+      name: 'web-search-agent',
+      instructions: 'Search the web.',
+      model: 'openai/gpt-5-mini',
+      tools: {
+        searchTheWeb: webSearchTool,
+      },
+    });
+
+    const tools = await agent.getToolsForExecution({
+      requestContext: new RequestContext(),
+      activeModel: await agent.getModel({ modelConfig: 'anthropic/claude-sonnet-4-20250514', requestContext: new RequestContext() }),
+    });
+
+    expect(tools.searchTheWeb).toMatchObject({
+      type: 'provider-defined',
+      id: 'anthropic.web_search_20250305',
+      name: 'web_search',
+    });
+  });
+
+  it('throws for unsupported providers', async () => {
+    const agent = new Agent({
+      id: 'web-search-agent',
+      name: 'web-search-agent',
+      instructions: 'Search the web.',
+      model: 'unsupported/model',
+      tools: {
+        searchTheWeb: webSearchTool,
+      },
+    });
+
+    await expect(agent.getToolsForExecution({ requestContext: new RequestContext() })).rejects.toThrow(MastraError);
+  });
+
+  it('does not replace custom tools with web search-like names', async () => {
+    const customTool = createTool({
+      id: 'web_search',
+      description: 'Custom web search.',
+      inputSchema: z.object({}),
+      execute: async () => 'custom',
+    });
+    const agent = new Agent({
+      id: 'custom-web-search-agent',
+      name: 'custom-web-search-agent',
+      instructions: 'Search the web.',
+      model: 'openai/gpt-5-mini',
+      tools: {
+        webSearch: customTool,
+        web_search: customTool,
+      },
+    });
+
+    const tools = await agent.getToolsForExecution({ requestContext: new RequestContext() });
+
+    expect(tools.webSearch.id).toBe('web_search');
+    expect(tools.webSearch.execute).toBeTypeOf('function');
+    expect(tools.web_search.id).toBe('web_search');
+    expect(tools.web_search.execute).toBeTypeOf('function');
+  });
+});
 
 toolhandlingTests('v1');
 toolhandlingTests('v2');

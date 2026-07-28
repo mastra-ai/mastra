@@ -192,6 +192,10 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       // the same configuration as the original call site.
       const resolveRequestContext = restoreRequestContext(input.requestContextEntries);
 
+      model =
+        (await (agent as any).getModel?.({ requestContext: resolveRequestContext })) ??
+        resolveModel(input.modelConfig, mastra);
+
       tools = await agent.getToolsForExecution({
         runId,
         threadId: input.state.threadId,
@@ -199,11 +203,8 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
         requestContext: resolveRequestContext,
         memoryConfig: input.state.memoryConfig,
         autoResumeSuspendedTools: input.options?.autoResumeSuspendedTools,
+        activeModel: model,
       });
-
-      model =
-        (await (agent as any).getModel?.({ requestContext: resolveRequestContext })) ??
-        resolveModel(input.modelConfig, mastra);
 
       const rawModelList = await (agent as any).getModelList?.(resolveRequestContext);
       if (rawModelList && Array.isArray(rawModelList)) {
@@ -361,6 +362,9 @@ export async function rebuildRunToolsFromMastra(options: {
     // and memory resolve with the same configuration as the original call.
     const resolveRequestContext = restoreRequestContext(requestContextEntries);
 
+    const activeModel = (await (agent as any).getModel?.({ requestContext: resolveRequestContext })) as
+      | MastraLanguageModel
+      | undefined;
     const tools = await agent.getToolsForExecution({
       runId,
       threadId: state.threadId,
@@ -368,6 +372,7 @@ export async function rebuildRunToolsFromMastra(options: {
       requestContext: resolveRequestContext,
       memoryConfig: state.memoryConfig,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
+      activeModel,
     });
 
     const memory = await (agent as any).getMemory?.({ requestContext: resolveRequestContext });

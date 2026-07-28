@@ -95,6 +95,11 @@ import { ChunkFrom } from '../stream';
 import type { ChunkType, MastraAgentNetworkStream, MastraOnFinishCallback } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
+import {
+  createWebSearchProviderTool,
+  isWebSearchTool,
+  normalizeWebSearchProvider,
+} from '../tools/builtin/web-search';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
 import { isMastraTool, isProviderTool } from '../tools/toolchecks';
@@ -4345,6 +4350,10 @@ export class Agent<
           return;
         }
 
+        if (isWebSearchTool(tool)) {
+          return [k, tool as unknown as CoreTool];
+        }
+
         const options: ToolOptions = {
           name: k,
           runId,
@@ -4484,6 +4493,11 @@ export class Agent<
     if (clientToolsForInput.length > 0) {
       this.logger.debug('Adding client tools', { agent: this.name, tools: Object.keys(clientTools || {}), runId });
       for (const [toolName, tool] of clientToolsForInput) {
+        if (isWebSearchTool(tool)) {
+          toolsForRequest[toolName] = tool as unknown as CoreTool;
+          continue;
+        }
+
         const { execute, ...toolRest } = tool;
         const toolToConvert = isProviderTool(tool) ? tool : toolRest;
         const options: ToolOptions = {
@@ -5809,6 +5823,7 @@ export class Agent<
     hooks?: ToolHooks;
     delegation?: DelegationConfig;
     methodType?: AgentMethodType;
+    activeModel?: MastraLanguageModel | MastraLegacyLanguageModel;
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
     const defaultOptions = await this.getDefaultOptions({ requestContext });
@@ -5844,6 +5859,7 @@ export class Agent<
       // survive when callers pass a partial per-call delegation override.
       delegation: mergedOptions.delegation,
       methodType: options.methodType ?? 'stream',
+      activeModel: options.activeModel,
     });
   }
 
@@ -5866,6 +5882,7 @@ export class Agent<
     backgroundTaskEnabled,
     inputProcessors,
     hooks,
+    activeModel,
     ...rest
   }: {
     toolsets?: ToolsetsInput;
@@ -5882,6 +5899,7 @@ export class Agent<
     backgroundTaskEnabled?: boolean;
     inputProcessors?: InputProcessorOrWorkflow[];
     hooks?: ToolHooks;
+    activeModel?: MastraLanguageModel | MastraLegacyLanguageModel;
   } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
     const observabilityContext = resolveObservabilityContext(rest);
     let mastraProxy = undefined;
@@ -6025,7 +6043,87 @@ export class Agent<
     };
 
     const formattedTools = this.formatTools(allTools);
-    return this.wrapToolsWithHooks(formattedTools, this.resolveToolHooks(hooks));
+    const resolvedTools = await this.resolveWebSearchTools({
+      tools: formattedTools,
+      runId,
+      resourceId,
+      threadId,
+      requestContext,
+      ...observabilityContext,
+      mastraProxy,
+      outputWriter,
+      autoResumeSuspendedTools,
+      backgroundTaskEnabled,
+      model: activeModel,
+    });
+    return this.wrapToolsWithHooks(resolvedTools, this.resolveToolHooks(hooks));
+  }
+
+  private async resolveWebSearchTools({
+    tools,
+    runId,
+    resourceId,
+    threadId,
+    requestContext,
+    mastraProxy,
+    outputWriter,
+    autoResumeSuspendedTools,
+    backgroundTaskEnabled,
+    model: activeModel,
+    ...rest
+  }: {
+    tools: Record<string, CoreTool>;
+    runId?: string;
+    resourceId?: string;
+    threadId?: string;
+    requestContext: RequestContext;
+    mastraProxy?: MastraUnion;
+    outputWriter?: OutputWriter;
+    autoResumeSuspendedTools?: boolean;
+    backgroundTaskEnabled?: boolean;
+    model?: MastraLanguageModel | MastraLegacyLanguageModel;
+  } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
+    const webSearchToolNames = Object.entries(tools)
+      .filter(([, tool]) => isWebSearchTool(tool))
+      .map(([toolName]) => toolName);
+
+    if (!webSearchToolNames.length) {
+      return tools;
+    }
+
+    const observabilityContext = resolveObservabilityContext(rest);
+    const model = activeModel ?? (await this.getModel({ requestContext }));
+    const provider = normalizeWebSearchProvider(model);
+    const memory = await this.getMemory({ requestContext });
+    const resolvedTools = { ...tools };
+
+    for (const toolName of webSearchToolNames) {
+      const providerTool = createWebSearchProviderTool(provider);
+      resolvedTools[toolName] = makeCoreTool(
+        providerTool,
+        {
+          name: toolName,
+          runId,
+          threadId,
+          resourceId,
+          logger: this.logger,
+          mastra: mastraProxy as MastraUnion | undefined,
+          memory,
+          agentName: this.name,
+          agentId: this.id,
+          requestContext,
+          ...observabilityContext,
+          model,
+          outputWriter,
+          tracingPolicy: this.#options?.tracingPolicy,
+        },
+        undefined,
+        autoResumeSuspendedTools,
+        backgroundTaskEnabled,
+      );
+    }
+
+    return resolvedTools;
   }
 
   /**
