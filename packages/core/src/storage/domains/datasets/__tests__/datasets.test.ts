@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { MAX_EXPERIMENT_ITEM_TIMEOUT_MS } from '../../../../datasets/validation';
 import { InMemoryDB } from '../../inmemory-db';
 import { DatasetsInMemory } from '../inmemory';
 
@@ -189,6 +190,36 @@ describe('DatasetsInMemory', () => {
           timeout: 2_000,
         }),
       ).rejects.toMatchObject({ id: 'DATASET_ITEM_IDENTITY_CONFLICT' });
+    });
+
+    it.each([0, -1, 1.5, MAX_EXPERIMENT_ITEM_TIMEOUT_MS + 1])(
+      'rejects invalid timeout %s across item writes',
+      async timeout => {
+        const dataset = await storage.createDataset({ name: 'test' });
+
+        await expect(
+          storage.addItem({ datasetId: dataset.id, input: { prompt: 'add' }, timeout }),
+        ).rejects.toMatchObject({ id: 'EXPERIMENT_TIMEOUT_INVALID' });
+
+        const item = await storage.addItem({ datasetId: dataset.id, input: { prompt: 'valid' }, timeout: 1_000 });
+        await expect(storage.updateItem({ id: item.id, datasetId: dataset.id, timeout })).rejects.toMatchObject({
+          id: 'EXPERIMENT_TIMEOUT_INVALID',
+        });
+        await expect(
+          storage.batchInsertItems({ datasetId: dataset.id, items: [{ input: { prompt: 'batch' }, timeout }] }),
+        ).rejects.toMatchObject({ id: 'EXPERIMENT_TIMEOUT_INVALID' });
+      },
+    );
+
+    it('accepts the maximum item timeout', async () => {
+      const dataset = await storage.createDataset({ name: 'test' });
+      const item = await storage.addItem({
+        datasetId: dataset.id,
+        input: { prompt: 'hello' },
+        timeout: MAX_EXPERIMENT_ITEM_TIMEOUT_MS,
+      });
+
+      expect(item.timeout).toBe(MAX_EXPERIMENT_ITEM_TIMEOUT_MS);
     });
 
     it('addItem rejects circular payloads before idempotency comparison', async () => {

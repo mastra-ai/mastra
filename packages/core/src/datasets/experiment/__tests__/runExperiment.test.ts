@@ -8,6 +8,7 @@ import { DatasetsInMemory } from '../../../storage/domains/datasets/inmemory';
 import { ExperimentsInMemory } from '../../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../../storage/domains/inmemory-db';
 import { createStep, createWorkflow } from '../../../workflows';
+import { MAX_EXPERIMENT_ITEM_TIMEOUT_MS } from '../../validation';
 import { runExperiment } from '../index';
 
 // Mock agent that returns predictable output
@@ -369,6 +370,60 @@ describe('runExperiment', () => {
   });
 
   describe('item timeouts', () => {
+    it.each([0, -1, 1.5, MAX_EXPERIMENT_ITEM_TIMEOUT_MS + 1])(
+      'rejects invalid inline timeout %s before execution',
+      async timeout => {
+        const task = vi.fn().mockResolvedValue('done');
+
+        await expect(
+          runExperiment(mastra, {
+            data: [{ input: 'invalid-timeout', timeout }],
+            task,
+          }),
+        ).rejects.toMatchObject({ id: 'EXPERIMENT_TIMEOUT_INVALID' });
+        expect(task).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each([0, -1, 1.5, MAX_EXPERIMENT_ITEM_TIMEOUT_MS + 1])(
+      'rejects invalid run-level timeout %s before execution',
+      async itemTimeout => {
+        const task = vi.fn().mockResolvedValue('done');
+
+        await expect(
+          runExperiment(mastra, {
+            data: [{ input: 'invalid-timeout' }],
+            itemTimeout,
+            task,
+          }),
+        ).rejects.toMatchObject({ id: 'EXPERIMENT_TIMEOUT_INVALID' });
+        expect(task).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects an invalid timeout returned by persisted storage', async () => {
+      const persistedItems = await datasetsStorage.getItemsByVersion({ datasetId, version: 2 });
+      vi.spyOn(datasetsStorage, 'getItemsByVersion').mockResolvedValue(
+        persistedItems.map(item => ({ ...item, timeout: 0 })),
+      );
+      const task = vi.fn().mockResolvedValue('done');
+
+      await expect(runExperiment(mastra, { datasetId, task })).rejects.toMatchObject({
+        id: 'EXPERIMENT_TIMEOUT_INVALID',
+      });
+      expect(task).not.toHaveBeenCalled();
+    });
+
+    it('accepts the maximum timeout for item overrides and the run-level fallback', async () => {
+      const result = await runExperiment(mastra, {
+        data: [{ input: 'override', timeout: MAX_EXPERIMENT_ITEM_TIMEOUT_MS }, { input: 'fallback' }],
+        itemTimeout: MAX_EXPERIMENT_ITEM_TIMEOUT_MS,
+        task: async ({ input }) => input,
+      });
+
+      expect(result.succeededCount).toBe(2);
+    });
+
     it('applies different persisted timeout overrides within one run', async () => {
       const timeoutDataset = await datasetsStorage.createDataset({ name: 'Stored timeout overrides' });
       await datasetsStorage.addItem({

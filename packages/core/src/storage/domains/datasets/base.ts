@@ -1,4 +1,8 @@
-import { getSchemaValidator, SchemaUpdateValidationError } from '../../../datasets/validation';
+import {
+  getSchemaValidator,
+  SchemaUpdateValidationError,
+  validateExperimentTimeout,
+} from '../../../datasets/validation';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type {
   DatasetRecord,
@@ -176,6 +180,7 @@ export abstract class DatasetsStorage extends StorageDomain {
     }
 
     const { id: _id, datasetId: _datasetId, filters: _filters, ...payload } = args;
+    validateExperimentTimeout(args.timeout, 'item.timeout');
     validateDatasetItemPayloadSerialization(payload, 'item');
 
     // Validate new values against schemas if enabled
@@ -242,6 +247,7 @@ export abstract class DatasetsStorage extends StorageDomain {
 
     for (const [index, itemData] of input.items.entries()) {
       validateDatasetItemExternalId(itemData.externalId);
+      validateExperimentTimeout(itemData.timeout, `items[${index}].timeout`);
       validateDatasetItemPayloadSerialization(itemData, `items[${index}]`);
       if (dataset.inputSchema) {
         validator.validate(itemData.input, dataset.inputSchema, 'input', `${cacheKey}:input`);
