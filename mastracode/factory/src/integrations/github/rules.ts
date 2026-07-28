@@ -367,6 +367,8 @@ export interface ReconcileRepository {
 }
 
 export interface ReconcileSweepSummary {
+  /** Factory-configured repositories included in the sweep. */
+  repositories: number;
   /** PRs whose live state was fetched from GitHub. */
   checked: number;
   /** Missed merges replayed through the rules ingress. */
@@ -447,7 +449,7 @@ export function createGithubPullRequestReconciler(
 ): GithubPullRequestReconciler {
   const rules = new GithubRules(options);
   return async repositories => {
-    const summary: ReconcileSweepSummary = { checked: 0, merged: 0, closed: 0, failed: 0, errors: [] };
+    const summary: ReconcileSweepSummary = { repositories: 0, checked: 0, merged: 0, closed: 0, failed: 0, errors: [] };
     const recordFailure = (repository: ReconcileRepository, error: unknown, pullRequestNumber?: number) => {
       summary.failed += 1;
       if (summary.errors.length < RECONCILE_ERROR_SAMPLE_LIMIT) {
@@ -458,7 +460,19 @@ export function createGithubPullRequestReconciler(
         });
       }
     };
-    for (const repository of repositories) {
+    // An installation can expose hundreds of repositories; only the ones
+    // actually linked to a factory project can have cards to reconcile, so
+    // scope the sweep to those up front instead of probing each repository.
+    const configured = new Set(
+      (await options.sourceControl.projectRepositories.listConfiguredExternalKeys()).map(
+        key => `${key.installationExternalId}\u0000${key.repositoryExternalId}`,
+      ),
+    );
+    const scoped = repositories.filter(repository =>
+      configured.has(`${repository.installationId}\u0000${repository.id}`),
+    );
+    summary.repositories = scoped.length;
+    for (const repository of scoped) {
       // One broken repository (or a failing token exchange for its
       // installation) must not abort the sweep for the others.
       let numbers: Set<number>;

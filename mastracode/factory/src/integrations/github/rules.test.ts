@@ -641,7 +641,7 @@ describe('createGithubPullRequestReconciler', () => {
     const fetchPullRequest = vi.fn(async () => mergedState(17));
     const reconcile = createReconciler(context, fetchPullRequest);
 
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ checked: 1, merged: 1, closed: 0, failed: 0, errors: [] });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 1, merged: 1, closed: 0, failed: 0, errors: [] });
     expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 17 });
     const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
     expect(decisions).toEqual([
@@ -653,7 +653,7 @@ describe('createGithubPullRequestReconciler', () => {
 
     // A later sweep re-checks live state but the ingress replays: no
     // duplicate decisions are committed for the same merge.
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ checked: 1, merged: 1, closed: 0, failed: 0, errors: [] });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 1, merged: 1, closed: 0, failed: 0, errors: [] });
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(1);
   });
 
@@ -664,7 +664,7 @@ describe('createGithubPullRequestReconciler', () => {
     const fetchPullRequest = vi.fn(async () => ({ ...mergedState(18), state: 'open' as const, merged: false }));
     const reconcile = createReconciler(context, fetchPullRequest);
 
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ checked: 1, merged: 0, closed: 0, failed: 0, errors: [] });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 1, merged: 0, closed: 0, failed: 0, errors: [] });
     expect(fetchPullRequest).toHaveBeenCalledTimes(1);
     expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 18 });
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
@@ -676,7 +676,7 @@ describe('createGithubPullRequestReconciler', () => {
     const fetchPullRequest = vi.fn(async () => mergedState(19));
     const reconcile = createReconciler(context, fetchPullRequest);
 
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ checked: 0, merged: 0, closed: 0, failed: 0, errors: [] });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 0, merged: 0, closed: 0, failed: 0, errors: [] });
     expect(fetchPullRequest).not.toHaveBeenCalled();
   });
 
@@ -687,6 +687,7 @@ describe('createGithubPullRequestReconciler', () => {
     const reconcile = createReconciler(context, fetchPullRequest);
 
     await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
       checked: 1,
       merged: 0,
       closed: 1,
@@ -717,6 +718,7 @@ describe('createGithubPullRequestReconciler', () => {
     const reconcile = createReconciler(context, fetchPullRequest);
 
     await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
       checked: 1,
       merged: 1,
       closed: 0,
@@ -736,5 +738,39 @@ describe('createGithubPullRequestReconciler', () => {
         decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
       }),
     ]);
+  });
+
+  it('only sweeps repositories linked to a factory project', async () => {
+    const context = await setup('read');
+    await createCard(context, { number: 17 });
+    const fetchPullRequest = vi.fn(async () => mergedState(17));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    // The installation exposes many repositories, but only acme/repo is
+    // linked to a factory project — the others must not be probed at all.
+    const unconfigured = [
+      { id: 11, fullName: 'acme/other', installationId: 7 },
+      { id: 12, fullName: 'acme/archive', installationId: 7 },
+    ];
+    await expect(reconcile(unconfigured)).resolves.toEqual({
+      repositories: 0,
+      checked: 0,
+      merged: 0,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
+    expect(fetchPullRequest).not.toHaveBeenCalled();
+
+    await expect(reconcile([...unconfigured, repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 1,
+      merged: 1,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
+    expect(fetchPullRequest).toHaveBeenCalledTimes(1);
+    expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 17 });
   });
 });

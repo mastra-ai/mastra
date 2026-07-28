@@ -287,12 +287,14 @@ export class PlatformGithubEventWorker extends MastraWorker {
       return;
     }
     this.deps?.logger.debug('Platform GitHub pull request reconcile sweep starting', {
-      repositories: targets.map(target => target.fullName),
+      candidateRepositories: targets.length,
     });
     const startedAt = Date.now();
     try {
+      // `counts.repositories` is the factory-configured subset actually swept;
+      // `candidateRepositories` is everything the installations exposed.
       const { errors, ...counts } = await this.#reconcileFactoryState(targets);
-      const context = { ...counts, repositories: targets.length, durationMs: Date.now() - startedAt };
+      const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
       if (counts.failed > 0) {
         this.deps?.logger.warn('Platform GitHub pull request reconcile sweep completed with failures', {
           ...context,
