@@ -134,7 +134,7 @@ Split worker deployments require:
 - **Shared storage**: All processes must connect to the same database. The storage backend must support the `workflows`, `backgroundTasks`, and `schedules` domains. The following backends support all three:
   - [`PostgresStore`](/reference/storage/postgresql)
   - [`LibSQLStore`](/reference/storage/libsql)
-  - [`MySQLStore`](/reference/storage/mysql)
+  - `MySQLStore` (`@mastra/mysql`)
   - [`MongoDBStore`](/reference/storage/mongodb)
   - [`SpannerStore`](/reference/storage/spanner)
   - [`ConvexStore`](/reference/storage/convex)
