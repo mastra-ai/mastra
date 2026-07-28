@@ -1,34 +1,13 @@
-Web UI (Vite HMR against the web host API): pnpm --filter ./mastracode/factory-ui web
-Build: pnpm --filter ./mastracode/factory-ui build
-Typecheck: pnpm --filter ./mastracode/factory-ui typecheck
-Unit tests: pnpm --filter ./mastracode/factory-ui test:unit
-MSW UI tests: pnpm --filter ./mastracode/factory-ui test:msw
+Web UI (Vite against the web host API): `pnpm --filter ./mastracode/factory-ui web`
+Build: `pnpm --filter ./mastracode/factory-ui build`
+Typecheck: `pnpm --filter ./mastracode/factory-ui typecheck`
+Unit tests: `pnpm --filter ./mastracode/factory-ui test:unit`
+MSW UI tests: `pnpm --filter ./mastracode/factory-ui test:msw`
 
-This package owns the MastraCode browser application: React SPA, client data
-layer, Vite config, and UI tests. Its build produces the Factory SPA bundled by
-the Mastra CLI; it is not a runtime dependency of the web host. For split UI/API development, run
-`pnpm --dir mastracode/web api` first, then `pnpm --dir mastracode/factory-ui web`.
-The `web` script reads the host `.env`, runs Vite on :5173, and proxies to the
-host API on :4111.
+This package owns the MastraCode React SPA, client data layer, Vite config, and UI tests. Its build is bundled into the Mastra CLI, not used by the web host at runtime. For split UI/API development, run `pnpm --dir mastracode/web api`, then `pnpm --dir mastracode/factory-ui web`; Vite runs on :5173 and proxies to :4111.
 
-Build upstream workspace deps first (playground-ui, client-js, factory, etc.):
-`pnpm turbo build --filter ./mastracode/factory-ui` handles the graph.
+Build workspace dependencies with `pnpm turbo build --filter ./mastracode/factory-ui`.
 
-PRIMARY testing strategy: Vitest + MSW + real @mastra/client-js + React Query.
-Drive the real fetch/SDK transport and the real React Query cache; only the
-network boundary is mocked, via MSW. Never `vi.mock` our own hooks, services,
-or auth gating.
+Primary tests use Vitest, MSW, real `@mastra/client-js`, and React Query. Mock only the network boundary—never our hooks, services, or auth gating. Unit tests run from `vitest.config.ts`; MSW UI tests use `e2e/ui/vitest.config.ts`, `e2e/ui/msw-server.ts`, and `e2e/ui/render.tsx`. Use `waitForMutationsIdle` for query chains.
 
-- Unit tests (`*.test.ts`) run in node environment via `vitest.config.ts`.
-- MSW UI tests (`*.msw.test.tsx`) run in jsdom via `e2e/ui/vitest.config.ts`
-  with shared handlers in `e2e/ui/msw-server.ts` and render helpers in
-  `e2e/ui/render.tsx` (real ThemeProvider + TooltipProvider +
-  QueryClientProvider + ApiConfigProvider stack).
-- The two suites have disjoint globs — they never cross-pick each other's files.
-- Use `waitForMutationsIdle` (double-idle assert) to avoid false passes in
-  query chains with brief gaps.
-
-Source layout preserves `src` and `src/ui` so the 200+ reciprocal
-imports between hooks, services, and components stay relative. The `src/ui`
-tsconfig has paths workarounds for `react` and `class-variance-authority` types
-that playground-ui's d.ts files reference from the pnpm store.
+Keep the `src`/`src/ui` layout: it avoids churn across 200+ reciprocal imports. `src/ui/tsconfig.json` includes type-resolution workarounds for Playground UI declarations.
