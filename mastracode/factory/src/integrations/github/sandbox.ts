@@ -299,7 +299,18 @@ export async function materializeRepo(options: {
       }
       const pull = await sh(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`, { phase: 'repository pull' });
       if (pull.exitCode !== 0) {
-        throw classifyGitFailure(pull, 'pull-failed');
+        if (!isBenignNonFastForward(pull)) {
+          throw classifyGitFailure(pull, 'pull-failed');
+        }
+        // The workdir was left on a session's working branch that can't be
+        // fast-forwarded (diverged from upstream, no upstream, or detached
+        // HEAD). That branch holds the session's local work — never rebase or
+        // reset it here. The checkout is still perfectly usable; leave it
+        // as-is and let the session reconcile with the remote itself.
+        reportProgress(onProgress, {
+          phase: 'pulling',
+          message: 'Workspace has local changes that diverge from the remote — keeping them as-is.',
+        });
       }
     }
     succeeded = true;
@@ -400,6 +411,22 @@ async function scrubRemote(
       'pull-failed',
     );
   }
+}
+
+/**
+ * True when a failed `git pull --ff-only` on re-open just means the current
+ * branch can't be fast-forwarded — not that anything is broken. The shared
+ * workdir is routinely left on a session's working branch, which may have
+ * local commits diverging from upstream, no upstream at all (session branches
+ * are created from `FETCH_HEAD`), or a detached HEAD. In all of those cases
+ * the checkout is intact and holds the session's work; materialization must
+ * keep it rather than fail the workspace open.
+ */
+function isBenignNonFastForward(result: SandboxCommandResult): boolean {
+  const output = `${result.stderr || ''}\n${result.stdout || ''}`;
+  return /Not possible to fast-forward|Diverging branches can't be fast-forwarded|no tracking information for the current branch|You are not currently on a branch/i.test(
+    output,
+  );
 }
 
 /**
