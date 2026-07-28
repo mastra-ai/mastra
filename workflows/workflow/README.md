@@ -98,7 +98,7 @@ const approval = createStep({
 await run.resume({ step: 'approval', resumeData: { approved: true } });
 ```
 
-Under the hood a suspended step waits on a Workflow SDK hook whose token is `` `mastra:${runId}:${stepId}` `` (with `:${index}` appended inside a `foreach`). That token shape is part of this package's public contract, so you can also resume from anywhere that knows the run and step id — a webhook handler, say — without holding the `Run` object:
+Under the hood a suspended step waits on a Workflow SDK hook whose token is `` `mastra:${runId}:${stepId}` ``. Inside a `.foreach()` the element's index is appended — `` `mastra:${runId}:${stepId}:${index}` `` — because several copies of one step can be suspended at once; the index is zero-based and counts across the whole array, not within a concurrency batch. That token shape is part of this package's public contract, so you can also resume from anywhere that knows the run and step id — a webhook handler, say — without holding the `Run` object:
 
 ```ts
 import { resumeHook } from 'workflow/api';
@@ -111,9 +111,27 @@ await resumeHook(`mastra:${runId}:approval`, { approved: true });
 `run.resume()` works from a process that did not start the run — an API route resuming a run a background job began, for example — as long as your `Mastra` instance has **storage** configured:
 
 ```ts
+import { Mastra } from '@mastra/core/mastra';
+import { LibSQLStore } from '@mastra/libsql';
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: process.env.DATABASE_URL!,
+    authToken: process.env.DATABASE_AUTH_TOKEN,
+  }),
+  workflows: { approvalWorkflow },
+});
+```
+
+Then, from any process:
+
+```ts
 const run = await mastra.getWorkflow('approvalWorkflow').createRun({ runId });
 const result = await run.resume({ step: 'approval', resumeData: { approved: true } });
 ```
+
+Point `DATABASE_URL` at a shared database rather than a `file:` path if you deploy to serverless. The mapping is only useful when every process reads the same store, and a file-backed database gives each invocation its own empty copy — which surfaces as exactly the `its Workflow SDK run id is unknown` error the storage is there to prevent.
 
 The Workflow SDK assigns each run its own id and will not accept Mastra's, so the two ids have to be mapped somewhere. This package records the mapping on the Mastra run snapshot, which is also what makes `run.watch()` and `run.cancel()` work from a second process. Without storage there is nowhere to keep it, and those three methods throw an error saying so rather than silently doing nothing.
 
