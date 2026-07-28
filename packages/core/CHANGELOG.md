@@ -1,5 +1,29 @@
 # @mastra/core
 
+## 1.54.0-alpha.4
+
+### Minor Changes
+
+- Added `smoothStream()` and experimental agent stream transforms for buffering text and reasoning deltas into consistent, delayed chunks. ([#19792](https://github.com/mastra-ai/mastra/pull/19792))
+
+  ```typescript
+  const stream = result.fullStream.pipeThrough(smoothStream());
+  ```
+
+### Patch Changes
+
+- Added a `requireDelivery` option to agent-controller session signals. When set, `session.sendSignal` waits for the agent to accept the wake signal and rejects if delivery fails, instead of resolving optimistically. This lets callers that need guaranteed delivery (like the Factory rule dispatcher) detect and retry failed kickoffs. ([#20294](https://github.com/mastra-ai/mastra/pull/20294))
+
+  ```ts
+  const result = session.sendSignal(
+    { id, type: 'user', tagName: 'user', contents: message },
+    { requestContext, requireDelivery: true },
+  );
+  // Resolves only once the agent has accepted the signal (`action` is
+  // 'wake' or 'deliver'); rejects if the wake never reaches an agent.
+  const { action, runId } = await result.accepted;
+  ```
+
 ## 1.54.0-alpha.3
 
 ### Patch Changes

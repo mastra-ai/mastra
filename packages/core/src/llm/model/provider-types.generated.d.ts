@@ -2071,12 +2071,10 @@ export type ProviderModelsMap = {
     'deepseek-ai/deepseek-v4-flash',
     'deepseek-ai/deepseek-v4-pro',
     'google/gemma-4-31b-it',
-    'moonshotai/kimi-k2.6',
     'moonshotai/kimi-k2.7-code',
     'moonshotai/kimi-k3',
     'openai/gpt-oss-120b',
     'qwen/qwen3.6-27b',
-    'zai-org/glm-5.1',
     'zai-org/glm-5.2',
   ];
   readonly pioneer: readonly [
@@ -2789,6 +2787,7 @@ export type ProviderModelsMap = {
     'mistralai/Mistral-Medium-3.5-128B',
     'mistralai/Mistral-Small-3.2-24B-Instruct-2506',
     'moonshotai/Kimi-K2.6',
+    'moonshotai/Kimi-K3',
     'openai/gpt-oss-120b',
     'zai-org/GLM-4.7',
     'zai-org/GLM-5.2',
@@ -3757,7 +3756,6 @@ export type ProviderModelsMap = {
     'google/gemini-2.5-pro',
     'google/gemini-3-flash',
     'google/gemini-3-pro-image',
-    'google/gemini-3-pro-preview',
     'google/gemini-3.1-flash-image',
     'google/gemini-3.1-flash-image-preview',
     'google/gemini-3.1-flash-lite',
@@ -5016,7 +5014,21 @@ export type ProviderModelsMap = {
     'text-embedding-3-small',
     'text-embedding-ada-002',
   ];
-  readonly xpersona: readonly ['claude-fable-5', 'xpersona-frieren-coder', 'xpersona-gpt-5.5'];
+  readonly xpersona: readonly [
+    'claude-fable-5',
+    'claude-haiku-4-5',
+    'claude-opus-4-8',
+    'claude-sonnet-4-6',
+    'gemini-3.5-flash',
+    'gpt-5.4',
+    'gpt-5.4-mini',
+    'gpt-5.5',
+    'gpt-5.6',
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
+    'xpersona-frieren-coder',
+    'xpersona-gpt-5.5',
+  ];
   readonly sarvam: readonly ['sarvam-105b', 'sarvam-30b'];
   readonly zai: readonly [
     'glm-4.5',
