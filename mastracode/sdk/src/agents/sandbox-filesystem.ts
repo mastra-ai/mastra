@@ -87,9 +87,23 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   /**
    * Resolve a workspace path to an absolute path inside the sandbox, enforcing
    * that it stays within the workdir.
+   *
+   * Accepts both workspace-relative paths (`src/foo.ts`, `/src/foo.ts`) and
+   * absolute sandbox paths that already live under the workdir — the agent's
+   * prompt advertises the workdir as its working directory, so tools are
+   * routinely called with fully-qualified paths like `<workdir>/src/foo.ts`.
    */
   private resolve(inputPath: string): string {
-    const rel = inputPath.startsWith('/') ? inputPath.slice(1) : inputPath;
+    const base = posixPath.normalize(this.basePath);
+    const normalizedInput = posixPath.normalize(inputPath);
+    const rel =
+      normalizedInput === base
+        ? ''
+        : normalizedInput.startsWith(`${base}/`)
+          ? normalizedInput.slice(base.length + 1)
+          : inputPath.startsWith('/')
+            ? inputPath.slice(1)
+            : inputPath;
     const resolved = posixPath.normalize(posixPath.join(this.basePath, rel));
     const root = posixPath.normalize(this.basePath);
     if (resolved !== root && !resolved.startsWith(`${root}/`)) {
@@ -249,16 +263,20 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     const abs = this.resolve(path);
     await this.assertContainedRealpath(abs, path);
     if (options?.recursive) {
-      // Use find for recursive listings; emit "type\tpath".
+      // Recursive listing emitting "type\tpath". `find -printf` is GNU-only
+      // (fails on macOS/BSD hosts backing a local sandbox), so classify each
+      // entry with a portable shell loop instead.
       const result = await this.exec(
-        `find ${shellQuote(abs)} -mindepth 1 ${options.maxDepth ? `-maxdepth ${Number(options.maxDepth)} ` : ''}-printf '%y\\t%p\\n' 2>/dev/null`,
+        `test -d ${shellQuote(abs)} && find ${shellQuote(abs)} -mindepth 1 ${options.maxDepth ? `-maxdepth ${Number(options.maxDepth)} ` : ''}2>/dev/null | while IFS= read -r f; do if [ -d "$f" ]; then printf 'd\\t%s\\n' "$f"; else printf 'f\\t%s\\n' "$f"; fi; done`,
       );
       if (result.exitCode !== 0) throw new Error(`Directory not found: ${path}`);
       return this.parseFindOutput(result.stdout, abs, options);
     }
-    // Non-recursive: list with name + type via a portable loop.
+    // Non-recursive: list with name + type via a portable loop. Use printf,
+    // not echo — bash-as-/bin/sh (macOS local sandboxes) does not expand \t
+    // in echo arguments.
     const result = await this.exec(
-      `cd ${shellQuote(abs)} 2>/dev/null && for f in * .[!.]*; do [ -e "$f" ] || continue; if [ -d "$f" ]; then echo "d\t$f"; else echo "f\t$f"; fi; done`,
+      `cd ${shellQuote(abs)} 2>/dev/null && for f in * .[!.]*; do [ -e "$f" ] || continue; if [ -d "$f" ]; then printf 'd\\t%s\\n' "$f"; else printf 'f\\t%s\\n' "$f"; fi; done`,
     );
     if (result.exitCode !== 0) throw new Error(`Directory not found: ${path}`);
     return this.parseListOutput(result.stdout, options);
@@ -312,13 +330,19 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   async stat(path: string): Promise<FileStat> {
     const abs = this.resolve(path);
     await this.assertContainedRealpath(abs, path);
-    // %F=type, %s=size, %X=atime, %Y=mtime (epoch seconds), %W=birth (or -1).
-    const result = await this.exec(`stat -c '%F\\t%s\\t%Y\\t%W' ${shellQuote(abs)}`);
+    // GNU stat: %F=type, %s=size, %Y=mtime (epoch seconds), %W=birth (or -1).
+    // BSD/macOS stat (local sandbox hosts) rejects `-c`; fall back to its
+    // `-f` format with the same field order (%HT=type, %z=size, %m=mtime,
+    // %B=birth). Delimit with `|` — neither stat interprets `\t` escapes in
+    // its format string.
+    const result = await this.exec(
+      `stat -c '%F|%s|%Y|%W' ${shellQuote(abs)} 2>/dev/null || stat -f '%HT|%z|%m|%B' ${shellQuote(abs)}`,
+    );
     if (result.exitCode !== 0) {
       throw new Error(`Path not found: ${path}`);
     }
-    const [kind, sizeStr, mtimeStr, ctimeStr] = result.stdout.trim().split('\t');
-    const type = kind && kind.includes('directory') ? 'directory' : 'file';
+    const [kind, sizeStr, mtimeStr, ctimeStr] = result.stdout.trim().split('|');
+    const type = kind && kind.toLowerCase().includes('directory') ? 'directory' : 'file';
     const size = Number(sizeStr) || 0;
     const mtime = Number(mtimeStr) || 0;
     const ctime = Number(ctimeStr);

@@ -122,7 +122,7 @@ describe('SandboxFilesystem', () => {
   it('stats a file and returns parsed metadata', async () => {
     const { fs } = makeFs(script => {
       if (script.startsWith('readlink')) return { exitCode: 0, stdout: `${WORKDIR}/a.txt`, stderr: '' };
-      return { exitCode: 0, stdout: 'regular file\t42\t1700000000\t-1\n', stderr: '' };
+      return { exitCode: 0, stdout: 'regular file|42|1700000000|-1\n', stderr: '' };
     });
 
     const stat = await fs.stat('/a.txt');
@@ -131,6 +131,63 @@ describe('SandboxFilesystem', () => {
     expect(stat.size).toBe(42);
     expect(stat.name).toBe('a.txt');
     expect(stat.path).toBe('/a.txt');
+  });
+
+  it('accepts absolute paths that already live under the workdir', async () => {
+    // The agent prompt advertises the workdir as the working directory, so
+    // tools are called with fully-qualified paths. These must resolve in
+    // place instead of being re-joined onto the workdir.
+    const { sandbox, fs } = makeFs(script => {
+      if (script.startsWith('readlink')) return { exitCode: 0, stdout: `${WORKDIR}/notes/review.md`, stderr: '' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await fs.writeFile(`${WORKDIR}/notes/review.md`, 'verdict');
+
+    const writeCall = sandbox.calls.find(c => c.includes('base64 -d >'));
+    expect(writeCall).toContain(`base64 -d > '${WORKDIR}/notes/review.md'`);
+    expect(writeCall).not.toContain(`${WORKDIR}${WORKDIR}`);
+  });
+
+  it('normalizes .. segments inside an absolute workdir path', async () => {
+    const { sandbox, fs } = makeFs(script => {
+      if (script.startsWith('readlink')) return { exitCode: 0, stdout: `${WORKDIR}/notes.txt`, stderr: '' };
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await fs.readFile(`${WORKDIR}/src/../notes.txt`);
+    expect(sandbox.calls.some(c => c.includes(`base64 < '${WORKDIR}/notes.txt'`))).toBe(true);
+  });
+
+  it('falls back to BSD stat when GNU stat is unavailable', async () => {
+    const { fs } = makeFs(script => {
+      if (script.startsWith('readlink')) return { exitCode: 0, stdout: `${WORKDIR}/dir`, stderr: '' };
+      // Simulate macOS: the `stat -c || stat -f` compound runs BSD output.
+      if (script.includes('stat -c')) {
+        expect(script).toContain('stat -f');
+        return { exitCode: 0, stdout: 'Directory|128|1700000000|1690000000\n', stderr: '' };
+      }
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    const stat = await fs.stat('/dir');
+    expect(stat.type).toBe('directory');
+  });
+
+  it('lists recursively without GNU find -printf', async () => {
+    const { sandbox, fs } = makeFs(script => {
+      if (script.startsWith('readlink')) return { exitCode: 0, stdout: WORKDIR, stderr: '' };
+      return { exitCode: 0, stdout: `d\t${WORKDIR}/src\nf\t${WORKDIR}/src/index.ts\n`, stderr: '' };
+    });
+
+    const entries = await fs.readdir('/', { recursive: true });
+
+    expect(entries).toEqual([
+      { name: 'src', type: 'directory' },
+      { name: 'src/index.ts', type: 'file' },
+    ]);
+    const findCall = sandbox.calls.find(c => c.includes('find '));
+    expect(findCall).not.toContain('-printf');
   });
 
   it('removes a file via rm', async () => {
