@@ -127,8 +127,8 @@ interface CoverageVerdict {
  *
  * Coverage is measured against the questions that were asked, not against the
  * verdicts that came back, so a judge that answers only some of them cannot
- * raise the score by staying silent. Extra verdicts are dropped for the same
- * reason.
+ * raise the score by staying silent. A question with no verdict at all counts
+ * as missing, and extra verdicts are dropped.
  *
  * @returns Both axis ratios, the claims and questions behind them, and whether
  * there was anything to score at all
@@ -145,13 +145,14 @@ const measureAxes = ({
   maxQuestions: number;
 }) => {
   const totalQuestions = Math.min(questions.length, maxQuestions);
+  const judgedQuestions = questions.slice(0, totalQuestions);
   const judgedCoverage = coverage.slice(0, totalQuestions);
 
   return {
     alignmentScore: ratio(alignment.filter(verdict => verdict.supported).length, alignment.length),
     coverageScore: ratio(judgedCoverage.filter(verdict => verdict.answered).length, totalQuestions),
     unsupportedClaims: alignment.filter(verdict => !verdict.supported).map(verdict => verdict.claim),
-    missingQuestions: judgedCoverage.filter(verdict => !verdict.answered).map(verdict => verdict.question),
+    missingQuestions: judgedQuestions.filter((_, index) => !judgedCoverage[index]?.answered),
     isScorable: alignment.length > 0 && totalQuestions > 0,
   };
 };

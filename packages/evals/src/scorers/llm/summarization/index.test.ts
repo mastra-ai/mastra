@@ -404,18 +404,25 @@ describe('createSummarizationScorer', () => {
     it('counts unanswered questions as missing when the judge returns too few verdicts', async () => {
       const claims = ['Claim A'];
       const questions = ['Question A', 'Question B', 'Question C', 'Question D'];
-
-      const scorer = createSummarizationScorer({
-        model: mockJudge({
-          alignment: supported(claims, [true]),
-          questions,
-          coverage: answered(['Question A'], [true]),
-        }),
+      const model = mockJudge({
+        alignment: supported(claims, [true]),
+        questions,
+        coverage: answered(['Question A'], [true]),
       });
+
+      const scorer = createSummarizationScorer({ model });
 
       const result = await scorer.run(run('A summary.'));
 
       expect(result.score).toBe(0.25);
+
+      const reasonPrompt = [...model.doStreamCalls, ...model.doGenerateCalls]
+        .map(call => JSON.stringify(call.prompt))
+        .find(prompt => prompt.includes('Explain the summarization score'));
+
+      expect(reasonPrompt).toContain('Question B');
+      expect(reasonPrompt).toContain('Question C');
+      expect(reasonPrompt).toContain('Question D');
     });
 
     it('ignores coverage verdicts beyond the questions that were asked', async () => {

@@ -108,10 +108,51 @@ Use this scorer when an agent condenses text:
     name: 'reason',
     type: 'string',
     description:
-      'Human-readable explanation naming the axis that produced the score and the claims or questions behind it',
+      'Human-readable explanation naming the axis that produced the score and the claims or questions behind it. Both axis scores appear in the text',
+  },
+  {
+    name: 'preprocessStepResult',
+    type: 'object',
+    description: 'The alignment verdicts and the questions drawn from the source',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'alignment',
+            type: '{ claim: string; supported: boolean; reason: string }[]',
+            description: 'One verdict per claim the summary makes',
+          },
+          {
+            name: 'questions',
+            type: 'string[]',
+            description: 'The coverage questions drawn from the source text',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'analyzeStepResult',
+    type: 'object',
+    description: 'The coverage verdicts',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'coverage',
+            type: '{ question: string; answered: boolean; reason: string }[]',
+            description: 'One verdict per question, answered from the summary alone',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
+
+The axis scores are derived from these verdicts rather than stored: alignment is the share of `alignment` entries with `supported: true`, and coverage is the share of `questions` whose `coverage` entry has `answered: true`.
 
 ## Scoring details
 
