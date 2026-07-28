@@ -127,11 +127,20 @@ export class WorkflowSdkWorkflow<
     return retries;
   }
 
-  async createRun(options?: { runId?: string; resourceId?: string; disableScorers?: boolean }) {
+  /**
+   * The return type is spelled out so callers keep the `WorkflowSdkRun` surface
+   * — `sdkRunId` in particular. Inference would widen it to the base `Run`,
+   * because that is how the cache below is typed.
+   */
+  async createRun(options?: {
+    runId?: string;
+    resourceId?: string;
+    disableScorers?: boolean;
+  }): Promise<WorkflowSdkRun<TSteps, TState, TInput, TOutput, TRequestContext>> {
     const runId = options?.runId ?? randomUUID();
     const existing = this.runs.get(runId);
     if (existing) {
-      return existing;
+      return existing as WorkflowSdkRun<TSteps, TState, TInput, TOutput, TRequestContext>;
     }
 
     const run = new WorkflowSdkRun<TSteps, TState, TInput, TOutput, TRequestContext>(

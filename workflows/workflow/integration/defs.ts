@@ -1,3 +1,5 @@
+import { Mastra } from '@mastra/core';
+import { MockStore } from '@mastra/core/storage';
 import { z } from 'zod';
 import { init } from '../src/index';
 import { mastraRunner } from '../src/workflows/index';
@@ -113,8 +115,7 @@ const fanOut = createStep({
   id: 'fan-out',
   inputSchema: numberIn,
   outputSchema: z.array(numberIn),
-  execute: async ({ inputData }) =>
-    Array.from({ length: inputData.value }, (_unused, index) => ({ value: index + 1 })),
+  execute: async ({ inputData }) => Array.from({ length: inputData.value }, (_unused, index) => ({ value: index + 1 })),
 });
 
 export const foreachWorkflow = createWorkflow({
@@ -213,3 +214,27 @@ export const failingWorkflow = createWorkflow({
 })
   .then(alwaysFails)
   .commit();
+
+// --- the Mastra instance --------------------------------------------------
+
+/**
+ * Registering the workflows on a `Mastra` instance gives them storage, which is
+ * what lets a run be resumed, watched or cancelled from a process other than
+ * the one that started it. `MockStore` is in-memory; a real app would use a
+ * persistent store.
+ */
+export const mastra = new Mastra({
+  logger: false,
+  storage: new MockStore(),
+  workflows: {
+    chainWorkflow,
+    parallelWorkflow,
+    branchWorkflow,
+    loopWorkflow,
+    foreachWorkflow,
+    sleepWorkflow,
+    suspendWorkflow,
+    stateWorkflow,
+    failingWorkflow,
+  },
+});

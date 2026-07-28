@@ -10,9 +10,10 @@ import type {
   WorkflowRunState,
 } from '@mastra/core/workflows';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '@mastra/core/workflows/_constants';
-import { getWritable } from 'workflow';
+import { getWorkflowMetadata, getWritable } from 'workflow';
 import { MASTRA_EVENT_NAMESPACE } from './constants';
 import { requireRegisteredWorkflow } from './registry';
+import { readSdkRunId, withSdkRunId } from './snapshot';
 import type { MastraOp, MastraOpRequest, MastraOpResponse, SerializedOpError } from './types';
 
 /**
@@ -46,7 +47,8 @@ function serializeError(error: unknown): SerializedOpError {
       stack: error.stack,
       // `MastraNonRetryableError` is matched by name so the check keeps working
       // whether the error came from core or was re-thrown across a boundary.
-      nonRetryable: error.name === 'MastraNonRetryableError' || (error as { nonRetryable?: boolean }).nonRetryable === true,
+      nonRetryable:
+        error.name === 'MastraNonRetryableError' || (error as { nonRetryable?: boolean }).nonRetryable === true,
     };
   }
   return { message: String(error) };
@@ -173,9 +175,7 @@ export async function runMastraOp(request: MastraOpRequest): Promise<MastraOpRes
     let suspended: { payload: unknown } | undefined;
     let bailed: { payload: unknown } | undefined;
     const abortController = new AbortController();
-    const requestContext = new RequestContext(
-      (request.requestContext ?? []) as [string, {} | undefined][],
-    );
+    const requestContext = new RequestContext((request.requestContext ?? []) as [string, {} | undefined][]);
 
     const writable = getWritable<Record<string, unknown>>({ namespace: MASTRA_EVENT_NAMESPACE });
     const writer = new ToolStream(
@@ -254,8 +254,23 @@ export async function runMastraOp(request: MastraOpRequest): Promise<MastraOpRes
 }
 
 /**
+ * The Workflow SDK run id of the run this step belongs to.
+ *
+ * Returns `undefined` when called outside a step — unit tests drive
+ * {@link runMastraOp} directly, and a missing id must not fail the op.
+ */
+function currentSdkRunId(): string | undefined {
+  try {
+    return getWorkflowMetadata().workflowRunId;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Mirrors the run into Mastra storage so `getWorkflowRunById()` and the
- * playground can see it.
+ * playground can see it, and so another process can map this Mastra run back
+ * to its Workflow SDK run (see `snapshot.ts`).
  *
  * Best-effort by design: the Workflow SDK event log is the source of truth for
  * execution, and a storage hiccup should not fail an otherwise good step.
@@ -271,23 +286,29 @@ async function persistSnapshot(
     if (!store) {
       return;
     }
+    const previous = await store
+      .loadWorkflowSnapshot({ workflowName: request.workflowId, runId: request.runId })
+      .catch(() => null);
     await store.persistWorkflowSnapshot({
       workflowName: request.workflowId,
       runId: request.runId,
       resourceId: request.resourceId,
-      snapshot: {
-        runId: request.runId,
-        status,
-        value: state as WorkflowRunState['value'],
-        context: request.stepResults as WorkflowRunState['context'],
-        activePaths: [],
-        activeStepsPath: {},
-        waitingPaths: {},
-        suspendedPaths: {},
-        resumeLabels: {},
-        serializedStepGraph: workflow.serializedStepGraph as SerializedStepFlowEntry[],
-        timestamp: Date.now(),
-      },
+      snapshot: withSdkRunId(
+        {
+          runId: request.runId,
+          status,
+          value: state as WorkflowRunState['value'],
+          context: request.stepResults as WorkflowRunState['context'],
+          activePaths: [],
+          activeStepsPath: {},
+          waitingPaths: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          serializedStepGraph: workflow.serializedStepGraph as SerializedStepFlowEntry[],
+          timestamp: Date.now(),
+        },
+        currentSdkRunId() ?? readSdkRunId(previous),
+      ),
     });
   } catch {
     // Storage is optional for Workflow SDK-backed runs.

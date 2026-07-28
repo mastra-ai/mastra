@@ -6,10 +6,12 @@ import type {
   Step,
   WorkflowResult,
   WorkflowRunStartOptions,
+  WorkflowRunState,
   WorkflowStreamEvent,
 } from '@mastra/core/workflows';
 import { getRun, resumeHook, start as startWorkflowSdkRun } from 'workflow/api';
 import { MASTRA_EVENT_NAMESPACE } from './constants';
+import { readSdkRunId, withSdkRunId } from './snapshot';
 import type { WorkflowSdkEngineType, MastraRunnerParams, SerializedOpError } from './types';
 import { mastraRunner } from './workflows/runner';
 import { suspendToken, type WalkerParams } from './workflows/walker';
@@ -60,9 +62,10 @@ export class WorkflowSdkRun<
    *
    * `start()` does not accept a caller-supplied id, so the two id spaces stay
    * separate. Mastra's id is what hook tokens are built from and is therefore
-   * enough to resume a run from any process; the Workflow SDK id is only needed to
-   * read streams and cancel, so it is kept in memory and mirrored onto the
-   * stored snapshot for callers that reconnect later.
+   * enough to resume a run from any process; the Workflow SDK id is what reading
+   * streams, cancelling, and awaiting an outcome need. It is cached here for the
+   * process that started the run and mirrored onto the stored snapshot so a
+   * second process can recover it — see {@link WorkflowSdkRun.#resolveSdkRunId}.
    */
   #sdkRunId?: string;
   /**
@@ -89,6 +92,108 @@ export class WorkflowSdkRun<
   /** Workflow SDK run id, once the run has been started in this process. */
   get sdkRunId(): string | undefined {
     return this.#sdkRunId;
+  }
+
+  async #workflowsStore() {
+    return this.mastra?.getStorage()?.getStore('workflows');
+  }
+
+  /**
+   * Starts the underlying Workflow SDK run and records the id mapping.
+   *
+   * Shared by `start()`, `startAsync()` and `stream()` so every entry point
+   * leaves the same trail for a second process to pick up.
+   */
+  async #startSdkRun(params: WalkerParams): Promise<string> {
+    const sdkRun = await startWorkflowSdkRun(mastraRunner, [params], {
+      // `$`-prefixed keys are reserved for tooling; these plain keys let the
+      // Workflow SDK dashboard show which Mastra run a Workflow SDK run belongs to.
+      attributes: { mastraRunId: this.runId, mastraWorkflowId: this.workflowId },
+    });
+    this.#sdkRunId = sdkRun.runId;
+    await this.#persistSdkRunId(sdkRun.runId, params);
+    return sdkRun.runId;
+  }
+
+  /**
+   * Writes the Mastra run → Workflow SDK run mapping to storage.
+   *
+   * Steps write it too, on every snapshot, but only once the first one has
+   * finished. Writing it here as well means a run is resumable, watchable and
+   * cancellable from another process from the moment `start()` returns.
+   *
+   * Best-effort: storage is optional for Workflow SDK-backed runs, and a run
+   * that cannot be mirrored still executes normally.
+   */
+  async #persistSdkRunId(sdkRunId: string, params: WalkerParams): Promise<void> {
+    try {
+      const store = await this.#workflowsStore();
+      if (!store) {
+        return;
+      }
+      const previous = await store
+        .loadWorkflowSnapshot({ workflowName: this.workflowId, runId: this.runId })
+        .catch(() => null);
+      const base: WorkflowRunState = previous ?? {
+        runId: this.runId,
+        status: 'pending',
+        value: (params.initialState ?? {}) as WorkflowRunState['value'],
+        context: { input: params.inputData as Record<string, any> } as WorkflowRunState['context'],
+        activePaths: [],
+        activeStepsPath: {},
+        waitingPaths: {},
+        suspendedPaths: {},
+        resumeLabels: {},
+        serializedStepGraph: this.serializedStepGraph,
+        timestamp: Date.now(),
+      };
+      await store.persistWorkflowSnapshot({
+        workflowName: this.workflowId,
+        runId: this.runId,
+        resourceId: this.resourceId,
+        snapshot: withSdkRunId(base, sdkRunId),
+      });
+    } catch {
+      // Storage is optional; the in-memory id still serves this process.
+    }
+  }
+
+  /**
+   * Returns the Workflow SDK run id, recovering it from storage when this
+   * process is not the one that started the run.
+   *
+   * On recovery the stream cursor is fast-forwarded past everything already
+   * written. A run reached this way is parked on a hook, so its stream ends
+   * with the `workflow-step-suspended` event that parked it; replaying from the
+   * start would hand the caller back that stale suspension instead of the
+   * events their resume is about to produce.
+   */
+  async #resolveSdkRunId(): Promise<string | undefined> {
+    if (this.#sdkRunId) {
+      return this.#sdkRunId;
+    }
+    const store = await this.#workflowsStore();
+    const snapshot = await store
+      ?.loadWorkflowSnapshot({ workflowName: this.workflowId, runId: this.runId })
+      .catch(() => null);
+    const sdkRunId = readSdkRunId(snapshot);
+    if (!sdkRunId) {
+      return undefined;
+    }
+    this.#sdkRunId = sdkRunId;
+    this.#streamCursor = await tailIndexOf(sdkRunId);
+    return sdkRunId;
+  }
+
+  /** Explains what to configure when a run cannot be located from this process. */
+  #unknownSdkRunError(action: string): Error {
+    return new Error(
+      `Cannot ${action} run ${this.runId} from this process: its Workflow SDK run id is unknown. ` +
+        `Resuming, watching and cancelling a run started elsewhere require storage on the Mastra ` +
+        `instance (\`new Mastra({ storage })\`), which is where the two run ids are mapped to each ` +
+        `other. Without storage, resume a suspended step by calling ` +
+        `\`resumeHook("mastra:${this.runId}:<stepId>", data)\` from \`workflow/api\` instead.`,
+    );
   }
 
   #buildRunnerParams(
@@ -222,14 +327,9 @@ export class WorkflowSdkRun<
     const initialState = await this._validateInitialState(args.initialState ?? ({} as TState));
 
     const params = this.#buildRunnerParams(inputData, initialState, args.requestContext);
-    const sdkRun = await startWorkflowSdkRun(mastraRunner, [params], {
-      // `$`-prefixed keys are reserved for tooling; these plain keys let the
-      // Workflow SDK dashboard show which Mastra run a Workflow SDK run belongs to.
-      attributes: { mastraRunId: this.runId, mastraWorkflowId: this.workflowId },
-    });
-    this.#sdkRunId = sdkRun.runId;
+    const sdkRunId = await this.#startSdkRun(params);
 
-    const observed = await this.#observeUntilSettled(sdkRun.runId);
+    const observed = await this.#observeUntilSettled(sdkRunId);
     const result = this.#toWorkflowResult(observed, inputData, Boolean(args.outputOptions?.includeState));
 
     if (result.status !== 'suspended') {
@@ -239,17 +339,12 @@ export class WorkflowSdkRun<
   }
 
   /** Starts the run and returns as soon as it is enqueued. */
-  async startAsync(
-    args: WorkflowSdkRunStartArgs<TState, TInput, TRequestContext> = {},
-  ): Promise<{ runId: string }> {
+  async startAsync(args: WorkflowSdkRunStartArgs<TState, TInput, TRequestContext> = {}): Promise<{ runId: string }> {
     const inputData = await this._validateInput(args.inputData);
     const initialState = await this._validateInitialState(args.initialState ?? ({} as TState));
 
     const params = this.#buildRunnerParams(inputData, initialState, args.requestContext);
-    const sdkRun = await startWorkflowSdkRun(mastraRunner, [params], {
-      attributes: { mastraRunId: this.runId, mastraWorkflowId: this.workflowId },
-    });
-    this.#sdkRunId = sdkRun.runId;
+    await this.#startSdkRun(params);
 
     return { runId: this.runId };
   }
@@ -257,8 +352,10 @@ export class WorkflowSdkRun<
   /**
    * Resumes a suspended step by resolving the hook it parked on.
    *
-   * The token is derived from the Mastra run and step ids, so this works from
-   * any process without first locating the Workflow SDK run.
+   * The token is derived from the Mastra run and step ids, so the resume itself
+   * works from any process. Awaiting the outcome additionally needs the
+   * Workflow SDK run id, which is read back from storage when this process is
+   * not the one that started the run.
    */
   async resume<TResume>(params: {
     resumeData?: TResume;
@@ -277,34 +374,47 @@ export class WorkflowSdkRun<
     const resumeData = await this._validateResumeData(params.resumeData, suspendedStep);
     const token = suspendToken(this.runId, stepId, params.foreachIndex);
 
-    await resumeHook(token, resumeData);
-
-    if (!this.#sdkRunId) {
-      // Without the Workflow SDK run id there is no stream to read. The resume itself
-      // landed, so report that rather than pretending to know the outcome.
-      throw new Error(
-        `Cannot await the result of run ${this.runId}: its Workflow SDK run id is unknown in this ` +
-          `process. Resume from the same process that started the run, or use ` +
-          `\`resumeHook()\` from \`workflow/api\` directly and read the run yourself.`,
-      );
+    // Resolved before the resume so the stream cursor is parked at the tail
+    // while the run is still suspended, and no post-resume event is missed.
+    const sdkRunId = await this.#resolveSdkRunId();
+    if (!sdkRunId) {
+      throw this.#unknownSdkRunError('resume');
     }
 
-    const observed = await this.#observeUntilSettled(this.#sdkRunId);
+    await resumeHook(token, resumeData);
+
+    const observed = await this.#observeUntilSettled(sdkRunId);
     return this.#toWorkflowResult(observed, undefined, false);
   }
 
+  /**
+   * Delivers the run's Mastra events to `cb` until the returned function is
+   * called.
+   *
+   * Watching a run started in another process works as long as the Mastra
+   * instance has storage; locating that run is asynchronous, so the callback
+   * starts receiving events shortly after this returns rather than
+   * synchronously.
+   */
   watch(cb: (event: WorkflowStreamEvent) => void): () => void {
     let active = true;
-    const sdkRunId = this.#sdkRunId;
-    if (!sdkRunId) {
-      throw new Error(`Cannot watch run ${this.runId} before it has been started.`);
-    }
-
-    const readable = getRun(sdkRunId).getReadable<WorkflowStreamEvent>({
-      namespace: MASTRA_EVENT_NAMESPACE,
-    });
+    let readable: ReadableStream<WorkflowStreamEvent> | undefined;
 
     void (async () => {
+      const sdkRunId = await this.#resolveSdkRunId();
+      if (!sdkRunId) {
+        // `watch()` is synchronous by contract, so there is no promise to
+        // reject onto; the logger is the only channel back to the caller.
+        this.mastra?.getLogger()?.error(this.#unknownSdkRunError('watch').message);
+        return;
+      }
+      if (!active) {
+        return;
+      }
+
+      readable = getRun(sdkRunId).getReadable<WorkflowStreamEvent>({
+        namespace: MASTRA_EVENT_NAMESPACE,
+      });
       const reader = readable.getReader();
       try {
         while (active) {
@@ -325,7 +435,7 @@ export class WorkflowSdkRun<
 
     return () => {
       active = false;
-      void readable.cancel().catch(() => {});
+      void readable?.cancel().catch(() => {});
     };
   }
 
@@ -356,12 +466,9 @@ export class WorkflowSdkRun<
           const inputData = await self._validateInput(args.inputData);
           const initialState = await self._validateInitialState(args.initialState ?? ({} as TState));
           const params = self.#buildRunnerParams(inputData, initialState, args.requestContext);
-          const sdkRun = await startWorkflowSdkRun(mastraRunner, [params], {
-            attributes: { mastraRunId: self.runId, mastraWorkflowId: self.workflowId },
-          });
-          self.#sdkRunId = sdkRun.runId;
+          const sdkRunId = await self.#startSdkRun(params);
 
-          const readable = getRun(sdkRun.runId).getReadable<Record<string, any>>({
+          const readable = getRun(sdkRunId).getReadable<Record<string, any>>({
             namespace: MASTRA_EVENT_NAMESPACE,
             startIndex: self.#streamCursor,
           });
@@ -451,10 +558,28 @@ export class WorkflowSdkRun<
   }
 
   async cancel(): Promise<void> {
-    if (!this.#sdkRunId) {
-      throw new Error(`Cannot cancel run ${this.runId} before it has been started.`);
+    const sdkRunId = await this.#resolveSdkRunId();
+    if (!sdkRunId) {
+      throw this.#unknownSdkRunError('cancel');
     }
-    await getRun(this.#sdkRunId).cancel();
+    await getRun(sdkRunId).cancel();
+
+    // Mirror the outcome so a reader of storage does not keep seeing the run as
+    // still going. Best-effort, matching every other snapshot write here.
+    try {
+      const store = await this.#workflowsStore();
+      const snapshot = await store?.loadWorkflowSnapshot({ workflowName: this.workflowId, runId: this.runId });
+      if (store && snapshot) {
+        await store.persistWorkflowSnapshot({
+          workflowName: this.workflowId,
+          runId: this.runId,
+          resourceId: this.resourceId,
+          snapshot: { ...snapshot, status: 'canceled' },
+        });
+      }
+    } catch {
+      // Storage is optional for Workflow SDK-backed runs.
+    }
   }
 
   timeTravel(): never {
@@ -467,6 +592,25 @@ export class WorkflowSdkRun<
 
   streamLegacy(): never {
     throw unsupported('streamLegacy()');
+  }
+}
+
+/**
+ * Number of chunks already written to a run's Mastra event stream.
+ *
+ * Used as the starting cursor when attaching to a run this process did not
+ * start, so only events produced from that point on are read.
+ */
+async function tailIndexOf(sdkRunId: string): Promise<number> {
+  const readable = getRun(sdkRunId).getReadable({ namespace: MASTRA_EVENT_NAMESPACE });
+  try {
+    // `getTailIndex()` is the 0-based index of the last chunk, or -1 when the
+    // stream is empty; the cursor is the count, so one past it.
+    return (await readable.getTailIndex()) + 1;
+  } catch {
+    return 0;
+  } finally {
+    await readable.cancel().catch(() => {});
   }
 }
 

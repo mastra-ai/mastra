@@ -106,7 +106,18 @@ import { resumeHook } from 'workflow/api';
 await resumeHook(`mastra:${runId}:approval`, { approved: true });
 ```
 
-Prefer that form across process boundaries. `run.resume()` can only *await the result* in the process that started the run (see limitations).
+### Resuming from another process
+
+`run.resume()` works from a process that did not start the run — an API route resuming a run a background job began, for example — as long as your `Mastra` instance has **storage** configured:
+
+```ts
+const run = await mastra.getWorkflow('approvalWorkflow').createRun({ runId });
+const result = await run.resume({ step: 'approval', resumeData: { approved: true } });
+```
+
+The Workflow SDK assigns each run its own id and will not accept Mastra's, so the two ids have to be mapped somewhere. This package records the mapping on the Mastra run snapshot, which is also what makes `run.watch()` and `run.cancel()` work from a second process. Without storage there is nowhere to keep it, and those three methods throw an error saying so rather than silently doing nothing.
+
+Use `resumeHook()` when you want to resume without waiting for the run to finish, or when the resuming process has no `Mastra` instance at hand. It returns as soon as the hook is released. `run.resume()` waits for the run to reach its next stopping point and hands back the `WorkflowResult`.
 
 ## Watching a run
 
@@ -135,8 +146,8 @@ These throw a clear error rather than misbehaving quietly:
 Also worth knowing:
 
 - **`.map()` is untested.** It should work — a mapping step is an ordinary step in the graph — but nothing verifies that yet.
-- **Cross-process `run.resume()` cannot await its result.** The Workflow SDK assigns its own run id, and this package does not yet persist the Mastra-to-SDK run id mapping. Resuming from another process works via `resumeHook()`; only awaiting the outcome through the `Run` object needs the original process.
-- **Upgrading this package breaks in-flight runs.** The Workflow SDK derives step ids from the package specifier and version, so a version bump renames every step this package ships and runs recorded against the old ids cannot replay. Drain in-flight runs before upgrading.
+- **`resume()`, `watch()` and `cancel()` from another process need storage** on your `Mastra` instance. See [Resuming from another process](#resuming-from-another-process).
+- **Upgrading this package changes the ids of the steps it ships.** The Workflow SDK derives them from the package specifier and version, so `@mastra/workflow@0.1.0` and `@mastra/workflow@0.2.0` register different ids for the same functions. On Vercel this is safe: a run is pinned to the deployment that started it and resumes there, on the code that recorded those ids, so runs already in flight — including ones suspended on a hook — finish on the old version while new runs use the new one. On a self-hosted world without deployment pinning (`@workflow/world-postgres`) there is only ever one live version of the code, so a deploy invalidates in-flight runs; that applies to any change you deploy, not just upgrades of this package.
 
 ## How it works
 
@@ -148,7 +159,7 @@ Every piece of your code — step `execute` bodies, `.branch()` predicates, loop
 
 Two details are worth calling out because they are load-bearing rather than incidental:
 
-- **Replay identity.** The Workflow SDK matches journal entries by position and validates them by step *name*. Because every operation here flows through the same dispatcher, that check cannot tell two graph nodes apart. The dispatcher therefore echoes back the identity of the node it actually ran, and the walker asserts it matches the node it is standing on — so a divergent replay fails loudly instead of feeding one step's output to another.
+- **Replay identity.** The Workflow SDK matches journal entries by position and validates them by step _name_. Because every operation here flows through the same dispatcher, that check cannot tell two graph nodes apart. The dispatcher therefore echoes back the identity of the node it actually ran, and the walker asserts it matches the node it is standing on — so a divergent replay fails loudly instead of feeding one step's output to another.
 - **Retries.** Mastra owns retry policy through `step.retries`, applied by the walker. Workflow SDK-level retries are switched off on the dispatcher so the two policies don't multiply.
 
 ## Development

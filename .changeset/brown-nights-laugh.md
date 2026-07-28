@@ -36,6 +36,21 @@ const run = await mastra.getWorkflow('incrementWorkflow').createRun();
 const result = await run.start({ inputData: { value: 1 } });
 ```
 
+**Resuming from anywhere.** A suspended step parks on a Workflow SDK hook, so it can be released from a route handler, a webhook, or another service. `run.resume()` works from a process that did not start the run as long as your `Mastra` instance has storage, and so do `run.watch()` and `run.cancel()`:
+
+```ts
+const run = await mastra.getWorkflow('approvalWorkflow').createRun({ runId });
+const result = await run.resume({ step: 'approval', resumeData: { approved: true } });
+```
+
+Or release the hook directly by its token, which is part of the package's public contract:
+
+```ts
+import { resumeHook } from 'workflow/api';
+
+await resumeHook(`mastra:${runId}:approval`, { approved: true });
+```
+
 **Supported:** `.then()`, `.parallel()`, `.branch()`, `.dowhile()`, `.dountil()`, `.foreach()`, `.sleep()`, `.sleepUntil()`, workflow state, `suspend()`/`resume()`, `bail()`, per-step retries, and event streaming.
 
 **Not supported yet:** nested workflows, time travel, `streamLegacy()`, and `perStep` each throw a clear error. The package is experimental and not ready for production use.
