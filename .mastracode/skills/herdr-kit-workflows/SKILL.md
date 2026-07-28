@@ -53,6 +53,17 @@ PY
 
 Before each operation, require its capability to be present and `available: true`.
 
+## Detect and update an outdated plugin
+
+The skill describes the current Herdr Kit public contract, but the enabled plugin may be older. Treat a missing required capability, an unsupported protocol/request schema, or a missing documented command as an update signal—not as permission to call private scripts or invent a fallback.
+
+Inspect the discovered plugin's `source.kind` from `herdr plugin list`:
+
+- For a GitHub-installed plugin, update it with `herdr plugin install mastra-ai/herdr-kit -y`, reinstall the official integration with `herdr integration install mastracode`, and run `herdr server reload-config`.
+- For a locally linked plugin, do not replace it with a GitHub installation. Report the linked `plugin_root`. If it is a clean checkout of `mastra-ai/herdr-kit` on its normal branch, fast-forward it with `git -C "$plugin_root" pull --ff-only`, then reload Herdr. If it is dirty, detached, on a feature branch, or cannot be verified as that repository, stop and ask before modifying it.
+
+After any update, repeat plugin discovery and capability negotiation from scratch. Continue only when the required operation is present and `available: true`; otherwise report the remaining incompatibility exactly. Do not update merely because a newer release exists—update when setup is requested or the requested workflow requires an interface the enabled plugin does not provide.
+
 ## New-user setup
 
 1. Install the plugin and official Mastra Code integration:
