@@ -74,7 +74,7 @@ const agent = new Agent({
 const agentController = new AgentController({
   id: 'my-agent',
   agent,
-  storage: new LibSQLStore({ url: 'file:./data.db' }),
+  storage: new LibSQLStore({ id: 'agent-storage', url: 'file:./data.db' }),
   modes: [
     {
       id: 'plan',

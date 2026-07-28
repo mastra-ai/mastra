@@ -2,7 +2,7 @@
  * @see https://modal.com/docs/reference/modal.Sandbox
  */
 
-import type { MastraSandboxOptions, ProviderStatus, SandboxInfo } from '@mastra/core/workspace';
+import type { MastraSandboxOptions, ProviderStatus, SandboxCloneOptions, SandboxInfo } from '@mastra/core/workspace';
 import { MastraSandbox, SandboxNotReadyError } from '@mastra/core/workspace';
 import { ClientClosedError, ModalClient, NotFoundError } from 'modal';
 import type { App, Image, Sandbox } from 'modal';
@@ -96,6 +96,7 @@ export class ModalSandbox extends MastraSandbox {
   private readonly tokenId?: string;
   private readonly tokenSecret?: string;
   private readonly _instructionsOverride?: InstructionsOption;
+  private readonly _constructorOptions: ModalSandboxOptions;
 
   constructor(options: ModalSandboxOptions = {}) {
     super({
@@ -113,6 +114,31 @@ export class ModalSandbox extends MastraSandbox {
     this.tokenId = options.tokenId;
     this.tokenSecret = options.tokenSecret;
     this._instructionsOverride = options.instructions;
+    this._constructorOptions = { ...options };
+  }
+
+  /**
+   * Construct a sibling `ModalSandbox` that inherits this sandbox's
+   * configuration (credentials, app, base image, workdir, instructions) with
+   * per-instance overrides.
+   *
+   * Performs no I/O — the sandbox clone provisions (or reconnects to a
+   * running Modal sandbox with the same logical `id`) on its own `start()`.
+   * Use it when one configured sandbox acts as the template for a fleet of
+   * independent sandboxes (e.g. one per project).
+   *
+   * `options.idleTimeoutMinutes` maps to Modal's `timeoutMs` (wall-clock
+   * lifetime); `options.sandboxId` is ignored because Modal reconnects by
+   * logical `id`.
+   */
+  clone(options: SandboxCloneOptions = {}): ModalSandbox {
+    const { id: _id, ...base } = this._constructorOptions;
+    return new ModalSandbox({
+      ...base,
+      ...(options.id !== undefined && { id: options.id }),
+      ...(options.env !== undefined && { env: options.env }),
+      ...(options.idleTimeoutMinutes !== undefined && { timeoutMs: options.idleTimeoutMinutes * 60_000 }),
+    });
   }
 
   /**

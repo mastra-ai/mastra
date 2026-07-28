@@ -98,7 +98,7 @@ npx mastra migrate
 The migration copies span data from `mastra_ai_spans` into `mastra_span_events` in day-sized batches. It handles column mapping, deduplicates legacy rows, and preserves the original table as a backup. After migration, traces appear in Studio through the vNext adapter.
 
 :::note
-The legacy table is not deleted. Drop it manually after verifying the migration.
+The legacy table isn't deleted. Drop it manually after verifying the migration.
 :::
 
 ### ClickHouse for every domain

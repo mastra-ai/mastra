@@ -28,18 +28,12 @@ const scorer = createScorer({
     instructions: 'You are an expert evaluator...',
   },
 })
-  .preprocess({
-    /* step config */
-  })
-  .analyze({
-    /* step config */
-  })
+  .preprocess({/* step config */})
+  .analyze({/* step config */})
   .generateScore(({ run, results }) => {
     // Return a number
   })
-  .generateReason({
-    /* step config */
-  })
+  .generateReason({/* step config */})
 ```
 
 ## `createScorer` options
@@ -87,10 +81,10 @@ const scorer = createScorer({
           },
           {
             name: 'jsonPromptInjection',
-            type: 'boolean',
+            type: "boolean | 'system' | 'inline' | 'auto'",
             isOptional: true,
             description:
-              "When true, inject the JSON schema into the prompt instead of using the provider's native `response_format` API. Set this for models that don't support native structured output (e.g. some Groq Llama models) to avoid a wasted 400 call.",
+              "Controls how the judge's structured output schema reaches the model. Defaults to 'auto', which uses native structured output when supported and inline prompt injection otherwise. Explicit values override automatic routing.",
           },
           {
             name: 'inputProcessors',
@@ -111,14 +105,14 @@ const scorer = createScorer({
             type: 'Processor[]',
             isOptional: true,
             description:
-              'Error processors for the internal judge agent. These implement `processAPIError` and can inspect LLM API rejections and signal a retry, e.g. `StreamErrorRetryProcessor`. Requires `maxProcessorRetries` to be set for retry-based processors to take effect.',
+              'Error processors for judge models that use Mastra’s current generation API. These implement `processAPIError` and can inspect LLM API rejections and signal a retry, e.g. `StreamErrorRetryProcessor`. Legacy model adapters use `generateLegacy()` and do not run error processors.',
           },
           {
             name: 'maxProcessorRetries',
             type: 'number',
             isOptional: true,
             description:
-              'Maximum number of times processors can trigger a retry per judge generation. Required for retry-based error processors (e.g. `StreamErrorRetryProcessor`) to take effect.',
+              'Maximum number of times error processors can retry one judge generation. The runtime defaults to 10 when errorProcessors are configured without this value. Set it explicitly to bound the retry budget.',
           },
         ],
       },
@@ -146,6 +140,61 @@ This function returns a scorer builder that you can chain step methods onto. See
 The judge only runs for steps defined as **prompt objects** (`preprocess`, `analyze`, `generateScore`, `generateReason` in prompt mode). If you use function steps only, the judge is never called and there is no LLM output to inspect. In that case, any score/reason must be produced by your functions.
 
 When a prompt-object step runs, its structured LLM output is stored in the corresponding result field (`preprocessStepResult`, `analyzeStepResult`, or the value consumed by `calculateScore` in `generateScore`).
+
+## Retry judge requests
+
+Use the existing judge `errorProcessors` configuration to retry transient failures inside a failed judge request. This doesn't retry the scorer workflow, trace target, batch item, score write, or a completed scorer step.
+
+`@mastra/core` `1.49.0` doesn't include scorer error-processor configuration. Upgrade to a version with scorer processor support, or backport that focused change, before using this configuration.
+
+The following example uses one bounded retry budget. Set the processor `maxRetries` and `judge.maxProcessorRetries` to the same value. Keep the internal judge agent's model retries at the default of `0` so model retries don't multiply processor attempts.
+
+```typescript title="src/mastra/scorers/response-quality.ts"
+import { createScorer } from '@mastra/core/evals'
+import { StreamErrorRetryProcessor } from '@mastra/core/processors'
+
+const isTransientNetworkError = (error: unknown) =>
+  error instanceof Error && /ECONNRESET|ETIMEDOUT|socket hang up/i.test(error.message)
+
+const retryProcessor = new StreamErrorRetryProcessor({
+  maxRetries: 2,
+  maxRetryAfterMs: 30_000,
+  delayMs: ({ retryCount }) => Math.min(1_000 * 2 ** retryCount, 30_000),
+  matchers: [isTransientNetworkError],
+  retryUnknownErrors: false,
+})
+
+export const responseQuality = createScorer({
+  id: 'response-quality',
+  description: 'Scores response quality',
+  judge: {
+    model: myModel,
+    instructions: 'Return a score and concise reason.',
+    errorProcessors: [retryProcessor],
+    maxProcessorRetries: 2,
+  },
+})
+  .generateScore({
+    description: 'Score the response quality.',
+    createPrompt: ({ run }) => `Score: ${run.output}`,
+  })
+  .generateReason({
+    description: 'Explain the score.',
+    createPrompt: () => 'Explain the score.',
+  })
+```
+
+With this configuration, a failed request has at most three provider attempts: the initial request plus two processor retries. If `generateScore` completes and `generateReason` receives a retryable failure, only `generateReason` retries.
+
+`StreamErrorRetryProcessor` honors retryable provider metadata and narrow custom matchers. It keeps `retryUnknownErrors` disabled by default, so authentication, invalid-request, and context-length errors fail immediately unless you explicitly match them. It bounds `Retry-After` values to `30_000` milliseconds by default; use `maxRetryAfterMs` to change that cap.
+
+Avoid adding outer scorer or workflow retries. Avoid combining a nonzero model retry setting with this processor unless you intentionally accept additional attempts.
+
+### Override retries for one step
+
+A step's `judge` configuration overrides scorer-level judge fields. Processor arrays replace the scorer-level arrays. Omit `maxProcessorRetries` in the step configuration to inherit the scorer-level numeric cap.
+
+Coordinated processor retries require a judge model that uses Mastra’s current generation API. Legacy model adapters call [`generateLegacy()`](/reference/agents/generateLegacy), bypass error processors, and use that API's separate AI SDK `maxRetries` default of `2`.
 
 ## Type safety
 

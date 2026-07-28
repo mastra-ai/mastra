@@ -54,6 +54,14 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
     description: 'Whether to compress requests and accept compressed responses.',
   },
   {
+    name: 'consistency',
+    type: "'strong' | 'eventual'",
+    isOptional: true,
+    defaultValue: 'strong',
+    description:
+      'The default consistency level for queries. Can be overridden per query. "strong" guarantees queries see all data written before the query started, at the cost of higher latency. "eventual" offers lower latency, but recently written data may not be visible yet.',
+  },
+  {
     name: 'schemaConfigForIndex',
     type: 'function',
     isOptional: true,
@@ -146,6 +154,13 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
     isOptional: true,
     defaultValue: 'false',
     description: 'Whether to include vectors in the results',
+  },
+  {
+    name: 'consistency',
+    type: "'strong' | 'eventual'",
+    isOptional: true,
+    description:
+      'The consistency level for this query. Overrides the consistency level set in the constructor. Defaults to "strong".',
   },
 ]}
 />

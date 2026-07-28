@@ -1,7 +1,10 @@
+import { APICallError } from '@internal/ai-sdk-v5';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { SpanType } from '../observability';
+import { StreamErrorRetryProcessor } from '../processors';
 import { createMockModel } from '../test-utils/llm-mock';
 import { createScorer } from './base';
 import {
@@ -24,6 +27,78 @@ const createTestData = () => ({
     return { input: this.userInput, output: this.agentOutput };
   },
 });
+
+function withoutJudge<T extends { judge?: unknown }>(result: T): Omit<T, 'judge'> {
+  const { judge: _judge, ...legacyResult } = result;
+  return legacyResult;
+}
+
+type JudgeModelResponse = Error | string;
+
+function createJudgeModel(responses: JudgeModelResponse[]) {
+  let callCount = 0;
+  const prompts: unknown[] = [];
+
+  const model = new MockLanguageModelV2({
+    doGenerate: async () => {
+      throw new Error('Unexpected non-streaming judge call');
+    },
+    doStream: async ({ prompt }) => {
+      prompts.push(prompt);
+      const response = responses[callCount] ?? responses.at(-1);
+      callCount += 1;
+      if (response instanceof Error) throw response;
+
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'judge-response', modelId: 'judge-model', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: response },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      };
+    },
+  });
+
+  return { model, getCallCount: () => callCount, getPrompts: () => prompts };
+}
+
+function createProviderError(statusCode: number, isRetryable: boolean, message = 'provider failed'): APICallError {
+  const error = new APICallError({
+    message,
+    url: 'https://api.example.com/v1/responses',
+    requestBodyValues: {},
+    statusCode,
+    responseHeaders: { 'retry-after': '1', 'x-request-id': 'request-123' },
+    isRetryable,
+  });
+  Object.assign(error, { requestId: 'request-123' });
+  return error;
+}
+
+function findAPICallError(error: unknown): APICallError | undefined {
+  const visited = new WeakSet<object>();
+  let candidate = error;
+
+  while (candidate && typeof candidate === 'object') {
+    if (APICallError.isInstance(candidate) || ('statusCode' in candidate && 'isRetryable' in candidate)) {
+      return candidate as APICallError;
+    }
+    if (visited.has(candidate)) return undefined;
+    visited.add(candidate);
+    candidate = 'cause' in candidate ? candidate.cause : undefined;
+  }
+
+  return undefined;
+}
 
 function createMockSpan(traceId: string, type: SpanType) {
   const span: any = {
@@ -92,7 +167,8 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(result).not.toHaveProperty('judge');
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('should create a scorer with reason', async () => {
@@ -100,7 +176,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('should create a scorer with preprocess and reason', async () => {
@@ -108,7 +184,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('should create a scorer with preprocess and analyze', async () => {
@@ -116,7 +192,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('should create a scorer with preprocess only', async () => {
@@ -124,7 +200,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('should create a scorer with preprocess, analyze, and reason', async () => {
@@ -132,7 +208,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('should create a scorer with analyze only', async () => {
@@ -140,7 +216,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('should create a scorer with analyze and reason', async () => {
@@ -148,7 +224,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
   });
 
@@ -158,7 +234,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with preprocess and analyze prompt object', async () => {
@@ -167,7 +243,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with analyze and reason prompt object', async () => {
@@ -176,7 +252,7 @@ describe('createScorer', () => {
 
       expect(runId).toBeDefined();
       expect(typeof result.reason).toBe('string');
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with generate score as prompt object', async () => {
@@ -184,7 +260,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with all steps', async () => {
@@ -192,7 +268,31 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(Object.keys(result.judge ?? {})).toEqual(['preprocess', 'analyze', 'generateReason']);
+
+      const preprocessExecution = result.judge?.preprocess?.executions[0];
+      expect(preprocessExecution).toMatchObject({
+        prompt: 'Test Preprocess prompt',
+        output: {
+          reformattedInput: 'TEST INPUT',
+          reformattedOutput: 'TEST OUTPUT',
+        },
+        judgeModelId: 'mock-model-id',
+        judgeProvider: 'mock-provider',
+        usage: {
+          inputTokens: 10,
+          outputTokens: 20,
+          totalTokens: 30,
+        },
+        attemptCount: 1,
+        modelCallCount: 1,
+        durationMs: expect.any(Number),
+      });
+      expect(preprocessExecution?.durationMs).toBeGreaterThanOrEqual(0);
+      expect(Number.isInteger(preprocessExecution?.durationMs)).toBe(true);
+      expect(preprocessExecution).not.toHaveProperty('cost');
+      expect(JSON.parse(JSON.stringify(result.judge))).toEqual(result.judge);
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('forwards judge.jsonPromptInjection to agent.stream', async () => {
@@ -218,6 +318,33 @@ describe('createScorer', () => {
 
         const [, options] = (streamSpy.mock.calls[0] ?? []) as any[];
         expect(options?.structuredOutput?.jsonPromptInjection).toBe(true);
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
+
+    it('uses automatic structured output routing by default', async () => {
+      const streamSpy = vi.spyOn(Agent.prototype, 'stream');
+      try {
+        const model = createMockModel({ mockText: { score: 1 }, version: 'v2' });
+
+        const scorer = createScorer({
+          id: 'automatic-json-routing-scorer',
+          name: 'automatic-json-routing-scorer',
+          description: 'Verifies the default structured output routing',
+          judge: {
+            model,
+            instructions: 'Test instructions',
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        });
+
+        await scorer.run(testData.scoringInput);
+
+        const [, options] = (streamSpy.mock.calls[0] ?? []) as any[];
+        expect(options?.structuredOutput?.jsonPromptInjection).toBe('auto');
       } finally {
         streamSpy.mockRestore();
       }
@@ -431,6 +558,257 @@ describe('createScorer', () => {
       }
     });
 
+    it.each([408, 429, 500])(
+      'retries a retryable V2 judge HTTP %s request within the failed scorer step',
+      async statusCode => {
+        const { model, getCallCount } = createJudgeModel([
+          createProviderError(statusCode, true, 'transient provider failure'),
+          JSON.stringify({ score: 1 }),
+        ]);
+        const scorer = createScorer({
+          id: `v2-judge-retry-${statusCode}-scorer`,
+          name: 'v2-judge-retry-scorer',
+          description: 'Retries only the failed V2 judge generation',
+          judge: {
+            model,
+            instructions: 'Test instructions',
+            errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 2, maxRetryAfterMs: 0 })],
+            maxProcessorRetries: 2,
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        });
+
+        await expect(scorer.run(testData.scoringInput)).resolves.toMatchObject({ score: 1 });
+        expect(getCallCount()).toBe(2);
+      },
+    );
+
+    describe('given a V2 judge with an error processor but no agent retry cap', () => {
+      it('retries until the processor retry limit is reached', async () => {
+        const { model, getCallCount } = createJudgeModel([
+          createProviderError(429, true, 'rate limited'),
+          createProviderError(429, true, 'rate limited'),
+          JSON.stringify({ score: 1 }),
+        ]);
+        const scorer = createScorer({
+          id: 'v2-judge-default-processor-cap-scorer',
+          name: 'v2-judge-default-processor-cap-scorer',
+          description: 'Uses the runtime error-processor retry cap when no agent cap is configured',
+          judge: {
+            model,
+            instructions: 'Test instructions',
+            errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 2, maxRetryAfterMs: 0 })],
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        });
+
+        await expect(scorer.run(testData.scoringInput)).resolves.toMatchObject({ score: 1 });
+        expect(getCallCount()).toBe(3);
+      });
+    });
+
+    it('does not retry a V2 judge request when processor configuration is omitted', async () => {
+      const { model, getCallCount } = createJudgeModel([createProviderError(429, true, 'rate limited')]);
+      const scorer = createScorer({
+        id: 'v2-judge-no-retry-scorer',
+        name: 'v2-judge-no-retry-scorer',
+        description: 'Leaves V2 judge retries disabled without an error processor',
+        judge: { model, instructions: 'Test instructions' },
+      }).generateScore({
+        description: 'score',
+        createPrompt: () => 'score this',
+      });
+
+      await expect(scorer.run(testData.scoringInput)).rejects.toBeDefined();
+      expect(getCallCount()).toBe(1);
+    });
+
+    it.each([
+      ['authentication failure', 401, 'authentication failed'],
+      ['invalid request', 400, 'invalid request'],
+      ['context-length failure', 400, 'maximum context length exceeded'],
+    ])('does not retry terminal V2 judge %s', async (_description, statusCode, message) => {
+      const { model, getCallCount } = createJudgeModel([createProviderError(statusCode, false, message)]);
+      const scorer = createScorer({
+        id: `v2-judge-terminal-${statusCode}-${message}`,
+        name: 'v2-judge-terminal-scorer',
+        description: 'Fails terminal V2 judge errors immediately',
+        judge: {
+          model,
+          instructions: 'Test instructions',
+          errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 2, maxRetryAfterMs: 0 })],
+          maxProcessorRetries: 2,
+        },
+      }).generateScore({
+        description: 'score',
+        createPrompt: () => 'score this',
+      });
+
+      await expect(scorer.run(testData.scoringInput)).rejects.toBeDefined();
+      expect(getCallCount()).toBe(1);
+    });
+
+    it('retries a narrowly matched V2 judge network error', async () => {
+      const networkError = Object.assign(new Error('socket hung up'), { code: 'ECONNRESET' });
+      const { model, getCallCount } = createJudgeModel([networkError, JSON.stringify({ score: 1 })]);
+      const scorer = createScorer({
+        id: 'v2-judge-network-retry-scorer',
+        name: 'v2-judge-network-retry-scorer',
+        description: 'Retries a narrowly matched V2 judge network error',
+        judge: {
+          model,
+          instructions: 'Test instructions',
+          errorProcessors: [
+            new StreamErrorRetryProcessor({
+              maxRetries: 2,
+              matchers: [
+                error => typeof error === 'object' && error !== null && 'code' in error && error.code === 'ECONNRESET',
+              ],
+            }),
+          ],
+          maxProcessorRetries: 2,
+        },
+      }).generateScore({
+        description: 'score',
+        createPrompt: () => 'score this',
+      });
+
+      await expect(scorer.run(testData.scoringInput)).resolves.toMatchObject({ score: 1 });
+      expect(getCallCount()).toBe(2);
+    });
+
+    it('caps exhausted V2 judge retries and preserves provider context', async () => {
+      const providerError = createProviderError(503, true, 'service unavailable');
+      const { model, getCallCount } = createJudgeModel([providerError, providerError, providerError]);
+      const scorer = createScorer({
+        id: 'v2-judge-retry-exhaustion-scorer',
+        name: 'v2-judge-retry-exhaustion-scorer',
+        description: 'Preserves exhausted V2 judge provider errors',
+        judge: {
+          model,
+          instructions: 'Test instructions',
+          errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 2, maxRetryAfterMs: 0 })],
+          maxProcessorRetries: 2,
+        },
+      }).generateScore({
+        description: 'score',
+        createPrompt: () => 'score this',
+      });
+
+      const error = await scorer.run(testData.scoringInput).catch(error => error);
+
+      expect(getCallCount()).toBe(3);
+      expect(findAPICallError(error)).toMatchObject({
+        statusCode: 503,
+        requestId: 'request-123',
+        isRetryable: true,
+        responseHeaders: { 'retry-after': '1', 'x-request-id': 'request-123' },
+      });
+    });
+
+    it('does not rerun a successful score step when the reason step retries', async () => {
+      const { model, getCallCount, getPrompts } = createJudgeModel([
+        JSON.stringify({ score: 1 }),
+        createProviderError(429, true, 'rate limited while generating reason'),
+        'The score is supported by the output.',
+      ]);
+      const scorer = createScorer({
+        id: 'v2-judge-reason-retry-scorer',
+        name: 'v2-judge-reason-retry-scorer',
+        description: 'Retries only the failed reason step',
+        judge: {
+          model,
+          instructions: 'Test instructions',
+          errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 2, maxRetryAfterMs: 0 })],
+          maxProcessorRetries: 2,
+        },
+      })
+        .generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        })
+        .generateReason({
+          description: 'reason',
+          createPrompt: () => 'explain this score',
+        });
+
+      await expect(scorer.run(testData.scoringInput)).resolves.toMatchObject({
+        score: 1,
+        reason: 'The score is supported by the output.',
+      });
+      expect(getCallCount()).toBe(3);
+
+      const serializedPrompts = getPrompts().map(prompt => JSON.stringify(prompt));
+      expect(serializedPrompts.filter(prompt => prompt.includes('score this'))).toHaveLength(1);
+      expect(serializedPrompts.filter(prompt => prompt.includes('explain this score'))).toHaveLength(2);
+    });
+
+    it('normalizes successful V1 judge usage and records model identity', async () => {
+      const model = createMockModel({ mockText: { score: 0.75 }, objectGenerationMode: 'json', version: 'v1' });
+      const generateLegacySpy = vi.spyOn(Agent.prototype, 'generateLegacy');
+
+      try {
+        const scorer = createScorer({
+          id: 'v1-judge-telemetry-scorer',
+          description: 'Captures normalized telemetry from a V1 judge',
+          judge: {
+            model,
+            instructions: 'Return a score.',
+          },
+        }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
+
+        const result = await scorer.run(testData.scoringInput);
+
+        expect(generateLegacySpy).toHaveBeenCalledTimes(1);
+        expect(result.judge?.generateScore?.executions[0]).toMatchObject({
+          prompt: 'score this output',
+          output: 0.75,
+          judgeModelId: 'mock-model-id',
+          judgeProvider: 'mock-provider',
+          usage: {
+            inputTokens: 10,
+            outputTokens: 20,
+            totalTokens: 30,
+          },
+          attemptCount: 1,
+          modelCallCount: 1,
+          durationMs: expect.any(Number),
+        });
+      } finally {
+        generateLegacySpy.mockRestore();
+      }
+    });
+
+    it('routes V1 judges through generateLegacy without error processors', async () => {
+      const model = createMockModel({ mockText: { score: 1 }, version: 'v1' });
+      const errorProcessor = { id: 'v1-error-processor', processAPIError: vi.fn(() => ({ retry: true })) };
+      const generateLegacySpy = vi
+        .spyOn(Agent.prototype, 'generateLegacy')
+        .mockRejectedValueOnce(createProviderError(429, true));
+      try {
+        const scorer = createScorer({
+          id: 'v1-legacy-judge-scorer',
+          description: 'V1 scorer judges bypass error processors',
+          judge: {
+            model,
+            instructions: 'Return a score.',
+            errorProcessors: [errorProcessor],
+            maxProcessorRetries: 2,
+          },
+        }).generateScore({ description: 'score', createPrompt: () => 'score this' });
+
+        await expect(scorer.run(testData.scoringInput)).rejects.toThrow('provider failed');
+        expect(generateLegacySpy).toHaveBeenCalledTimes(1);
+        expect(errorProcessor.processAPIError).not.toHaveBeenCalled();
+      } finally {
+        generateLegacySpy.mockRestore();
+      }
+    });
+
     it('lets the per-step judge override the scorer-level jsonPromptInjection', async () => {
       const streamSpy = vi.spyOn(Agent.prototype, 'stream');
       try {
@@ -492,12 +870,163 @@ describe('createScorer', () => {
 
         const result = await scorer.run(testData.scoringInput);
 
-        // Two stream calls: the failed first attempt + the jsonPromptInjection retry.
+        // Two stream calls: automatic routing first, then the existing fallback retry.
         expect(streamSpy).toHaveBeenCalledTimes(2);
-        expect(((streamSpy.mock.calls as any)[0]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBeFalsy();
+        expect(((streamSpy.mock.calls as any)[0]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBe('auto');
         expect(((streamSpy.mock.calls as any)[1]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBe(true);
         // The scorer recovered and produced the retried score.
         expect(result.score).toBe(1);
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
+
+    it('aggregates current judge fallback attempts without double-counting usage and preserves callbacks', async () => {
+      const { model, getCallCount } = createJudgeModel(['not valid JSON', JSON.stringify({ score: 1 })]);
+      const onStepFinish = vi.fn(async () => {});
+      const onFinish = vi.fn(async () => {});
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        const scorer = createScorer({
+          id: 'judge-telemetry-fallback-scorer',
+          description: 'Captures judge telemetry across structured output fallback attempts',
+          judge: {
+            model,
+            instructions: 'Return a score.',
+            onStepFinish,
+            onFinish,
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this output',
+        });
+
+        const result = await scorer.run(testData.scoringInput);
+        const execution = result.judge?.generateScore?.executions[0];
+
+        expect(getCallCount()).toBe(2);
+        expect(onStepFinish).toHaveBeenCalledTimes(2);
+        expect(onFinish).toHaveBeenCalledTimes(2);
+        expect(execution).toMatchObject({
+          prompt: 'score this output',
+          output: 1,
+          judgeModelId: 'mock-model-id',
+          judgeProvider: 'mock-provider',
+          usage: {
+            inputTokens: 20,
+            outputTokens: 40,
+            totalTokens: 60,
+          },
+          attemptCount: 2,
+          modelCallCount: 2,
+          durationMs: expect.any(Number),
+        });
+        expect(execution?.usage).not.toHaveProperty('raw');
+        expect(execution).not.toHaveProperty('providerMetadata');
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('awaits the caller onFinish callback inside the judge finish callback', async () => {
+      const model = createJudgeModel([JSON.stringify({ score: 1 })]).model;
+      let releaseOnFinish!: () => void;
+      const onFinishGate = new Promise<void>(resolve => {
+        releaseOnFinish = resolve;
+      });
+      const onFinish = vi.fn(async () => {
+        await onFinishGate;
+      });
+      const streamSpy = vi.spyOn(Agent.prototype, 'stream').mockImplementation((async (...args: any[]) => {
+        const options = args[1];
+        let wrapperSettled = false;
+        const wrapperPromise = options
+          .onFinish({
+            model: { modelId: 'mock-model-id', provider: 'mock-provider' },
+          })
+          .then(() => {
+            wrapperSettled = true;
+          });
+
+        await Promise.resolve();
+        expect(wrapperSettled).toBe(false);
+        releaseOnFinish();
+        await wrapperPromise;
+
+        return {
+          object: Promise.resolve({ score: 1 }),
+          consumeStream: vi.fn(),
+          totalUsage: Promise.resolve({ inputTokens: 10, outputTokens: 20, totalTokens: 30 }),
+          steps: Promise.resolve([{}]),
+        } as any;
+      }) as any);
+
+      try {
+        const scorer = createScorer({
+          id: 'judge-on-finish-await-scorer',
+          description: 'Awaits the caller finish callback',
+          judge: { model, instructions: 'Return a score.', onFinish },
+        }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
+
+        await expect(scorer.run(testData.scoringInput)).resolves.toMatchObject({ score: 1 });
+        expect(onFinish).toHaveBeenCalledTimes(1);
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
+
+    it('propagates caller onFinish callback errors from the judge invocation', async () => {
+      const model = createJudgeModel([JSON.stringify({ score: 1 })]).model;
+      const callbackError = new Error('judge finish callback failed');
+      const onFinish = vi.fn(async () => {
+        throw callbackError;
+      });
+      const streamSpy = vi.spyOn(Agent.prototype, 'stream').mockImplementation((async (...args: any[]) => {
+        const options = args[1];
+        await options.onFinish({
+          model: { modelId: 'mock-model-id', provider: 'mock-provider' },
+        });
+        throw new Error('unreachable');
+      }) as any);
+
+      try {
+        const scorer = createScorer({
+          id: 'judge-on-finish-error-scorer',
+          description: 'Propagates caller finish callback errors',
+          judge: { model, instructions: 'Return a score.', onFinish },
+        }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
+
+        await expect(scorer.run(testData.scoringInput)).rejects.toThrow('judge finish callback failed');
+        expect(onFinish).toHaveBeenCalledTimes(1);
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
+
+    it('counts multiple completed model steps within one judge attempt', async () => {
+      const model = createJudgeModel([JSON.stringify({ score: 1 })]).model;
+      const streamSpy = vi.spyOn(Agent.prototype, 'stream').mockResolvedValue({
+        object: Promise.resolve({ score: 1 }),
+        consumeStream: vi.fn(),
+        totalUsage: Promise.resolve({ inputTokens: 15, outputTokens: 25, totalTokens: 40 }),
+        steps: Promise.resolve([{}, {}]),
+      } as any);
+
+      try {
+        const scorer = createScorer({
+          id: 'judge-multiple-model-steps-scorer',
+          description: 'Counts model steps separately from attempts',
+          judge: { model, instructions: 'Return a score.' },
+        }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
+
+        const result = await scorer.run(testData.scoringInput);
+
+        expect(result.judge?.generateScore?.executions[0]).toMatchObject({
+          attemptCount: 1,
+          modelCallCount: 2,
+          usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 },
+        });
       } finally {
         streamSpy.mockRestore();
       }
@@ -510,7 +1039,9 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(Object.keys(result.judge ?? {})).toEqual(['analyze']);
+      expect(result.judge?.analyze?.executions).toHaveLength(1);
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with preprocess prompt and analyze function', async () => {
@@ -518,7 +1049,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with reason function and analyze prompt', async () => {
@@ -526,7 +1057,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with reason prompt and analyze function', async () => {
@@ -534,7 +1065,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
   });
 
@@ -544,7 +1075,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with preprocess', async () => {
@@ -552,7 +1083,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with preprocess function and analyze as prompt object', async () => {
@@ -560,7 +1091,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with preprocess prompt object and analyze function', async () => {
@@ -568,7 +1099,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with async createPrompt in preprocess', async () => {
@@ -576,7 +1107,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with async createPrompt in analyze', async () => {
@@ -584,7 +1115,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with async createPrompt in generateScore', async () => {
@@ -592,7 +1123,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
 
     it('with async createPrompt in generateReason', async () => {
@@ -600,7 +1131,7 @@ describe('createScorer', () => {
       const { runId, ...result } = await scorer.run(testData.scoringInput);
 
       expect(runId).toBeDefined();
-      expect(result).toMatchSnapshot();
+      expect(withoutJudge(result)).toMatchSnapshot();
     });
   });
 

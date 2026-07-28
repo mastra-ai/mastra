@@ -38,18 +38,18 @@ const {
 }));
 
 vi.mock('@ai-sdk/anthropic-v6', () => ({ createAnthropic: createAnthropicMock }));
-vi.mock('@ai-sdk/cerebras-v5', () => ({ createCerebras: createCerebrasMock }));
-vi.mock('@ai-sdk/deepinfra-v5', () => ({ createDeepInfra: createDeepInfraMock }));
-vi.mock('@ai-sdk/deepseek-v5', () => ({ createDeepSeek: createDeepSeekMock }));
+vi.mock('@ai-sdk/cerebras-v6', () => ({ createCerebras: createCerebrasMock }));
+vi.mock('@ai-sdk/deepinfra-v6', () => ({ createDeepInfra: createDeepInfraMock }));
+vi.mock('@ai-sdk/deepseek-v6', () => ({ createDeepSeek: createDeepSeekMock }));
 vi.mock('@ai-sdk/google-v6', () => ({ createGoogleGenerativeAI: createGoogleGenerativeAIMock }));
 vi.mock('@ai-sdk/groq-v6', () => ({ createGroq: createGroqMock }));
 vi.mock('@ai-sdk/mistral-v6', () => ({ createMistral: createMistralMock }));
 vi.mock('@ai-sdk/openai-v6', () => ({ createOpenAI: createOpenAIMock }));
-vi.mock('@ai-sdk/perplexity-v5', () => ({ createPerplexity: createPerplexityMock }));
-vi.mock('@ai-sdk/togetherai-v5', () => ({ createTogetherAI: createTogetherAIMock }));
+vi.mock('@ai-sdk/perplexity-v6', () => ({ createPerplexity: createPerplexityMock }));
+vi.mock('@ai-sdk/togetherai-v6', () => ({ createTogetherAI: createTogetherAIMock }));
 vi.mock('@ai-sdk/xai-v6', () => ({ createXai: createXaiMock }));
 vi.mock('@internal/ai-v6', () => ({ createGateway: createGatewayMock }));
-vi.mock('@openrouter/ai-sdk-provider-v5', () => ({ createOpenRouter: createOpenRouterMock }));
+vi.mock('@openrouter/ai-sdk-provider-v6', () => ({ createOpenRouter: createOpenRouterMock }));
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -263,7 +263,7 @@ describe('ModelsDevGateway', () => {
       expect(providers['example-provider'].apiKeyEnvVar).toBe('EXAMPLE_API_TOKEN');
     });
 
-    it('should filter out deprecated models', async () => {
+    it('should keep deprecated models and report them separately', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -286,12 +286,14 @@ describe('ModelsDevGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
+      // Deprecated upstream means "still served, scheduled for retirement", so the
+      // model stays selectable and keeps type-checking for users already on it.
       expect(providers.groq).toBeDefined();
-      expect(providers.groq.models).toEqual(['llama-3.1-8b']);
-      expect(providers.groq.models).not.toContain('deepseek-r1-distill-llama-70b');
+      expect(providers.groq.models).toEqual(['deepseek-r1-distill-llama-70b', 'llama-3.1-8b']);
+      expect(providers.groq.deprecatedModels).toEqual(['deepseek-r1-distill-llama-70b']);
     });
 
-    it('should return empty models array when all models are deprecated', async () => {
+    it('should omit deprecatedModels when nothing is deprecated', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -299,8 +301,7 @@ describe('ModelsDevGateway', () => {
             id: 'groq',
             name: 'Groq',
             models: {
-              'model-1': { name: 'Model 1', status: 'deprecated' },
-              'model-2': { name: 'Model 2', status: 'deprecated' },
+              'llama-3.1-8b': { name: 'Llama 3.1 8B' },
             },
             env: ['GROQ_API_KEY'],
             api: 'https://api.groq.com/openai/v1',
@@ -311,8 +312,46 @@ describe('ModelsDevGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      expect(providers.groq).toBeDefined();
-      expect(providers.groq.models).toEqual([]);
+      expect(providers.groq.models).toEqual(['llama-3.1-8b']);
+      expect(providers.groq.deprecatedModels).toBeUndefined();
+    });
+
+    it('should retain capabilities and per-model overrides for deprecated models', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          groq: {
+            id: 'groq',
+            name: 'Groq',
+            models: {
+              'legacy-model': {
+                name: 'Legacy Model',
+                status: 'deprecated',
+                attachment: true,
+                temperature: true,
+                structured_output: true,
+                provider: { api: 'https://api.groq.com/openai/v1/responses', shape: 'responses' },
+              },
+            },
+            env: ['GROQ_API_KEY'],
+            api: 'https://api.groq.com/openai/v1',
+            npm: '@ai-sdk/openai-compatible',
+          },
+        }),
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      // A deprecated model still runs, so it must keep the routing and capability
+      // data required to call it correctly.
+      expect(providers.groq.modelOverrides?.['legacy-model']).toEqual({
+        api: 'https://api.groq.com/openai/v1/responses',
+        shape: 'responses',
+        npm: undefined,
+      });
+      expect(gateway.getAttachmentCapabilities().groq).toContain('legacy-model');
+      expect(gateway.getTemperatureCapabilities().groq).toContain('legacy-model');
+      expect(gateway.getStructuredOutputCapabilities().groq).toContain('legacy-model');
     });
 
     it('should extract model IDs from each provider', async () => {

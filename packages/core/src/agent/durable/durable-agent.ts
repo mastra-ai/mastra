@@ -10,9 +10,11 @@ import { RequestContext } from '../../request-context';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType, MastraOnFinishCallback } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
+import { deepMerge } from '../../utils';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
+import { beginGoalActivity, stopGoalActivity } from '../goal';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
@@ -34,6 +36,7 @@ import { createDurableAgenticWorkflow } from './workflows';
  * Not part of the public `DurableAgentStreamOptions` surface.
  */
 const CLOSE_ON_SUSPEND = Symbol('mastra.durable.closeOnSuspend');
+const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
 
 /**
  * Options for DurableAgent.stream()
@@ -165,6 +168,10 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
    */
   abortSignal?: AbortSignal;
 }
+
+type DurableAgentResumeOptions<OUTPUT = undefined> = DurableAgentStreamOptions<OUTPUT> & {
+  toolCallId?: string;
+};
 
 /**
  * Result from DurableAgent.stream()
@@ -609,6 +616,31 @@ export class DurableAgent<
     return this.#wrappedAgent.getDefaultOptions(options);
   }
 
+  async #resolveExecutionOptions(
+    options?: DurableAgentStreamOptions<TOutput>,
+  ): Promise<DurableAgentStreamOptions<TOutput>> {
+    if ((options as any)?.[RESOLVED_EXECUTION_OPTIONS]) {
+      return options!;
+    }
+
+    const defaultOptions = await this.getDefaultOptions({ requestContext: options?.requestContext });
+    const resolvedOptions = deepMerge(
+      (defaultOptions ?? {}) as Record<string, unknown>,
+      (options ?? {}) as Record<string, unknown>,
+    ) as DurableAgentStreamOptions<TOutput>;
+    // Actor is a per-call trust signal, so an explicit value replaces the
+    // default actor as a whole rather than inheriting any of its fields.
+    if (options?.actor !== undefined) {
+      resolvedOptions.actor = options.actor;
+    }
+    if ((options as any)?.[CLOSE_ON_SUSPEND] === true) {
+      Object.defineProperty(resolvedOptions, CLOSE_ON_SUSPEND, { value: true, enumerable: true });
+    }
+    // Preserve the marker when the until-idle wrapper spreads these options.
+    Object.defineProperty(resolvedOptions, RESOLVED_EXECUTION_OPTIONS, { value: true, enumerable: true });
+    return resolvedOptions;
+  }
+
   override getDefaultGenerateOptionsLegacy(options?: any) {
     return this.#wrappedAgent.getDefaultGenerateOptionsLegacy(options);
   }
@@ -913,6 +945,7 @@ export class DurableAgent<
     const result = await run.start({
       inputData: workflowInput,
       requestContext,
+      actor: workflowInput.options?.actor,
       ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
     });
     if (result?.status === 'failed') {
@@ -999,14 +1032,25 @@ export class DurableAgent<
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
+    options = await this.#resolveExecutionOptions(options);
+
     // Delegate to the idle-loop wrapper when `untilIdle` is set.
     // Strip `untilIdle` before passing to the wrapper so its internal
     // agent.stream() call doesn't recurse.
     if (options?.untilIdle) {
       const { untilIdle, ...rest } = options;
       const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
+      // The idle helper normally resolves defaults for scope discovery. These
+      // options are already resolved, so keep its inner stream on the same values.
+      const resolvedOptionsAgent = {
+        id: this.id,
+        getDefaultOptions: () => ({}),
+        getMemory: (args?: any) => this.getMemory(args),
+        stream: (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
+          this.stream(innerMessages, innerOptions),
+      } as unknown as DurableAgent<any, any, TOutput>;
       return runDurableStreamUntilIdle<TOutput>(
-        this as unknown as DurableAgent<any, any, TOutput>,
+        resolvedOptionsAgent,
         messages,
         { ...rest, maxIdleMs },
         {
@@ -1016,6 +1060,17 @@ export class DurableAgent<
       );
     }
 
+    // Enforce agent-level FGA (agents:execute) before durable execution. The
+    // base Agent enforces this in its stream()/generate(); durable execution
+    // runs a workflow instead and would otherwise skip the gate. This also
+    // covers evented subclasses, which inherit stream()/generate().
+    await this.requireAgentExecutionFGA({
+      requestContext: options?.requestContext,
+      memory: options?.memory,
+      runId: options?.runId,
+      actor: options?.actor,
+    });
+
     // 1. Prepare for durable execution (non-durable phase)
     const preparation = await prepareForDurableExecution<TOutput>({
       agent: this.#wrappedAgent as Agent<string, any, TOutput>,
@@ -1023,6 +1078,7 @@ export class DurableAgent<
       options: options as AgentExecutionOptions<TOutput>,
       runId: options?.runId,
       requestContext: options?.requestContext,
+      optionsAreResolved: true,
       mastra: this.#mastra,
       durableAgentId: this.id,
       durableAgentName: this.name,
@@ -1126,7 +1182,20 @@ export class DurableAgent<
           from: ChunkFrom.AGENT,
           payload: { id: workflowInput.agentId, messageId },
         });
-        return this.executeWorkflow(runId, workflowInput);
+        if (this.__getGoalConfig()) {
+          await beginGoalActivity({
+            mastra: this.#mastra,
+            agentId: workflowInput.agentId,
+            threadId,
+            runId,
+            requestContext: globalRunRegistry.get(runId)?.requestContext,
+          });
+        }
+        try {
+          return await this.executeWorkflow(runId, workflowInput);
+        } finally {
+          await stopGoalActivity({ agentId: workflowInput.agentId, runId });
+        }
       })
       .catch(error => {
         void this.emitError(runId, error);
@@ -1187,26 +1256,8 @@ export class DurableAgent<
   async resume(
     runId: string,
     resumeData: unknown,
-    options?: DurableAgentStreamOptions<TOutput>,
+    options?: DurableAgentResumeOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
-    // `untilIdle` before passing to the wrapper so the inner agent.resume()
-    // call (and subsequent agent.stream([]) continuations) don't recurse.
-    if (options?.untilIdle) {
-      const { untilIdle, ...rest } = options;
-      const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
-      return runResumeDurableStreamUntilIdle<TOutput>(
-        this as unknown as DurableAgent<any, any, TOutput>,
-        runId,
-        resumeData,
-        { ...rest, maxIdleMs } as DurableAgentStreamOptions<TOutput> & { maxIdleMs?: number },
-        {
-          activeStreams: this.#activeStreamUntilIdle,
-          bgManager: this.#mastra?.backgroundTaskManager,
-        },
-      );
-    }
-
     let entry = this.#runRegistry.get(runId);
     if (!entry) {
       // A persisted durable run can outlive this process (or the registry TTL).
@@ -1254,19 +1305,21 @@ export class DurableAgent<
       )?.memoryInfo;
       const threadId = workflowInput.state?.threadId ?? messageListMemoryInfo?.threadId;
       const resourceId = workflowInput.state?.resourceId ?? messageListMemoryInfo?.resourceId;
-      const requestContext =
-        options?.requestContext ??
-        (workflowInput.requestContextEntries
-          ? new RequestContext(
-              Object.entries(workflowInput.requestContextEntries) as Iterable<readonly [string, unknown]>,
-            )
-          : undefined);
-      const memory = options?.memory ?? (threadId ? { thread: threadId, resource: resourceId } : undefined);
+      const snapshotRequestContext = workflowInput.requestContextEntries
+        ? new RequestContext<unknown>(Object.entries(workflowInput.requestContextEntries))
+        : undefined;
+      const memory = threadId
+        ? {
+            ...options?.memory,
+            thread: threadId,
+            resource: resourceId ?? options?.memory?.resource,
+          }
+        : options?.memory;
 
       await this.prepare([], {
         ...(options as AgentExecutionOptions<TOutput>),
         runId,
-        requestContext,
+        requestContext: options?.requestContext ?? snapshotRequestContext,
         memory,
       });
       entry = this.#runRegistry.get(runId);
@@ -1275,18 +1328,70 @@ export class DurableAgent<
       throw new Error(`Failed to rehydrate registry entry for run ${runId}. Cannot resume.`);
     }
 
+    const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
+    const registeredMemory = memoryInfo?.threadId
+      ? ({
+          ...options?.memory,
+          thread: memoryInfo.threadId,
+          resource: memoryInfo.resourceId ?? options?.memory?.resource,
+        } as DurableAgentStreamOptions<TOutput>['memory'])
+      : options?.memory;
+
+    const resolvedOptions = (await this.#resolveExecutionOptions({
+      ...(options as DurableAgentStreamOptions<TOutput>),
+      requestContext:
+        options?.requestContext ??
+        (entry.requestContext as DurableAgentStreamOptions<TOutput>['requestContext'] | undefined),
+      memory: registeredMemory ?? options?.memory,
+    })) as DurableAgentResumeOptions<TOutput>;
+
+    // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
+    // `untilIdle` before passing to the wrapper so the inner agent.resume()
+    // call (and subsequent agent.stream([]) continuations) don't recurse.
+    if (resolvedOptions.untilIdle) {
+      const { untilIdle, ...rest } = resolvedOptions;
+      const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
+      const resolvedOptionsAgent = {
+        id: this.id,
+        getDefaultOptions: () => ({}),
+        getMemory: (args?: any) => this.getMemory(args),
+        resume: (innerRunId: string, innerResumeData: unknown, innerOptions?: DurableAgentResumeOptions<TOutput>) =>
+          this.resume(innerRunId, innerResumeData, innerOptions),
+        stream: (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
+          this.stream(innerMessages, innerOptions),
+      } as unknown as DurableAgent<any, any, TOutput>;
+      return runResumeDurableStreamUntilIdle<TOutput>(
+        resolvedOptionsAgent,
+        runId,
+        resumeData,
+        { ...rest, maxIdleMs } as DurableAgentStreamOptions<TOutput> & { maxIdleMs?: number },
+        {
+          activeStreams: this.#activeStreamUntilIdle,
+          bgManager: this.#mastra?.backgroundTaskManager,
+        },
+      );
+    }
+
+    await this.requireAgentExecutionFGA({
+      requestContext: resolvedOptions.requestContext,
+      memory: resolvedOptions.memory,
+      runId,
+      snapshotMemoryInfo: memoryInfo,
+      actor: resolvedOptions.actor,
+    });
+
     // Install a fresh abort controller for the resumed segment. The original
     // controller is gone (the stream that owned it has already settled), so
     // we overwrite the registry slot. If the caller passed an external
     // signal, forward it onto the new internal controller.
     const abortController = new AbortController();
-    if (options?.abortSignal) {
-      if (options.abortSignal.aborted) {
-        abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason);
+    if (resolvedOptions.abortSignal) {
+      if (resolvedOptions.abortSignal.aborted) {
+        abortController.abort((resolvedOptions.abortSignal as AbortSignal & { reason?: unknown }).reason);
       } else {
-        options.abortSignal.addEventListener(
+        resolvedOptions.abortSignal.addEventListener(
           'abort',
-          () => abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason),
+          () => abortController.abort((resolvedOptions.abortSignal as AbortSignal & { reason?: unknown }).reason),
           { once: true },
         );
       }
@@ -1298,8 +1403,6 @@ export class DurableAgent<
       globalEntryForAbort.abortController = abortController;
       globalEntryForAbort.abortSignal = abortController.signal;
     }
-
-    const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
 
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
@@ -1341,16 +1444,16 @@ export class DurableAgent<
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
       offset: resumeOffset,
-      onChunk: options?.onChunk,
-      onStepFinish: options?.onStepFinish,
-      onFinish: options?.onFinish,
+      onChunk: resolvedOptions.onChunk,
+      onStepFinish: resolvedOptions.onStepFinish,
+      onFinish: resolvedOptions.onFinish,
       onStreamFinished: scheduleAutoCleanup,
       onError: async error => {
-        await options?.onError?.(error);
+        await resolvedOptions.onError?.(error);
         scheduleAutoCleanup();
       },
-      onSuspended: options?.onSuspended,
-      closeOnSuspend: (options as any)?.[CLOSE_ON_SUSPEND] === true,
+      onSuspended: resolvedOptions.onSuspended,
+      closeOnSuspend: (resolvedOptions as any)[CLOSE_ON_SUSPEND] === true,
       structuredOutput: entry.structuredOutput as any,
       outputProcessors: entry.outputProcessors,
       messageList: globalEntry?.messageList ?? this.#runRegistry.getMessageList(runId),
@@ -1358,7 +1461,7 @@ export class DurableAgent<
 
     // Wait for subscription to be ready, then resume workflow
     const workflow = this.getWorkflow();
-    const requestContext = globalRunRegistry.get(runId)?.requestContext;
+    const requestContext = resolvedOptions.requestContext;
 
     // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment on the same
     // traceId — the originals were ended as `suspended` and can't be reopened. Post-resume
@@ -1432,11 +1535,27 @@ export class DurableAgent<
         }
 
         const run = await workflow.createRun({ runId, pubsub: this.pubsub });
-        const result = await run.resume({
-          resumeData,
-          requestContext,
-          ...createObservabilityContext({ currentSpan: entry.resumeAgentSpan ?? entry.agentSpan }),
-        });
+        if (this.__getGoalConfig()) {
+          await beginGoalActivity({
+            mastra: this.#mastra,
+            agentId: this.id,
+            threadId: memoryInfo?.threadId,
+            runId,
+            requestContext,
+          });
+        }
+        let result;
+        try {
+          result = await run.resume({
+            resumeData,
+            label: resolvedOptions.toolCallId,
+            requestContext,
+            actor: resolvedOptions.actor,
+            ...createObservabilityContext({ currentSpan: entry.resumeAgentSpan ?? entry.agentSpan }),
+          });
+        } finally {
+          await stopGoalActivity({ agentId: this.id, runId });
+        }
         if (result?.status === 'failed') {
           const error = new Error((result as any).error?.message || 'Workflow resume failed');
           void this.emitError(runId, error);
@@ -1460,11 +1579,8 @@ export class DurableAgent<
     // Register the resumed run with the thread-stream runtime so
     // subscribeToThread subscribers are notified of the new stream.
     const resumeStreamOptions: AgentExecutionOptions<TOutput> = {
-      ...options,
+      ...resolvedOptions,
       runId,
-      memory: memoryInfo?.threadId
-        ? { thread: memoryInfo.threadId, resource: memoryInfo.resourceId }
-        : (options as any)?.memory,
     } as AgentExecutionOptions<TOutput>;
     await agentThreadStreamRuntime.registerRun(
       this as unknown as Agent<any, any, any, any>,
@@ -1932,6 +2048,20 @@ export class DurableAgent<
     return this.resumeStream({ approved: false }, options);
   }
 
+  override async approveToolCallGenerate<OUTPUT = undefined>(
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+  ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    const { runId, ...resumeOptions } = options;
+    return this.resumeGenerate(runId, { approved: true }, resumeOptions as any) as any;
+  }
+
+  override async declineToolCallGenerate<OUTPUT = undefined>(
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+  ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
+    const { runId, ...resumeOptions } = options;
+    return this.resumeGenerate(runId, { approved: false }, resumeOptions as any) as any;
+  }
+
   /**
    * Generate a complete response from the agent using durable execution.
    *
@@ -1965,6 +2095,17 @@ export class DurableAgent<
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<FullOutput<TOutput>> {
+    options = await this.#resolveExecutionOptions(options);
+
+    // Enforce agent-level FGA (agents:execute) before durable execution — see
+    // stream() above. Durable/evented generate would otherwise skip the gate.
+    await this.requireAgentExecutionFGA({
+      requestContext: options?.requestContext,
+      memory: options?.memory,
+      runId: options?.runId,
+      actor: options?.actor,
+    });
+
     // 1. Prepare for durable execution (non-durable phase)
     const preparation = await prepareForDurableExecution<TOutput>({
       agent: this.#wrappedAgent as Agent<string, any, TOutput>,
@@ -1972,6 +2113,7 @@ export class DurableAgent<
       options: options as AgentExecutionOptions<TOutput>,
       runId: options?.runId,
       requestContext: options?.requestContext,
+      optionsAreResolved: true,
       mastra: this.#mastra,
       methodType: 'generate',
       durableAgentId: this.id,
@@ -2076,7 +2218,20 @@ export class DurableAgent<
           from: ChunkFrom.AGENT,
           payload: { id: workflowInput.agentId, messageId },
         });
-        return this.executeWorkflow(runId, workflowInput);
+        if (this.__getGoalConfig()) {
+          await beginGoalActivity({
+            mastra: this.#mastra,
+            agentId: workflowInput.agentId,
+            threadId,
+            runId,
+            requestContext: globalRunRegistry.get(runId)?.requestContext,
+          });
+        }
+        try {
+          return await this.executeWorkflow(runId, workflowInput);
+        } finally {
+          await stopGoalActivity({ agentId: workflowInput.agentId, runId });
+        }
       })
       .catch(error => {
         void this.emitError(runId, error);
@@ -2489,14 +2644,19 @@ export class DurableAgent<
   }
 
   /**
-   * Clear cached pubsub events for a run's topic.
-   * Only effective when pubsub supports clearTopic (e.g. CachingPubSub).
+   * Clear retained pubsub state for a run's topic (cached history and, for
+   * persistent transports, the underlying stream). Fire-and-forget: the
+   * `clearTopic` contract is best-effort and non-throwing.
+   *
+   * Unlike the evented workflow engine's per-run topic cleanup, this needs no
+   * restart guard: cleanup timers arm only on terminal outcomes
+   * (FINISH/ERROR/ABORT — never SUSPENDED), `resume()` rejects runs whose
+   * snapshot isn't `suspended`, `untilIdle` continuations mint a fresh runId
+   * per segment, and cross-process `recover()` can't race a dead process's
+   * timer. No supported flow re-engages a runId after its timer is armed.
    */
   #clearPubsubTopic(runId: string): void {
-    const pubsub = this.pubsub;
-    if ('clearTopic' in pubsub && typeof (pubsub as any).clearTopic === 'function') {
-      void (pubsub as any).clearTopic(AGENT_STREAM_TOPIC(runId));
-    }
+    void this.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
   }
 
   /**
@@ -2552,15 +2712,11 @@ export class DurableAgent<
     messages: MessageListInput,
     streamOptions?: DurableAgentStreamOptions<OUTPUT> & { maxIdleMs?: number },
   ): Promise<DurableAgentStreamResult<OUTPUT>> {
-    return runDurableStreamUntilIdle<OUTPUT>(
-      this as unknown as DurableAgent<any, any, OUTPUT>,
-      messages,
-      streamOptions,
-      {
-        activeStreams: this.#activeStreamUntilIdle,
-        bgManager: this.#mastra?.backgroundTaskManager,
-      },
-    );
+    const { maxIdleMs, ...options } = streamOptions ?? {};
+    return this.stream(messages, {
+      ...options,
+      untilIdle: maxIdleMs === undefined ? true : { maxIdleMs },
+    } as DurableAgentStreamOptions<TOutput>) as unknown as Promise<DurableAgentStreamResult<OUTPUT>>;
   }
 
   /**

@@ -198,9 +198,7 @@ test.describe('Admin Role', () => {
       await page.goto('/tools/weatherInfo');
 
       // Should see the tool execution form/panel
-      // Look for input fields or execute button
-      const locationInput = page.getByLabel(/location/i).or(page.locator('input[name="location"]'));
-      await expect(locationInput.first()).toBeVisible();
+      await expect(page.locator('[name="location"]')).toBeVisible();
     });
 
     test('admin does not see permission denied for tool execution', async ({ page }) => {

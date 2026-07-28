@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 /**
  * Smoke test for the platform-deployable entry (`src/mastra/index.ts`).
@@ -29,5 +29,93 @@ describe('platform entry (src/mastra/index.ts)', () => {
     const apiRoutes = server?.apiRoutes ?? [];
     const paths = apiRoutes.map(r => r.path);
     expect(paths.some(p => p.startsWith('/web/'))).toBe(true);
+  });
+
+  // Integration env groups are all-or-nothing: setting ANY var of a group
+  // means you intend to enable the integration, so a partial set must fail
+  // the boot loudly (listing what's missing) instead of silently disabling.
+  describe('integration env groups', () => {
+    beforeEach(() => {
+      for (const name of [
+        'GITHUB_APP_ID',
+        'GITHUB_APP_PRIVATE_KEY',
+        'GITHUB_APP_CLIENT_ID',
+        'GITHUB_APP_CLIENT_SECRET',
+        'GITHUB_APP_SLUG',
+        'GITHUB_APP_WEBHOOK_SECRET',
+        'LINEAR_CLIENT_ID',
+        'LINEAR_CLIENT_SECRET',
+      ]) {
+        vi.stubEnv(name, '');
+      }
+      vi.resetModules();
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    });
+
+    it(
+      'boots when the GitHub group is partially configured so diagnostics can report the missing setup',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        // The test env may carry a full GitHub config — blank everything but the
+        // app id to force the partial state.
+        vi.stubEnv('GITHUB_APP_ID', '12345');
+        vi.stubEnv('GITHUB_APP_PRIVATE_KEY', '');
+        vi.stubEnv('GITHUB_APP_CLIENT_ID', '');
+        vi.stubEnv('GITHUB_APP_CLIENT_SECRET', '');
+        vi.stubEnv('GITHUB_APP_SLUG', '');
+        const mod = await import('./index.js');
+        expect(mod.mastra).toBeDefined();
+      },
+    );
+
+    it(
+      'registers the direct GitHub App integration when the full group is configured',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        // No platform identity in this env, so the only source of a GitHub
+        // connection is the direct GITHUB_APP_* group wired in the entry.
+        vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
+        vi.stubEnv('GITHUB_APP_ID', '12345');
+        vi.stubEnv('GITHUB_APP_PRIVATE_KEY', 'test-private-key');
+        vi.stubEnv('GITHUB_APP_CLIENT_ID', 'Iv1.client');
+        vi.stubEnv('GITHUB_APP_CLIENT_SECRET', 'client-secret');
+        vi.stubEnv('GITHUB_APP_SLUG', 'test-app');
+        vi.stubEnv('GITHUB_APP_WEBHOOK_SECRET', 'webhook-secret');
+        const mod = await import('./index.js');
+        const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
+        // The connect route is registered only by the GithubIntegration, so its
+        // presence proves the direct fallback wired the integration onto the factory.
+        expect(paths).toContain('/auth/github/connect');
+      },
+    );
+
+    it(
+      'boots when the Linear group is partially configured so diagnostics can report the missing setup',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        vi.stubEnv('LINEAR_CLIENT_ID', 'lin_client');
+        vi.stubEnv('LINEAR_CLIENT_SECRET', '');
+        const mod = await import('./index.js');
+        expect(mod.mastra).toBeDefined();
+      },
+    );
+
+    it('registers the direct Linear integration when the full group is configured', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
+      vi.stubEnv('WORKOS_COOKIE_PASSWORD', 'stable-state-secret');
+      vi.stubEnv('LINEAR_CLIENT_ID', 'lin_client');
+      vi.stubEnv('LINEAR_CLIENT_SECRET', 'linear-secret');
+      const mod = await import('./index.js');
+      const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
+      expect(paths).toContain('/auth/linear/connect');
+    });
   });
 });

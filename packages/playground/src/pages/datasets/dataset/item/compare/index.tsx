@@ -67,7 +67,7 @@ function DatasetItemsComparePage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-neutral4 text-center py-8">
+          <div className="text-neutral4 py-8 text-center">
             <p>Select at least two items to compare.</p>
           </div>
         </MainContentContent>

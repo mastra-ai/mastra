@@ -20,6 +20,7 @@ export type DatabaseConfig = {
   pinecone?: PineconeConfig
   pgvector?: PgVectorConfig
   chroma?: ChromaConfig
+  turbopuffer?: TurbopufferConfig
   [key: string]: any // Extensible for future databases
 }
 ```
@@ -162,6 +163,27 @@ whereDocument: { "$contains": "API documentation" }
 - Advanced metadata filtering
 - Content-based document filtering
 - Complex query combinations
+
+### `TurbopufferConfig`
+
+Configuration options specific to Turbopuffer vector store.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'consistency',
+    type: "'strong' | 'eventual'",
+    description:
+      'The consistency level for queries. "strong" (default) guarantees queries see all data written before the query started, at the cost of higher latency. "eventual" offers lower latency, but recently written data may not be visible yet.',
+    isOptional: true,
+  },
+]}
+/>
+
+**Use Cases:**
+
+- Latency-sensitive queries where slightly stale data is acceptable (`eventual`)
+- Read-your-writes workflows that must see the latest data (`strong`)
 
 ## Usage examples
 

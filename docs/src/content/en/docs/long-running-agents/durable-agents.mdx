@@ -166,11 +166,12 @@ cleanup()
 
 `createDurableAgent()` and `createEventedAgent()` use an in-memory cache by default, which means resumable streams work within a single process. For production, provide a persistent cache backend (e.g., Redis) so cached events survive process restarts:
 
-```typescript title="src/mastra/agents/durable-with-cache.ts" {2,7}
+```typescript title="src/mastra/agents/durable-with-cache.ts" {2,3,5,9}
 import { createDurableAgent } from '@mastra/core/agent/durable'
 import { RedisServerCache } from '@mastra/redis'
+import Redis from 'ioredis'
 
-const cache = new RedisServerCache({ url: 'redis://localhost:6379' })
+const cache = new RedisServerCache({ client: new Redis('redis://localhost:6379') })
 
 export const durableAgent = createDurableAgent({
   agent,

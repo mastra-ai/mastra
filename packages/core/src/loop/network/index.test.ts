@@ -117,6 +117,22 @@ describe('getRoutingAgent', () => {
     } as any;
   }
 
+  it('resolves an explicit routing model through the parent agent', async () => {
+    const mockAgent = createMockAgent({});
+    const requestContext = new RequestContext();
+
+    await getRoutingAgent({
+      agent: mockAgent,
+      requestContext,
+      model: 'google/gemini-2.5-flash',
+    });
+
+    expect(mockAgent.getModel).toHaveBeenCalledWith({
+      requestContext,
+      modelConfig: 'google/gemini-2.5-flash',
+    });
+  });
+
   it('should handle workflow with undefined inputSchema without throwing', async () => {
     // Create a workflow without inputSchema (simulating the bug scenario)
     const workflowWithoutInputSchema = createWorkflow({

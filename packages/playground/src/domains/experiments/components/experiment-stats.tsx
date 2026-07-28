@@ -22,7 +22,7 @@ export function ExperimentStats({ experiment, className }: ExperimentStatsProps)
 
   return (
     <div className={cn('grid justify-items-end gap-3', className)}>
-      <div className="flex p-1 px-3 text-ui-lg capitalize text-neutral4 gap-2 items-center bg-surface5 rounded-lg ">
+      <div className="text-ui-lg text-neutral4 bg-surface5 flex items-center gap-2 rounded-lg p-1 px-3 capitalize">
         <span
           className={cn('w-5 h-5 flex items-center justify-center rounded-full text-black', '[&>svg]:w-4 [&>svg]:h-4', {
             'bg-green-700': status === 'completed',

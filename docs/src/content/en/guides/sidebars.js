@@ -183,6 +183,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'deployment/kubernetes',
+          label: 'Kubernetes',
+        },
+        {
+          type: 'doc',
           id: 'deployment/netlify',
           label: 'Netlify',
         },
@@ -280,6 +285,11 @@ const sidebars = {
               label: 'Filesystem: Docs Manager',
             },
           ],
+        },
+        {
+          type: 'doc',
+          id: 'guide/coding-agent',
+          label: 'Building a Coding Agent',
         },
         {
           type: 'doc',

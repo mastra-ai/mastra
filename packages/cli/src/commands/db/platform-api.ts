@@ -1,5 +1,5 @@
 import { withPollingRetries } from '../../utils/polling.js';
-import { authHeaders, platformFetch, throwApiError } from '../auth/client.js';
+import { authHeaders, extractApiErrorDetail, platformFetch, throwApiError } from '../auth/client.js';
 
 export type DatabaseKind = 'turso' | 'neon' | 'mongodb';
 export type DatabaseStatus = 'provisioning' | 'ready' | 'failed' | 'deleting' | 'deleted';
@@ -52,8 +52,7 @@ function getApiUrl(): string {
 
 async function readErrorDetail(resp: Response): Promise<string | undefined> {
   try {
-    const err = (await resp.json()) as { detail?: string; error?: string };
-    return err.detail ?? err.error;
+    return extractApiErrorDetail(await resp.json());
   } catch {
     return undefined;
   }
@@ -117,14 +116,14 @@ export async function fetchDatabase(
   return data.database;
 }
 
-export async function detachDatabase(token: string, orgId: string, projectId: string, dbId: string): Promise<void> {
+export async function deleteDatabase(token: string, orgId: string, projectId: string, dbId: string): Promise<void> {
   const resp = await platformFetch(`${getApiUrl()}/v1/server/projects/${projectId}/databases/${dbId}`, {
     method: 'DELETE',
     headers: authHeaders(token, orgId),
   });
 
   if (!resp.ok) {
-    await handleFailure(resp, 'Failed to detach database');
+    await handleFailure(resp, 'Failed to delete database');
   }
 }
 

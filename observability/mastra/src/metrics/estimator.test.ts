@@ -7,8 +7,167 @@ import { TokenMetrics } from './types';
 
 const fixturePath = path.join(import.meta.dirname, '__fixtures__', 'pricing-data-test.jsonl');
 const pricingRegistry = PricingRegistry.fromText(fs.readFileSync(fixturePath, 'utf-8'));
+const embeddedPricingPath = path.join(import.meta.dirname, 'pricing-data.jsonl');
+const embeddedPricingRegistry = PricingRegistry.fromText(fs.readFileSync(embeddedPricingPath, 'utf-8'));
 
 describe('estimateCosts', () => {
+  it.each([
+    ['gpt-5.6', '02673ef8836dfa48', 0.005, 0.0005, 0.00625, 0.03, 0.00001, 0.000045],
+    ['gpt-5.6-sol', '20d0cde775d1441d', 0.005, 0.0005, 0.00625, 0.03, 0.00001, 0.000045],
+    ['gpt-5.6-terra', 'd39bbd4dbe73180a', 0.0025, 0.00025, 0.003125, 0.015, 0.000005, 0.0000225],
+    ['gpt-5.6-luna', '3ad0e58759c048c0', 0.001, 0.0001, 0.00125, 0.006, 0.000002, 0.000009],
+  ])(
+    'estimates embedded OpenAI pricing for %s',
+    (
+      model,
+      pricingId,
+      inputCost,
+      cacheReadCost,
+      cacheWriteCost,
+      outputCost,
+      longContextInputRate,
+      longContextOutputRate,
+    ) => {
+      const costs = estimateCosts(
+        {
+          provider: 'openai',
+          model,
+          usage: {
+            inputTokens: 3_000,
+            outputTokens: 1_000,
+            inputDetails: { text: 1_000, cacheRead: 1_000, cacheWrite: 1_000 },
+            outputDetails: { text: 1_000 },
+          },
+        },
+        embeddedPricingRegistry,
+      );
+
+      expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(inputCost);
+      expect(costs.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(cacheReadCost);
+      expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE)?.estimatedCost).toBeCloseTo(cacheWriteCost);
+      expect(costs.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(outputCost);
+      expect(costs.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({ pricing_id: pricingId, tier_index: 0 });
+
+      const longContextCosts = estimateCosts(
+        {
+          provider: 'openai',
+          model,
+          usage: { inputTokens: 272_001, outputTokens: 1_000 },
+        },
+        embeddedPricingRegistry,
+      );
+
+      expect(longContextCosts.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(272_001 * longContextInputRate);
+      expect(longContextCosts.get(TokenMetrics.TOTAL_OUTPUT)?.estimatedCost).toBeCloseTo(1_000 * longContextOutputRate);
+      expect(longContextCosts.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({
+        pricing_id: pricingId,
+        tier_index: 1,
+      });
+    },
+  );
+
+  it.each([
+    ['claude-fable-5', '00de3426817c9886', 0.01, 0.001, 0.0125, 0.05],
+    ['claude-opus-4-8', '93c628c3a9d22500', 0.005, 0.0005, 0.00625, 0.025],
+    ['claude-sonnet-5', '916837951831cfe5', 0.002, 0.0002, 0.0025, 0.01],
+  ])(
+    'estimates embedded Anthropic pricing for %s',
+    (model, pricingId, inputCost, cacheReadCost, cacheWriteCost, outputCost) => {
+      const costs = estimateCosts(
+        {
+          provider: 'anthropic',
+          model,
+          usage: {
+            inputTokens: 3_000,
+            outputTokens: 1_000,
+            inputDetails: { text: 1_000, cacheRead: 1_000, cacheWrite: 1_000 },
+            outputDetails: { text: 1_000 },
+          },
+        },
+        embeddedPricingRegistry,
+      );
+
+      expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(inputCost);
+      expect(costs.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(cacheReadCost);
+      expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE)?.estimatedCost).toBeCloseTo(cacheWriteCost);
+      expect(costs.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(outputCost);
+      expect(costs.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({ pricing_id: pricingId, tier_index: 0 });
+    },
+  );
+
+  it('estimates embedded Google pricing for gemini-3.5-flash', () => {
+    const costs = estimateCosts(
+      {
+        provider: 'google',
+        model: 'gemini-3.5-flash',
+        usage: {
+          inputTokens: 2_000,
+          outputTokens: 1_000,
+          inputDetails: { text: 1_000, cacheRead: 1_000 },
+          outputDetails: { text: 1_000 },
+        },
+      },
+      embeddedPricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(0.0015);
+    expect(costs.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(0.00015);
+    expect(costs.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(0.009);
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({
+      pricing_id: 'f13bc1ec3f88b97d',
+      tier_index: 0,
+    });
+  });
+
+  it.each([
+    ['grok-4.5', 'ec1c2a95e38faa9b', 0.002, 0.0003, 0.006, 0.000004, 0.0000006, 0.000012],
+    ['grok-build-0.1', 'd03e4214108e83a2', 0.001, 0.0002, 0.002, 0.000002, 0.0000004, 0.000004],
+  ])(
+    'estimates embedded xAI pricing for %s',
+    (model, pricingId, inputCost, cacheReadCost, outputCost, longInputRate, longCacheReadRate, longOutputRate) => {
+      const costs = estimateCosts(
+        {
+          provider: 'xai',
+          model,
+          usage: {
+            inputTokens: 2_000,
+            outputTokens: 1_000,
+            inputDetails: { text: 1_000, cacheRead: 1_000 },
+            outputDetails: { text: 1_000 },
+          },
+        },
+        embeddedPricingRegistry,
+      );
+
+      expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(inputCost);
+      expect(costs.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(cacheReadCost);
+      expect(costs.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(outputCost);
+      expect(costs.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({ pricing_id: pricingId, tier_index: 0 });
+
+      const longContextCosts = estimateCosts(
+        {
+          provider: 'xai',
+          model,
+          usage: {
+            inputTokens: 201_000,
+            outputTokens: 1_000,
+            inputDetails: { text: 200_000, cacheRead: 1_000 },
+            outputDetails: { text: 1_000 },
+          },
+        },
+        embeddedPricingRegistry,
+      );
+
+      expect(longContextCosts.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(200_000 * longInputRate);
+      expect(longContextCosts.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(1_000 * longCacheReadRate);
+      expect(longContextCosts.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(1_000 * longOutputRate);
+      expect(longContextCosts.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({
+        pricing_id: pricingId,
+        tier_index: 1,
+      });
+    },
+  );
+
   it('returns total-row error contexts when provider and model do not match a pricing row', () => {
     const costs = estimateCosts(
       {
@@ -448,6 +607,131 @@ describe('estimateCosts', () => {
         pricing_id: 'openrouter-gemini-2-5-flash',
         tier_index: 0,
       },
+    });
+  });
+
+  it.each([
+    ['anthropic/claude-haiku-4.5', 'vercel-claude-haiku-4-5', 0.001],
+    ['amazon/nova-micro', 'vercel-amazon-nova-micro', 0.000035],
+  ])('resolves Vercel AI Gateway model id %s against Vercel pricing', (model, pricingId, estimatedCost) => {
+    const costs = estimateCosts(
+      {
+        provider: 'gateway',
+        model,
+        usage: { inputTokens: 1_000 },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toMatchObject({
+      provider: 'vercel',
+      costMetadata: { pricing_id: pricingId },
+    });
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(estimatedCost);
+  });
+
+  it.each(['claude-haiku-4.5', ' /claude-haiku-4.5', 'anthropic/claude/haiku-4.5'])(
+    'does not treat invalid Gateway model id %s as Vercel pricing',
+    model => {
+      const costs = estimateCosts(
+        {
+          provider: 'gateway',
+          model,
+          usage: { inputTokens: 1_000 },
+        },
+        pricingRegistry,
+      );
+
+      expect(costs.get(TokenMetrics.TOTAL_INPUT)).toEqual({
+        provider: 'gateway',
+        model,
+        costMetadata: { error: 'no_matching_model' },
+      });
+    },
+  );
+
+  it('prefers exact Gateway pricing before the Vercel fallback', () => {
+    const registry = PricingRegistry.fromText(`
+{"i":"gateway-openai-gpt-4o-mini","p":"gateway","m":"openai/gpt-4o-mini","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"it":{"c":2e-7}}}]}}}
+{"i":"vercel-gpt-4o-mini","p":"vercel","m":"gpt-4o-mini","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"it":{"c":1.5e-7}}}]}}}
+`);
+    const costs = estimateCosts(
+      {
+        provider: 'gateway',
+        model: 'openai/gpt-4o-mini',
+        usage: { inputTokens: 1_000 },
+      },
+      registry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toMatchObject({
+      provider: 'gateway',
+      model: 'openai/gpt-4o-mini',
+      costMetadata: { pricing_id: 'gateway-openai-gpt-4o-mini' },
+    });
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(0.0002);
+  });
+
+  it.each([
+    ['openai.chat', 'gpt-4o-mini', 'openai', 'openai-gpt-4o-mini'],
+    ['google.generative-ai', 'gemini-2.0-flash', 'google', 'google-gemini-2-0-flash'],
+  ])('falls back from AI SDK provider %s to %s pricing', (provider, model, pricingProvider, pricingId) => {
+    const costs = estimateCosts(
+      {
+        provider,
+        model,
+        usage: { inputTokens: 1_000 },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toMatchObject({
+      provider: pricingProvider,
+      costMetadata: { pricing_id: pricingId },
+    });
+  });
+
+  it.each([
+    ['google.vertex.chat', 'gemini-2.0-flash', 'google-vertex', 'google-vertex-gemini-2-0-flash', 0.00015],
+    ['vertex.maas.chat', 'deepseek-ai/deepseek-v3.1-maas', 'google-vertex', 'google-vertex-deepseek-v3-1-maas', 0.0006],
+    [
+      'vertex.anthropic.messages',
+      'claude-sonnet-4-5@20250929',
+      'google-vertex-anthropic',
+      'google-vertex-anthropic-claude-sonnet-4-5',
+      0.003,
+    ],
+  ])('resolves AI SDK provider %s against %s pricing', (provider, model, pricingProvider, pricingId, estimatedCost) => {
+    const costs = estimateCosts(
+      {
+        provider,
+        model,
+        usage: { inputTokens: 1_000 },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toMatchObject({
+      provider: pricingProvider,
+      costMetadata: { pricing_id: pricingId },
+    });
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(estimatedCost);
+  });
+
+  it('does not fall back from Google Vertex to direct Google pricing', () => {
+    const costs = estimateCosts(
+      {
+        provider: 'google.vertex.chat',
+        model: 'gemini-2.5-pro',
+        usage: { inputTokens: 1_000 },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toEqual({
+      provider: 'google.vertex.chat',
+      model: 'gemini-2.5-pro',
+      costMetadata: { error: 'no_matching_model' },
     });
   });
 

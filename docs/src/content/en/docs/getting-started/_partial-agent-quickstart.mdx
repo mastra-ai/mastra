@@ -38,17 +38,31 @@ export const weatherTool = createTool({
     location: z.string().describe('City name'),
   }),
   outputSchema: z.object({
-    output: z.string(),
+    location: z.string(),
+    temperatureCelsius: z.number(),
+    conditions: z.string(),
   }),
   execute: async ({ location }) => {
     return {
-      output: `The weather in ${location} is sunny`,
+      location,
+      temperatureCelsius: 21,
+      conditions: 'sunny',
     }
   },
 })
 ```
 
-If you need to create an agent, create a new file and use `import { Agent } from "@mastra/core/agent"`. The constructor takes `{ id, name, instructions, model }`. The `model` property is a string in Mastra's model router format: `provider/model`, for example `__GATEWAY_OPENAI_MODEL__`. For OpenAI models, use `openai/<model>`, not `openai:<model>`, and don't pass a provider object. No provider import is needed for this format. Don't install any AI SDK package unless Mastra's documentation says otherwise.
+If you need to create an agent, create a new file and use `import { Agent } from "@mastra/core/agent"`. The constructor takes `{ id, name, instructions, model }`. The `model` property is a string in Mastra's model router format. No provider import is needed for this format. Don't install any AI SDK package unless Mastra's documentation says otherwise.
+
+By defining the model using `provider/model` format Mastra automatically looks for environment variables for the given provider. The defined model requires an environment variable to be set for the provider. OpenAI: `OPENAI_API_KEY`. Anthropic: `ANTHROPIC_API_KEY`. Google: `GOOGLE_API_KEY`. Example: Any `openai/<model>` requires the `OPENAI_API_KEY` environment variable. Go to [https://mastra.ai/models/environment-variables](https://mastra.ai/models/environment-variables) for a full list of supported providers and their environment variable names.
+
+Short list of known model IDs are:
+
+- `__GATEWAY_OPENAI_MODEL__`, `__GATEWAY_OPENAI_MODEL_MINI__`
+- `__GATEWAY_ANTHROPIC_MODEL_SONNET__`, `__GATEWAY_ANTHROPIC_MODEL_OPUS__`, `__GATEWAY_ANTHROPIC_MODEL_HAIKU__`
+- `__GATEWAY_GOOGLE_MODEL_FLASH__`
+
+Go to [https://mastra.ai/models](https://mastra.ai/models) for a full list of supported models.
 
 Add a tool an agent by importing the tool and passing it to the agent constructor as a tools object.
 
@@ -76,16 +90,6 @@ export const weatherAgent = new Agent({
   tools: { weatherTool },
 })
 ```
-
-By defining the model using `provider/model` format Mastra automatically looks for environment variables for the given provider. The defined model requires an environment variable to be set for the provider. OpenAI: `OPENAI_API_KEY`. Anthropic: `ANTHROPIC_API_KEY`. Google: `GOOGLE_API_KEY`. Example: Any `openai/<model>` requires the `OPENAI_API_KEY` environment variable. Go to [https://mastra.ai/models/environment-variables](https://mastra.ai/models/environment-variables) for a full list of supported providers and their environment variable names.
-
-Short list of known model IDs are:
-
-- `__GATEWAY_OPENAI_MODEL__`, `__GATEWAY_OPENAI_MODEL_MINI__`
-- `__GATEWAY_ANTHROPIC_MODEL_SONNET__`, `__GATEWAY_ANTHROPIC_MODEL_OPUS__`, `__GATEWAY_ANTHROPIC_MODEL_HAIKU__`
-- `__GATEWAY_GOOGLE_MODEL_FLASH__`
-
-Go to [https://mastra.ai/models](https://mastra.ai/models) for a full list of supported models.
 
 Create a Mastra entry point at `src/mastra/index.ts` and register the agent:
 

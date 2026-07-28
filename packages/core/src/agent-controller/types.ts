@@ -1,6 +1,8 @@
 import type { Agent } from '../agent';
+import type { MastraDBMessage } from '../agent/message-list/state/types';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
+import type { AgentControllerChannelsConfig } from '../channels/agent-controller-channels';
 import type { PubSub } from '../events/pubsub';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import type { LoopOptions } from '../loop/types';
@@ -246,6 +248,19 @@ export interface AgentControllerConfig<TState = {}> {
 
   /** Shared backing agent that each mode forks and decorates on the controller. */
   agent?: Agent<any, any, any, any>;
+
+  /**
+   * Chat channel adapters (Slack, Discord, ...) that run this controller
+   * inside messaging threads. Inbound platform messages route into a
+   * controller `Session` (one durable session per chat thread) and the
+   * streamed output renders back to the platform through the channels
+   * output processor (native streaming, tool cards, typing status).
+   * Tool approvals resolve through the session's approval gate.
+   *
+   * V1 expects manually constructed adapters and a long-lived server
+   * (controller sessions are in-memory and don't survive restarts).
+   */
+  channels?: AgentControllerChannelsConfig;
 
   /** Default mode to enter when a thread has no persisted mode. */
   defaultModeId?: string;
@@ -600,7 +615,7 @@ export interface AgentControllerDisplayState {
 
   // ── Current streaming message ────────────────────────────────────────
   /** The message currently being streamed (null when idle) */
-  currentMessage: AgentControllerMessage | null;
+  currentMessage: MastraDBMessage | null;
 
   // ── Follow-up queue ──────────────────────────────────────────────────
   /** Number of follow-up messages queued locally by the AgentController */
@@ -740,9 +755,9 @@ export type AgentControllerEvent =
   | { type: 'state_changed'; state: Record<string, unknown>; changedKeys: string[] }
   | { type: 'agent_start' }
   | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
-  | { type: 'message_start'; message: AgentControllerMessage }
-  | { type: 'message_update'; message: AgentControllerMessage }
-  | { type: 'message_end'; message: AgentControllerMessage }
+  | { type: 'message_start'; message: MastraDBMessage }
+  | { type: 'message_update'; message: MastraDBMessage }
+  | { type: 'message_end'; message: MastraDBMessage }
   | { type: 'tool_start'; toolCallId: string; toolName: string; args: unknown }
   | { type: 'tool_approval_required'; toolCallId: string; toolName: string; args: unknown }
   | {
@@ -753,6 +768,7 @@ export type AgentControllerEvent =
       suspendPayload: unknown;
       resumeSchema?: string;
     }
+  | { type: 'tool_suspension_cancelled'; toolCallId: string; toolName: string; reason: string }
   | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
   | {
       type: 'tool_end';
@@ -762,7 +778,7 @@ export type AgentControllerEvent =
       providerMetadata?: Record<string, unknown>;
     }
   | { type: 'tool_input_start'; toolCallId: string; toolName: string }
-  | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: string; toolName?: string }
+  | { type: 'tool_input_delta'; toolCallId: string; argsTextDelta: unknown; toolName?: string }
   | { type: 'tool_input_end'; toolCallId: string }
   | { type: 'shell_output'; toolCallId: string; output: string; stream: 'stdout' | 'stderr' }
   | { type: 'usage_update'; usage: TokenUsage }
@@ -905,112 +921,6 @@ export type AgentControllerEvent =
 export type AgentControllerEventListener = (event: AgentControllerEvent) => void | Promise<void>;
 
 // =============================================================================
-// Messages
-// =============================================================================
-
-/**
- * Simplified message type for UI consumption.
- * Maps from Mastra's internal message format.
- */
-export interface AgentControllerMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: AgentControllerMessageContent[];
-  createdAt: Date;
-  attributes?: Record<string, string | number | boolean | null | undefined>;
-  stopReason?: 'complete' | 'tool_use' | 'aborted' | 'error';
-  errorMessage?: string;
-}
-
-export type AgentControllerMessageContent =
-  | { type: 'text'; text: string }
-  | { type: 'thinking'; thinking: string }
-  | { type: 'tool_call'; id: string; name: string; args: unknown }
-  | {
-      type: 'tool_result';
-      id: string;
-      name: string;
-      result: unknown;
-      isError: boolean;
-      providerMetadata?: Record<string, unknown>;
-    }
-  | {
-      type: 'system_reminder';
-      message: string;
-      reminderType?: string;
-      path?: string;
-      precedesMessageId?: string;
-      gapText?: string;
-      gapMs?: number;
-      timestamp?: string;
-      goalMaxTurns?: number;
-      judgeModelId?: string;
-      goalEvaluation?: GoalEvaluationPayload;
-    }
-  | {
-      type: 'state_signal';
-      id?: string;
-      stateId: string;
-      mode: 'snapshot' | 'delta';
-      cacheKey?: string;
-      version?: number;
-      message: string;
-    }
-  | {
-      type: 'reactive_signal';
-      id?: string;
-      tagName: string;
-      message: string;
-      attributes?: Record<string, unknown>;
-      metadata?: Record<string, unknown>;
-    }
-  | {
-      type: 'notification_summary';
-      id?: string;
-      message: string;
-      pending: number;
-      bySource: Record<string, number>;
-      byPriority: Record<string, number>;
-      notificationIds: string[];
-    }
-  | {
-      type: 'notification';
-      id?: string;
-      notificationId?: string;
-      message: string;
-      source?: string;
-      kind?: string;
-      priority?: string;
-      status?: string;
-      attributes?: Record<string, unknown>;
-      metadata?: Record<string, unknown>;
-    }
-  | { type: 'image'; data: string; mimeType: string }
-  | { type: 'file'; data: string; mediaType: string; filename?: string }
-  | {
-      type: 'om_observation_start';
-      tokensToObserve: number;
-      operationType?: 'observation' | 'reflection';
-    }
-  | {
-      type: 'om_observation_end';
-      tokensObserved: number;
-      observationTokens: number;
-      durationMs: number;
-      operationType?: 'observation' | 'reflection';
-      observations?: string;
-      currentTask?: string;
-      suggestedResponse?: string;
-    }
-  | {
-      type: 'om_observation_failed';
-      error: string;
-      tokensAttempted?: number;
-      operationType?: 'observation' | 'reflection';
-    }
-  | { type: 'om_thread_title_updated'; threadId: string; oldTitle?: string; newTitle: string };
-
-// =============================================================================
 // Request Context
 // =============================================================================
 
@@ -1090,6 +1000,9 @@ export interface AgentControllerRequestContext<TState = unknown> {
 
   /** Current resource ID */
   resourceId: string;
+
+  /** Optional isolation scope used to identify this session within its resource. */
+  scope?: string;
 
   /**
    * Snapshot of the relevant session-owned values for this request.

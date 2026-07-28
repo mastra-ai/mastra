@@ -2,19 +2,57 @@ import type { DatasetExperiment } from '@mastra/client-js';
 import { Chip } from '@mastra/playground-ui/components/Chip';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { getShortId } from '@mastra/playground-ui/components/Text';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { format, isThisYear, isToday } from 'date-fns';
 import { Play } from 'lucide-react';
 
 const experimentsListColumns = [
-  { name: 'experimentId', label: 'ID', size: '7rem' },
+  { name: 'experiment', label: 'Experiment', size: 'minmax(9rem,1fr)' },
   { name: 'status', label: 'Status', size: '5rem' },
   { name: 'targetType', label: 'Type', size: '6rem' },
   { name: 'target', label: 'Target', size: 'minmax(0,1fr)' },
   { name: 'counts', label: 'Counts', size: '7rem' },
   { name: 'date', label: 'Created', size: '10rem' },
 ];
+
+/**
+ * Primary label for an experiment row: its name (falling back to the short ID),
+ * with the short ID shown as a secondary line when a name is present. The
+ * description, when set, surfaces in a tooltip.
+ */
+function ExperimentNameCell({ experiment }: { experiment: DatasetExperiment }) {
+  const id = getShortId(experiment.id) ?? experiment.id;
+
+  if (!experiment.name) {
+    return (
+      <DataList.Cell height="compact" className="min-w-0">
+        <span className="text-ui-smd text-neutral3 block truncate font-mono">{id}</span>
+      </DataList.Cell>
+    );
+  }
+
+  const label = (
+    <span className="flex min-w-0 flex-col gap-0.5 py-0.5 text-left">
+      <span className="text-ui-md text-neutral4 block truncate">{experiment.name}</span>
+      <span className="text-ui-sm text-neutral2 block truncate font-mono">{id}</span>
+    </span>
+  );
+
+  return (
+    <DataList.Cell height="compact" className="min-w-0">
+      {experiment.description ? (
+        <Tooltip>
+          <TooltipTrigger asChild>{label}</TooltipTrigger>
+          <TooltipContent>{experiment.description}</TooltipContent>
+        </Tooltip>
+      ) : (
+        label
+      )}
+    </DataList.Cell>
+  );
+}
 
 export interface DatasetExperimentsListProps {
   experiments: DatasetExperiment[];
@@ -71,12 +109,12 @@ export function DatasetExperimentsList({
 
         const rowCells = (
           <>
-            <DataList.IdCell id={experiment.id} />
+            <ExperimentNameCell experiment={experiment} />
             <DataList.Cell height="compact">
               {experiment.status && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="flex items-center justify-center w-10 relative bg-transparent h-full">
+                    <div className="relative flex h-full w-10 items-center justify-center bg-transparent">
                       <div
                         className={cn('w-2 h-2 rounded-full', {
                           'bg-green-600': ['success', 'completed'].includes(experiment.status),
@@ -110,7 +148,7 @@ export function DatasetExperimentsList({
               </Tooltip>
             </DataList.Cell>
             <DataList.Cell height="compact" className="min-w-0">
-              <span className="block text-ui-smd text-neutral2 truncate">{formatDate(createdAtDate)}</span>
+              <span className="text-ui-smd text-neutral2 block truncate">{formatDate(createdAtDate)}</span>
             </DataList.Cell>
           </>
         );
@@ -146,7 +184,7 @@ function EmptyDatasetExperimentsList() {
   return (
     <div className="flex h-full items-center justify-center py-12">
       <EmptyState
-        iconSlot={<Play className="w-8 h-8 text-neutral3" />}
+        iconSlot={<Play className="text-neutral3 h-8 w-8" />}
         titleSlot="No experiments yet"
         descriptionSlot="Trigger an experiment to evaluate your dataset against an agent, workflow, or scorer."
       />

@@ -470,8 +470,9 @@ type WithoutMethods<T> = {
 
 export type NetworkStreamParams<OUTPUT = undefined> = {
   messages: MessageListInput;
+  model?: string;
   tracingOptions?: TracingOptions;
-} & MultiPrimitiveExecutionOptions<OUTPUT>;
+} & Omit<MultiPrimitiveExecutionOptions<OUTPUT>, 'model'>;
 
 export interface GetAgentResponse {
   id: string;
@@ -534,24 +535,32 @@ export interface GetAgentBrowserSessionResponse {
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
+  model?: string;
   output?: T;
   experimental_output?: T;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
-  Omit<AgentGenerateOptions<any>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
+  Omit<
+    AgentGenerateOptions<any>,
+    'model' | 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'
+  >
 >;
 
 export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
+  model?: string;
   output?: T;
   experimental_output?: T;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
-  Omit<AgentStreamOptions<any>, 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'>
+  Omit<
+    AgentStreamOptions<any>,
+    'model' | 'output' | 'experimental_output' | 'requestContext' | 'clientTools' | 'abortSignal'
+  >
 >;
 
 export type StructuredOutputOptions<OUTPUT = undefined> = Omit<
@@ -561,11 +570,15 @@ export type StructuredOutputOptions<OUTPUT = undefined> = Omit<
   schema: PublicSchema<OUTPUT>;
 };
 export type StreamParamsBase<OUTPUT = undefined> = {
+  model?: string;
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
   clientTools?: ToolsInput;
 } & WithoutMethods<
-  Omit<AgentExecutionOptions<OUTPUT>, 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'>
+  Omit<
+    AgentExecutionOptions<OUTPUT>,
+    'model' | 'requestContext' | 'clientTools' | 'options' | 'abortSignal' | 'structuredOutput'
+  >
 >;
 export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = StreamParamsBase<OUTPUT>;
 export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {
@@ -1470,6 +1483,8 @@ export interface UpdateStoredAgentParams {
   requestContextSchema?: Record<string, unknown>;
   /** Optional message describing the changes for the auto-created version */
   changeMessage?: string;
+  /** Immediately activate the auto-created version. Defaults to false when omitted. */
+  autoPublish?: boolean;
 }
 
 /**
@@ -2620,6 +2635,7 @@ export interface DatasetItem {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  externalId?: string | null;
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
@@ -2655,6 +2671,10 @@ export interface DatasetExperiment {
   agentVersion: string | null;
   targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
   targetId: string;
+  /** Human-readable name used as the primary label wherever the experiment is displayed. */
+  name?: string;
+  /** Longer description shown as secondary detail (e.g. in a tooltip). */
+  description?: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
   totalItems: number;
   succeededCount: number;
@@ -2731,6 +2751,7 @@ export interface UpdateDatasetParams {
 
 export interface AddDatasetItemParams {
   datasetId: string;
+  externalId?: string;
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
@@ -2755,6 +2776,7 @@ export interface UpdateDatasetItemParams {
 export interface BatchInsertDatasetItemsParams {
   datasetId: string;
   items: Array<{
+    externalId?: string;
     input: unknown;
     groundTruth?: unknown;
     expectedTrajectory?: unknown;

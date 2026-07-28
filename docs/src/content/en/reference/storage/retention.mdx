@@ -306,7 +306,7 @@ const storage = new MongoDBStore({
 ```
 
 :::tip
-TTL indexes delete documents shortly after they expire (background thread runs every \~60 seconds), but the exact timing is not guaranteed. For precise, immediate cleanup, use `prune()` instead.
+TTL indexes delete documents shortly after they expire (background thread runs every \~60 seconds), but the exact timing isn't guaranteed. For precise, immediate cleanup, use `prune()` instead.
 :::
 
 ## Reclaiming disk

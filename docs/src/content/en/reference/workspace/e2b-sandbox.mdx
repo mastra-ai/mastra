@@ -303,6 +303,25 @@ const workspace = new Workspace({
 
 This is optional—`gcsfuse` is installed automatically at mount time if not present.
 
+## Using with Code Mode
+
+[Code Mode](/docs/agents/code-mode) lets an agent write a single TypeScript program that orchestrates its tools. Because E2B runs that program in a remote micro-VM, it needs a transport that writes the program into the sandbox filesystem rather than the host. `@mastra/e2b` ships `E2BCodeModeTransport` for this—pass it as the second argument to `createCodeMode`:
+
+```typescript
+import { createCodeMode } from '@mastra/core/tools'
+import { E2BSandbox, E2BCodeModeTransport } from '@mastra/e2b'
+
+const { tool, instructions } = createCodeMode(
+  {
+    tools: { getWeather, getForecast },
+    sandbox: new E2BSandbox({ timeout: 60_000 }),
+  },
+  new E2BCodeModeTransport(),
+)
+```
+
+`E2BCodeModeTransport` auto-starts the sandbox if it isn't running, strips TypeScript on the host with esbuild (so it works regardless of the sandbox's Node version), runs `node` inside the VM, and cleans up the program files afterwards. The default `StdioCodeModeTransport` from `@mastra/core` only works with sandboxes that share the host filesystem, such as `LocalSandbox`.
+
 ## Related
 
 - [SandboxProcessManager reference](/reference/workspace/process-manager)

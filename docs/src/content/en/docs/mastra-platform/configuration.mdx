@@ -1,17 +1,17 @@
 ---
 title: "Configuration | Mastra platform"
-description: Configuration options and settings for the Mastra platform, including Studio and Server deployments.
+description: How Mastra platform deploys resolve their target project through .mastra-project.json and their environment variables across managed, stored, and local sources.
 ---
 
 # Configuration
 
-When you deploy to the Mastra platform, the CLI generates a `.mastra-project.json` config file and reads environment variables from your local `.env` files.
+When you deploy to the Mastra platform, the CLI generates a `.mastra-project.json` config file and resolves environment variables from the platform and, optionally, your local `.env` files.
 
-This page explains both mechanisms and how they differ between Studio and Server deployments.
+This page explains both mechanisms.
 
 ## Project config
 
-The `.mastra-project.json` file is auto-generated on your first Studio or Server deploy. It links your local project to a platform project. The [GitHub integration](/docs/mastra-platform/github) writes the same file into linked repositories.
+The `.mastra-project.json` file is auto-generated on your first [`mastra deploy`](/docs/mastra-platform/deploy). It links your local project to a platform project. The [GitHub integration](/docs/mastra-platform/github) writes the same file into linked repositories.
 
 Commit it to your version control so that subsequent deploys (including from CI) target the correct project.
 
@@ -33,18 +33,19 @@ Your file will look something like this:
 
 ## Environment variables
 
-The CLI reads from `.env` and `.env.local` files in your project directory during deploy. Variables from `.env.local` override those in `.env`.
+A local env file is optional. [`mastra deploy`](/docs/mastra-platform/deploy) resolves variables from three sources:
 
-You can set environment variables like so:
+- **Managed variables**: Injected by platform resources like [hosted databases](/docs/mastra-platform/database). The platform defines these, and you can't edit them.
+- **Stored variables**: Saved on the project or environment through the dashboard. Used as-is on every deploy with no local file needed.
+- **Local env files**: An explicit `--env-file`, or ambient `.env` and `.env.local` files, layered on top at deploy time. Variables from `.env.local` override those in `.env`.
 
-- **Studio**: Environment variables are read from your local `.env` files and bundled into the deploy artifact. To update them, redeploy.
-- **Server**: On the first deploy, the CLI automatically seeds environment variables from your local `.env` files. After that, manage them per-project through the dashboard or API.
-
-To pin the deploy to a specific env file (instead of relying on the default selection), pass `--env-file`:
+To pin the deploy to a specific env file instead of relying on the default selection, pass `--env-file`:
 
 ```bash
-mastra studio deploy --env-file .env.production --yes
+mastra deploy --env-file .env.production --yes
 ```
+
+Review and sanitize local env files before deploying to avoid uploading development-only or personal secrets.
 
 ### Observability
 
@@ -61,19 +62,13 @@ The following environment variables configure the Observability product on the M
 
 ## Multiple environments
 
-A platform project maps to a single deployed instance with one set of env vars. Platform projects don't have built-in `staging` vs `production` slots. To run the same codebase across multiple environments, create one project per environment and use the matching `.mastra-project.json` file for each deploy.
+A single project runs the same codebase across multiple [environments](/docs/mastra-platform/environments), such as `production` and `staging`. Each environment has its own URL, its own stored variables, and its own deploy history. One `.mastra-project.json` file covers all of them:
 
 ```bash
-# Create and deploy each environment for the first time.
-mastra studio deploy --project "my-app-staging" --env-file .env.staging --yes
-mastra studio deploy --project "my-app-production" --env-file .env.production --yes
-
-# For subsequent deploys, restore the matching .mastra-project.json file before deploying.
-cp .mastra-project.staging.json .mastra-project.json
-mastra studio deploy --env-file .env.staging --yes
-
-cp .mastra-project.production.json .mastra-project.json
-mastra studio deploy --env-file .env.production --yes
+mastra deploy --env production --yes
+mastra deploy --env staging --env-file .env.staging --yes
 ```
 
-Each project has its own Studio URL and can send observability data to the Mastra platform. When using [`MastraPlatformExporter`](/docs/observability/integrations/exporters/mastra-platform), set `MASTRA_PROJECT_ID` and `MASTRA_PLATFORM_ACCESS_TOKEN` per environment so traces route to the matching platform project.
+:::note
+Earlier platform versions required one project per environment. Environments replace that pattern, so keep one project and deploy to named environments instead.
+:::

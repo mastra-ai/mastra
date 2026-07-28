@@ -138,6 +138,14 @@ const events = await pubsub.getHistory('my-topic', 0)
 
 Returns: `Promise<Event[]>`
 
+### `clearTopic(topic)`
+
+Removes the topic's cached events and offset counter, and forwards the call to the inner pub/sub so persistent transports (such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams)) can delete their retained state too. Mastra's run lifecycles call this automatically when a run finishes.
+
+```typescript
+await pubsub.clearTopic('my-topic')
+```
+
 ## Functions
 
 ### `withCaching(pubsub, cache, options?)`

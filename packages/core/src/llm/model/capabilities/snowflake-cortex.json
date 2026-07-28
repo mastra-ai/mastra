@@ -30,5 +30,19 @@
     "mistral-large2",
     "openai-gpt-4.1",
     "snowflake-llama3.3-70b"
+  ],
+  "structuredOutput": [
+    "gemini-3.1-pro",
+    "openai-gpt-4.1",
+    "openai-gpt-5",
+    "openai-gpt-5-mini",
+    "openai-gpt-5-nano",
+    "openai-gpt-5.1",
+    "openai-gpt-5.2",
+    "openai-gpt-5.4",
+    "openai-gpt-5.5",
+    "openai-gpt-5.6-luna",
+    "openai-gpt-5.6-sol",
+    "openai-gpt-5.6-terra"
   ]
 }

@@ -25,12 +25,11 @@ import {
   detectPackageManager,
   fetchChangelog,
   fetchLatestVersion,
-  getInstallCommand,
   isNewerVersion,
-  runUpdate,
+  performUpdate,
 } from '@mastra/code-sdk/utils/update-check';
 import type { AgentSignalAttributes } from '@mastra/core/agent';
-import type { AgentControllerEvent, AgentControllerMessage } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
 import { dispatchSlashCommand } from './command-dispatch.js';
@@ -161,6 +160,7 @@ export class MastraTUI {
   private caffeinateProcess: ChildProcess | null = null;
   private cleanupKeyHandlers?: () => void;
   private cleanupPluginReloadListener?: () => void;
+  private cleanupPluginUpdateListener?: () => void;
   private lastStreamError: string | null = null;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
@@ -287,7 +287,7 @@ export class MastraTUI {
         addUserMessage(this.state, {
           id: messageId,
           role: 'user',
-          content: [{ type: 'text', text: msg }],
+          content: { format: 2, parts: [{ type: 'text', text: msg }] },
           createdAt: new Date(),
         });
         flushRender(this.state);
@@ -376,14 +376,17 @@ export class MastraTUI {
     content: string,
     images?: Array<{ data: string; mimeType: string }>,
     id = '',
-  ): AgentControllerMessage {
+  ): MastraDBMessage {
     return {
       id,
       role: 'user',
-      content: [
-        { type: 'text', text: content },
-        ...(images?.map(img => ({ type: 'image' as const, data: img.data, mimeType: img.mimeType })) ?? []),
-      ],
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: content },
+          ...(images?.map(img => ({ type: 'file' as const, data: img.data, mimeType: img.mimeType })) ?? []),
+        ],
+      },
       createdAt: new Date(),
     };
   }
@@ -559,6 +562,11 @@ export class MastraTUI {
       this.cleanupPluginReloadListener = undefined;
     }
 
+    if (this.cleanupPluginUpdateListener) {
+      this.cleanupPluginUpdateListener();
+      this.cleanupPluginUpdateListener = undefined;
+    }
+
     if (this.state.unsubscribe) {
       this.state.unsubscribe();
     }
@@ -595,6 +603,14 @@ export class MastraTUI {
           process.stderr.write(`[plugin runtime refresh] ${msg}\n`);
         }),
       );
+    }
+
+    if (this.state.pluginManager && !this.cleanupPluginUpdateListener) {
+      this.cleanupPluginUpdateListener = this.state.pluginManager.onGithubPluginsUpdated(pluginNames => {
+        if (pluginNames.length === 0) return;
+        const label = pluginNames.length === 1 ? 'Plugin' : 'Plugins';
+        showInfo(this.state, `${label} updated to the latest version: ${pluginNames.join(', ')}`);
+      });
     }
 
     // Load custom slash commands
@@ -647,7 +663,11 @@ export class MastraTUI {
         .initInBackground()
         .then(result => {
           for (const s of result.failed) {
-            showInfo(this.state, `MCP: Failed to connect to "${s.name}": ${s.error}`);
+            if (s.needsAuth) {
+              showInfo(this.state, `MCP: \u26a0 "${s.name}" needs authentication \u2192 run /mcp to authenticate`);
+            } else {
+              showInfo(this.state, `MCP: Failed to connect to "${s.name}": ${s.error}`);
+            }
           }
           for (const s of result.skipped) {
             showInfo(this.state, `MCP: Skipped "${s.name}": ${s.reason}`);
@@ -1660,14 +1680,14 @@ export class MastraTUI {
 
     if (answer === 'Yes') {
       showInfo(this.state, `Updating to v${latestVersion}…`);
-      const ok = await runUpdate(pm, latestVersion);
-      if (ok) {
-        showInfo(this.state, `Updated to v${latestVersion}. Please restart Mastra Code.`);
+      const outcome = await performUpdate(pm, latestVersion);
+      if (outcome.status === 'updated') {
+        // Printed after TUI teardown — a message rendered inside it is lost in the exit race.
         this.stop();
+        console.info(outcome.message);
         process.exit(0);
       } else {
-        const cmd = getInstallCommand(pm, latestVersion);
-        showError(this.state, `Auto-update failed. Run \`${cmd}\` manually.`);
+        showError(this.state, outcome.message);
       }
     } else {
       // User declined — save the dismissed version

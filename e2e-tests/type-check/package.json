@@ -8,9 +8,9 @@
     "get-port": "^7.2.0",
     "npm-cli-login": "^1.0.0",
     "tinyglobby": "^0.2.17",
-    "tsx": "^4.22.4",
+    "tsx": "^4.23.1",
     "verdaccio": "^6.7.4",
-    "verdaccio-auth-memory": "^10.3.3"
+    "verdaccio-auth-memory": "^13.0.3"
   },
   "scripts": {
     "test": "tsx test.ts"

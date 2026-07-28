@@ -1,5 +1,5 @@
-import * as babel from '@babel/core';
-import type { Plugin } from 'rollup';
+import { transformAsync } from '@babel/core';
+import type { Plugin, SourceMapInput } from 'rollup';
 
 import { removeDeployer as removeDeployerBabelPlugin } from '../babel/remove-deployer';
 
@@ -11,28 +11,16 @@ export function removeDeployer(mastraEntry: string, options?: { sourcemap?: bool
         return;
       }
 
-      return new Promise((resolve, reject) => {
-        babel.transform(
-          code,
-          {
-            babelrc: false,
-            configFile: false,
-            filename: id,
-            plugins: [removeDeployerBabelPlugin],
-            sourceMaps: options?.sourcemap,
-          },
-          (err, result) => {
-            if (err) {
-              return reject(err);
-            }
-
-            resolve({
-              code: result!.code!,
-              map: result!.map!,
-            });
-          },
-        );
-      });
+      return transformAsync(code, {
+        babelrc: false,
+        configFile: false,
+        filename: id,
+        plugins: [removeDeployerBabelPlugin],
+        sourceMaps: options?.sourcemap,
+      }).then(result => ({
+        code: result!.code!,
+        map: result!.map! as SourceMapInput,
+      }));
     },
   } satisfies Plugin;
 }

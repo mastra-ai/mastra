@@ -695,6 +695,27 @@ Async buffering isn't supported with `scope: 'resource'` and is automatically di
 
 Observational Memory emits typed data parts during agent execution that clients can use for real-time UI feedback. These are streamed alongside the agent's response.
 
+### Read extractor results
+
+Both completion events carry extractor output in their `data` payload. The extractor fields are:
+
+```typescript
+interface DataOmObservationEndPart {
+  type: 'data-om-observation-end'
+  data: {
+    /** Whether the completed work was an observation or reflection */
+    operationType: 'observation' | 'reflection'
+    /** Values extracted during this OM operation, keyed by extractor slug */
+    extractedValues?: Record<string, unknown>
+    /** Extractor failures from this OM operation. Successful extractor values are still included */
+    extractionFailures?: Array<{ slug: string; error: string }>
+    // ...other fields documented in the tables below
+  }
+}
+```
+
+Both extractor fields are optional. A completion can include values, failures, both, or neither. `data-om-observation-end` reports synchronous completion. `data-om-buffering-end` reports completed background work whose buffered content still awaits activation, although extractor metadata is already persisted. `DataOmBufferingEndPart` carries the same extractor fields, and both types are exported from `@mastra/memory/processors`. See [Read extracted values from a stream](/docs/memory/observational-memory#read-extracted-values-from-a-stream) for a consumer example.
+
 ### `data-om-status`
 
 Emitted once per agent loop step, before model generation. Provides a snapshot of the current memory state, including token usage for both context windows and the state of any async buffered content.

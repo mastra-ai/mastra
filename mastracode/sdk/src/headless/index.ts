@@ -47,6 +47,7 @@ export type {
   RunMCError,
   RunMCThreadOptions,
   MCRun,
+  RunMCGoalOptions,
   ResolutionPolicy,
   RunMode,
   ThinkingLevel,

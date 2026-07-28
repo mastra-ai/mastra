@@ -3,9 +3,8 @@ import {
   detectPackageManager,
   fetchChangelog,
   fetchLatestVersion,
-  getInstallCommand,
   isNewerVersion,
-  runUpdate,
+  performUpdate,
 } from '@mastra/code-sdk/utils/update-check';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
 import type { SlashCommandContext } from './types.js';
@@ -75,14 +74,14 @@ export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<voi
 
   if (answer === 'Yes') {
     ctx.showInfo(`Updating to v${latestVersion}…`);
-    const ok = await runUpdate(pm, latestVersion);
-    if (ok) {
-      ctx.showInfo(`Updated to v${latestVersion}. Please restart Mastra Code.`);
+    const outcome = await performUpdate(pm, latestVersion);
+    if (outcome.status === 'updated') {
+      // Printed after TUI teardown — a message rendered inside it is lost in the exit race.
       ctx.stop();
+      console.info(outcome.message);
       process.exit(0);
     } else {
-      const cmd = getInstallCommand(pm, latestVersion);
-      ctx.showError(`Auto-update failed. Run \`${cmd}\` manually.`);
+      ctx.showError(outcome.message);
     }
   } else if (answer === 'No') {
     const s = loadSettings();
