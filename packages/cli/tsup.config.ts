@@ -15,20 +15,16 @@ export default defineConfig({
   sourcemap: true,
   onSuccess: async () => {
     const studioPath = dirname(fileURLToPath(import.meta.resolve('@internal/playground/package.json')));
-    const factoryWebPath = join(dirname(fileURLToPath(import.meta.url)), '../../mastracode/web');
-    const factoryUIPath = join(factoryWebPath, 'src/mastra/public/factory');
+    const factoryUIPath = join(dirname(fileURLToPath(import.meta.url)), '../../mastracode/factory-ui');
 
-    // mastracode/web is an independent pnpm workspace and is not installed by the root workspace.
-    await execa('pnpm', ['install', '--frozen-lockfile'], {
-      cwd: factoryWebPath,
-      stdio: 'inherit',
-    });
-    await execa('pnpm', ['run', 'build:ui:embedded'], {
-      cwd: factoryWebPath,
+    // Factory UI is a root workspace package. Build its independent SPA and
+    // copy the resulting artifact into the CLI distribution.
+    await execa('pnpm', ['run', 'build'], {
+      cwd: factoryUIPath,
       stdio: 'inherit',
     });
     await copy(join(studioPath, 'dist'), join('dist', 'studio'));
-    await copy(factoryUIPath, join('dist', 'factory'));
+    await copy(join(factoryUIPath, 'dist'), join('dist', 'factory'));
     await generateTypes(process.cwd());
   },
 });

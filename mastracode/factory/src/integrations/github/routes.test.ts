@@ -657,8 +657,6 @@ beforeEach(() => {
   process.env.GITHUB_APP_WEBHOOK_SECRET = 'test-webhook-secret';
   // The webhook route verifies deliveries against the injected instance's secret.
   githubStub.webhookSecret = 'test-webhook-secret';
-  // No Postgres in these unit tests: keep the project lock purely in-process.
-  process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
   reattachSandbox.mockClear();
@@ -676,7 +674,6 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env.GITHUB_APP_WEBHOOK_SECRET;
-  delete process.env.MASTRACODE_DISTRIBUTED_LOCK;
   vi.clearAllMocks();
 });
 
@@ -1075,6 +1072,26 @@ describe('repos route', () => {
     expect(res.status).toBe(500);
     expect(tables.installations).toHaveLength(1);
   });
+
+  it('lists multiple installations concurrently', async () => {
+    install(7, 'octo');
+    install(8, 'other');
+    let inFlight = 0;
+    let maxInFlight = 0;
+    vi.mocked(listInstallationRepos).mockImplementation(async (installationId: number) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise(resolve => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return defaultImpl(installationId);
+    });
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+
+    expect(res.status).toBe(200);
+    // Serial listing would never overlap; the route must fan out.
+    expect(maxInFlight).toBe(2);
+  });
 });
 
 describe('auth scoping', () => {
@@ -1287,6 +1304,48 @@ describe('ensure (materialize)', () => {
       method: 'POST',
     });
     expect(res.status).toBe(404);
+  });
+
+  it('self-heals a stale sandbox provider by recomputing the workdir against the current fleet', async () => {
+    // The row was linked while a different provider was active — its workdir
+    // points into that provider's filesystem and would fail to clone here.
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: 'p1',
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        repoFullName: 'octo/hello',
+        defaultBranch: 'main',
+        sandboxProvider: 'platform',
+        sandboxWorkdir: '/old-provider/hello',
+      }),
+    );
+    // A per-user binding already inherited the stale workdir and thinks it is materialized.
+    tables.sandboxes.push(
+      sandboxRow({
+        id: 'sbrow-1',
+        projectRepositoryId: 'p1',
+        userId: 'u1',
+        sandboxId: 'sb-old',
+        sandboxWorkdir: '/old-provider/hello',
+        materializedAt: new Date(),
+      }),
+    );
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ projectRepositoryId: 'p1', sandboxWorkdir: '/workspace/hello' });
+    // The project row was healed to the current fleet's provider + workdir…
+    expect(tables.projectRepositories[0]).toMatchObject({
+      sandboxProvider: 'railway',
+      sandboxWorkdir: '/workspace/hello',
+    });
+    // …and the per-user binding was re-pointed and forced to re-materialize.
+    expect(tables.sandboxes[0]).toMatchObject({ sandboxWorkdir: '/workspace/hello', materializedAt: null });
+    expect(materializeRepo).toHaveBeenCalledOnce();
+    expect(materializeRepo).toHaveBeenCalledWith(
+      expect.objectContaining({ row: expect.objectContaining({ sandboxWorkdir: '/workspace/hello' }) }),
+    );
   });
 
   it('streams server-side progress events when the client accepts an event stream', async () => {

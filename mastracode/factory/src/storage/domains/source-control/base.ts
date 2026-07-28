@@ -351,6 +351,12 @@ export interface SourceControlStorageHandle {
   readonly sandboxes: {
     getOrCreate(args: { projectRepository: ProjectRepository; userId: string }): Promise<ProjectRepositorySandbox>;
     getById(args: { id: string }): Promise<ProjectRepositorySandbox | null>;
+    /**
+     * Point the binding at a new workdir and clear `materializedAt` — a moved
+     * workdir means the checkout must be re-cloned. Used to heal bindings whose
+     * inherited workdir went stale (e.g. the sandbox provider changed).
+     */
+    setWorkdir(args: { id: string; sandboxWorkdir: string }): Promise<void>;
     setSandboxId(args: { id: string; sandboxId: string }): Promise<void>;
     clearBinding(args: { id: string }): Promise<void>;
     markMaterialized(args: { id: string }): Promise<void>;
@@ -909,6 +915,10 @@ export class SourceControlStorage extends FactoryStorageDomain {
           }
         },
         getById: ({ id }) => getSandbox(id),
+        setWorkdir: async ({ id, sandboxWorkdir }) => {
+          await requireSandbox(id);
+          await db().updateMany(SANDBOXES, { id }, { sandbox_workdir: sandboxWorkdir, materialized_at: null });
+        },
         setSandboxId: async ({ id, sandboxId }) => {
           await requireSandbox(id);
           await db().updateMany(SANDBOXES, { id }, { sandbox_id: sandboxId });
