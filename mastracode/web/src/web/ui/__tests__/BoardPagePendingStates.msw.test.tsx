@@ -197,6 +197,9 @@ describe('Board card pending states', () => {
 
     const threadLink = within(card).getByRole('link', { name: 'Open thread for Fix login bug' });
     expect(within(card).queryByText('Open thread')).not.toBeInTheDocument();
+    // The link itself is an invisible overlay — a visible indicator must tell
+    // the user this card already has a work session.
+    expect(within(card).getByText('Session · fix-login')).toBeInTheDocument();
     expect(threadLink).toHaveAttribute(
       'href',
       `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,

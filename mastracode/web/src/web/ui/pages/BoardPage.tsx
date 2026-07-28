@@ -15,6 +15,7 @@ import {
   GitCompareArrows,
   GitPullRequest,
   Link2,
+  MessagesSquare,
   Plus,
   Stethoscope,
   Trash2,
@@ -1501,6 +1502,12 @@ function WorkItemCard({
         </div>
       </div>
       <CardLabels labels={labels} />
+      {threadSession !== null && (
+        <span className="text-ui-xs text-accent1 flex items-center gap-1">
+          <MessagesSquare size={11} aria-hidden />
+          <span className="truncate">Session · {threadSession.branch}</span>
+        </span>
+      )}
       {relatedItems.map(related => {
         const relationText = relationshipLabel(related);
         const relatedLiveSessions = Object.fromEntries(
