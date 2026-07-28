@@ -2491,6 +2491,7 @@ export interface DatasetItem {
   toolMocks?: DatasetItemToolMock[];
   unmockedToolPolicy?: DatasetUnmockedToolPolicy;
   scorerIds?: string[];
+  /** Execution timeout override in milliseconds. Must be a positive integer no greater than 30 minutes. */
   timeout?: number;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
@@ -2517,6 +2518,7 @@ export interface DatasetItemRow {
   toolMocks?: DatasetItemToolMock[];
   unmockedToolPolicy?: DatasetUnmockedToolPolicy;
   scorerIds?: string[];
+  /** Execution timeout override in milliseconds. Must be a positive integer no greater than 30 minutes. */
   timeout?: number;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
@@ -2637,6 +2639,7 @@ export interface DatasetItemPayload {
   /** Overrides the experiment's handling of tool calls not declared in `toolMocks`. */
   unmockedToolPolicy?: DatasetUnmockedToolPolicy;
   scorerIds?: string[];
+  /** Execution timeout override in milliseconds. Must be a positive integer no greater than 30 minutes. */
   timeout?: number;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;

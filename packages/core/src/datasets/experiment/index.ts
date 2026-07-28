@@ -2,6 +2,7 @@ import { MastraError } from '../../error/index.js';
 import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
+import { validateExperimentTimeout } from '../validation';
 import { executeTarget, raceWithSignal } from './executor';
 import type { Target, ExecutionResult } from './executor';
 import {
@@ -173,6 +174,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   let datasetRecord: DatasetRecord | null | undefined;
 
   try {
+    validateExperimentTimeout(itemTimeout, 'itemTimeout');
+
     if (config.data) {
       // Inline data path — array or factory function
       const rawData = typeof config.data === 'function' ? await config.data() : config.data;
@@ -239,6 +242,10 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       }));
     } else {
       throw new Error('No data source: provide datasetId or data');
+    }
+
+    for (const [index, item] of items.entries()) {
+      validateExperimentTimeout(item.timeout, `items[${index}].timeout`);
     }
   } catch (err) {
     await markFailedOnSetupError(err);
@@ -425,7 +432,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         // Compose one per-item signal before the first attempt so timeout is a whole-item budget.
         const effectiveTimeout = item.timeout ?? itemTimeout;
         let itemSignal: AbortSignal | undefined = signal;
-        if (effectiveTimeout) {
+        if (effectiveTimeout !== undefined) {
           const timeoutSignal = AbortSignal.timeout(effectiveTimeout);
           itemSignal = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
         }
