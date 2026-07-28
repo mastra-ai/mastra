@@ -608,6 +608,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
         columns: ['org_id', 'factory_project_id', 'idempotency_key'],
       },
     ],
+    indexes: [{ name: 'factory_deferred_decisions_claim_idx', columns: ['status', 'created_at'] }],
   },
   {
     name: 'factory_run_bindings',
@@ -625,6 +626,16 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       created_at: { type: 'timestamp' },
       revoked_at: { type: 'timestamp', nullable: true },
     },
+    indexes: [
+      // Exact-address lookups run on every processor message; status filter is
+      // applied on top of the address columns.
+      {
+        name: 'factory_run_bindings_session_idx',
+        columns: ['factory_project_id', 'thread_id', 'resource_id', 'session_id'],
+      },
+      // Restart reconciler enumerates active bindings across all tenants.
+      { name: 'factory_run_bindings_status_idx', columns: ['status'] },
+    ],
   },
   {
     name: 'factory_tool_result_cursors',
@@ -662,6 +673,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
         columns: ['org_id', 'factory_project_id', 'kickoff_key'],
       },
     ],
+    indexes: [{ name: 'factory_pending_starts_claim_idx', columns: ['status', 'created_at'] }],
   },
 ];
 
@@ -766,7 +778,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   ): Promise<T[]> {
     const claim = () =>
       this.storage.withTransaction(async ops => {
-        const candidates = await ops.findMany<GovernanceDbRow>(table, {}, { orderBy: [['created_at', 'asc']] });
+        // Bounded candidate window: only rows in claimable/expirable statuses,
+        // oldest first. Terminal rows (sent/succeeded/failed) accumulate over a
+        // deployment's lifetime and must never be scanned per dispatch tick.
+        const candidates = await ops.findMany<GovernanceDbRow>(
+          table,
+          { status: { in: ['pending', 'retry', 'leased'] } },
+          { orderBy: [['created_at', 'asc']], limit: Math.max(input.limit * 5, 50) },
+        );
         const claimed: T[] = [];
         for (const candidate of candidates) {
           if (claimed.length >= input.limit) break;
