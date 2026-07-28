@@ -293,15 +293,7 @@ function OverviewReadout({
   );
 }
 
-function MetricsSection({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: ReactNode;
-}) {
+function MetricsSection({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
     <section className="border-border1 flex flex-col gap-4 border-t pt-7">
       <div className="flex flex-col gap-1">
