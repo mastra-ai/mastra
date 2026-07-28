@@ -1,16 +1,9 @@
 ---
-'@mastra/core': minor
 '@mastra/factory': patch
-'@mastra/slack': patch
 ---
 
-Added `AgentChannels.onSdkReady(handler)`: run a callback with the Chat SDK instance once channel initialization constructs it (immediately when already initialized). The SDK is created lazily inside `initialize()`, so hosts that build their channels before the server boots can now register extra Chat SDK handlers — e.g. custom slash commands:
+Added a `channel-identity` storage domain so a factory can link a chat-platform sender to one of its own users.
 
-```ts
-const channels = new AgentControllerChannels({ adapters, handlers });
-channels.onSdkReady(chat => {
-  chat.onSlashCommand('/mycommand', async event => {
-    await event.channel.postEphemeral(event.user, 'hi', { fallbackToDM: false });
-  });
-});
-```
+`ChannelIdentityStorage` persists account links keyed by platform, external team id, and external user id, and records an optional default factory project per link. Alongside it, `createChannelLinkStateSigner` signs and verifies the short-lived state passed through an account-linking redirect, so a connect flow can round-trip through an external identity provider without trusting the returned parameters.
+
+Both are exported from the package entry point, together with the existing projects and work-items storage domains and `createFactoryRouteAuth`, which previously had no public export.

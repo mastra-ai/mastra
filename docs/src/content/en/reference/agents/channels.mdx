@@ -384,18 +384,34 @@ type ChannelHandler = (
   thread: Thread,
   message: Message,
   defaultHandler: (thread: Thread, message: Message) => Promise<void>,
-  ctx?: ChannelHandlerContext,
+  ctx: ChannelHandlerContext,
 ) => Promise<void>
+
+type ChannelHandlerContext = {
+  mastra?: Mastra
+  requestContext: RequestContext
+}
 ```
 
-`ctx` carries the resolved `mastra` instance, so a handler can reach storage or other registered primitives without being passed an external accessor:
+`ctx.mastra` is the resolved `mastra` instance, so a handler can reach storage or other registered primitives without being passed an external accessor:
 
 ```typescript
 onDirectMessage: async (thread, message, defaultHandler, ctx) => {
-  const store = await ctx?.mastra?.getStorage()?.getStore('memory')
+  const store = await ctx.mastra?.getStorage()?.getStore('memory')
   await defaultHandler(thread, message)
 }
 ```
+
+`ctx.requestContext` is the [`RequestContext`](/docs/server/request-context) for the run this message is about to start, built fresh for every message. Write to it before calling `defaultHandler` and the value reaches the run, alongside the channel entries Mastra adds afterward. Use it to stamp a tenant so per-tenant credentials resolve for channel runs:
+
+```typescript
+onDirectMessage: async (thread, message, defaultHandler, ctx) => {
+  ctx.requestContext.set('user', { id: linkedUserId, organizationId: linkedOrgId })
+  await defaultHandler(thread, message)
+}
+```
+
+`ctx` is not optional. Mastra always passes it. Handlers that declare fewer parameters still satisfy the type, so a three-parameter handler needs no change, but code that calls a `ChannelHandler` value directly must pass all four arguments.
 
 ## Resource ID resolution
 
