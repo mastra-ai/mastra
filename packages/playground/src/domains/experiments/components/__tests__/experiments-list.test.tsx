@@ -45,7 +45,13 @@ describe('ExperimentsList', () => {
   });
 
   describe('when an experiment name is an empty string', () => {
-    it('falls back to its shortened id rather than rendering an empty link', () => {
+    it('falls back to its shortened id as the label', () => {
+      renderList(<ExperimentsList experiments={experiments} isLoading={false} />);
+
+      expect(screen.getByText('b1a11c00')).toBeDefined();
+    });
+
+    it('still links the row to the experiment by its full id', () => {
       renderList(<ExperimentsList experiments={experiments} isLoading={false} />);
 
       const link = screen.getByRole('link', { name: /b1a11c00/ });

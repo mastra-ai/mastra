@@ -6,15 +6,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 export function ExperimentNameLabel({ experiment }: { experiment: DatasetExperiment }) {
   const shortId = getShortId(experiment.id) ?? experiment.id;
 
-  if (!experiment.name) {
-    return <span className="text-neutral4 block truncate font-mono">{shortId}</span>;
-  }
-
-  const label = (
+  const label = experiment.name ? (
     <span className="flex min-w-0 flex-col gap-0.5 py-0.5 text-left">
       <span className="text-neutral4 block truncate">{experiment.name}</span>
       <span className="text-ui-sm text-neutral2 block truncate font-mono">{shortId}</span>
     </span>
+  ) : (
+    <span className="text-neutral4 block truncate font-mono">{shortId}</span>
   );
 
   if (!experiment.description) {
