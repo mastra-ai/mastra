@@ -146,7 +146,8 @@ function createSandboxRequestContext(state: Record<string, unknown>) {
 }
 
 const baseState = {
-  githubProjectId: 'proj-1',
+  factoryProjectId: 'factory-project-1',
+  projectRepositoryId: 'project-repository-1',
   sandboxId: 'sbx-1',
   sandboxWorkdir: '/workspace/hello',
   sandboxAllowedPaths: [],
@@ -166,7 +167,7 @@ describe('getDynamicWorkspace sandbox worktree binding', () => {
 
     expect(sandboxFsCalls.at(-1)?.workdir).toBe('/workspace/hello');
     // Reuse key embeds the bound workdir (repo root here).
-    expect(workspace.id).toBe('mastra-code-workspace-gh-proj-1-sbx-1-/workspace/hello');
+    expect(workspace.id).toBe('mastra-code-workspace-repository-project-repository-1-sbx-1-/workspace/hello');
   });
 
   it('loads sandbox project skills without adding Web Factory skills', async () => {
@@ -208,7 +209,9 @@ describe('getDynamicWorkspace sandbox worktree binding', () => {
       const extensionSkill = await workspace.skills?.get('server-skill');
       const projectSkill = await workspace.skills?.get('project-skill');
 
-      expect(workspace.id).toBe('mastra-code-workspace-gh-proj-1-sbx-1-/workspace/hello-test-extension');
+      expect(workspace.id).toBe(
+        'mastra-code-workspace-repository-project-repository-1-sbx-1-/workspace/hello-test-extension',
+      );
       expect(extensionSkill?.instructions).toContain('# Server Skill');
       expect(projectSkill?.instructions).toContain('Loaded from sandbox.');
     } finally {
@@ -228,7 +231,9 @@ describe('getDynamicWorkspace sandbox worktree binding', () => {
 
     expect(sandboxFsCalls.at(-1)?.workdir).toBe('/workspace/worktrees/feat-x');
     // Reuse key includes the worktree path, so a different worktree gets a fresh workspace.
-    expect(workspace.id).toBe('mastra-code-workspace-gh-proj-1-sbx-1-/workspace/worktrees/feat-x');
+    expect(workspace.id).toBe(
+      'mastra-code-workspace-repository-project-repository-1-sbx-1-/workspace/worktrees/feat-x',
+    );
   });
 
   it('produces distinct reuse keys for different worktrees on the same sandbox', async () => {

@@ -388,6 +388,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'browser/firecrawl',
+              label: 'Firecrawl',
+            },
+            {
+              type: 'doc',
               id: 'browser/recording',
               label: 'Recording',
               customProps: {
@@ -499,8 +504,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'voice/livekit',
-              label: 'LiveKit',
+              id: 'voice/realtime-voice',
+              label: 'Realtime Voice',
             },
           ],
         },
@@ -596,6 +601,11 @@ const sidebars = {
               type: 'doc',
               id: 'agent-controller/tool-approvals',
               label: 'Tool Approvals',
+            },
+            {
+              type: 'doc',
+              id: 'agent-controller/channels',
+              label: 'Channels',
             },
           ],
         },
@@ -1030,8 +1040,24 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'mastra-platform/regions',
+          label: 'Regions',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'mastra-platform/observability',
           label: 'Observability',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/trace-intelligence',
+          label: 'Trace Intelligence',
+          customProps: {
+            tags: ['beta'],
+          },
         },
         {
           type: 'doc',
@@ -1055,6 +1081,14 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/database',
           label: 'Hosted databases',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/workspace',
+          label: 'Workspace',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',

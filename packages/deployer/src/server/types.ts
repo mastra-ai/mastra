@@ -10,6 +10,7 @@ export type ServerBundleOptions = {
   studio?: boolean;
   isDev?: boolean;
   tools: Record<string, Tool>;
+  browserStream?: boolean;
 };
 
 export type BodyLimitOptions = {

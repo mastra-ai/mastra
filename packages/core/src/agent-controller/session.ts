@@ -1,5 +1,5 @@
 import type { Agent } from '../agent';
-import type { MastraDBMessage } from '../agent/message-list/state/types';
+import type { MastraDBMessage, MastraProviderMetadata } from '../agent/message-list/state/types';
 import { createSignal } from '../agent/signals';
 import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type {
@@ -518,13 +518,13 @@ export class SessionThread {
   }
 
   /** Create a new thread, bind the session to it, and rebind the agent stream. */
-  async create({ title }: { title?: string } = {}): Promise<AgentControllerThread> {
+  async create({ title, id }: { title?: string; id?: string } = {}): Promise<AgentControllerThread> {
     const session = this.#owner;
     const store = this.#store;
     this.cleanupSubscription();
     const now = new Date();
     const thread: AgentControllerThread = {
-      id: session.machinery.generateId(),
+      id: id ?? session.machinery.generateId(),
       resourceId: session.identity.getResourceId(),
       title: title || '',
       createdAt: now,
@@ -3014,7 +3014,19 @@ export class Session<TState = unknown> {
           tracingContext?: TracingContext;
           tracingOptions?: TracingOptions;
           requestContext?: RequestContext;
+          /**
+           * Provider options attached to the resulting prompt turn. Surfaces as
+           * `providerOptions` on the `UserModelMessage` sent to the model and as
+           * `content.providerMetadata` on the persisted DB message (see
+           * {@link AgentSignalInput.providerOptions}).
+           */
+          providerOptions?: MastraProviderMetadata;
         },
+    options?: {
+      tracingContext?: TracingContext;
+      tracingOptions?: TracingOptions;
+      requestContext?: RequestContext;
+    },
   ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId?: string }> } {
     const settleRunId = async <T>(result: {
       accepted: Promise<SendAgentSignalAccepted<T>>;
@@ -3025,7 +3037,10 @@ export class Session<TState = unknown> {
       const settled = await result.accepted.catch(() => undefined);
       return settled && 'runId' in settled ? settled.runId : undefined;
     };
-    const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
+    const contentOptions = 'content' in input ? input : undefined;
+    const tracingContext = options?.tracingContext ?? contentOptions?.tracingContext;
+    const tracingOptions = options?.tracingOptions ?? contentOptions?.tracingOptions;
+    const requestContextInput = options?.requestContext ?? contentOptions?.requestContext;
     const ifActive = 'content' in input ? input.ifActive : undefined;
     const ifIdle = 'content' in input ? input.ifIdle : undefined;
     const submittedRunId = this.run.getRunId();
@@ -3041,7 +3056,9 @@ export class Session<TState = unknown> {
     // run to fully idle before starting a new run.
     const submittedAbortRequested = this.run.isAbortRequested();
     const signal = createSignal(
-      'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
+      'content' in input
+        ? { type: 'user', tagName: 'user', contents: input.content, providerOptions: input.providerOptions }
+        : input,
     );
     const accepted = Promise.resolve().then(async () => {
       if (!this.thread.getId()) {

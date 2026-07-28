@@ -1,148 +1,585 @@
 import fsSync from 'node:fs';
-import fs from 'node:fs/promises';
+import path from 'node:path';
 import * as p from '@clack/prompts';
 import color from 'picocolors';
-import pkgJson from '../../../package.json';
 import type { PosthogAnalytics } from '../../analytics/index';
 import { getAnalytics } from '../../analytics/index';
 import { cloneTemplate, installDependencies } from '../../utils/clone-template';
-import { loadTemplates, selectTemplate, findTemplateByName, getDefaultProjectName } from '../../utils/template-utils';
+import { findTemplateByName, loadTemplates, selectTemplate } from '../../utils/template-utils';
 import type { Template } from '../../utils/template-utils';
-import { init } from '../init/init';
-import type { Editor } from '../init/mcp-docs-server-install';
-import type { Component, LLMProvider } from '../init/utils';
-import { LLM_PROVIDERS } from '../init/utils';
-import { getPackageManager, gitInit } from '../utils.js';
+import { getToken } from '../auth/credentials.js';
+import { OrgSelectionCancelledError, resolveCurrentOrg } from '../auth/orgs.js';
+import { provisionObservabilityProject } from '../init/observability-provision';
+import { installMastraSkills } from '../init/skills-install';
+import { writeObservabilityEnv } from '../init/utils.js';
+import { getPackageManager, gitInit, isGitInitialized } from '../utils.js';
+import { detectCodingAgentSkills } from './coding-agents';
+import type { AgentResult } from './coding-agents';
+import {
+  CREATE_LLM_PROVIDERS,
+  configureCreateCommand,
+  getCreateMode,
+  normalizeCreateCommandOptions,
+  parseCreateLLMProvider,
+  parseCreateTimeout,
+  selectMatchingDistTag,
+  validateCreateOptionConflicts,
+  validateProjectName,
+} from './command';
+import type { CreateCommandOptions, CreateLLMProvider, CreateMode, NormalizedCreateOptions } from './command';
+import { adaptDefaultTemplate } from './provider-adapter';
+import {
+  cleanupOwnedStagingDirectory,
+  createOwnedStagingDirectory,
+  publishStagedProject,
+  writeEmptyScaffold,
+} from './utils';
 
-import { createMastraProject } from './utils';
+export {
+  CREATE_LLM_PROVIDERS,
+  configureCreateCommand,
+  getCreateMode,
+  normalizeCreateCommandOptions,
+  parseCreateLLMProvider,
+  parseCreateTimeout,
+  selectMatchingDistTag,
+  validateCreateOptionConflicts,
+  validateProjectName,
+};
+export type { CreateCommandOptions, CreateLLMProvider, CreateMode, NormalizedCreateOptions };
 
-const version = pkgJson.version;
-
-export const create = async (args: {
-  projectName?: string;
-  components?: Component[];
-  llmProvider?: LLMProvider;
-  addExample?: boolean;
-  llmApiKey?: string;
-  createVersionTag?: string;
-  timeout?: number;
-  directory?: string;
-  mcpServer?: Editor;
-  skills?: string[];
-  template?: string | boolean;
-  analytics?: PosthogAnalytics;
-  observability?: boolean;
-  observabilityProject?: string;
-}) => {
-  if (args.template !== undefined) {
-    await createFromTemplate({
-      projectName: args.projectName,
-      template: args.template,
-      timeout: args.timeout,
-      injectedAnalytics: args.analytics,
-      llmProvider: args.llmProvider,
-    });
-    return;
-  }
-
-  /**
-   * We need to explicitly check for undefined instead of using the falsy (!) check because the user might have passed args that are explicitly set to false (in this case, no example code) and we need to distinguish between those and the case where the args were not passed at all.
-   */
-  const needsInteractive =
-    args.components === undefined || args.llmProvider === undefined || args.addExample === undefined;
-
-  const directory = args.directory || 'src/';
-
-  const { projectName, result } = await createMastraProject({
-    projectName: args?.projectName,
-    createVersionTag: args?.createVersionTag,
-    timeout: args?.timeout,
-    llmProvider: args?.llmProvider,
-    llmApiKey: args?.llmApiKey,
-    skills: args?.skills,
-    mcpServer: args?.mcpServer,
-    observability: args?.observability,
-    needsInteractive,
-    onObservabilitySelected: event => getAnalytics()?.trackEvent('cli_observability_selected', event),
-  });
-
-  if (needsInteractive && result) {
-    // Track model provider selection from interactive prompt
-    const analytics = getAnalytics();
-    if (analytics && result?.llmProvider) {
-      analytics.trackEvent('cli_model_provider_selected', {
-        provider: result.llmProvider,
-        selection_method: 'interactive',
-      });
-    }
-
-    const interactiveComponents: Component[] = ['agents', 'tools', 'workflows', 'scorers'];
-
-    if (analytics) {
-      analytics.trackEvent('cli_components_selected', {
-        components: interactiveComponents,
-        selection_method: 'interactive',
-      });
-    }
-
-    await init({
-      ...result,
-      llmApiKey: result?.llmApiKey as string | undefined,
-      components: interactiveComponents,
-      addExample: true,
-      skills: result?.skills || args.skills,
-      mcpServer: result?.mcpServer || args.mcpServer,
-      versionTag: args.createVersionTag,
-      observability: args.observability ?? result?.observability,
-      observabilityProject: args.observabilityProject,
-      observabilityMode: 'create',
-      observabilityToken: result?.observabilityToken,
-      observabilityOrgId: result?.observabilityOrgId,
-      observabilityOrgName: result?.observabilityOrgName,
-    });
-    postCreate({ projectName });
-    return;
-  }
-
-  const { components = [], llmProvider = 'openai', addExample = false, llmApiKey } = args;
-
-  // Track model provider selection from CLI args
-  const cliAnalytics = getAnalytics();
-  if (cliAnalytics) {
-    cliAnalytics.trackEvent('cli_model_provider_selected', {
-      provider: llmProvider,
-      selection_method: 'cli_args',
-    });
-
-    cliAnalytics.trackEvent('cli_components_selected', {
-      components,
-      has_agents: components.includes('agents'),
-      has_tools: components.includes('tools'),
-      has_workflows: components.includes('workflows'),
-      has_scorers: components.includes('scorers'),
-      selection_method: 'cli_args',
-    });
-  }
-
-  await init({
-    directory,
-    components,
-    llmProvider,
-    addExample,
-    llmApiKey,
-    skills: args.skills,
-    mcpServer: args.mcpServer,
-    versionTag: args.createVersionTag,
-    observability: args.observability,
-    observabilityProject: args.observabilityProject,
-    observabilityMode: 'create',
-  });
-
-  postCreate({ projectName });
+const DEFAULT_TEMPLATE: Template = {
+  githubUrl: 'https://github.com/mastra-ai/template-agent-harness',
+  title: 'Agent Harness',
+  slug: 'template-agent-harness',
+  agents: ['agent'],
+  mcp: [],
+  tools: ['web-fetch'],
+  networks: [],
+  workflows: [],
 };
 
-const postCreate = ({ projectName }: { projectName: string }) => {
+export class CreateCancelledError extends Error {
+  constructor() {
+    super('Operation cancelled');
+    this.name = 'CreateCancelledError';
+  }
+}
+
+export function isCreateCancelledError(error: unknown): error is CreateCancelledError {
+  return error instanceof CreateCancelledError;
+}
+
+export function getCreateCommandAnalyticsArgs(args: CreateCommandOptions) {
+  return {
+    mode: args.empty ? 'empty' : args.template !== undefined ? 'template' : 'managed',
+    skills: args.skills,
+    git: args.git,
+  };
+}
+
+export interface CreateOptions {
+  projectName?: string;
+  empty?: boolean;
+  llmProvider?: CreateLLMProvider;
+  llmApiKey?: string;
+  skills?: boolean;
+  git?: boolean;
+  template?: string | boolean;
+  timeout?: number;
+  analytics?: PosthogAnalytics;
+  resolveVersionTag?: () => Promise<string | undefined>;
+}
+
+type PlatformSetupResult =
+  | { status: 'ready'; token: string; org: { orgId: string; orgName: string } }
+  | { status: 'cancelled' }
+  | { status: 'failed'; error: unknown };
+
+function cancelCreate(): never {
+  p.cancel('Operation cancelled');
+  throw new CreateCancelledError();
+}
+
+async function runCreatePrompt<T>(prompt: (signal: AbortSignal) => Promise<T | symbol>): Promise<T> {
+  const controller = new AbortController();
+  let rejectCancellation: (error: CreateCancelledError) => void = () => {};
+  let cancellationAnnounced = false;
+  const announceCancellation = () => {
+    if (cancellationAnnounced) return;
+    cancellationAnnounced = true;
+    p.cancel('Operation cancelled');
+  };
+  const cancellation = new Promise<never>((_resolve, reject) => {
+    rejectCancellation = reject;
+  });
+  const abort = () => {
+    controller.abort();
+    announceCancellation();
+    rejectCancellation(new CreateCancelledError());
+  };
+  process.once('SIGINT', abort);
+
+  try {
+    const value = await Promise.race([prompt(controller.signal), cancellation]);
+    if (p.isCancel(value)) {
+      announceCancellation();
+      throw new CreateCancelledError();
+    }
+    return value;
+  } finally {
+    process.removeListener('SIGINT', abort);
+  }
+}
+
+async function promptForProjectName(): Promise<string> {
+  return runCreatePrompt(signal =>
+    p.text({
+      message: 'What do you want to name your project?',
+      placeholder: 'my-mastra-app',
+      signal,
+      validate: value => {
+        if (!value || value.length === 0) return `Project name can't be empty`;
+        if (fsSync.existsSync(value)) {
+          return `A directory named "${value}" already exists. Please choose a different name.`;
+        }
+      },
+    }),
+  );
+}
+
+async function promptForProvider(): Promise<CreateLLMProvider> {
+  return runCreatePrompt(signal =>
+    p.select({
+      message: 'Select a default model provider:',
+      options: [...CREATE_LLM_PROVIDERS],
+      signal,
+      showInstructions: false,
+    }),
+  );
+}
+
+async function promptForObservabilityOptIn(): Promise<boolean> {
+  const choice = await p.select({
+    message: `Enable Mastra platform observability? (opens auth flow)`,
+    options: [
+      { value: 'yes', label: 'Yes' },
+      { value: 'no', label: 'No' },
+    ],
+    initialValue: 'yes',
+    showInstructions: false,
+  });
+
+  if (p.isCancel(choice)) {
+    p.log.info('Skipping Mastra platform setup.');
+    return false;
+  }
+
+  return choice === 'yes';
+}
+
+async function promptForApiKey(provider: CreateLLMProvider): Promise<string | undefined> {
+  const providerName = CREATE_LLM_PROVIDERS.find(option => option.value === provider)?.label ?? provider;
+  const choice = await runCreatePrompt(signal =>
+    p.select({
+      message: `Enter your ${providerName} API key?`,
+      options: [
+        { value: 'skip', label: 'Skip for now', hint: 'default' },
+        { value: 'enter', label: 'Enter API key' },
+      ],
+      initialValue: 'skip',
+      showInstructions: false,
+      signal,
+    }),
+  );
+
+  if (choice === 'skip') return undefined;
+
+  return runCreatePrompt(signal =>
+    p.password({
+      message: 'Enter your API key:',
+      mask: '*',
+      clearOnError: true,
+      validate: value => {
+        if (!value) return `API key can't be empty`;
+      },
+      signal,
+    }),
+  );
+}
+
+function normalizeDirectCreateOptions(args: CreateOptions): NormalizedCreateOptions {
+  return {
+    projectName: args.projectName,
+    empty: args.empty ?? false,
+    llmProvider: args.llmProvider,
+    llmApiKey: args.llmApiKey,
+    skills: args.skills ?? true,
+    git: args.git ?? true,
+    template: args.template,
+    timeout: args.timeout ?? 60_000,
+  };
+}
+
+export async function runCreateCommand(
+  projectName: string | undefined,
+  options: CreateCommandOptions,
+  dependencies: Pick<CreateOptions, 'analytics' | 'resolveVersionTag'> = {},
+): Promise<void> {
+  const normalized = normalizeCreateCommandOptions(projectName, options);
+  await create({ ...normalized, ...dependencies });
+}
+
+export const create = async (args: CreateOptions): Promise<void> => {
+  const options = normalizeDirectCreateOptions(args);
+  const mode = validateCreateOptionConflicts(options);
+  const invocationCwd = process.cwd();
+
+  const rawProjectName = options.projectName ?? (await promptForProjectName());
+  const projectName = validateProjectName(rawProjectName);
+  const targetPath = path.resolve(invocationCwd, projectName);
+
+  if (fsSync.existsSync(targetPath)) {
+    throw new Error(`A file or directory named "${projectName}" already exists. Please choose a different name.`);
+  }
+
+  const analytics = args.analytics ?? getAnalytics();
+  let llmProvider = options.llmProvider;
+  let llmApiKey = options.llmApiKey;
+  let providerSelectionMethod: 'cli_args' | 'interactive' | undefined;
+  let observabilityEnabled = false;
+  let platformSetupActive = false;
+  let platformSetupController: AbortController | undefined;
+  let platformSetupPromise: Promise<PlatformSetupResult> | undefined;
+
+  if (mode === 'managed') {
+    const providerProvidedByCli = llmProvider !== undefined;
+    if (llmProvider) {
+      providerSelectionMethod = 'cli_args';
+    } else {
+      llmProvider = await promptForProvider();
+      providerSelectionMethod = 'interactive';
+    }
+
+    if (llmApiKey === undefined && !providerProvidedByCli) {
+      llmApiKey = await promptForApiKey(llmProvider);
+    }
+
+    const offerObservability = options.projectName === undefined || options.llmProvider === undefined;
+    if (offerObservability) {
+      observabilityEnabled = await promptForObservabilityOptIn();
+      analytics?.trackEvent('cli_observability_selected', {
+        command: 'create',
+        enabled: observabilityEnabled,
+        answer: observabilityEnabled ? 'yes' : 'no',
+        selection_method: 'interactive',
+      });
+      if (observabilityEnabled) {
+        platformSetupController = new AbortController();
+        platformSetupActive = true;
+        const cancelPlatformSetup = () => platformSetupController?.abort();
+        process.on('SIGINT', cancelPlatformSetup);
+        platformSetupPromise = (async (): Promise<PlatformSetupResult> => {
+          try {
+            const token = await getToken(platformSetupController!.signal);
+            const org = await resolveCurrentOrg(token, {
+              forcePrompt: true,
+              exitOnCancel: false,
+              signal: platformSetupController!.signal,
+            });
+            return { status: 'ready', token, org };
+          } catch (error) {
+            if (platformSetupController!.signal.aborted || error instanceof OrgSelectionCancelledError) {
+              return { status: 'cancelled' };
+            }
+            return { status: 'failed', error };
+          } finally {
+            platformSetupActive = false;
+            process.removeListener('SIGINT', cancelPlatformSetup);
+          }
+        })();
+      }
+    }
+  }
+
+  const selectedTemplate = mode === 'empty' ? undefined : await resolveTemplate(mode, options.template);
+  analytics?.trackEvent('cli_create_mode_selected', {
+    mode,
+    template_slug: mode === 'template' ? selectedTemplate?.slug : undefined,
+    skills: options.skills,
+    git: options.git,
+  });
+  if (llmProvider) {
+    analytics?.trackEvent('cli_model_provider_selected', {
+      provider: llmProvider,
+      selection_method: providerSelectionMethod,
+    });
+  }
+  if (selectedTemplate) {
+    analytics?.trackEvent('cli_template_used', {
+      template_slug: selectedTemplate.slug,
+    });
+  }
+
+  const versionTag = mode === 'template' ? undefined : ((await args.resolveVersionTag?.()) ?? 'latest');
   const packageManager = getPackageManager();
+  const invocationIsGitWorktree = await isGitInitialized({ cwd: invocationCwd });
+  const staging = await createOwnedStagingDirectory(invocationCwd, projectName);
+  const materializationController = new AbortController();
+  let interruptionSignal: 'SIGINT' | 'SIGTERM' | undefined;
+  const interrupt = (signal: 'SIGINT' | 'SIGTERM') => {
+    if (signal === 'SIGINT' && platformSetupActive) {
+      platformSetupController?.abort();
+      return;
+    }
+    interruptionSignal ??= signal;
+    materializationController.abort();
+    platformSetupController?.abort();
+  };
+  const handleSigint = () => interrupt('SIGINT');
+  const handleSigterm = () => interrupt('SIGTERM');
+  process.on('SIGINT', handleSigint);
+  process.on('SIGTERM', handleSigterm);
+
+  let selectedApiKeyEnv: string | undefined;
+  let materializationError: unknown;
+
+  try {
+    if (mode === 'empty') {
+      await writeEmptyScaffold({
+        projectPath: staging.projectPath,
+        projectName,
+        versionTag: versionTag ?? 'latest',
+        packageManager,
+      });
+      materializationController.signal.throwIfAborted();
+    } else {
+      const isManaged = mode === 'managed';
+      const branch = isManaged && versionTag === 'beta' ? 'beta' : undefined;
+      await cloneTemplate({
+        template: selectedTemplate!,
+        projectName,
+        targetDir: staging.rootPath,
+        branch,
+        signal: materializationController.signal,
+        ...(observabilityEnabled ? { silent: true } : {}),
+      });
+
+      if (isManaged) {
+        const providerConfig = await adaptDefaultTemplate({
+          projectPath: staging.projectPath,
+          projectName,
+          packageManager,
+          provider: llmProvider!,
+          apiKey: llmApiKey,
+          versionTag: versionTag ?? 'latest',
+        });
+        selectedApiKeyEnv = providerConfig.apiKeyEnv;
+        materializationController.signal.throwIfAborted();
+      }
+    }
+
+    if (observabilityEnabled) {
+      await installDependencies(
+        staging.projectPath,
+        packageManager,
+        options.timeout,
+        materializationController.signal,
+        true,
+      );
+    } else {
+      await installDependencies(staging.projectPath, packageManager, options.timeout, materializationController.signal);
+    }
+    materializationController.signal.throwIfAborted();
+    await publishStagedProject({ projectPath: staging.projectPath, targetPath, projectName });
+  } catch (error) {
+    materializationError = error;
+    platformSetupController?.abort();
+  } finally {
+    if (process.cwd() !== invocationCwd) {
+      process.chdir(invocationCwd);
+    }
+    try {
+      await cleanupOwnedStagingDirectory(staging.rootPath);
+    } catch (cleanupError) {
+      console.error(
+        `Warning: Failed to clean up staging directory: ${cleanupError instanceof Error ? cleanupError.message : 'Unknown error'}`,
+      );
+    }
+  }
+
+  const platformSetup = await platformSetupPromise;
+  process.removeListener('SIGINT', handleSigint);
+  process.removeListener('SIGTERM', handleSigterm);
+
+  if (interruptionSignal === 'SIGINT') cancelCreate();
+  if (interruptionSignal === 'SIGTERM') throw new Error('Operation terminated by SIGTERM');
+  if (materializationError) throw materializationError;
+  if (platformSetup?.status === 'cancelled') {
+    p.log.info('Skipping Mastra platform setup.');
+  } else if (observabilityEnabled) {
+    p.log.success('Default template cloned and dependencies installed.');
+  }
+
+  const postSetup = await runPostCreateSetup({
+    projectPath: targetPath,
+    installSkills: options.skills,
+    initializeGit: options.git,
+    invocationIsGitWorktree,
+  });
+  analytics?.trackEvent('cli_create_post_setup', {
+    skills_agents: postSetup.skillsAgents,
+    skills_outcome: postSetup.skillsOutcome,
+    git_outcome: postSetup.gitOutcome,
+  });
+  const setupSummary = formatPostCreateSetup(postSetup);
+  if (postSetup.hasFailure) p.log.warn(setupSummary);
+  else p.log.success(setupSummary);
+
+  let observabilitySummary: string | undefined;
+  let platformEnvWritten = false;
+  let platformError = platformSetup?.status === 'failed' ? platformSetup.error : undefined;
+  if (platformSetup?.status === 'ready') {
+    try {
+      const result = await provisionObservabilityProject({
+        defaultProjectName: projectName,
+        mode: 'create',
+        token: platformSetup.token,
+        org: platformSetup.org,
+      });
+      await writeObservabilityEnv({
+        projectPath: targetPath,
+        token: result.token,
+        projectId: result.projectId,
+        endpoint: result.tracesEndpoint,
+      });
+      platformEnvWritten = true;
+      observabilitySummary = `${color.green('Mastra platform enabled.')}\n\nProject: ${color.cyan(result.projectName)} (${result.orgName})\nWrote ${color.cyan('MASTRA_PLATFORM_ACCESS_TOKEN')} and ${color.cyan('MASTRA_PROJECT_ID')} to ${color.cyan('.env')}.`;
+    } catch (error) {
+      platformError = error;
+    }
+  }
+
+  if (platformError !== undefined) {
+    const message = platformError instanceof Error ? platformError.message : 'Unknown error';
+    try {
+      await writeObservabilityEnv({ projectPath: targetPath });
+      platformEnvWritten = true;
+    } catch {}
+    const placeholderSummary = platformEnvWritten
+      ? `Empty ${color.cyan('MASTRA_PLATFORM_ACCESS_TOKEN')} and ${color.cyan('MASTRA_PROJECT_ID')} placeholders were added to your ${color.cyan('.env')} file.\n\n`
+      : '';
+    observabilitySummary = `${color.yellow('Could not connect this project to Mastra platform automatically:')} ${message}\n\n${placeholderSummary}1. Visit ${color.cyan('https://projects.mastra.ai')} to create a project and an access token.\n2. Paste the token into ${color.cyan('MASTRA_PLATFORM_ACCESS_TOKEN')} and the project id into ${color.cyan('MASTRA_PROJECT_ID')}.`;
+  }
+
+  if (mode === 'managed') {
+    const apiKeySummary = llmApiKey
+      ? `Your ${selectedApiKeyEnv} value was written to ${color.cyan('.env')}.`
+      : platformEnvWritten
+        ? `Set ${selectedApiKeyEnv} in ${color.cyan('.env')} before starting.`
+        : `Copy ${color.cyan('.env.example')} to ${color.cyan('.env')} and set ${selectedApiKeyEnv} before starting.`;
+    p.note(
+      `${color.green('Success!')}\n\n${apiKeySummary}${observabilitySummary ? `\n\n${observabilitySummary}` : ''}`,
+    );
+  } else if (mode === 'template') {
+    p.note(
+      `${color.green('Success!')}\n\nCreate a ${color.cyan('.env')} file if the template requires environment variables.`,
+    );
+  }
+
+  postCreate({ projectName, packageManager });
+};
+
+interface PostCreateSetupResult {
+  skillsAgents: AgentResult[0][];
+  skillsOutcome: 'installed' | 'failed' | 'opted_out';
+  gitOutcome: 'initialized' | 'failed' | 'opted_out' | 'parent_worktree' | 'target_worktree';
+  hasFailure: boolean;
+}
+
+async function runPostCreateSetup({
+  projectPath,
+  installSkills,
+  initializeGit,
+  invocationIsGitWorktree,
+}: {
+  projectPath: string;
+  installSkills: boolean;
+  initializeGit: boolean;
+  invocationIsGitWorktree: boolean;
+}): Promise<PostCreateSetupResult> {
+  let skillsAgents: AgentResult[] = [];
+  let skillsOutcome: PostCreateSetupResult['skillsOutcome'] = 'opted_out';
+
+  if (installSkills) {
+    try {
+      skillsAgents = await detectCodingAgentSkills();
+      const result = await installMastraSkills({
+        directory: projectPath,
+        agents: skillsAgents.map(([_, skill]) => skill),
+      });
+      skillsOutcome = result.success ? 'installed' : 'failed';
+    } catch {
+      skillsOutcome = 'failed';
+    }
+  }
+
+  let gitOutcome: PostCreateSetupResult['gitOutcome'];
+  if (!initializeGit) {
+    gitOutcome = 'opted_out';
+  } else if (invocationIsGitWorktree) {
+    gitOutcome = 'parent_worktree';
+  } else if (await isGitInitialized({ cwd: projectPath })) {
+    gitOutcome = 'target_worktree';
+  } else {
+    try {
+      await gitInit({ cwd: projectPath });
+      gitOutcome = 'initialized';
+    } catch {
+      gitOutcome = 'failed';
+    }
+  }
+
+  return {
+    skillsAgents: skillsAgents.map(([executable, _]) => executable),
+    skillsOutcome,
+    gitOutcome,
+    hasFailure: skillsOutcome === 'failed' || gitOutcome === 'failed',
+  };
+}
+
+const AGENT_MAP: Record<AgentResult[0], string> = {
+  claude: 'Claude Code',
+  codex: 'Codex',
+  'cursor-agent': 'Cursor',
+  droid: 'Droid',
+  gemini: 'Gemini',
+  opencode: 'OpenCode',
+  pi: 'Pi',
+  '': 'Universal',
+};
+
+function formatPostCreateSetup(result: PostCreateSetupResult): string {
+  const agents = result.skillsAgents.map(agent => AGENT_MAP[agent]).join(', ');
+  const skillsSummary =
+    result.skillsOutcome === 'opted_out'
+      ? 'Skipped skills (--no-skills).'
+      : result.skillsOutcome === 'installed'
+        ? `Installed skills for ${agents}.`
+        : `Could not install skills${agents ? ` for ${agents}` : ''}.`;
+
+  const gitSummaries: Record<PostCreateSetupResult['gitOutcome'], string> = {
+    initialized: 'Initialized git.',
+    failed: 'Could not initialize git.',
+    opted_out: 'Skipped git (--no-git).',
+    parent_worktree: 'Skipped git because the project is inside an existing worktree.',
+    target_worktree: 'Skipped git because the project already contains git metadata.',
+  };
+
+  return `${skillsSummary} ${gitSummaries[result.gitOutcome]}`;
+}
+
+const postCreate = ({ projectName, packageManager }: { projectName: string; packageManager: string }) => {
   p.outro(`
    ${color.green('To start your project:')}
 
@@ -151,10 +588,34 @@ const postCreate = ({ projectName }: { projectName: string }) => {
   `);
 };
 
-function isGitHubUrl(url: string): boolean {
+function parseGitHubRepositoryUrl(value: string): string | undefined {
   try {
-    const parsedUrl = new URL(url);
-    return parsedUrl.hostname === 'github.com' && parsedUrl.pathname.split('/').length >= 3;
+    const parsedUrl = new URL(value.startsWith('github.com/') ? `https://${value}` : value);
+    const pathParts = parsedUrl.pathname.split('/').filter(Boolean);
+    if (
+      parsedUrl.protocol !== 'https:' ||
+      parsedUrl.hostname !== 'github.com' ||
+      parsedUrl.username ||
+      parsedUrl.password ||
+      parsedUrl.search ||
+      parsedUrl.hash ||
+      pathParts.length !== 2
+    ) {
+      return undefined;
+    }
+
+    const [owner, repoPart] = pathParts;
+    const repo = repoPart?.replace(/\.git$/, '');
+    if (!owner || !repo) return undefined;
+    return `https://github.com/${owner}/${repo}`;
+  } catch {
+    return undefined;
+  }
+}
+
+function looksLikeGitHubUrl(value: string): boolean {
+  try {
+    return new URL(value.startsWith('github.com/') ? `https://${value}` : value).hostname === 'github.com';
   } catch {
     return false;
   }
@@ -164,41 +625,30 @@ async function validateGitHubProject(githubUrl: string): Promise<{ isValid: bool
   const errors: string[] = [];
 
   try {
-    // Extract owner and repo from GitHub URL
     const urlParts = new URL(githubUrl).pathname.split('/').filter(Boolean);
     const owner = urlParts[0];
-    const repo = urlParts[1]?.replace('.git', ''); // Remove .git if present
+    const repo = urlParts[1]?.replace('.git', '');
 
-    if (!owner || !repo) {
-      throw new Error('Invalid GitHub URL format');
-    }
+    if (!owner || !repo) throw new Error('Invalid GitHub URL format');
 
-    // Try to fetch from main branch first, fallback to master
-    const branches = ['main', 'master'];
     let packageJsonContent: string | null = null;
     let indexContent: string | null = null;
 
-    for (const branch of branches) {
+    for (const branch of ['main', 'master']) {
       try {
-        // Fetch package.json
-        const packageJsonUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/package.json`;
-        const packageJsonResponse = await fetch(packageJsonUrl);
+        const packageJsonResponse = await fetch(
+          `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/package.json`,
+        );
+        if (!packageJsonResponse.ok) continue;
 
-        if (packageJsonResponse.ok) {
-          packageJsonContent = await packageJsonResponse.text();
-
-          // If package.json found, try to fetch index.ts from same branch
-          const indexUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/src/mastra/index.ts`;
-          const indexResponse = await fetch(indexUrl);
-
-          if (indexResponse.ok) {
-            indexContent = await indexResponse.text();
-          }
-
-          break; // Found files, no need to check other branches
-        }
+        packageJsonContent = await packageJsonResponse.text();
+        const indexResponse = await fetch(
+          `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/src/mastra/index.ts`,
+        );
+        if (indexResponse.ok) indexContent = await indexResponse.text();
+        break;
       } catch {
-        // Continue to next branch
+        // Try the next branch.
       }
     }
 
@@ -207,32 +657,24 @@ async function validateGitHubProject(githubUrl: string): Promise<{ isValid: bool
       return { isValid: false, errors };
     }
 
-    // Check for @mastra/core dependency
     try {
       const packageJson = JSON.parse(packageJsonContent);
       const hasMastraCore =
         packageJson.dependencies?.['@mastra/core'] ||
         packageJson.devDependencies?.['@mastra/core'] ||
         packageJson.peerDependencies?.['@mastra/core'];
-
-      if (!hasMastraCore) {
-        errors.push('Missing @mastra/core dependency in package.json');
-      }
+      if (!hasMastraCore) errors.push('Missing @mastra/core dependency in package.json');
     } catch {
       errors.push('Invalid package.json format');
     }
 
-    // Check for src/mastra/index.ts
     if (!indexContent) {
       errors.push('Missing src/mastra/index.ts file');
-    } else {
-      // Check if it exports a Mastra instance
-      const hasMastraExport =
-        indexContent.includes('export') && (indexContent.includes('new Mastra') || indexContent.includes('Mastra('));
-
-      if (!hasMastraExport) {
-        errors.push('src/mastra/index.ts does not export a Mastra instance');
-      }
+    } else if (
+      !indexContent.includes('export') ||
+      (!indexContent.includes('new Mastra') && !indexContent.includes('Mastra('))
+    ) {
+      errors.push('src/mastra/index.ts does not export a Mastra instance');
     }
 
     return { isValid: errors.length === 0, errors };
@@ -242,13 +684,11 @@ async function validateGitHubProject(githubUrl: string): Promise<{ isValid: bool
   }
 }
 
-async function createFromGitHubUrl(url: string): Promise<Template> {
-  // Extract owner and repo from GitHub URL
+function createFromGitHubUrl(url: string): Template {
   const urlParts = new URL(url).pathname.split('/').filter(Boolean);
   const owner = urlParts[0] || 'unknown';
   const repo = urlParts[1] || 'unknown';
 
-  // Create a temporary Template object for GitHub URLs
   return {
     githubUrl: url,
     title: `${owner}/${repo}`,
@@ -261,176 +701,46 @@ async function createFromGitHubUrl(url: string): Promise<Template> {
   };
 }
 
-async function createFromTemplate(args: {
-  projectName?: string;
-  template?: string | boolean;
-  timeout?: number;
-  injectedAnalytics?: PosthogAnalytics;
-  llmProvider?: LLMProvider;
-}) {
-  let selectedTemplate: Template | undefined;
+async function resolveTemplate(mode: Exclude<CreateMode, 'empty'>, template?: string | boolean): Promise<Template> {
+  if (mode === 'managed') return DEFAULT_TEMPLATE;
 
-  if (args.template === true) {
-    // Interactive template selection
+  if (template === true) {
     const templates = await loadTemplates();
-    const selected = await selectTemplate(templates);
-    if (!selected) {
-      p.log.info('No template selected. Exiting.');
-      return;
-    }
-    selectedTemplate = selected;
-  } else if (args.template && typeof args.template === 'string') {
-    // Check if it's a GitHub URL
-    if (isGitHubUrl(args.template)) {
-      // Validate GitHub project before cloning
-      const spinner = p.spinner();
-      spinner.start('Validating GitHub repository...');
-
-      const validation = await validateGitHubProject(args.template);
-
-      if (!validation.isValid) {
-        spinner.stop('Validation failed');
-        p.log.error('This does not appear to be a valid Mastra project:');
-        validation.errors.forEach(error => p.log.error(`  - ${error}`));
-        throw new Error('Invalid Mastra project');
-      }
-
-      spinner.stop('Valid Mastra project ✓');
-      selectedTemplate = await createFromGitHubUrl(args.template);
-    } else {
-      // Template name provided, find it from the list
-      const templates = await loadTemplates();
-      const found = findTemplateByName(templates, args.template);
-      if (!found) {
-        p.log.error(`Template "${args.template}" not found. Available templates:`);
-        templates.forEach((t: Template) => p.log.info(`  - ${t.title} (use: ${t.slug.replace('template-', '')})`));
-        throw new Error(`Template "${args.template}" not found`);
-      }
-      selectedTemplate = found;
-    }
+    const selected = await runCreatePrompt(signal => selectTemplate(templates, { signal }));
+    if (!selected) cancelCreate();
+    return selected;
   }
 
-  if (!selectedTemplate) {
+  if (typeof template !== 'string') {
     throw new Error('No template selected');
   }
 
-  // Get project name
-  let projectName = args.projectName;
-  if (!projectName) {
-    const defaultName = getDefaultProjectName(selectedTemplate);
-    const response = await p.text({
-      message: 'What is your project name?',
-      defaultValue: defaultName,
-      placeholder: defaultName,
-    });
-
-    if (p.isCancel(response)) {
-      p.log.info('Project creation cancelled.');
-      return;
+  const githubUrl = parseGitHubRepositoryUrl(template);
+  if (githubUrl) {
+    const spinner = p.spinner();
+    spinner.start('Validating GitHub repository...');
+    const validation = await validateGitHubProject(githubUrl);
+    if (!validation.isValid) {
+      spinner.stop('Validation failed');
+      p.log.error('This does not appear to be a valid Mastra project:');
+      validation.errors.forEach(error => p.log.error(`  - ${error}`));
+      throw new Error('Invalid Mastra project');
     }
-
-    projectName = response as string;
+    spinner.stop('Valid Mastra project ✓');
+    return createFromGitHubUrl(githubUrl);
+  }
+  if (looksLikeGitHubUrl(template)) {
+    throw new Error('Invalid GitHub repository URL. Use https://github.com/<owner>/<repository>.');
   }
 
-  // Get LLM provider if not specified
-  let llmProvider = args.llmProvider;
-  if (!llmProvider) {
-    const providerResponse = await p.select({
-      message: 'Select a default provider:',
-      options: LLM_PROVIDERS,
-    });
-
-    if (p.isCancel(providerResponse)) {
-      p.log.info('Project creation cancelled.');
-      return;
-    }
-
-    llmProvider = providerResponse as LLMProvider;
+  const templates = await loadTemplates();
+  const found = findTemplateByName(templates, template);
+  if (!found) {
+    p.log.error(`Template "${template}" not found. Available templates:`);
+    templates.forEach(availableTemplate =>
+      p.log.info(`  - ${availableTemplate.title} (use: ${availableTemplate.slug.replace('template-', '')})`),
+    );
+    throw new Error(`Template "${template}" not found`);
   }
-
-  // Handle git initialization for templates
-  let initGit = false;
-  const gitConfirmResult = await p.confirm({
-    message: 'Initialize a new git repository?',
-    initialValue: true,
-  });
-
-  if (!p.isCancel(gitConfirmResult)) {
-    initGit = gitConfirmResult;
-  }
-
-  let projectPath: string | null = null;
-
-  try {
-    // Track template usage
-    const analytics = args.injectedAnalytics || getAnalytics();
-    if (analytics) {
-      analytics.trackEvent('cli_template_used', {
-        template_slug: selectedTemplate.slug,
-        template_title: selectedTemplate.title,
-      });
-
-      // Track model provider selection
-      if (llmProvider) {
-        analytics.trackEvent('cli_model_provider_selected', {
-          provider: llmProvider,
-          selection_method: args.llmProvider ? 'cli_args' : 'interactive',
-        });
-      }
-    }
-
-    const isBeta = version?.includes('beta') ?? false;
-    const isMastraTemplate = selectedTemplate.githubUrl.includes('github.com/mastra-ai/');
-    const branch = isBeta && isMastraTemplate ? 'beta' : undefined;
-
-    // Clone the template
-    projectPath = await cloneTemplate({
-      template: selectedTemplate,
-      projectName,
-      branch,
-      llmProvider,
-    });
-
-    // Install dependencies
-    await installDependencies(projectPath);
-
-    if (initGit) {
-      const s = p.spinner();
-      try {
-        s.start('Initializing git repository');
-
-        await gitInit({ cwd: projectPath });
-
-        s.stop('Git repository initialized');
-      } catch {
-        s.stop();
-      }
-    }
-
-    p.note(`
-      ${color.green('Mastra template installed!')}
-
-      Add the necessary environment
-      variables in your ${color.cyan('.env')} file
-      `);
-
-    // Show completion message
-    postCreate({ projectName });
-  } catch (error) {
-    // Clean up: remove the created directory on failure
-    if (projectPath) {
-      try {
-        if (fsSync.existsSync(projectPath)) {
-          await fs.rm(projectPath, { recursive: true, force: true });
-        }
-      } catch (cleanupError) {
-        // Log but don't throw - we want to exit with the original error
-        console.error(
-          `Warning: Failed to clean up project directory: ${cleanupError instanceof Error ? cleanupError.message : 'Unknown error'}`,
-        );
-      }
-    }
-    p.log.error(`Failed to create project from template: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    throw error;
-  }
+  return found;
 }

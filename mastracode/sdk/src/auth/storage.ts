@@ -9,6 +9,7 @@ import { getAppDataDir } from '../utils/project.js';
 import { anthropicOAuthProvider } from './providers/anthropic.js';
 import { githubCopilotOAuthProvider } from './providers/github-copilot.js';
 import { openaiCodexOAuthProvider } from './providers/openai-codex.js';
+import { xaiOAuthProvider } from './providers/xai.js';
 import type {
   AuthCredential,
   AuthStorageData,
@@ -22,12 +23,13 @@ import type {
  * Used when auto-selecting a model after login.
  */
 export const PROVIDER_DEFAULT_MODELS: Record<OAuthProviderId, string> = {
-  anthropic: 'anthropic/claude-opus-4-6',
-  'openai-codex': 'openai/gpt-5.5',
+  anthropic: 'anthropic/claude-fable-5',
+  'openai-codex': 'openai/gpt-5.6',
   // gpt-4.1 routes through `/chat/completions` (which our OpenAI-compatible
   // adapter handles); Anthropic-shaped Copilot models (Claude on `/v1/messages`)
   // are not yet wired up, so picking one as the post-login default would error.
   'github-copilot': 'github-copilot/gpt-4.1',
+  xai: 'xai/grok-4.5',
 };
 
 // Provider registry
@@ -35,6 +37,7 @@ const oauthProviderRegistry = new Map<string, OAuthProviderInterface>([
   [anthropicOAuthProvider.id, anthropicOAuthProvider],
   [openaiCodexOAuthProvider.id, openaiCodexOAuthProvider],
   [githubCopilotOAuthProvider.id, githubCopilotOAuthProvider],
+  [xaiOAuthProvider.id, xaiOAuthProvider],
 ]);
 
 /**
