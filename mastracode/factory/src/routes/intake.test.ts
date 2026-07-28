@@ -148,6 +148,14 @@ describe('intake configuration', () => {
     expect(await seed.intake.getConfig({ orgId: 'org1', userId: 'u1' })).toEqual({
       github: { enabled: true, sourceIds: ['repo-1'] },
     });
+    expect(auditEvents).toEqual([
+      {
+        action: 'factory.intake.config_updated',
+        metadata: {
+          github: { enabled: true, sources: 1 },
+        },
+      },
+    ]);
   });
 
   it('still rejects an unregistered integration the client actually tried to use', async () => {
