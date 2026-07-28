@@ -2,6 +2,7 @@ import type { LeaseProvider } from '@mastra/core/events';
 import type { WorkerDeps } from '@mastra/core/worker';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { GithubPullRequestReconciler } from '../../github/rules.js';
 import type { dispatchGithubWebhook } from '../../github/webhook.js';
 import { PlatformApiClient } from '../api-client.js';
 import { PlatformGithubEventWorker } from './event-worker.js';
@@ -63,6 +64,8 @@ function createWorker(input: {
   now?: () => number;
   dispatch?: typeof dispatchGithubWebhook;
   ingestFactoryEvent?: (event: Parameters<typeof dispatchGithubWebhook>[0]) => Promise<unknown>;
+  reconcileFactoryState?: GithubPullRequestReconciler;
+  reconcileIntervalMs?: number;
 }) {
   return new PlatformGithubEventWorker({
     client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl: input.fetchImpl }),
@@ -70,6 +73,8 @@ function createWorker(input: {
     github: createGithub(),
     storage: input.storage,
     ingestFactoryEvent: input.ingestFactoryEvent,
+    reconcileFactoryState: input.reconcileFactoryState,
+    reconcileIntervalMs: input.reconcileIntervalMs,
     intervalMs: input.intervalMs ?? 1_000,
     now: input.now,
     dispatch: input.dispatch,
@@ -404,5 +409,63 @@ describe('PlatformGithubEventWorker', () => {
     const callsAfterStop = fetchImpl.mock.calls.length;
     await vi.advanceTimersByTimeAsync(60_000);
     expect(fetchImpl).toHaveBeenCalledTimes(callsAfterStop);
+  });
+
+  it('runs the merge reconcile sweep on its own cadence and stays on cadence after a failing sweep', async () => {
+    const settings = createSettingsStorage();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/installations')) {
+        return json({ installations: [{ installationId: 7, usable: true, suspendedAt: null }] });
+      }
+      if (url.pathname.endsWith('/installations/7/repositories')) {
+        return json({ repositories: [{ id: 101, fullName: 'acme/repo' }, { id: 102 }] });
+      }
+      if (url.pathname.includes('/repositories/')) {
+        return json({ events: [], nextCursor: null });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    let clock = 1_000_000;
+    const reconcileFactoryState = vi
+      .fn<GithubPullRequestReconciler>()
+      .mockResolvedValueOnce({ checked: 1, merged: 1 })
+      .mockRejectedValueOnce(new Error('sweep exploded'))
+      .mockResolvedValue({ checked: 1, merged: 0 });
+    const worker = createWorker({
+      fetchImpl,
+      storage: settings.storage,
+      now: () => clock,
+      reconcileFactoryState,
+      reconcileIntervalMs: 5_000,
+    });
+
+    await worker.init(createDeps());
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // First poll sweeps immediately; repositories without a fullName are skipped.
+    expect(reconcileFactoryState).toHaveBeenCalledTimes(1);
+    expect(reconcileFactoryState).toHaveBeenCalledWith([{ id: 101, fullName: 'acme/repo', installationId: 7 }]);
+
+    // Next poll tick lands inside the reconcile interval: no sweep.
+    clock += 1_000;
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(reconcileFactoryState).toHaveBeenCalledTimes(1);
+
+    // Past the interval the sweep runs again; this one fails.
+    clock += 5_000;
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(reconcileFactoryState).toHaveBeenCalledTimes(2);
+
+    // The failure neither breaks polling nor tightens the cadence.
+    clock += 1_000;
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(reconcileFactoryState).toHaveBeenCalledTimes(2);
+    clock += 5_000;
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(reconcileFactoryState).toHaveBeenCalledTimes(3);
+
+    await worker.stop();
   });
 });

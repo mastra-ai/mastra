@@ -343,18 +343,159 @@ export class GithubRules {
   }
 }
 
-export function attachGithubRules(
-  github: GithubRulesIntegration,
-  context: IntegrationContext,
-): ((event: ParsedGithubWebhook) => Promise<unknown>) | undefined {
+export interface ReconcilePullRequestState {
+  title: string;
+  url: string;
+  state: 'open' | 'closed';
+  merged: boolean;
+  headBranch: string;
+  baseBranch: string;
+  createdAt?: string;
+  mergedBy?: string;
+}
+
+export type GithubPullRequestFetcher = (input: {
+  installationId: number;
+  repository: string;
+  number: number;
+}) => Promise<ReconcilePullRequestState | undefined>;
+
+export interface ReconcileRepository {
+  id: number;
+  fullName: string;
+  installationId: number;
+}
+
+export type GithubPullRequestReconciler = (
+  repositories: ReconcileRepository[],
+) => Promise<{ checked: number; merged: number }>;
+
+/**
+ * Extracts the PR number a work item tracks, but only when the item belongs
+ * to the given repository. Card URLs pin the repository unambiguously; the
+ * legacy source key embeds the repository id. Canonical keys (`github-pr:N`)
+ * carry no repository, so they are only trusted when the item has no URL —
+ * a project mapped to multiple repositories must not reconcile one repo's
+ * card against another repo's PR number.
+ */
+function reconcilablePullRequestNumber(item: WorkItemRow, repository: ReconcileRepository): number | undefined {
+  if (item.externalSource?.type !== 'pull-request') return undefined;
+  const url = item.externalSource.url;
+  if (url) {
+    const match = /^https?:\/\/[^/]+\/(.+)\/pull\/(\d+)(?:[/?#]|$)/.exec(url);
+    if (!match) return undefined;
+    return match[1] === repository.fullName ? Number(match[2]) : undefined;
+  }
+  const externalId = item.externalSource.externalId;
+  const legacy = /^github:(\d+):pull-request:(\d+)$/.exec(externalId);
+  if (legacy) return Number(legacy[1]) === repository.id ? Number(legacy[2]) : undefined;
+  const canonical = /^github-pr:(\d+)$/.exec(externalId);
+  return canonical ? Number(canonical[1]) : undefined;
+}
+
+export function reconciledMergeEvent(
+  repository: ReconcileRepository,
+  pullRequestNumber: number,
+  state: ReconcilePullRequestState,
+): ParsedGithubWebhook {
+  return {
+    event: 'pull_request',
+    // Stable per (repository, PR, merged): the ingress dedupe makes repeat
+    // reconcile cycles replay instead of re-committing decisions.
+    deliveryId: `reconcile:${repository.id}:pull-request:${pullRequestNumber}:merged`,
+    payload: {
+      action: 'closed',
+      installation: { id: repository.installationId },
+      repository: { id: repository.id, full_name: repository.fullName },
+      sender: { login: state.mergedBy ?? 'github' },
+      pull_request: {
+        number: pullRequestNumber,
+        title: state.title,
+        html_url: state.url,
+        ...(state.createdAt ? { created_at: state.createdAt } : {}),
+        state: 'closed',
+        merged: true,
+        head: { ref: state.headBranch },
+        base: { ref: state.baseBranch },
+      },
+    },
+  };
+}
+
+/**
+ * State-based safety net for merge signals: webhooks and event-log tailing
+ * can miss a merge (cursor gaps, downtime, terminally failed decisions), so
+ * this sweep compares still-open PR cards against actual GitHub state and
+ * replays the merge through the normal rules ingress when they disagree.
+ */
+export function createGithubPullRequestReconciler(
+  options: GithubRulesOptions,
+  fetchPullRequest: GithubPullRequestFetcher,
+): GithubPullRequestReconciler {
+  const rules = new GithubRules(options);
+  return async repositories => {
+    let checked = 0;
+    let merged = 0;
+    for (const repository of repositories) {
+      const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
+        installationExternalId: String(repository.installationId),
+        repositoryExternalId: String(repository.id),
+      });
+      if (projects.length === 0) continue;
+      const numbers = new Set<number>();
+      for (const project of projects) {
+        const items = await options.storage.list({ orgId: project.orgId, factoryProjectId: project.factoryProjectId });
+        for (const item of items) {
+          const stage = item.stages[0];
+          if (stage === 'done' || stage === 'canceled') continue;
+          const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
+          if (pullRequestNumber) numbers.add(pullRequestNumber);
+        }
+      }
+      for (const pullRequestNumber of numbers) {
+        const state = await fetchPullRequest({
+          installationId: repository.installationId,
+          repository: repository.fullName,
+          number: pullRequestNumber,
+        });
+        checked += 1;
+        if (!state?.merged) continue;
+        merged += 1;
+        await rules.ingest(reconciledMergeEvent(repository, pullRequestNumber, state));
+      }
+    }
+    return { checked, merged };
+  };
+}
+
+function githubRulesOptions(github: GithubRulesIntegration, context: IntegrationContext): GithubRulesOptions | undefined {
   if (!context.rules) return undefined;
-  const rules = new GithubRules({
+  return {
     github,
     sourceControl: context.storage.sourceControl,
     integrationStorage: context.storage.generic,
     projects: context.storage.projects,
     storage: context.rules.workItems,
     rules: context.rules.config,
-  });
+  };
+}
+
+export function attachGithubRules(
+  github: GithubRulesIntegration,
+  context: IntegrationContext,
+): ((event: ParsedGithubWebhook) => Promise<unknown>) | undefined {
+  const options = githubRulesOptions(github, context);
+  if (!options) return undefined;
+  const rules = new GithubRules(options);
   return event => rules.ingest(event);
+}
+
+export function attachGithubReconciler(
+  github: GithubRulesIntegration,
+  context: IntegrationContext,
+  fetchPullRequest: GithubPullRequestFetcher,
+): GithubPullRequestReconciler | undefined {
+  const options = githubRulesOptions(github, context);
+  if (!options) return undefined;
+  return createGithubPullRequestReconciler(options, fetchPullRequest);
 }

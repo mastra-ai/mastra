@@ -8,6 +8,7 @@ import type { WorkerDeps } from '@mastra/core/worker';
 
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type { GithubRepositoryPermission } from '../../github/integration.js';
+import type { GithubPullRequestReconciler, ReconcileRepository } from '../../github/rules.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from '../../github/subscriptions.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { dispatchGithubWebhook } from '../../github/webhook.js';
@@ -17,6 +18,7 @@ import { PlatformApiError } from '../api-client.js';
 
 const API_PREFIX = '/v1/server/github-app';
 const DEFAULT_POLL_INTERVAL_MS = 20_000;
+const DEFAULT_RECONCILE_INTERVAL_MS = 5 * 60_000;
 const EVENT_PAGE_SIZE = 500;
 const MIN_LEASE_TTL_MS = 30_000;
 const CURSOR_ORG_ID = '__platform_github_event_worker__';
@@ -57,7 +59,7 @@ type EventLogEntry = {
   payload: unknown;
 };
 
-type Repository = { id: number };
+type Repository = { id: number; fullName?: string; installationId: number };
 
 export interface PlatformGithubEventDispatchIntegration {
   readonly integrationStorage: GithubSubscriptionStorage;
@@ -75,7 +77,9 @@ export interface PlatformGithubEventWorkerConfig {
   github: PlatformGithubEventDispatchIntegration;
   storage: PlatformGithubEventStorage;
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
+  reconcileFactoryState?: GithubPullRequestReconciler;
   intervalMs?: number;
+  reconcileIntervalMs?: number;
   now?: () => number;
   dispatch?: typeof dispatchGithubWebhook;
 }
@@ -88,6 +92,8 @@ export class PlatformGithubEventWorker extends MastraWorker {
   readonly #github: PlatformGithubEventDispatchIntegration;
   readonly #storage: PlatformGithubEventStorage;
   readonly #ingestFactoryEvent: ((event: ParsedGithubWebhook) => Promise<unknown>) | undefined;
+  readonly #reconcileFactoryState: GithubPullRequestReconciler | undefined;
+  readonly #reconcileIntervalMs: number;
   readonly #intervalMs: number;
   readonly #now: () => number;
   readonly #dispatch: typeof dispatchGithubWebhook;
@@ -101,6 +107,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
   #leaseTtlMs: number;
   #hasLease = false;
   #startedAt = 0;
+  #lastReconcileAt = 0;
   #settings: PlatformGithubEventWorkerSettings = { version: 1, repositories: {} };
 
   constructor(config: PlatformGithubEventWorkerConfig) {
@@ -110,6 +117,8 @@ export class PlatformGithubEventWorker extends MastraWorker {
     this.#github = config.github;
     this.#storage = config.storage;
     this.#ingestFactoryEvent = config.ingestFactoryEvent;
+    this.#reconcileFactoryState = config.reconcileFactoryState;
+    this.#reconcileIntervalMs = config.reconcileIntervalMs ?? DEFAULT_RECONCILE_INTERVAL_MS;
     this.#intervalMs = config.intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     if (!Number.isFinite(this.#intervalMs) || this.#intervalMs <= 0) {
       throw new Error('Platform GitHub event polling interval must be a positive number.');
@@ -242,7 +251,40 @@ export class PlatformGithubEventWorker extends MastraWorker {
       }
     }
 
+    await this.#maybeReconcile(repositories);
+
     return retryInMs;
+  }
+
+  /**
+   * State-based safety net: event tailing can miss merges (cursor gaps,
+   * downtime, terminally failed decisions), so on a slower cadence we compare
+   * still-open PR cards against actual GitHub state and replay missed merges
+   * through the normal ingress, which dedupes against the event path.
+   */
+  async #maybeReconcile(repositories: Repository[]): Promise<void> {
+    if (!this.#reconcileFactoryState || !this.#running || !this.#hasLease) return;
+    const now = this.#now();
+    if (now - this.#lastReconcileAt < this.#reconcileIntervalMs) return;
+    // Advance the clock before sweeping so a persistently failing sweep stays
+    // on cadence instead of retrying every poll tick.
+    this.#lastReconcileAt = now;
+    const targets: ReconcileRepository[] = repositories.flatMap(repository =>
+      repository.fullName
+        ? [{ id: repository.id, fullName: repository.fullName, installationId: repository.installationId }]
+        : [],
+    );
+    if (targets.length === 0) return;
+    try {
+      const summary = await this.#reconcileFactoryState(targets);
+      if (summary.merged > 0) {
+        this.deps?.logger.info('Platform GitHub pull request reconcile replayed missed merges', summary);
+      }
+    } catch (error) {
+      this.deps?.logger.error('Platform GitHub pull request reconcile failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   async #discoverRepositories(): Promise<Repository[]> {
@@ -257,11 +299,13 @@ export class PlatformGithubEventWorker extends MastraWorker {
 
     for (const installation of result.installations) {
       if (!installation.usable || installation.suspendedAt) continue;
-      const page = await this.#client.request<{ repositories: Repository[] }>(
+      const page = await this.#client.request<{ repositories: Array<{ id: number; fullName?: string }> }>(
         'GET',
         `${API_PREFIX}/installations/${installation.installationId}/repositories`,
       );
-      for (const repository of page.repositories) repositories.set(repository.id, repository);
+      for (const repository of page.repositories) {
+        repositories.set(repository.id, { ...repository, installationId: installation.installationId });
+      }
     }
 
     return [...repositories.values()];

@@ -45,7 +45,8 @@ import type {
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
 import type { GithubIntegration, GithubRepositoryPermission, RepoSummary } from '../../github/integration.js';
 import { buildGithubRoutes } from '../../github/routes.js';
-import { attachGithubRules } from '../../github/rules.js';
+import { attachGithubReconciler, attachGithubRules } from '../../github/rules.js';
+import type { ReconcilePullRequestState } from '../../github/rules.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -640,9 +641,55 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         github: this,
         storage: ctx.storage.generic as unknown as PlatformGithubEventStorage,
         ingestFactoryEvent: attachGithubRules(this, ctx),
+        reconcileFactoryState: attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input)),
         intervalMs: this.#pollingIntervalMs,
       }),
     ];
+  }
+
+  /**
+   * Reads live PR state through the Platform GitHub proxy for the merge
+   * reconciler. Returns undefined when the PR cannot be resolved (missing,
+   * proxy error) so a sweep never fabricates a merge.
+   */
+  async fetchPullRequestState(input: {
+    installationId: number;
+    repository: string;
+    number: number;
+  }): Promise<ReconcilePullRequestState | undefined> {
+    let repository: { owner: string; repo: string };
+    try {
+      repository = splitRepository(input.repository);
+    } catch {
+      return undefined;
+    }
+    try {
+      const result = await this.#client.request<{
+        title?: string;
+        html_url?: string;
+        state?: string;
+        merged?: boolean;
+        created_at?: string;
+        merged_by?: { login?: string } | null;
+        head?: { ref?: string };
+        base?: { ref?: string };
+      }>(
+        'GET',
+        `${API_PREFIX}/github/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/pulls/${input.number}`,
+      );
+      return {
+        title: result.title ?? `PR ${input.number}`,
+        url: result.html_url ?? `https://github.com/${input.repository}/pull/${input.number}`,
+        state: result.state === 'closed' ? 'closed' : 'open',
+        merged: result.merged === true,
+        headBranch: result.head?.ref ?? '',
+        baseBranch: result.base?.ref ?? '',
+        ...(result.created_at ? { createdAt: result.created_at } : {}),
+        ...(result.merged_by?.login ? { mergedBy: result.merged_by.login } : {}),
+      };
+    } catch {
+      return undefined;
+    }
   }
 
   sessionTools({ requestContext }: { requestContext: RequestContext }): IntegrationTools {
