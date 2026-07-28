@@ -205,6 +205,7 @@ export const piiRedactorProvider: ProcessorProvider = {
     lastMessageOnly: z.boolean().optional(),
   }),
   availablePhases: ['processInput', 'processOutputStream', 'processOutputResult'] as ProcessorPhase[],
+  /** Build a PIIRedactor from a config already validated by `configSchema`. */
   createProcessor(config) {
     return new PIIRedactor(config as unknown as PIIRedactorOptions);
   },

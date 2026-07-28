@@ -165,6 +165,9 @@ export class PIIDetector implements Processor<'pii-detector'> {
   /** Default character threshold for flushing the LLM buffer during streaming. */
   private static readonly DEFAULT_BUFFER_SIZE = 200;
 
+  /**
+   * Create a PIIDetector and its internal detection agent.
+   */
   constructor(options: PIIDetectorOptions) {
     this.detectionTypes = options.detectionTypes || PIIDetector.DEFAULT_DETECTION_TYPES;
     this.threshold = options.threshold ?? 0.6;
@@ -189,6 +192,9 @@ export class PIIDetector implements Processor<'pii-detector'> {
     });
   }
 
+  /**
+   * Scan incoming messages with the detection agent and apply the configured strategy.
+   */
   async processInput(
     args: {
       messages: MastraDBMessage[];

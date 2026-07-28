@@ -6,6 +6,7 @@ import { ChunkFrom } from '../../stream/types';
 import type { ProcessInputArgs, ProcessOutputResultArgs, ProcessOutputStreamArgs } from '../index';
 import { PIIRedactor } from './pii-redactor';
 
+/** Build a V2 user or assistant message whose single text part holds `text`. */
 function createMessage(text: string, role: 'user' | 'assistant' = 'user'): MastraDBMessage {
   return {
     id: `msg-${Math.random()}`,
@@ -15,6 +16,7 @@ function createMessage(text: string, role: 'user' | 'assistant' = 'user'): Mastr
   };
 }
 
+/** Wrap messages in the argument shape `processInput` expects. */
 function createInputArgs(messages: MastraDBMessage[]): ProcessInputArgs {
   return {
     messages,
@@ -29,6 +31,7 @@ function createInputArgs(messages: MastraDBMessage[]): ProcessInputArgs {
   };
 }
 
+/** Wrap messages in the argument shape `processOutputResult` expects. */
 function createOutputResultArgs(messages: MastraDBMessage[]): ProcessOutputResultArgs {
   return {
     messages,
@@ -42,6 +45,7 @@ function createOutputResultArgs(messages: MastraDBMessage[]): ProcessOutputResul
   };
 }
 
+/** Build a text-delta stream chunk carrying `text`. */
 function createTextChunk(text: string): ChunkType {
   return {
     type: 'text-delta',
@@ -51,6 +55,7 @@ function createTextChunk(text: string): ChunkType {
   };
 }
 
+/** Wrap a chunk in the argument shape `processOutputStream` expects, with carry-over state. */
 function createStreamArgs(part: ChunkType, state: Record<string, any> = {}): ProcessOutputStreamArgs {
   return {
     part,
@@ -64,6 +69,7 @@ function createStreamArgs(part: ChunkType, state: Record<string, any> = {}): Pro
   };
 }
 
+/** Read the text of a message's first text part. */
 function getText(message: MastraDBMessage): string {
   const part = message.content.parts?.[0];
   return part && part.type === 'text' && 'text' in part ? (part.text as string) : '';
