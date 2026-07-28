@@ -66,7 +66,7 @@ function FlowCard({
 
   return (
     <Card
-      aria-label="Signal theme flow"
+      aria-label="Trace signal theme flow"
       as="section"
       className="min-w-0 overflow-hidden"
       elevation="elevated"
@@ -98,7 +98,7 @@ function FlowCard({
           <span>HOVER OR FOCUS TO ISOLATE FLOW</span>
         </div>
         <ul
-          aria-label="Signal stage legend"
+          aria-label="Trace signal stage legend"
           className="text-neutral3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs"
           data-alignment="right"
         >
@@ -224,7 +224,7 @@ export function SankeySignals({
   if (snapshotsQuery.isError || hasFlowError || hasActivePathsError) {
     return (
       <SignalsErrorState
-        message="Unable to load signal flow."
+        message="Unable to load trace signal flow."
         onRetry={() => {
           setIsPlaying(false);
           void snapshotsQuery.refetch();
@@ -298,20 +298,20 @@ export function SankeySignals({
       <header className="max-w-3xl" data-testid="signals-page-header">
         <div className="text-neutral4 flex items-center gap-2 font-mono text-xs font-semibold tracking-widest">
           <span aria-hidden="true" className="bg-accent1 size-2 rounded-full" />
-          SIGNALS
+          TRACE INTELLIGENCE
         </div>
         <h1 className="text-neutral6 mt-2 text-xl font-semibold sm:text-2xl">
           Understand what drives every agent interaction
         </h1>
         <p className="text-neutral3 mt-1.5 text-sm leading-5">
-          Signals group recurring patterns across traces so you can see how goals, outcomes, behaviors, and sentiment
-          connect.
+          Trace intelligence groups recurring patterns across traces so you can see how goal, outcome, behavior, and
+          sentiment trace signals connect.
         </p>
         <p className="text-neutral4 mt-2 font-mono text-xs">
           {entityId} · Snapshot {flow.snapshot.ordinal} of {flow.snapshot.total} ·{' '}
           {formatSnapshotWindow(flow.snapshot.startedAt, flow.snapshot.endedAt)}
         </p>
-        <ul aria-label="Signal analysis metrics" className="mt-3 flex flex-wrap gap-2">
+        <ul aria-label="Trace intelligence metrics" className="mt-3 flex flex-wrap gap-2">
           <li className="border-border1 bg-surface2 text-neutral4 rounded-md border px-3 py-1.5 text-xs">
             {traceLabel(flow.snapshot.traceCount)} analyzed
           </li>
@@ -319,7 +319,7 @@ export function SankeySignals({
             {themeCount} themes
           </li>
           <li className="border-border1 bg-surface2 text-neutral4 rounded-md border px-3 py-1.5 text-xs">
-            {flow.stages.length} signal types
+            {flow.stages.length} trace signal types
           </li>
         </ul>
       </header>
