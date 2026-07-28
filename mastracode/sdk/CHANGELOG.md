@@ -1,5 +1,43 @@
 # @mastra/code-sdk
 
+## 1.1.0-alpha.2
+
+### Minor Changes
+
+- Added `resolveProviderOMDefault` to `@mastra/code-sdk/onboarding/packs`, which returns the small, cheap observational memory model for a provider, or the model you pass in when that provider has none. ([#20298](https://github.com/mastra-ai/mastra/pull/20298))
+
+  The built-in OM packs are now a single table, so the list offered during onboarding and the per-provider default can no longer drift apart.
+
+  ```ts
+  import { resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
+
+  resolveProviderOMDefault('anthropic').modelId; // 'anthropic/claude-haiku-4-5'
+  resolveProviderOMDefault('openai-codex').modelId; // 'openai/gpt-5.4-mini'
+  resolveProviderOMDefault('xai', 'xai/grok-4.5').modelId; // 'xai/grok-4.5'
+  ```
+
+- Added provider-aware observational memory defaults, so a controller started without a stored OM choice observes and reflects with the cheap model of a provider you can actually reach instead of the built-in Gemini default. ([#20291](https://github.com/mastra-ai/mastra/pull/20291))
+
+  The helpers behind it are exported if you build your own surface on the SDK:
+
+  ```ts
+  import { hasExplicitOMConfiguration } from '@mastra/code-sdk/onboarding/om-settings';
+  import { selectPreferredOMPack } from '@mastra/code-sdk/onboarding/packs';
+
+  // Best OM pack across everything the user can reach, preferring a given provider
+  selectPreferredOMPack({ anthropic: 'oauth', google: 'apikey' }, 'anthropic')?.modelId;
+
+  // True once the user picked an OM model or pack themselves — never seed over it
+  hasExplicitOMConfiguration(settings);
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`a211d09`](https://github.com/mastra-ai/mastra/commit/a211d09185dc65a746534914cf38b67f21ee9bac), [`05db566`](https://github.com/mastra-ai/mastra/commit/05db566fcbdcbf33d0bffca0c72ec30129e2e3ca), [`05db566`](https://github.com/mastra-ai/mastra/commit/05db566fcbdcbf33d0bffca0c72ec30129e2e3ca), [`e075db9`](https://github.com/mastra-ai/mastra/commit/e075db9715c836bae5dfc37c50248492af397c3b), [`8124754`](https://github.com/mastra-ai/mastra/commit/8124754ae89fbc69f8136d1df4a91904d0f84c4e)]:
+  - @mastra/core@1.54.0-alpha.2
+  - @mastra/pg@1.18.0-alpha.2
+  - @mastra/libsql@1.18.0-alpha.1
+
 ## 1.0.3-alpha.1
 
 ### Patch Changes

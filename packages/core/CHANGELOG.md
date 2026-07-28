@@ -1,5 +1,36 @@
 # @mastra/core
 
+## 1.54.0-alpha.2
+
+### Patch Changes
+
+- Fixed `skill_read` returning an empty string when `startLine` is past the end of a file, which left agents unable to tell end-of-file from a failed read so they kept paginating. It now returns the total line count with an explicit end-of-file message, and prefixes ranged reads with a `(lines 350-428 of 428)` header. Full-file reads are unchanged. ([#20287](https://github.com/mastra-ai/mastra/pull/20287))
+
+- Fixed four bugs affecting split API and worker deployments: ([#19652](https://github.com/mastra-ai/mastra/pull/19652))
+
+  **Workflow resolution in distributed step execution** — Workers now correctly resolve workflows by their internal ID, fixing silent failures when workflow IDs differ from their registration keys.
+
+  **Background task dispatch without worker competition** — Added a `mode` option (`'full'` | `'producer'` | `'worker'`) to `BackgroundTaskManager` so the API tier can dispatch tasks without consuming them. Mastra automatically selects `'producer'` mode when workers are disabled or filtered.
+
+  **Background task execution engine** — Background tasks now execute in-process on the worker that picks them up, instead of routing through the distributed orchestration pipeline.
+
+  **Agent tool registration for background tasks** — Tools attached to an agent are now registered with the background task executor registry, so dedicated workers can resolve and execute them.
+
+- Notifications now stop retrying after a delivery failure that will never succeed. ([#20290](https://github.com/mastra-ai/mastra/pull/20290))
+
+  A notification whose delivery deterministically fails — a missing model, a rejected request context — used to be retried on every dispatch tick forever, because a failed delivery only incremented a counter and left the record `pending`. One production notification reached 288 delivery attempts against the same error.
+
+  Delivery attempts are now capped. After 5 failures the notification is marked `failed` and is no longer picked up by the dispatcher:
+
+  ```ts
+  const [notification] = await storage.listNotifications({ threadId, status: 'failed' });
+
+  notification.deliveryAttempts; // 5
+  notification.lastDeliveryError; // 'No model selected. Use /models to select a model first.'
+  ```
+
+  `failed` is a new `NotificationStatus`, so notification inbox queries can filter for delivery failures that need attention. Transient failures are unaffected — they still retry, just no longer without bound.
+
 ## 1.54.0-alpha.1
 
 ### Minor Changes

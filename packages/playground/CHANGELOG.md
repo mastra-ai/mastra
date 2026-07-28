@@ -1,5 +1,21 @@
 # @internal/playground
 
+## 1.20.3-alpha.2
+
+### Patch Changes
+
+- Studio now shows experiment names and descriptions instead of only a shortened ID. Dataset experiment lists, the experiments overview, comparison views, and experiment detail pages use the experiment's name as the primary label, keep the shortened ID visible as secondary detail, and surface the description in a tooltip. You can also search the experiments list by name. ([#19256](https://github.com/mastra-ai/mastra/pull/19256))
+
+- Fixed experiment comparison cards rendering a blank link when an experiment had an empty name. They now fall back to the shortened experiment ID, matching the experiment lists. ([#20301](https://github.com/mastra-ai/mastra/pull/20301))
+
+  Fixed the Experiment column on the experiments overview stretching to fit long names and squeezing the columns next to it. Long names now truncate instead.
+
+- Updated dependencies [[`a211d09`](https://github.com/mastra-ai/mastra/commit/a211d09185dc65a746534914cf38b67f21ee9bac), [`2dd1681`](https://github.com/mastra-ai/mastra/commit/2dd168133bebbeb4ea15e8bcf775faad43017865), [`071d4d8`](https://github.com/mastra-ai/mastra/commit/071d4d8a644e853a776d9846554f117ba9a35942), [`05db566`](https://github.com/mastra-ai/mastra/commit/05db566fcbdcbf33d0bffca0c72ec30129e2e3ca), [`8124754`](https://github.com/mastra-ai/mastra/commit/8124754ae89fbc69f8136d1df4a91904d0f84c4e)]:
+  - @mastra/core@1.54.0-alpha.2
+  - @mastra/client-js@1.35.0-alpha.2
+  - @mastra/playground-ui@44.0.0-alpha.2
+  - @mastra/react@1.3.3-alpha.2
+
 ## 1.20.3-alpha.1
 
 ### Patch Changes
