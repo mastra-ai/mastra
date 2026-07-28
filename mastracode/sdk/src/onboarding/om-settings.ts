@@ -3,8 +3,34 @@
  * configuration. Shared by the TUI `/om` command and the web settings
  * routes — no UI dependencies.
  */
+import type { OMPack } from './packs.js';
 import type { GlobalSettings } from './settings.js';
 import { loadSettings, saveSettings } from './settings.js';
+
+/** Whether the user has already chosen any persisted OM model or pack. */
+export function hasExplicitOMConfiguration(settings: GlobalSettings): boolean {
+  return Boolean(
+    settings.onboarding.omPackId ||
+    settings.models.activeOmPackId ||
+    settings.models.omModelOverride ||
+    settings.models.observerModelOverride ||
+    settings.models.reflectorModelOverride,
+  );
+}
+
+/**
+ * Seed a provider-aware OM pack without replacing an existing user choice.
+ *
+ * Returns true when settings changed.
+ */
+export function applyOMDefaultIfUnconfigured(settings: GlobalSettings, pack: OMPack): boolean {
+  if (hasExplicitOMConfiguration(settings)) return false;
+
+  settings.onboarding.omPackId = pack.id;
+  settings.models.activeOmPackId = pack.id;
+  settings.models.omModelOverride = pack.id === 'custom' ? pack.modelId : null;
+  return true;
+}
 
 /**
  * Apply a role-specific OM model override to an in-memory `GlobalSettings`.

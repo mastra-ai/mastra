@@ -1,7 +1,24 @@
 import { describe, expect, it } from 'vitest';
 
 import { PROVIDER_DEFAULT_MODELS } from '../../auth/storage.js';
-import { getAvailableModePacks } from '../packs.js';
+import {
+  getAvailableModePacks,
+  resolveProviderOMDefault,
+  selectPreferredOMPack,
+  type ProviderAccess,
+} from '../packs.js';
+
+function providerAccess(overrides: Partial<ProviderAccess> = {}): ProviderAccess {
+  return {
+    anthropic: false,
+    openai: false,
+    cerebras: false,
+    google: false,
+    deepseek: false,
+    'github-copilot': false,
+    ...overrides,
+  };
+}
 
 describe('getAvailableModePacks', () => {
   it('uses GPT-5.6 for OpenAI plan and build modes while keeping fast on GPT-5.4 mini', () => {
@@ -79,5 +96,41 @@ describe('getAvailableModePacks', () => {
     });
 
     expect(packs.find(p => p.id === 'github-copilot')).toBeUndefined();
+  });
+});
+
+describe('provider-aware OM defaults', () => {
+  it.each([
+    ['anthropic', 'anthropic', 'anthropic/claude-haiku-4-5'],
+    ['openai-codex', 'openai', 'openai/gpt-5.4-mini'],
+    ['openai', 'openai', 'openai/gpt-5.4-mini'],
+    ['google', 'gemini', 'google/gemini-3.5-flash'],
+  ])('maps %s to the %s OM pack', (providerId, packId, modelId) => {
+    expect(resolveProviderOMDefault(providerId)).toMatchObject({ id: packId, modelId });
+  });
+
+  it('uses the selected provider model for unsupported providers', () => {
+    expect(resolveProviderOMDefault('xai', 'xai/grok-4.5')).toMatchObject({
+      id: 'custom',
+      modelId: 'xai/grok-4.5',
+    });
+  });
+
+  it('prefers the matching reachable provider over earlier packs', () => {
+    const pack = selectPreferredOMPack(providerAccess({ google: 'apikey', openai: 'oauth' }), 'openai-codex');
+
+    expect(pack).toMatchObject({ id: 'openai', modelId: 'openai/gpt-5.4-mini' });
+  });
+
+  it('prefers OAuth access when no provider is selected', () => {
+    const pack = selectPreferredOMPack(providerAccess({ google: 'apikey', anthropic: 'oauth' }));
+
+    expect(pack).toMatchObject({ id: 'anthropic', modelId: 'anthropic/claude-haiku-4-5' });
+  });
+
+  it('falls back to the first reachable API-key pack', () => {
+    const pack = selectPreferredOMPack(providerAccess({ google: 'apikey', deepseek: 'apikey' }));
+
+    expect(pack).toMatchObject({ id: 'gemini', modelId: 'google/gemini-3.5-flash' });
   });
 });

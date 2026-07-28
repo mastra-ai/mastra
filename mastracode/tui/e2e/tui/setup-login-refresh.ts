@@ -38,7 +38,10 @@ export const setupLoginRefreshScenario = {
       ANTHROPIC_API_KEY: '',
       OPENAI_API_KEY: '',
       MASTRA_GATEWAY_API_KEY: '',
-      GOOGLE_GENERATIVE_AI_API_KEY: '',
+      // Keep a reachable Gemini pack before login. The successful Anthropic
+      // login must still become the preferred OM pack instead of selecting
+      // the first reachable pack.
+      GOOGLE_GENERATIVE_AI_API_KEY: 'mc-e2e-google-key',
       GOOGLE_API_KEY: '',
       DEEPSEEK_API_KEY: '',
       CEREBRAS_API_KEY: '',
@@ -73,6 +76,13 @@ export const setupLoginRefreshScenario = {
 
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal, 8_000);
     await runtime.waitForScreenText(/anthropic\/claude-fable-5/i, terminal, 8_000);
+
+    terminal.submit('/memory');
+    await runtime.waitForScreenText(/Observational Memory Settings/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Observer model\s+claude-haiku-4-5/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Reflector model\s+claude-haiku-4-5/i, terminal, 8_000);
+    terminal.write('\x1b');
+    await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
       `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s=JSON.parse(fs.readFileSync(app+"/settings.json","utf8")); const a=JSON.parse(fs.readFileSync(app+"/auth.json","utf8")); console.log("SETUP_LOGIN_AUTH="+(a.anthropic?.type||"missing")+":"+(a.anthropic?.access||"missing")); console.log("SETUP_LOGIN_PACK="+s.models.activeModelPackId+":"+s.onboarding.modePackId+":"+s.onboarding.omPackId+":"+s.models.activeOmPackId); console.log("SETUP_LOGIN_BUILTIN_DEFAULTS="+Object.keys(s.models.modeDefaults||{}).length);'`,

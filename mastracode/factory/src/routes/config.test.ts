@@ -631,10 +631,10 @@ describe('OM routes with a tenant', () => {
 
   function buildApp(
     session: ReturnType<typeof makeOmSession>,
-    opts: { withStorage?: boolean; authEnabled?: boolean } = {},
+    opts: { withStorage?: boolean; authEnabled?: boolean; provider?: string } = {},
   ) {
     const controller = {
-      ...makeAgentController([{ provider: 'anthropic', hasApiKey: true }]),
+      ...makeAgentController([{ provider: opts.provider ?? 'anthropic', hasApiKey: true }]),
       getSessionByResource: async () => session,
     };
     const app = new Hono();
@@ -692,6 +692,24 @@ describe('OM routes with a tenant', () => {
     await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
       observerModelId: 'anthropic/claude-haiku-4-5',
       reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+  });
+
+  it('uses the shared Codex OM default policy', async () => {
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'openai-codex', {
+      type: 'api_key',
+      key: 'sk-openai',
+    });
+
+    const res = await postJson(buildApp(makeOmSession(), { provider: 'openai' }), '/web/config/om/provider-defaults', {
+      providerId: 'openai',
+      factoryModelId: 'openai/gpt-5.6',
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config).toMatchObject({
+      observerModelId: 'openai/gpt-5.4-mini',
+      reflectorModelId: 'openai/gpt-5.4-mini',
     });
   });
 

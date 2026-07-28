@@ -19,6 +19,12 @@
         "default": "./dist/index.js"
       }
     },
+    "./onboarding": {
+      "import": {
+        "types": "./dist/onboarding/index.d.ts",
+        "default": "./dist/onboarding/index.js"
+      }
+    },
     "./*": {
       "import": {
         "types": "./dist/*.d.ts",
