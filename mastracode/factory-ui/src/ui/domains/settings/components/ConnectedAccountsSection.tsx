@@ -176,12 +176,15 @@ export function ConnectedAccountsSection() {
           </DataList.RowStatic>
         ))}
       </DataList>
-      {canConnect && (
-        <Button variant="outline" size="sm" onClick={connectSlack}>
-          <Slack className="size-3" aria-hidden="true" />
-          Connect another Slack account
-        </Button>
-      )}
+      {/* No "connect another" affordance once a link exists. The sender key
+          `(platform, external_team_id, external_user_id)` omits the Mastra user
+          id, so the schema does allow one user to link several Slack
+          WORKSPACES. But there is no public Mastra Slack app yet — each
+          deployment runs its own app against a single workspace webhook
+          endpoint — so re-running OIDC lands on the same sender key and
+          silently re-links the same row. Offering it reads as "you are not
+          connected" to a user who is. Restore this when a multi-workspace app
+          makes a second link reachable. */}
     </div>
   );
 }

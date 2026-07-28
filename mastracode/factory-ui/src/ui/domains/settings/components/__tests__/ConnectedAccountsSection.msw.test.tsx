@@ -54,13 +54,17 @@ describe('ConnectedAccountsSection', () => {
     expect(screen.queryByText(/Message the bot in Slack/)).not.toBeInTheDocument();
   });
 
-  it('given a linked account and OIDC configured, when rendered, then it offers connecting another account', async () => {
+  it('given a linked account and OIDC configured, when rendered, then it offers no connect button', async () => {
     mockAccounts([slackLink], true);
 
     renderWithProviders(<ConnectedAccountsSection />);
 
     expect(await screen.findByText('Slack · U095PUH0FKL in T06CB4A5FT9')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Connect another Slack account' })).toBeInTheDocument();
+    // A connected user must not be offered a connect affordance: one Slack app
+    // serves one workspace today, so re-running OIDC would re-link the same
+    // sender key. Disconnect stays available.
+    expect(screen.queryByRole('button', { name: /Connect/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Disconnect/ })).toBeInTheDocument();
   });
 
   it('given a link with display names, when rendered, then it shows names instead of ids', async () => {
