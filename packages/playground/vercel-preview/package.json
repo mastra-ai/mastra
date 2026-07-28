@@ -1,25 +1,23 @@
 {
-  "name": "examples-studio-preview",
+  "name": "studio-preview",
   "type": "module",
   "private": true,
   "version": "0.0.0",
   "scripts": {
     "build": "pnpm build:linked-workspace-deps && pnpm mastra:build",
-    "build:linked-workspace-deps": "turbo --cwd ../.. build --filter mastra --filter @mastra/deployer-vercel",
+    "build:linked-workspace-deps": "node scripts/build-linked-workspace-deps.mjs",
     "dev": "pnpm build:linked-workspace-deps && pnpm mastra:dev",
-    "mastra:build": "node ../../packages/cli/dist/index.js build",
-    "mastra:dev": "node ../../packages/cli/dist/index.js dev",
+    "mastra:build": "node ../../../packages/cli/dist/index.js build",
+    "mastra:dev": "node ../../../packages/cli/dist/index.js dev",
     "typecheck": "pnpm build:linked-workspace-deps && tsc --noEmit"
   },
   "dependencies": {
-    "@ai-sdk/provider-utils-v5": "npm:@ai-sdk/provider-utils@3.0.25",
     "@mastra/core": "latest",
     "@mastra/deployer-vercel": "latest",
     "@mastra/editor": "latest",
     "@mastra/memory": "latest",
     "hono": "^4.12.8",
-    "zod": "^4.4.3",
-    "zod-from-json-schema-v3": "npm:zod-from-json-schema@^0.0.5"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "22.19.15",
@@ -29,11 +27,11 @@
   },
   "pnpm": {
     "overrides": {
-      "@mastra/core": "1.49.0",
-      "@mastra/editor": "0.13.4",
-      "@mastra/memory": "1.22.1",
-      "@mastra/deployer-vercel": "link:../../deployers/vercel",
-      "mastra": "link:../../packages/cli"
+      "@mastra/core": "link:../../../packages/core",
+      "@mastra/deployer-vercel": "link:../../../deployers/vercel",
+      "@mastra/editor": "link:../../../packages/editor",
+      "@mastra/memory": "link:../../../packages/memory",
+      "mastra": "link:../../../packages/cli"
     }
   },
   "license": "Apache-2.0",
