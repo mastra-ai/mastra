@@ -145,6 +145,8 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
       githubRepositoryId: context.repository.id,
       githubPullRequestNumber: context.pullRequest.number,
       factoryAuthored: context.actor.type === 'github' && context.actor.factoryAuthored,
+      headBranch: context.pullRequest.headBranch,
+      baseBranch: context.pullRequest.baseBranch,
     },
   } as const;
 }

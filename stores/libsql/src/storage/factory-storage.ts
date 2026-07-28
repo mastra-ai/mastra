@@ -402,9 +402,6 @@ class LibSQLFactoryStorageOps implements FactoryStorageOps {
  * LibSQL/Turso {@link FactoryStorage} backend: one libsql database powering
  * agent state (via a wrapped {@link LibSQLStore}) and app-owned collections
  * (via {@link FactoryStorageOps}), sharing a single client.
- *
- * No `withDistributedLock`: local libsql is single-writer and single-replica,
- * so in-process serialization is the correct locking story.
  */
 export class LibSQLFactoryStorage extends FactoryStorage {
   readonly ops: FactoryStorageOps;

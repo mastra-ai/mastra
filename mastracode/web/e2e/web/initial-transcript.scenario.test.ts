@@ -1,8 +1,8 @@
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import { describe, it, expect } from 'vitest';
 
-import { createInitialTranscript } from '../../src/web/ui/domains/chat/services/transcript.js';
-import type { MessageEntry, TimelineEntry } from '../../src/web/ui/domains/chat/services/transcript.js';
+import { createInitialTranscript } from '../../../factory-ui/src/ui/domains/chat/services/transcript.js';
+import type { MessageEntry, TimelineEntry } from '../../../factory-ui/src/ui/domains/chat/services/transcript.js';
 
 /** Flatten a message entry's ordered text/reasoning parts to a string. */
 function messageText(entry: TimelineEntry): string {

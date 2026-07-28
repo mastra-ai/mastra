@@ -28,7 +28,8 @@
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "test:e2e": "RUN_AWS_NOVA_SONIC_E2E=1 vitest run --config vitest.e2e.config.ts",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {

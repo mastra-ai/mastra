@@ -327,11 +327,7 @@ export interface SourceControlStorageHandle {
   readonly repositories: {
     list(args: { orgId: string; installationId: string }): Promise<SourceControlRepository[]>;
     get(args: { orgId: string; id: string }): Promise<SourceControlRepository | null>;
-    findByExternalId(args: {
-      orgId: string;
-      installationId: string;
-      externalId: string;
-    }): Promise<SourceControlRepository | null>;
+    findByExternalId(args: { orgId: string; externalId: string }): Promise<SourceControlRepository | null>;
     findBySlug(args: { orgId: string; installationId: string; slug: string }): Promise<SourceControlRepository | null>;
     upsert(args: { orgId: string; input: UpsertSourceControlRepositoryInput }): Promise<SourceControlRepository>;
   };
@@ -355,6 +351,12 @@ export interface SourceControlStorageHandle {
   readonly sandboxes: {
     getOrCreate(args: { projectRepository: ProjectRepository; userId: string }): Promise<ProjectRepositorySandbox>;
     getById(args: { id: string }): Promise<ProjectRepositorySandbox | null>;
+    /**
+     * Point the binding at a new workdir and clear `materializedAt` — a moved
+     * workdir means the checkout must be re-cloned. Used to heal bindings whose
+     * inherited workdir went stale (e.g. the sandbox provider changed).
+     */
+    setWorkdir(args: { id: string; sandboxWorkdir: string }): Promise<void>;
     setSandboxId(args: { id: string; sandboxId: string }): Promise<void>;
     clearBinding(args: { id: string }): Promise<void>;
     markMaterialized(args: { id: string }): Promise<void>;
@@ -716,13 +718,12 @@ export class SourceControlStorage extends FactoryStorageDomain {
           );
         },
         get: getRepository,
-        findByExternalId: async ({ orgId, installationId, externalId }) => {
-          await requireInstallation({ orgId, id: installationId });
-          const row = await db().findOne<RepositoryDbRow>(REPOSITORIES, {
-            installation_id: installationId,
-            external_id: externalId,
-          });
-          return row ? toRepository(row) : null;
+        findByExternalId: async ({ orgId, externalId }) => {
+          const rows = await db().findMany<RepositoryDbRow>(REPOSITORIES, { external_id: externalId });
+          for (const row of rows) {
+            if (await getInstallation({ orgId, id: row.installation_id })) return toRepository(row);
+          }
+          return null;
         },
         findBySlug: async ({ orgId, installationId, slug }) => {
           await requireInstallation({ orgId, id: installationId });
@@ -914,6 +915,10 @@ export class SourceControlStorage extends FactoryStorageDomain {
           }
         },
         getById: ({ id }) => getSandbox(id),
+        setWorkdir: async ({ id, sandboxWorkdir }) => {
+          await requireSandbox(id);
+          await db().updateMany(SANDBOXES, { id }, { sandbox_workdir: sandboxWorkdir, materialized_at: null });
+        },
         setSandboxId: async ({ id, sandboxId }) => {
           await requireSandbox(id);
           await db().updateMany(SANDBOXES, { id }, { sandbox_id: sandboxId });

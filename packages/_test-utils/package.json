@@ -1,6 +1,6 @@
 {
   "name": "@internal/test-utils",
-  "version": "0.0.50",
+  "version": "0.0.53",
   "description": "Mastra-specific test helpers - version-agnostic agent wrappers, dummy API keys",
   "type": "module",
   "private": true,
@@ -34,7 +34,8 @@
   "scripts": {
     "build": "tsup --config tsup.config.ts",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "keywords": [],
   "author": "",

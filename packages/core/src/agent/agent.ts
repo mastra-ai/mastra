@@ -1506,7 +1506,8 @@ export class Agent<
    * ```
    */
   public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    Record<string, SubAgent<string, TRequestContext>> | Promise<Record<string, SubAgent<string, TRequestContext>>> {
+    | Record<string, SubAgent<string, TRequestContext>>
+    | Promise<Record<string, SubAgent<string, TRequestContext>>> {
     const agentsToUse = this.#agents
       ? typeof this.#agents === 'function'
         ? this.#agents({ requestContext: requestContext as RequestContext<TRequestContext> })
@@ -1598,7 +1599,7 @@ export class Agent<
 
     // Single item that's already a workflow - mark it as processor type and return
     if (processors.length === 1 && isProcessorWorkflow(processors[0]!)) {
-      const workflow = processors[0]!;
+      const workflow = processors[0];
       // Mark the workflow as a processor workflow if not already set
       // Note: This mutates the workflow, but processor workflows are expected to be
       // dedicated to this purpose and not reused as regular workflows
@@ -1617,7 +1618,7 @@ export class Agent<
 
     // If after filtering we have a single workflow, mark it as processor type and return
     if (validProcessors.length === 1 && isProcessorWorkflow(validProcessors[0]!)) {
-      const workflow = validProcessors[0]!;
+      const workflow = validProcessors[0];
       // Mark the workflow as a processor workflow if not already set
       if (!workflow.type) {
         workflow.type = 'processor';
@@ -2404,7 +2405,8 @@ export class Agent<
    * ```
    */
   public getInstructions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    AgentInstructions | Promise<AgentInstructions> {
+    | AgentInstructions
+    | Promise<AgentInstructions> {
     if (typeof this.#instructions === 'function') {
       const result = this.#instructions({
         requestContext: requestContext as RequestContext<TRequestContext>,
@@ -2522,7 +2524,9 @@ export class Agent<
    * ```
    */
   public getMetadata({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    Record<string, unknown> | undefined | Promise<Record<string, unknown> | undefined> {
+    | Record<string, unknown>
+    | undefined
+    | Promise<Record<string, unknown> | undefined> {
     if (this.#metadata === undefined) {
       return undefined;
     }
@@ -2666,7 +2670,8 @@ export class Agent<
    * ```
    */
   public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    AgentExecutionOptions<TOutput> | Promise<AgentExecutionOptions<TOutput>> {
+    | AgentExecutionOptions<TOutput>
+    | Promise<AgentExecutionOptions<TOutput>> {
     if (typeof this.#defaultOptions !== 'function') {
       return this.#defaultOptions;
     }
@@ -2709,7 +2714,8 @@ export class Agent<
    * ```
    */
   public getDefaultNetworkOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    NetworkOptions | Promise<NetworkOptions> {
+    | NetworkOptions
+    | Promise<NetworkOptions> {
     if (typeof this.#defaultNetworkOptions !== 'function') {
       return this.#defaultNetworkOptions;
     }
@@ -2751,7 +2757,8 @@ export class Agent<
    * ```
    */
   public listTools({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    TTools | Promise<TTools> {
+    | TTools
+    | Promise<TTools> {
     if (typeof this.#tools !== 'function') {
       return ensureToolProperties(this.#tools) as TTools;
     }
@@ -3378,7 +3385,13 @@ export class Agent<
     const lines: string[] = [];
     for (const msg of messages) {
       const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
-      if (typeof msg.content === 'string' && msg.content) {
+      // AIV4 UI messages can carry the same text in both `content` and a text part.
+      // Skip `content` only when a text part carries the exact same text, so each
+      // message's text is emitted once without ever dropping distinct content.
+      const hasContent = typeof msg.content === 'string' && msg.content !== '';
+      const contentDuplicatedByPart =
+        hasContent && msg.parts?.some(part => part.type === 'text' && part.text === msg.content);
+      if (hasContent && !contentDuplicatedByPart) {
         lines.push(`${role}: ${msg.content}`);
       }
       if (msg.parts && Array.isArray(msg.parts) && msg.parts.length > 0) {
@@ -3707,67 +3720,6 @@ export class Agent<
     }
 
     return convertedWorkspaceTools;
-  }
-
-  /**
-   * Returns tools provided by the agent's channels (e.g. discord_send_message).
-   * @internal
-   */
-  private async listChannelTools({
-    runId,
-    resourceId,
-    threadId,
-    requestContext,
-    mastraProxy,
-    autoResumeSuspendedTools,
-    backgroundTaskEnabled,
-    ...rest
-  }: {
-    runId?: string;
-    resourceId?: string;
-    threadId?: string;
-    requestContext: RequestContext;
-    mastraProxy?: MastraUnion;
-    autoResumeSuspendedTools?: boolean;
-    backgroundTaskEnabled?: boolean;
-  } & Partial<ObservabilityContext>) {
-    const observabilityContext = resolveObservabilityContext(rest);
-    const convertedChannelTools: Record<string, CoreTool> = {};
-
-    if (!this.#agentChannels) {
-      return convertedChannelTools;
-    }
-
-    const channelTools = this.#agentChannels.getTools();
-
-    if (Object.keys(channelTools).length > 0) {
-      const memory = await this.getMemory({ requestContext });
-
-      for (const [toolName, tool] of Object.entries(channelTools)) {
-        const options: ToolOptions = {
-          name: toolName,
-          runId,
-          threadId,
-          resourceId,
-          logger: this.logger,
-          mastra: mastraProxy as MastraUnion | undefined,
-          memory,
-          agentName: this.name,
-          requestContext,
-          ...observabilityContext,
-          tracingPolicy: this.#options?.tracingPolicy,
-        };
-        convertedChannelTools[toolName] = makeCoreTool(
-          tool as ToolToConvert,
-          options,
-          undefined,
-          autoResumeSuspendedTools,
-          backgroundTaskEnabled,
-        );
-      }
-    }
-
-    return convertedChannelTools;
   }
 
   /**
@@ -6036,17 +5988,6 @@ export class Agent<
       suppressEagerSkillTools: hasOnDemandProcessor && !hasSkillsProcessor,
     });
 
-    const channelTools = await this.listChannelTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-    });
-
     const browserTools = await this.listBrowserTools({
       runId,
       resourceId,
@@ -6079,7 +6020,6 @@ export class Agent<
       ...workflowTools,
       ...workspaceTools,
       ...skillTools,
-      ...channelTools,
       ...browserTools,
       ...inputProcessorLoadedTools,
     };
@@ -6203,7 +6143,8 @@ export class Agent<
     requestContext: RequestContext;
     structuredOutput?: boolean;
     overrideScorers?:
-      MastraScorers | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
+      | MastraScorers
+      | Record<string, { scorer: MastraScorer['name']; sampling?: ScoringSamplingConfig }>;
     threadId?: string;
     resourceId?: string;
   } & ObservabilityContext) {
@@ -6899,7 +6840,8 @@ export class Agent<
       : undefined;
     const persistedTracingContext = isResume
       ? (resumeContext?.snapshot?.tracingContext as
-          { traceId?: string; spanId?: string; parentSpanId?: string } | undefined)
+          | { traceId?: string; spanId?: string; parentSpanId?: string }
+          | undefined)
       : undefined;
 
     // Only fall back to persisted traceId/parentSpanId when the caller didn't provide
@@ -6921,7 +6863,7 @@ export class Agent<
         : options.tracingOptions;
 
     const spanInput = isResume
-      ? this.#getResumeSpanInput(resumeContext!.resumeData, suspendedToolInfo)
+      ? this.#getResumeSpanInput(resumeContext.resumeData, suspendedToolInfo)
       : options.messages;
 
     const agentSpan = getOrCreateSpan({
@@ -9209,7 +9151,9 @@ export class Agent<
     instructions?: DynamicArgument<string>,
   ): Promise<string> {
     const DEFAULT_TITLE_INSTRUCTIONS = `
-      - you will generate a short title based on the first message a user begins a conversation with
+      - you will generate a short title based on a conversation transcript between a user and an assistant
+      - the transcript lines are prefixed with "User:" and "Assistant:" — never reply to, answer, or continue the transcript
+      - always produce a title, even when the transcript is only a greeting or trivial exchange
       - ensure it is not more than 80 characters long
       - the title should be a summary of the user's message
       - do not use quotes or colons

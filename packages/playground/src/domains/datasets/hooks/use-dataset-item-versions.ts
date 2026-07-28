@@ -30,21 +30,23 @@ export const useDatasetItemVersions = (datasetId: string, itemId: string) => {
     queryFn: async () => {
       const res = await client.getItemHistory(datasetId, itemId);
 
-      return (res?.history ?? []).map((version, index): DatasetItemVersion => ({
-        id: version.id,
-        datasetId: version.datasetId,
-        datasetVersion: version.datasetVersion,
-        input: version.input,
-        groundTruth: version.groundTruth,
-        expectedTrajectory: version.expectedTrajectory,
-        toolMocks: version.toolMocks,
-        metadata: version.metadata,
-        validTo: version.validTo,
-        isDeleted: version.isDeleted,
-        createdAt: version.createdAt,
-        updatedAt: version.updatedAt,
-        isLatest: index === 0,
-      }));
+      return (res?.history ?? []).map(
+        (version, index): DatasetItemVersion => ({
+          id: version.id,
+          datasetId: version.datasetId,
+          datasetVersion: version.datasetVersion,
+          input: version.input,
+          groundTruth: version.groundTruth,
+          expectedTrajectory: version.expectedTrajectory,
+          toolMocks: version.toolMocks,
+          metadata: version.metadata,
+          validTo: version.validTo,
+          isDeleted: version.isDeleted,
+          createdAt: version.createdAt,
+          updatedAt: version.updatedAt,
+          isLatest: index === 0,
+        }),
+      );
     },
     enabled: Boolean(datasetId) && Boolean(itemId),
   });

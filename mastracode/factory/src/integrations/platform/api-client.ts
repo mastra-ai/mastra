@@ -173,7 +173,7 @@ export function logPlatformError(message: string, fields?: Record<string, unknow
 
 function writePlatformLog(level: 'info' | 'warn' | 'error', message: string, fields?: Record<string, unknown>): void {
   const metadata = fields ? ` ${JSON.stringify(stripUndefined(fields))}` : '';
-  process.stderr.write(`[MastraCode Web] ${level.toUpperCase()} ${message}${metadata}\n`);
+  process.stderr.write(`[Mastra Factory] ${level.toUpperCase()} ${message}${metadata}\n`);
 }
 
 function stripUndefined(fields: Record<string, unknown>): Record<string, unknown> {

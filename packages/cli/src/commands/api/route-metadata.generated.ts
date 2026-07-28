@@ -3422,6 +3422,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "agents",
       "authorId",
+      "autoPublish",
       "browser",
       "changeMessage",
       "defaultOptions",

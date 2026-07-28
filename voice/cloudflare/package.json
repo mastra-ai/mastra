@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-cloudflare",
-  "version": "0.13.1-alpha.0",
+  "version": "0.13.1",
   "description": "Mastra Cloudflare AI voice integration",
   "type": "module",
   "files": [
@@ -28,7 +28,8 @@
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {

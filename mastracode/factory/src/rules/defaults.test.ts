@@ -346,6 +346,13 @@ describe('defaultFactoryRules', () => {
     });
   });
 
+  it('records the PR head branch on Review intake so the card links back to its work item', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    expect(await rules.github.pullRequestOpened?.onEvent?.(githubContext('pullRequestOpened'))).toMatchObject({
+      metadata: { headBranch: 'feature', baseBranch: 'main' },
+    });
+  });
+
   it('reminds the linked Work agent after merge without transitioning to Done', async () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     const context = githubContext('pullRequestMerged');
