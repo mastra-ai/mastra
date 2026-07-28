@@ -505,6 +505,36 @@ describe('notification inbox', () => {
     expect(sendSignal).toHaveBeenCalledTimes(MAX_NOTIFICATION_DELIVERY_ATTEMPTS);
   });
 
+  it('terminalizes a record already past the cap without inflating its attempt count', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.reject(new Error('No model selected. Use /models to select a model first.')),
+      signal,
+    }));
+    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed',
+      deliverAt: now,
+    });
+    await storage.updateNotification({ id: 'n1', threadId: 'thread-1', deliveryAttempts: 288 });
+
+    await dispatchDueNotifications({ mastra, storage, now });
+
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+      status: 'failed',
+      deliveryAttempts: 288,
+    });
+    await expect(storage.listDueNotifications({ now })).resolves.toEqual([]);
+  });
+
   it('groups due summary notifications by agent, resource, and thread', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');

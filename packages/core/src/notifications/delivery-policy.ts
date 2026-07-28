@@ -22,7 +22,11 @@ export function resolveDeliveryFailureUpdate(record: NotificationRecord): {
   deliveryAttempts: number;
   status?: NotificationStatus;
 } {
-  const deliveryAttempts = (record.deliveryAttempts ?? 0) + 1;
+  const attempts = record.deliveryAttempts ?? 0;
+  // Records written before the cap existed can already be past it. Terminalize
+  // them at their recorded count instead of inflating it further.
+  if (attempts >= MAX_NOTIFICATION_DELIVERY_ATTEMPTS) return { deliveryAttempts: attempts, status: 'failed' };
+  const deliveryAttempts = attempts + 1;
   if (deliveryAttempts < MAX_NOTIFICATION_DELIVERY_ATTEMPTS) return { deliveryAttempts };
   return { deliveryAttempts, status: 'failed' };
 }
