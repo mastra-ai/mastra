@@ -1,0 +1,122 @@
+import { randomUUID } from 'node:crypto';
+import { describe, expect, it } from 'vitest';
+
+import type { SourceControlSession } from '../../storage/domains/source-control/base.js';
+import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory.js';
+import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import { releaseWorkItemSandboxes } from './sandbox-release.js';
+
+function workItem(sessions: Record<string, { sessionId: string }>): WorkItemRow {
+  return {
+    id: 'item-1',
+    orgId: 'org-1',
+    factoryProjectId: 'project-1',
+    externalSource: null,
+    parentWorkItemId: null,
+    title: 'Fix the bug',
+    stages: ['done'],
+    stageHistory: [],
+    sessions: Object.fromEntries(
+      Object.entries(sessions).map(([role, session]) => [
+        role,
+        { ...session, branch: 'factory/issue-1', threadId: 'thread-1', startedBy: 'user-1' },
+      ]),
+    ),
+    metadata: null,
+    revision: 2,
+    createdBy: 'user-1',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+}
+
+function workItems(item: WorkItemRow | null): Pick<WorkItemsStorage, 'get'> {
+  return { get: async () => item };
+}
+
+async function seedSession(
+  storage: SourceControlStorageInMemory,
+  overrides: Partial<SourceControlSession> = {},
+): Promise<SourceControlSession> {
+  const session = await storage.sessions.create({
+    sessionId: overrides.sessionId ?? randomUUID(),
+    projectRepositoryId: overrides.projectRepositoryId ?? 'repo-link-1',
+    orgId: overrides.orgId ?? 'org-1',
+    userId: overrides.userId ?? 'user-1',
+    branch: overrides.branch ?? 'factory/issue-1',
+    baseBranch: 'main',
+  });
+  Object.assign(session, {
+    sandboxId: overrides.sandboxId ?? null,
+    sandboxWorkdir: overrides.sandboxWorkdir ?? null,
+    materializedAt: overrides.materializedAt ?? null,
+  });
+  return session;
+}
+
+describe('releaseWorkItemSandboxes', () => {
+  it('pools the sandboxes of every item session and clears their bindings', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const materializedAt = new Date('2026-07-01T00:00:00Z');
+    const session = await seedSession(storage, {
+      sandboxId: 'sandbox-1',
+      sandboxWorkdir: '/workspace/mastra',
+      materializedAt,
+    });
+    const item = workItem({
+      triage: { sessionId: session.sessionId },
+      work: { sessionId: session.sessionId },
+    });
+
+    await releaseWorkItemSandboxes({
+      workItems: workItems(item),
+      sourceControl: storage,
+      orgId: 'org-1',
+      workItemId: item.id,
+    });
+
+    expect(storage.sandboxPoolRows).toEqual([
+      expect.objectContaining({
+        orgId: 'org-1',
+        projectRepositoryId: 'repo-link-1',
+        userId: 'user-1',
+        sandboxId: 'sandbox-1',
+        sandboxWorkdir: '/workspace/mastra',
+        materializedAt,
+      }),
+    ]);
+    expect((await storage.sessions.getBySessionId(session.sessionId))?.sandboxId).toBeNull();
+  });
+
+  it('skips sessions without a sandbox binding, foreign-org sessions, and missing items', async () => {
+    const storage = new SourceControlStorageInMemory();
+    const unbound = await seedSession(storage, { branch: 'factory/issue-2' });
+    const foreign = await seedSession(storage, {
+      orgId: 'org-2',
+      branch: 'factory/issue-3',
+      sandboxId: 'sandbox-foreign',
+      sandboxWorkdir: '/workspace/mastra',
+    });
+    const item = workItem({
+      triage: { sessionId: unbound.sessionId },
+      work: { sessionId: foreign.sessionId },
+      review: { sessionId: 'missing-session' },
+    });
+
+    await releaseWorkItemSandboxes({
+      workItems: workItems(item),
+      sourceControl: storage,
+      orgId: 'org-1',
+      workItemId: item.id,
+    });
+    await releaseWorkItemSandboxes({
+      workItems: workItems(null),
+      sourceControl: storage,
+      orgId: 'org-1',
+      workItemId: 'missing-item',
+    });
+
+    expect(storage.sandboxPoolRows).toEqual([]);
+    expect((await storage.sessions.getBySessionId(foreign.sessionId))?.sandboxId).toBe('sandbox-foreign');
+  });
+});

@@ -1357,8 +1357,20 @@ function buildProjectGitRoutes({
         if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        let sandbox: MaterializationSandbox | undefined;
-        if (session.sandboxId) {
+        if (session.sandboxId && fleet.provider !== 'local' && session.sandboxWorkdir) {
+          // Keep the remote VM alive: return it to the reuse pool so the next
+          // session for this repository link and user claims it (repo already
+          // cloned) instead of provisioning a fresh sandbox.
+          await github.sourceControlStorage.sandboxPool.release({
+            orgId: session.orgId,
+            projectRepositoryId: session.projectRepositoryId,
+            userId: session.userId,
+            sandboxId: session.sandboxId,
+            sandboxWorkdir: session.sandboxWorkdir,
+            materializedAt: session.materializedAt,
+          });
+        } else if (session.sandboxId) {
+          let sandbox: MaterializationSandbox | undefined;
           try {
             sandbox = await fleet.reattachSandbox(session.sandboxId);
           } catch {

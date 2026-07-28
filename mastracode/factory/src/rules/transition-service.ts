@@ -22,6 +22,7 @@ import {
 
 const RULE_TIMEOUT_MS = 5_000;
 const MAX_REJECTION_REASON = 512;
+const TERMINAL_STAGES: ReadonlySet<FactoryRuleStage> = new Set(['done', 'canceled']);
 
 export interface FactoryTransitionRequest {
   orgId: string;
@@ -42,6 +43,19 @@ export interface FactoryTransitionServiceOptions {
   rules: FactoryRules;
   storage: WorkItemsStorage;
   timeoutMs?: number;
+  /**
+   * Called after a transition commits into a terminal stage (`done` /
+   * `canceled`) — the point where the item's sessions stop receiving runs, so
+   * resources they hold (e.g. sandboxes) can be released for reuse. Awaited,
+   * but failures are swallowed: releasing resources must never break or roll
+   * back the committed transition.
+   */
+  onTerminalStage?: (args: {
+    orgId: string;
+    factoryProjectId: string;
+    workItemId: string;
+    stage: FactoryRuleStage;
+  }) => Promise<void> | void;
 }
 
 function rejection(
@@ -111,11 +125,13 @@ export class FactoryTransitionService {
   readonly #rules: FactoryRules;
   readonly #storage: WorkItemsStorage;
   readonly #timeoutMs: number;
+  readonly #onTerminalStage: FactoryTransitionServiceOptions['onTerminalStage'];
 
   constructor(options: FactoryTransitionServiceOptions) {
     this.#rules = options.rules;
     this.#storage = options.storage;
     this.#timeoutMs = options.timeoutMs ?? RULE_TIMEOUT_MS;
+    this.#onTerminalStage = options.onTerminalStage;
   }
 
   get ruleSetVersion(): string {
@@ -281,6 +297,19 @@ export class FactoryTransitionService {
     if (committed.status === 'missing') {
       return rejection(transitionId, request.workItemId, 'invalid_transition', 'Work item not found.');
     }
-    return committed.result as unknown as FactoryTransitionResult;
+    const result = committed.result as unknown as FactoryTransitionResult;
+    if (this.#onTerminalStage && result.status === 'accepted' && TERMINAL_STAGES.has(result.stage)) {
+      try {
+        await this.#onTerminalStage({
+          orgId: request.orgId,
+          factoryProjectId: request.factoryProjectId,
+          workItemId: request.workItemId,
+          stage: result.stage,
+        });
+      } catch {
+        // Resource release is best-effort — never fail a committed transition.
+      }
+    }
+    return result;
   }
 }

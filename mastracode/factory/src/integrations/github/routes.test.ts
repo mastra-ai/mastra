@@ -648,6 +648,7 @@ beforeEach(() => {
   sourceControlStorage.sandboxesRows = tables.sandboxes as any;
   sourceControlStorage.worktreesRows = tables.worktrees as any;
   sourceControlStorage.sessionsRows = tables.sessions as any;
+  sourceControlStorage.sandboxPoolRows = [];
   featureEnabled = true;
   sandboxEnabled = true;
   cookieUser = null;
@@ -1763,6 +1764,36 @@ describe('Factory session routes', () => {
     const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
     expect(deleted.status).toBe(200);
     expect(tables.sessions).toHaveLength(0);
+  });
+
+  it('returns a remote session sandbox to the reuse pool on delete instead of destroying it', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
+    const sessionId = (await created.json()).session.sessionId;
+    Object.assign(
+      tables.sessions.find(row => row.sessionId === sessionId)!,
+      {
+        sandboxId: 'sb-live',
+        sandboxWorkdir: '/workspace/hello',
+      },
+    );
+
+    const deleted = await app.request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
+
+    expect(deleted.status).toBe(200);
+    expect(tables.sessions).toHaveLength(0);
+    // The VM stays alive for the next session: no reattach/teardown.
+    expect(reattachSandbox).not.toHaveBeenCalled();
+    expect(sourceControlStorage.sandboxPoolRows).toEqual([
+      expect.objectContaining({
+        orgId: 'org1',
+        projectRepositoryId: 'p1',
+        userId: 'u1',
+        sandboxId: 'sb-live',
+        sandboxWorkdir: '/workspace/hello',
+      }),
+    ]);
   });
 
   it('does not expose another user or organization session', async () => {
