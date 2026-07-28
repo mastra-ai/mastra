@@ -201,6 +201,11 @@ const sidebars = {
           id: 'deployment/vercel',
           label: 'Vercel',
         },
+        {
+          type: 'doc',
+          id: 'deployment/workflow-devkit',
+          label: 'Workflow DevKit',
+        },
       ],
     },
     {
