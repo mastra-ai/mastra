@@ -98,6 +98,8 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
   options: AgentExecutionOptionsBase<OUTPUT> & {
     structuredOutput: StructuredOutputOptions<OUTPUT>;
     onStream?: (stream: Awaited<ReturnType<Agent['stream']>>) => void | Promise<void>;
+    /** Called after each stream invocation is consumed, including a failed structured-output attempt. */
+    onStreamFinish?: (stream: Awaited<ReturnType<Agent['stream']>>) => void | Promise<void>;
   },
 ) {
   if (!options.structuredOutput?.schema) {
@@ -109,21 +111,25 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
     });
   }
 
-  const { onStream, ...streamOptions } = options;
+  const { onStream, onStreamFinish, ...streamOptions } = options;
 
   try {
     const result = await agent.stream(prompt, streamOptions);
     void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
-    const object = await result.object;
-    if (!object) {
-      throw new MastraError({
-        id: 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'structuredOutput object is undefined',
-      });
+    try {
+      const object = await result.object;
+      if (!object) {
+        throw new MastraError({
+          id: 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'structuredOutput object is undefined',
+        });
+      }
+      return result;
+    } finally {
+      await onStreamFinish?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
     }
-    return result;
   } catch (error) {
     if (!isStructuredOutputFormatError(error)) throw error;
 
@@ -140,16 +146,20 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
       },
     });
     void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
-    const object = await result.object;
-    if (object === undefined) {
-      throw new MastraError({
-        id: 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'structuredOutput object is undefined',
-      });
+    try {
+      const object = await result.object;
+      if (object === undefined) {
+        throw new MastraError({
+          id: 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'structuredOutput object is undefined',
+        });
+      }
+      return result;
+    } finally {
+      await onStreamFinish?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
     }
-    return result;
   }
 }
 

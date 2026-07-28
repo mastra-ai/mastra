@@ -1,5 +1,39 @@
 # create-factory
 
+## 0.1.3-alpha.1
+
+### Patch Changes
+
+- Generated Factory projects now use the Factory UI bundled with the Mastra CLI instead of including editable browser source and its build dependencies. ([#20246](https://github.com/mastra-ai/mastra/pull/20246))
+
+- Updated dependencies:
+  - mastra@1.20.3-alpha.1
+
+## 0.1.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.20.3-alpha.0
+
+## 0.1.2
+
+### Patch Changes
+
+- Fixed generated Factory projects to allow newly published Mastra packages when pnpm minimum release age policies are configured. ([#20104](https://github.com/mastra-ai/mastra/pull/20104))
+
+- Fixed Factory template generation during release transitions by selecting exact published package versions that match the local source release and configuring npm for compatible prerelease installs. ([#20097](https://github.com/mastra-ai/mastra/pull/20097))
+
+- Updated dependencies:
+  - mastra@1.20.2
+
+## 0.1.2-alpha.5
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.20.2-alpha.5
+
 ## 0.1.2-alpha.4
 
 ### Patch Changes

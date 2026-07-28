@@ -110,6 +110,7 @@ const sidebars = {
         { type: 'doc', id: 'auth/auth0', label: 'Auth0' },
         { type: 'doc', id: 'auth/better-auth', label: 'Better Auth' },
         { type: 'doc', id: 'auth/clerk', label: 'Clerk' },
+        { type: 'doc', id: 'auth/fga', label: 'Fine-Grained Authorization' },
         { type: 'doc', id: 'auth/firebase', label: 'Firebase' },
         { type: 'doc', id: 'auth/google', label: 'Google' },
         { type: 'doc', id: 'auth/jwt', label: 'JSON Web Token' },

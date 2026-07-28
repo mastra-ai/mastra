@@ -11,6 +11,7 @@
     "voxtral-small-24b-2507"
   ],
   "temperature": [
+    "devstral-2-123b-instruct-2512",
     "gemma-3-27b-it",
     "gemma-4-26b-a4b-it",
     "glm-5.2",

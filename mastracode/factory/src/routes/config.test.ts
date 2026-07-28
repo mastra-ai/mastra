@@ -630,12 +630,12 @@ describe('OM routes with a tenant', () => {
   }
 
   function buildApp(
-    session: ReturnType<typeof makeOmSession>,
+    session: ReturnType<typeof makeOmSession> | null,
     opts: { withStorage?: boolean; authEnabled?: boolean } = {},
   ) {
     const controller = {
       ...makeAgentController([{ provider: 'anthropic', hasApiKey: true }]),
-      getSessionByResource: async () => session,
+      getSessionByResource: async () => session ?? undefined,
     };
     const app = new Hono();
     if (opts.authEnabled !== false) {
@@ -802,6 +802,35 @@ describe('OM routes with a tenant', () => {
       observerModelId: 'anthropic/claude-fable-5',
       observationThreshold: 25000,
       reflectionThreshold: 45000,
+      observeAttachments: false,
+    });
+  });
+
+  it('falls back to the stored row when the resourceId has no live session', async () => {
+    // The settings page addresses the factory-level resource, which has no
+    // live agent-controller session after a restart or before any chat. The
+    // stored row is authoritative and new sessions hydrate from it, so reads
+    // and writes must succeed session-less instead of 404ing.
+    const app = buildApp(null);
+
+    const initial = await app.request('/web/config/om?resourceId=r1');
+    expect(initial.status).toBe(200);
+    expect((await initial.json()).config.observerModelId).toBe(DEFAULT_OM_MODEL_ID);
+
+    expect(
+      (await putJson(app, '/web/config/om/observer/model', { resourceId: 'r1', modelId: 'anthropic/claude-fable-5' }))
+        .status,
+    ).toBe(200);
+    expect(
+      (await putJson(app, '/web/config/om/thresholds', { resourceId: 'r1', observationThreshold: 25000 })).status,
+    ).toBe(200);
+    expect((await putJson(app, '/web/config/om/observe-attachments', { resourceId: 'r1', value: false })).status).toBe(
+      200,
+    );
+
+    await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
+      observerModelId: 'anthropic/claude-fable-5',
+      observationThreshold: 25000,
       observeAttachments: false,
     });
   });

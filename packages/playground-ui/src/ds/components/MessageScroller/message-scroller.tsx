@@ -520,7 +520,7 @@ export const MessageScrollerViewport = React.forwardRef<HTMLDivElement, MessageS
         data-slot="message-scroller-viewport"
         data-preserve-scroll-on-prepend={preserveScrollOnPrepend ? 'true' : undefined}
         className={cn(
-          'data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent size-full min-h-0 min-w-0 overflow-y-auto overscroll-contain',
+          'size-full min-h-0 min-w-0 overflow-y-auto overscroll-contain data-autoscrolling:scrollbar-thumb-transparent data-autoscrolling:scrollbar-track-transparent',
           className,
         )}
         onScroll={event => {
