@@ -28,6 +28,7 @@ export interface PIICategoryScore {
   score: number;
 }
 
+/** Confidence scores for every PII category considered during detection */
 export type PIICategoryScores = PIICategoryScore[];
 
 /**

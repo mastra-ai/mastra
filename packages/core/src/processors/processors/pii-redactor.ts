@@ -95,6 +95,12 @@ export class PIIRedactor implements Processor<'pii-redactor', PIIRedactorTripwir
   private redactionOptions: PIIRedactionOptions;
   private lastMessageOnly: boolean;
 
+  /**
+   * Create a PIIRedactor.
+   *
+   * @throws If `detectionTypes` is empty, or contains a type that regex cannot
+   * detect (context-dependent types such as name, address, and date-of-birth).
+   */
   constructor(options: PIIRedactorOptions) {
     if (!options.detectionTypes || options.detectionTypes.length === 0) {
       throw new Error('PIIRedactor requires at least one detection type');
@@ -118,10 +124,16 @@ export class PIIRedactor implements Processor<'pii-redactor', PIIRedactorTripwir
     this.lastMessageOnly = options.lastMessageOnly ?? false;
   }
 
+  /**
+   * Scan incoming user messages and apply the configured strategy.
+   */
   processInput(args: ProcessInputArgs<PIIRedactorTripwireMetadata>): ProcessInputResult | Promise<ProcessInputResult> {
     return this.processMessages(args.messages, 'input');
   }
 
+  /**
+   * Scan the completed agent response and apply the configured strategy.
+   */
   processOutputResult(args: ProcessOutputResultArgs<PIIRedactorTripwireMetadata>): ProcessorMessageResult {
     return this.processMessages(args.messages, 'output');
   }
@@ -176,6 +188,11 @@ export class PIIRedactor implements Processor<'pii-redactor', PIIRedactorTripwir
     }
   }
 
+  /**
+   * Detect PII across the selected messages and apply the configured strategy.
+   * `context` only labels the location ('input' or 'output') in warnings and
+   * TripWire messages. Returns the original array when nothing is detected.
+   */
   private processMessages(messages: MastraDBMessage[], context: string): MastraDBMessage[] {
     if (messages.length === 0) {
       return messages;
@@ -220,6 +237,9 @@ export class PIIRedactor implements Processor<'pii-redactor', PIIRedactorTripwir
     }
   }
 
+  /**
+   * Collect PII detections from every text segment of a single message.
+   */
   private detectInMessage(message: MastraDBMessage): PIIDetection[] {
     const detections: PIIDetection[] = [];
     for (const segment of this.extractSegments(message)) {
@@ -228,6 +248,11 @@ export class PIIRedactor implements Processor<'pii-redactor', PIIRedactorTripwir
     return detections;
   }
 
+  /**
+   * Pull the scannable text out of a message: a plain string content, each
+   * text part, or the flattened `content.content` fallback when no text part
+   * exists. Non-text parts are ignored.
+   */
   private extractSegments(message: MastraDBMessage): string[] {
     // At runtime, content may be a plain string even though MastraDBMessage types it as MastraMessageContentV2
     if (typeof message.content === 'string') {
@@ -247,6 +272,10 @@ export class PIIRedactor implements Processor<'pii-redactor', PIIRedactorTripwir
     return segments;
   }
 
+  /**
+   * Return a copy of the message with PII redacted in every text location,
+   * keeping non-text parts and all other message fields untouched.
+   */
   private redactMessage(message: MastraDBMessage): MastraDBMessage {
     if (typeof message.content === 'string') {
       return { ...message, content: this.redactText(message.content) } as unknown as MastraDBMessage;
@@ -273,6 +302,10 @@ export class PIIRedactor implements Processor<'pii-redactor', PIIRedactorTripwir
     return { ...message, content: newContent };
   }
 
+  /**
+   * Apply the configured redaction method to one string, returning it
+   * unchanged when no PII is found.
+   */
   private redactText(text: string): string {
     const result = detectPIIWithPatterns(text, this.detectionTypes, this.redactionOptions);
     return result.redacted_content ?? text;
@@ -303,10 +336,20 @@ export class PIIRedactor implements Processor<'pii-redactor', PIIRedactorTripwir
     return out;
   }
 
+  /**
+   * List the distinct PII types present in a detection set. Used for logs and
+   * TripWire metadata, which never carry the matched values.
+   */
   private uniqueTypes(detections: PIIDetection[]): string[] {
     return [...new Set(detections.map(d => d.type))];
   }
 
+  /**
+   * Abort processing for the 'block' strategy.
+   *
+   * @throws A non-retryable {@link TripWire} carrying the detected types and
+   * count, but never the matched values.
+   */
   private blockWithTripWire(detections: PIIDetection[], context: string): never {
     const detectedTypes = this.uniqueTypes(detections);
     throw new TripWire<PIIRedactorTripwireMetadata>(`PII detected in ${context}. Types: ${detectedTypes.join(', ')}`, {
