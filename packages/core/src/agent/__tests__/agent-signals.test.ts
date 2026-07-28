@@ -11,6 +11,7 @@ import type { EventCallback } from '../../events/types';
 import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import { MAX_NOTIFICATION_DELIVERY_ATTEMPTS } from '../../notifications/delivery-policy';
 import { dispatchDueNotifications } from '../../notifications/dispatcher';
 import { InMemoryNotificationsStorage } from '../../notifications/storage';
 import { createNotificationInboxTool } from '../../notifications/tool';
@@ -1464,7 +1465,7 @@ describe('Agent signals', () => {
         },
       },
     });
-    new Mastra({ agents: { rejectedSummaryAgent: agent }, storage, logger: false });
+    const mastra = new Mastra({ agents: { rejectedSummaryAgent: agent }, storage, logger: false });
     const rejectedAccepted = Promise.reject(new Error('summary rejected'));
     rejectedAccepted.catch(() => {});
     const sendSignal = vi.spyOn(agentThreadStreamRuntime, 'sendSignal').mockReturnValue({
@@ -1488,6 +1489,21 @@ describe('Agent signals', () => {
       await expect(notifications.listDueNotifications({ now: new Date() })).resolves.toMatchObject([
         { id: result.record.id },
       ]);
+
+      for (let attempt = 2; attempt <= MAX_NOTIFICATION_DELIVERY_ATTEMPTS; attempt++) {
+        await dispatchDueNotifications({ mastra, storage: notifications, now: new Date() });
+        await expect(
+          notifications.getNotification({ threadId: 'summary-thread', id: result.record.id }),
+        ).resolves.toMatchObject({ deliveryAttempts: attempt });
+      }
+
+      await expect(
+        notifications.getNotification({ threadId: 'summary-thread', id: result.record.id }),
+      ).resolves.toMatchObject({ status: 'failed', deliveryAttempts: MAX_NOTIFICATION_DELIVERY_ATTEMPTS });
+      await expect(notifications.listDueNotifications({ now: new Date() })).resolves.toEqual([]);
+
+      await dispatchDueNotifications({ mastra, storage: notifications, now: new Date() });
+      expect(sendSignal).toHaveBeenCalledTimes(MAX_NOTIFICATION_DELIVERY_ATTEMPTS);
     } finally {
       sendSignal.mockRestore();
     }

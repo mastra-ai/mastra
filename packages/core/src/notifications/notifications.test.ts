@@ -505,7 +505,10 @@ describe('notification inbox', () => {
     expect(sendSignal).toHaveBeenCalledTimes(MAX_NOTIFICATION_DELIVERY_ATTEMPTS);
   });
 
-  it('terminalizes a record already past the cap without inflating its attempt count', async () => {
+  it.each([
+    { label: 'at the cap', attempts: MAX_NOTIFICATION_DELIVERY_ATTEMPTS },
+    { label: 'far past the cap', attempts: 288 },
+  ])('terminalizes a record $label without inflating its attempt count', async ({ attempts }) => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');
     const sendSignal = vi.fn((signal, _target) => ({
@@ -524,15 +527,21 @@ describe('notification inbox', () => {
       summary: 'CI failed',
       deliverAt: now,
     });
-    await storage.updateNotification({ id: 'n1', threadId: 'thread-1', deliveryAttempts: 288 });
+    await storage.updateNotification({ id: 'n1', threadId: 'thread-1', deliveryAttempts: attempts });
 
     await dispatchDueNotifications({ mastra, storage, now });
 
     await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
       status: 'failed',
-      deliveryAttempts: 288,
+      deliveryAttempts: attempts,
     });
     await expect(storage.listDueNotifications({ now })).resolves.toEqual([]);
+    // A record carried over from before the cap existed gets one final
+    // attempt, in case the failure it accumulated has since been resolved.
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+
+    await dispatchDueNotifications({ mastra, storage, now });
+    expect(sendSignal).toHaveBeenCalledTimes(1);
   });
 
   it('groups due summary notifications by agent, resource, and thread', async () => {
