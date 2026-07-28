@@ -3,6 +3,8 @@ import type { ClientToolsInput } from '@mastra/react';
 import { useCallback, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
+import { getWorkflowToolsForPhase, isWorkflowMutationTool } from './workflow-chat-tools';
+import type { WorkflowGenerationPhase } from './workflow-chat-tools';
 import { getOriginalWorkflowRequest, serializeWorkflowDraftInstructions } from './workflow-conversation';
 import type { WorkflowDraftAuthoringState, WorkflowDraftValidationContext } from './workflow-draft';
 import { createWorkflowDraftCandidate } from './workflow-draft-tools';
@@ -13,19 +15,6 @@ export interface WorkflowGenerationFailure {
   code: 'repair-budget-exhausted' | 'no-accepted-draft' | 'generation-failed';
   message: string;
 }
-
-type WorkflowGenerationPhase = 'constructing' | 'checkpointed' | 'repairing' | 'finalized';
-
-const WORKFLOW_MUTATION_TOOL_IDS = new Set([
-  'insert-workflow-mapping-before',
-  'insert-workflow-mapping-after',
-  'set-workflow-mapping-source',
-  'set-workflow-predicate',
-  'add-workflow-step',
-  'update-workflow-step',
-  'remove-workflow-step',
-  'set-workflow-metadata',
-]);
 
 export interface WorkflowChatProviderProps {
   threadId: string;
@@ -71,6 +60,7 @@ function WorkflowChatSession({
   const authoringStateRef = useRef(authoringState);
   authoringStateRef.current = authoringState;
   const generationRef = useRef(0);
+  const generationToolsRef = useRef<ClientToolsInput>({});
   const generationStateRef = useRef({
     accepted: false,
     finalized: false,
@@ -128,7 +118,7 @@ function WorkflowChatSession({
       if (generation !== generationRef.current || generationStateRef.current.stopped) return;
       const isCheckpoint = toolId === 'checkpoint-workflow-draft' || toolId === 'checkpoint-workflow-candidate';
       const isFinalize = toolId === 'finalize-workflow-draft';
-      const isMutation = WORKFLOW_MUTATION_TOOL_IDS.has(toolId);
+      const isMutation = isWorkflowMutationTool(toolId);
       if (result.success) {
         if (isCheckpoint || isFinalize) generationStateRef.current.accepted = true;
         if (toolId === 'checkpoint-workflow-draft') {
@@ -187,7 +177,7 @@ function WorkflowChatSession({
 
     const getToolBlockReason = (toolId: string) => {
       const phase = generationStateRef.current.phase;
-      if (phase === 'checkpointed' && WORKFLOW_MUTATION_TOOL_IDS.has(toolId)) {
+      if (phase === 'checkpointed' && isWorkflowMutationTool(toolId)) {
         return 'The accepted draft is already checkpointed. Call finalize-workflow-draft before making further edits.';
       }
       if (toolId === 'checkpoint-workflow-draft' && phase === 'checkpointed') {
@@ -208,7 +198,7 @@ function WorkflowChatSession({
       return undefined;
     };
 
-    return createTools(
+    const tools = createTools(
       () =>
         generation === generationRef.current &&
         !generationStateRef.current.stopped &&
@@ -219,7 +209,15 @@ function WorkflowChatSession({
       getToolBlockReason,
       true,
     );
+    generationToolsRef.current = tools;
+    return getWorkflowToolsForPhase(tools, generationStateRef.current.phase);
   }, [createTools, failGeneration, onGenerationFailure, updateCandidate]);
+
+  const resolveClientTools = useCallback(() => {
+    const state = generationStateRef.current;
+    if (state.stopped || state.finalized) return {};
+    return getWorkflowToolsForPhase(generationToolsRef.current, state.phase);
+  }, []);
 
   const handleSendComplete = useCallback(() => {
     const state = generationStateRef.current;
@@ -245,6 +243,7 @@ function WorkflowChatSession({
       initialMessages={hydrationMessages}
       initialUserMessage={initialUserMessage}
       createClientTools={createClientTools}
+      clientToolsResolver={resolveClientTools}
       extraInstructions={serializeWorkflowDraftInstructions(
         authoringState,
         validationContext,

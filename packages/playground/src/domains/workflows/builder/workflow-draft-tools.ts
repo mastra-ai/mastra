@@ -77,13 +77,24 @@ const mappingStepSchema = z.object({
   id: z.string().min(1),
   mapConfig: z.string().min(1),
 });
-const mappingDescriptorInputSchema = z.union([
-  z.object({ value: z.unknown() }).strict(),
-  z.object({ template: z.string().min(1) }).strict(),
-  z.object({ requestContextPath: z.string().min(1) }).strict(),
-  z.object({ initData: z.literal(true), path: z.string() }).strict(),
-  z.object({ step: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]), path: z.string() }).strict(),
-]);
+const mappingDescriptorInputSchema = z
+  .union([
+    z.object({ value: z.unknown() }).strict().describe('Constant source: { "value": <JSON value> }.'),
+    z
+      .object({ template: z.string().min(1) })
+      .strict()
+      .describe('Template source: { "template": "..." }.'),
+    z.object({ requestContextPath: z.string().min(1) }).strict(),
+    z
+      .object({ initData: z.literal(true), path: z.string().min(1) })
+      .strict()
+      .describe('Workflow-input source: { "initData": true, "path": "field.path" }. initData must be true.'),
+    z
+      .object({ step: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]), path: z.string() })
+      .strict()
+      .describe('Prior-step source: { "step": "step-id", "path": "field.path" }.'),
+  ])
+  .describe('Use exactly one source form. Never combine initData and step.');
 const mappingConfigInputSchema = z.record(z.string(), mappingDescriptorInputSchema);
 const mappingRepairInputSchema = z.object({
   targetStepId: z.string().min(1),
@@ -561,7 +572,34 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
         if (store.isCurrentGeneration?.() === false) return supersededResult;
         const blocked = blockedResult('checkpoint-workflow-draft');
         if (blocked) return blocked;
-        candidate.draft = parseWorkflowDraftInput(input);
+        if (candidate.hasUncheckpointedChanges) {
+          return reportCandidateResult('checkpoint-workflow-draft', {
+            ok: false,
+            state: toCandidateAuthoringState(candidate),
+            error:
+              'Generation candidate has uncheckpointed changes. Preserve the current repairs and call checkpoint-workflow-candidate with the exact candidateRevision.',
+          });
+        }
+        const nextDraft = parseWorkflowDraftInput(input);
+        if (nextDraft.graph.length === 0) {
+          const issues: WorkflowDraftValidationIssue[] = [
+            {
+              code: 'invalid-mutation',
+              path: 'graph',
+              message:
+                'Workflow checkpoints cannot have an empty graph. Add at least one top-level workflow step before checkpointing.',
+            },
+          ];
+          candidate.issues = issues;
+          publishCandidate();
+          return reportCandidateResult('checkpoint-workflow-draft', {
+            ok: false,
+            state: toCandidateAuthoringState(candidate),
+            error: issues[0]!.message,
+            issues,
+          });
+        }
+        candidate.draft = nextDraft;
         candidate.revision += 1;
         candidate.issues = [];
         candidate.hasUncheckpointedChanges = true;

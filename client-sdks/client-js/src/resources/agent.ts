@@ -288,6 +288,7 @@ async function executeToolCallAndRespond<OUTPUT>({
           structuredOutput?: StructuredOutputOptions<OUTPUT>;
         } = {
           ...params,
+          clientTools: params.clientToolsResolver?.() ?? params.clientTools,
         };
 
         delete (respondOptions as { messages?: MessageListInput }).messages;
@@ -2328,6 +2329,9 @@ export class Agent extends BaseResource {
                   {
                     ...processedParams,
                     messages: updatedMessages,
+                    clientTools: processClientTools(
+                      processedParams.clientToolsResolver?.() ?? processedParams.clientTools,
+                    ),
                   },
                   controller,
                   recursionRoute,

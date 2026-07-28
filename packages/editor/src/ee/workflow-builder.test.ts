@@ -17,6 +17,9 @@ describe('EditorWorkflowBuilder', () => {
     expect(instructions).toContain('checkpoint-workflow-draft');
     expect(instructions).toContain('finalize-workflow-draft');
     expect(instructions).toContain('explicit Studio Save action');
+    expect(instructions).toContain('# The composition rule — schemas MUST match');
+    expect(instructions).toContain('# Mappings — how to reshape data between steps');
+    expect(instructions).toContain('# Nested workflows — compose one workflow inside another');
     expect(instructions).not.toContain('set-workflow-identity');
     expect(instructions).not.toContain('set-workflow-schemas');
   });

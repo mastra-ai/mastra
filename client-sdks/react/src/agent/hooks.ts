@@ -24,7 +24,7 @@ import {
 } from './extract-tasks';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import { convertSignalDataToBase64String } from './signal-data';
-import type { ClientToolsInput, ModelSettings } from './types';
+import type { ClientToolsInput, ClientToolsResolver, ModelSettings } from './types';
 
 const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[]) => {
   const pendingToolApprovalIds = new Set<string>();
@@ -206,11 +206,13 @@ export type SendMessageArgs = { message: string; coreUserMessages?: CoreUserMess
 export type GenerateArgs = SharedArgs & {
   onFinish?: (messages: MastraDBMessage[]) => Promise<void>;
   clientTools?: ClientToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
 };
 
 export type StreamArgs = SharedArgs & {
   onChunk?: (chunk: ChunkType) => Promise<void>;
   clientTools?: ClientToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
   signalId?: string;
   /**
    * Client-generated correlation id stamped on the optimistic pending bubble
@@ -567,6 +569,7 @@ export const useChat = ({
     onFinish,
     tracingOptions,
     clientTools,
+    clientToolsResolver,
   }: GenerateArgs) => {
     const {
       frequencyPenalty,
@@ -619,6 +622,7 @@ export const useChat = ({
       tracingOptions,
       requireToolApproval,
       clientTools: resolvedClientTools,
+      clientToolsResolver,
     });
 
     // Check if suspended for tool approval
@@ -662,6 +666,7 @@ export const useChat = ({
     signal,
     tracingOptions,
     clientTools,
+    clientToolsResolver,
     signalId,
     clientMessageId,
   }: StreamArgs) => {
@@ -743,6 +748,7 @@ export const useChat = ({
         requireToolApproval,
         tracingOptions,
         clientTools: resolvedClientTools,
+        clientToolsResolver,
       });
 
       _onChunk.current = onChunk;

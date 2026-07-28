@@ -7,6 +7,7 @@ import {
   normalizeWorkflowBuilderDefinition,
   preflightWorkflowDefinition,
   WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS,
+  WORKFLOW_BUILDER_AUTHORING_PLAYBOOK,
   WORKFLOW_BUILDER_SUPPORTED_STEP_TYPES,
 } from './index';
 
@@ -33,13 +34,31 @@ describe('workflow builder authoring contract', () => {
     ]);
   });
 
-  it('keeps shared composition and nesting constraints available to every authoring frontend', () => {
-    expect(WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS).toContain(
-      'previous output shape must satisfy the next input schema',
-    );
-    expect(WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS).toContain('nested workflow');
-    expect(WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS).toContain('declarative predicate DSL');
+  it('keeps the shared JSON-safe authoring constraints available to every authoring frontend', () => {
+    expect(WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS).toContain('JSON-safe static graph');
     expect(WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS).toContain('Never invent agent, tool, or workflow IDs');
+  });
+
+  it('publishes the complete Mastra Code composition playbook for every authoring frontend', () => {
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# How a workflow runs');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# The composition rule — schemas MUST match');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Mappings — how to reshape data between steps');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain(
+      '# Fan-out, iteration, and waiting — the container step types',
+    );
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Conditional branches and loops — declarative predicates');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Nested workflows — compose one workflow inside another');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Out of scope — do NOT emit these');
+  });
+
+  it('documents canonical direct mapping sources and container output semantics', () => {
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('`{ "initData": true, "path": "<field.path>" }`');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('`{ "step": "<stepId>", "path": "<field.path>" }`');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('references **exactly one** source');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain(
+      'The inner step receives ONE ELEMENT of the array at a time as its input.',
+    );
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain("complete output of **every** child under that child's id");
   });
 
   it.each(fixtures)('normalizes the $name fixture deterministically', ({ input, expected }) => {

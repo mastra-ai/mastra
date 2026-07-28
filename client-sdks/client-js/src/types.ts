@@ -533,6 +533,8 @@ export interface GetAgentBrowserSessionResponse {
   screencastAvailable: boolean;
 }
 
+export type ClientToolsResolver = () => ToolsInput | undefined;
+
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
   messages: string | string[] | CoreMessage[] | AiMessageType[] | UIMessageWithMetadata[];
   model?: string;
@@ -540,6 +542,7 @@ export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined =
   experimental_output?: T;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
   Omit<
@@ -555,6 +558,7 @@ export type StreamLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = u
   experimental_output?: T;
   requestContext?: RequestContext | Record<string, any>;
   clientTools?: ToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   // Use `any` to avoid "Type instantiation is excessively deep" error from complex ZodSchema generics
   Omit<
@@ -574,6 +578,7 @@ export type StreamParamsBase<OUTPUT = undefined> = {
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
   clientTools?: ToolsInput;
+  clientToolsResolver?: ClientToolsResolver;
 } & WithoutMethods<
   Omit<
     AgentExecutionOptions<OUTPUT>,
@@ -643,7 +648,12 @@ export type ListStoredWorkflowsResponse = GeneratedResponse<'GET /stored/workflo
 export type UpsertStoredWorkflowParams = GeneratedRequest<Body<'POST /stored/workflows'>>;
 export type UpsertStoredWorkflowResponse = GeneratedResponse<'POST /stored/workflows'>;
 type StoredWorkflowDefinitionField =
-  'description' | 'inputSchema' | 'outputSchema' | 'stateSchema' | 'requestContextSchema' | 'graph';
+  | 'description'
+  | 'inputSchema'
+  | 'outputSchema'
+  | 'stateSchema'
+  | 'requestContextSchema'
+  | 'graph';
 export type StoredWorkflowDefinition = Omit<
   GeneratedResponse<'GET /stored/workflows/:storedWorkflowId'>,
   StoredWorkflowDefinitionField

@@ -166,6 +166,57 @@ describe('workflow draft client tools', () => {
       expect(result).toEqual({ available: false, reason: 'catalog-unavailable' });
     });
 
+    it('rejects an empty initial checkpoint with actionable graph guidance', async () => {
+      const store = createStore();
+
+      const result = await executeTool(store.tools['checkpoint-workflow-draft'], {
+        id: 'new-workflow',
+        inputSchema: {},
+        outputSchema: {},
+        graph: [],
+      });
+
+      expect(result).toMatchObject({
+        success: false,
+        error: expect.stringContaining('Add at least one top-level workflow step'),
+        issues: [expect.objectContaining({ code: 'invalid-mutation', path: 'graph' })],
+      });
+      expect(store.state).toMatchObject({ revision: 0, draft: { graph: [] } });
+    });
+
+    it('preserves an uncheckpointed repair candidate instead of replacing it with a whole-definition checkpoint', async () => {
+      const store = createStore('new-workflow', undefined, undefined, availableValidationContext);
+      await executeTool(store.tools['checkpoint-workflow-draft'], {
+        id: 'new-workflow',
+        inputSchema: {},
+        outputSchema: {},
+        graph: [{ type: 'tool', id: 'lookup', toolId: 'lookupCustomer' }],
+      });
+      await executeTool(store.tools['update-workflow-step'], {
+        stepId: 'lookup',
+        step: { type: 'tool', id: 'lookup', toolId: 'lookupCustomer', options: { retries: 1 } },
+      });
+
+      const result = await executeTool(store.tools['checkpoint-workflow-draft'], {
+        id: 'new-workflow',
+        inputSchema: {},
+        outputSchema: {},
+        graph: [],
+      });
+
+      expect(result).toMatchObject({
+        success: false,
+        error: expect.stringContaining('checkpoint-workflow-candidate'),
+        candidateRevision: 1,
+        baseAcceptedRevision: 1,
+      });
+      const checkpoint = await executeTool(store.tools['checkpoint-workflow-candidate'], { candidateRevision: 1 });
+      expect(checkpoint).toMatchObject({ success: true, revision: 2 });
+      expect(store.state.draft.graph).toEqual([
+        { type: 'tool', id: 'lookup', toolId: 'lookupCustomer', options: { retries: 1 } },
+      ]);
+    });
+
     it('constructs typed mapping repairs without exposing ambiguous persisted descriptors', async () => {
       const store = createStore('new-workflow', undefined, undefined, availableValidationContext);
       const checkpoint = await executeTool(store.tools['checkpoint-workflow-draft'], {
