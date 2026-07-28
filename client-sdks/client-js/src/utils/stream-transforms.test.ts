@@ -92,4 +92,10 @@ describe('createSseJsonTransform', () => {
     ]);
     await expect(readAll(createSseJsonTransform(), [bytes('data: {"bad":}\n\n')])).rejects.toThrow(SyntaxError);
   });
+
+  it('ignores the SSE data: [DONE] terminator instead of JSON.parse-ing it', async () => {
+    await expect(
+      readAll(createSseJsonTransform(), [bytes('data: {"id":1}\n\ndata: [DONE]\n\n')]),
+    ).resolves.toEqual([{ id: 1 }]);
+  });
 });

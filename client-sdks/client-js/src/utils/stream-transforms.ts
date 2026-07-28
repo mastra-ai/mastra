@@ -58,9 +58,17 @@ export function createSseJsonTransform<T>(): TransformStream<ArrayBuffer, T> {
       dataLines.push(value.startsWith(' ') ? value.slice(1) : value);
     }
 
-    if (dataLines.length > 0) {
-      controller.enqueue(JSON.parse(dataLines.join('\n')) as T);
+    if (dataLines.length === 0) {
+      return;
     }
+
+    const payload = dataLines.join('\n');
+    // Mirror processMastraStream: hono SSE adapters terminate with `data: [DONE]\n\n`.
+    if (payload === '[DONE]') {
+      return;
+    }
+
+    controller.enqueue(JSON.parse(payload) as T);
   };
 
   const processCompleteFrames = (controller: TransformStreamDefaultController<T>) => {
