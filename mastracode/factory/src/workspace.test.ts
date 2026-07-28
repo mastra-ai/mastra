@@ -269,6 +269,10 @@ describe('getFactoryWorkspace', () => {
     const review = await read('factory-review');
     expect(review).toContain('Verdict: approve');
     expect(review).toContain('Verdict: request changes');
+    // The verdict must be published on the PR itself, unprompted.
+    expect(review).toContain('gh pr review <number> --approve --body-file');
+    expect(review).toContain('gh pr review <number> --request-changes --body-file');
+    expect(review).toContain('gh pr comment <number> --body-file');
   });
 
   it('adds read-only Web Factory skills and keeps them authoritative over project shadows', async () => {
@@ -366,6 +370,25 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.runWorktreeSetup).toHaveBeenCalledTimes(2);
     expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe(workdirA);
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
+  });
+
+  it('deduplicates concurrent materializations of the same session workspace', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    // Hold materialization open long enough for the follower to arrive while
+    // the leader is still in flight.
+    mocks.materializeRepo.mockImplementationOnce(() => new Promise(resolve => setTimeout(resolve, 20)));
+
+    const [first, second] = await Promise.all([
+      workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
+      workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
+    ]);
+
+    expect(second).toBe(first);
+    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+    expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
+    expect(mocks.checkoutSessionBranch).toHaveBeenCalledTimes(1);
   });
 
   it('uses repository-scoped access when materializing a Factory session', async () => {

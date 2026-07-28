@@ -26,6 +26,8 @@ const harness = vi.hoisted(() => {
     getMastra: vi.fn(() => mastra),
     getSessionByResource: vi.fn(async () => session),
     createSession: vi.fn(async () => session),
+    // Mastra's constructor probes each controller for channels wiring.
+    getChannels: vi.fn(() => undefined),
   };
 
   return {
