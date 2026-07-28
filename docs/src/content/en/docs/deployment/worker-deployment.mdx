@@ -49,9 +49,9 @@ Same single process, but events are persisted in a distributed PubSub backend (e
 │  PubSub: distributed backend     │
 └────────────┬─────────────────────┘
              │
-      ┌──────▼──────┐
+      ┌──────▼─────────┐
       │ PubSub backend │
-      └─────────────┘
+      └────────────────┘
 ```
 
 Use this when:
@@ -113,7 +113,7 @@ Each worker type runs as its own process or container. The API handles HTTP requ
        │            └────────┬───────────┘             │
        │                     │                         │
   ┌────▼─────────────────────▼─────────────────────────▼────┐
-  │                   PubSub backend                          │
+  │                   PubSub backend                        │
   └────┬────────────────────────────────────────────────────┘
        │
   ┌────▼──────────────┐    ┌───────────────┐
