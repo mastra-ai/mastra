@@ -6,10 +6,9 @@ import { WORKFLOW_SDK_ENGINE_TYPE } from './constants';
 import { WorkflowSdkExecutionEngine } from './execution-engine';
 import { registerWorkflow, type RegisteredMastraWorkflow } from './registry';
 import { WorkflowSdkRun } from './run';
-import type { WorkflowSdkEngineType } from './types';
+import type { WorkflowSdkEngineType, WorkflowSdkRunnerRef } from './types';
 
-/** Runner reference threaded through `init({ runner })`. */
-export type WorkflowSdkRunnerRef = (...args: any[]) => Promise<any>;
+export type { WorkflowSdkRunnerRef };
 
 export interface WorkflowSdkWorkflowParams {
   /**
@@ -163,7 +162,7 @@ export class WorkflowSdkWorkflow<
         validateInputs: this.options.validateInputs,
         cleanup: () => this.runs.delete(runId),
       },
-      { stepRetries: this.#collectStepRetries() },
+      { runner: this.runner, stepRetries: this.#collectStepRetries() },
     );
 
     this.runs.set(runId, run);

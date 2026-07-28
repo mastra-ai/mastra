@@ -126,6 +126,9 @@ describe('WorkflowSdkRun resuming from another process', () => {
     // — which is what happens if the walker stops issuing its `finalize` op.
     const snapshot = await loadSnapshot('chain-workflow', run.runId);
     expect(snapshot?.status).toBe('success');
+    // A poller reads the output from here, not from the resolved promise it
+    // never held, so a terminal status without a result is only half a fix.
+    expect(snapshot?.result).toEqual(result.status === 'success' ? result.result : undefined);
   });
 
   it('names the waiting step on the snapshot while a run is suspended', async () => {

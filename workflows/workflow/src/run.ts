@@ -12,8 +12,7 @@ import type {
 import { getRun, resumeHook, start as startWorkflowSdkRun } from 'workflow/api';
 import { MASTRA_EVENT_NAMESPACE } from './constants';
 import { readSdkRunId, withSdkRunId } from './snapshot';
-import type { WorkflowSdkEngineType, MastraRunnerParams, SerializedOpError } from './types';
-import { mastraRunner } from './workflows/runner';
+import type { WorkflowSdkEngineType, MastraRunnerParams, SerializedOpError, WorkflowSdkRunnerRef } from './types';
 import { suspendToken, type WalkerParams } from './workflows/walker';
 
 type WorkflowSdkRunStartArgs<TState, TInput, TRequestContext> = {
@@ -24,6 +23,16 @@ type WorkflowSdkRunStartArgs<TState, TInput, TRequestContext> = {
 
 /** Extra bits `WorkflowSdkWorkflow` hands to each run. */
 export interface WorkflowSdkRunOptions {
+  /**
+   * The `mastraRunner` function this run starts, threaded down from
+   * `init({ runner })`.
+   *
+   * Passed in rather than imported so no host-side module here reaches
+   * `workflows/runner`; see {@link WorkflowSdkRunnerRef}. `suspendToken` above
+   * comes from `workflows/walker`, which carries no directives and imports only
+   * `constants` — importing it is safe, importing the runner is not.
+   */
+  runner?: WorkflowSdkRunnerRef;
   stepRetries?: Record<string, number>;
 }
 
@@ -78,6 +87,7 @@ export class WorkflowSdkRun<
    */
   #streamCursor = 0;
   readonly #stepRetries: Record<string, number>;
+  readonly #runner?: WorkflowSdkRunnerRef;
 
   constructor(
     params: ConstructorParameters<
@@ -87,6 +97,7 @@ export class WorkflowSdkRun<
   ) {
     super(params);
     this.#stepRetries = options.stepRetries ?? {};
+    this.#runner = options.runner;
   }
 
   /** Workflow SDK run id, once the run has been started in this process. */
@@ -105,7 +116,14 @@ export class WorkflowSdkRun<
    * leaves the same trail for a second process to pick up.
    */
   async #startSdkRun(params: WalkerParams): Promise<string> {
-    const sdkRun = await startWorkflowSdkRun(mastraRunner, [params], {
+    if (!this.#runner) {
+      throw new Error(
+        `Cannot start workflow "${this.workflowId}": no Workflow SDK runner was supplied. ` +
+          `Build workflows with the \`createWorkflow\` returned by \`init({ runner })\`, passing the ` +
+          `\`mastraRunner\` re-exported from your own workflows/ directory.`,
+      );
+    }
+    const sdkRun = await startWorkflowSdkRun(this.#runner, [params], {
       // `$`-prefixed keys are reserved for tooling; these plain keys let the
       // Workflow SDK dashboard show which Mastra run a Workflow SDK run belongs to.
       attributes: { mastraRunId: this.runId, mastraWorkflowId: this.workflowId },

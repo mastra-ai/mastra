@@ -2,6 +2,8 @@ import { readFile } from 'node:fs/promises';
 import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsup';
 
+const DIRECTIVE_STATEMENT = /^\s*['"]use (?:step|workflow)['"];?\s*$/m;
+
 /**
  * Fails the build if host-only code reached the workflow bundle.
  *
@@ -26,6 +28,34 @@ async function assertWorkflowBundleIsSandboxSafe() {
       `dist/workflows/index.js imports ${leaked.join(', ')}, which the workflow sandbox cannot load. ` +
         `Host-only modules must stay behind the dynamic import() in src/workflows/steps.ts, and that ` +
         `module must stay external in this config — see the keep-executor-lazy plugin.`,
+    );
+  }
+}
+
+/**
+ * Fails the build if the host entry carries workflow directives.
+ *
+ * `splitting: false` copies shared modules into every entry that reaches them,
+ * so a single host-side import of `workflows/runner` puts `"use workflow"` and
+ * `"use step"` into `dist/index.js` as well. The Workflow SDK then discovers
+ * the host entry as a second workflow module and compiles everything it imports
+ * — `@mastra/core`, `node:crypto`, the whole host graph — into the sandbox.
+ *
+ * That is how the same `ReferenceError: require is not defined` survived
+ * cleaning up `dist/workflows/index.js`: the leak had two sources and only one
+ * was visible from the workflows entry. Nothing warns about this one. The SDK's
+ * "bundle contains Node.js built-in imports" notice does not fire for it, and
+ * the compile succeeds — it just reports two workflows where there is one.
+ */
+async function assertHostBundleHasNoDirectives() {
+  const bundlePath = new URL('./dist/index.js', import.meta.url);
+  const bundle = await readFile(bundlePath, 'utf8');
+  if (DIRECTIVE_STATEMENT.test(bundle)) {
+    throw new Error(
+      `dist/index.js contains a "use step" or "use workflow" directive, so the Workflow SDK will ` +
+        `discover the host entry as a workflow module and compile @mastra/core into the sandbox. ` +
+        `Something under src/ outside src/workflows/ imports a directive-bearing module: the runner ` +
+        `reaches runs through init({ runner }) instead — see WorkflowSdkRunOptions.runner.`,
     );
   }
 }
@@ -74,14 +104,14 @@ export default defineConfig({
       //
       // Marking the specifier external is what reconciles the two
       // constraints, and it is rewritten to the package's own `./executor`
-      // subpath on the way out. Two reasons it is done here rather than in the
-      // source. A relative specifier would have to carry a `.js` extension to
-      // resolve as ESM, and a `.js`-suffixed relative import in a
-      // directive-reachable file is invisible to the SDK's discovery pass
-      // (vercel/workflow#3151). It would also be depth-dependent: this step
-      // lands in both `dist/index.js` and `dist/workflows/index.js`, which sit
-      // at different depths, so one relative path cannot be right for both.
-      // The bare specifier resolves through `exports` from either.
+      // subpath on the way out. The rewrite happens here rather than in the
+      // source because the two forms cannot both be spelled the same way: a
+      // relative specifier needs a `.js` extension to resolve as ESM at run
+      // time, and a `.js`-suffixed relative import in a directive-reachable
+      // file is invisible to the SDK's discovery pass — no build error, a
+      // `WorkflowNotRegisteredError` at run time (vercel/workflow#3151). So the
+      // source keeps the extensionless form the rest of the repo uses and the
+      // build emits a bare specifier, which resolves through `exports`.
       name: 'keep-executor-lazy',
       setup(build) {
         build.onResolve({ filter: /^\.\.\/executor$/ }, () => ({
@@ -94,5 +124,6 @@ export default defineConfig({
   onSuccess: async () => {
     await generateTypes(process.cwd());
     await assertWorkflowBundleIsSandboxSafe();
+    await assertHostBundleHasNoDirectives();
   },
 });

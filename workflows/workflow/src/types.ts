@@ -12,6 +12,21 @@ export type WorkflowSdkEngineType = {
   step: any;
 };
 
+/**
+ * The `mastraRunner` workflow function, threaded through `init({ runner })`.
+ *
+ * Every run is started by calling the function the consumer handed to
+ * `init()` — the one they re-exported from their own `workflows/` directory —
+ * never a copy imported inside this package. Host-side modules importing the
+ * runner directly would pull `"use workflow"` and `"use step"` code into the
+ * host bundle, which the Workflow SDK then discovers as a second workflow
+ * module and compiles along with everything the host imports.
+ *
+ * Declared here rather than next to `WorkflowSdkWorkflow` so `run.ts` can name
+ * the type without importing from the module that constructs it.
+ */
+export type WorkflowSdkRunnerRef = (...args: any[]) => Promise<any>;
+
 export type WorkflowSdkWorkflowConfig<
   TWorkflowId extends string,
   TState,
