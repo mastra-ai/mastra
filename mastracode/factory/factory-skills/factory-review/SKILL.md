@@ -1,11 +1,11 @@
 ---
 name: factory-review
-description: Review a pull request for a Factory work item — history and context first, then verdict — and mark the review complete
+description: Review a pull request for a Factory work item — history and context first, then a verdict published on the PR — and mark the review complete
 ---
 
 # Factory Review
 
-Review the pull request behind this Factory work item — build its history and context first, then judge correctness, tests, scope, and pattern-consistency — and finish by posting a verdict handoff and requesting the stage transition.
+Review the pull request behind this Factory work item — build its history and context first, then judge correctness, tests, scope, and pattern-consistency — and finish by publishing the verdict on the PR, posting a verdict handoff, and requesting the stage transition.
 
 You are working in a bound Factory session. Complete the full review in one pass, then make `factory_transition_work_item` your terminal step — one transition request, repeated only if the governed transition rejects it and only with the rejection reason addressed. Never wait for or solicit human input mid-run; every judgment call is yours to resolve.
 
@@ -57,6 +57,13 @@ First, post the **review handoff** as your final message in the conversation. It
 - **Requested changes** — one entry per change, concrete enough to act on (for a request-changes verdict).
 - **Assumptions** — every recorded judgment call from the run.
 - **Open questions** — any decision that genuinely needs a human.
+
+Next, publish the review on the PR itself — this is part of every pass, not something to wait to be asked for. Write the handoff body to a temp file (avoids shell-quoting breakage) and submit a PR review matching the verdict:
+
+- approve → `gh pr review <number> --approve --body-file <file>`
+- request changes → `gh pr review <number> --request-changes --body-file <file>`
+
+If GitHub rejects the review submission (e.g. the token authored the PR and cannot approve or request changes on it), fall back to `gh pr comment <number> --body-file <file>` so the verdict still lands on the PR, and record the fallback as an assumption.
 
 Then make your terminal `factory_transition_work_item` call. Take the current stage and `expectedRevision` from the `factory-phase` signal. Request `stage: "done"` (review board) **for both verdicts** — the transition marks the review pass complete; what to do about requested changes is the human's call from the handoff.
 
