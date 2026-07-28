@@ -1,5 +1,25 @@
 # @mastra/ai-sdk
 
+## 1.7.0-alpha.0
+
+### Minor Changes
+
+- Added experimental smooth streaming support to `handleChatStream()`, `chatRoute()`, and `toAISdkStream()`. ([#19792](https://github.com/mastra-ai/mastra/pull/19792))
+
+  ```typescript
+  const stream = await handleChatStream({
+    mastra,
+    agentId: 'weatherAgent',
+    params,
+    experimentalTransform: smoothStream({ chunking: 'word', delayInMs: 20 }),
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`6218217`](https://github.com/mastra-ai/mastra/commit/62182171b6cfca0b099f1c6a77a2e65e7639ab86), [`d12b2e4`](https://github.com/mastra-ai/mastra/commit/d12b2e4023fd9e3d3e93a9169f5088bcee2a849c)]:
+  - @mastra/core@1.54.0-alpha.4
+
 ## 1.6.3
 
 ### Patch Changes

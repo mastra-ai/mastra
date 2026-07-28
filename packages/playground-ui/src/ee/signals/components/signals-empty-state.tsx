@@ -53,7 +53,7 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
         </header>
 
         <div
-          aria-label="Signals analysis pipeline"
+          aria-label="Trace intelligence pipeline"
           className="mt-14 grid gap-4 lg:grid-cols-[17.5rem_4.5rem_17.5rem_4.5rem_minmax(0,1fr)] lg:gap-0"
           role="list"
         >
@@ -98,7 +98,7 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
           <PipelineConnector />
 
           <article className="h-50 p-5" role="listitem">
-            <h2 className="text-neutral6 text-lg font-semibold">Signal analysis</h2>
+            <h2 className="text-neutral6 text-lg font-semibold">Trace signals</h2>
             <p className="text-neutral3 mt-0.5 text-xs">What your users actually do</p>
             <p className="text-neutral2 mt-5 font-mono text-[0.5625rem] tracking-[0.24em] uppercase">Output</p>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -118,9 +118,9 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
 
         <section className="mt-10" aria-labelledby="signal-definitions-heading">
           <h2 id="signal-definitions-heading" className="text-neutral6 text-lg font-semibold">
-            What each signal means
+            What each trace signal means
           </h2>
-          <div aria-label="Signal definitions" className="mt-4 grid gap-3 sm:grid-cols-2" role="list">
+          <div aria-label="Trace signal definitions" className="mt-4 grid gap-3 sm:grid-cols-2" role="list">
             {signalDefinitions.map(signal => (
               <article className="px-1 py-2" key={signal.label} role="listitem">
                 <h3 className="text-sm font-semibold" style={signalStyle(signal.label)}>
@@ -132,9 +132,9 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
           </div>
         </section>
 
-        <section className="mt-10" aria-label="Signal relationship preview">
+        <section className="mt-10" aria-label="Trace signal relationship preview">
           <p className="text-neutral2 font-mono text-[0.5625rem] tracking-[0.2em] uppercase">
-            Grouped trace relationships will appear after traces contain at least two signal types
+            Grouped trace relationships will appear after traces contain at least two trace signal types
           </p>
           <div aria-hidden="true" className="mt-3 grid h-18 grid-cols-3 gap-5 opacity-35">
             {[0, 1, 2].map(index => (
@@ -154,7 +154,7 @@ export const SignalsEmptyState = ({ actionSlot, LinkComponent = 'a' }: SignalsEm
               className="bg-warning1 mt-1.5 size-2 shrink-0 rounded-full shadow-[0_0_9px_currentColor] sm:mt-0"
             />
             <p className="text-neutral3 text-xs leading-5">
-              <strong className="text-neutral5 font-semibold">Waiting for traces.</strong> Signals activate
+              <strong className="text-neutral5 font-semibold">Waiting for traces.</strong> Trace intelligence activates
               automatically once your agents start receiving traffic.
             </p>
           </div>

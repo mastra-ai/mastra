@@ -5,7 +5,8 @@ import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { GithubIntegration } from './integration.js';
-import { GithubRules } from './rules.js';
+import { createGithubPullRequestReconciler, GithubRules } from './rules.js';
+import type { ReconcilePullRequestState } from './rules.js';
 
 async function setup(permission: string | undefined) {
   const seeded = await createFactoryStorageForTests();
@@ -188,7 +189,7 @@ describe('GithubRules', () => {
           (input: { id: string; contents: string }, options: { requestContext: { get(key: string): unknown } }) => {
             if (!threadId) throw new Error('Signal delivered before thread persistence.');
             deliveredSignals.push({ ...input, threadId, user: options.requestContext.get('user') });
-            return { accepted: Promise.resolve({ accepted: true }) };
+            return { accepted: Promise.resolve({ accepted: true, action: 'wake' }) };
           },
         ),
         state: { set: vi.fn(async () => {}) },
@@ -493,6 +494,46 @@ describe('GithubRules', () => {
     ]);
   });
 
+  it('moves the merged Review card to Done when the PR has no Factory provenance', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(service.ingest(pullRequest('closed', 'delivery-merged-card', true))).resolves.toEqual({
+      status: 'committed',
+    });
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        workItemId: card.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+      }),
+    ]);
+  });
+
   it('evaluates the same delivery independently for every tenant project mapped to the repository', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const second = await projects.create({
@@ -535,5 +576,201 @@ describe('GithubRules', () => {
     await service.ingest(issueOpened('multi-tenant'));
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(1);
     expect(await workItems.listDeferredDecisions('org-2', second.id)).toHaveLength(1);
+  });
+});
+
+describe('createGithubPullRequestReconciler', () => {
+  const repositoryTarget = { id: 10, fullName: 'acme/repo', installationId: 7 };
+
+  function mergedState(number: number): ReconcilePullRequestState {
+    return {
+      title: `PR ${number}`,
+      url: `https://github.com/acme/repo/pull/${number}`,
+      state: 'closed',
+      merged: true,
+      headBranch: 'feature',
+      baseBranch: 'main',
+      createdAt: '2030-01-01T00:00:00Z',
+      mergedBy: 'maintainer',
+    };
+  }
+
+  async function createCard(
+    context: Awaited<ReturnType<typeof setup>>,
+    input: { number: number; url?: string | null; stages?: string[] },
+  ) {
+    return context.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: context.project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: `github-pr:${input.number}`,
+          url: input.url === null ? undefined : (input.url ?? `https://github.com/acme/repo/pull/${input.number}`),
+        },
+        title: `PR ${input.number}`,
+        stages: input.stages ?? ['review'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+  }
+
+  function createReconciler(
+    context: Awaited<ReturnType<typeof setup>>,
+    fetchPullRequest: ReturnType<typeof vi.fn>,
+  ) {
+    return createGithubPullRequestReconciler(
+      {
+        github: context.github,
+        sourceControl: context.sourceControl,
+        integrationStorage: context.integrationStorage,
+        projects: context.projects,
+        storage: context.workItems,
+        rules: builtInFactoryRules(),
+      },
+      fetchPullRequest as never,
+    );
+  }
+
+  it('replays a missed merge through the ingress exactly once', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, { number: 17 });
+    const fetchPullRequest = vi.fn(async () => mergedState(17));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 1, merged: 1, closed: 0, failed: 0, errors: [] });
+    expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 17 });
+    const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        workItemId: card.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+      }),
+    ]);
+
+    // A later sweep re-checks live state but the ingress replays: no
+    // duplicate decisions are committed for the same merge.
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 1, merged: 1, closed: 0, failed: 0, errors: [] });
+    expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(1);
+  });
+
+  it('only checks open cards and commits nothing for unmerged pull requests', async () => {
+    const context = await setup('read');
+    await createCard(context, { number: 17, stages: ['done'] });
+    await createCard(context, { number: 18 });
+    const fetchPullRequest = vi.fn(async () => ({ ...mergedState(18), state: 'open' as const, merged: false }));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 1, merged: 0, closed: 0, failed: 0, errors: [] });
+    expect(fetchPullRequest).toHaveBeenCalledTimes(1);
+    expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 18 });
+    expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
+  });
+
+  it('never checks a card whose URL points at a different repository', async () => {
+    const context = await setup('read');
+    await createCard(context, { number: 19, url: 'https://github.com/other/repo/pull/19' });
+    const fetchPullRequest = vi.fn(async () => mergedState(19));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 0, merged: 0, closed: 0, failed: 0, errors: [] });
+    expect(fetchPullRequest).not.toHaveBeenCalled();
+  });
+
+  it('replays a close-without-merge and cancels the review card', async () => {
+    const context = await setup('read');
+    const card = await createCard(context, { number: 21 });
+    const fetchPullRequest = vi.fn(async () => ({ ...mergedState(21), merged: false, mergedBy: undefined }));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 1,
+      merged: 0,
+      closed: 1,
+      failed: 0,
+      errors: [],
+    });
+    const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        workItemId: card.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'canceled' }),
+      }),
+    ]);
+
+    // A second sweep replays through the ingress dedupe without new decisions.
+    await reconcile([repositoryTarget]);
+    expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(1);
+  });
+
+  it('keeps sweeping the remaining PRs when one state fetch fails and reports the failure', async () => {
+    const context = await setup('read');
+    await createCard(context, { number: 17 });
+    await createCard(context, { number: 18 });
+    const fetchPullRequest = vi.fn(async (input: { number: number }) => {
+      if (input.number === 17) throw new Error('Platform API request failed: 500 Internal Server Error');
+      return mergedState(18);
+    });
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 1,
+      merged: 1,
+      closed: 0,
+      failed: 1,
+      errors: [
+        {
+          repository: 'acme/repo',
+          pullRequestNumber: 17,
+          error: 'Platform API request failed: 500 Internal Server Error',
+        },
+      ],
+    });
+    // The healthy PR still got reconciled to Done.
+    const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+      }),
+    ]);
+  });
+
+  it('only sweeps repositories linked to a factory project', async () => {
+    const context = await setup('read');
+    await createCard(context, { number: 17 });
+    const fetchPullRequest = vi.fn(async () => mergedState(17));
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    // The installation exposes many repositories, but only acme/repo is
+    // linked to a factory project — the others must not be probed at all.
+    const unconfigured = [
+      { id: 11, fullName: 'acme/other', installationId: 7 },
+      { id: 12, fullName: 'acme/archive', installationId: 7 },
+    ];
+    await expect(reconcile(unconfigured)).resolves.toEqual({
+      repositories: 0,
+      checked: 0,
+      merged: 0,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
+    expect(fetchPullRequest).not.toHaveBeenCalled();
+
+    await expect(reconcile([...unconfigured, repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 1,
+      merged: 1,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
+    expect(fetchPullRequest).toHaveBeenCalledTimes(1);
+    expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 17 });
   });
 });

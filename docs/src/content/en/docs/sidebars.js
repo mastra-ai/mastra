@@ -504,8 +504,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'voice/livekit',
-              label: 'LiveKit',
+              id: 'voice/realtime-voice',
+              label: 'Realtime Voice',
             },
           ],
         },
@@ -1050,6 +1050,14 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/observability',
           label: 'Observability',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/trace-intelligence',
+          label: 'Trace Intelligence',
+          customProps: {
+            tags: ['beta'],
+          },
         },
         {
           type: 'doc',
