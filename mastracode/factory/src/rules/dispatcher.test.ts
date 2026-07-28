@@ -65,7 +65,7 @@ function createSession(accepted?: Promise<unknown>) {
     sendMessage: vi.fn(async () => {}),
     sendSignal: vi.fn((input: { id: string }, _options: { requestContext: { get(key: string): unknown } }) => {
       deliveredSignals.add(input.id);
-      return { accepted: Promise.resolve({ accepted: true }) };
+      return { accepted: Promise.resolve({ accepted: true, action: 'deliver' as string | undefined }) };
     }),
     sendNotificationSignal,
   };
@@ -551,6 +551,54 @@ describe('FactoryDecisionDispatcher', () => {
     });
     session.sendSignal.mockImplementationOnce(() => ({
       accepted: Promise.resolve({ accepted: true as const, action: 'blocked' }),
+    }));
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(record?.status).toBe('retry');
+    expect(record?.lastError).toContain('did not reach the agent');
+  });
+
+  it('retries the skill kickoff when acceptance carries no delivery action', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-no-action',
+    });
+    const { controller, session } = createSession();
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-no-action',
+      kickoffMessage: null,
+    });
+    // A session that resolves acceptance without an action never verified
+    // delivery — with `requireDelivery` set that must count as a failure.
+    session.sendSignal.mockImplementationOnce(() => ({
+      accepted: Promise.resolve({ accepted: true as const, action: undefined }),
     }));
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,

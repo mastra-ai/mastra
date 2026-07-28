@@ -115,6 +115,7 @@ export function WorkspacesSection() {
     <section className="flex flex-col gap-4" aria-label="Factory sessions">
       {workRows.all.length > 0 && (
         <WorkspaceGroup
+          key="work"
           title="Work Sessions"
           rows={workRows.visible}
           allRows={workRows.all}
@@ -125,6 +126,7 @@ export function WorkspacesSection() {
       )}
       {reviewRows.all.length > 0 && (
         <WorkspaceGroup
+          key="review"
           title="Review Sessions"
           rows={reviewRows.visible}
           allRows={reviewRows.all}

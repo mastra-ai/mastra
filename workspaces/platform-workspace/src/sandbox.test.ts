@@ -235,9 +235,7 @@ describe('PlatformSandbox', () => {
       .fn()
       // The platform ignores the advisory id in the POST body and assigns its own.
       .mockResolvedValueOnce(json({ id: 'sbx_platform_uuid', createdAt: '2026-06-26T00:00:00.000Z' }))
-      .mockResolvedValueOnce(
-        json({ id: 'sbx_platform_uuid', createdAt: '2026-06-26T00:00:00.000Z', status: 'ready' }),
-      );
+      .mockResolvedValueOnce(json({ id: 'sbx_platform_uuid', createdAt: '2026-06-26T00:00:00.000Z', status: 'ready' }));
 
     const sandbox = new PlatformSandbox({
       id: 'local-construction-id',

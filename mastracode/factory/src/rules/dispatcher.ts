@@ -294,8 +294,11 @@ export class FactoryDecisionDispatcher {
           { requestContext, requireDelivery: true },
         );
         const settled = await result.accepted;
-        if (settled.action && settled.action !== 'wake' && settled.action !== 'deliver') {
-          throw new Error(`Factory skill invocation signal did not reach the agent (${settled.action}).`);
+        if (settled.action !== 'wake' && settled.action !== 'deliver') {
+          // An undefined action means the session did not verify delivery at
+          // all — with `requireDelivery` set that is a contract violation, not
+          // a success.
+          throw new Error(`Factory skill invocation signal did not reach the agent (${String(settled.action)}).`);
         }
         return;
       }

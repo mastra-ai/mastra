@@ -140,12 +140,17 @@ async function sh(
   script: string,
   options: ShOptions = {},
 ): Promise<SandboxCommandResult> {
+  // One budget for the command as a whole: each attempt only gets the time
+  // remaining, so transport retries can never multiply the hang guard.
+  const deadlineMs = Date.now() + (options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS);
   for (let attempt = 0; ; attempt++) {
     try {
-      return await shOnce(sandbox, script, options);
+      return await shOnce(sandbox, script, { ...options, timeoutMs: Math.max(deadlineMs - Date.now(), 1) });
     } catch (error) {
       if (attempt >= SH_RETRIES || !isTransientTransportError(error)) throw error;
-      await new Promise(resolve => setTimeout(resolve, SH_RETRY_DELAY_MS * (attempt + 1)));
+      const delayMs = SH_RETRY_DELAY_MS * (attempt + 1);
+      if (deadlineMs - Date.now() <= delayMs) throw error;
+      await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
 }
