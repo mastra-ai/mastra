@@ -33,27 +33,27 @@ npm install @mastra/deployer-netlify@latest
 Import [`NetlifyDeployer`](/reference/deployer/netlify) and set it as the deployer in your Mastra configuration:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core'
 // highlight-next-line
-import { NetlifyDeployer } from '@mastra/deployer-netlify';
+import { NetlifyDeployer } from '@mastra/deployer-netlify'
 
 export const mastra = new Mastra({
   // highlight-next-line
   deployer: new NetlifyDeployer(),
-});
+})
 ```
 
 To deploy as edge functions instead, pass `{ target: 'edge' }`:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { NetlifyDeployer } from '@mastra/deployer-netlify';
+import { Mastra } from '@mastra/core'
+import { NetlifyDeployer } from '@mastra/deployer-netlify'
 
 export const mastra = new Mastra({
   deployer: new NetlifyDeployer({
     target: 'edge',
   }),
-});
+})
 ```
 
 Edge functions run on Deno at the edge closest to your users. They have no hard execution timeout (only a CPU time limit), making them a better fit for longer-running AI workflows. See the [constructor options](/reference/deployer/netlify#constructor-options) for details.
@@ -78,13 +78,12 @@ After setting up your project, push it to your remote Git provider of choice (e.
     Remember to set your environment variables needed to run your application (e.g. your [model provider](/models/providers) API key).
 
     :::
-
   </StepItem>
 
-<StepItem>
-  Once you're ready, click the **Deploy** button and wait for the first deployment to complete. It'll tell you that one
-  function has been deployed.
-</StepItem>
+  <StepItem>
+    Once you're ready, click the **Deploy** button and wait for the first deployment to complete. It'll tell you that one
+    function has been deployed.
+  </StepItem>
 
   <StepItem>
     Verify your deployment at `https://<random-slug>.netlify.app/api/agents`, which should return a JSON list of your agents.
@@ -96,7 +95,6 @@ After setting up your project, push it to your remote Git provider of choice (e.
     Netlify functions are typically deployed at `https://<random-slug>.netlify.app/.netlify/functions/api`. The `NetlifyDeployer` redirects any request from `/*` to `/.netlify/functions/api/:splat`, so you don't need to include the `.netlify/functions` prefix in your URLs.
 
     :::
-
   </StepItem>
 
   <StepItem>
@@ -105,6 +103,5 @@ After setting up your project, push it to your remote Git provider of choice (e.
     :::warning
     Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
     :::
-
   </StepItem>
 </Steps>
