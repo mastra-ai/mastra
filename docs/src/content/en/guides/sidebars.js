@@ -203,8 +203,8 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'deployment/workflow-devkit',
-          label: 'Workflow DevKit',
+          id: 'deployment/workflow-sdk',
+          label: 'Workflow SDK',
         },
       ],
     },
