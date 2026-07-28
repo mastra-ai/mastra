@@ -1,20 +1,25 @@
 import { Agent } from '@mastra/core/agent';
 import type { ModelRouterModelId } from '@mastra/core/llm';
 import { Memory } from '@mastra/memory';
-import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models';
 import { previewScorers } from '../scorers/preview-scorers';
 import { storage } from '../store';
 import { previewStatusTool } from '../tools/preview-status';
 
+// literal IDs from docs/src/plugins/remark-model-tokens/models.ts — importing docs drags its uninstalled tsconfig into the deployer analysis
+const PREVIEW_MODEL_TOKENS: Record<string, string> = {
+  __GATEWAY_OPENAI_MODEL_BASE__: 'openai/gpt-5',
+  __GATEWAY_ANTHROPIC_MODEL_SONNET__: 'anthropic/claude-sonnet-4-6',
+};
+
 function resolvePreviewModel() {
   if (process.env.MASTRA_PREVIEW_MODEL) {
-    return MODEL_TOKENS[process.env.MASTRA_PREVIEW_MODEL] ?? process.env.MASTRA_PREVIEW_MODEL;
+    return PREVIEW_MODEL_TOKENS[process.env.MASTRA_PREVIEW_MODEL] ?? process.env.MASTRA_PREVIEW_MODEL;
   }
 
-  if (process.env.OPENAI_API_KEY) return MODEL_TOKENS.__GATEWAY_OPENAI_MODEL_BASE__;
-  if (process.env.ANTHROPIC_API_KEY) return MODEL_TOKENS.__GATEWAY_ANTHROPIC_MODEL_SONNET__;
+  if (process.env.OPENAI_API_KEY) return PREVIEW_MODEL_TOKENS.__GATEWAY_OPENAI_MODEL_BASE__;
+  if (process.env.ANTHROPIC_API_KEY) return PREVIEW_MODEL_TOKENS.__GATEWAY_ANTHROPIC_MODEL_SONNET__;
 
-  return MODEL_TOKENS.__GATEWAY_OPENAI_MODEL_BASE__;
+  return PREVIEW_MODEL_TOKENS.__GATEWAY_OPENAI_MODEL_BASE__;
 }
 
 const model = resolvePreviewModel() as ModelRouterModelId;
@@ -50,22 +55,16 @@ Use the preview status tool when a reviewer asks about preview health, routing, 
 });
 
 /**
- * Code-defined agent whose instructions and tools may be overridden from the
- * Studio editor. Registering `MastraEditor` (see `../index.ts`) flips the editor
+ * Code-defined agent whose instructions and tools are owned by the Studio
+ * editor (`editor: { instructions: true, tools: true }` forbids providing them
+ * in code). Registering `MastraEditor` (see `../index.ts`) flips the editor
  * capability on for the preview, so reviewers can open this agent, see the
  * "Editor" capability in the sidebar footer, and exercise the versioning flow.
  */
 export const editorShowcaseAgent = new Agent({
   id: 'editor-showcase-agent',
   name: 'Editor Showcase Agent',
-  description: 'Code-defined agent that Studio may override (instructions + tools) to demo the editor.',
-  instructions: `
-You are a small demo agent for the Mastra Studio editor.
-Reviewers can edit these instructions and your tools from the editor to try the save/publish versioning flow.
-`,
+  description: 'Code-defined agent whose instructions and tools Studio owns, to demo the editor.',
   model,
-  tools: {
-    previewStatusTool,
-  },
   editor: { instructions: true, tools: true },
 });
