@@ -3019,8 +3019,21 @@ export class Session<TState = unknown> {
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
       requestContext?: RequestContext;
+      /**
+       * When true, the returned `accepted` promise awaits the agent's real
+       * acceptance decision (`wake`/`deliver`/…) and propagates routing or
+       * stream-setup failures as rejections instead of resolving on the next
+       * tick. Callers that need delivery guarantees (e.g. the Factory rule
+       * dispatcher) use this so a failed wake is retried rather than silently
+       * treated as sent.
+       */
+      awaitAcceptance?: boolean;
     },
-  ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId?: string }> } {
+  ): {
+    id: string;
+    type: AgentSignalInput['type'];
+    accepted: Promise<{ accepted: true; runId?: string; action?: SendAgentSignalAccepted['action'] }>;
+  } {
     const settleRunId = async <T>(result: {
       accepted: Promise<SendAgentSignalAccepted<T>>;
     }): Promise<string | undefined> => {
@@ -3034,6 +3047,7 @@ export class Session<TState = unknown> {
     const tracingContext = options?.tracingContext ?? contentOptions?.tracingContext;
     const tracingOptions = options?.tracingOptions ?? contentOptions?.tracingOptions;
     const requestContextInput = options?.requestContext ?? contentOptions?.requestContext;
+    const awaitAcceptance = options?.awaitAcceptance ?? false;
     const ifActive = 'content' in input ? input.ifActive : undefined;
     const ifIdle = 'content' in input ? input.ifIdle : undefined;
     const submittedRunId = this.run.getRunId();
@@ -3075,6 +3089,14 @@ export class Session<TState = unknown> {
           ifActive,
           ifIdle,
         });
+        if (awaitAcceptance) {
+          const settled = await result.accepted;
+          return {
+            accepted: true as const,
+            runId: 'runId' in settled ? settled.runId : undefined,
+            action: settled.action,
+          };
+        }
         return { accepted: true as const, runId: await settleRunId(result) };
       }
 
@@ -3102,6 +3124,16 @@ export class Session<TState = unknown> {
         ifActive,
         ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
       });
+      if (awaitAcceptance) {
+        // Delivery-guaranteed path: surface the real acceptance decision and
+        // propagate routing/stream-setup failures to the caller.
+        const settled = await result.accepted;
+        return {
+          accepted: true as const,
+          runId: 'runId' in settled ? settled.runId : undefined,
+          action: settled.action,
+        };
+      }
       try {
         await Promise.race([
           result.accepted.then(() => undefined),
