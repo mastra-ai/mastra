@@ -431,9 +431,9 @@ describe('PlatformGithubEventWorker', () => {
     let clock = 1_000_000;
     const reconcileFactoryState = vi
       .fn<GithubPullRequestReconciler>()
-      .mockResolvedValueOnce({ checked: 1, merged: 1, failed: 0, errors: [] })
+      .mockResolvedValueOnce({ checked: 1, merged: 1, closed: 0, failed: 0, errors: [] })
       .mockRejectedValueOnce(new Error('sweep exploded'))
-      .mockResolvedValue({ checked: 1, merged: 0, failed: 0, errors: [] });
+      .mockResolvedValue({ checked: 1, merged: 0, closed: 0, failed: 0, errors: [] });
     const worker = createWorker({
       fetchImpl,
       storage: settings.storage,
@@ -492,6 +492,7 @@ describe('PlatformGithubEventWorker', () => {
     const reconcileFactoryState = vi.fn<GithubPullRequestReconciler>(async () => ({
       checked: 2,
       merged: 0,
+      closed: 0,
       failed: 1,
       errors: [{ repository: 'acme/repo', pullRequestNumber: 17, error: 'Internal Server Error' }],
     }));

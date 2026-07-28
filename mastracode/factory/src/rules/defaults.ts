@@ -182,6 +182,24 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
   } as const;
 }
 
+function pullRequestClosed(context: FactoryGithubRuleContext) {
+  if (!context.item || !context.pullRequest || context.pullRequest.merged) return;
+  if (context.board !== 'review') return;
+  // A PR closed without merging is abandoned review work: clear the card off
+  // the board instead of leaving it in Reviewing forever.
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:pull-request-closed`,
+    board: 'review',
+    stage: 'canceled',
+    message: {
+      text:
+        `Pull request #${context.pullRequest.number} was closed without merging; ` +
+        'this Review card was moved to Canceled.',
+    },
+  } as const;
+}
+
 function linearIssueObserved(context: FactoryLinearRuleContext) {
   if (context.item) return;
   return {
@@ -223,6 +241,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
     issueOpened: { onEvent: issueOpened },
     pullRequestOpened: { onEvent: pullRequestOpened },
     pullRequestMerged: { onEvent: pullRequestMerged },
+    pullRequestClosed: { onEvent: pullRequestClosed },
   },
   linear: { issueObserved: { onEvent: linearIssueObserved } },
 };

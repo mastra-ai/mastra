@@ -15,6 +15,7 @@ export const FACTORY_GITHUB_EVENTS = [
   'pullRequestUpdated',
   'pullRequestReviewRequested',
   'pullRequestMerged',
+  'pullRequestClosed',
 ] as const;
 export type FactoryGithubEventName = (typeof FACTORY_GITHUB_EVENTS)[number];
 

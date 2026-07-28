@@ -56,8 +56,8 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
   if (parsed.event === 'issues' && action === 'opened') return 'issueOpened';
   if (parsed.event === 'pull_request' && action === 'opened') return 'pullRequestOpened';
   if (parsed.event === 'pull_request' && action === 'synchronize') return 'pullRequestUpdated';
-  if (parsed.event === 'pull_request' && action === 'closed' && boolean(object(parsed.payload.pull_request)?.merged)) {
-    return 'pullRequestMerged';
+  if (parsed.event === 'pull_request' && action === 'closed') {
+    return boolean(object(parsed.payload.pull_request)?.merged) ? 'pullRequestMerged' : 'pullRequestClosed';
   }
   if (parsed.event === 'pull_request' && action === 'review_requested') return 'pullRequestReviewRequested';
   return undefined;
@@ -371,6 +371,8 @@ export interface ReconcileSweepSummary {
   checked: number;
   /** Missed merges replayed through the rules ingress. */
   merged: number;
+  /** Missed closes-without-merge replayed through the rules ingress. */
+  closed: number;
   /** PRs (or whole repositories) skipped because of an error. */
   failed: number;
   /** Error samples with context, capped at {@link RECONCILE_ERROR_SAMPLE_LIMIT}. */
@@ -404,16 +406,16 @@ function reconcilablePullRequestNumber(item: WorkItemRow, repository: ReconcileR
   return canonical ? Number(canonical[1]) : undefined;
 }
 
-export function reconciledMergeEvent(
+export function reconciledClosedEvent(
   repository: ReconcileRepository,
   pullRequestNumber: number,
   state: ReconcilePullRequestState,
 ): ParsedGithubWebhook {
   return {
     event: 'pull_request',
-    // Stable per (repository, PR, merged): the ingress dedupe makes repeat
+    // Stable per (repository, PR, outcome): the ingress dedupe makes repeat
     // reconcile cycles replay instead of re-committing decisions.
-    deliveryId: `reconcile:${repository.id}:pull-request:${pullRequestNumber}:merged`,
+    deliveryId: `reconcile:${repository.id}:pull-request:${pullRequestNumber}:${state.merged ? 'merged' : 'closed'}`,
     payload: {
       action: 'closed',
       installation: { id: repository.installationId },
@@ -425,7 +427,7 @@ export function reconciledMergeEvent(
         html_url: state.url,
         ...(state.createdAt ? { created_at: state.createdAt } : {}),
         state: 'closed',
-        merged: true,
+        merged: state.merged,
         head: { ref: state.headBranch },
         base: { ref: state.baseBranch },
       },
@@ -445,7 +447,7 @@ export function createGithubPullRequestReconciler(
 ): GithubPullRequestReconciler {
   const rules = new GithubRules(options);
   return async repositories => {
-    const summary: ReconcileSweepSummary = { checked: 0, merged: 0, failed: 0, errors: [] };
+    const summary: ReconcileSweepSummary = { checked: 0, merged: 0, closed: 0, failed: 0, errors: [] };
     const recordFailure = (repository: ReconcileRepository, error: unknown, pullRequestNumber?: number) => {
       summary.failed += 1;
       if (summary.errors.length < RECONCILE_ERROR_SAMPLE_LIMIT) {
@@ -491,9 +493,10 @@ export function createGithubPullRequestReconciler(
             number: pullRequestNumber,
           });
           summary.checked += 1;
-          if (!state?.merged) continue;
-          await rules.ingest(reconciledMergeEvent(repository, pullRequestNumber, state));
-          summary.merged += 1;
+          if (!state || state.state !== 'closed') continue;
+          await rules.ingest(reconciledClosedEvent(repository, pullRequestNumber, state));
+          if (state.merged) summary.merged += 1;
+          else summary.closed += 1;
         } catch (error) {
           recordFailure(repository, error, pullRequestNumber);
         }
