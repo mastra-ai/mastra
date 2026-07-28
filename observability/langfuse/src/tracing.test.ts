@@ -402,6 +402,50 @@ describe('LangfuseExporter', () => {
       expect(attrs['mastra.completion_start_time']).toBeUndefined();
     });
 
+    it('maps provider-reported generation cost to Langfuse cost details', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          attributes: {
+            model: 'anthropic/claude-sonnet-4',
+            provider: 'openrouter',
+            usage: { inputTokens: 10, outputTokens: 5 },
+            costContext: {
+              provider: 'openrouter',
+              estimatedCost: 0.0123,
+              costUnit: 'USD',
+              costMetadata: { source: 'provider_reported', providerCostField: 'usage.cost' },
+            },
+          },
+        }),
+      );
+
+      expect(processedSpans[0].attributes['langfuse.observation.cost_details']).toBe(JSON.stringify({ total: 0.0123 }));
+    });
+
+    it('does not override Langfuse cost inference with an estimated cost', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          attributes: {
+            model: 'anthropic/claude-sonnet-4',
+            provider: 'openrouter',
+            usage: { inputTokens: 10, outputTokens: 5 },
+            costContext: {
+              provider: 'openrouter',
+              estimatedCost: 0.0099,
+              costUnit: 'USD',
+              costMetadata: { source: 'pricing_registry' },
+            },
+          },
+        }),
+      );
+
+      expect(processedSpans[0].attributes['langfuse.observation.cost_details']).toBeUndefined();
+    });
+
     it('maps userId to user.id', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       await exportSpan(exporter, makeSpan({ metadata: { userId: 'user-123' } }));

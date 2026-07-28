@@ -80,6 +80,94 @@ describe('ModelSpanTracker', () => {
     });
   });
 
+  describe('provider-reported costs', () => {
+    it('records OpenRouter usage.cost as the exact generation cost', () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'anthropic/claude-sonnet-4', provider: 'openrouter' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      tracker.endGeneration({
+        attributes: {},
+        providerMetadata: {
+          openrouter: {
+            usage: {
+              cost: 0.0123,
+              costDetails: { upstreamInferenceCost: 0.01 },
+            },
+          },
+        },
+      });
+
+      const [span] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      expect(span?.attributes?.costContext).toEqual({
+        provider: 'openrouter',
+        model: 'anthropic/claude-sonnet-4',
+        estimatedCost: 0.0123,
+        costUnit: 'USD',
+        costMetadata: {
+          source: 'provider_reported',
+          providerCostField: 'usage.cost',
+        },
+      });
+    });
+
+    it('falls back to OpenRouter upstreamInferenceCost when usage.cost is absent', () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'openai/gpt-4o', provider: 'openrouter' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      tracker.endGeneration({
+        attributes: {},
+        providerMetadata: {
+          openrouter: {
+            usage: {
+              costDetails: { upstreamInferenceCost: 0.0042 },
+            },
+          },
+        },
+      });
+
+      const [span] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      expect(span?.attributes?.costContext).toMatchObject({
+        provider: 'openrouter',
+        estimatedCost: 0.0042,
+        costMetadata: {
+          source: 'provider_reported',
+          providerCostField: 'usage.costDetails.upstreamInferenceCost',
+        },
+      });
+    });
+
+    it('does not create a cost context from invalid or estimated metadata', () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'openai/gpt-4o', provider: 'openrouter' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      tracker.endGeneration({
+        attributes: {},
+        providerMetadata: {
+          openrouter: {
+            usage: {
+              cost: '0.0042',
+            },
+          },
+        },
+      });
+
+      const [span] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      expect(span?.attributes?.costContext).toBeUndefined();
+    });
+  });
+
   describe('tool-output pass-through (no spans created)', () => {
     it('should NOT create spans for tool-output chunks (streaming progress)', async () => {
       const modelSpan = tracing.startSpan({
