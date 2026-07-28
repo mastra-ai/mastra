@@ -183,7 +183,9 @@ await dataset.updateItem({
 
 Omitting `scorerIds` from an update preserves its current value. Each item version stores its scorer ID list, including an empty list. Scorer definitions aren't copied into the item version and continue to use their existing registry or Editor behavior.
 
-Mastra resolves all item-level IDs before running the target. It checks registered scorers first, then asks the Editor to hydrate a stored scorer. A stale item-level ID produces the `EXPERIMENT_ITEM_SCORER_NOT_FOUND` code for that item. Mastra skips its target execution and retries, while the rest of the experiment continues. Missing run-level and dataset-level IDs keep their previous skip-and-warn behavior.
+Mastra resolves each item's scorer IDs before running its target. It checks registered scorers first, then asks the Editor to hydrate a stored scorer. A stale item-level ID produces the `EXPERIMENT_ITEM_SCORER_NOT_FOUND` code for that item. Mastra skips target execution without retrying that item, while the rest of the experiment continues.
+
+A missing ID in the selected run-level or dataset-level source fails experiment setup. Mastra doesn't resolve IDs from lower-priority sources that the precedence rules ignore.
 
 Workflow step scorers are available only through a run-level categorized `scorers` configuration. Item-level IDs apply to the flat agent, workflow, and trajectory scorer dispatch.
 
