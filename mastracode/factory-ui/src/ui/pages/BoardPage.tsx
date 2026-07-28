@@ -31,6 +31,7 @@ import { SkeletonRows } from '../ui/SkeletonRows';
 import { GithubIcon } from '../ui/icons';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
 import { FactoryItemActions, actionIcon } from '../domains/factory/components/FactoryItemActions';
+import { CreateWorkItemDrawer } from '../domains/factory/components/CreateWorkItemDrawer';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import {
@@ -109,15 +110,6 @@ function CardTitleTooltip({ title, children }: { title: string; children: ReactE
 
 function hasLabel(labels: readonly string[], label: string): boolean {
   return labels.some(item => item.toLowerCase() === label);
-}
-
-function githubNewIssueUrl(repoFullName: string): string | undefined {
-  const [owner, repo, extra] = repoFullName.split('/');
-  if (extra || !owner || !repo || repo === '.' || repo === '..') return undefined;
-  if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(owner) || !/^[A-Za-z0-9_.-]+$/.test(repo)) {
-    return undefined;
-  }
-  return `https://github.com/${owner}/${repo}/issues/new`;
 }
 
 function metadataLabels(metadata: Record<string, unknown>): string[] {
@@ -599,7 +591,7 @@ function BoardContent({
   const availableIntakeSources: IntakeSource[] = review
     ? ['github-prs']
     : [...(githubIntakeActive ? (['github'] as const) : []), ...(linearReady ? (['linear'] as const) : [])];
-  const newIssueUrl = !review && config && githubIntakeActive ? githubNewIssueUrl(repository.slug) : undefined;
+  const [createStage, setCreateStage] = useState<BoardStageId>();
   const [intakeSource, setIntakeSource] = useState<IntakeSource>(review ? 'github-prs' : 'github');
   const showIntakeSourceSwitch = availableIntakeSources.length > 1;
   const activeIntakeSource: IntakeSource | null = availableIntakeSources.includes(intakeSource)
@@ -873,17 +865,17 @@ function BoardContent({
               }}
               onDrop={handleDrop}
               headerAction={
-                stage.id === 'intake' && newIssueUrl ? (
-                  <a
-                    href={newIssueUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="Create GitHub issue"
-                    title="Create GitHub issue"
-                    className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
+                !review && stage.id !== 'done' && stage.id !== 'canceled' ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Create work item in ${stage.label}`}
+                    title={`Create work item in ${stage.label}`}
+                    onClick={() => setCreateStage(stage.id)}
                   >
                     <Plus size={13} aria-hidden />
-                  </a>
+                  </Button>
                 ) : undefined
               }
               headerExtras={
@@ -991,6 +983,14 @@ function BoardContent({
           ))}
         </div>
       </ScrollArea>
+      {createStage !== undefined ? (
+        <CreateWorkItemDrawer
+          factoryProjectId={factoryProjectId}
+          stage={createStage}
+          stageLabel={stageLabel(createStage)}
+          onClose={() => setCreateStage(undefined)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1135,6 +1135,9 @@ function dropLinePosition(cardList: HTMLDivElement, pointerY: number): number {
   return lastCard ? lastCard.offsetTop + lastCard.offsetHeight + BOARD_CARD_GAP_PX / 2 : 0;
 }
 
+const COLUMN_ACTION_REVEAL_CLASS =
+  'pointer-events-none opacity-0 transition-opacity group-hover/column:pointer-events-auto group-hover/column:opacity-100 group-focus-within/column:pointer-events-auto group-focus-within/column:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100 motion-reduce:transition-none';
+
 function BoardColumn({
   stage,
   label,
@@ -1171,7 +1174,7 @@ function BoardColumn({
       aria-label={collapsed ? `${label}, empty` : label}
       data-testid={`board-column-${stage}`}
       className={cn(
-        'flex min-h-0 shrink-0 flex-col transition-[width,background-color] motion-reduce:transition-none',
+        'group/column flex min-h-0 shrink-0 flex-col transition-[width,background-color] motion-reduce:transition-none',
         collapsed ? 'w-14 rounded-lg' : 'w-80 gap-4',
         collapsed && dragOver && 'bg-surface2 ring-1 ring-border1',
       )}
@@ -1196,9 +1199,23 @@ function BoardColumn({
     >
       {collapsed ? (
         <div className="flex min-h-0 flex-1 flex-col items-center gap-3 py-1">
-          <span aria-hidden className="text-ui-xs text-icon3 flex h-8 items-center font-medium tabular-nums">
-            {taskCount}
-          </span>
+          <div className="relative flex h-8 w-full items-center justify-center">
+            <span
+              aria-hidden
+              className={cn(
+                'text-ui-xs text-icon3 flex h-8 items-center font-medium tabular-nums',
+                headerAction &&
+                  'transition-opacity group-hover/column:opacity-0 group-focus-within/column:opacity-0 pointer-coarse:opacity-0 motion-reduce:transition-none',
+              )}
+            >
+              {taskCount}
+            </span>
+            {headerAction ? (
+              <div className={cn('absolute inset-0 flex items-center justify-center', COLUMN_ACTION_REVEAL_CLASS)}>
+                {headerAction}
+              </div>
+            ) : null}
+          </div>
           <Txt as="h2" variant="ui-smd" className="text-icon3 m-0 font-semibold [writing-mode:vertical-rl]">
             {label}
           </Txt>
@@ -1217,7 +1234,9 @@ function BoardColumn({
                 <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
               )}
             </div>
-            {headerAction && <div className="flex h-8 shrink-0 items-center">{headerAction}</div>}
+            {headerAction ? (
+              <div className={cn('flex h-8 shrink-0 items-center', COLUMN_ACTION_REVEAL_CLASS)}>{headerAction}</div>
+            ) : null}
           </div>
           {headerExtras}
           {/* Cards scroll inside the swimlane; the page stays fixed. */}

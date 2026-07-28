@@ -297,4 +297,51 @@ describe('Board card pending states', () => {
     transitionGate.resolve();
     await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
   });
+  it('creates a manual work item in the selected active column', async () => {
+    stubBoardEndpoints();
+    let createRequest: unknown;
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
+        createRequest = await request.json();
+        return HttpResponse.json({
+          workItem: {
+            id: 'manual-1',
+            orgId: 'org-1',
+            createdBy: 'user-1',
+            factoryProjectId: FACTORY_ID,
+            externalSource: null,
+            parentWorkItemId: null,
+            title: 'Plan onboarding',
+            stages: ['planning'],
+            stageHistory: [],
+            sessions: {},
+            metadata: {},
+            revision: 1,
+            createdAt: '2026-07-28T00:00:00.000Z',
+            updatedAt: '2026-07-28T00:00:00.000Z',
+          },
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    const planningColumn = await screen.findByTestId('board-column-planning');
+    await waitFor(() => expect(planningColumn).toHaveAccessibleName('Planning, empty'));
+
+    for (const label of ['Intake', 'Triage', 'Planning', 'Building', 'Review']) {
+      expect(screen.getByRole('button', { name: `Create work item in ${label}` })).toBeInTheDocument();
+    }
+    expect(screen.queryByRole('button', { name: 'Create work item in Done' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create work item in Canceled' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Create work item in Planning' }));
+    expect(await screen.findByText('Add an item directly to Planning.')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Title'), 'Plan onboarding');
+    await user.click(screen.getByRole('button', { name: 'Create work item' }));
+
+    await waitFor(() => expect(createRequest).toEqual({ title: 'Plan onboarding', stages: ['planning'] }));
+    expect(await within(planningColumn).findByText('Plan onboarding')).toBeInTheDocument();
+  });
 });
