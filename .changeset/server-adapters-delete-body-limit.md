@@ -5,4 +5,4 @@
 "@mastra/nestjs": patch
 ---
 
-fix(server-adapters): enforce body size limits and parse body on DELETE requests (#20013)
+DELETE requests now honor configured body size limits and parse request bodies consistently across the Express, Fastify, Hono, and NestJS adapters.
