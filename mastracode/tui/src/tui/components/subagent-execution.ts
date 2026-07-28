@@ -85,6 +85,7 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
   private durationMs = 0;
   private finalResult?: string;
   private backgroundTaskId?: string;
+  private cancelled = false;
   private expanded = false;
   private collapseOnComplete: boolean;
   private expandOnComplete: boolean;
@@ -169,6 +170,7 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
   }
 
   finish(isError: boolean, durationMs: number, result?: string): void {
+    if (this.cancelled) return;
     this.done = true;
     this.isError = isError;
     this.durationMs = durationMs;
@@ -178,6 +180,16 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     } else if (this.collapseOnComplete) {
       this.expanded = false;
     }
+    this.rebuild();
+  }
+
+  cancel(result = 'Background execution cancelled.'): void {
+    this.cancelled = true;
+    this.done = true;
+    this.isError = false;
+    this.durationMs = Date.now() - this.startTime;
+    this.finalResult = result;
+    this.expanded = false;
     this.rebuild();
   }
 
@@ -221,9 +233,11 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     const modelLabel = this.modelId ? theme.fg('muted', ` ${this.modelId}`) : '';
     const statusIcon = this.backgroundTaskId
       ? this.done
-        ? this.isError
-          ? theme.fg('error', ` ✗ background · ${this.backgroundTaskId}`)
-          : theme.fg('success', ` ✓ background · ${this.backgroundTaskId}`)
+        ? this.cancelled
+          ? theme.fg('muted', ` ■ background · ${this.backgroundTaskId}`)
+          : this.isError
+            ? theme.fg('error', ` ✗ background · ${this.backgroundTaskId}`)
+            : theme.fg('success', ` ✓ background · ${this.backgroundTaskId}`)
         : theme.fg('warning', ` ◌ background · ${this.backgroundTaskId}`)
       : this.done
         ? this.isError

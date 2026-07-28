@@ -34,9 +34,10 @@ import type { AgentSignalAttributes } from '@mastra/core/agent';
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import {
-  clearCompletedBackgroundActivities,
+  clearCompletedBackgroundActivitiesForTarget,
   compareBackgroundActivities,
   completeBackgroundActivity,
+  getBackgroundActivitiesForTarget,
 } from './background-activity.js';
 import type { BackgroundActivity } from './background-activity.js';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
@@ -54,7 +55,6 @@ import { GradientAnimator } from './components/obi-loader.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent } from './event-dispatch.js';
-import { navigateToBackgroundCompletion } from './global-background-notices.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import { askModalQuestion } from './modal-question.js';
@@ -174,7 +174,6 @@ export class MastraTUI {
   private cleanupPluginUpdateListener?: () => void;
   private cleanupBackgroundCompletionListener?: () => void;
   private backgroundNoticeQueue = Promise.resolve();
-  private readonly backgroundActivitiesAwaitingReplay = new Set<string>();
   private lastStreamError: string | null = null;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
@@ -270,74 +269,58 @@ export class MastraTUI {
       stop: () => this.stop(),
       doubleCtrlCMs: MastraTUI.DOUBLE_CTRL_C_MS,
       queueFollowUpMessage: text => this.queueFollowUpMessage(text),
-      jumpToBackgroundCompletion: () => this.showBackgroundActivityCenter(),
-      dismissBackgroundCompletion: () => this.clearFinishedBackgroundActivity(),
+      openBackgroundActivityCenter: () => this.showBackgroundActivityCenter(),
+      clearFinishedBackgroundActivities: () => this.clearFinishedBackgroundActivity(),
     });
   }
 
+  private getCurrentThreadBackgroundActivities(): BackgroundActivity[] {
+    return getBackgroundActivitiesForTarget(
+      this.state.backgroundActivities,
+      this.state.session.identity.getResourceId(),
+      this.state.pendingNewThread ? null : this.state.session.thread.getId(),
+    );
+  }
+
   private refreshBackgroundActivity(): void {
-    this.state.globalBackgroundNotice.setActivities([...this.state.backgroundActivities.values()]);
+    this.state.globalBackgroundNotice.setActivities(this.getCurrentThreadBackgroundActivities());
     flushRender(this.state);
   }
 
   private clearFinishedBackgroundActivity(): void {
-    clearCompletedBackgroundActivities(this.state.backgroundActivities);
+    clearCompletedBackgroundActivitiesForTarget(
+      this.state.backgroundActivities,
+      this.state.session.identity.getResourceId(),
+      this.state.pendingNewThread ? null : this.state.session.thread.getId(),
+    );
     this.refreshBackgroundActivity();
   }
 
   private showBackgroundActivityCenter(): void {
-    const activities = [...this.state.backgroundActivities.values()].sort(compareBackgroundActivities);
+    const activities = this.getCurrentThreadBackgroundActivities().sort(compareBackgroundActivities);
     if (activities.length === 0) return;
 
     const selector = new BackgroundActivitySelectorComponent({
       tui: this.state.ui,
       activities,
-      onSelect: activity => {
-        this.state.ui.hideOverlay();
-        void this.navigateToBackgroundActivity(activity);
-      },
       onCancel: () => this.state.ui.hideOverlay(),
+      onAbort: activity => void this.abortBackgroundActivity(activity),
     });
     showModalOverlay(this.state.ui, selector, { maxHeight: '80%' });
     selector.focused = true;
   }
 
-  private async navigateToBackgroundActivity(activity: BackgroundActivity): Promise<void> {
-    try {
-      await navigateToBackgroundCompletion(
-        { resourceId: activity.resourceId, threadId: activity.threadId },
-        this.state.session.identity.getResourceId(),
-        resourceId => this.state.controller.setResourceId(this.state.session, { resourceId }),
-        async threadId => {
-          await this.state.session.thread.switch({ threadId });
-          await this.state.waitForAgentControllerEvents?.();
-        },
-      );
-      this.state.pendingNewThread = false;
-      if (activity.status === 'accepted') {
-        this.backgroundActivitiesAwaitingReplay.add(activity.taskId);
-      } else {
-        this.state.backgroundActivities.delete(activity.taskId);
-      }
-      this.refreshBackgroundActivity();
-    } catch (error) {
-      showError(
-        this.state,
-        `Failed to open background task: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
+  private async abortBackgroundActivity(activity: BackgroundActivity): Promise<void> {
+    const manager = this.state.controller.getMastra()?.backgroundTaskManager;
+    if (!manager) return;
+    await manager.cancel(activity.taskId);
+    this.state.ui.hideOverlay();
   }
 
   private handleBackgroundCompletion(event: BackgroundCompletionEvent): void {
-    this.backgroundNoticeQueue = this.backgroundNoticeQueue.then(async () => {
+    this.backgroundNoticeQueue = this.backgroundNoticeQueue.then(() => {
       completeBackgroundActivity(this.state.backgroundActivities, event);
       this.refreshBackgroundActivity();
-
-      if (!this.backgroundActivitiesAwaitingReplay.delete(event.taskId) || this.state.pendingNewThread) return;
-      const isCurrentOrigin =
-        event.resourceId === this.state.session.identity.getResourceId() &&
-        event.threadId === this.state.session.thread.getId();
-      if (isCurrentOrigin) await this.renderExistingMessagesAndSeedIdleCounter();
     });
   }
 

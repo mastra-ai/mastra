@@ -17,6 +17,7 @@ function createMockState() {
     allSystemReminderComponents: [{}],
     messageComponentsById: new Map([['a', {}]]),
     allShellComponents: [{}],
+    globalBackgroundNotice: { setActivities: vi.fn() },
     taskProgress: { updateTasks: vi.fn() },
     taskToolInsertIndex: 5,
     session: {
@@ -88,6 +89,7 @@ describe('handleNewCommand', () => {
     expect(state.allSystemReminderComponents).toEqual([]);
     expect(state.messageComponentsById.size).toBe(0);
     expect(state.allShellComponents).toEqual([]);
+    expect(state.globalBackgroundNotice.setActivities).toHaveBeenCalledWith([]);
     expect(state.session.state.set).toHaveBeenCalledWith({
       tasks: [],
       activePlan: null,

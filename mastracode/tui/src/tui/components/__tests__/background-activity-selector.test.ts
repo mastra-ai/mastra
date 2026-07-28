@@ -20,24 +20,43 @@ function activity(overrides: Partial<BackgroundActivity> = {}): BackgroundActivi
 }
 
 describe('BackgroundActivitySelectorComponent', () => {
-  it('renders every task with status and origin identity', () => {
+  it('renders every current-thread task as inspectable activity', () => {
     const component = new BackgroundActivitySelectorComponent({
       tui: { requestRender: vi.fn() } as unknown as TUI,
       activities: [
         activity(),
         activity({ taskId: 'task-2', toolName: 'search_content', status: 'completed' }),
         activity({ taskId: 'task-3', toolName: 'mastra_expert', status: 'failed' }),
+        activity({ taskId: 'task-4', toolName: 'find_files', status: 'cancelled' }),
       ],
-      onSelect: vi.fn(),
       onCancel: vi.fn(),
+      onAbort: vi.fn(),
     });
 
     const output = stripAnsi(component.render(100).join('\n'));
     expect(output).toContain('Background activity');
-    expect(output).toContain('◌ view  thread thread-1');
-    expect(output).toContain('✓ search_content  thread thread-1');
-    expect(output).toContain('✗ mastra_expert  thread thread-1');
-    expect(output).toContain('running · task task-1 · thread thread-123456789');
-    expect(output).toContain('↑↓ navigate · Enter open thread · Esc close');
+    expect(output).toContain('◌ view');
+    expect(output).toContain('✓ search_content');
+    expect(output).toContain('✗ mastra_expert');
+    expect(output).toContain('■ find_files');
+    expect(output).toContain('running · task task-1');
+    expect(output).not.toContain('thread-123456789');
+    expect(output).toContain('↑↓ inspect · D abort running · Esc close');
+    expect(output).not.toContain('open thread');
+  });
+
+  it('aborts only the selected running task', () => {
+    const onAbort = vi.fn();
+    const component = new BackgroundActivitySelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      activities: [activity()],
+      onCancel: vi.fn(),
+      onAbort,
+    });
+    component.focused = true;
+
+    component.handleInput('d');
+
+    expect(onAbort).toHaveBeenCalledWith(expect.objectContaining({ taskId: 'task-1', status: 'accepted' }));
   });
 });

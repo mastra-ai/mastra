@@ -1,6 +1,6 @@
 import type { BackgroundCompletionEvent } from '@mastra/code-sdk/agents/background-completion-events';
 
-export type BackgroundActivityStatus = 'accepted' | 'completed' | 'failed';
+export type BackgroundActivityStatus = 'accepted' | 'completed' | 'failed' | 'cancelled';
 
 export interface BackgroundActivity {
   id: string;
@@ -28,15 +28,18 @@ export function acceptBackgroundActivity(
   toolCallId: string,
   context: BackgroundToolContext,
 ): void {
+  const existing = activities.get(taskId);
+  if (existing?.status === 'completed' || existing?.status === 'failed' || existing?.status === 'cancelled') return;
+
   activities.set(taskId, {
-    id: `background-task:${taskId}`,
+    id: existing?.id ?? `background-task:${taskId}`,
     taskId,
     toolCallId,
     toolName: context.toolName,
     resourceId: context.resourceId,
     threadId: context.threadId,
     status: 'accepted',
-    createdAt: context.createdAt,
+    createdAt: existing?.createdAt ?? context.createdAt,
   });
 }
 
@@ -45,6 +48,7 @@ export function completeBackgroundActivity(
   event: BackgroundCompletionEvent,
 ): void {
   const existing = activities.get(event.taskId);
+  if (existing?.status === 'cancelled' && event.status !== 'cancelled') return;
   activities.set(event.taskId, {
     id: existing?.id ?? `background-task:${event.taskId}`,
     taskId: event.taskId,
@@ -65,8 +69,26 @@ export function compareBackgroundActivities(a: BackgroundActivity, b: Background
   return b.createdAt - a.createdAt;
 }
 
-export function clearCompletedBackgroundActivities(activities: Map<string, BackgroundActivity>): void {
+export function getBackgroundActivitiesForTarget(
+  activities: Map<string, BackgroundActivity>,
+  resourceId: string,
+  threadId: string | null,
+): BackgroundActivity[] {
+  if (!threadId) return [];
+  return [...activities.values()].filter(
+    activity => activity.resourceId === resourceId && activity.threadId === threadId,
+  );
+}
+
+export function clearCompletedBackgroundActivitiesForTarget(
+  activities: Map<string, BackgroundActivity>,
+  resourceId: string,
+  threadId: string | null,
+): void {
+  if (!threadId) return;
   for (const [taskId, activity] of activities) {
-    if (activity.status !== 'accepted') activities.delete(taskId);
+    if (activity.resourceId === resourceId && activity.threadId === threadId && activity.status !== 'accepted') {
+      activities.delete(taskId);
+    }
   }
 }

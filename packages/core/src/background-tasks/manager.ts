@@ -330,7 +330,10 @@ export class BackgroundTaskManager {
     if (task.status === 'pending') {
       await storage.updateTask(taskId, { status: 'cancelled', completedAt: new Date() });
       const cancelledTask = await storage.getTask(taskId);
-      if (cancelledTask) await this.publishLifecycleEvent('task.cancelled', cancelledTask);
+      if (cancelledTask) {
+        await this.publishLifecycleEvent('task.cancelled', cancelledTask);
+        await this.config.onTaskCancelled?.(cancelledTask);
+      }
       this.localPendingTaskIds.delete(taskId);
       this.releaseLocalSlot(taskId);
       this.deregisterTaskContext(taskId);
@@ -352,7 +355,10 @@ export class BackgroundTaskManager {
         }
       }
       const cancelledTask = await storage.getTask(taskId);
-      if (cancelledTask) await this.publishLifecycleEvent('task.cancelled', cancelledTask);
+      if (cancelledTask) {
+        await this.publishLifecycleEvent('task.cancelled', cancelledTask);
+        await this.config.onTaskCancelled?.(cancelledTask);
+      }
       this.deregisterTaskContext(taskId);
       return;
     }
@@ -384,7 +390,10 @@ export class BackgroundTaskManager {
       }
 
       const cancelledTask = await storage.getTask(taskId);
-      if (cancelledTask) await this.publishLifecycleEvent('task.cancelled', cancelledTask);
+      if (cancelledTask) {
+        await this.publishLifecycleEvent('task.cancelled', cancelledTask);
+        await this.config.onTaskCancelled?.(cancelledTask);
+      }
       this.releaseLocalSlot(taskId);
       this.deregisterTaskContext(taskId);
 

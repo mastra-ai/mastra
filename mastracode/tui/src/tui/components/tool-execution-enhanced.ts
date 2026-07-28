@@ -201,6 +201,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   private ui: TUI;
   private result?: ToolResult;
   private backgroundTaskId?: string;
+  private backgroundCancelled = false;
   private options: ToolExecutionOptions;
   private startTime = Date.now();
   private streamingOutput = ''; // Buffer for streaming shell output
@@ -256,6 +257,12 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
   setBackgroundTaskId(taskId: string): void {
     this.backgroundTaskId = taskId;
+    this.rebuild();
+  }
+
+  cancelBackground(): void {
+    this.backgroundCancelled = true;
+    this.isPartial = false;
     this.rebuild();
   }
 
@@ -2595,6 +2602,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
   private getBackgroundStatusIndicator(): string {
     if (!this.backgroundTaskId) return '';
+    if (this.backgroundCancelled) return theme.fg('muted', ` ■ background · ${this.backgroundTaskId}`);
     if (this.isPartial) return theme.fg('warning', ` ◌ background · ${this.backgroundTaskId}`);
     return this.isErrorResult()
       ? theme.fg('error', ` ✗ background · ${this.backgroundTaskId}`)

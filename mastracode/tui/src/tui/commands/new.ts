@@ -10,6 +10,7 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
   state.session.thread.detachFromCurrent();
 
   state.pendingNewThread = true;
+  state.globalBackgroundNotice.setActivities([]);
   state.chatContainer.clear();
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();

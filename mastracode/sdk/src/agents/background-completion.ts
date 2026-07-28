@@ -28,7 +28,7 @@ function summarizeDetail(value: unknown): string | undefined {
 async function persistBackgroundCompletion(
   controller: BackgroundCompletionRouter,
   task: BackgroundTask,
-  status: 'completed' | 'failed',
+  status: 'completed' | 'failed' | 'cancelled',
 ): Promise<void> {
   if (!task.resourceId || !task.threadId) return;
 
@@ -68,8 +68,8 @@ async function persistBackgroundCompletion(
 export function createBackgroundCompletionCallbacks(
   getController: () => BackgroundCompletionRouter,
   events?: BackgroundCompletionEvents,
-): Pick<BackgroundTaskManagerConfig, 'onTaskComplete' | 'onTaskFailed'> {
-  const deliver = async (task: BackgroundTask, status: 'completed' | 'failed') => {
+): Pick<BackgroundTaskManagerConfig, 'onTaskComplete' | 'onTaskFailed' | 'onTaskCancelled'> {
+  const deliver = async (task: BackgroundTask, status: 'completed' | 'failed' | 'cancelled') => {
     await persistBackgroundCompletion(getController(), task, status);
     if (!task.resourceId || !task.threadId) return;
     events?.publish({
@@ -89,5 +89,6 @@ export function createBackgroundCompletionCallbacks(
   return {
     onTaskComplete: task => deliver(task, 'completed'),
     onTaskFailed: task => deliver(task, 'failed'),
+    onTaskCancelled: task => deliver(task, 'cancelled'),
   };
 }

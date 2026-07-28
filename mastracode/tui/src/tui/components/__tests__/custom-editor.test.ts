@@ -180,23 +180,23 @@ describe('CustomEditor image paste handling', () => {
     expect(queueFollowUp).toHaveBeenCalledTimes(1);
   });
 
-  it('routes Ctrl+G to the latest background completion and Alt+G to dismiss it', () => {
+  it('routes Ctrl+G to the read-only activity center and Alt+G to clear finished tasks', () => {
     mocks.matchesKey.mockImplementation(
       (data: string, key: string) => (data === '\x07' && key === 'ctrl+g') || (data === '\u001bg' && key === 'alt+g'),
     );
 
     const editor = new CustomEditor({} as any, {} as any);
-    const jump = vi.fn();
-    const dismiss = vi.fn();
-    editor.onAction('jumpToBackgroundCompletion', jump);
-    editor.onAction('dismissBackgroundCompletion', dismiss);
+    const open = vi.fn();
+    const clear = vi.fn();
+    editor.onAction('openBackgroundActivityCenter', open);
+    editor.onAction('clearFinishedBackgroundActivities', clear);
 
     editor.handleInput('\x07');
-    expect(jump).toHaveBeenCalledOnce();
-    expect(dismiss).not.toHaveBeenCalled();
+    expect(open).toHaveBeenCalledOnce();
+    expect(clear).not.toHaveBeenCalled();
 
     editor.handleInput('\u001bg');
-    expect(dismiss).toHaveBeenCalledOnce();
+    expect(clear).toHaveBeenCalledOnce();
     expect(mocks.superHandleInput).not.toHaveBeenCalled();
   });
 

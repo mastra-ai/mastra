@@ -3,9 +3,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   acceptBackgroundActivity,
-  clearCompletedBackgroundActivities,
+  clearCompletedBackgroundActivitiesForTarget,
   compareBackgroundActivities,
   completeBackgroundActivity,
+  getBackgroundActivitiesForTarget,
 } from '../background-activity.js';
 import type { BackgroundActivity } from '../background-activity.js';
 
@@ -43,6 +44,38 @@ describe('background activity', () => {
       status: 'completed',
       createdAt: 10,
     });
+  });
+
+  it('does not downgrade a terminal activity when accepted projection arrives later', () => {
+    const activities = new Map<string, BackgroundActivity>();
+    completeBackgroundActivity(activities, completion());
+
+    acceptBackgroundActivity(activities, 'task-1', 'call-1', {
+      toolName: 'view',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      createdAt: 20,
+    });
+
+    expect(activities.get('task-1')).toMatchObject({
+      status: 'completed',
+      completedAt: expect.any(Number),
+    });
+  });
+
+  it('keeps cancellation terminal when late lifecycle projections arrive', () => {
+    const activities = new Map<string, BackgroundActivity>();
+    completeBackgroundActivity(activities, completion({ status: 'cancelled' }));
+
+    acceptBackgroundActivity(activities, 'task-1', 'call-1', {
+      toolName: 'view',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      createdAt: 20,
+    });
+    completeBackgroundActivity(activities, completion({ status: 'completed' }));
+
+    expect(activities.get('task-1')).toMatchObject({ status: 'cancelled' });
   });
 
   it('sorts active work before terminal work and newest tasks first within each state', () => {
@@ -86,18 +119,30 @@ describe('background activity', () => {
     ]);
   });
 
-  it('creates terminal activity when the accepted event was missed and clears only finished work', () => {
+  it('filters activities to the displayed thread', () => {
     const activities = new Map<string, BackgroundActivity>();
-    completeBackgroundActivity(activities, completion({ taskId: 'task-2', status: 'failed', errorSummary: 'failed' }));
+    completeBackgroundActivity(activities, completion({ taskId: 'task-1', threadId: 'thread-1' }));
+    completeBackgroundActivity(activities, completion({ taskId: 'task-2', threadId: 'thread-2' }));
+
+    expect(
+      getBackgroundActivitiesForTarget(activities, 'resource-1', 'thread-1').map(activity => activity.taskId),
+    ).toEqual(['task-1']);
+    expect(getBackgroundActivitiesForTarget(activities, 'resource-1', null)).toEqual([]);
+  });
+
+  it('clears only finished work from the displayed thread', () => {
+    const activities = new Map<string, BackgroundActivity>();
+    completeBackgroundActivity(activities, completion({ taskId: 'task-1', threadId: 'thread-1' }));
+    completeBackgroundActivity(activities, completion({ taskId: 'task-2', threadId: 'thread-2', status: 'failed' }));
     acceptBackgroundActivity(activities, 'task-3', 'call-3', {
       toolName: 'search_content',
       resourceId: 'resource-1',
-      threadId: 'thread-2',
+      threadId: 'thread-1',
       createdAt: 20,
     });
 
-    clearCompletedBackgroundActivities(activities);
+    clearCompletedBackgroundActivitiesForTarget(activities, 'resource-1', 'thread-1');
 
-    expect([...activities.keys()]).toEqual(['task-3']);
+    expect([...activities.keys()]).toEqual(['task-2', 'task-3']);
   });
 });

@@ -320,13 +320,19 @@ export function getReactiveSignalView(message: MastraDBMessage): ReactiveSignalV
 }
 
 export interface BackgroundWorkLifecycleView {
-  tagName: 'work-deferred' | 'work-awaited' | 'work-completed' | 'work-failed';
+  tagName: 'work-deferred' | 'work-awaited' | 'work-completed' | 'work-failed' | 'work-cancelled';
   originToolCallId: string;
   taskId?: string;
   status?: string;
 }
 
-const BACKGROUND_WORK_TAGS = new Set(['work-deferred', 'work-awaited', 'work-completed', 'work-failed']);
+const BACKGROUND_WORK_TAGS = new Set([
+  'work-deferred',
+  'work-awaited',
+  'work-completed',
+  'work-failed',
+  'work-cancelled',
+]);
 
 /** Correlation fields for a background-work lifecycle signal. */
 export function getBackgroundWorkLifecycleView(message: MastraDBMessage): BackgroundWorkLifecycleView | undefined {

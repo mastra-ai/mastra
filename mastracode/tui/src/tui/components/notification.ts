@@ -99,9 +99,14 @@ export class NotificationComponent extends WidthAwareContainer {
     if (options.backgroundCompletion && !this.expanded) {
       const completion = options.backgroundCompletion;
       const failed = options.status === 'failed';
-      const icon = failed ? theme.fg('error', '✗') : theme.fg('success', '✓');
+      const cancelled = options.status === 'cancelled';
+      const icon = cancelled ? theme.fg('muted', '■') : failed ? theme.fg('error', '✗') : theme.fg('success', '✓');
       const toolName = theme.fg('toolTitle', completion.toolName ?? 'background task');
-      const status = failed ? 'failed in background' : 'completed in background';
+      const status = cancelled
+        ? 'cancelled in background'
+        : failed
+          ? 'failed in background'
+          : 'completed in background';
       const taskId = theme.fg('muted', ` · ${completion.taskId}`);
       this.addChild(new Text(`${icon} ${toolName} ${status}${taskId}`, BOX_INDENT, 0));
       return;

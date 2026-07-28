@@ -24,6 +24,7 @@ describe('GlobalBackgroundNoticeComponent', () => {
       activity(),
       activity({ taskId: 'task-2', status: 'completed', completedAt: 2 }),
       activity({ taskId: 'task-3', status: 'failed', completedAt: 3 }),
+      activity({ taskId: 'task-4', status: 'cancelled', completedAt: 4 }),
     ]);
 
     const output = component.render(120).join('\n');
@@ -31,6 +32,7 @@ describe('GlobalBackgroundNoticeComponent', () => {
     expect(output).toContain('◌ 1 running');
     expect(output).toContain('✓ 1 completed');
     expect(output).toContain('✗ 1 failed');
+    expect(output).toContain('■ 1 cancelled');
     expect(output).toContain('Ctrl+G open');
     expect(output).toContain('Alt+G clear finished');
   });

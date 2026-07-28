@@ -6,7 +6,7 @@ export interface BackgroundCompletionEvent {
   resourceId: string;
   threadId: string;
   toolName: string;
-  status: 'completed' | 'failed';
+  status: 'completed' | 'failed' | 'cancelled';
   argsSummary?: string;
   errorSummary?: string;
 }

@@ -450,6 +450,28 @@ describe('addUserMessage', () => {
     expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(false);
   });
 
+  it('marks the correlated ordinary tool row as cancelled', () => {
+    const state = createState();
+    const cancelBackground = vi.fn();
+    state.pendingTools.set('call-1', { cancelBackground } as never);
+
+    addUserMessage(
+      state,
+      createSignal({
+        id: 'work-cancelled-1',
+        type: 'notification',
+        tagName: 'work-cancelled',
+        contents: 'work-cancelled: call-1',
+        attributes: { source: 'background-work', status: 'cancelled' },
+        metadata: { originToolCallId: 'call-1', taskId: 'task-1', status: 'cancelled' },
+      }).toDBMessage(),
+    );
+
+    expect(cancelBackground).toHaveBeenCalledOnce();
+    expect(state.messageComponentsById.has('work-cancelled-1')).toBe(false);
+    expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(false);
+  });
+
   it('suppresses an uncorrelated background-work lifecycle signal', () => {
     const state = createState();
 
@@ -1137,6 +1159,57 @@ describe('renderExistingMessages subagents', () => {
       .replace(/\x1b\[[0-9;]*m/g, '');
     expect(expanded).toContain('Authoritative Alexandria audit');
     expect(state.pendingSubagents.has('tool-background-plugin-1')).toBe(false);
+  });
+
+  it('replays a cancelled background plugin subagent as terminal', async () => {
+    const toolMessage = assistantToolMessage('assistant-plugin-background-cancelled', [
+      {
+        id: 'tool-background-plugin-cancelled',
+        name: 'mastra_expert',
+        args: { question: 'Audit cancellation' },
+        result: 'Background task started. Task ID: task-plugin-cancelled',
+        isError: false,
+      },
+    ]);
+    const cancellationMessage = createSignal({
+      id: 'background-task:task-plugin-cancelled:cancelled',
+      type: 'notification',
+      tagName: 'notification',
+      contents: 'mastra_expert cancelled in background',
+      attributes: { source: 'background-work', status: 'cancelled' },
+      metadata: {
+        backgroundCompletion: {
+          eventId: 'background-task:task-plugin-cancelled:cancelled',
+          taskId: 'task-plugin-cancelled',
+          originRunId: 'run-plugin-cancelled',
+          originToolCallId: 'tool-background-plugin-cancelled',
+          toolName: 'mastra_expert',
+          status: 'cancelled',
+        },
+      },
+    }).toDBMessage();
+    const state = createState();
+    state.pluginManager = {
+      getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria' })),
+    } as unknown as TUIState['pluginManager'];
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([toolMessage, cancellationMessage]) },
+    } as unknown as TUIState['session'];
+    state.controller = { session: state.session } as unknown as TUIState['controller'];
+
+    await renderExistingMessages(state);
+
+    const subagent = state.chatContainer.children.find(
+      child => child instanceof SubagentExecutionComponent,
+    ) as SubagentExecutionComponent;
+    const rendered = subagent
+      .render(120)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('■ background · task-plugin-cancelled');
+    expect(rendered).not.toContain('◌ background');
+    expect(state.pendingSubagents.has('tool-background-plugin-cancelled')).toBe(false);
   });
 
   it('uses the current model id for persisted forked subagents when no metadata tag is present', async () => {

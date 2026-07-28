@@ -32,8 +32,8 @@ export function setupKeyboardShortcuts(
     stop: () => void;
     doubleCtrlCMs: number;
     queueFollowUpMessage: (text: string) => void;
-    jumpToBackgroundCompletion: () => void;
-    dismissBackgroundCompletion: () => void;
+    openBackgroundActivityCenter: () => void;
+    clearFinishedBackgroundActivities: () => void;
   },
 ): void {
   // Ctrl+C / Escape - abort if running, clear input if idle, double-tap always exits
@@ -142,8 +142,8 @@ export function setupKeyboardShortcuts(
     state.ui.requestRender();
   });
 
-  state.editor.onAction('jumpToBackgroundCompletion', callbacks.jumpToBackgroundCompletion);
-  state.editor.onAction('dismissBackgroundCompletion', callbacks.dismissBackgroundCompletion);
+  state.editor.onAction('openBackgroundActivityCenter', callbacks.openBackgroundActivityCenter);
+  state.editor.onAction('clearFinishedBackgroundActivities', callbacks.clearFinishedBackgroundActivities);
 
   // Shift+Tab - cycle controller modes
   state.editor.onAction('cycleMode', async () => {

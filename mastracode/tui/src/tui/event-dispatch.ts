@@ -6,7 +6,7 @@ import type { AgentControllerEvent, AgentControllerThread, MastraDBMessage } fro
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
-import { acceptBackgroundActivity } from './background-activity.js';
+import { acceptBackgroundActivity, getBackgroundActivitiesForTarget } from './background-activity.js';
 import { getMessageText } from './db-message-parts.js';
 import {
   handleAgentStart,
@@ -206,7 +206,13 @@ export async function dispatchEvent(
       const context = state.backgroundToolContexts.get(event.toolCallId);
       if (taskId && context) {
         acceptBackgroundActivity(state.backgroundActivities, taskId, event.toolCallId, context);
-        state.globalBackgroundNotice.setActivities([...state.backgroundActivities.values()]);
+        state.globalBackgroundNotice.setActivities(
+          getBackgroundActivitiesForTarget(
+            state.backgroundActivities,
+            state.session.identity.getResourceId(),
+            state.pendingNewThread ? null : state.session.thread.getId(),
+          ),
+        );
         flushRender(state);
       }
       if (!taskId) state.backgroundToolContexts.delete(event.toolCallId);

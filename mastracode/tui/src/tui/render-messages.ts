@@ -545,7 +545,14 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
         component?.setBackgroundTaskId?.(backgroundWork.taskId);
         subagentComponent?.setBackgroundTaskId(backgroundWork.taskId);
       }
-      if (component && (backgroundWork.tagName === 'work-completed' || backgroundWork.tagName === 'work-failed')) {
+      if (backgroundWork.tagName === 'work-cancelled') {
+        component?.cancelBackground?.();
+        subagentComponent?.cancel();
+        state.pendingSubagents.delete(backgroundWork.originToolCallId);
+      } else if (
+        component &&
+        (backgroundWork.tagName === 'work-completed' || backgroundWork.tagName === 'work-failed')
+      ) {
         const status =
           backgroundWork.tagName === 'work-completed'
             ? 'Completed in background; reconciling result…'
@@ -558,6 +565,19 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
 
     const notification = getNotificationView(message);
     const backgroundCompletion = getBackgroundCompletionView(message);
+    if (backgroundCompletion?.status === 'cancelled') {
+      const toolComponent = state.pendingTools.get(backgroundCompletion.originToolCallId);
+      const subagentComponent = state.pendingSubagents.get(backgroundCompletion.originToolCallId);
+      toolComponent?.setBackgroundTaskId?.(backgroundCompletion.taskId);
+      toolComponent?.updateResult(
+        { content: [{ type: 'text', text: 'Background execution cancelled.' }], isError: true },
+        true,
+      );
+      toolComponent?.cancelBackground?.();
+      subagentComponent?.setBackgroundTaskId(backgroundCompletion.taskId);
+      subagentComponent?.cancel();
+      state.pendingSubagents.delete(backgroundCompletion.originToolCallId);
+    }
     const component = new NotificationComponent({
       message: notification.message,
       source: notification.source,

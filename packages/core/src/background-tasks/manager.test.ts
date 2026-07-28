@@ -683,6 +683,29 @@ describe('BackgroundTaskManager', () => {
       await cleanup();
     });
 
+    it('invokes onTaskCancelled callback', async () => {
+      const onCancelled = vi.fn();
+      const { mgr, cleanup } = await makeLocalManager({ enabled: true, onTaskCancelled: onCancelled });
+      const executeFn = vi.fn().mockImplementation(
+        (_args: any, opts: { abortSignal: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            opts.abortSignal.addEventListener('abort', () => reject(new Error('Task cancelled')));
+          }),
+      );
+      const { task } = await mgr.enqueue(
+        { toolName: 'tool', toolCallId: 'c1', args: {}, agentId: 'a1', runId: 'run-1' },
+        ctx(executeFn),
+      );
+      await tick();
+
+      await mgr.cancel(task.id);
+      await tick();
+
+      expect(onCancelled).toHaveBeenCalledTimes(1);
+      expect(onCancelled.mock.calls[0]![0].status).toBe('cancelled');
+      await cleanup();
+    });
+
     it('invokes per-task onComplete callback', async () => {
       const onComplete = vi.fn();
       const executeFn = vi.fn().mockResolvedValue('ok');

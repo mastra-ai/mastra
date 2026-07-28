@@ -35,6 +35,7 @@ describe('createBackgroundCompletionCallbacks', () => {
   it.each([
     ['completed', 'onTaskComplete', 'low'],
     ['failed', 'onTaskFailed', 'high'],
+    ['cancelled', 'onTaskCancelled', 'low'],
   ] as const)(
     'persists one stable %s completion card without duplicating the tool result',
     async (status, callback, priority) => {

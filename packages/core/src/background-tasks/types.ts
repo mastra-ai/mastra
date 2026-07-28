@@ -206,6 +206,8 @@ export interface BackgroundTaskManagerConfig {
   onTaskComplete?: (task: BackgroundTask) => void | Promise<void>;
   /** Optional callback invoked when a task fails (in addition to stream + message list injection) */
   onTaskFailed?: (task: BackgroundTask) => void | Promise<void>;
+  /** Optional callback invoked when a task is cancelled */
+  onTaskCancelled?: (task: BackgroundTask) => void | Promise<void>;
 }
 
 // --- Tool-level and agent-level config ---

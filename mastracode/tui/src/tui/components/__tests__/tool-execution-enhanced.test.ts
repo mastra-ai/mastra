@@ -635,6 +635,22 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     output = stripAnsi(component.render(100).join('\n'));
     expect(output).toContain('✗ background · task-1');
     expect(output).toContain('failed result');
+
+    const cancelled = new ToolExecutionComponentEnhanced(
+      'find_files',
+      { path: '.' },
+      { quietDisplayMode: 'normal', collapsedByDefault: false },
+      ui,
+    );
+    cancelled.setBackgroundTaskId('task-2');
+    cancelled.updateResult(
+      { content: [{ type: 'text', text: 'Background execution cancelled.' }], isError: true },
+      true,
+    );
+    cancelled.cancelBackground();
+    output = stripAnsi(cancelled.render(100).join('\n'));
+    expect(output).toContain('■ background · task-2');
+    expect(output).not.toContain('◌ background');
   });
 
   it('uses the active mode color for quiet compact tool badges', () => {

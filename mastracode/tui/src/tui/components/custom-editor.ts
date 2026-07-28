@@ -67,8 +67,8 @@ export type AppAction =
   | 'undo'
   | 'toggleThinking'
   | 'expandTools'
-  | 'jumpToBackgroundCompletion'
-  | 'dismissBackgroundCompletion'
+  | 'openBackgroundActivityCenter'
+  | 'clearFinishedBackgroundActivities'
   | 'followUp'
   | 'queueFollowUp'
   | 'cycleMode'
@@ -964,7 +964,7 @@ export class CustomEditor extends Editor {
     }
 
     if (matchesKey(data, 'ctrl+g')) {
-      const handler = this.actionHandlers.get('jumpToBackgroundCompletion');
+      const handler = this.actionHandlers.get('openBackgroundActivityCenter');
       if (handler) {
         handler();
         return;
@@ -972,7 +972,7 @@ export class CustomEditor extends Editor {
     }
 
     if (matchesKey(data, 'alt+g')) {
-      const handler = this.actionHandlers.get('dismissBackgroundCompletion');
+      const handler = this.actionHandlers.get('clearFinishedBackgroundActivities');
       if (handler) {
         handler();
         return;

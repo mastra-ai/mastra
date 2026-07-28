@@ -22,6 +22,7 @@ export interface IToolExecutionComponent {
   refresh?(): void;
   updateResult(result: ToolResult, isPartial?: boolean): void;
   setBackgroundTaskId?(taskId: string): void;
+  cancelBackground?(): void;
   setExpanded(expanded: boolean): void;
   setQuietModeDisplay?(mode: QuietToolDisplayMode): void;
   setQuietPreviewLineLimit?(limit: number): void;
