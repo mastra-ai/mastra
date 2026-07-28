@@ -1450,6 +1450,49 @@ describe('Agent signals', () => {
     }
   });
 
+  it('keeps a rejected notification summary due for retry', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'rejected-summary-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'rejected-summary-agent',
+      name: 'Rejected Summary Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('unused'),
+      notifications: {
+        deliveryPolicy: {
+          decide: ({ now }) => ({ action: 'summarize', summaryAt: now, reason: 'test-summary-now' }),
+        },
+      },
+    });
+    new Mastra({ agents: { rejectedSummaryAgent: agent }, storage, logger: false });
+    const rejectedAccepted = Promise.reject(new Error('summary rejected'));
+    rejectedAccepted.catch(() => {});
+    const sendSignal = vi.spyOn(agentThreadStreamRuntime, 'sendSignal').mockReturnValue({
+      accepted: rejectedAccepted,
+      signal: createSignal({ type: 'notification', tagName: 'notification-summary', contents: 'Rejected' }),
+    } as any);
+
+    try {
+      const result = await agent.sendNotificationSignal(
+        { source: 'github', kind: 'ci-status', priority: 'medium', summary: 'Rejected summary' },
+        { resourceId: 'summary-user', threadId: 'summary-thread' },
+      );
+
+      expect(result.record).toMatchObject({
+        status: 'pending',
+        deliveryAttempts: 1,
+        lastDeliveryError: 'summary rejected',
+      });
+      const stored = await notifications.getNotification({ threadId: 'summary-thread', id: result.record.id });
+      expect(stored?.summaryAt).toBeInstanceOf(Date);
+      await expect(notifications.listDueNotifications({ now: new Date() })).resolves.toMatchObject([
+        { id: result.record.id },
+      ]);
+    } finally {
+      sendSignal.mockRestore();
+    }
+  });
+
   it('batches active high notifications for full delivery and active medium or low notifications for summaries', async () => {
     let releaseFirst!: () => void;
     const firstFinished = new Promise<void>(resolve => {
