@@ -126,6 +126,54 @@ describe('intake configuration', () => {
     });
     expect(invalid.status).toBe(400);
   });
+
+  it('silently drops a harmless default entry for an unregistered integration', async () => {
+    // Regression test for #20277: a generated client (create-factory) may
+    // submit a disabled placeholder for an integration that isn't
+    // registered in this deployment. That should save successfully, with
+    // the unregistered key dropped rather than rejected.
+    const config = {
+      github: { enabled: true, sourceIds: ['repo-1'] },
+      linear: { enabled: false, sourceIds: null },
+    };
+    const response = await buildApp(orgUser, [{ id: 'github', intake: github }]).request('/web/intake/config', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      config: { github: { enabled: true, sourceIds: ['repo-1'] } },
+    });
+    expect(await seed.intake.getConfig({ orgId: 'org1', userId: 'u1' })).toEqual({
+      github: { enabled: true, sourceIds: ['repo-1'] },
+    });
+  });
+
+  it('still rejects an unregistered integration the client actually tried to use', async () => {
+    const enabledUnknown = await buildApp(orgUser, [{ id: 'github', intake: github }]).request('/web/intake/config', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        github: { enabled: true, sourceIds: null },
+        linear: { enabled: true, sourceIds: null },
+      }),
+    });
+    expect(enabledUnknown.status).toBe(400);
+
+    const unknownWithSources = await buildApp(orgUser, [{ id: 'github', intake: github }]).request(
+      '/web/intake/config',
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          github: { enabled: true, sourceIds: null },
+          linear: { enabled: false, sourceIds: ['team-1'] },
+        }),
+      },
+    );
+    expect(unknownWithSources.status).toBe(400);
+  });
 });
 
 describe('aggregated intake', () => {
