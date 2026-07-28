@@ -406,7 +406,7 @@ export class Dataset {
 
     const experimentId = run.id;
 
-    // Fire-and-forget — runExperiment merges dataset-attached scorers automatically
+    // Fire-and-forget — runExperiment resolves the applicable run, item, or dataset scorer source
     void runExperiment(this.#mastra, {
       datasetId: this.id,
       experimentId,

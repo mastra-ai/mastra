@@ -21,8 +21,9 @@ export interface DataItem<I = unknown, E = unknown> {
   /** Per-item request context merged over the global request context (item takes precedence) */
   requestContext?: Record<string, unknown>;
   /**
-   * Scorer IDs that override dataset-attached scorers for this item.
-   * An empty array explicitly disables scoring for the item.
+   * Scorer IDs that override dataset-attached scorers for this item when run-level
+   * `config.scorers` is absent. Run-level scorers, including an empty configuration,
+   * take precedence. An empty array explicitly disables scoring for the item.
    */
   scorerIds?: string[];
   /**
