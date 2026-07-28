@@ -32,6 +32,7 @@ import {
   MastraFactory,
   ChannelIdentityStorage,
   FactoryProjectsStorage,
+  WorkItemsStorage,
   createChannelLinkStateSigner,
   createFactoryRouteAuth,
   createStateSigner,
@@ -248,6 +249,7 @@ export const channelLinkStateSigner = createChannelLinkStateSigner(stateSecret);
 // the time we get here.
 const accountLinks = storage.getDomain<ChannelIdentityStorage>('channel-identity');
 const factoryProjects = storage.getDomain<FactoryProjectsStorage>('projects');
+const workItems = storage.getDomain<WorkItemsStorage>('work-items');
 
 // Slack channels are optional: chat's Slack adapter validates `signingSecret`
 // at construction, so only wire channels when the Slack app env is configured.
@@ -259,6 +261,7 @@ if (mcAgentController) {
       accountLinks,
       channelLinkStateSigner,
       projects: factoryProjects,
+      workItems,
       // Repo-backed Slack threads: linked senders with a repo-connected
       // factory get a Factory user-session (repo sandbox) per thread. Only
       // available with the direct GitHub App wiring.
