@@ -631,10 +631,10 @@ describe('OM routes with a tenant', () => {
 
   function buildApp(
     session: ReturnType<typeof makeOmSession> | null,
-    opts: { withStorage?: boolean; authEnabled?: boolean } = {},
+    opts: { withStorage?: boolean; authEnabled?: boolean; provider?: string } = {},
   ) {
     const controller = {
-      ...makeAgentController([{ provider: 'anthropic', hasApiKey: true }]),
+      ...makeAgentController([{ provider: opts.provider ?? 'anthropic', hasApiKey: true }]),
       getSessionByResource: async () => session ?? undefined,
     };
     const app = new Hono();
@@ -692,6 +692,60 @@ describe('OM routes with a tenant', () => {
     await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
       observerModelId: 'anthropic/claude-haiku-4-5',
       reflectorModelId: 'anthropic/claude-haiku-4-5',
+    });
+  });
+
+  it('reads the OpenAI OM default through a Codex credential', async () => {
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'openai-codex', {
+      type: 'api_key',
+      key: 'sk-openai',
+    });
+
+    const res = await postJson(buildApp(makeOmSession(), { provider: 'openai' }), '/web/config/om/provider-defaults', {
+      providerId: 'openai',
+      factoryModelId: 'openai/gpt-5.6',
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config).toMatchObject({
+      observerModelId: 'openai/gpt-5.4-mini',
+      reflectorModelId: 'openai/gpt-5.4-mini',
+    });
+  });
+
+  it('prefers the low-cost OM pack over the selected factory model', async () => {
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'google', {
+      type: 'api_key',
+      key: 'sk-google',
+    });
+
+    const res = await postJson(buildApp(makeOmSession(), { provider: 'google' }), '/web/config/om/provider-defaults', {
+      providerId: 'google',
+      factoryModelId: 'google/gemini-3.5-pro',
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config).toMatchObject({
+      observerModelId: 'google/gemini-3.5-flash',
+      reflectorModelId: 'google/gemini-3.5-flash',
+    });
+  });
+
+  it('keeps the selected factory model for providers without an OM pack', async () => {
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'xai', {
+      type: 'api_key',
+      key: 'sk-xai',
+    });
+
+    const res = await postJson(buildApp(makeOmSession(), { provider: 'xai' }), '/web/config/om/provider-defaults', {
+      providerId: 'xai',
+      factoryModelId: 'xai/grok-4.5',
+    });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).config).toMatchObject({
+      observerModelId: 'xai/grok-4.5',
+      reflectorModelId: 'xai/grok-4.5',
     });
   });
 
