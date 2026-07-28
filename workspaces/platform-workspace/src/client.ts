@@ -9,6 +9,18 @@ export interface PlatformRequestOptions extends RequestInit {
 }
 
 const DEFAULT_PROXY_URL = 'https://workspaces.mastra.ai';
+const REGIONAL_PROXY_URLS: Record<string, string> = {
+  EU: 'https://workspaces.eu.mastra.ai',
+  US: 'https://workspaces.us.mastra.ai',
+};
+
+function resolveProxyUrl(env: NodeJS.ProcessEnv): string {
+  const override = env.MASTRA_WORKSPACE_PROXY_URL?.trim();
+  if (override) return override.replace(/\/+$/, '');
+
+  const region = env.MASTRA_PLATFORM_REGION?.trim().toUpperCase();
+  return (region ? REGIONAL_PROXY_URLS[region] : undefined) ?? DEFAULT_PROXY_URL;
+}
 
 /**
  * Default per-request timeout for calls to the workspace proxy. Applied only
@@ -32,7 +44,7 @@ export function resolvePlatformOptions(options: PlatformClientOptions) {
       'accessToken',
     ),
     projectId: requireOption(options.projectId ?? process.env.MASTRA_PROJECT_ID, 'projectId'),
-    proxyUrl: (process.env.MASTRA_WORKSPACE_PROXY_URL ?? DEFAULT_PROXY_URL).replace(/\/$/, ''),
+    proxyUrl: resolveProxyUrl(process.env),
     fetch: options.fetch ?? fetch,
   };
 }

@@ -29,6 +29,41 @@ describe('PlatformClient', () => {
     expect(init.method).toBe('POST');
   });
 
+  it.each([
+    ['EU', 'https://workspaces.eu.mastra.ai'],
+    ['eu', 'https://workspaces.eu.mastra.ai'],
+    ['US', 'https://workspaces.us.mastra.ai'],
+    ['us', 'https://workspaces.us.mastra.ai'],
+  ])('selects the %s regional workspace proxy', (region, expectedProxyUrl) => {
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    vi.stubEnv('MASTRA_PLATFORM_REGION', region);
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', undefined);
+
+    expect(resolvePlatformOptions({}).proxyUrl).toBe(expectedProxyUrl);
+  });
+
+  it.each([undefined, '', 'APAC', 'unknown'])(
+    'falls back to the legacy workspace proxy for missing or unknown region %s',
+    region => {
+      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+      vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+      vi.stubEnv('MASTRA_PLATFORM_REGION', region);
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', undefined);
+
+      expect(resolvePlatformOptions({}).proxyUrl).toBe('https://workspaces.mastra.ai');
+    },
+  );
+
+  it('prefers MASTRA_WORKSPACE_PROXY_URL over regional routing', () => {
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    vi.stubEnv('MASTRA_PLATFORM_REGION', 'EU');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test/');
+
+    expect(resolvePlatformOptions({}).proxyUrl).toBe('https://proxy.test');
+  });
+
   it('reads the access token from MASTRA_PLATFORM_SECRET_KEY', () => {
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
     vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');

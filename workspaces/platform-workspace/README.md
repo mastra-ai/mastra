@@ -21,7 +21,7 @@ All options can be passed to the constructor or read from environment variables:
 
 `MASTRA_PLATFORM_ACCESS_TOKEN` is still read as a deprecated fallback for `accessToken`.
 
-The proxy URL defaults to `https://workspaces.mastra.ai` and can be overridden with the `MASTRA_WORKSPACE_PROXY_URL` env var (useful for staging).
+The proxy URL is selected from the Platform-managed `MASTRA_PLATFORM_REGION`: `EU` uses `https://workspaces.eu.mastra.ai` and `US` uses `https://workspaces.us.mastra.ai`. Missing or unknown regions continue to use the backward-compatible `https://workspaces.mastra.ai` endpoint. `MASTRA_WORKSPACE_PROXY_URL` remains the highest-priority override for staging and local development.
 
 Requests to the proxy are authenticated with `Authorization: Bearer <accessToken>`.
 
