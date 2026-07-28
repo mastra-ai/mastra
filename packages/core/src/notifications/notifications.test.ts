@@ -13,6 +13,7 @@ import {
   createNotificationSignal,
   createNotificationSummarySignal,
   dispatchDueNotifications,
+  MAX_NOTIFICATION_DELIVERY_ATTEMPTS,
   resolveNotificationDeliveryDecision,
   summarizeNotifications,
 } from '.';
@@ -461,6 +462,47 @@ describe('notification inbox', () => {
       lastDeliveryError: 'signal routing failed: no model configured',
     });
     expect(stored?.deliveredSignalId).toBeUndefined();
+  });
+
+  it('marks a notification failed once delivery attempts are exhausted', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn((signal, _target) => ({
+      accepted: Promise.reject(new Error('No model selected. Use /models to select a model first.')),
+      signal,
+    }));
+    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed',
+      deliverAt: now,
+    });
+
+    for (let attempt = 1; attempt < MAX_NOTIFICATION_DELIVERY_ATTEMPTS; attempt++) {
+      await dispatchDueNotifications({ mastra, storage, now });
+      await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+        status: 'pending',
+        deliveryAttempts: attempt,
+      });
+    }
+
+    await dispatchDueNotifications({ mastra, storage, now });
+
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+      status: 'failed',
+      deliveryAttempts: MAX_NOTIFICATION_DELIVERY_ATTEMPTS,
+      lastDeliveryError: 'No model selected. Use /models to select a model first.',
+    });
+    await expect(storage.listDueNotifications({ now })).resolves.toEqual([]);
+
+    await dispatchDueNotifications({ mastra, storage, now });
+    expect(sendSignal).toHaveBeenCalledTimes(MAX_NOTIFICATION_DELIVERY_ATTEMPTS);
   });
 
   it('groups due summary notifications by agent, resource, and thread', async () => {
