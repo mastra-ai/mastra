@@ -366,9 +366,20 @@ export interface ReconcileRepository {
   installationId: number;
 }
 
-export type GithubPullRequestReconciler = (
-  repositories: ReconcileRepository[],
-) => Promise<{ checked: number; merged: number }>;
+export interface ReconcileSweepSummary {
+  /** PRs whose live state was fetched from GitHub. */
+  checked: number;
+  /** Missed merges replayed through the rules ingress. */
+  merged: number;
+  /** PRs (or whole repositories) skipped because of an error. */
+  failed: number;
+  /** Error samples with context, capped at {@link RECONCILE_ERROR_SAMPLE_LIMIT}. */
+  errors: Array<{ repository: string; pullRequestNumber?: number; error: string }>;
+}
+
+export type GithubPullRequestReconciler = (repositories: ReconcileRepository[]) => Promise<ReconcileSweepSummary>;
+
+const RECONCILE_ERROR_SAMPLE_LIMIT = 5;
 
 /**
  * Extracts the PR number a work item tracks, but only when the item belongs
@@ -434,37 +445,61 @@ export function createGithubPullRequestReconciler(
 ): GithubPullRequestReconciler {
   const rules = new GithubRules(options);
   return async repositories => {
-    let checked = 0;
-    let merged = 0;
+    const summary: ReconcileSweepSummary = { checked: 0, merged: 0, failed: 0, errors: [] };
+    const recordFailure = (repository: ReconcileRepository, error: unknown, pullRequestNumber?: number) => {
+      summary.failed += 1;
+      if (summary.errors.length < RECONCILE_ERROR_SAMPLE_LIMIT) {
+        summary.errors.push({
+          repository: repository.fullName,
+          ...(pullRequestNumber === undefined ? {} : { pullRequestNumber }),
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    };
     for (const repository of repositories) {
-      const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
-        installationExternalId: String(repository.installationId),
-        repositoryExternalId: String(repository.id),
-      });
-      if (projects.length === 0) continue;
-      const numbers = new Set<number>();
-      for (const project of projects) {
-        const items = await options.storage.list({ orgId: project.orgId, factoryProjectId: project.factoryProjectId });
-        for (const item of items) {
-          const stage = item.stages[0];
-          if (stage === 'done' || stage === 'canceled') continue;
-          const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
-          if (pullRequestNumber) numbers.add(pullRequestNumber);
+      // One broken repository (or a failing token exchange for its
+      // installation) must not abort the sweep for the others.
+      let numbers: Set<number>;
+      try {
+        const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
+          installationExternalId: String(repository.installationId),
+          repositoryExternalId: String(repository.id),
+        });
+        if (projects.length === 0) continue;
+        numbers = new Set<number>();
+        for (const project of projects) {
+          const items = await options.storage.list({
+            orgId: project.orgId,
+            factoryProjectId: project.factoryProjectId,
+          });
+          for (const item of items) {
+            const stage = item.stages[0];
+            if (stage === 'done' || stage === 'canceled') continue;
+            const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
+            if (pullRequestNumber) numbers.add(pullRequestNumber);
+          }
         }
+      } catch (error) {
+        recordFailure(repository, error);
+        continue;
       }
       for (const pullRequestNumber of numbers) {
-        const state = await fetchPullRequest({
-          installationId: repository.installationId,
-          repository: repository.fullName,
-          number: pullRequestNumber,
-        });
-        checked += 1;
-        if (!state?.merged) continue;
-        merged += 1;
-        await rules.ingest(reconciledMergeEvent(repository, pullRequestNumber, state));
+        try {
+          const state = await fetchPullRequest({
+            installationId: repository.installationId,
+            repository: repository.fullName,
+            number: pullRequestNumber,
+          });
+          summary.checked += 1;
+          if (!state?.merged) continue;
+          await rules.ingest(reconciledMergeEvent(repository, pullRequestNumber, state));
+          summary.merged += 1;
+        } catch (error) {
+          recordFailure(repository, error, pullRequestNumber);
+        }
       }
     }
-    return { checked, merged };
+    return summary;
   };
 }
 

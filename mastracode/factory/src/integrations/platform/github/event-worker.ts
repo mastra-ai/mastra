@@ -282,14 +282,31 @@ export class PlatformGithubEventWorker extends MastraWorker {
         ? [{ id: repository.id, fullName: repository.fullName, installationId: repository.installationId }]
         : [],
     );
-    if (targets.length === 0) return;
+    if (targets.length === 0) {
+      this.deps?.logger.debug('Platform GitHub pull request reconcile skipped: no named repositories');
+      return;
+    }
+    this.deps?.logger.debug('Platform GitHub pull request reconcile sweep starting', {
+      repositories: targets.map(target => target.fullName),
+    });
+    const startedAt = Date.now();
     try {
-      const summary = await this.#reconcileFactoryState(targets);
-      if (summary.merged > 0) {
-        this.deps?.logger.info('Platform GitHub pull request reconcile replayed missed merges', summary);
+      const { errors, ...counts } = await this.#reconcileFactoryState(targets);
+      const context = { ...counts, repositories: targets.length, durationMs: Date.now() - startedAt };
+      if (counts.failed > 0) {
+        this.deps?.logger.warn('Platform GitHub pull request reconcile sweep completed with failures', {
+          ...context,
+          errors,
+        });
+      } else if (counts.merged > 0) {
+        this.deps?.logger.info('Platform GitHub pull request reconcile replayed missed merges', context);
+      } else {
+        this.deps?.logger.info('Platform GitHub pull request reconcile sweep completed', context);
       }
     } catch (error) {
       this.deps?.logger.error('Platform GitHub pull request reconcile failed', {
+        repositories: targets.length,
+        durationMs: Date.now() - startedAt,
         error: error instanceof Error ? error.message : String(error),
       });
     }

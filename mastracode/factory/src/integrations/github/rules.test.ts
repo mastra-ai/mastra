@@ -641,7 +641,7 @@ describe('createGithubPullRequestReconciler', () => {
     const fetchPullRequest = vi.fn(async () => mergedState(17));
     const reconcile = createReconciler(context, fetchPullRequest);
 
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ checked: 1, merged: 1 });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({ checked: 1, merged: 1, failed: 0, errors: [] });
     expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 17 });
     const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
     expect(decisions).toEqual([
@@ -653,7 +653,7 @@ describe('createGithubPullRequestReconciler', () => {
 
     // A later sweep re-checks live state but the ingress replays: no
     // duplicate decisions are committed for the same merge.
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ checked: 1, merged: 1 });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({ checked: 1, merged: 1, failed: 0, errors: [] });
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(1);
   });
 
@@ -664,7 +664,7 @@ describe('createGithubPullRequestReconciler', () => {
     const fetchPullRequest = vi.fn(async () => ({ ...mergedState(18), state: 'open' as const, merged: false }));
     const reconcile = createReconciler(context, fetchPullRequest);
 
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ checked: 1, merged: 0 });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({ checked: 1, merged: 0, failed: 0, errors: [] });
     expect(fetchPullRequest).toHaveBeenCalledTimes(1);
     expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 18 });
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
@@ -676,7 +676,38 @@ describe('createGithubPullRequestReconciler', () => {
     const fetchPullRequest = vi.fn(async () => mergedState(19));
     const reconcile = createReconciler(context, fetchPullRequest);
 
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ checked: 0, merged: 0 });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({ checked: 0, merged: 0, failed: 0, errors: [] });
     expect(fetchPullRequest).not.toHaveBeenCalled();
+  });
+
+  it('keeps sweeping the remaining PRs when one state fetch fails and reports the failure', async () => {
+    const context = await setup('read');
+    await createCard(context, { number: 17 });
+    await createCard(context, { number: 18 });
+    const fetchPullRequest = vi.fn(async (input: { number: number }) => {
+      if (input.number === 17) throw new Error('Platform API request failed: 500 Internal Server Error');
+      return mergedState(18);
+    });
+    const reconcile = createReconciler(context, fetchPullRequest);
+
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      checked: 1,
+      merged: 1,
+      failed: 1,
+      errors: [
+        {
+          repository: 'acme/repo',
+          pullRequestNumber: 17,
+          error: 'Platform API request failed: 500 Internal Server Error',
+        },
+      ],
+    });
+    // The healthy PR still got reconciled to Done.
+    const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+      }),
+    ]);
   });
 });
