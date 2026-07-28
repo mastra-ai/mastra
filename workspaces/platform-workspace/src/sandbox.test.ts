@@ -1,8 +1,84 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { DirectExecWebSocket, DirectExecWebSocketFactory } from './direct-exec.js';
 import { PlatformSandbox } from './sandbox.js';
 
 function json(body: unknown, init?: ResponseInit) {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' }, ...init });
+}
+
+/**
+ * Wire-shape of a successful `POST /sandbox/:id/exec-lease` response, used
+ * across tests that exercise the direct-exec path.
+ */
+function leaseResponse(overrides: { jwt?: string; expiresAt?: string | null } = {}) {
+  return json({
+    provider: 'railway',
+    sandboxId: 'sbx_test',
+    providerResourceId: 'rw_sb_test',
+    jwt: overrides.jwt ?? 'jwt.value.here',
+    wsEndpoint: 'wss://ssh.railway.com:2226/ws/exec',
+    subprotocol: 'railway-shell',
+    // Explicit key check so `expiresAt: null` isn't collapsed to the default
+    // by nullish coalescing (which treats null and undefined the same).
+    expiresAt: 'expiresAt' in overrides ? overrides.expiresAt : '2030-01-01T00:00:00.000Z',
+  });
+}
+
+/**
+ * Build a WebSocket factory that immediately drives an exec to completion
+ * with the given exit code and stdout, so tests can exercise `executeCommand`
+ * without mocking a real WebSocket. Sockets are captured so tests can assert
+ * on the endpoint + subprotocols they were opened with.
+ */
+function fakeExecSocket(script: { exitCode: number; stdout?: string; stderr?: string }): {
+  factory: DirectExecWebSocketFactory;
+  sockets: FakeSocket[];
+} {
+  const sockets: FakeSocket[] = [];
+  const factory: DirectExecWebSocketFactory = (endpoint, subprotocols) => {
+    const socket = new FakeSocket(endpoint, subprotocols);
+    sockets.push(socket);
+    queueMicrotask(() => {
+      socket.onopen?.({});
+      if (script.stdout) socket.fireBinary(1, script.stdout);
+      if (script.stderr) socket.fireBinary(3, script.stderr);
+      socket.onmessage?.({ data: JSON.stringify({ type: 'exit', data: { exit_code: script.exitCode } }) });
+    });
+    return socket;
+  };
+  return { factory, sockets };
+}
+
+class FakeSocket implements DirectExecWebSocket {
+  binaryType: 'blob' | 'arraybuffer' = 'blob';
+  onopen: ((event: unknown) => void) | null = null;
+  onmessage: ((event: { data: unknown }) => void) | null = null;
+  onclose: ((event: { code: number; reason: string }) => void) | null = null;
+  onerror: ((event: unknown) => void) | null = null;
+  sent: string[] = [];
+  closed = false;
+
+  constructor(
+    readonly endpoint: string,
+    readonly subprotocols: string[],
+  ) {}
+
+  send(data: string): void {
+    this.sent.push(data);
+  }
+
+  close(): void {
+    this.closed = true;
+  }
+
+  fireBinary(prefix: number, payload: string): void {
+    const bytes = new TextEncoder().encode(payload);
+    const framed = new Uint8Array(bytes.length + 1);
+    framed[0] = prefix;
+    framed.set(bytes, 1);
+    const buffer = framed.buffer.slice(framed.byteOffset, framed.byteOffset + framed.byteLength) as ArrayBuffer;
+    this.onmessage?.({ data: buffer });
+  }
 }
 
 describe('PlatformSandbox', () => {
@@ -10,34 +86,41 @@ describe('PlatformSandbox', () => {
     vi.unstubAllEnvs();
   });
 
-  it('creates a sandbox and executes commands through the proxy', async () => {
+  it('creates a sandbox, mints an exec lease, and runs the command over the direct WebSocket', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
-      .mockResolvedValueOnce(json({ exitCode: 0, stdout: 'ok', stderr: '', timedOut: false, truncated: false }));
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
 
     const sandbox = new PlatformSandbox({
       accessToken: 'sk_test',
       projectId: 'proj_123',
       environmentId: 'env_123',
       fetch: fetchMock,
+      webSocketFactory: factory,
     });
 
     await sandbox._start();
     const result = await sandbox.executeCommand('echo', ['ok'], { cwd: '/workspace', env: { A: '1' } });
 
     expect(result).toMatchObject({ success: true, exitCode: 0, stdout: 'ok', stderr: '', command: 'echo ok' });
+    // Provision request first.
     expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
     expect(await (fetchMock.mock.calls[0]![1].body as string)).toContain('env_123');
-    expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec');
-    const execBody = JSON.parse(fetchMock.mock.calls[1]![1].body as string);
-    expect(execBody).toMatchObject({
-      command: 'echo ok',
-      cwd: '/workspace',
-      env: { A: '1' },
-    });
-    expect(execBody.environmentId).toBeUndefined();
+    // Then the exec-lease mint — no /exec HTTP hit.
+    expect(String(fetchMock.mock.calls[1]![0])).toBe(
+      'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // Exec ran over the direct WS with the lease's endpoint + subprotocols.
+    expect(sockets).toHaveLength(1);
+    expect(sockets[0]!.endpoint).toBe('wss://ssh.railway.com:2226/ws/exec');
+    expect(sockets[0]!.subprotocols).toEqual(['railway-shell', 'jwt.value.here']);
+    // init_exec frame carries command + cwd + env.
+    const init = JSON.parse(sockets[0]!.sent[0]!) as { data: Record<string, unknown> };
+    expect(init.data).toEqual({ command: 'echo ok', cwd: '/workspace', env: { A: '1' } });
   });
 
   it('does not send a template field on the create wire body', async () => {
@@ -155,12 +238,14 @@ describe('PlatformSandbox', () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(json({ id: 'sbx_existing', createdAt: '2026-06-26T00:00:00.000Z' }))
-      .mockResolvedValueOnce(json({ exitCode: 0, stdout: 'ok', stderr: '' }));
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
     const sandbox = new PlatformSandbox({
       accessToken: 'sk_test',
       projectId: 'proj_123',
       sandboxId: 'sbx_existing',
       fetch: fetchMock,
+      webSocketFactory: factory,
     });
 
     await sandbox._start();
@@ -169,7 +254,7 @@ describe('PlatformSandbox', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_existing');
     expect(String(fetchMock.mock.calls[1]![0])).toBe(
-      'https://proxy.test/v1/projects/proj_123/sandbox/sbx_existing/exec',
+      'https://proxy.test/v1/projects/proj_123/sandbox/sbx_existing/exec-lease',
     );
   });
 
@@ -180,12 +265,14 @@ describe('PlatformSandbox', () => {
       .fn()
       .mockResolvedValueOnce(json({ error: { message: 'Sandbox not found', type: 'not_found' } }, { status: 404 }))
       .mockResolvedValueOnce(json({ id: 'sbx_recreated', createdAt: '2026-06-26T00:00:00.000Z' }))
-      .mockResolvedValueOnce(json({ exitCode: 0, stdout: 'ok', stderr: '' }));
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
     const sandbox = new PlatformSandbox({
       accessToken: 'sk_test',
       projectId: 'proj_123',
       sandboxId: 'sbx_stale',
       fetch: fetchMock,
+      webSocketFactory: factory,
     });
 
     await sandbox._start();
@@ -198,7 +285,7 @@ describe('PlatformSandbox', () => {
       environmentId: 'env_from_process',
     });
     expect(String(fetchMock.mock.calls[2]![0])).toBe(
-      'https://proxy.test/v1/projects/proj_123/sandbox/sbx_recreated/exec',
+      'https://proxy.test/v1/projects/proj_123/sandbox/sbx_recreated/exec-lease',
     );
   });
 
@@ -212,12 +299,14 @@ describe('PlatformSandbox', () => {
         json({ id: 'sbx_stale', createdAt: '2026-06-26T00:00:00.000Z', destroyedAt: '2026-06-27T00:00:00.000Z' }),
       )
       .mockResolvedValueOnce(json({ id: 'sbx_recreated', createdAt: '2026-06-28T00:00:00.000Z' }))
-      .mockResolvedValueOnce(json({ exitCode: 0, stdout: 'ok', stderr: '' }));
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
     const sandbox = new PlatformSandbox({
       accessToken: 'sk_test',
       projectId: 'proj_123',
       sandboxId: 'sbx_stale',
       fetch: fetchMock,
+      webSocketFactory: factory,
     });
 
     await sandbox._start();
@@ -225,7 +314,7 @@ describe('PlatformSandbox', () => {
 
     expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
     expect(String(fetchMock.mock.calls[2]![0])).toBe(
-      'https://proxy.test/v1/projects/proj_123/sandbox/sbx_recreated/exec',
+      'https://proxy.test/v1/projects/proj_123/sandbox/sbx_recreated/exec-lease',
     );
   });
 
@@ -283,43 +372,306 @@ describe('PlatformSandbox', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2); // no third fetch
   });
 
-  it('preserves an explicit timeout: 0 on executeCommand instead of dropping it', async () => {
+  it('treats an explicit timeout: 0 as "no timeout" on the direct-exec path (matches proxy semantics)', async () => {
+    // On the fallback /exec path, timeout: 0 must be preserved (not dropped
+    // by a truthy check) so the proxy sees `timeoutSec: 0` and interprets it
+    // as no-timeout. On the direct-exec path, the client owns the timeout —
+    // "no timeout" is expressed by NOT arming a client-side timer, so the
+    // exec runs to completion regardless of wall-clock elapsed.
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
-      .mockResolvedValueOnce(json({ exitCode: 0, stdout: '', stderr: '' }));
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory, sockets } = fakeExecSocket({ exitCode: 0 });
 
     const sandbox = new PlatformSandbox({
       accessToken: 'sk_test',
       projectId: 'proj_123',
       environmentId: 'env_123',
       fetch: fetchMock,
+      webSocketFactory: factory,
     });
 
     await sandbox._start();
-    await sandbox.executeCommand('sleep', ['1'], { timeout: 0 });
+    const result = await sandbox.executeCommand('sleep', ['1'], { timeout: 0 });
 
-    const body = JSON.parse(fetchMock.mock.calls[1]![1].body as string);
-    expect(body.timeoutSec).toBe(0);
+    // Would have been `timedOut: true, exitCode: 124` if the 0 got converted
+    // to a "default short timeout" — the whole point of the original bug.
+    expect(result).toMatchObject({ exitCode: 0, timedOut: false });
+    // The init frame carries no timeout field either way — timeout enforcement
+    // is client-side on the direct path, not part of the wire protocol.
+    const init = JSON.parse(sockets[0]!.sent[0]!) as { data: Record<string, unknown> };
+    expect('timeoutSec' in init.data).toBe(false);
+    expect('timeoutMs' in init.data).toBe(false);
   });
 
   it('kill() throws because the proxy has no cancel endpoint', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(json({ id: 'sbx_1' }))
-      .mockResolvedValueOnce(json({ exitCode: 0, stdout: '', stderr: '' }));
+      .mockResolvedValueOnce(leaseResponse());
+    const { factory } = fakeExecSocket({ exitCode: 0 });
 
     const sandbox = new PlatformSandbox({
       accessToken: 'sk_test',
       projectId: 'proj_123',
       environmentId: 'env_123',
       fetch: fetchMock,
+      webSocketFactory: factory,
     });
     await sandbox._start();
 
     const handle = await sandbox.processes.spawn('sleep 10');
     await expect(handle.kill()).rejects.toThrow(/does not support killing/);
+  });
+
+  describe('direct exec', () => {
+    it('reuses a cached lease across multiple execs on the same sandbox', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse());
+      const { factory, sockets } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+      });
+
+      await sandbox._start();
+      await sandbox.executeCommand('echo one');
+      // A second exec must NOT round-trip to /exec-lease again; the lease is
+      // reused until it expires. Only two fetches total: provision + first lease.
+      await sandbox.executeCommand('echo two');
+      await sandbox.executeCommand('echo three');
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      // But each exec still opens a fresh WebSocket (leases are per sandbox,
+      // WS sessions are per exec).
+      expect(sockets).toHaveLength(3);
+    });
+
+    it('mints a fresh lease when the cached one is within LEASE_REFRESH_MARGIN_MS of expiry', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const expiringSoon = new Date(Date.now() + 10_000).toISOString();
+      const freshLater = new Date(Date.now() + 3600_000).toISOString();
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.old', expiresAt: expiringSoon }))
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.new', expiresAt: freshLater }));
+      const { factory, sockets } = fakeExecSocket({ exitCode: 0 });
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+      });
+
+      await sandbox._start();
+      await sandbox.executeCommand('one');
+      await sandbox.executeCommand('two');
+
+      // Second exec re-minted because expiry - margin < now.
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(String(fetchMock.mock.calls[2]![0])).toBe(
+        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
+      );
+      // Each socket opened with the JWT that was current at that moment.
+      expect(sockets[0]!.subprotocols[1]).toBe('jwt.old');
+      expect(sockets[1]!.subprotocols[1]).toBe('jwt.new');
+    });
+
+    it('always re-mints when the lease has a null expiresAt (unknown TTL, refresh eagerly)', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse({ expiresAt: null }))
+        .mockResolvedValueOnce(leaseResponse({ expiresAt: null }));
+      const { factory } = fakeExecSocket({ exitCode: 0 });
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+      });
+
+      await sandbox._start();
+      await sandbox.executeCommand('one');
+      await sandbox.executeCommand('two');
+
+      // Provision + two lease mints — cache is skipped because expiresAt is null.
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
+    it('falls back to the proxy /exec route when the exec-lease endpoint returns 404', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        // Older platform deployment: exec-lease not present.
+        .mockResolvedValueOnce(json({ error: { message: 'Not Found', type: 'not_found' } }, { status: 404 }))
+        .mockResolvedValueOnce(json({ exitCode: 0, stdout: 'ok', stderr: '', timedOut: false, truncated: false }))
+        // Second exec should skip the mint attempt entirely — the fallback bit is sticky.
+        .mockResolvedValueOnce(json({ exitCode: 0, stdout: 'ok', stderr: '', timedOut: false, truncated: false }));
+      // If the fallback fails to trigger, we'd end up here and the test would blow up
+      // with an unhandled WS error. Passing a factory that throws makes that explicit.
+      const factory: DirectExecWebSocketFactory = () => {
+        throw new Error('should not open a WebSocket after 404 fallback');
+      };
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+      });
+
+      await sandbox._start();
+      const first = await sandbox.executeCommand('echo one');
+      const second = await sandbox.executeCommand('echo two');
+
+      expect(first).toMatchObject({ exitCode: 0, stdout: 'ok' });
+      expect(second).toMatchObject({ exitCode: 0, stdout: 'ok' });
+      // Calls: provision, exec-lease (404), /exec (fallback), /exec (sticky fallback).
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect(String(fetchMock.mock.calls[1]![0])).toBe(
+        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
+      );
+      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec');
+      expect(String(fetchMock.mock.calls[3]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec');
+    });
+
+    it('propagates non-404/501 errors from the exec-lease mint instead of falling back silently', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(json({ error: { message: 'boom', type: 'internal_error' } }, { status: 500 }));
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+
+      await sandbox._start();
+      await expect(sandbox.executeCommand('echo hi')).rejects.toThrow(/internal_error/);
+      // Only provision + failed mint; no /exec fallback because 500 isn't a
+      // "endpoint not present" signal.
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('drops the cached lease and falls through to /exec when the WS closes without an exit frame', async () => {
+      // Simulates a mid-handshake drop / expired token / provider hiccup:
+      // lease mint succeeds but the direct-exec socket closes before an exit
+      // frame arrives. We should discard the (possibly stale) lease, fall
+      // through to the proxy /exec path for THIS call, and re-mint on the
+      // next call so we don't fall through forever on a transient blip.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.first' }))
+        .mockResolvedValueOnce(
+          json({ exitCode: 0, stdout: 'via-proxy', stderr: '', timedOut: false, truncated: false }),
+        )
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.second' }));
+      const sockets: FakeSocket[] = [];
+      let call = 0;
+      const factory: DirectExecWebSocketFactory = (endpoint, subprotocols) => {
+        const socket = new FakeSocket(endpoint, subprotocols);
+        sockets.push(socket);
+        const isFirst = ++call === 1;
+        queueMicrotask(() => {
+          socket.onopen?.({});
+          if (isFirst) {
+            // First exec: close without an exit frame — transport failure.
+            socket.onclose?.({ code: 1006, reason: 'abnormal' });
+          } else {
+            // Second exec: normal exit.
+            socket.onmessage?.({ data: JSON.stringify({ type: 'exit', data: { exit_code: 0 } }) });
+          }
+        });
+        return socket;
+      };
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+      });
+
+      await sandbox._start();
+      const first = await sandbox.executeCommand('echo one');
+      const second = await sandbox.executeCommand('echo two');
+
+      // First call fell through to /exec after the WS drop.
+      expect(first).toMatchObject({ exitCode: 0, stdout: 'via-proxy' });
+      // Second call re-minted a fresh lease (jwt.second) and succeeded direct.
+      expect(second).toMatchObject({ exitCode: 0 });
+      // Fetch sequence: provision, first lease, /exec fallback, second lease.
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec');
+      expect(String(fetchMock.mock.calls[3]![0])).toBe(
+        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
+      );
+      // Two sockets opened (both direct-exec attempts); the second used the fresh JWT.
+      expect(sockets).toHaveLength(2);
+      expect(sockets[1]!.subprotocols[1]).toBe('jwt.second');
+    });
+
+    it('coalesces concurrent lease mints on a cold cache into a single POST /exec-lease', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      // Delay the lease response so both execs hit `_ensureLease` before it resolves.
+      let releaseLease!: () => void;
+      const leasePromise = new Promise<Response>(resolve => {
+        releaseLease = () => resolve(leaseResponse());
+      });
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockImplementationOnce(() => leasePromise);
+      const { factory } = fakeExecSocket({ exitCode: 0 });
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+      });
+
+      await sandbox._start();
+      // Fire two execs in parallel before the lease mint resolves.
+      const both = Promise.all([sandbox.executeCommand('echo one'), sandbox.executeCommand('echo two')]);
+      // Let both calls reach `_ensureLease`, then release the shared mint.
+      await new Promise(r => setTimeout(r, 0));
+      releaseLease();
+      const [first, second] = await both;
+
+      expect(first).toMatchObject({ exitCode: 0 });
+      expect(second).toMatchObject({ exitCode: 0 });
+      // Provision + exactly one shared mint (no duplicate) — proves coalescing.
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(String(fetchMock.mock.calls[1]![0])).toBe(
+        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
+      );
+    });
   });
 
   describe('clone', () => {
@@ -385,12 +737,14 @@ describe('PlatformSandbox', () => {
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(json({ id: 'sbx_existing', createdAt: '2026-06-26T00:00:00.000Z' }))
-        .mockResolvedValueOnce(json({ exitCode: 0, stdout: 'ok', stderr: '' }));
+        .mockResolvedValueOnce(leaseResponse());
+      const { factory } = fakeExecSocket({ exitCode: 0, stdout: 'ok' });
       const template = new PlatformSandbox({
         accessToken: 'sk_test',
         projectId: 'proj_123',
         environmentId: 'env_123',
         fetch: fetchMock,
+        webSocketFactory: factory,
       });
 
       const child = template.clone({ sandboxId: 'sbx_existing' });
@@ -399,7 +753,7 @@ describe('PlatformSandbox', () => {
 
       expect(String(fetchMock.mock.calls[0]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_existing');
       expect(String(fetchMock.mock.calls[1]![0])).toBe(
-        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_existing/exec',
+        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_existing/exec-lease',
       );
       const createCalls = fetchMock.mock.calls.filter(call => {
         const url = String(call[0]);
