@@ -40,7 +40,6 @@ export function SankeyChart({
 }: SankeyChartProps) {
   const { graph, enabledColumns, hueMap, usesFixedGeometry } = useSankeyRenderContext();
   const { chartContainerRef, fixedGeometry, labelWidths } = useSankeyChartMeasurements({
-    columnCount: enabledColumns.length,
     graph,
     height,
     margin,

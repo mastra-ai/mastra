@@ -6,7 +6,6 @@ import { buildFixedSankeyGeometry, getSankeyLabelWidths, SANKEY_NODE_WIDTH } fro
 import type { SankeyChartGraph } from './sankey-chart-utils';
 
 type SankeyChartMeasurementsOptions = {
-  columnCount: number;
   graph: SankeyChartGraph;
   height: CSSProperties['height'];
   margin: ComponentProps<typeof RechartsSankey>['margin'];
@@ -14,7 +13,6 @@ type SankeyChartMeasurementsOptions = {
 };
 
 export function useSankeyChartMeasurements({
-  columnCount,
   graph,
   height,
   margin,
@@ -55,16 +53,13 @@ export function useSankeyChartMeasurements({
     [graph, margin?.bottom, margin?.left, margin?.right, margin?.top, measuredHeight, measuredWidth, usesFixedGeometry],
   );
 
-  const labelWidths = useMemo(
-    () =>
-      getSankeyLabelWidths({
-        chartWidth: measuredWidth,
-        columnCount,
-        marginLeft: Number(margin?.left ?? 160),
-        marginRight: Number(margin?.right ?? 160),
-      }),
-    [columnCount, margin?.left, margin?.right, measuredWidth],
-  );
+  // recharts spaces columns by link depth, so the graph — not the enabled column list — sets the pitch
+  const labelWidths = getSankeyLabelWidths({
+    chartWidth: measuredWidth,
+    columnCount: new Set(graph.nodes.map(node => node.column.id)).size,
+    marginLeft: Number(margin?.left ?? 160),
+    marginRight: Number(margin?.right ?? 160),
+  });
 
   return { chartContainerRef, fixedGeometry, labelWidths };
 }
