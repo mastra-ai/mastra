@@ -35,6 +35,11 @@ interface CreateSandboxResponse {
   destroyedAt?: string | null;
 }
 
+/** Max attempts for `POST /sandbox` when the proxy returns transient 5xx errors. */
+const CREATE_MAX_ATTEMPTS = 3;
+/** Base delay between create retries; multiplied by the attempt number. */
+const CREATE_RETRY_BASE_DELAY_MS = 2_000;
+
 interface ExecResponse {
   exitCode: number | null;
   stdout: string;
@@ -215,21 +220,37 @@ export class PlatformSandbox extends MastraSandbox {
 
     if (!this._environmentId) throw new Error('environmentId is required');
 
-    const response = await this._client.request('/sandbox', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        // Sent so the platform can associate the provisioned resource with a
-        // caller-stable identifier (used for opt-in checkpoint recovery). The
-        // platform treats it as an advisory key: unknown values fall through
-        // to a fresh sandbox, matching pre-existing behavior.
-        id: this.id,
-        environmentId: this._environmentId,
-        idleTimeoutMinutes: this._idleTimeoutMinutes,
-        networkIsolation: this._networkIsolation,
-        env: this._env,
-      }),
+    const body = JSON.stringify({
+      // Sent so the platform can associate the provisioned resource with a
+      // caller-stable identifier (used for opt-in checkpoint recovery). The
+      // platform treats it as an advisory key: unknown values fall through
+      // to a fresh sandbox, matching pre-existing behavior.
+      id: this.id,
+      environmentId: this._environmentId,
+      idleTimeoutMinutes: this._idleTimeoutMinutes,
+      networkIsolation: this._networkIsolation,
+      env: this._env,
     });
+    // Provisioning is observed to fail intermittently with proxy 500s while
+    // the provider is under load. A create either succeeds (201) or fails
+    // without allocating a caller-visible resource, so retrying transient
+    // 5xx responses with a short backoff is safe and keeps a single flaky
+    // window from killing the caller's whole workflow.
+    let response: Response | undefined;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        response = await this._client.request('/sandbox', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body,
+        });
+        break;
+      } catch (error) {
+        const transient = error instanceof PlatformApiError && error.status >= 500;
+        if (!transient || attempt >= CREATE_MAX_ATTEMPTS) throw error;
+        await new Promise(resolve => setTimeout(resolve, CREATE_RETRY_BASE_DELAY_MS * attempt));
+      }
+    }
     const json = (await response.json()) as CreateSandboxResponse;
     this._sandboxId = json.id;
     this._createdAt = json.createdAt ? new Date(json.createdAt) : new Date();

@@ -75,6 +75,81 @@ describe('PlatformSandbox', () => {
     expect(body.id).toBe('mc-project-42');
   });
 
+  it('retries sandbox creation when the proxy returns a transient 5xx', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          json({ error: { message: 'Internal server error', type: 'internal_error' } }, { status: 500 }),
+        )
+        .mockResolvedValueOnce(json({ id: 'sbx_after_retry', createdAt: '2026-06-26T00:00:00.000Z' }));
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+
+      const started = sandbox._start();
+      await vi.advanceTimersByTimeAsync(2_000);
+      await started;
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not retry sandbox creation on non-transient errors', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(json({ error: { message: 'Environment not found', type: 'not_found' } }, { status: 404 }));
+
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+
+    await expect(sandbox._start()).rejects.toThrow('not_found');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives up sandbox creation after exhausting transient retries', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      // Fresh Response per call — a shared instance would fail on the second
+      // body read instead of exercising the retry path.
+      const fetchMock = vi
+        .fn()
+        .mockImplementation(async () =>
+          json({ error: { message: 'Internal server error', type: 'internal_error' } }, { status: 500 }),
+        );
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+
+      const started = sandbox._start();
+      const assertion = expect(started).rejects.toThrow('internal_error');
+      await vi.advanceTimersByTimeAsync(10_000);
+      await assertion;
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('reattaches when constructed with a sandbox id', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi
