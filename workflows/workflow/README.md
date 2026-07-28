@@ -147,7 +147,6 @@ Also worth knowing:
 
 - **`.map()` is untested.** It should work — a mapping step is an ordinary step in the graph — but nothing verifies that yet.
 - **`resume()`, `watch()` and `cancel()` from another process need storage** on your `Mastra` instance. See [Resuming from another process](#resuming-from-another-process).
-- **Upgrading this package changes the ids of the steps it ships.** The Workflow SDK derives them from the package specifier and version, so `@mastra/workflow@0.1.0` and `@mastra/workflow@0.2.0` register different ids for the same functions. On Vercel this is safe: a run is pinned to the deployment that started it and resumes there, on the code that recorded those ids, so runs already in flight — including ones suspended on a hook — finish on the old version while new runs use the new one. On a self-hosted world without deployment pinning (`@workflow/world-postgres`) there is only ever one live version of the code, so a deploy invalidates in-flight runs; that applies to any change you deploy, not just upgrades of this package.
 
 ## How it works
 

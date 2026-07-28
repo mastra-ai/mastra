@@ -12,7 +12,11 @@
  * points at source and names the two directive-bearing modules directly:
  * Workflow SDK's discovery pass resolves relative specifiers itself and does not
  * apply TypeScript's `.js` -> `.ts` rewrite, so it cannot see through the
- * barrel file the way a bundler can.
+ * barrel file the way a bundler can. Tracked upstream as
+ * https://github.com/vercel/workflow/issues/3151 — until it is fixed, a
+ * `.js`-suffixed relative specifier in a directive-reachable file makes that
+ * file invisible to discovery, with no build error and a
+ * `WorkflowNotRegisteredError` at runtime.
  */
 import '../defs';
 
