@@ -4,6 +4,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
@@ -19,7 +20,7 @@ import {
   Stethoscope,
   Trash2,
 } from 'lucide-react';
-import type { ComponentType, DragEvent } from 'react';
+import type { ComponentType, DragEvent, ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 
@@ -81,6 +82,28 @@ function SourceTitle({ source, title }: { source: WorkItemSource; title: string 
       <span className="sr-only">{SOURCE_LABELS[source]}: </span>
       <span>{title}</span>
     </>
+  );
+}
+
+/**
+ * Card titles are clipped to one line, so the full text is only reachable on
+ * hover. The tooltip anchors to the whole card rather than the title span: in
+ * `WorkItemCard` the click target is an `absolute inset-0 z-10` overlay that
+ * paints over the title, so a trigger on the title itself would never see a
+ * pointer event.
+ */
+function CardTitleTooltip({ title, children }: { title: string; children: ReactElement }) {
+  return (
+    // The app-wide provider uses a 0ms delay, which is fine for icon buttons but
+    // makes a card-sized target fire while the pointer merely crosses the board.
+    <TooltipProvider delay={400}>
+      <Tooltip>
+        <TooltipTrigger render={children} />
+        <TooltipContent side="top" className="max-w-90">
+          <span className="wrap-anywhere whitespace-pre-wrap">{title}</span>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -1394,185 +1417,187 @@ function WorkItemCard({
   const labels = metadataLabels(item.metadata);
 
   return (
-    <article
-      draggable={!evaluating}
-      aria-label={item.title}
-      aria-busy={evaluating || runPending || undefined}
-      data-testid="work-item-card"
-      data-related={relatedItems.length > 0 ? 'true' : undefined}
-      onDragStart={event => {
-        if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
-      }}
-      className={cn(
-        'group relative flex flex-col gap-3 rounded-xl border border-border1/50 bg-neutral6/5 p-3 outline-none transition-colors hover:bg-surface3',
-        evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
-        runPending && 'opacity-70',
-      )}
-    >
-      {threadSession !== null ? (
-        <Link
-          to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
-          draggable={false}
-          aria-label={`Open thread for ${item.title}`}
-          className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
-        />
-      ) : (
-        // Card click starts the default run (first unused action, e.g. Review
-        // for PRs) so clicking a card kicks off its work; cards with no run
-        // spec fall back to opening a plain chat session on the item's branch.
-        <button
-          type="button"
-          draggable={false}
-          disabled={runDisabled}
-          aria-busy={pendingRunRoles.size > 0 || undefined}
-          aria-label={
-            runSpec !== null && runActions[0] !== undefined
-              ? `${runActions[0].label} ${item.title}`
-              : `Create thread for ${item.title}`
-          }
-          className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
-          onClick={() =>
-            runSpec !== null && runActions[0] !== undefined
-              ? onStartRun(runSpec, runActions[0])
-              : onCreateSession(itemSessionSpec(item))
-          }
-        />
-      )}
-      <div className="absolute top-2 right-2 z-20">
-        <DropdownMenu>
-          <DropdownMenu.Trigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                disabled={evaluating}
-                aria-label={`Actions for ${item.title}`}
-              >
-                <EllipsisVertical size={13} aria-hidden />
-              </Button>
+    <CardTitleTooltip title={item.title}>
+      <article
+        draggable={!evaluating}
+        aria-label={item.title}
+        aria-busy={evaluating || runPending || undefined}
+        data-testid="work-item-card"
+        data-related={relatedItems.length > 0 ? 'true' : undefined}
+        onDragStart={event => {
+          if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
+        }}
+        className={cn(
+          'group relative flex flex-col gap-3 rounded-xl border border-border1/50 bg-neutral6/5 p-3 outline-none transition-colors hover:bg-surface3',
+          evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
+          runPending && 'opacity-70',
+        )}
+      >
+        {threadSession !== null ? (
+          <Link
+            to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
+            draggable={false}
+            aria-label={`Open thread for ${item.title}`}
+            className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+          />
+        ) : (
+          // Card click starts the default run (first unused action, e.g. Review
+          // for PRs) so clicking a card kicks off its work; cards with no run
+          // spec fall back to opening a plain chat session on the item's branch.
+          <button
+            type="button"
+            draggable={false}
+            disabled={runDisabled}
+            aria-busy={pendingRunRoles.size > 0 || undefined}
+            aria-label={
+              runSpec !== null && runActions[0] !== undefined
+                ? `${runActions[0].label} ${item.title}`
+                : `Create thread for ${item.title}`
+            }
+            className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
+            onClick={() =>
+              runSpec !== null && runActions[0] !== undefined
+                ? onStartRun(runSpec, runActions[0])
+                : onCreateSession(itemSessionSpec(item))
             }
           />
-          <DropdownMenu.Content align="end" className="min-w-44">
-            {runSpec !== null &&
-              runActions.map(action => {
-                const starting = pendingRunRoles.has(action.role);
-                return (
-                  <DropdownMenu.Item
-                    key={action.label}
-                    disabled={runDisabled || starting}
-                    onClick={() => onStartRun(runSpec, action)}
-                  >
-                    {actionIcon(action.label)}
-                    <span>{starting ? 'Starting…' : action.label}</span>
+        )}
+        <div className="absolute top-2 right-2 z-20">
+          <DropdownMenu>
+            <DropdownMenu.Trigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  disabled={evaluating}
+                  aria-label={`Actions for ${item.title}`}
+                >
+                  <EllipsisVertical size={13} aria-hidden />
+                </Button>
+              }
+            />
+            <DropdownMenu.Content align="end" className="min-w-44">
+              {runSpec !== null &&
+                runActions.map(action => {
+                  const starting = pendingRunRoles.has(action.role);
+                  return (
+                    <DropdownMenu.Item
+                      key={action.label}
+                      disabled={runDisabled || starting}
+                      onClick={() => onStartRun(runSpec, action)}
+                    >
+                      {actionIcon(action.label)}
+                      <span>{starting ? 'Starting…' : action.label}</span>
+                    </DropdownMenu.Item>
+                  );
+                })}
+              {columnStage === 'intake' &&
+                item.url !== null &&
+                (item.source === 'github-issue' || item.source === 'linear-issue') && (
+                  <DropdownMenu.Item render={<a href={item.url} target="_blank" rel="noreferrer" />}>
+                    <ArrowUpRight aria-hidden />
+                    <span>{externalLinkLabel(item.source)}</span>
                   </DropdownMenu.Item>
-                );
-              })}
-            {columnStage === 'intake' &&
-              item.url !== null &&
-              (item.source === 'github-issue' || item.source === 'linear-issue') && (
-                <DropdownMenu.Item render={<a href={item.url} target="_blank" rel="noreferrer" />}>
-                  <ArrowUpRight aria-hidden />
-                  <span>{externalLinkLabel(item.source)}</span>
-                </DropdownMenu.Item>
-              )}
-            {itemStageOptions(item)
-              .filter(stage => stage.id !== columnStage)
-              .map(stage => (
-                <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
-                  <BoardStageIcon stage={stage.id} />
-                  <span>{stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}</span>
-                </DropdownMenu.Item>
-              ))}
-            <DropdownMenu.Item onClick={onRemove}>
-              <Trash2 aria-hidden />
-              <span>Remove</span>
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu>
-      </div>
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <span className="text-ui-xs text-icon2 truncate pr-8">{workItemMeta(item)}</span>
-        <div className="flex min-w-0 items-center gap-1.5">
-          <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
-          <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
-            <SourceTitle source={item.source} title={item.title} />
-          </span>
+                )}
+              {itemStageOptions(item)
+                .filter(stage => stage.id !== columnStage)
+                .map(stage => (
+                  <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
+                    <BoardStageIcon stage={stage.id} />
+                    <span>{stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}</span>
+                  </DropdownMenu.Item>
+                ))}
+              <DropdownMenu.Item onClick={onRemove}>
+                <Trash2 aria-hidden />
+                <span>Remove</span>
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu>
         </div>
-      </div>
-      <CardLabels labels={labels} />
-      {relatedItems.map(related => {
-        const relationText = relationshipLabel(related);
-        const relatedLiveSessions = Object.fromEntries(
-          Object.entries(related.sessions).filter(([, session]) => liveWorktreePaths.has(session.sessionId)),
-        );
-        const relatedSession = itemThreadSession(relatedLiveSessions);
-        return (
-          <Link
-            key={related.id}
-            to={
-              relatedSession
-                ? `/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`
-                : relationshipPath(related, factoryId)
-            }
-            className="text-ui-xs text-icon4 hover:text-icon6 relative z-20 flex items-center gap-1 hover:underline"
-            aria-label={`Open ${relationText}`}
-          >
-            <Link2 size={11} aria-hidden />
-            <span className="truncate">{relationText}</span>
-          </Link>
-        );
-      })}
-      {otherStages.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {otherStages.map(stage => (
-            <span key={stage} className="border-border1 text-ui-xs text-icon4 rounded-full border px-2 py-0.5">
-              {itemStageLabel(item, stage)}
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-ui-xs text-icon2 truncate pr-8">{workItemMeta(item)}</span>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
+            <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
+              <SourceTitle source={item.source} title={item.title} />
             </span>
-          ))}
+          </div>
         </div>
-      )}
-      {evaluatingStage !== undefined && (
-        <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
-          <Spinner size="sm" aria-hidden className="size-3" />
-          {evaluatingStage === 'done' ? 'Marking done…' : `Moving to ${itemStageLabel(item, evaluatingStage)}…`}
-        </span>
-      )}
-      {[...pendingRunRoles].map(([role, phase]) => (
-        <span key={role} role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
-          <Spinner size="sm" aria-hidden className="size-3" />
-          {runSpec?.actions.find(action => action.role === role)?.label ?? 'Starting run'} —{' '}
-          {phase !== undefined ? RUN_PHASE_LABELS[phase] : 'starting…'}
-        </span>
-      ))}
-      {!evaluating && decision !== undefined && (
-        <div className="flex items-center justify-between gap-2">
-          <span
-            role={decision.status === 'failed' ? 'alert' : 'status'}
-            className={cn('text-ui-xs', decision.status === 'failed' ? 'text-error' : 'text-icon4')}
-          >
-            {decisionStatusText(decision)}
-          </span>
-          {decision.status === 'failed' ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="relative z-20"
-              disabled={retryingDecisionId === decision.id}
-              onClick={() => onRetryDecision(decision.id)}
+        <CardLabels labels={labels} />
+        {relatedItems.map(related => {
+          const relationText = relationshipLabel(related);
+          const relatedLiveSessions = Object.fromEntries(
+            Object.entries(related.sessions).filter(([, session]) => liveWorktreePaths.has(session.sessionId)),
+          );
+          const relatedSession = itemThreadSession(relatedLiveSessions);
+          return (
+            <Link
+              key={related.id}
+              to={
+                relatedSession
+                  ? `/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`
+                  : relationshipPath(related, factoryId)
+              }
+              className="text-ui-xs text-icon4 hover:text-icon6 relative z-20 flex items-center gap-1 hover:underline"
+              aria-label={`Open ${relationText}`}
             >
-              {retryingDecisionId === decision.id ? 'Retrying…' : 'Retry'}
-            </Button>
-          ) : null}
-        </div>
-      )}
-      {!evaluating && transitionReason !== undefined && (
-        <span role="alert" className="text-ui-xs text-error">
-          {transitionReason}
-        </span>
-      )}
-    </article>
+              <Link2 size={11} aria-hidden />
+              <span className="truncate">{relationText}</span>
+            </Link>
+          );
+        })}
+        {otherStages.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {otherStages.map(stage => (
+              <span key={stage} className="border-border1 text-ui-xs text-icon4 rounded-full border px-2 py-0.5">
+                {itemStageLabel(item, stage)}
+              </span>
+            ))}
+          </div>
+        )}
+        {evaluatingStage !== undefined && (
+          <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
+            <Spinner size="sm" aria-hidden className="size-3" />
+            {evaluatingStage === 'done' ? 'Marking done…' : `Moving to ${itemStageLabel(item, evaluatingStage)}…`}
+          </span>
+        )}
+        {[...pendingRunRoles].map(([role, phase]) => (
+          <span key={role} role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
+            <Spinner size="sm" aria-hidden className="size-3" />
+            {runSpec?.actions.find(action => action.role === role)?.label ?? 'Starting run'} —{' '}
+            {phase !== undefined ? RUN_PHASE_LABELS[phase] : 'starting…'}
+          </span>
+        ))}
+        {!evaluating && decision !== undefined && (
+          <div className="flex items-center justify-between gap-2">
+            <span
+              role={decision.status === 'failed' ? 'alert' : 'status'}
+              className={cn('text-ui-xs', decision.status === 'failed' ? 'text-error' : 'text-icon4')}
+            >
+              {decisionStatusText(decision)}
+            </span>
+            {decision.status === 'failed' ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="relative z-20"
+                disabled={retryingDecisionId === decision.id}
+                onClick={() => onRetryDecision(decision.id)}
+              >
+                {retryingDecisionId === decision.id ? 'Retrying…' : 'Retry'}
+              </Button>
+            ) : null}
+          </div>
+        )}
+        {!evaluating && transitionReason !== undefined && (
+          <span role="alert" className="text-ui-xs text-error">
+            {transitionReason}
+          </span>
+        )}
+      </article>
+    </CardTitleTooltip>
   );
 }
 
@@ -1601,79 +1626,81 @@ function CandidateCard({
   const showTriage = candidate.source === 'github-issue' && !hasLabel(labels, AUTO_TRIAGED_LABEL) && onTriage;
   const [defaultAction, ...otherActions] = candidate.runActions;
   return (
-    <article
-      draggable
-      aria-label={candidate.title}
-      data-testid="candidate-card"
-      onDragStart={event =>
-        setDragPayload(event, {
-          kind: 'candidate',
-          candidate: {
-            source: candidate.source,
-            sourceKey: candidate.sourceKey,
-            title: candidate.title,
-            url: candidate.url,
-            metadata: candidate.metadata,
-          },
-        })
-      }
-      className="group border-border1/50 bg-neutral6/5 hover:bg-surface3 flex cursor-grab flex-col gap-3 rounded-xl border p-3 transition-colors outline-none active:cursor-grabbing"
-    >
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <span className="text-ui-xs text-icon2 block truncate">{candidate.meta}</span>
-        <div className="flex min-w-0 items-center gap-1.5">
-          <Icon size={16} className={cn('shrink-0', candidate.iconClassName)} aria-hidden />
-          <button
-            type="button"
-            disabled={disabled}
-            aria-busy={pendingRunRoles.has(defaultAction.role) || undefined}
-            // Title click starts the default run — same as the primary action
-            // button — so clicking a candidate always kicks off its work.
-            onClick={() => onRun(defaultAction)}
-            className="text-ui-smd text-icon6 min-w-0 flex-1 truncate text-left font-semibold hover:underline disabled:opacity-60"
-          >
-            <SourceTitle source={candidate.source} title={candidate.title} />
-          </button>
-          <a
-            href={candidate.url}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={externalLinkLabel(candidate.source)}
-            className="text-icon3 hover:text-icon5 shrink-0 transition-[opacity,translate] focus-visible:translate-x-0 focus-visible:translate-y-0 focus-visible:opacity-100 motion-reduce:transition-none pointer-fine:-translate-x-1 pointer-fine:translate-y-1 pointer-fine:opacity-0 pointer-fine:group-hover:translate-x-0 pointer-fine:group-hover:translate-y-0 pointer-fine:group-hover:opacity-100"
-          >
-            <ArrowUpRight size={12} aria-hidden />
-          </a>
-        </div>
-      </div>
-      <CardLabels labels={labels} />
-      <FactoryItemActions
-        actionLabel={defaultAction.label}
-        itemLabel={candidate.title}
-        starting={pendingRunRoles.has(defaultAction.role)}
-        disabled={disabled}
-        onAction={() => onRun(defaultAction)}
-        extraActions={otherActions.map(action => ({
-          label: action.label,
-          starting: pendingRunRoles.has(action.role),
-          onAction: () => onRun(action),
-        }))}
-        onRunPrompt={prompt => onRun(defaultAction, prompt)}
-        menuExtras={
-          <>
-            {showTriage && (
-              <DropdownMenu.Item disabled={triageStarting} onClick={onTriage}>
-                <Stethoscope aria-hidden />
-                <span>{triageStarting ? 'Starting…' : 'Triage issue'}</span>
-              </DropdownMenu.Item>
-            )}
-            <DropdownMenu.Item onClick={onFile}>
-              <Plus aria-hidden />
-              <span>Add to board</span>
-            </DropdownMenu.Item>
-          </>
+    <CardTitleTooltip title={candidate.title}>
+      <article
+        draggable
+        aria-label={candidate.title}
+        data-testid="candidate-card"
+        onDragStart={event =>
+          setDragPayload(event, {
+            kind: 'candidate',
+            candidate: {
+              source: candidate.source,
+              sourceKey: candidate.sourceKey,
+              title: candidate.title,
+              url: candidate.url,
+              metadata: candidate.metadata,
+            },
+          })
         }
-      />
-    </article>
+        className="group border-border1/50 bg-neutral6/5 hover:bg-surface3 flex cursor-grab flex-col gap-3 rounded-xl border p-3 transition-colors outline-none active:cursor-grabbing"
+      >
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-ui-xs text-icon2 block truncate">{candidate.meta}</span>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Icon size={16} className={cn('shrink-0', candidate.iconClassName)} aria-hidden />
+            <button
+              type="button"
+              disabled={disabled}
+              aria-busy={pendingRunRoles.has(defaultAction.role) || undefined}
+              // Title click starts the default run — same as the primary action
+              // button — so clicking a candidate always kicks off its work.
+              onClick={() => onRun(defaultAction)}
+              className="text-ui-smd text-icon6 min-w-0 flex-1 truncate text-left font-semibold hover:underline disabled:opacity-60"
+            >
+              <SourceTitle source={candidate.source} title={candidate.title} />
+            </button>
+            <a
+              href={candidate.url}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={externalLinkLabel(candidate.source)}
+              className="text-icon3 hover:text-icon5 shrink-0 transition-[opacity,translate] focus-visible:translate-x-0 focus-visible:translate-y-0 focus-visible:opacity-100 motion-reduce:transition-none pointer-fine:-translate-x-1 pointer-fine:translate-y-1 pointer-fine:opacity-0 pointer-fine:group-hover:translate-x-0 pointer-fine:group-hover:translate-y-0 pointer-fine:group-hover:opacity-100"
+            >
+              <ArrowUpRight size={12} aria-hidden />
+            </a>
+          </div>
+        </div>
+        <CardLabels labels={labels} />
+        <FactoryItemActions
+          actionLabel={defaultAction.label}
+          itemLabel={candidate.title}
+          starting={pendingRunRoles.has(defaultAction.role)}
+          disabled={disabled}
+          onAction={() => onRun(defaultAction)}
+          extraActions={otherActions.map(action => ({
+            label: action.label,
+            starting: pendingRunRoles.has(action.role),
+            onAction: () => onRun(action),
+          }))}
+          onRunPrompt={prompt => onRun(defaultAction, prompt)}
+          menuExtras={
+            <>
+              {showTriage && (
+                <DropdownMenu.Item disabled={triageStarting} onClick={onTriage}>
+                  <Stethoscope aria-hidden />
+                  <span>{triageStarting ? 'Starting…' : 'Triage issue'}</span>
+                </DropdownMenu.Item>
+              )}
+              <DropdownMenu.Item onClick={onFile}>
+                <Plus aria-hidden />
+                <span>Add to board</span>
+              </DropdownMenu.Item>
+            </>
+          }
+        />
+      </article>
+    </CardTitleTooltip>
   );
 }
 

@@ -16,6 +16,7 @@ import type {
 } from '@mastra/core/storage';
 
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
+import { withClientWriteLock } from './db/write-lock';
 import { LibSQLStore } from './index';
 
 export interface LibSQLFactoryStorageConfig {
@@ -99,27 +100,20 @@ function serializeDefault(value: string | number | boolean): string {
   return String(value);
 }
 
-/** Simple FIFO in-process mutex serializing the single-writer paths. */
-class Mutex {
-  #tail: Promise<unknown> = Promise.resolve();
-
-  run<T>(fn: () => Promise<T>): Promise<T> {
-    const result = this.#tail.then(fn, fn);
-    this.#tail = result.catch(() => {});
-    return result;
-  }
-}
-
 type LibSQLExecutor = Pick<Client, 'execute'>;
+type WriteGate = <T>(fn: () => Promise<T>) => Promise<T>;
+
+const runWithoutWriteLock: WriteGate = fn => fn();
 
 class LibSQLFactoryStorageOps implements FactoryStorageOps {
   readonly #client: LibSQLExecutor;
   readonly #schemas: Map<string, CollectionSchema>;
-  readonly #writeMutex = new Mutex();
+  readonly #withWriteLock: WriteGate;
 
-  constructor(client: LibSQLExecutor, schemas: Map<string, CollectionSchema>) {
+  constructor(client: LibSQLExecutor, schemas: Map<string, CollectionSchema>, withWriteLock: WriteGate) {
     this.#client = client;
     this.#schemas = schemas;
+    this.#withWriteLock = withWriteLock;
   }
 
   #schema(collection: string): CollectionSchema {
@@ -291,7 +285,7 @@ class LibSQLFactoryStorageOps implements FactoryStorageOps {
     return this.#select<T>(collection, where, opts);
   }
 
-  async insertOne<T extends Record<string, unknown>>(collection: string, row: Partial<T>): Promise<T> {
+  async #insertOne<T extends Record<string, unknown>>(collection: string, row: Partial<T>): Promise<T> {
     const schema = this.#schema(collection);
     const pk = primaryKeyOf(schema);
 
@@ -320,7 +314,11 @@ class LibSQLFactoryStorageOps implements FactoryStorageOps {
     return inserted;
   }
 
-  async upsertOne<T extends Record<string, unknown>>(
+  async insertOne<T extends Record<string, unknown>>(collection: string, row: Partial<T>): Promise<T> {
+    return this.#withWriteLock(() => this.#insertOne<T>(collection, row));
+  }
+
+  async #upsertOne<T extends Record<string, unknown>>(
     collection: string,
     conflictKeys: string[],
     row: Partial<T>,
@@ -340,14 +338,14 @@ class LibSQLFactoryStorageOps implements FactoryStorageOps {
           ),
         );
         if (Object.keys(set).length > 0) {
-          await this.updateMany(collection, { [pk]: existing[pk] as CollectionValue }, set);
+          await this.#updateMany(collection, { [pk]: existing[pk] as CollectionValue }, set);
         }
         const updated = await this.findOne<T>(collection, { [pk]: existing[pk] as CollectionValue });
         if (!updated) continue; // deleted concurrently; retry
         return updated;
       }
       try {
-        return await this.insertOne<T>(collection, row);
+        return await this.#insertOne<T>(collection, row);
       } catch (error) {
         if (!(error instanceof UniqueViolationError)) throw error;
         lastError = error; // lost an insert race; retry as update
@@ -356,7 +354,15 @@ class LibSQLFactoryStorageOps implements FactoryStorageOps {
     throw lastError ?? new Error(`LibSQLFactoryStorage: upsert into '${collection}' did not converge`);
   }
 
-  async updateMany(collection: string, where: CollectionWhere, set: Record<string, unknown>): Promise<number> {
+  async upsertOne<T extends Record<string, unknown>>(
+    collection: string,
+    conflictKeys: string[],
+    row: Partial<T>,
+  ): Promise<T> {
+    return this.#withWriteLock(() => this.#upsertOne<T>(collection, conflictKeys, row));
+  }
+
+  async #updateMany(collection: string, where: CollectionWhere, set: Record<string, unknown>): Promise<number> {
     const schema = this.#schema(collection);
     const columns = Object.keys(set).filter(column => set[column] !== undefined);
     if (columns.length === 0) return 0;
@@ -367,7 +373,11 @@ class LibSQLFactoryStorageOps implements FactoryStorageOps {
     return result.rowsAffected;
   }
 
-  async deleteMany(collection: string, where: CollectionWhere): Promise<number> {
+  async updateMany(collection: string, where: CollectionWhere, set: Record<string, unknown>): Promise<number> {
+    return this.#withWriteLock(() => this.#updateMany(collection, where, set));
+  }
+
+  async #deleteMany(collection: string, where: CollectionWhere): Promise<number> {
     const schema = this.#schema(collection);
     const filter = this.#buildWhere(schema, where);
     const result = await this.#client.execute({
@@ -377,22 +387,24 @@ class LibSQLFactoryStorageOps implements FactoryStorageOps {
     return result.rowsAffected;
   }
 
+  async deleteMany(collection: string, where: CollectionWhere): Promise<number> {
+    return this.#withWriteLock(() => this.#deleteMany(collection, where));
+  }
+
   async updateAtomic<T extends Record<string, unknown>>(
     collection: string,
     where: CollectionWhere,
     fn: (row: T) => Partial<T> | null | Promise<Partial<T> | null>,
   ): Promise<T | null> {
-    const schema = this.#schema(collection);
-    const pk = primaryKeyOf(schema);
-    // libsql local is single-writer; serializing read-modify-write in process
-    // gives the same "no lost updates" guarantee pg gets from FOR UPDATE.
-    return this.#writeMutex.run(async () => {
+    return this.#withWriteLock(async () => {
+      const schema = this.#schema(collection);
+      const pk = primaryKeyOf(schema);
       const row = await this.findOne<T>(collection, where);
       if (!row) return null;
       const patch = await fn(row);
       if (patch === null) return row;
       const pkWhere = { [pk]: row[pk] as CollectionValue } as CollectionWhere;
-      await this.updateMany(collection, pkWhere, patch);
+      await this.#updateMany(collection, pkWhere, patch);
       return this.findOne<T>(collection, pkWhere);
     });
   }
@@ -420,7 +432,7 @@ export class LibSQLFactoryStorage extends FactoryStorage {
       ...(config.authToken ? { authToken: config.authToken } : {}),
       ...(isLocalDb ? { timeout: DEFAULT_CONNECTION_TIMEOUT_MS } : {}),
     });
-    this.ops = new LibSQLFactoryStorageOps(this.#client, this.#schemas);
+    this.ops = new LibSQLFactoryStorageOps(this.#client, this.#schemas, fn => withClientWriteLock(this.#client, fn));
   }
 
   getMastraStorage(): MastraCompositeStore {
@@ -437,25 +449,31 @@ export class LibSQLFactoryStorage extends FactoryStorage {
   }
 
   async withTransaction<T>(fn: (ops: FactoryStorageOps) => Promise<T>): Promise<T> {
-    if (this.#config.url.includes(':memory:')) return fn(this.ops);
-    const transaction = await this.#client.transaction('write');
-    try {
-      const result = await fn(new LibSQLFactoryStorageOps(transaction, this.#schemas));
-      await transaction.commit();
-      return result;
-    } catch (error) {
-      await transaction.rollback();
-      throw error;
-    } finally {
-      transaction.close();
-    }
+    return withClientWriteLock(this.#client, async () => {
+      if (this.#config.url.includes(':memory:')) {
+        return fn(new LibSQLFactoryStorageOps(this.#client, this.#schemas, runWithoutWriteLock));
+      }
+      const transaction = await this.#client.transaction('write');
+      try {
+        const result = await fn(new LibSQLFactoryStorageOps(transaction, this.#schemas, runWithoutWriteLock));
+        await transaction.commit();
+        return result;
+      } catch (error) {
+        await transaction.rollback();
+        throw error;
+      } finally {
+        transaction.close();
+      }
+    });
   }
 
   async ensureCollections(schemas: CollectionSchema[]): Promise<void> {
-    for (const schema of schemas) {
-      await this.#ensureCollection(schema);
-      this.#schemas.set(schema.name, schema);
-    }
+    await withClientWriteLock(this.#client, async () => {
+      for (const schema of schemas) {
+        await this.#ensureCollection(schema);
+        this.#schemas.set(schema.name, schema);
+      }
+    });
   }
 
   async close(): Promise<void> {
