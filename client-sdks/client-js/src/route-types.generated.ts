@@ -17034,7 +17034,7 @@ export type PostDatasetsDatasetIdItems_Body = {
   toolMocks?: Shared_Type_114[] | undefined;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
-  /** Execution timeout override in milliseconds */
+  /** Execution timeout override in milliseconds, from 1 to 1,800,000 (30 minutes) */
   timeout?: number | undefined;
   /** Request context preset for this item */
   requestContext?:
@@ -17089,7 +17089,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
     toolMocks?: Shared_Type_114[] | undefined;
     /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
     unmockedToolPolicy?: ('allow' | 'deny') | undefined;
-    /** Execution timeout override in milliseconds */
+    /** Execution timeout override in milliseconds, from 1 to 1,800,000 (30 minutes) */
     timeout?: number | undefined;
     requestContext?:
       | {
@@ -17212,7 +17212,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
   toolMocks?: Shared_Type_114[] | undefined;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
-  /** Execution timeout override in milliseconds */
+  /** Execution timeout override in milliseconds, from 1 to 1,800,000 (30 minutes) */
   timeout?: number | undefined;
   /** Request context preset for this item */
   requestContext?:
@@ -17506,7 +17506,7 @@ export type PostDatasetsDatasetIdExperiments_Body = {
   agentVersion?: string | undefined;
   /** Maximum concurrent executions */
   maxConcurrency?: number | undefined;
-  /** Fallback execution timeout per item in milliseconds */
+  /** Fallback execution timeout per item in milliseconds, from 1 to 1,800,000 (30 minutes) */
   itemTimeout?: number | undefined;
   /** Global request context passed to the target */
   requestContext?:
