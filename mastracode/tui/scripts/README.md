@@ -1,5 +1,30 @@
 # Mastra Code scripts
 
+## Render churn reproduction
+
+This deterministic benchmark measures the cumulative output allocated when `pi-tui` repeatedly renders a retained chat tree. It does not call a model or read user settings.
+
+Reproduce the former 5,000-child chat buffer under 30,000 renders (40 minutes at the TUI's 80 ms render interval):
+
+```sh
+pnpm --filter ./mastracode/tui repro:render-churn -- 5000 30000 2000 120
+```
+
+Compare it with the restored 200-child limit:
+
+```sh
+pnpm --filter ./mastracode/tui repro:render-churn -- 200 30000 2000 120
+```
+
+Arguments are `childCount`, `renders`, `payloadBytes`, and terminal `width`. The JSON result reports cumulative rendered GiB, elapsed time, RSS, V8 heap, and peak RSS. `renderedGiB` represents allocation/output churn, not simultaneously resident memory.
+
+Reference results on an Apple Silicon Mac with Node 24.11.1:
+
+| Children | Renders |   Rendered |  Elapsed |  Peak RSS |
+| -------: | ------: | ---------: | -------: | --------: |
+|    5,000 |  30,000 | 301.75 GiB | 120.30 s | 340.9 MiB |
+|      200 |  30,000 |  12.07 GiB |   4.31 s |  96.4 MiB |
+
 ## Render Smoke
 
 Render Smoke is a local OpenAI-compatible streaming mock used to stress-test Mastra Code TUI rendering with large streamed tool arguments.

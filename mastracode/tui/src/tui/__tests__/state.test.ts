@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@earendil-works/pi-tui', () => {
   class MockContainer {
     children: unknown[] = [];
+    invalidate = vi.fn();
   }
 
   class MockProcessTerminal {
@@ -10,6 +11,8 @@ vi.mock('@earendil-works/pi-tui', () => {
   }
 
   class MockTUI {
+    requestRender = vi.fn();
+
     constructor(public terminal: MockProcessTerminal) {}
   }
 
@@ -148,5 +151,21 @@ describe('createTUIState', () => {
 
     expect(state.editor.getModeColor?.()).toBe('#7c3aed');
     expect(controller.session.mode.resolve).toHaveBeenCalled();
+  });
+
+  it('prunes retained chat history before rendering', () => {
+    const session = createSession();
+    const state = createTUIState({
+      controller: createAgentController(session) as never,
+      session: session as never,
+    });
+
+    state.chatContainer.children.push(...(Array.from({ length: 201 }, (_, index) => ({ index })) as never[]));
+
+    state.renderScheduler!.flush();
+
+    expect(state.chatContainer.children).toHaveLength(100);
+    expect(state.chatContainer.children[0]).toEqual({ index: 101 });
+    expect(state.ui.requestRender).toHaveBeenCalledOnce();
   });
 });
