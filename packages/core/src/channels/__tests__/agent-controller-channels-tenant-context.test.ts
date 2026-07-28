@@ -4,10 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../../agent';
 import { AgentController } from '../../agent-controller/agent-controller';
 import { createMockWorkspace } from '../../agent-controller/test-utils';
-import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 import type { AgentControllerChannels } from '../agent-controller-channels';
-import type { ChannelAccountLinkResolver } from '../types';
+import { getChatModule } from '../chat-lazy';
+import type { ChannelHandler } from '../types';
 
 function createTextStreamModel(responseText: string) {
   return new MockLanguageModelV2({
@@ -26,8 +26,6 @@ function createTextStreamModel(responseText: string) {
   });
 }
 
-// Minimal Slack-shaped mock adapter — named 'slack' so the core team-id
-// extraction (`resolveSlackTeamId`, gated on platform === 'slack') fires.
 function createSlackMockAdapter() {
   return {
     name: 'slack',
@@ -50,7 +48,18 @@ function createSlackMockAdapter() {
   } as any;
 }
 
-async function createSetup() {
+/**
+ * Build a controller whose channels carry a custom `onDirectMessage`, and
+ * capture the wrapper the Chat SDK is handed so the test can drive a message
+ * through the real handler boundary — the seam a host writes the tenant on.
+ */
+async function createSetup(onDirectMessage: ChannelHandler) {
+  const chatMod = await getChatModule();
+  let registeredDMWrapper: ((thread: any, message: any) => unknown) | undefined;
+  const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+    registeredDMWrapper = handler;
+  });
+
   const adapter = createSlackMockAdapter();
   const agent = new Agent({
     id: 'mode-agent',
@@ -65,14 +74,15 @@ async function createSetup() {
     resourceId: 'ctrl-resource',
     modes: [{ id: 'build', agent, defaultModelId: 'anthropic/claude-opus-4-7' }],
     defaultModeId: 'build',
-    channels: { adapters: { slack: adapter } },
+    channels: { adapters: { slack: adapter }, handlers: { onDirectMessage } },
   });
   await controller.init();
   const mastra = controller.getMastra()!;
   await mastra.startWorkers();
   const channels = controller.getChannels()! as AgentControllerChannels;
   await channels.initialize(mastra);
-  return { adapter, controller, mastra, channels };
+
+  return { adapter, controller, mastra, channels, dispatch: registeredDMWrapper!, restore: () => spy.mockRestore() };
 }
 
 function createSlackChatThread(adapter: any, threadId: string) {
@@ -90,15 +100,13 @@ function createSlackChatThread(adapter: any, threadId: string) {
   } as any;
 }
 
-// A Slack message whose raw envelope carries `team_id` (the only place the
-// Slack team id survives onto a normalized chat Message).
-function createSlackMessage(id: string, text: string, teamId: string) {
+function createSlackMessage(id: string, text: string) {
   return {
     id,
     text,
     author: { userId: 'U-sender', userName: 'caleb', fullName: 'Caleb Barnes' },
     attachments: [],
-    raw: { team_id: teamId },
+    raw: { team_id: 'T-workspace' },
   } as any;
 }
 
@@ -110,16 +118,18 @@ async function waitFor(cond: () => boolean, { timeoutMs = 15_000, what = 'condit
   }
 }
 
-describe('AgentControllerChannels account linking', () => {
-  it('resolves the linked sender and stamps the tenant on the run before dispatching', async () => {
-    const { adapter, controller, mastra, channels } = await createSetup();
+describe('AgentControllerChannels tenant context', () => {
+  it('carries a tenant stamped by the handler through to the dispatched run', async () => {
+    // This is the seam that replaced core's injected account-link resolver: the
+    // host resolves the sender itself and writes the tenant before deferring.
+    const onDirectMessage: ChannelHandler = async (thread, message, defaultHandler, ctx) => {
+      ctx.requestContext.set('user', { id: 'tenant-user-9', organizationId: 'org-9' });
+      await defaultHandler(thread, message);
+    };
+
+    const { adapter, controller, dispatch, restore } = await createSetup(onDirectMessage);
     const chatThread = createSlackChatThread(adapter, 'C-1:t-1');
 
-    const resolver: ChannelAccountLinkResolver = vi.fn(async () => ({ orgId: 'org-9', userId: 'tenant-user-9' }));
-    channels.setAccountLinkResolver(resolver);
-
-    // Wrap the created session's sendSignal to capture the requestContext the
-    // dispatcher hands it, so we can assert the tenant was stamped as `user`.
     let signalUser: unknown;
     let createSessionUser: unknown;
     const createSession = controller.createSession.bind(controller);
@@ -134,77 +144,39 @@ describe('AgentControllerChannels account linking', () => {
       return session;
     });
 
-    await (channels as any).processChatMessage(
-      chatThread,
-      createSlackMessage('m-1', 'hi', 'T-workspace'),
-      mastra,
-      new RequestContext(),
-    );
-
+    await dispatch(chatThread, createSlackMessage('m-1', 'hi'));
     await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'agent reply posted' });
 
-    // The resolver was consulted with the platform sender identity from the
-    // channel context (team id extracted from message.raw.team_id).
-    expect(resolver).toHaveBeenCalledWith({ platform: 'slack', teamId: 'T-workspace', userId: 'U-sender' });
-
-    // The tenant was stamped on the run's requestContext as `user` — the single
-    // seam `resolveCredentialStore` reads to load the sender's model creds.
+    // The tenant reached the run's requestContext as `user` — the single seam
+    // `resolveCredentialStore` reads to load the sender's model credentials.
     expect(signalUser).toEqual({ id: 'tenant-user-9', organizationId: 'org-9' });
 
-    // Session creation received the same stamped context: a dynamic workspace
-    // factory resolves once at creation time, and it must see the tenant or a
+    // Session creation saw the same stamped context: a dynamic workspace factory
+    // resolves once at creation time, and it must see the tenant or a
     // repo-backed session workspace fails its owner check on the first message.
     expect(createSessionUser).toEqual({ id: 'tenant-user-9', organizationId: 'org-9' });
 
-    // And the run proceeded: a session exists and the reply rendered.
     const session = await controller.getSessionByResource('channel:C-1:t-1');
     expect(session).toBeDefined();
+
+    restore();
   }, 30_000);
 
-  it('does not dispatch an unlinked sender and invokes the unlinked-sender handler', async () => {
-    const { adapter, controller, mastra, channels } = await createSetup();
+  it('does not run when the handler declines to call defaultHandler', async () => {
+    // The unlinked-sender path, now owned entirely by the host: gating means
+    // simply not deferring to the default handler. Core has no say.
+    const onDirectMessage: ChannelHandler = async () => {};
+
+    const { adapter, controller, dispatch, restore } = await createSetup(onDirectMessage);
     const chatThread = createSlackChatThread(adapter, 'C-2:t-2');
 
-    const resolver: ChannelAccountLinkResolver = vi.fn(async () => null);
-    channels.setAccountLinkResolver(resolver);
-    const unlinked = vi.fn();
-    channels.setUnlinkedSenderHandler(unlinked);
-
     const createSpy = vi.spyOn(controller, 'createSession');
 
-    await (channels as any).processChatMessage(
-      chatThread,
-      createSlackMessage('m-1', 'hi', 'T-workspace'),
-      mastra,
-      new RequestContext(),
-    );
+    await dispatch(chatThread, createSlackMessage('m-1', 'hi'));
 
-    // The unlinked handler fired with the sender identity...
-    await waitFor(() => unlinked.mock.calls.length >= 1, { what: 'unlinked handler invoked' });
-    expect(unlinked).toHaveBeenCalledWith(
-      expect.objectContaining({ platform: 'slack', teamId: 'T-workspace', userId: 'U-sender', channelId: 'C-2' }),
-    );
-
-    // ...and no run happened: no session created, no reply posted.
     expect(createSpy).not.toHaveBeenCalled();
     expect(chatThread.post.mock.calls.length).toBe(0);
-  }, 30_000);
 
-  it('keeps pre-account-linking behavior when no resolver is set (dispatches with no tenant)', async () => {
-    const { adapter, controller, mastra, channels } = await createSetup();
-    const chatThread = createSlackChatThread(adapter, 'C-3:t-3');
-
-    // No resolver set — the gate is inert.
-    const createSpy = vi.spyOn(controller, 'createSession');
-
-    await (channels as any).processChatMessage(
-      chatThread,
-      createSlackMessage('m-1', 'hi', 'T-workspace'),
-      mastra,
-      new RequestContext(),
-    );
-
-    await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'agent reply posted' });
-    expect(createSpy).toHaveBeenCalled();
+    restore();
   }, 30_000);
 });
