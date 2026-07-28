@@ -94,28 +94,14 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 pb-8">
-      <header className="flex flex-col gap-1 pt-1">
-        <Txt as="h1" variant="header-sm" className="text-icon6 m-0">
-          Metrics
-        </Txt>
-        <Txt as="p" variant="ui-sm" className="text-icon3 m-0 max-w-2xl">
-          See how work moves through the Factory and where it needs attention.
-        </Txt>
-      </header>
-
-      <MetricsSection
-        title="Reporting period"
-        description="Drag the range or use the date controls to compare a different window."
-        action={<Badge size="sm">{windowDays} days</Badge>}
-      >
-        <DateRangeTimeline
-          key={`${bounds.min}:${bounds.max}`}
-          value={range}
-          min={bounds.min}
-          max={bounds.max}
-          onCommit={value => setRange(clampRangeSpan(value, MAX_METRICS_WINDOW_DAYS))}
-        />
-      </MetricsSection>
+      <h1 className="sr-only">Metrics</h1>
+      <DateRangeTimeline
+        key={`${bounds.min}:${bounds.max}`}
+        value={range}
+        min={bounds.min}
+        max={bounds.max}
+        onCommit={value => setRange(clampRangeSpan(value, MAX_METRICS_WINDOW_DAYS))}
+      />
 
       {!metrics ? (
         <MetricsLoading />
@@ -307,29 +293,16 @@ function OverviewReadout({
   );
 }
 
-function MetricsSection({
-  title,
-  description,
-  action,
-  children,
-}: {
-  title: string;
-  description: string;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
+function MetricsSection({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
     <section className="border-border1 flex flex-col gap-4 border-t pt-7">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <Txt as="h2" variant="ui-md" className="text-icon6 m-0 font-medium">
-            {title}
-          </Txt>
-          <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
-            {description}
-          </Txt>
-        </div>
-        {action}
+      <div className="flex flex-col gap-1">
+        <Txt as="h2" variant="ui-md" className="text-icon6 m-0 font-medium">
+          {title}
+        </Txt>
+        <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
+          {description}
+        </Txt>
       </div>
       {children}
     </section>
