@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import type { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const clack = vi.hoisted(() => ({
@@ -48,7 +49,6 @@ vi.mock('tinyexec', () => tinyexec);
 vi.mock('./platform.js', () => platform);
 vi.mock('mastra/internal/auth', () => cliAuth);
 
-import type { PosthogAnalytics } from 'mastra/dist/analytics/index.js';
 import { create } from './create.js';
 import { detectPackageManager, getInstallArgs } from './utils/pm.js';
 
