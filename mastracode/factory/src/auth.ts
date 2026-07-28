@@ -22,8 +22,8 @@ import { timedAboveThreshold } from './timing.js';
  * server is placed behind it: unauthenticated browser navigations are
  * redirected to the SPA's `/signin` page, API/XHR calls receive a 401, and a
  * small set of public routes stay reachable while signed out — the provider's
- * `/auth/*` routes plus `/auth/me`, the `/signin` page and its `/assets/*`
- * bundle. When no provider is active, `mountFactoryAuth` is a no-op and the server
+ * `/auth/*` routes plus `/auth/me`, the `/signin` page, its `/assets/*` bundle,
+ * and the SPA manifest metadata. When no provider is active, `mountFactoryAuth` is a no-op and the server
  * behaves exactly as it does without auth.
  *
  * Provider specifics stay in the providers (`@mastra/auth-workos`,
@@ -638,9 +638,15 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     if (c.req.method === 'POST' && path === '/web/github/webhook') {
       return next();
     }
-    // The SPA sign-in page and the static bundle it needs must be reachable
-    // while signed out; no user is stashed, so `/api/*` stays protected.
-    if (path === '/signin' || path.startsWith('/assets/')) {
+    // The SPA sign-in page, its static bundle, and browser-fetched metadata
+    // must be reachable while signed out; no user is stashed, so `/api/*`
+    // stays protected.
+    if (
+      path === '/signin' ||
+      path.startsWith('/assets/') ||
+      path === '/manifest.webmanifest' ||
+      path === '/mastra.svg'
+    ) {
       return next();
     }
 

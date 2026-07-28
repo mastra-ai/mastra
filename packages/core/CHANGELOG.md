@@ -1,5 +1,72 @@
 # @mastra/core
 
+## 1.54.0-alpha.1
+
+### Minor Changes
+
+- Channel handlers now receive a 4th argument: a `ChannelHandlerContext` carrying the resolved `mastra` instance. Custom handlers can read `ctx.mastra`. ([#19289](https://github.com/mastra-ai/mastra/pull/19289))
+
+- Added structured judge execution details to scorer results. ([#20022](https://github.com/mastra-ai/mastra/pull/20022))
+
+  ```typescript
+  const result = await scorer.run(input);
+  const usage = result.judge?.generateScore?.executions[0]?.usage;
+  ```
+
+  Prompt-based scorer steps now expose their prompt, structured output, judge model identity, normalized token usage, attempt and model-call counts, and duration. Use this data to interpret one scorer run without reconstructing it from traces.
+
+- Added chat channel support to `AgentController`. Configure `channels` with Chat SDK adapters (Slack, Discord, Telegram, and more) to run a controller-backed agent session inside a messaging thread: each chat thread maps to one durable controller session, the agent's streamed output renders back to the platform with native streaming, tool approval cards, and typing status, and tool approvals resolve through the session's approval gate. ([#19289](https://github.com/mastra-ai/mastra/pull/19289))
+
+  ```typescript
+  import { AgentController } from '@mastra/core/agent-controller';
+  import { createSlackAdapter } from '@chat-adapter/slack';
+
+  const agentController = new AgentController({
+    id: 'my-agent-controller',
+    agent,
+    modes,
+    channels: {
+      adapters: {
+        slack: createSlackAdapter(),
+      },
+    },
+  });
+  ```
+
+  Registering the controller on a `Mastra` instance exposes a webhook route per adapter at `/api/agent-controllers/<CONTROLLER_ID>/channels/<PLATFORM>/webhook`. Adapters can be constructed manually here; provider-managed connect flows (such as Slack's controller-owned installations) are also supported. Controller channels need a long-lived server.
+
+  Controller channels attach to the backing agent instance (via `setChannels`, propagated to every backing agent including per-mode agents) rather than being stamped onto each run's request context. Only agents explicitly given channels attach the channel output processor, so child runs such as observational-memory observers and forked subagents no longer render to the chat platform.
+
+  Inbound channel messages routed into a controller session keep their platform metadata: the message's `providerOptions` (author name, user ID, message ID, and so on under `mastra.channels.<PLATFORM>`) are stamped onto the persisted user message as `content.providerMetadata`, matching the plain agent channel path.
+
+- Added a built-in web fetch tool export for agents to retrieve HTTP and HTTPS page content. ([#20232](https://github.com/mastra-ai/mastra/pull/20232))
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { webFetchTool } from '@mastra/core/tools';
+
+  export const agent = new Agent({
+    name: 'Research agent',
+    instructions: 'Use web_fetch when you need page content.',
+    model,
+    tools: { web_fetch: webFetchTool },
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`ce93a3c`](https://github.com/mastra-ai/mastra/commit/ce93a3c114ea1cbfbd576f3db41d7c26c9844f5b))
+
+- Observational-memory settings no longer fail with "No session for resourceId" on the settings page: OM config routes now treat the live session as best-effort sync and fall back to the durably stored per-user settings when no agent-controller session exists for the resource (e.g. after a server restart), so settings load and save instead of 404ing ([#20265](https://github.com/mastra-ai/mastra/pull/20265))
+
+- Fixed session creation ignoring an exact thread id when the session was already live. Requesting a session with a threadId now resumes or creates that exact thread even when another request (like an event subscription or message listing) created the session first, preventing 'Thread not found' errors for workspace threads. ([#20265](https://github.com/mastra-ai/mastra/pull/20265))
+
+- Fixed Factory sessions failing to start their kickoff run. Workspaces now recover automatically when the sandbox provider changes or a sandbox is wiped (the repository is re-cloned instead of failing), thread pages surface workspace preparation errors with a Retry button instead of hanging, and kickoff messages are now delivered to the session thread instead of silently failing with a permissions error. ([#20265](https://github.com/mastra-ai/mastra/pull/20265))
+
+- The factory-review skill now publishes its verdict on the pull request itself (gh pr review --approve / --request-changes with the full handoff body, falling back to a PR comment when GitHub rejects the review) instead of only posting the verdict in the Factory thread ([#20265](https://github.com/mastra-ai/mastra/pull/20265))
+
+- Fixed Mastra construction so failed storage initialization no longer causes unhandled promise rejections. ([#20181](https://github.com/mastra-ai/mastra/pull/20181))
+
 ## 1.54.0-alpha.0
 
 ### Minor Changes

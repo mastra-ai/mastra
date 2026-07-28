@@ -124,13 +124,16 @@ describe('mountFactoryAuth gate (enabled)', () => {
     expect(await res.text()).toBe('ok');
   });
 
-  it('lets unauthenticated requests fetch static assets needed by the sign-in page', async () => {
+  it('lets unauthenticated requests fetch static assets and metadata needed by the sign-in page', async () => {
     mockAuthenticate.mockResolvedValue(null);
     const { app } = buildApp();
 
-    const res = await app.request('/assets/app.js', { headers: { Accept: '*/*' } });
-    expect(res.status).toBe(200);
-    expect(await res.text()).toBe('ok');
+    for (const path of ['/assets/app.js', '/manifest.webmanifest', '/mastra.svg']) {
+      const res = await app.request(path, { headers: { Accept: '*/*' } });
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe('ok');
+    }
+    expect(mockAuthenticate).not.toHaveBeenCalled();
   });
 
   it('returns 401 JSON for unauthenticated /api requests', async () => {

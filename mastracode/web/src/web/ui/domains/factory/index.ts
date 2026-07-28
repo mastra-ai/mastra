@@ -1,9 +1,0 @@
-export { FactorySection } from './components/FactorySection';
-export * from '../../../../shared/hooks/useFactoryData';
-export * from '../../../../shared/hooks/useLinearData';
-export * from '../../../../shared/hooks/useIntakeConfig';
-export * from '../../../../shared/hooks/useWorkItems';
-export * from './services/factory';
-export * from './services/linear';
-export * from './services/intake';
-export * from './services/workItems';
