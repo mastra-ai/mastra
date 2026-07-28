@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Browser application for MastraCode: React SPA, client data layer, Vite config, and UI tests. Consumed by the standalone mastracode/web host via link:.",
+  "description": "Browser application for MastraCode: React SPA, client data layer, Vite config, and UI tests. Produces the Factory SPA bundled by the Mastra CLI.",
   "scripts": {
     "dev": "vite --config src/vite.config.ts",
     "web": "MASTRACODE_ENV_DIR=../web MASTRACODE_API_TARGET=${MASTRACODE_API_TARGET:-http://localhost:4111} MASTRACODE_UI_PORT=${MASTRACODE_UI_PORT:-5173} vite --config src/vite.config.ts",

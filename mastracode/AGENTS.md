@@ -8,7 +8,7 @@ Lint TUI: pnpm --filter ./mastracode/tui lint
 Run pnpm build:mastracode before broad tests so workspace dist artifacts exist.
 Focused TUI test: pnpm --filter ./mastracode/tui exec vitest run <test-file> --reporter=dot --bail 1
 
-Factory UI (mastracode/factory-ui): React SPA + client data layer consumed by the standalone web host via `link:`. See mastracode/factory-ui/AGENTS.md for build, typecheck, test, and MSW conventions.
+Factory UI (mastracode/factory-ui): independent React SPA + client data layer for Vite UI development and the CLI UI artifact. See mastracode/factory-ui/AGENTS.md for build, typecheck, test, and MSW conventions.
 
 Unit tests are colocated under `mastracode/sdk/src` or `mastracode/tui/src`. Test the owning package first.
 

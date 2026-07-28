@@ -57,13 +57,12 @@ function runtimeConfigPlugin(): Plugin {
  * and `pnpm web` runs Vite (:5173) from this package. API paths are proxied to
  * that server so the browser uses same-origin requests in dev.
  *
- * The production build outputs the static SPA. The standalone web host sets
- * `MASTRACODE_OUT_DIR` to its `src/mastra/public/factory` so `mastra build`
- * copies the `public/` dir next to the Mastra entry into `.mastra/output/`
- * automatically, making the build self-contained and letting the API server
- * serve the SPA same-origin at `/` (see @mastra/factory/spa-static). The host
- * sets `MASTRACODE_ENV_DIR` so Vite loads `.env` from the host project root.
- * Hosting the SPA separately (static host / CDN, cross-origin via
+ * The production build outputs the static SPA for inclusion in the Mastra CLI.
+ * `mastra build` then copies that versioned CLI artifact into `.mastra/output/`
+ * beside the server bundle, which serves it same-origin at `/` (see
+ * @mastra/factory/spa-static). `MASTRACODE_OUT_DIR` and `MASTRACODE_ENV_DIR`
+ * remain available for local artifact and environment overrides. Hosting the
+ * SPA separately (static host / CDN, cross-origin via
  * MASTRACODE_ALLOWED_ORIGINS) remains possible.
  */
 export default defineConfig({

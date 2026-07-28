@@ -5,7 +5,8 @@ Unit tests: pnpm --filter ./mastracode/factory-ui test:unit
 MSW UI tests: pnpm --filter ./mastracode/factory-ui test:msw
 
 This package owns the MastraCode browser application: React SPA, client data
-layer, Vite config, and UI tests. For split UI/API development, run
+layer, Vite config, and UI tests. Its build produces the Factory SPA bundled by
+the Mastra CLI; it is not a runtime dependency of the web host. For split UI/API development, run
 `pnpm --dir mastracode/web api` first, then `pnpm --dir mastracode/factory-ui web`.
 The `web` script reads the host `.env`, runs Vite on :5173, and proxies to the
 host API on :4111.

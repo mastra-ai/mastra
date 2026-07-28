@@ -36,12 +36,11 @@ const SHARED_REGISTRY_SUITES = {
   softwarefactory: {
     tag: 'softwarefactory-e2e-test',
     manifestGlobs: [],
-    // The Software Factory template is generated from mastracode/web (server)
-    // and mastracode/factory-ui (browser app) by create-factory's
-    // sync-template.mjs; its roots are whatever those projects link/workspace
-    // from the monorepo, so discover them from the manifests instead of
-    // hardcoding a list that can drift.
-    linkManifests: ['mastracode/web/package.json', 'mastracode/factory-ui/package.json'],
+    // The Software Factory template is generated from the mastracode/web
+    // server scaffold by create-factory's sync-template.mjs. Discover its
+    // linked package roots from that manifest instead of hardcoding a list
+    // that can drift; the browser app is bundled by the CLI and not copied.
+    linkManifests: ['mastracode/web/package.json'],
   },
 };
 

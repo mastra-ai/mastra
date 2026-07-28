@@ -1,8 +1,8 @@
 # mastracode-web
 
-The Mastra Code web host: API routes (config/fs/GitHub/Linear), a deployable Mastra entry (`src/mastra/index.ts`), and server/controller scenario tests. The SPA UI lives in [`mastracode/factory-ui`](../factory-ui) (`@internal/factory-ui`), linked via `link:` — the host delegates UI development and building to that package. Built on [`@mastra/code-sdk`](../sdk). One factory storage backend persists agent state (threads, messages, and memory) and web app data. When `DATABASE_URL` is set, a separate `PgVector` uses the same PostgreSQL database for recall search; explicit local development and test runs use the SDK's local LibSQL database without vector storage. (`APP_DATABASE_URL` is honored as a deprecated fallback.)
+The Mastra Code web host: API routes (config/fs/GitHub/Linear), a deployable Mastra entry (`src/mastra/index.ts`), and server/controller scenario tests. Production builds and generated Factory projects use the versioned SPA bundled with the Mastra CLI. [`mastracode/factory-ui`](../factory-ui) remains the independent internal browser application for Vite-based UI development. Built on [`@mastra/code-sdk`](../sdk). One factory storage backend persists agent state (threads, messages, and memory) and web app data. When `DATABASE_URL` is set, a separate `PgVector` uses the same PostgreSQL database for recall search; explicit local development and test runs use the SDK's local LibSQL database without vector storage. (`APP_DATABASE_URL` is honored as a deprecated fallback.)
 
-This is a **standalone pnpm project** (own lockfile, not a monorepo workspace member). For development, the monorepo-provided packages (`@mastra/*`, `mastra`) are consumed via `link:` specs pointing at the monorepo directories, so you always develop against local source. The `@internal/factory-ui` package is a monorepo workspace member that carries the React SPA, Vite config, client data layer, and UI tests. For builds, `scripts/monorepo-deps.mjs` temporarily pins the `link:` deps to the exact versions found in the monorepo (see below).
+This is a **standalone pnpm project** (own lockfile, not a monorepo workspace member). For development, the monorepo-provided packages (`@mastra/*`, `mastra`) are consumed via `link:` specs pointing at the monorepo directories, so you always develop against local source. For builds, `scripts/monorepo-deps.mjs` temporarily pins every declared `link:` dependency to the exact version found in the monorepo (see below).
 
 ## Setup
 
@@ -46,8 +46,8 @@ pnpm build
 ```
 
 1. `prebuild` builds linked monorepo packages with Turbo.
-2. `scripts/monorepo-deps.mjs run -- mastra build --dir src/mastra` pins `link:` dependencies to the exact monorepo versions, builds the API server into `.mastra/output/`, and restores the `link:` specs afterward, including on failure or interruption.
-3. The Factory server serves its SPA artifact same-origin at `/`.
+2. `scripts/monorepo-deps.mjs run -- mastra build --dir src/mastra` pins `link:` dependencies to the exact monorepo versions, bundles the API server into `.mastra/output/`, copies the Factory SPA bundled with the CLI, and restores the `link:` specs afterward, including on failure or interruption.
+3. The Factory server serves the CLI-bundled SPA artifact same-origin at `/`.
 
 Run the output with `pnpm start` (or `node .mastra/output/index.mjs` after installing output dependencies).
 
