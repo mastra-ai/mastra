@@ -160,12 +160,12 @@ describe('createTUIState', () => {
       session: session as never,
     });
 
-    state.chatContainer.children.push(...(Array.from({ length: 201 }, (_, index) => ({ index })) as never[]));
+    state.chatContainer.children.push(...(Array.from({ length: 5001 }, (_, index) => ({ index })) as never[]));
 
     state.renderScheduler!.flush();
 
-    expect(state.chatContainer.children).toHaveLength(100);
-    expect(state.chatContainer.children[0]).toEqual({ index: 101 });
+    expect(state.chatContainer.children).toHaveLength(3000);
+    expect(state.chatContainer.children[0]).toEqual({ index: 2001 });
     expect(state.ui.requestRender).toHaveBeenCalledOnce();
   });
 });

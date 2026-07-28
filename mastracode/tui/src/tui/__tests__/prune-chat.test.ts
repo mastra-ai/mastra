@@ -28,8 +28,8 @@ function createState(childrenCount: number): TUIState {
 }
 
 describe('pruneChatContainer', () => {
-  it('keeps the last 100 children and removes every reference to pruned components', () => {
-    const state = createState(201);
+  it('keeps the last 3000 children and removes every reference to pruned components', () => {
+    const state = createState(5001);
 
     const removedTool = { toolName: 'removed-tool' };
     const keptTool = { toolName: 'kept-tool' };
@@ -53,11 +53,11 @@ describe('pruneChatContainer', () => {
     state.chatContainer.children[60] = removedSubagent;
     state.chatContainer.children[70] = removedAskUser;
     state.chatContainer.children[80] = removedSubmitPlan;
-    state.chatContainer.children[150] = keptTool as any;
-    state.chatContainer.children[170] = keptSlash as any;
-    state.chatContainer.children[180] = keptReminder as any;
-    state.chatContainer.children[190] = keptShell as any;
-    state.chatContainer.children[200] = keptMessage;
+    state.chatContainer.children[3500] = keptTool as any;
+    state.chatContainer.children[3700] = keptSlash as any;
+    state.chatContainer.children[3800] = keptReminder as any;
+    state.chatContainer.children[3900] = keptShell as any;
+    state.chatContainer.children[5000] = keptMessage;
 
     state.allToolComponents = [removedTool as any, keptTool as any];
     state.allSlashCommandComponents = [removedSlash, keptSlash];
@@ -71,12 +71,12 @@ describe('pruneChatContainer', () => {
 
     pruneChatContainer(state);
 
-    expect(state.chatContainer.children).toHaveLength(100);
-    expect(state.chatContainer.children[49]).toBe(keptTool);
-    expect(state.chatContainer.children[69]).toBe(keptSlash);
-    expect(state.chatContainer.children[79]).toBe(keptReminder);
-    expect(state.chatContainer.children[89]).toBe(keptShell);
-    expect(state.chatContainer.children[99]).toBe(keptMessage);
+    expect(state.chatContainer.children).toHaveLength(3000);
+    expect(state.chatContainer.children[1499]).toBe(keptTool);
+    expect(state.chatContainer.children[1699]).toBe(keptSlash);
+    expect(state.chatContainer.children[1799]).toBe(keptReminder);
+    expect(state.chatContainer.children[1899]).toBe(keptShell);
+    expect(state.chatContainer.children[2999]).toBe(keptMessage);
     expect(state.allToolComponents).toEqual([keptTool]);
     expect(state.allSlashCommandComponents).toEqual([keptSlash]);
     expect(state.allSystemReminderComponents).toEqual([keptReminder]);
@@ -88,12 +88,12 @@ describe('pruneChatContainer', () => {
   });
 
   it('does nothing when the container is already within the limit', () => {
-    const state = createState(200);
+    const state = createState(5000);
     const originalChildren = [...state.chatContainer.children];
 
     pruneChatContainer(state);
 
-    expect(state.chatContainer.children).toHaveLength(200);
+    expect(state.chatContainer.children).toHaveLength(5000);
     expect(state.chatContainer.children).toEqual(originalChildren);
   });
 });

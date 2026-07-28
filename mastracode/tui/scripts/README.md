@@ -4,13 +4,13 @@
 
 This deterministic benchmark measures the cumulative output allocated when `pi-tui` repeatedly renders a retained chat tree. It does not call a model or read user settings.
 
-Reproduce the former 5,000-child chat buffer under 30,000 renders (40 minutes at the TUI's 80 ms render interval):
+Measure the current 5,000-child chat buffer under 30,000 renders (40 minutes at the TUI's 80 ms render interval):
 
 ```sh
 pnpm --filter ./mastracode/tui repro:render-churn -- 5000 30000 2000 120
 ```
 
-Compare it with the restored 200-child limit:
+Compare the render amplification against a 200-child tree:
 
 ```sh
 pnpm --filter ./mastracode/tui repro:render-churn -- 200 30000 2000 120

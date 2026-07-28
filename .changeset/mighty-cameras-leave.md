@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-Fixed runaway terminal rendering allocations in long Mastra Code sessions by bounding retained chat history and releasing stale component references.
+Fixed oversized chat trees continuing to grow during streaming renders and released stale references when old components are pruned.
