@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import {
   AgentControllerChannels,
-  type ChannelAccountLinkResolver,
   type ChannelHandler,
+  type ChannelHandlerContext,
   type ChannelHandlers,
   type ResolveResourceId,
   type ResolveThreadId,
@@ -375,24 +375,6 @@ export async function resolveFactoryForLink({
 }
 
 /**
- * Adapt the factory account-link store into the core resolver shape: map the
- * platform sender ids (`teamId`/`userId`) to the store's `external_*` key. A
- * missing `teamId` can't identify a workspace-scoped link, so treat it as
- * unlinked rather than matching across workspaces.
- */
-function createAccountLinkResolver(accountLinks: ChannelIdentityStorage): ChannelAccountLinkResolver {
-  return async ({ platform, teamId, userId }) => {
-    if (!teamId) return null;
-    const link = await accountLinks.getAccountLink({
-      platform,
-      externalTeamId: teamId,
-      externalUserId: userId,
-    });
-    return link ? { orgId: link.orgId, userId: link.userId } : null;
-  };
-}
-
-/**
  * Deterministic per-thread branch name: `slack/{threadTs}` with characters
  * outside the sandbox git-ref allow-list (`[A-Za-z0-9_./-]`, and `.` for
  * readability) mapped to `-`. `thread.id` is `{channelId}:{threadTs}`
@@ -487,103 +469,6 @@ export const resolveChannelThreadId: ResolveThreadId = ({ resourceId, defaultThr
   resourceId.startsWith('channel:') ? defaultThreadId : resourceId;
 
 /**
- * Structural view of the chat SDK surface the `/factory` command needs.
- * Local rather than imported from `chat` for the same version-clash reason as
- * `HandlerThread` — and the command only touches this sliver.
- */
-export interface SlashCommandChat {
-  onSlashCommand(
-    command: string,
-    handler: (event: {
-      adapter: { name: string };
-      channel: {
-        id: string;
-        postEphemeral(user: unknown, message: unknown, options: { fallbackToDM: boolean }): Promise<unknown>;
-      };
-      text: string;
-      user: { userId: string };
-      raw: unknown;
-    }) => Promise<void> | void,
-  ): void;
-}
-
-/**
- * Register the `/factory` slash command: `/factory` lists the sender's
- * factories with the current default marked; `/factory <name>` repoints the
- * link's default (the same column the settings dropdown edits). Unlinked
- * senders get the Connect card. All replies are ephemeral.
- *
- * NOTE: the command must also be added to the Slack app's slash-command
- * config (manual, like the OIDC redirect URI) or Slack never posts it.
- */
-export function registerFactoryCommand(chat: SlashCommandChat, deps: SlackChannelDeps): void {
-  const { accountLinks, channelLinkStateSigner, projects } = deps;
-  // Without the link store + projects domain there is nothing to list or set.
-  if (!accountLinks || !projects) return;
-
-  chat.onSlashCommand('/factory', async event => {
-    const platform = event.adapter.name;
-    const externalUserId = event.user.userId;
-    const externalTeamId = rawTeamId(event.raw);
-    const ephemeral = (message: unknown) => event.channel.postEphemeral(event.user, message, { fallbackToDM: false });
-
-    const key = externalTeamId ? { platform, externalTeamId, externalUserId } : undefined;
-    const link = key ? await accountLinks.getAccountLink(key) : null;
-    if (!link || !key) {
-      const publicUrl = webPublicUrl();
-      if (channelLinkStateSigner && publicUrl && externalTeamId) {
-        await ephemeral(
-          buildConnectCard({
-            signer: channelLinkStateSigner,
-            publicUrl,
-            platform,
-            externalTeamId,
-            externalUserId,
-            channelId: event.channel.id,
-          }),
-        );
-      } else {
-        await ephemeral('Connect your account first — message the bot and follow its Connect link.');
-      }
-      return;
-    }
-
-    const factories = link.orgId ? await projects.list({ orgId: link.orgId }) : [];
-    if (factories.length === 0) {
-      await ephemeral('Your account has no factory yet. Create one in the web app first.');
-      return;
-    }
-
-    const text = event.text.trim();
-    if (!text) {
-      const lines = factories.map(factory =>
-        factory.id === link.defaultFactoryProjectId ? `• ${factory.name} (default)` : `• ${factory.name}`,
-      );
-      await ephemeral(['Your factories:', ...lines, 'Set the default with `/factory <name>`.'].join('\n'));
-      return;
-    }
-
-    // Exact name match wins; otherwise a unique substring match is accepted.
-    const lower = text.toLowerCase();
-    const exact = factories.filter(factory => factory.name.toLowerCase() === lower);
-    const matches = exact.length > 0 ? exact : factories.filter(factory => factory.name.toLowerCase().includes(lower));
-    if (matches.length !== 1) {
-      const options = factories.map(factory => factory.name).join(', ');
-      await ephemeral(
-        matches.length === 0
-          ? `No factory matches "${text}". Options: ${options}`
-          : `"${text}" is ambiguous. Options: ${options}`,
-      );
-      return;
-    }
-
-    const picked = matches[0]!;
-    await accountLinks.setDefaultFactory({ ...key, userId: link.userId, factoryProjectId: picked.id });
-    await ephemeral(`Slack sessions will go to ${picked.name}.`);
-  });
-}
-
-/**
  * The internal Mastra thread the framework created for a channel conversation.
  * The handler's `thread.id` is the platform thread id (e.g. `slack:C123:ts`),
  * NOT the internal UUID — the mapping lives in the stored thread's channel
@@ -619,11 +504,20 @@ async function gateDispatch(
   thread: HandlerThread,
   message: HandlerMessage,
   { accountLinks, channelLinkStateSigner, projects }: SlackChannelDeps,
+  ctx: ChannelHandlerContext,
 ): Promise<{ routed?: { link: ChannelAccountLink; factoryProjectId: string } } | null> {
   const sender = await resolveLinkedSender({ thread, message, accountLinks, channelLinkStateSigner });
   if (sender.status === 'blocked') return null;
   // Linked senders must also route to a Factory project before a run starts.
   if (sender.status === 'linked' && accountLinks) {
+    // Stamp the tenant on the run's request context — the single seam
+    // `resolveCredentialStore` reads to load this sender's model credentials.
+    // This belongs to the link, not to the routing: a linked sender whose
+    // factory routing comes back `ungated` still exits below and dispatches, so
+    // stamping only in the routed branch would silently run them on default
+    // credentials.
+    ctx.requestContext.set('user', { id: sender.link.userId, organizationId: sender.link.orgId });
+
     const route = await resolveFactoryForLink({ thread, message, ...sender, accountLinks, projects });
     if (route.status === 'blocked') return null;
     if (route.status === 'resolved') {
@@ -635,12 +529,13 @@ async function gateDispatch(
 
 function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
   const { getMastra } = deps;
-  return async (thread, message, defaultHandler) => {
+  return async (thread, message, defaultHandler, ctx) => {
     // Gate on the sender having linked their Slack account to a Mastra tenant.
     // Unlinked → post the ephemeral Connect card and stop; no session/run is
     // created (which would otherwise be tenant-less and fail credential
-    // resolution). The core dispatch seam enforces the same gate as a backstop.
-    const gate = await gateDispatch(thread, message, deps);
+    // resolution). This handler is the only gate — core dispatches whatever
+    // reaches it — so every slot that can start a run must call it.
+    const gate = await gateDispatch(thread, message, deps, ctx);
     if (!gate) return;
 
     // A mention on a not-yet-subscribed thread is a NEW session. The
@@ -702,7 +597,7 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
   const newSessionChatHandler = createNewSessionChatHandler(deps);
 
   return {
-    onSubscribedMessage: async (thread, message, defaultHandler) => {
+    onSubscribedMessage: async (thread, message, defaultHandler, ctx) => {
       // `aside` as its own leading word lets humans talk in a subscribed
       // thread without the bot replying. Word boundary so messages that
       // merely start with "aside..." (e.g. "asides can wait") still route.
@@ -711,7 +606,7 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // (e.g. the link was removed mid-conversation), and it must still
       // resolve a factory (e.g. the default was cleared or its factory
       // deleted mid-conversation).
-      const gate = await gateDispatch(thread, message, deps);
+      const gate = await gateDispatch(thread, message, deps, ctx);
       if (!gate) return;
       await defaultHandler(thread, message);
     },
@@ -721,7 +616,6 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
 };
 
 export function createAgentControllerSlackChannels(deps: SlackChannelDeps): AgentControllerChannels {
-  const { accountLinks } = deps;
   const channels = new AgentControllerChannels({
     adapters: {
       slack: {
@@ -740,18 +634,6 @@ export function createAgentControllerSlackChannels(deps: SlackChannelDeps): Agen
     resolveResourceId: createChannelResourceIdResolver(deps),
     resolveThreadId: resolveChannelThreadId,
   });
-
-  // Gate dispatch on the sender having linked their Slack account to a Mastra
-  // tenant, so the run resolves that user's model credentials. Unset store →
-  // no gating (pre-account-linking behavior). This is the backstop behind the
-  // handler-level Connect card — it enforces the gate on every dispatch path.
-  if (accountLinks) {
-    channels.setAccountLinkResolver(createAccountLinkResolver(accountLinks));
-  }
-
-  // `/factory` lists/sets the sender's default factory. The Chat SDK is built
-  // lazily inside `initialize()`, so registration waits for it.
-  channels.onSdkReady(chat => registerFactoryCommand(chat as unknown as SlashCommandChat, deps));
 
   return channels;
 }

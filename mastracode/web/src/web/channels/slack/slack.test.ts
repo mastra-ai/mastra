@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { createChannelLinkStateSigner } from '@mastra/factory';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -6,9 +7,17 @@ import {
   resolveChannelThreadId,
   createHandlers,
   promptIfUnlinked,
-  registerFactoryCommand,
   resolveFactoryForLink,
 } from './slack.js';
+
+/**
+ * The 4th argument core hands every channel handler. The handlers write the
+ * resolved tenant onto `requestContext`, so tests that drive them must pass a
+ * real one — a bare `{}` throws once the sender resolves as linked.
+ */
+function handlerCtx() {
+  return { mastra: undefined, requestContext: new RequestContext() };
+}
 
 function makeThread() {
   return {
@@ -300,17 +309,57 @@ describe('handler dispatch gating', () => {
     } as any;
   }
 
-  it('dispatches a linked sender whose default factory resolves', async () => {
+  it('dispatches a linked sender whose default factory resolves, under their tenant', async () => {
     const thread = makeSubscribedThread();
     const accountLinks = fullStore({ orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' });
     const projects = makeProjects([{ id: 'fp-1' }]);
     const defaultHandler = vi.fn();
     const handlers = createHandlers({ getMastra: () => undefined, accountLinks, projects });
 
-    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler);
+    const ctx = handlerCtx();
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, ctx);
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
     expect(thread.postEphemeral).not.toHaveBeenCalled();
+    // The run must carry the linked tenant, or it resolves default credentials.
+    expect(ctx.requestContext.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
+  });
+
+  it('stamps the tenant for a linked sender even when factory routing is ungated', async () => {
+    // The silent-failure path: with no `projects` dep, `resolveFactoryForLink`
+    // returns `ungated`, so this sender leaves the gate without a routed
+    // result. A stamp written in the routed branch would be skipped here and
+    // the sender would run on default credentials with nothing to show for it.
+    const thread = makeSubscribedThread();
+    const accountLinks = fullStore({ orgId: 'org-1', userId: 'user-1' });
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({ getMastra: () => undefined, accountLinks });
+
+    const ctx = handlerCtx();
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, ctx);
+
+    expect(defaultHandler).toHaveBeenCalledTimes(1);
+    expect(ctx.requestContext.get('user')).toEqual({ id: 'user-1', organizationId: 'org-1' });
+  });
+
+  it('does not stamp a tenant for an unlinked sender, and does not dispatch', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const thread = makeSubscribedThread();
+    const accountLinks = fullStore(null);
+    const defaultHandler = vi.fn();
+    const handlers = createHandlers({
+      getMastra: () => undefined,
+      accountLinks,
+      channelLinkStateSigner: createChannelLinkStateSigner('test-secret'),
+    });
+
+    const ctx = handlerCtx();
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, ctx);
+
+    // The host handler is now the only gate — core dispatches whatever reaches it.
+    expect(defaultHandler).not.toHaveBeenCalled();
+    expect(ctx.requestContext.get('user')).toBeUndefined();
+    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
   });
 
   it('blocks dispatch for a linked sender with several factories and no default', async () => {
@@ -321,7 +370,7 @@ describe('handler dispatch gating', () => {
     const defaultHandler = vi.fn();
     const handlers = createHandlers({ getMastra: () => undefined, accountLinks, projects });
 
-    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler);
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
 
     expect(defaultHandler).not.toHaveBeenCalled();
     expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
@@ -336,7 +385,7 @@ describe('handler dispatch gating', () => {
     const defaultHandler = vi.fn();
     const handlers = createHandlers({ getMastra: () => undefined, accountLinks, projects });
 
-    await handlers.onMention!(thread, makeMessage('T-1'), defaultHandler);
+    await handlers.onMention!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
 
     expect(defaultHandler).not.toHaveBeenCalled();
     expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
@@ -348,7 +397,7 @@ describe('handler dispatch gating', () => {
     const defaultHandler = vi.fn();
     const handlers = createHandlers({ getMastra: () => undefined, accountLinks });
 
-    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler);
+    await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
 
     expect(defaultHandler).toHaveBeenCalledTimes(1);
   });
@@ -511,7 +560,7 @@ describe('View Session card link', () => {
     const handlers = createHandlers(deps as any);
     const thread = makeCardThread();
 
-    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn());
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx());
 
     expect(thread.post).toHaveBeenCalledTimes(1);
     const card = thread.post.mock.calls[0][0];
@@ -527,7 +576,7 @@ describe('View Session card link', () => {
     const handlers = createHandlers(deps as any);
     const thread = makeCardThread();
 
-    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn());
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx());
 
     const card = thread.post.mock.calls[0][0];
     const actions = card.children.find((c: any) => c.type === 'actions');
@@ -544,138 +593,12 @@ describe('View Session card link', () => {
     const handlers = createHandlers(deps as any);
     const thread = makeCardThread();
 
-    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn());
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx());
 
     const card = thread.post.mock.calls[0][0];
     const actions = card.children.find((c: any) => c.type === 'actions');
     expect(actions.children[0].url).toBe(
       `https://mc.example.com/threads/uuid-thread-1?resourceId=${encodeURIComponent('channel:slack:C-1:1700.42')}`,
     );
-  });
-});
-
-describe('/factory slash command', () => {
-  function makeCommandHarness({
-    link = { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-2' },
-    factories = [
-      { id: 'fp-1', name: 'Mastra OSS' },
-      { id: 'fp-2', name: 'Kepler' },
-    ],
-  }: {
-    link?: { orgId?: string; userId: string; defaultFactoryProjectId?: string } | null;
-    factories?: Array<{ id: string; name: string }>;
-  } = {}) {
-    const accountLinks = {
-      getAccountLink: vi.fn().mockResolvedValue(link),
-      setDefaultFactory: vi.fn().mockResolvedValue(true),
-    } as any;
-    const projects = makeProjects(factories);
-    let handler: ((event: any) => Promise<void>) | undefined;
-    const chat = {
-      onSlashCommand: vi.fn((command: string, h: any) => {
-        expect(command).toBe('/factory');
-        handler = h;
-      }),
-    };
-    registerFactoryCommand(chat as any, { getMastra: () => undefined, accountLinks, projects });
-    const postEphemeral = vi.fn().mockResolvedValue({ id: 'eph' });
-    const invoke = (text: string, teamId: string | undefined = 'T-1') =>
-      handler!({
-        adapter: { name: 'slack' },
-        channel: { id: 'C-1', postEphemeral },
-        text,
-        user: { userId: 'U-sender' },
-        raw: teamId ? { team_id: teamId } : {},
-      });
-    return { accountLinks, invoke, postEphemeral };
-  }
-
-  it('no args lists factories with the current default marked', async () => {
-    const { invoke, postEphemeral, accountLinks } = makeCommandHarness();
-
-    await invoke('');
-
-    const reply = postEphemeral.mock.calls[0][1] as string;
-    expect(reply).toContain('• Mastra OSS');
-    expect(reply).toContain('• Kepler (default)');
-    expect(accountLinks.setDefaultFactory).not.toHaveBeenCalled();
-  });
-
-  it('a unique name match sets the default on the sender link', async () => {
-    const { invoke, postEphemeral, accountLinks } = makeCommandHarness();
-
-    await invoke('mastra oss');
-
-    expect(accountLinks.setDefaultFactory).toHaveBeenCalledWith({
-      platform: 'slack',
-      externalTeamId: 'T-1',
-      externalUserId: 'U-sender',
-      userId: 'user-1',
-      factoryProjectId: 'fp-1',
-    });
-    expect(postEphemeral.mock.calls[0][1]).toContain('Mastra OSS');
-  });
-
-  it('an ambiguous name lists the options without setting anything', async () => {
-    const { invoke, postEphemeral, accountLinks } = makeCommandHarness({
-      factories: [
-        { id: 'fp-1', name: 'Mastra OSS' },
-        { id: 'fp-2', name: 'Mastra Cloud' },
-      ],
-    });
-
-    await invoke('mastra');
-
-    expect(accountLinks.setDefaultFactory).not.toHaveBeenCalled();
-    const reply = postEphemeral.mock.calls[0][1] as string;
-    expect(reply).toContain('ambiguous');
-    expect(reply).toContain('Mastra OSS, Mastra Cloud');
-  });
-
-  it('an unknown name lists the options', async () => {
-    const { invoke, postEphemeral, accountLinks } = makeCommandHarness();
-
-    await invoke('nope');
-
-    expect(accountLinks.setDefaultFactory).not.toHaveBeenCalled();
-    expect(postEphemeral.mock.calls[0][1]).toContain('No factory matches "nope"');
-  });
-
-  it('an unlinked sender gets the Connect card', async () => {
-    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-    const accountLinks = {
-      getAccountLink: vi.fn().mockResolvedValue(null),
-      setDefaultFactory: vi.fn(),
-    } as any;
-    const projects = makeProjects([{ id: 'fp-1', name: 'Mastra OSS' }]);
-    let handler: ((event: any) => Promise<void>) | undefined;
-    const chat = { onSlashCommand: vi.fn((_c: string, h: any) => (handler = h)) };
-    registerFactoryCommand(chat as any, {
-      getMastra: () => undefined,
-      accountLinks,
-      projects,
-      channelLinkStateSigner: createChannelLinkStateSigner('secret'),
-    });
-    const postEphemeral = vi.fn().mockResolvedValue({ id: 'eph' });
-
-    await handler!({
-      adapter: { name: 'slack' },
-      channel: { id: 'C-1', postEphemeral },
-      text: '',
-      user: { userId: 'U-sender' },
-      raw: { team_id: 'T-1' },
-    });
-
-    expect(accountLinks.setDefaultFactory).not.toHaveBeenCalled();
-    const card = postEphemeral.mock.calls[0][1];
-    expect(card.title).toBe('Connect your account');
-  });
-
-  it('is not registered without the link store or projects domain', async () => {
-    const chat = { onSlashCommand: vi.fn() };
-
-    registerFactoryCommand(chat as any, { getMastra: () => undefined });
-
-    expect(chat.onSlashCommand).not.toHaveBeenCalled();
   });
 });
