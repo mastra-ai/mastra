@@ -36,6 +36,7 @@ import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
 import type { GithubPatKind } from './pat.js';
 
+import { cleanReleasedSandbox } from './sandbox-release.js';
 import {
   commitAll,
   computeWorktreePath,
@@ -1360,7 +1361,17 @@ function buildProjectGitRoutes({
         if (session.sandboxId && fleet.provider !== 'local' && session.sandboxWorkdir) {
           // Keep the remote VM alive: return it to the reuse pool so the next
           // session for this repository link and user claims it (repo already
-          // cloned) instead of provisioning a fresh sandbox.
+          // cloned) instead of provisioning a fresh sandbox. Scrub the
+          // session's work off the VM first so it doesn't idle with stale
+          // branches or dirty state.
+          await cleanReleasedSandbox({
+            fleet,
+            sourceControl: github.sourceControlStorage,
+            orgId: session.orgId,
+            projectRepositoryId: session.projectRepositoryId,
+            sandboxId: session.sandboxId,
+            sandboxWorkdir: session.sandboxWorkdir,
+          });
           await github.sourceControlStorage.sandboxPool.release({
             orgId: session.orgId,
             projectRepositoryId: session.projectRepositoryId,

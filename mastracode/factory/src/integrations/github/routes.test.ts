@@ -399,6 +399,7 @@ const materializeRepo = vi.fn(async (opts: { onProgress?: (e: any) => void }) =>
   opts.onProgress?.({ phase: 'cloning', message: 'Cloning octo/hello…' });
 });
 const reattachSandbox = vi.fn(async (_id: string) => ({ id: 'sb' }));
+const recycleClaimedWorkdir = vi.fn(async (_sb: any, _workdir: string, _defaultBranch: string) => {});
 const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: string; baseBranch: string }) => ({
   worktreePath: `/workspace/hello/../worktrees/${opts.branch}`,
   branch: opts.branch,
@@ -446,6 +447,8 @@ vi.mock('./sandbox', () => {
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
     runWorktreeSetup: (sb: any, worktreePath: string, command: string) => runWorktreeSetup(sb, worktreePath, command),
+    recycleClaimedWorkdir: (sb: any, workdir: string, defaultBranch: string) =>
+      recycleClaimedWorkdir(sb, workdir, defaultBranch),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     createPullRequest: (input: any) => createPullRequest(input),
@@ -661,6 +664,7 @@ beforeEach(() => {
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
   reattachSandbox.mockClear();
+  recycleClaimedWorkdir.mockClear();
   ensureWorktree.mockClear();
   removeWorktree.mockClear();
   runWorktreeSetup.mockClear();
@@ -1783,8 +1787,10 @@ describe('Factory session routes', () => {
 
     expect(deleted.status).toBe(200);
     expect(tables.sessions).toHaveLength(0);
-    // The VM stays alive for the next session: no reattach/teardown.
-    expect(reattachSandbox).not.toHaveBeenCalled();
+    // The VM stays alive for the next session, but the released session's
+    // work is scrubbed off it before it enters the pool.
+    expect(reattachSandbox).toHaveBeenCalledWith('sb-live');
+    expect(recycleClaimedWorkdir).toHaveBeenCalledWith(expect.anything(), '/workspace/hello', 'main');
     expect(sourceControlStorage.sandboxPoolRows).toEqual([
       expect.objectContaining({
         orgId: 'org1',
