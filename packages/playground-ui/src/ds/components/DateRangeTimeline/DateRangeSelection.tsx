@@ -39,7 +39,7 @@ export function DateRangeSelection({
       aria-valuenow={value}
       aria-valuetext={valueText}
       className={cn(
-        'absolute inset-y-1 z-10 flex cursor-grab touch-none items-center justify-center overflow-hidden rounded-md bg-neutral6/10 text-neutral6 select-none outline-hidden focus-visible:ring-2 focus-visible:ring-accent3 active:cursor-grabbing',
+        'absolute inset-y-1 z-10 flex cursor-grab touch-none items-center justify-center overflow-hidden rounded-md bg-neutral6/10 text-neutral6 outline-hidden select-none focus-visible:ring-2 focus-visible:ring-accent3 active:cursor-grabbing',
         active
           ? 'transition-none'
           : 'transition-[left,width,background-color] duration-150 ease-out motion-reduce:transition-none',

@@ -170,10 +170,30 @@
     "@mastra/platform-workspace": "0.2.1",
     "@mastra/railway": "0.4.0",
     "@mastra/s3": "0.6.0",
-    "@mastra/vercel": "1.3.0"
+    "@mastra/vercel": "1.3.0",
+    "@internal/factory-ui": "0.0.0"
   },
   "changesets": [
+    "automated-provider-registry-20260727-184430",
+    "channel-handler-ctx",
     "cozy-pets-listen",
-    "green-birds-knock"
+    "eighty-masks-ask",
+    "every-hotels-fix",
+    "four-words-serve",
+    "fruity-mice-flow",
+    "full-worlds-think",
+    "giant-breads-strive",
+    "green-birds-knock",
+    "hip-views-cover",
+    "hip-wasps-repair",
+    "huge-lands-pull",
+    "loose-bears-sell",
+    "ninety-mangos-refuse",
+    "pkce-state-scoped-login",
+    "sixty-lands-sip",
+    "slack-owner-type",
+    "spicy-clouds-glow",
+    "tough-hands-race",
+    "witty-houses-smoke"
   ]
 }
