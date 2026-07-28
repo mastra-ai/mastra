@@ -520,6 +520,91 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 
+  it('completes a transition with a message silently when the item has no active binding', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'transition',
+      board: 'work',
+      stage: 'done',
+      idempotencyKey: 'merged-no-binding',
+      message: { text: 'Pull request merged; card moved to Done.' },
+    });
+    const { controller, sendNotificationSignal } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(record?.status).toBe('succeeded');
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['done']);
+  });
+
+  it('delivers the transition message to the active session and still moves the card', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'transition',
+      board: 'work',
+      stage: 'done',
+      idempotencyKey: 'merged-with-binding',
+      message: { text: 'Pull request merged; card moved to Done.' },
+    });
+    const { controller, sendNotificationSignal } = createSession();
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: 'kickoff-null',
+      kickoffMessage: null,
+    });
+    const primeCredentials = vi.fn(async () => {});
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      primeCredentials,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [record] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(record?.status).toBe('succeeded');
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['done']);
+    expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'rule-message',
+        summary: 'Pull request merged; card moved to Done.',
+        payload: { message: 'Pull request merged; card moved to Done.' },
+      }),
+      expect.objectContaining({
+        ifActive: { behavior: 'deliver' },
+        ifIdle: { behavior: 'wake' },
+      }),
+    );
+    const requestContext = sendNotificationSignal.mock.calls[0]?.[1]?.requestContext;
+    expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+  });
+
   it('retries the skill kickoff when the signal is persisted without starting a run', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {

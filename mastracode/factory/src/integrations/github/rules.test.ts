@@ -493,6 +493,46 @@ describe('GithubRules', () => {
     ]);
   });
 
+  it('moves the merged Review card to Done when the PR has no Factory provenance', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(service.ingest(pullRequest('closed', 'delivery-merged-card', true))).resolves.toEqual({
+      status: 'committed',
+    });
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        workItemId: card.item.id,
+        decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
+      }),
+    ]);
+  });
+
   it('evaluates the same delivery independently for every tenant project mapped to the repository', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const second = await projects.create({

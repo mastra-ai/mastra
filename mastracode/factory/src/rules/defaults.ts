@@ -153,6 +153,25 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
 
 function pullRequestMerged(context: FactoryGithubRuleContext) {
   if (!context.item || !context.pullRequest?.merged) return;
+  if (context.board === 'review') {
+    // The event is bound to the PR's own Review card: a merged PR is finished
+    // review work, so always move the card to Done. The message only reaches
+    // an active session (if any) — cards without one just move, instead of
+    // failing retries against a binding that never existed.
+    return {
+      type: 'transition',
+      idempotencyKey: `${context.ingress.id}:pull-request-merged`,
+      board: 'review',
+      stage: 'done',
+      message: {
+        text:
+          `Pull request #${context.pullRequest.number} merged; this Review card was moved to Done. ` +
+          'No further review is needed unless follow-up work was requested.',
+      },
+    } as const;
+  }
+  // Provenance bound the event to the originating Work item instead: remind
+  // its agent to assess completion — never auto-complete the Work item.
   return {
     type: 'sendMessage',
     idempotencyKey: `${context.ingress.id}:assess-work-completion`,

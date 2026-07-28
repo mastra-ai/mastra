@@ -237,6 +237,38 @@ export class FactoryDecisionDispatcher {
           causalChain: nextChain,
         });
         if (result.status === 'rejected') throw new Error(`${result.code}: ${result.reason}`);
+        if (!decision.message) return;
+        // Best-effort recipient lookup: no active binding (or no authenticated
+        // session owner) means nobody is engaged with this item, so the
+        // transition itself is the whole effect. A retry after a delivery
+        // failure is safe because the transition replays by ingress identity.
+        const binding = await this.#findBinding(record, decision.message.role);
+        if (!binding) return;
+        const startedBy = item.sessions[binding.role]?.startedBy;
+        if (!startedBy) return;
+        await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+        const requestContext = new RequestContext();
+        requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
+        const session = await this.#requireSession(binding);
+        await awaitNotification(
+          await session.sendNotificationSignal(
+            {
+              source: 'factory',
+              kind: 'rule-message',
+              summary: decision.message.text,
+              priority: 'high',
+              payload: { message: decision.message.text },
+              sourceId: record.id,
+              dedupeKey: record.idempotencyKey,
+            },
+            {
+              ifActive: { behavior: 'deliver' },
+              ifIdle: { behavior: 'wake' },
+              requestContext,
+            },
+          ),
+          true,
+        );
         return;
       }
       case 'upsertLinkedWorkItem': {
