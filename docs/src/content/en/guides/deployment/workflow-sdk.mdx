@@ -32,7 +32,7 @@ npm install @mastra/workflow@latest workflow
 ```
 
 :::note
-Requires `workflow` v5 or later.
+`@mastra/workflow` declares peer dependencies on `@mastra/core` (`>=1.50.0-0 <2.0.0-0`), `workflow` (`>=5.0.0-beta.36 <6.0.0`), and `zod` (`^3.25.0 || ^4.0.0`). Install a `workflow` version in that range. Version 4 doesn't work.
 :::
 
 ### Configuring your framework
@@ -134,7 +134,7 @@ import '../src/mastra'
 It does two things:
 
 - The `export *` re-exports the library's `"use workflow"` runner from a path inside your own source tree. The compiler [derives workflow and step ids from the source file it processes](https://workflow-sdk.dev/v5/docs/how-it-works/code-transform), and ids for code imported straight from a package embed the package name and version, such as `step//@mastra/workflow@0.1.0//...`. Without the re-export, every upgrade of `@mastra/workflow` changes every id and breaks replay for runs that are still in flight. Re-exporting derives the ids from your own source tree instead, where they stay stable across upgrades.
-- The side-effect `import '../src/mastra'` loads your Mastra instance in the process that handles workflow execution, so the runner can look up your workflow definitions by id at run time.
+- The side-effect `import '../src/mastra'` loads your Mastra instance in the process that handles workflow execution. Steps resolve the live workflow object from a registry by id, so if your definitions never load in that process, every step fails with an error naming this import as the fix.
 
 The compiler discovers any file that contains the directives. A `workflows/` directory at the project root is the convention used in the Workflow SDK's own guides. Adjust the relative import if your Mastra entry file lives elsewhere. For more on this pattern, see [Publishing libraries](https://workflow-sdk.dev/v5/cookbook/advanced/publishing-libraries).
 
@@ -202,10 +202,25 @@ See the [Workflow SDK deploying guide](https://workflow-sdk.dev/v5/docs/deployin
 
 ## Constraints and notes
 
-- `workflow` v5 or later is required.
-- The `workflows/mastra.ts` file is required for stable workflow ids and for runtime registration. See [Registering the runner](#registering-the-runner).
-- Nested workflows, `.map()` data mapping, and time travel aren't supported yet.
-- Flow control options available on Inngest workflows, such as `concurrency`, `rateLimit`, `throttle`, and `debounce`, aren't available. Use your platform's concurrency controls instead.
+`@mastra/workflow` is experimental and covers most, but not all, of the Mastra workflow API.
+
+Supported today:
+
+- `.then()`, `.parallel()`, `.branch()`, `.dountil()`, `.dowhile()`, and `.foreach()`
+- `.sleep()` and `.sleepUntil()`
+- Workflow state, suspend and resume, and event streaming
+
+Not supported yet:
+
+- Nested workflows, which throw at run time when a workflow is used as a step
+- Time travel, through `timeTravel()` and `timeTravelStream()`
+- `streamLegacy()` and the `perStep` streaming option
+
+Flow control options available on Inngest workflows, such as `concurrency`, `rateLimit`, `throttle`, `debounce`, and `priority`, aren't available. Use your platform's concurrency controls instead.
+
+`.map()` data mapping isn't blocked, but it's untested. Treat it as unverified.
+
+The `workflows/mastra.ts` file is required, both for stable workflow ids and for runtime registration. See [Registering the runner](#registering-the-runner).
 
 ## Related
 
