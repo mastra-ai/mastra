@@ -142,6 +142,26 @@ describe('listProviders', () => {
       expect(list[0]?.source).toBe('oauth-user');
     });
 
+    it('reports orgKey when an org-wide API key exists, even when shadowed by a personal credential', async () => {
+      const controller = makeAgentController([{ provider: 'anthropic', hasApiKey: false }]);
+
+      const shadowed = await listProviders({
+        controller,
+        tenantCredentials: [record('anthropic', 'user', 'api_key'), record('anthropic', 'org', 'api_key')],
+      });
+      expect(shadowed[0]).toMatchObject({ source: 'stored-user', orgKey: true });
+
+      const personalOnly = await listProviders({
+        controller,
+        tenantCredentials: [record('anthropic', 'user', 'api_key')],
+      });
+      expect(personalOnly[0]).toMatchObject({ source: 'stored-user', orgKey: false });
+
+      // Local (non-tenant) mode has no scope concept — the field is omitted.
+      const local = await listProviders({ controller, authStorage: makeAuthStorage({ loggedIn: [] }) });
+      expect(local[0]?.orgKey).toBeUndefined();
+    });
+
     it('never falls back to the server-global auth storage in tenant mode', async () => {
       const auth = makeAuthStorage({ loggedIn: ['anthropic'] });
       const list = await listProviders({
