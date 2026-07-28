@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps, CSSProperties } from 'react';
 import type { Sankey as RechartsSankey } from 'recharts';
 
-import { buildFixedSankeyGeometry } from './sankey-chart-utils';
+import { buildFixedSankeyGeometry, getSankeyLabelWidths, SANKEY_NODE_WIDTH } from './sankey-chart-utils';
 import type { SankeyChartGraph } from './sankey-chart-utils';
 
 type SankeyChartMeasurementsOptions = {
+  columnCount: number;
   graph: SankeyChartGraph;
   height: CSSProperties['height'];
   margin: ComponentProps<typeof RechartsSankey>['margin'];
@@ -13,6 +14,7 @@ type SankeyChartMeasurementsOptions = {
 };
 
 export function useSankeyChartMeasurements({
+  columnCount,
   graph,
   height,
   margin,
@@ -46,12 +48,23 @@ export function useSankeyChartMeasurements({
             top: Number(margin?.top ?? 64),
             bottom: measuredHeight - Number(margin?.bottom ?? 12),
             left: Number(margin?.left ?? 160),
-            right: measuredWidth - Number(margin?.right ?? 160) - 7,
+            right: measuredWidth - Number(margin?.right ?? 160) - SANKEY_NODE_WIDTH,
             nodePadding: 8,
           })
         : undefined,
     [graph, margin?.bottom, margin?.left, margin?.right, margin?.top, measuredHeight, measuredWidth, usesFixedGeometry],
   );
 
-  return { chartContainerRef, fixedGeometry };
+  const labelWidths = useMemo(
+    () =>
+      getSankeyLabelWidths({
+        chartWidth: measuredWidth,
+        columnCount,
+        marginLeft: Number(margin?.left ?? 160),
+        marginRight: Number(margin?.right ?? 160),
+      }),
+    [columnCount, margin?.left, margin?.right, measuredWidth],
+  );
+
+  return { chartContainerRef, fixedGeometry, labelWidths };
 }
