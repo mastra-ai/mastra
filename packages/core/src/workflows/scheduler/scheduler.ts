@@ -43,6 +43,13 @@ export class Scheduler extends MastraBase {
    */
   #missingWorkflowCounts = new Map<string, number>();
 
+  /**
+   * Schedule ids we've already warned about skipping because the local
+   * target definition is stale (see `#ensureTargetCurrent`). Prevents a
+   * straggler instance from re-logging the same warning on every tick.
+   */
+  #staleDefinitionLoggedIds = new Set<string>();
+
   constructor({
     schedulesStore,
     pubsub,
@@ -71,6 +78,7 @@ export class Scheduler extends MastraBase {
     // over into a new start() since the workflow registry may now look
     // different.
     this.#missingWorkflowCounts.clear();
+    this.#staleDefinitionLoggedIds.clear();
 
     try {
       // Run one tick immediately so newly-due schedules don't wait the full interval.
@@ -237,8 +245,59 @@ export class Scheduler extends MastraBase {
     return false;
   }
 
+  /**
+   * Stale-build fence (#19169). Scheduled runs execute `localOnly` in the
+   * claiming process against its own workflow registry, so an instance whose
+   * local target definition differs from the one recorded on the schedule
+   * row must not claim the fire — it would silently run an outdated step
+   * graph. Returning `false` skips the CAS claim entirely, leaving
+   * `nextFireAt` untouched so an instance with a matching definition can
+   * claim the fire on its own tick.
+   *
+   * Fails open when no predicate is configured or when the predicate
+   * throws — fencing is a safety net, not a reason to stop firing.
+   */
+  #ensureTargetCurrent(schedule: Schedule): boolean {
+    const predicate = this.#config.isTargetCurrent;
+    if (!predicate) return true;
+
+    let current: boolean;
+    try {
+      current = predicate(schedule.target);
+    } catch (err) {
+      this.logger.error('isTargetCurrent predicate threw; treating target as current', {
+        scheduleId: schedule.id,
+        error: err,
+      });
+      return true;
+    }
+
+    if (current) {
+      this.#staleDefinitionLoggedIds.delete(schedule.id);
+      return true;
+    }
+
+    if (!this.#staleDefinitionLoggedIds.has(schedule.id)) {
+      this.#staleDefinitionLoggedIds.add(schedule.id);
+      const targetSummary =
+        schedule.target.type === 'workflow'
+          ? { workflowId: schedule.target.workflowId }
+          : { agentId: schedule.target.agentId };
+      this.logger.warn(
+        'Local target definition differs from the schedule row; leaving fire for an instance running the current build',
+        {
+          scheduleId: schedule.id,
+          targetType: schedule.target.type,
+          ...targetSummary,
+        },
+      );
+    }
+    return false;
+  }
+
   async #fireSchedule(schedule: Schedule): Promise<void> {
     if (!(await this.#ensureTargetReady(schedule))) return;
+    if (!this.#ensureTargetCurrent(schedule)) return;
 
     const actualFireAt = Date.now();
 

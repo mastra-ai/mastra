@@ -95,6 +95,24 @@ export type SchedulerConfig = {
    */
   isTargetReady?: (target: ScheduleTarget) => boolean;
   /**
+   * Predicate used to check whether the *local build's* definition of a
+   * schedule's target matches the definition recorded on the schedule row
+   * (`WorkflowScheduleTarget.definitionHash`). Scheduled runs execute
+   * `localOnly` in the claiming process against its own workflow registry,
+   * so an instance whose local step graph differs from the row (a
+   * not-yet-cycled straggler from a previous deploy) must not claim the
+   * fire — it would silently execute a stale graph (#19169). When the
+   * predicate returns `false` the scheduler leaves the fire unclaimed for
+   * an instance whose definition matches.
+   *
+   * Fail open: rows without a `definitionHash` (legacy or imperative
+   * schedules) and configurations without this predicate always fire.
+   *
+   * Wired up by `SchedulerWorker` from the registered workflow's serialized
+   * step graph.
+   */
+  isTargetCurrent?: (target: ScheduleTarget) => boolean;
+  /**
    * Number of consecutive ticks a schedule's target workflow may be missing
    * before the scheduler deletes the row. Defaults to 3 (≈30s with the
    * default tick interval). Provides a grace window for deploy/startup

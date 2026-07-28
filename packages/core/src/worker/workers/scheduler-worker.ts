@@ -1,5 +1,6 @@
 import type { IMastraLogger } from '../../logger';
 import type { ScheduleTarget } from '../../storage/domains/schedules/base';
+import { computeScheduleDefinitionHash } from '../../workflows/scheduler/definition-hash';
 import { Scheduler } from '../../workflows/scheduler/scheduler';
 import type { SchedulerConfig } from '../../workflows/scheduler/types';
 import { MastraWorker } from '../worker';
@@ -63,10 +64,32 @@ export class SchedulerWorker extends MastraWorker {
         }
       : undefined;
 
+    // Bind a stale-build fence (#19169): scheduled runs execute `localOnly`
+    // in the claiming process against its own workflow registry, so an
+    // instance whose local step graph differs from the hash recorded on the
+    // schedule row (a straggler from a previous deploy) must not claim the
+    // fire. Fails open for rows without a hash (legacy/imperative
+    // schedules) and for agent targets, which have no step graph.
+    const isTargetCurrent = mastra
+      ? (target: ScheduleTarget) => {
+          if (target.type !== 'workflow' || !target.definitionHash) return true;
+          try {
+            const workflow = mastra.getWorkflowById(target.workflowId);
+            const localHash = computeScheduleDefinitionHash(workflow.serializedStepGraph);
+            // Unhashable local graph → can't compare, fail open.
+            if (!localHash) return true;
+            return localHash === target.definitionHash;
+          } catch {
+            // Missing workflow is the readiness predicate's concern.
+            return true;
+          }
+        }
+      : undefined;
+
     this.#scheduler = new Scheduler({
       schedulesStore,
       pubsub: deps.pubsub,
-      config: { ...this.#config, isTargetReady },
+      config: { ...this.#config, isTargetReady, isTargetCurrent },
     });
     this.#scheduler.__setLogger(deps.logger as IMastraLogger);
 

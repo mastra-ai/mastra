@@ -71,7 +71,7 @@ import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../w
 import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import { computeNextFireAt } from '../workflows/scheduler';
+import { computeNextFireAt, computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
@@ -1864,8 +1864,12 @@ export class Mastra<
     // have their old rows cleaned up.
     const declaredIdsByWorkflow = new Map<string, Set<string>>();
     const workflows = this.#workflows as Record<string, AnyWorkflow> | undefined;
+    // `#workflows` is keyed by registration key, which may differ from
+    // `workflow.id` — index by id for the definition-hash lookup below.
+    const workflowsById = new Map<string, AnyWorkflow>();
     for (const workflow of Object.values(workflows ?? {})) {
       declaredIdsByWorkflow.set(workflow.id, new Set());
+      workflowsById.set(workflow.id, workflow);
     }
     for (const { workflowId, scheduleId } of declared) {
       if (!declaredIdsByWorkflow.has(workflowId)) declaredIdsByWorkflow.set(workflowId, new Set());
@@ -1883,6 +1887,12 @@ export class Mastra<
           initialState: cfg.initialState,
           requestContext: cfg.requestContext,
         };
+        // Stamp the current build's step-graph hash so the scheduler can
+        // refuse to claim this row from an instance whose local workflow
+        // definition differs (stale-build fencing, #19169). `targetsEqual`
+        // below picks up hash changes and rewrites the row on redeploy.
+        const definitionHash = computeScheduleDefinitionHash(workflowsById.get(workflowId)?.serializedStepGraph);
+        if (definitionHash) target.definitionHash = definitionHash;
 
         if (!existing) {
           await schedulesStore.createSchedule({
