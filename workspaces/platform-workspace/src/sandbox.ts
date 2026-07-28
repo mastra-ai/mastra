@@ -184,7 +184,7 @@ export class PlatformSandbox extends MastraSandbox {
    * when `expiresAt - LEASE_REFRESH_MARGIN_MS < now`, or when the WS
    * handshake fails with a close code Railway uses for expired tokens.
    */
-  private _lease: ExecLease & { expiresAtMs: number | null } | null = null;
+  private _lease: (ExecLease & { expiresAtMs: number | null }) | null = null;
   /**
    * Tri-state feature detection for the platform's exec-lease endpoint:
    *   undefined — not yet tried (default; try direct on first exec)
@@ -453,11 +453,7 @@ export class PlatformSandbox extends MastraSandbox {
     // A null `expiresAtMs` means the provider didn't disclose a TTL — treat
     // that as "refresh every call" rather than "cache forever", so a token
     // that turns out to be short-lived can't wedge the sandbox until restart.
-    if (
-      this._lease &&
-      this._lease.expiresAtMs !== null &&
-      this._lease.expiresAtMs - LEASE_REFRESH_MARGIN_MS > now
-    ) {
+    if (this._lease && this._lease.expiresAtMs !== null && this._lease.expiresAtMs - LEASE_REFRESH_MARGIN_MS > now) {
       return this._lease;
     }
     if (!this._sandboxId) throw new SandboxNotReadyError(this.id);

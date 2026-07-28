@@ -407,7 +407,10 @@ describe('PlatformSandbox', () => {
   });
 
   it('kill() throws because the proxy has no cancel endpoint', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1' })).mockResolvedValueOnce(leaseResponse());
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(json({ id: 'sbx_1' }))
+      .mockResolvedValueOnce(leaseResponse());
     const { factory } = fakeExecSocket({ exitCode: 0 });
 
     const sandbox = new PlatformSandbox({
@@ -517,9 +520,7 @@ describe('PlatformSandbox', () => {
         .fn()
         .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
         // Older platform deployment: exec-lease not present.
-        .mockResolvedValueOnce(
-          json({ error: { message: 'Not Found', type: 'not_found' } }, { status: 404 }),
-        )
+        .mockResolvedValueOnce(json({ error: { message: 'Not Found', type: 'not_found' } }, { status: 404 }))
         .mockResolvedValueOnce(json({ exitCode: 0, stdout: 'ok', stderr: '', timedOut: false, truncated: false }))
         // Second exec should skip the mint attempt entirely — the fallback bit is sticky.
         .mockResolvedValueOnce(json({ exitCode: 0, stdout: 'ok', stderr: '', timedOut: false, truncated: false }));
@@ -572,7 +573,6 @@ describe('PlatformSandbox', () => {
       // "endpoint not present" signal.
       expect(fetchMock).toHaveBeenCalledTimes(2);
     });
-
   });
 
   describe('clone', () => {
