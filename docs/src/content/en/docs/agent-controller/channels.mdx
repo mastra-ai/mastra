@@ -137,7 +137,7 @@ The `resolveThreadId` config hook controls the internal Mastra thread ID the sam
 ```typescript filename="channels.ts"
 const channels = new AgentControllerChannels({
   adapters,
-  resolveResourceId: async (ctx) => resolveSessionId(ctx),
+  resolveResourceId: async ctx => resolveSessionId(ctx),
   resolveThreadId: ({ resourceId, defaultThreadId }) =>
     isSessionId(resourceId) ? resourceId : defaultThreadId,
 })
