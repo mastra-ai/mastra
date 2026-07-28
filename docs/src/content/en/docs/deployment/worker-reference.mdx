@@ -3,6 +3,8 @@ title: "Worker reference | Deployment"
 description: "Environment variables, CLI commands, and configuration options for Mastra workers."
 packages:
   - "@mastra/core"
+  - "@mastra/redis-streams"
+  - "@mastra/google-cloud-pubsub"
 ---
 
 # Worker reference
@@ -164,7 +166,7 @@ The scheduler auto-enables when any workflow declares a `schedule` config. See [
 
 ### OrchestrationWorker
 
-Processes workflow events from the PubSub `workflows` topic. Requires a pull-capable PubSub like `@mastra/redis-streams`.
+Processes workflow events from the PubSub `workflows` topic. Requires a pull-capable PubSub like `@mastra/redis-streams` or `@mastra/google-cloud-pubsub`.
 
 - **Name**: `orchestration`
 - **PubSub topic**: `workflows`

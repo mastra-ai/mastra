@@ -4,6 +4,7 @@ description: "Separate background processing from the API layer by running workf
 packages:
   - "@mastra/core"
   - "@mastra/redis-streams"
+  - "@mastra/google-cloud-pubsub"
 ---
 
 # Workers
@@ -37,9 +38,9 @@ Mastra has three built-in worker types. Each handles a specific kind of backgrou
 
 Subscribes to workflow events on the [PubSub](/docs/server/pubsub) bus and executes workflow steps. Every `workflow.start`, step transition, and lifecycle event flows through this worker.
 
-In a split deployment, the orchestration worker pulls events from Redis Streams and delegates step execution back to the API over HTTP. In-process, it runs steps directly.
+In a split deployment, the orchestration worker pulls events from a distributed PubSub backend and delegates step execution back to the API over HTTP. In-process, it runs steps directly.
 
-The orchestration worker requires a PubSub backend that supports pull mode (e.g., [`RedisStreamsPubSub`](/reference/pubsub/redis-streams)).
+The orchestration worker requires a PubSub backend that supports pull mode (e.g., [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)).
 
 ### Scheduler worker
 
@@ -76,6 +77,8 @@ This setup needs no external infrastructure beyond your storage adapter. It does
 
 To run workers separately, configure a distributed [PubSub](/docs/server/pubsub) backend and use the `MASTRA_WORKERS` environment variable to control which workers start in each process.
 
+The following example uses Redis Streams:
+
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import { RedisStreamsPubSub } from '@mastra/redis-streams'
@@ -87,6 +90,23 @@ export const mastra = new Mastra({
   }),
   pubsub: new RedisStreamsPubSub({
     url: process.env.REDIS_URL!,
+  }),
+})
+```
+
+The following example uses Google Cloud Pub/Sub:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { GoogleCloudPubSub } from '@mastra/google-cloud-pubsub'
+import { PostgresStore } from '@mastra/pg'
+
+export const mastra = new Mastra({
+  storage: new PostgresStore({
+    connectionString: process.env.DATABASE_URL!,
+  }),
+  pubsub: new GoogleCloudPubSub({
+    projectId: process.env.GCP_PROJECT_ID!,
   }),
 })
 ```
@@ -106,7 +126,7 @@ The [worker deployment guide](/docs/deployment/worker-deployment) walks through 
 
 Split worker deployments require:
 
-- **Distributed PubSub**: [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) is the recommended backend. The default in-memory PubSub can't deliver events across processes.
+- **Distributed PubSub**: [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub) are the supported backends. The default in-memory PubSub can't deliver events across processes.
 - **Shared storage**: All processes must connect to the same database. [`PostgresStore`](/reference/storage/postgresql) is recommended.
 - **Network connectivity**: The orchestration worker must be able to reach the API over HTTP for step execution in fully split setups.
 
@@ -117,7 +137,7 @@ Workers are internal infrastructure. They are not exposed to end users and do no
 In a split deployment:
 
 - **The API server is the only public-facing process.** It serves all client HTTP requests — REST endpoints, agent interactions, workflow triggers, and any custom routes.
-- **Workers connect outbound only.** They pull events from Redis Streams and read/write to PostgreSQL. They do not accept inbound traffic from clients.
+- **Workers connect outbound only.** They pull events from the distributed PubSub backend and read/write to PostgreSQL. They do not accept inbound traffic from clients.
 - **The orchestration worker calls the API internally.** It sends step execution requests to the API over the container network using `MASTRA_STEP_EXECUTION_URL`. This is internal service-to-service communication, not a public endpoint.
 
 ```
@@ -132,7 +152,7 @@ In a split deployment:
         └─────┬─────┘ └───┬────┘ └─────────┬──────────┘
               │            │                │
          ┌────▼────────────▼────────────────▼────┐
-         │         Redis + PostgreSQL            │
+         │      PubSub backend + PostgreSQL       │
          └───────────────────────────────────────┘
 ```
 
