@@ -23,18 +23,18 @@ export const namedExperiment: DatasetExperiment = {
   updatedAt: '2026-07-01T10:05:00.000Z',
 };
 
-/** Second named experiment, for comparison scenarios. */
-export const contenderExperiment: DatasetExperiment = {
-  ...namedExperiment,
-  id: 'e5f6a7b8-0000-0000-0000-000000000002',
-  name: 'entity-extraction / model-b',
-  description: 'Entity extraction evaluation using Model B',
-};
-
 /** Experiment without a name — should fall back to the short id as the label. */
 export const unnamedExperiment: DatasetExperiment = {
   ...namedExperiment,
   id: 'c0ffee00-0000-0000-0000-000000000003',
   name: undefined,
+  description: undefined,
+};
+
+/** Nothing rejects an empty name server-side, and it must fall back like a missing one. */
+export const blankNameExperiment: DatasetExperiment = {
+  ...namedExperiment,
+  id: 'b1a11c00-0000-0000-0000-000000000004',
+  name: '',
   description: undefined,
 };

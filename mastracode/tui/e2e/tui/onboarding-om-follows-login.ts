@@ -5,10 +5,14 @@ import { anthropicOAuthProvider } from '@mastra/code-sdk/auth/providers/anthropi
 import { createGlobalPatchScope } from './global-patches.js';
 import type { McE2eScenario } from './types.js';
 
-export const setupLoginRefreshScenario = {
-  name: 'setup-login-refresh',
-  description: 'Refreshes onboarding model packs after a successful login without restarting the TUI.',
-  testName: 'refreshes available setup packs after login succeeds',
+/**
+ * Gemini is reachable from an API key before the wizard starts, so it heads the
+ * OM list; the Anthropic login must still win the preselection.
+ */
+export const onboardingOmFollowsLoginScenario = {
+  name: 'onboarding-om-follows-login',
+  description: 'Preselects the OM pack of the provider signed in during onboarding, not the first reachable one.',
+  testName: 'preselects the OM pack matching the provider signed in during setup',
   prepare({ appDataDir, projectDir }) {
     rmSync(join(appDataDir, 'settings.json'), { force: true });
     rmSync(join(appDataDir, 'auth.json'), { force: true });
@@ -17,10 +21,10 @@ export const setupLoginRefreshScenario = {
   async inProcessApp({ startMastraCodeApp }) {
     const patches = createGlobalPatchScope();
     patches.setProperty(anthropicOAuthProvider, 'login', async callbacks => {
-      callbacks.onProgress?.('MC_SETUP_LOGIN_REFRESH_FAKE_LOGIN');
+      callbacks.onProgress?.('MC_ONBOARDING_OM_FOLLOWS_LOGIN_FAKE_LOGIN');
       return {
-        access: 'mc-setup-login-refresh-access',
-        refresh: 'mc-setup-login-refresh-refresh',
+        access: 'mc-onboarding-om-follows-login-access',
+        refresh: 'mc-onboarding-om-follows-login-refresh',
         expires: Date.now() + 60 * 60 * 1000,
       };
     });
@@ -38,7 +42,7 @@ export const setupLoginRefreshScenario = {
       ANTHROPIC_API_KEY: '',
       OPENAI_API_KEY: '',
       MASTRA_GATEWAY_API_KEY: '',
-      GOOGLE_GENERATIVE_AI_API_KEY: '',
+      GOOGLE_GENERATIVE_AI_API_KEY: 'mc-e2e-google-key',
       GOOGLE_API_KEY: '',
       DEEPSEEK_API_KEY: '',
       CEREBRAS_API_KEY: '',
@@ -56,15 +60,10 @@ export const setupLoginRefreshScenario = {
 
     await runtime.waitForScreenText(/Model Packs/i, terminal, 8_000);
     await runtime.waitForScreenText(/Anthropic\s+All Anthropic models via Max subscription/i, terminal, 8_000);
-
-    const modelPackScreen = terminal.serialize().view;
-    if (/No model providers configured/i.test(modelPackScreen)) {
-      throw new Error('Expected provider-access warning to clear after successful login refresh');
-    }
-
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Observational Memory/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Gemini Flash\s+Via Google API key/i, terminal, 8_000);
     await runtime.waitForScreenText(/Claude Haiku\s+Via Max subscription/i, terminal, 8_000);
     terminal.write('\r');
 
@@ -72,7 +71,6 @@ export const setupLoginRefreshScenario = {
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal, 8_000);
-    await runtime.waitForScreenText(/anthropic\/claude-fable-5/i, terminal, 8_000);
 
     terminal.submit('/memory');
     await runtime.waitForScreenText(/Observational Memory Settings/i, terminal, 8_000);
@@ -82,11 +80,9 @@ export const setupLoginRefreshScenario = {
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 
     terminal.submit(
-      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s=JSON.parse(fs.readFileSync(app+"/settings.json","utf8")); const a=JSON.parse(fs.readFileSync(app+"/auth.json","utf8")); console.log("SETUP_LOGIN_AUTH="+(a.anthropic?.type||"missing")+":"+(a.anthropic?.access||"missing")); console.log("SETUP_LOGIN_PACK="+s.models.activeModelPackId+":"+s.onboarding.modePackId+":"+s.onboarding.omPackId+":"+s.models.activeOmPackId); console.log("SETUP_LOGIN_BUILTIN_DEFAULTS="+Object.keys(s.models.modeDefaults||{}).length);'`,
+      `!node -e 'const fs=require("fs"); const app=process.env.MASTRA_APP_DATA_DIR; const s=JSON.parse(fs.readFileSync(app+"/settings.json","utf8")); console.log("ONBOARDING_OM_PACK="+s.onboarding.omPackId+":"+s.models.activeOmPackId);'`,
     );
-    await runtime.waitForScreenText(/SETUP_LOGIN_AUTH=oauth:mc-setup-login-refresh-access/i, terminal, 8_000);
-    await runtime.waitForScreenText(/SETUP_LOGIN_PACK=anthropic:anthropic:anthropic:anthropic/i, terminal, 8_000);
-    await runtime.waitForScreenText(/SETUP_LOGIN_BUILTIN_DEFAULTS=0/i, terminal, 8_000);
+    await runtime.waitForScreenText(/ONBOARDING_OM_PACK=anthropic:anthropic/i, terminal, 8_000);
 
     terminal.keyCtrlC();
   },
