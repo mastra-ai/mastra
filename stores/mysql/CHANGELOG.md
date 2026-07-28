@@ -1,5 +1,14 @@
 # @mastra/mysql
 
+## 0.5.0-alpha.1
+
+### Patch Changes
+
+- Fixed multi-thread message queries so included messages are resolved from their actual threads. ([#20303](https://github.com/mastra-ai/mastra/pull/20303))
+
+- Updated dependencies [[`a211d09`](https://github.com/mastra-ai/mastra/commit/a211d09185dc65a746534914cf38b67f21ee9bac), [`05db566`](https://github.com/mastra-ai/mastra/commit/05db566fcbdcbf33d0bffca0c72ec30129e2e3ca), [`8124754`](https://github.com/mastra-ai/mastra/commit/8124754ae89fbc69f8136d1df4a91904d0f84c4e)]:
+  - @mastra/core@1.54.0-alpha.2
+
 ## 0.5.0-alpha.0
 
 ### Minor Changes

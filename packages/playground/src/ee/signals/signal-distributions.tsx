@@ -218,7 +218,7 @@ export function SignalDistributions({
           <section
             {...provided.droppableProps}
             ref={provided.innerRef}
-            aria-label="Signal distributions"
+            aria-label="Trace signal distributions"
             className="flex gap-3 overflow-x-auto pb-1"
           >
             {stages.map((stage, index) => (

@@ -38,6 +38,7 @@ const platform = vi.hoisted(() => ({
 const cliAuth = vi.hoisted(() => ({
   getToken: vi.fn(),
   loadCredentials: vi.fn(),
+  LoginCancelledError: class LoginCancelledError extends Error {},
   resolveCurrentOrg: vi.fn(),
   fetchOrgs: vi.fn(),
   MASTRA_PLATFORM_API_URL: 'https://platform.example.test',
@@ -78,7 +79,6 @@ beforeEach(() => {
   vi.clearAllMocks();
 
   // Sensible default: platform provisioning succeeds. Tests can override.
-  // Cached credentials exist, so no "press enter to open auth flow" pause.
   cliAuth.loadCredentials.mockResolvedValue({ token: 'cached' });
   cliAuth.getToken.mockResolvedValue('wos-token');
   cliAuth.resolveCurrentOrg.mockResolvedValue({ orgId: 'org_123', orgName: 'Acme' });
@@ -356,7 +356,7 @@ describe('create (platform provisioning)', () => {
     expect(platform.createServerProject).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org_456' }));
   });
 
-  it('pauses with a "press enter" prompt before opening the auth flow when not logged in', async () => {
+  it('asks for confirmation before opening browser authentication', async () => {
     vi.stubEnv('MASTRA_API_TOKEN', '');
     cliAuth.loadCredentials.mockResolvedValue(null);
     clack.text.mockResolvedValue('');
@@ -367,31 +367,48 @@ describe('create (platform provisioning)', () => {
       message: 'Mastra account is required, press enter to continue...',
       defaultValue: '',
     });
-    // Prompt shown before the auth flow starts.
     expect(clack.text.mock.invocationCallOrder[0]!).toBeLessThan(cliAuth.getToken.mock.invocationCallOrder[0]!);
-    expect(clack.note).toHaveBeenCalledWith(expect.stringContaining('Provisioned on Mastra platform'), 'Next steps');
     vi.unstubAllEnvs();
   });
 
-  it('skips the auth pause when cached credentials already exist', async () => {
-    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
-
-    expect(clack.text).not.toHaveBeenCalled();
-    expect(cliAuth.getToken).toHaveBeenCalledTimes(1);
-  });
-
-  it('treats cancelling the auth pause as a provisioning failure without opening the auth flow', async () => {
+  it('cancels the process when Ctrl+C is pressed at the authentication confirmation', async () => {
     vi.stubEnv('MASTRA_API_TOKEN', '');
     cliAuth.loadCredentials.mockResolvedValue(null);
     clack.text.mockResolvedValue(Symbol.for('clack.cancel'));
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process exited');
+    });
+
+    try {
+      await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+
+      expect(clack.cancel).toHaveBeenCalledWith('Operation cancelled');
+      expect(exit).toHaveBeenCalledWith(0);
+      expect(cliAuth.getToken).not.toHaveBeenCalled();
+    } finally {
+      exit.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('allows any key to skip while waiting for platform authentication', async () => {
+    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+
+    expect(clack.text).not.toHaveBeenCalled();
+    expect(cliAuth.getToken).toHaveBeenCalledWith(undefined, { skipOnInput: true });
+    expect(clack.note).toHaveBeenCalledWith(expect.stringContaining('Provisioned on Mastra platform'), 'Next steps');
+  });
+
+  it('treats keyboard cancellation as skipped platform setup', async () => {
+    cliAuth.getToken.mockRejectedValue(new cliAuth.LoginCancelledError());
 
     await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
 
-    expect(cliAuth.getToken).not.toHaveBeenCalled();
+    expect(platform.createServerProject).not.toHaveBeenCalled();
+    expect(clack.log.info).toHaveBeenCalledWith('Skipping Mastra platform setup.');
     const note = clack.note.mock.calls[0]![0] as string;
-    expect(note).toContain('Platform provisioning failed');
-    expect(note).toContain('Sign-in cancelled.');
-    vi.unstubAllEnvs();
+    expect(note).toContain('Skipped Mastra platform setup');
+    expect(note).not.toContain('Platform provisioning failed');
   });
 
   it('--org fails with a clear message when no org matches', async () => {
