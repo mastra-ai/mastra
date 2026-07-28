@@ -1,4 +1,3 @@
-import { EntityType } from '@mastra/core/observability';
 import { DataListCell, DataListMonoCell } from '../DataList/data-list-cells';
 type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
@@ -43,12 +42,12 @@ function EntityTypeIcon({ entityType, className }: { entityType: string; classNa
   const normalizedEntityType = entityType.toLowerCase();
 
   switch (normalizedEntityType) {
-    case EntityType.AGENT:
+    case 'agent':
       return <AgentIcon className={iconClass} aria-hidden />;
     case 'workflow':
-    case EntityType.WORKFLOW_RUN:
+    case 'workflow_run':
       return <WorkflowIcon className={iconClass} aria-hidden />;
-    case EntityType.TOOL:
+    case 'tool':
       return <ToolsIcon className={iconClass} aria-hidden />;
     default:
       return null;
