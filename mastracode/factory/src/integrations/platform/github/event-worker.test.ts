@@ -66,6 +66,7 @@ function createWorker(input: {
   ingestFactoryEvent?: (event: Parameters<typeof dispatchGithubWebhook>[0]) => Promise<unknown>;
   reconcileFactoryState?: GithubPullRequestReconciler;
   reconcileIntervalMs?: number;
+  pollEventsEnabled?: boolean;
 }) {
   return new PlatformGithubEventWorker({
     client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl: input.fetchImpl }),
@@ -75,6 +76,7 @@ function createWorker(input: {
     ingestFactoryEvent: input.ingestFactoryEvent,
     reconcileFactoryState: input.reconcileFactoryState,
     reconcileIntervalMs: input.reconcileIntervalMs,
+    pollEventsEnabled: input.pollEventsEnabled,
     intervalMs: input.intervalMs ?? 1_000,
     now: input.now,
     dispatch: input.dispatch,
@@ -465,6 +467,45 @@ describe('PlatformGithubEventWorker', () => {
     clock += 5_000;
     await vi.advanceTimersByTimeAsync(1_000);
     expect(reconcileFactoryState).toHaveBeenCalledTimes(3);
+
+    await worker.stop();
+  });
+
+  it('reconciles without tailing events when event polling is disabled', async () => {
+    const settings = createSettingsStorage();
+    const dispatch = vi.fn<typeof dispatchGithubWebhook>();
+    const eventRequests: URL[] = [];
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = new URL(String(input));
+      if (url.pathname.endsWith('/installations')) {
+        return json({ installations: [{ installationId: 7, usable: true, suspendedAt: null }] });
+      }
+      if (url.pathname.endsWith('/installations/7/repositories')) {
+        return json({ repositories: [{ id: 101, fullName: 'acme/repo' }] });
+      }
+      if (url.pathname.includes('/events')) {
+        eventRequests.push(url);
+        return json({ events: [], nextCursor: null });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    const reconcileFactoryState = vi.fn<GithubPullRequestReconciler>(async () => ({ checked: 1, merged: 0 }));
+    const worker = createWorker({
+      fetchImpl,
+      storage: settings.storage,
+      now: () => 1_000_000,
+      dispatch,
+      reconcileFactoryState,
+      pollEventsEnabled: false,
+    });
+
+    await worker.init(createDeps());
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(reconcileFactoryState).toHaveBeenCalledWith([{ id: 101, fullName: 'acme/repo', installationId: 7 }]);
+    expect(eventRequests).toHaveLength(0);
+    expect(dispatch).not.toHaveBeenCalled();
 
     await worker.stop();
   });

@@ -78,6 +78,8 @@ export interface PlatformGithubEventWorkerConfig {
   storage: PlatformGithubEventStorage;
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
   reconcileFactoryState?: GithubPullRequestReconciler;
+  /** When false the worker skips event tailing and only runs the reconcile sweep. */
+  pollEventsEnabled?: boolean;
   intervalMs?: number;
   reconcileIntervalMs?: number;
   now?: () => number;
@@ -93,6 +95,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
   readonly #storage: PlatformGithubEventStorage;
   readonly #ingestFactoryEvent: ((event: ParsedGithubWebhook) => Promise<unknown>) | undefined;
   readonly #reconcileFactoryState: GithubPullRequestReconciler | undefined;
+  readonly #pollEventsEnabled: boolean;
   readonly #reconcileIntervalMs: number;
   readonly #intervalMs: number;
   readonly #now: () => number;
@@ -118,6 +121,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
     this.#storage = config.storage;
     this.#ingestFactoryEvent = config.ingestFactoryEvent;
     this.#reconcileFactoryState = config.reconcileFactoryState;
+    this.#pollEventsEnabled = config.pollEventsEnabled ?? true;
     this.#reconcileIntervalMs = config.reconcileIntervalMs ?? DEFAULT_RECONCILE_INTERVAL_MS;
     this.#intervalMs = config.intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     if (!Number.isFinite(this.#intervalMs) || this.#intervalMs <= 0) {
@@ -233,21 +237,25 @@ export class PlatformGithubEventWorker extends MastraWorker {
 
   async #poll(): Promise<number> {
     const repositories = await this.#discoverRepositories();
-    let retryInMs = this.#intervalMs;
+    // Reconcile-only mode has no event tail to keep fresh, so tick on the
+    // slower reconcile cadence instead of the polling interval.
+    let retryInMs = this.#pollEventsEnabled ? this.#intervalMs : this.#reconcileIntervalMs;
 
-    for (const repository of repositories) {
-      if (!this.#running || !this.#hasLease) break;
-      try {
-        await this.#pollRepository(repository.id);
-      } catch (error) {
-        const delay = retryDelay(error, this.#intervalMs);
-        retryInMs = Math.max(retryInMs, delay);
-        this.deps?.logger.error('Platform GitHub repository event polling failed', {
-          repositoryId: repository.id,
-          error: error instanceof Error ? error.message : String(error),
-          retryInMs: delay,
-        });
-        if (error instanceof PlatformApiError && error.status === 429) break;
+    if (this.#pollEventsEnabled) {
+      for (const repository of repositories) {
+        if (!this.#running || !this.#hasLease) break;
+        try {
+          await this.#pollRepository(repository.id);
+        } catch (error) {
+          const delay = retryDelay(error, this.#intervalMs);
+          retryInMs = Math.max(retryInMs, delay);
+          this.deps?.logger.error('Platform GitHub repository event polling failed', {
+            repositoryId: repository.id,
+            error: error instanceof Error ? error.message : String(error),
+            retryInMs: delay,
+          });
+          if (error instanceof PlatformApiError && error.status === 429) break;
+        }
       }
     }
 

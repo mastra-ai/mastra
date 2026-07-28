@@ -187,6 +187,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly #endpointHost: string;
   readonly #pollingEnabled: boolean;
   readonly #pollingIntervalMs: number | undefined;
+  readonly #reconcileEnabled: boolean;
   #storage: SourceControlStorageHandle | undefined;
   #integrationStorage: GithubSubscriptionStorage | undefined;
   /** installationId → cached repository listing (TTL-bounded). */
@@ -406,6 +407,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     this.#endpointHost = new URL(config.baseUrl).host;
     this.#pollingEnabled = process.env.MASTRA_PLATFORM_GITHUB_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
     this.#pollingIntervalMs = optionalPositiveIntegerEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS');
+    this.#reconcileEnabled = process.env.MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED?.trim().toLowerCase() !== 'false';
   }
 
   get storage(): SourceControlStorageHandle {
@@ -451,6 +453,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       endpointHost: this.#endpointHost,
       pollingEnabled: this.#pollingEnabled,
       pollingIntervalMs: this.#pollingIntervalMs,
+      reconcileEnabled: this.#reconcileEnabled,
     });
   }
 
@@ -630,7 +633,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   workers(ctx: IntegrationContext): PlatformGithubEventWorker[] {
-    if (!this.#pollingEnabled) return [];
+    if (!this.#pollingEnabled && !this.#reconcileEnabled) return [];
     if (!ctx.controller) {
       throw new Error('Platform GitHub event polling requires the mounted Mastra Code controller.');
     }
@@ -641,7 +644,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         github: this,
         storage: ctx.storage.generic as unknown as PlatformGithubEventStorage,
         ingestFactoryEvent: attachGithubRules(this, ctx),
-        reconcileFactoryState: attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input)),
+        reconcileFactoryState: this.#reconcileEnabled
+          ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
+          : undefined,
+        pollEventsEnabled: this.#pollingEnabled,
         intervalMs: this.#pollingIntervalMs,
       }),
     ];
@@ -718,6 +724,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         enabled: this.#pollingEnabled,
         ...(this.#pollingIntervalMs === undefined ? {} : { intervalMs: this.#pollingIntervalMs }),
       },
+      reconcile: { enabled: this.#reconcileEnabled },
     };
   }
 
