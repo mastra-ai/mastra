@@ -599,7 +599,7 @@ export function createDatasetsTests({
       });
 
       (supportsItemTimeout ? it : it.skip)(
-        'timeout round-trips through add, batch insert, updates, and SCD-2 history',
+        'timeout round-trips through add, batch insert, updates, SCD-2 history, and deletion tombstones',
         async () => {
           const ds = await datasetsStorage.createDataset({ name: 'item-timeout' });
           const item = await datasetsStorage.addItem({ datasetId: ds.id, input: { q: 'one' }, timeout: 1_000 });
@@ -644,6 +644,24 @@ export function createDatasetsTests({
 
           const history = await datasetsStorage.getItemHistory(item.id);
           expect(history.map(row => row.timeout)).toEqual([4_000, 1_000, 1_000]);
+
+          await datasetsStorage.deleteItem({ id: item.id, datasetId: ds.id });
+          expect((await datasetsStorage.getItemHistory(item.id))[0]).toMatchObject({
+            timeout: 4_000,
+            isDeleted: true,
+          });
+
+          await datasetsStorage.batchDeleteItems({
+            datasetId: ds.id,
+            itemIds: batch.map(batchItem => batchItem.id),
+          });
+          const batchHistories = await Promise.all(
+            batch.map(batchItem => datasetsStorage.getItemHistory(batchItem.id)),
+          );
+          expect(batchHistories.map(batchHistory => batchHistory[0])).toMatchObject([
+            { timeout: 2_000, isDeleted: true },
+            { timeout: 3_000, isDeleted: true },
+          ]);
         },
       );
 
