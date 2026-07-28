@@ -116,7 +116,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
 
         <DataPanel.Content>
           {isEditing ? (
-            <DatasetItemEditForm item={item} onSuccess={closeEditor} onCancel={closeEditor} />
+            <DatasetItemEditForm key={item.id} item={item} onSuccess={closeEditor} onCancel={closeEditor} />
           ) : (
             <>
               <DataKeysAndValues>
