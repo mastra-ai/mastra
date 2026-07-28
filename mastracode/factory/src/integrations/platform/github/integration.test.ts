@@ -587,6 +587,93 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
+  it('reuses installation repository listings within the cache TTL', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () =>
+        json({
+          repositories: [
+            { id: 101, owner: 'acme', name: 'app', fullName: 'acme/app', private: true, defaultBranch: 'main' },
+          ],
+        }),
+      );
+      const integration = createIntegration(fetchImpl);
+
+      const first = await integration.listInstallationRepos(7);
+      const second = await integration.listInstallationRepos(7);
+      expect(second).toBe(first);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+      // A different installation is a different cache entry.
+      await integration.listInstallationRepos(8);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+
+      // Expired entries are refetched.
+      vi.advanceTimersByTime(31_000);
+      await integration.listInstallationRepos(7);
+      expect(fetchImpl).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('evicts the oldest installation listing once the cache bound is reached', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json({ repositories: [] }));
+      const integration = createIntegration(fetchImpl);
+
+      // Fill the cache past its 1000-entry bound; installation 1 is oldest.
+      for (let installationId = 1; installationId <= 1001; installationId++) {
+        await integration.listInstallationRepos(installationId);
+      }
+      expect(fetchImpl).toHaveBeenCalledTimes(1001);
+
+      // Installation 1 was evicted (refetches); a recent entry is still cached.
+      await integration.listInstallationRepos(1);
+      expect(fetchImpl).toHaveBeenCalledTimes(1002);
+      await integration.listInstallationRepos(1001);
+      expect(fetchImpl).toHaveBeenCalledTimes(1002);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reuses repository access grants within the cache TTL', async () => {
+    vi.useFakeTimers();
+    try {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockImplementation(async () => json({ token: 'ghs_scoped', expiresAt: '2026-07-21T18:00:00Z' }));
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage: sourceControl.forIntegration('github') });
+      const installation = await integration.versionControl.registerInstallation({
+        orgId: 'org-1',
+        userId: 'user-1',
+        installation: { externalId: '7', accountName: 'acme', accountType: 'Organization' },
+      });
+      const [repository] = await integration.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: installation.id,
+        repositories: [{ externalId: '101', slug: 'acme/app', defaultBranch: 'main' }],
+      });
+
+      const input = { orgId: 'org-1', repositoryId: repository!.id };
+      const first = await integration.versionControl.getRepositoryAccess(input);
+      const second = await integration.versionControl.getRepositoryAccess(input);
+      expect(second).toBe(first);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+      // Expired grants re-mint through the platform.
+      vi.advanceTimersByTime(5 * 60_000 + 1_000);
+      await integration.versionControl.getRepositoryAccess(input);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('exposes platform-backed routes and session tools without local callback or webhook routes', async () => {
     const seed = await createPlatformStorageForTests();
     const integration = createIntegration();

@@ -287,21 +287,37 @@ export interface ChannelAdapterLegacyConfig extends ChannelAdapterBaseConfig {
 }
 
 /**
+ * Runtime context passed to a {@link ChannelHandler} as its 4th argument.
+ *
+ * Carries handles the channels instance already resolves internally so a
+ * custom handler doesn't have to be injected with them. Optional so existing
+ * handlers written against the 3-arg signature keep compiling.
+ */
+export interface ChannelHandlerContext {
+  /** The Mastra instance that owns the channels, resolved from the bound agent or controller. */
+  mastra?: Mastra;
+}
+
+/**
  * Handler function for channel events.
- * Receives the thread, message, and the default handler implementation.
+ * Receives the thread, message, the default handler implementation, and a
+ * runtime context ({@link ChannelHandlerContext}) carrying the resolved Mastra
+ * instance.
  * Call `defaultHandler` to run the built-in behavior, or ignore it to fully replace.
  */
 export type ChannelHandler = (
   thread: Thread,
   message: Message,
   defaultHandler: (thread: Thread, message: Message) => Promise<void>,
+  ctx?: ChannelHandlerContext,
 ) => Promise<void>;
 
 /**
  * Handler configuration for channel events.
  * - `undefined` or omitted → use default handler
  * - `false` → disable handler entirely
- * - function → custom handler (receives defaultHandler as 3rd arg to wrap/extend)
+ * - function → custom handler (receives defaultHandler as 3rd arg and a
+ *   {@link ChannelHandlerContext} as 4th arg to wrap/extend)
  */
 export type ChannelHandlerConfig = ChannelHandler | false | undefined;
 

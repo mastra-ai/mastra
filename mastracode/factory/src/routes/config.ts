@@ -1,6 +1,6 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
-import { getAvailableModePacks } from '@mastra/code-sdk/onboarding/packs';
+import { getAvailableModePacks, resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
 import { getCustomProviderId, THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
@@ -488,17 +488,6 @@ export interface OMConfigInfo {
 export interface ProviderOMDefaultsResponse {
   ok: true;
   config: OMConfigInfo;
-}
-
-function providerOMModelId(providerId: string, factoryModelId: string): string {
-  switch (providerId) {
-    case 'anthropic':
-      return 'anthropic/claude-haiku-4-5';
-    case 'openai':
-      return 'openai/gpt-5.4-mini';
-    default:
-      return factoryModelId || DEFAULT_OM_MODEL_ID;
-  }
 }
 
 export function readOMConfig(session: OMSession): OMConfigInfo {
@@ -1064,7 +1053,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             });
             if (!access[providerId]) return c.json({ error: `Provider "${providerId}" is not configured` }, 400);
 
-            const modelId = providerOMModelId(providerId, factoryModelId);
+            const modelId = resolveProviderOMDefault(providerId, factoryModelId).modelId;
             const record = await context.storage.patch({
               orgId: context.orgId,
               userId: context.userId,

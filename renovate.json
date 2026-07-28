@@ -293,7 +293,7 @@
       "matchDepTypes": ["devDependencies"],
       "matchPackageNames": [
         "@microsoft/api-extractor",
-        "tsup",
+        "tsdown",
         "rollup",
         "@rollup/*",
         "@types/node",

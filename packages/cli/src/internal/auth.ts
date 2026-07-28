@@ -17,9 +17,15 @@ export {
   throwApiError,
 } from '../commands/auth/client.js';
 
-export { getToken, loadCredentials, saveCredentials, validateOrgAccess } from '../commands/auth/credentials.js';
+export {
+  getToken,
+  loadCredentials,
+  LoginCancelledError,
+  saveCredentials,
+  validateOrgAccess,
+} from '../commands/auth/credentials.js';
 
-export type { Credentials } from '../commands/auth/credentials.js';
+export type { Credentials, LoginOptions } from '../commands/auth/credentials.js';
 
 export { resolveCurrentOrg, OrgSelectionCancelledError } from '../commands/auth/orgs.js';
 

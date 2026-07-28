@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.20.3-alpha.0",
+  "version": "1.20.3-alpha.2",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -24,7 +24,7 @@
   ],
   "scripts": {
     "generate:api-manifest": "pnpm --filter @mastra/server generate:api-cli-route-metadata",
-    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
@@ -78,6 +78,7 @@
   },
   "devDependencies": {
     "@commander-js/extra-typings": "^14.0.0",
+    "@internal/factory-ui": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/playground": "workspace:*",
     "@internal/types-builder": "workspace:*",
@@ -93,7 +94,7 @@
     "eslint": "^10.7.0",
     "memfs": "^4.56.11",
     "rollup": "^4.62.2",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "type-fest": "^5.4.4",
     "typescript": "catalog:",

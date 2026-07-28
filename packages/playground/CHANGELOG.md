@@ -1,5 +1,33 @@
 # @internal/playground
 
+## 1.20.3-alpha.2
+
+### Patch Changes
+
+- Studio now shows experiment names and descriptions instead of only a shortened ID. Dataset experiment lists, the experiments overview, comparison views, and experiment detail pages use the experiment's name as the primary label, keep the shortened ID visible as secondary detail, and surface the description in a tooltip. You can also search the experiments list by name. ([#19256](https://github.com/mastra-ai/mastra/pull/19256))
+
+- Fixed experiment comparison cards rendering a blank link when an experiment had an empty name. They now fall back to the shortened experiment ID, matching the experiment lists. ([#20301](https://github.com/mastra-ai/mastra/pull/20301))
+
+  Fixed the Experiment column on the experiments overview stretching to fit long names and squeezing the columns next to it. Long names now truncate instead.
+
+- Updated dependencies [[`a211d09`](https://github.com/mastra-ai/mastra/commit/a211d09185dc65a746534914cf38b67f21ee9bac), [`2dd1681`](https://github.com/mastra-ai/mastra/commit/2dd168133bebbeb4ea15e8bcf775faad43017865), [`071d4d8`](https://github.com/mastra-ai/mastra/commit/071d4d8a644e853a776d9846554f117ba9a35942), [`05db566`](https://github.com/mastra-ai/mastra/commit/05db566fcbdcbf33d0bffca0c72ec30129e2e3ca), [`8124754`](https://github.com/mastra-ai/mastra/commit/8124754ae89fbc69f8136d1df4a91904d0f84c4e)]:
+  - @mastra/core@1.54.0-alpha.2
+  - @mastra/client-js@1.35.0-alpha.2
+  - @mastra/playground-ui@44.0.0-alpha.2
+  - @mastra/react@1.3.3-alpha.2
+
+## 1.20.3-alpha.1
+
+### Patch Changes
+
+- Improved Signals loading by limiting snapshots and themes to the selected date range. ([#20264](https://github.com/mastra-ai/mastra/pull/20264))
+
+- Updated dependencies [[`ce93a3c`](https://github.com/mastra-ai/mastra/commit/ce93a3c114ea1cbfbd576f3db41d7c26c9844f5b), [`5718a22`](https://github.com/mastra-ai/mastra/commit/5718a229281dcfd36bcd1f42a242e3717e510a33), [`5807d3a`](https://github.com/mastra-ai/mastra/commit/5807d3ae1d259b8b7d6df7e5bf2b485c694af9c8), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`5718a22`](https://github.com/mastra-ai/mastra/commit/5718a229281dcfd36bcd1f42a242e3717e510a33), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`d1b7e3a`](https://github.com/mastra-ai/mastra/commit/d1b7e3a978a309a5653eeaa490d2d6c7c53bd093), [`c093146`](https://github.com/mastra-ai/mastra/commit/c0931466404d3c521308ea119cb165bb7e695155)]:
+  - @mastra/core@1.54.0-alpha.1
+  - @mastra/client-js@1.35.0-alpha.1
+  - @mastra/react@1.3.3-alpha.1
+  - @mastra/playground-ui@44.0.0-alpha.1
+
 ## 1.20.3-alpha.0
 
 ### Patch Changes

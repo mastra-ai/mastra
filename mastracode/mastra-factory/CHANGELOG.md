@@ -1,5 +1,23 @@
 # create-factory
 
+## 0.1.3-alpha.2
+
+### Patch Changes
+
+- Improved Factory onboarding so any key skips optional Mastra Platform setup while Ctrl+C cancels project creation. ([#20299](https://github.com/mastra-ai/mastra/pull/20299))
+
+- Updated dependencies [[`6ce9581`](https://github.com/mastra-ai/mastra/commit/6ce9581ba0ef671dd04e9ad6c6290f2aa7028550)]:
+  - mastra@1.20.3-alpha.2
+
+## 0.1.3-alpha.1
+
+### Patch Changes
+
+- Generated Factory projects now use the Factory UI bundled with the Mastra CLI instead of including editable browser source and its build dependencies. ([#20246](https://github.com/mastra-ai/mastra/pull/20246))
+
+- Updated dependencies:
+  - mastra@1.20.3-alpha.1
+
 ## 0.1.3-alpha.0
 
 ### Patch Changes

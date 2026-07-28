@@ -1,6 +1,6 @@
 {
   "name": "@mastra/react",
-  "version": "1.3.3-alpha.0",
+  "version": "1.3.3-alpha.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
@@ -26,15 +26,25 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./ui": {
+      "import": {
+        "types": "./dist/ui/index.d.ts",
+        "default": "./dist/ui/index.js"
+      },
+      "require": {
+        "types": "./dist/ui/index.d.ts",
+        "default": "./dist/ui/index.cjs"
+      }
+    },
     "./styles.css": "./dist/react.css"
   },
   "scripts": {
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix .",
     "build": "echo 'Use turbo to run build'",
-    "build:js": "tsup --config tsup.config.ts",
+    "build:js": "tsdown --config tsdown.config.ts",
     "build:css": "tailwindcss -i src/ui/index.css -o dist/react.css",
-    "dev": "tsup --config tsup.config.ts --watch",
+    "dev": "tsdown --config tsdown.config.ts --watch",
     "test": "vitest",
     "test:unit": "vitest run",
     "storybook": "storybook dev -p 6006",
@@ -79,7 +89,7 @@
     "react-dom": "^19.2.5",
     "storybook": "^9.1.20",
     "tailwindcss": "^4.3.3",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vite": "^7.3.1",
     "vitest": "catalog:",

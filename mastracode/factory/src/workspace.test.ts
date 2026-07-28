@@ -372,6 +372,25 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
   });
 
+  it('deduplicates concurrent materializations of the same session workspace', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    // Hold materialization open long enough for the follower to arrive while
+    // the leader is still in flight.
+    mocks.materializeRepo.mockImplementationOnce(() => new Promise(resolve => setTimeout(resolve, 20)));
+
+    const [first, second] = await Promise.all([
+      workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
+      workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
+    ]);
+
+    expect(second).toBe(first);
+    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+    expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
+    expect(mocks.checkoutSessionBranch).toHaveBeenCalledTimes(1);
+  });
+
   it('uses repository-scoped access when materializing a Factory session', async () => {
     const { workspace } = await createLocalFactory();
     addProject();

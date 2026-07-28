@@ -1,5 +1,5 @@
 {
-  "attachment": ["google/gemma-4-31b-it", "moonshotai/kimi-k2.6", "moonshotai/kimi-k2.7-code"],
+  "attachment": ["google/gemma-4-31b-it", "moonshotai/kimi-k2.6", "moonshotai/kimi-k2.7-code", "moonshotai/kimi-k3"],
   "temperature": [
     "deepseek-ai/deepseek-v4-flash",
     "deepseek-ai/deepseek-v4-pro",
@@ -16,6 +16,7 @@
     "google/gemma-4-31b-it",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
+    "moonshotai/kimi-k3",
     "openai/gpt-oss-120b",
     "qwen/qwen3.6-27b",
     "zai-org/glm-5.1",
