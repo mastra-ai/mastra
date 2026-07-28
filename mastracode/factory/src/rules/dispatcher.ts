@@ -32,7 +32,7 @@ interface DispatcherSession extends SkillSession {
   };
   sendSignal(
     input: { id: string; type: 'user'; tagName: 'user'; contents: string },
-    options: { requestContext: RequestContext; awaitAcceptance?: boolean },
+    options: { requestContext: RequestContext; requireDelivery?: boolean },
   ): { accepted: Promise<{ accepted: true; runId?: string; action?: string }> };
 }
 
@@ -287,11 +287,11 @@ export class FactoryDecisionDispatcher {
             tagName: 'user',
             contents: resolved.message,
           },
-          // Without `awaitAcceptance` the session resolves `accepted` on the
+          // Without `requireDelivery` the session resolves `accepted` on the
           // next tick and swallows wake failures, so a kickoff that never
           // reached the agent would be marked succeeded and the thread would
           // stay empty forever.
-          { requestContext, awaitAcceptance: true },
+          { requestContext, requireDelivery: true },
         );
         const settled = await result.accepted;
         if (settled.action && settled.action !== 'wake' && settled.action !== 'deliver') {

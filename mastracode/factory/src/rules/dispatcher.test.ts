@@ -459,7 +459,7 @@ describe('FactoryDecisionDispatcher', () => {
         tagName: 'user',
         contents: expect.stringMatching(/<skill name="understand-issue">[\s\S]*ARGUMENTS: Issue 42[\s\S]*<\/skill>/),
       },
-      { requestContext: expect.anything(), awaitAcceptance: true },
+      { requestContext: expect.anything(), requireDelivery: true },
     );
     const requestContext = session.sendSignal.mock.calls[0]?.[1]?.requestContext;
     expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
@@ -612,7 +612,7 @@ describe('FactoryDecisionDispatcher', () => {
     );
     expect(session.sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ contents: expect.stringContaining('<skill name="understand-issue">') }),
-      { requestContext: expect.anything(), awaitAcceptance: true },
+      { requestContext: expect.anything(), requireDelivery: true },
     );
   });
 
@@ -684,7 +684,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-2' });
     expect(session.sendSignal).toHaveBeenCalledWith(
       expect.objectContaining({ contents: expect.stringContaining('<skill name="understand-issue">') }),
-      { requestContext: expect.anything(), awaitAcceptance: true },
+      { requestContext: expect.anything(), requireDelivery: true },
     );
   });
 
@@ -733,7 +733,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
     expect(session.sendSignal).toHaveBeenCalledWith(expect.objectContaining({ id: decision?.id }), {
       requestContext: expect.anything(),
-      awaitAcceptance: true,
+      requireDelivery: true,
     });
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });

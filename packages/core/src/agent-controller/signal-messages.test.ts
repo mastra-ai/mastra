@@ -458,7 +458,7 @@ describe('AgentController signal messages', () => {
     );
   });
 
-  it('propagates delayed wake failures to callers that opt into awaitAcceptance', async () => {
+  it('propagates delayed wake failures to callers that opt into requireDelivery', async () => {
     const storage = new InMemoryStore();
     const agent = new Agent({
       id: 'await-acceptance-agent',
@@ -487,7 +487,7 @@ describe('AgentController signal messages', () => {
     // Delivery-guaranteed semantics: the same failure rejects so callers
     // (e.g. the Factory rule dispatcher) can retry instead of assuming the
     // kickoff reached the agent.
-    const guaranteed = session.sendSignal({ content: 'kickoff' }, { awaitAcceptance: true });
+    const guaranteed = session.sendSignal({ content: 'kickoff' }, { requireDelivery: true });
     await expect(guaranteed.accepted).rejects.toThrow('wake stream setup failed');
 
     // And on success it surfaces the real acceptance decision.
@@ -498,7 +498,7 @@ describe('AgentController signal messages', () => {
           signal: createSignal({ type: 'user-message', contents: 'kickoff' }),
         }) as any,
     );
-    const accepted = session.sendSignal({ content: 'kickoff' }, { awaitAcceptance: true });
+    const accepted = session.sendSignal({ content: 'kickoff' }, { requireDelivery: true });
     await expect(accepted.accepted).resolves.toEqual({ accepted: true, runId: 'run-2', action: 'deliver' });
   });
 

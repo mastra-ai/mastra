@@ -3027,7 +3027,7 @@ export class Session<TState = unknown> {
        * dispatcher) use this so a failed wake is retried rather than silently
        * treated as sent.
        */
-      awaitAcceptance?: boolean;
+      requireDelivery?: boolean;
     },
   ): {
     id: string;
@@ -3047,7 +3047,7 @@ export class Session<TState = unknown> {
     const tracingContext = options?.tracingContext ?? contentOptions?.tracingContext;
     const tracingOptions = options?.tracingOptions ?? contentOptions?.tracingOptions;
     const requestContextInput = options?.requestContext ?? contentOptions?.requestContext;
-    const awaitAcceptance = options?.awaitAcceptance ?? false;
+    const requireDelivery = options?.requireDelivery ?? false;
     const ifActive = 'content' in input ? input.ifActive : undefined;
     const ifIdle = 'content' in input ? input.ifIdle : undefined;
     const submittedRunId = this.run.getRunId();
@@ -3089,7 +3089,7 @@ export class Session<TState = unknown> {
           ifActive,
           ifIdle,
         });
-        if (awaitAcceptance) {
+        if (requireDelivery) {
           const settled = await result.accepted;
           return {
             accepted: true as const,
@@ -3124,7 +3124,7 @@ export class Session<TState = unknown> {
         ifActive,
         ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
       });
-      if (awaitAcceptance) {
+      if (requireDelivery) {
         // Delivery-guaranteed path: surface the real acceptance decision and
         // propagate routing/stream-setup failures to the caller.
         const settled = await result.accepted;
