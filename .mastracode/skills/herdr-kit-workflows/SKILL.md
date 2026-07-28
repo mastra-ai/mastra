@@ -1,6 +1,7 @@
 ---
 name: herdr-kit-workflows
-description: Set up and operate Herdr Kit safely: install and configure the plugin and Mastra Code integration, manage Review and Work repository scope, open primary repository workspaces, synchronize managers, materialize or dematerialize managed worktrees, and update Herdr Kit settings or shortcuts.
+description: >-
+  Set up and operate Herdr Kit safely: install and configure the plugin and Mastra Code integration, manage Review and Work repository scope, open primary repository workspaces, synchronize managers, materialize or dematerialize managed worktrees, and update Herdr Kit settings or shortcuts.
 ---
 
 # Herdr Kit Workflows
