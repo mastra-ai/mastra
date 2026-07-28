@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../../agent';
 import { AgentController } from '../../agent-controller/agent-controller';
 import { createMockWorkspace } from '../../agent-controller/test-utils';
+import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 import type { AgentControllerChannels } from '../agent-controller-channels';
 import type { ChannelAccountLinkResolver } from '../types';
@@ -133,7 +134,12 @@ describe('AgentControllerChannels account linking', () => {
       return session;
     });
 
-    await (channels as any).processChatMessage(chatThread, createSlackMessage('m-1', 'hi', 'T-workspace'), mastra);
+    await (channels as any).processChatMessage(
+      chatThread,
+      createSlackMessage('m-1', 'hi', 'T-workspace'),
+      mastra,
+      new RequestContext(),
+    );
 
     await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'agent reply posted' });
 
@@ -166,7 +172,12 @@ describe('AgentControllerChannels account linking', () => {
 
     const createSpy = vi.spyOn(controller, 'createSession');
 
-    await (channels as any).processChatMessage(chatThread, createSlackMessage('m-1', 'hi', 'T-workspace'), mastra);
+    await (channels as any).processChatMessage(
+      chatThread,
+      createSlackMessage('m-1', 'hi', 'T-workspace'),
+      mastra,
+      new RequestContext(),
+    );
 
     // The unlinked handler fired with the sender identity...
     await waitFor(() => unlinked.mock.calls.length >= 1, { what: 'unlinked handler invoked' });
@@ -186,7 +197,12 @@ describe('AgentControllerChannels account linking', () => {
     // No resolver set — the gate is inert.
     const createSpy = vi.spyOn(controller, 'createSession');
 
-    await (channels as any).processChatMessage(chatThread, createSlackMessage('m-1', 'hi', 'T-workspace'), mastra);
+    await (channels as any).processChatMessage(
+      chatThread,
+      createSlackMessage('m-1', 'hi', 'T-workspace'),
+      mastra,
+      new RequestContext(),
+    );
 
     await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'agent reply posted' });
     expect(createSpy).toHaveBeenCalled();

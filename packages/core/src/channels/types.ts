@@ -1,6 +1,7 @@
 import type { Adapter, CardElement, ChatConfig, Message, StateAdapter, StreamChunk, Thread } from 'chat';
 
 import type { Mastra } from '../mastra';
+import type { RequestContext } from '../request-context';
 import type { ApiRoute, CorsOptions } from '../server/types';
 import type { InlineLinkEntry } from './inline-media';
 import type { TypingStatusFn } from './typing-status';
@@ -290,12 +291,21 @@ export interface ChannelAdapterLegacyConfig extends ChannelAdapterBaseConfig {
  * Runtime context passed to a {@link ChannelHandler} as its 4th argument.
  *
  * Carries handles the channels instance already resolves internally so a
- * custom handler doesn't have to be injected with them. Optional so existing
- * handlers written against the 3-arg signature keep compiling.
+ * custom handler doesn't have to be injected with them.
  */
 export interface ChannelHandlerContext {
   /** The Mastra instance that owns the channels, resolved from the bound agent or controller. */
   mastra?: Mastra;
+  /**
+   * The request context for the run this message will start, constructed fresh
+   * per message.
+   *
+   * A handler may write to it before calling `defaultHandler` — for example to
+   * stamp the tenant a channel sender maps to, so the run resolves that user's
+   * credentials. Core adds the channel and render-context entries afterward and
+   * dispatches with this same instance.
+   */
+  requestContext: RequestContext;
 }
 
 /**
@@ -309,7 +319,7 @@ export type ChannelHandler = (
   thread: Thread,
   message: Message,
   defaultHandler: (thread: Thread, message: Message) => Promise<void>,
-  ctx?: ChannelHandlerContext,
+  ctx: ChannelHandlerContext,
 ) => Promise<void>;
 
 /**
