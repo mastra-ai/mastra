@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cloudflare",
-  "version": "1.5.1",
+  "version": "1.6.0-alpha.0",
   "description": "Cloudflare provider for Mastra - includes db storage capabilities",
   "type": "module",
   "files": [
@@ -47,7 +47,8 @@
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {

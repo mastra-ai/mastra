@@ -1137,7 +1137,7 @@ export class BackgroundTaskManager {
           resourceId,
           result: event.data.result,
           status: 'completed',
-          completedAt: task.completedAt!,
+          completedAt: task.completedAt,
           startedAt: task.startedAt!,
         });
 
@@ -1170,7 +1170,7 @@ export class BackgroundTaskManager {
           resourceId,
           error: event.data.error,
           status: 'failed',
-          completedAt: task.completedAt!,
+          completedAt: task.completedAt,
           startedAt: task.startedAt!,
         });
 

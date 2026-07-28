@@ -1,6 +1,6 @@
 {
   "name": "@mastra/otel-bridge",
-  "version": "1.4.3",
+  "version": "1.4.4-alpha.0",
   "description": "OpenTelemetry observability bridge for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -27,7 +27,8 @@
     "build:watch": "pnpm build --watch",
     "test": "vitest run",
     "test:watch": "vitest watch",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {

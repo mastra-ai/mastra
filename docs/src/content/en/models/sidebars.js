@@ -123,6 +123,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/aiand',
+          label: 'ai&',
+        },
+        {
+          type: 'doc',
           id: 'providers/aihubmix',
           label: 'AIHubMix',
         },
@@ -215,6 +220,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/cerebras',
           label: 'Cerebras',
+        },
+        {
+          type: 'doc',
+          id: 'providers/hyper',
+          label: 'Charm Hyper',
         },
         {
           type: 'doc',
@@ -360,6 +370,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/helicone',
           label: 'Helicone',
+        },
+        {
+          type: 'doc',
+          id: 'providers/hetzner',
+          label: 'Hetzner',
         },
         {
           type: 'doc',

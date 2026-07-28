@@ -6,7 +6,6 @@ import type { TestAuthUser } from '../../routes/test-utils.js';
 import type { StateSigner } from '../../state-signing.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../../storage/test-utils.js';
-import type { IntegrationHooks } from '../base.js';
 import { LinearIntegration } from './integration.js';
 import { buildLinearRoutes } from './routes.js';
 
@@ -68,7 +67,11 @@ const stateSigner: StateSigner = {
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(
   user: TestAuthUser | null,
-  options: { signer?: StateSigner | null; authEnabled?: boolean; hooks?: IntegrationHooks } = {},
+  options: {
+    signer?: StateSigner | null;
+    authEnabled?: boolean;
+    ingestFactoryIssues?: Parameters<typeof buildLinearRoutes>[0]['ingestFactoryIssues'];
+  } = {},
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -83,7 +86,7 @@ function buildApp(
       auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
       stateSigner: options.signer === undefined ? stateSigner : (options.signer ?? undefined),
       intake: seed.intake,
-      hooks: options.hooks,
+      ingestFactoryIssues: options.ingestFactoryIssues,
     }),
   );
   return app;
@@ -251,14 +254,14 @@ describe('issues route', () => {
 
   it('ingests fetched issues for the active Factory project', async () => {
     await connect();
-    const ingestLinearIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
+    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
     const factoryProjectId = '11111111-1111-4111-8111-111111111111';
-    const res = await buildApp(org1(), { hooks: { ingestLinearIssues } }).request(
+    const res = await buildApp(org1(), { ingestFactoryIssues }).request(
       `/web/linear/issues?factoryProjectId=${factoryProjectId}`,
     );
 
     expect(res.status).toBe(200);
-    expect(ingestLinearIssues).toHaveBeenCalledWith({
+    expect(ingestFactoryIssues).toHaveBeenCalledWith({
       orgId: 'org1',
       userId: 'u1',
       factoryProjectId,
@@ -268,14 +271,14 @@ describe('issues route', () => {
 
   it('rejects malformed Factory project identifiers before fetching issues', async () => {
     await connect();
-    const ingestLinearIssues = vi.fn();
-    const res = await buildApp(org1(), { hooks: { ingestLinearIssues } }).request(
+    const ingestFactoryIssues = vi.fn();
+    const res = await buildApp(org1(), { ingestFactoryIssues }).request(
       '/web/linear/issues?factoryProjectId=not-a-uuid',
     );
 
     expect(res.status).toBe(400);
     expect(listActiveLinearIssues).not.toHaveBeenCalled();
-    expect(ingestLinearIssues).not.toHaveBeenCalled();
+    expect(ingestFactoryIssues).not.toHaveBeenCalled();
   });
 
   it('forwards the pagination cursor', async () => {
