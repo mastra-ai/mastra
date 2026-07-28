@@ -851,7 +851,7 @@ export function channelOrigin(entry: MessageEntry): { platform: string; authorNa
 export function ChannelOriginBadge({ origin }: { origin: { platform: string; authorName?: string } }) {
   const label = CHANNEL_PLATFORM_LABEL[origin.platform] ?? origin.platform;
   return (
-    <div className="mt-1 flex items-center gap-1 text-ui-xs text-icon3" aria-label={`Sent from ${label}`}>
+    <div className="text-ui-xs text-icon3 mt-1 flex items-center gap-1" aria-label={`Sent from ${label}`}>
       {origin.platform === 'slack' && <Slack className="size-3" aria-hidden="true" />}
       <span>
         via {label}
