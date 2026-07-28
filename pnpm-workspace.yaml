@@ -2,6 +2,7 @@ packages:
   - mastracode/sdk
   - mastracode/tui
   - mastracode/factory
+  - mastracode/factory-ui
   - mastracode/mastra-factory
   - docs
   - packages/_vendored/*
@@ -50,7 +51,6 @@ catalog:
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
   '@earendil-works/pi-tui@0.80.6': patches/@earendil-works__pi-tui@0.80.6.patch
-  tsup@8.5.1: patches/tsup@8.5.1.patch
 
 packageExtensions:
   '@ai-sdk/provider-utils@3.0.25':
@@ -160,6 +160,8 @@ trustPolicyExclude:
   # without the trusted-publisher evidence that older @mesadev/sdk versions had.
   - '@mesadev/sdk@0.38.0'
 overrides:
+  # Temporarily pinning to 7.2.0; will unpin shortly.
+  bson: 7.2.0
   typescript: ^6.0.3
   '@types/node': 22.19.15
   # Capped below 2: cookie@2 renamed parse/serialize to parseCookie/stringifyCookie,
