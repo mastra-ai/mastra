@@ -24,7 +24,28 @@ Parse the PR reference from `$ARGUMENTS`. Then:
 3. Gauge the author: maintainer, regular contributor, or first-time contributor (`gh pr list --author <login> --state merged --limit 100 --json number --jq length`). This frames the review attention needed, not the verdict.
 4. State the PR's goal concretely — what problem it solves and what the intended outcome is. "Fixes a bug" is not enough.
 
-## Phase 2: Quality Gate
+## Phase 2: Existing Review Signal
+
+The PR may already carry reviews — from bots (CodeRabbit, linters, security scanners) and from humans. Collect them before forming your own opinion:
+
+1. `gh pr view <number> --json reviews --jq '.reviews[] | {author: .author.login, state, body}'` for submitted reviews and their verdicts.
+2. Unresolved inline threads, which need GraphQL:
+
+   ```
+   gh api graphql -f query='query { repository(owner: "<owner>", name: "<repo>") { pullRequest(number: <number>) { reviewThreads(first: 100) { nodes { isResolved isOutdated path line comments(first: 10) { nodes { author { login } body } } } } } } }'
+   ```
+
+3. `gh pr view <number> --json comments --jq '.comments[] | {author: .author.login, body}'` for top-level comments (bot summaries often land here).
+
+Triage every substantive finding — bot or human — against the current diff and code. Classify each as:
+
+- **confirmed** — the finding is real and unaddressed. It becomes one of _your_ findings and weighs into the verdict exactly as if you had found it yourself.
+- **addressed** — a later commit fixed it. Verify the fix, don't trust the thread's resolved flag.
+- **refuted** — the finding is wrong or doesn't apply. Record _why_ with evidence; "the bot is noisy" is not evidence.
+
+Bots have false positives — verify, don't rubber-stamp. But a major finding from an existing reviewer that you confirm and that remains unaddressed is a review failure if it doesn't shape your verdict. Ignoring existing review signal is the most common way a review pass goes wrong.
+
+## Phase 3: Quality Gate
 
 - `gh pr checks` — CI status (build, typecheck, tests). Still-running CI is noted, not blocking.
 - Does the PR add or modify tests? Are they meaningful, or do they exercise paths without real assertions?
@@ -34,26 +55,29 @@ Parse the PR reference from `$ARGUMENTS`. Then:
 
 Gate failures don't stop the review — they become findings for the verdict.
 
-## Phase 3: History & Architecture
+## Phase 4: History & Architecture
 
 For each significantly changed file: `git log --oneline -20 -- <file>`, `git blame` on the changed regions' pre-PR state, and linked PRs/issues from commit messages. Understand why the current code exists before judging the change to it.
 
 Read around the changed lines: the module architecture, the contracts the changed code participates in, callers and data flow, and any AGENTS.md/README conventions in the touched packages. Then judge the approach: does it fit the existing design, or fight it? If the history shows a simpler or more consistent approach, flag it.
 
-## Phase 4: Verdict
+## Phase 5: Verdict
 
-Weigh the findings and commit to one verdict:
+Weigh the findings — yours and the confirmed ones inherited from existing reviewers — and commit to one verdict:
 
 - **approve** — correct, adequately tested, in-scope, consistent with the codebase's patterns. Minor nits don't block approval; record them as findings.
-- **request changes** — a correctness bug, a meaningful test gap, unjustified scope, or a pattern violation that will cost the codebase later.
+- **request changes** — a correctness bug, a meaningful test gap, unjustified scope, a pattern violation that will cost the codebase later, **or a confirmed major finding from an existing reviewer that remains unaddressed**.
+
+Approval is earned, not the default — the burden of proof is on the PR, and your job is to find what's wrong with it, not to find a reading under which it's fine. If you confirmed a major finding — a correctness, security, or data-loss issue — you cannot downgrade it to a nit to keep an approve verdict; it forces request changes until addressed or refuted with evidence.
 
 Do not hedge between the two — pick the verdict the evidence supports and record borderline judgment calls as assumptions.
 
-## Phase 5: Handoff & Transition
+## Phase 6: Handoff & Transition
 
 First, post the **review handoff** as your final message in the conversation. It **must open with the verdict line**: `Verdict: approve` or `Verdict: request changes`, followed by:
 
 - **Findings** — correctness assessment, test assessment, scope assessment, pattern-consistency notes, each grounded in the history you traced. Distill — this is a handoff, not a transcript.
+- **Existing review disposition** — every substantive finding from prior reviewers (bots included) with its classification: confirmed, addressed, or refuted with evidence. A major bot comment must never be silently dropped.
 - **Requested changes** — one entry per change, concrete enough to act on (for a request-changes verdict).
 - **Assumptions** — every recorded judgment call from the run.
 - **Open questions** — any decision that genuinely needs a human.
@@ -74,6 +98,7 @@ The transition is governed by the server's rules. If it is rejected, read the st
 ## Behavior Rules
 
 - **History before opinions.** Never judge a change without knowing why the current code exists.
+- **Existing reviews are evidence.** Every substantive prior finding — bot or human — is confirmed, addressed, or refuted in the handoff; none are silently dropped.
 - **Be skeptical, not hostile.** Flag what's suspicious with evidence; don't pad approvals with praise.
 - **Decide and record.** Every judgment fork gets the best-supported answer plus an assumption entry — never an open thread.
 - **Changes requested are discrete.** Each requested change is its own actionable handoff entry.
