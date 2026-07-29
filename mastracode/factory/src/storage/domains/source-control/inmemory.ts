@@ -155,7 +155,9 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       newInstallationId: string;
     }) => {
       const existing = await this.repositories.get({ orgId, id });
-      if (!existing) return false;
+      if (!existing) {
+        throw new Error(`Repository ${id} not found in organization ${orgId}`);
+      }
       if (!(await this.installations.get({ orgId, id: newInstallationId }))) {
         throw new Error('Source-control installation not found');
       }
@@ -163,10 +165,20 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       const conflict = this.repositoriesRows.find(
         row => row.installationId === newInstallationId && row.externalId === existing.externalId,
       );
-      if (conflict) return false; // Unique constraint violation
+      if (conflict) {
+        // Return the existing repository under the new installation
+        return conflict;
+      }
+      // Update the repository's installation
       existing.installationId = newInstallationId;
       existing.updatedAt = new Date();
-      return true;
+      // Migrate dependent connections to the new installation
+      for (const conn of this.connectionsRows) {
+        if (conn.installationId === existing.installationId) {
+          conn.installationId = newInstallationId;
+        }
+      }
+      return existing;
     },
   };
 
