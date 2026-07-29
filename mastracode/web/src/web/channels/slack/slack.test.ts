@@ -726,7 +726,9 @@ describe('Slack thread work-item intake', () => {
     const handlers = createHandlers(deps as any);
     const thread = makeIntakeThread();
 
-    await expect(handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra))).resolves.toBeUndefined();
+    await expect(
+      handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra)),
+    ).resolves.toBeUndefined();
 
     expect(thread.post).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalled();
