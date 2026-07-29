@@ -31,6 +31,11 @@ const sidebars = {
       items: [
         {
           type: 'doc',
+          id: 'what-is-mastra',
+          label: 'What is Mastra?',
+        },
+        {
+          type: 'doc',
           id: 'getting-started/manual-install',
           label: 'Manual Install',
         },

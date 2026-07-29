@@ -250,6 +250,10 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async deleteFile(path: string, options?: RemoveOptions): Promise<void> {
     const abs = this.resolve(path);
+    // Contain the parent's realpath: deleting `link/file` where `link` points
+    // outside the workdir must fail, while deleting a symlink entry itself
+    // (which lives inside the workdir) stays allowed.
+    await this.assertContainedRealpath(posixPath.dirname(abs), path);
     if (options?.force) {
       // `rm -f` already succeeds for a missing file, but still fails for
       // directories and permission errors — surface those.
@@ -354,6 +358,9 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async rmdir(path: string, options?: RemoveOptions): Promise<void> {
     const abs = this.resolve(path);
+    // Same parent containment as deleteFile — `rm -r` through a symlinked
+    // parent would otherwise delete outside the workspace.
+    await this.assertContainedRealpath(posixPath.dirname(abs), path);
     if (options?.recursive) {
       const force = options?.force ? '-f ' : '';
       await this.execOk(`rm -r ${force}${shellQuote(abs)}`, `rmdir ${path}`);
