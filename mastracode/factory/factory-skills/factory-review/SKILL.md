@@ -50,7 +50,9 @@ Bots have false positives — verify, don't rubber-stamp. But a major finding fr
 ## Phase 3: Quality Gate
 
 - `gh pr checks` — CI status (build, typecheck, tests). Still-running CI is noted, not blocking.
+- **Run it yourself.** Check out the PR branch in the session sandbox and execute the narrowest test suite and typecheck covering the changed packages (e.g. `pnpm --filter <pkg> test`). CI green is corroboration, not a substitute — reading code predicts behavior, running it proves behavior. Record every command and its outcome for the handoff. If something prevented you from executing anything, the handoff must say so explicitly — a review that ran nothing is a weaker review and must not hide it.
 - Does the PR add or modify tests? Are they meaningful, or do they exercise paths without real assertions?
+- If you suspect a correctness issue, don't speculate — write a quick counter-test or repro in the sandbox. A demonstrated failure is a blocking finding with evidence; a failed repro attempt kills a hedge before it reaches the handoff.
 - Is the diff coherent — one focused change, or unrelated changes mixed in?
 - Changeset present if the repo uses changesets and the change is runtime-visible?
 - Any evidence the author verified the change works (test output, repro, screenshots)?
@@ -76,6 +78,8 @@ Weigh the findings — yours and the confirmed ones inherited from existing revi
 
 Approval is earned, not the default — the burden of proof is on the PR, and your job is to find what's wrong with it, not to find a reading under which it's fine. If you confirmed a major finding — a correctness, security, or data-loss issue — you cannot downgrade it to a nit to keep an approve verdict; it forces request changes until addressed or refuted with evidence.
 
+**Adversarial check — required before every approve.** Before committing to approve, argue the strongest case for request changes: take the most damaging reading of your findings, and name the consumer, platform, or configuration most likely to break. If the argument survives contact with the evidence, switch the verdict. If it doesn't, record in one line why it fails — that line goes in the handoff. An approve without a surviving adversarial check is not an approve.
+
 Do not hedge between the two — pick the verdict the evidence supports. When genuinely borderline, request changes: a wrong request-changes costs the author one re-review cycle; a wrong approve ships the defect with a green checkmark.
 
 ## Phase 6: Handoff & Transition
@@ -83,7 +87,9 @@ Do not hedge between the two — pick the verdict the evidence supports. When ge
 First, post the **review handoff** as your final message in the conversation. It **must open with the verdict line**: `Verdict: approve` or `Verdict: request changes`, followed by:
 
 - **Findings** — correctness assessment, test assessment, scope assessment, pattern-consistency notes, each grounded in the history you traced. Distill — this is a handoff, not a transcript.
+- **Verification** — every command you executed (tests, typecheck, repros) with its outcome, or an explicit statement that nothing was executed and why.
 - **Existing review disposition** — every substantive finding from prior reviewers (bots included) with its classification: confirmed, addressed, or refuted with evidence. A major bot comment must never be silently dropped.
+- **Adversarial check** (approve only) — the one-line record of why the strongest request-changes case fails.
 - **Requested changes** — one entry per change, concrete enough to act on (for a request-changes verdict).
 - **Assumptions** — every recorded judgment call from the run.
 - **Open questions** — any decision that genuinely needs a human.

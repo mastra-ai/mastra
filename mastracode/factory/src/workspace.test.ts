@@ -293,6 +293,11 @@ describe('getFactoryWorkspace', () => {
     expect(review).toContain('any concrete change the author should make before merge, the verdict is request changes');
     expect(review).toContain('When genuinely borderline, request changes');
     expect(review).toContain('A confirmed finding may never be resolved by recording an assumption');
+    // The reviewer must execute the change, not just read it, and every approve
+    // must survive an adversarial self-check.
+    expect(review).toContain('CI green is corroboration, not a substitute');
+    expect(review).toContain('argue the strongest case for request changes');
+    expect(review).toContain('An approve without a surviving adversarial check is not an approve');
   });
 
   it('adds read-only Web Factory skills and keeps them authoritative over project shadows', async () => {
