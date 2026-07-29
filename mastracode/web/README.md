@@ -104,12 +104,12 @@ Generate a manifest for the tunnel URL:
 ```shell
 pnpm --dir mastracode/web slack:manifest \
   --url https://your-tunnel-hostname \
-  --name "Mastra Factory (dev)"
+  --name "Mastra Factory (dev)" \
+  --copy
 ```
 
-The command writes JSON to stdout. Add `--copy` on macOS to copy it with
-`pbcopy` instead. At [api.slack.com/apps](https://api.slack.com/apps), choose
-**Create New App → From a manifest** and paste the result.
+At [api.slack.com/apps](https://api.slack.com/apps), choose **Create New App →
+From a manifest** and paste the manifest from your clipboard.
 
 Install it to your workspace, then copy these from **Basic Information → App
 Credentials** into `.env`:
