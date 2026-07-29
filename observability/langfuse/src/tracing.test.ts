@@ -446,6 +446,31 @@ describe('LangfuseExporter', () => {
       expect(processedSpans[0].attributes['langfuse.observation.cost_details']).toBeUndefined();
     });
 
+    it.each([
+      { cost: -0.0123, unit: 'USD' },
+      { cost: 0.0123, unit: 'EUR' },
+    ])('does not map an invalid provider-reported cost ($cost $unit)', async ({ cost, unit }) => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          attributes: {
+            model: 'anthropic/claude-sonnet-4',
+            provider: 'openrouter',
+            usage: { inputTokens: 10, outputTokens: 5 },
+            costContext: {
+              provider: 'openrouter',
+              estimatedCost: cost,
+              costUnit: unit,
+              costMetadata: { source: 'provider_reported', providerCostField: 'usage.cost' },
+            },
+          },
+        }),
+      );
+
+      expect(processedSpans[0].attributes['langfuse.observation.cost_details']).toBeUndefined();
+    });
+
     it('maps userId to user.id', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       await exportSpan(exporter, makeSpan({ metadata: { userId: 'user-123' } }));

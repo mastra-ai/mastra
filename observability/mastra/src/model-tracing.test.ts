@@ -81,7 +81,7 @@ describe('ModelSpanTracker', () => {
   });
 
   describe('provider-reported costs', () => {
-    it('adds OpenRouter usage.cost and upstreamInferenceCost for the exact generation cost', () => {
+    it('uses OpenRouter usage.cost without double-counting the upstream cost breakdown', () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -105,11 +105,11 @@ describe('ModelSpanTracker', () => {
       expect(span?.attributes?.costContext).toEqual({
         provider: 'openrouter',
         model: 'anthropic/claude-sonnet-4',
-        estimatedCost: 0.0223,
+        estimatedCost: 0.0123,
         costUnit: 'USD',
         costMetadata: {
           source: 'provider_reported',
-          providerCostField: 'usage.cost+usage.costDetails.upstreamInferenceCost',
+          providerCostField: 'usage.cost',
         },
       });
     });

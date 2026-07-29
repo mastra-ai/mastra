@@ -72,25 +72,19 @@ function extractOpenRouterCostContext(
       ? costDetails.upstreamInferenceCost
       : undefined;
 
-  if (reportedCost === undefined && upstreamInferenceCost === undefined) {
+  const totalCost = reportedCost ?? upstreamInferenceCost;
+  if (totalCost === undefined) {
     return undefined;
   }
-
-  const providerCostField =
-    reportedCost !== undefined && upstreamInferenceCost !== undefined
-      ? 'usage.cost+usage.costDetails.upstreamInferenceCost'
-      : reportedCost !== undefined
-        ? 'usage.cost'
-        : 'usage.costDetails.upstreamInferenceCost';
 
   return {
     provider: 'openrouter',
     model: attributes?.responseModel ?? modelSpan?.attributes?.responseModel ?? modelSpan?.attributes?.model,
-    estimatedCost: (reportedCost ?? 0) + (upstreamInferenceCost ?? 0),
+    estimatedCost: totalCost,
     costUnit: 'USD',
     costMetadata: {
       source: 'provider_reported',
-      providerCostField,
+      providerCostField: reportedCost !== undefined ? 'usage.cost' : 'usage.costDetails.upstreamInferenceCost',
     },
   };
 }

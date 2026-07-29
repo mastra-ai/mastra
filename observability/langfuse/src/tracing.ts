@@ -325,8 +325,10 @@ function mapMastraToLangfuseAttributes(
       : undefined;
   if (
     costContext?.costMetadata?.source === 'provider_reported' &&
+    costContext.costUnit === 'USD' &&
     typeof costContext.estimatedCost === 'number' &&
-    Number.isFinite(costContext.estimatedCost)
+    Number.isFinite(costContext.estimatedCost) &&
+    costContext.estimatedCost >= 0
   ) {
     attributes['langfuse.observation.cost_details'] = JSON.stringify({
       total: costContext.estimatedCost,

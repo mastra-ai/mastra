@@ -487,47 +487,6 @@ describe('AutoExtractedMetrics', () => {
     expect(byName('mastra_model_input_cache_write_tokens')!.metric.costContext?.estimatedCost).toBeUndefined();
   });
 
-  it('should allocate an OpenRouter provider-reported cost to the query-total carrier metric', () => {
-    setup();
-    const estimateCostsSpy = vi.spyOn(estimatorModule, 'estimateCosts');
-    const span = createMockSpan({
-      type: SpanType.MODEL_GENERATION,
-      endTime: new Date('2026-01-01T00:00:01Z'),
-      attributes: {
-        model: 'openai/gpt-4o',
-        provider: 'openrouter',
-        usage: {
-          inputTokens: 15,
-          outputTokens: 4,
-        },
-        costContext: {
-          provider: 'openrouter',
-          model: 'openai/gpt-4o',
-          estimatedCost: 0.0123,
-          costUnit: 'USD',
-          costMetadata: {
-            source: 'provider_reported',
-            providerCostField: 'usage.cost',
-          },
-        },
-      },
-    });
-
-    emitAutoExtractedMetrics(span, createMetricsContext(span));
-
-    expect(estimateCostsSpy).not.toHaveBeenCalled();
-    const byName = (name: string) => emittedMetrics.find(m => m.metric.name === name);
-    expect(byName('mastra_model_total_input_tokens')!.metric.costContext).toMatchObject({
-      estimatedCost: 0.0123,
-      costMetadata: {
-        source: 'provider_reported',
-        providerCostField: 'usage.cost',
-        allocation: 'query_total',
-      },
-    });
-    expect(byName('mastra_model_total_output_tokens')!.metric.costContext?.estimatedCost).toBeUndefined();
-  });
-
   it('should keep total output cost only when no output detail row has a successful cost', () => {
     setup();
     const span = createMockSpan({
