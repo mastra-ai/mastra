@@ -581,7 +581,7 @@ export class AgentController<TState = {}> {
           : threads;
 
       const sortedCandidates = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-      let selectedThread: (typeof sortedCandidates)[number] | undefined;
+      let selectedThread: AgentControllerThread | undefined;
       for (const candidate of sortedCandidates) {
         if (this.config.threadLock?.tryAcquire) {
           if (!(await this.config.threadLock.tryAcquire(candidate.id))) continue;
