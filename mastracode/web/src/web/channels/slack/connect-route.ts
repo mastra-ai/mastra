@@ -45,8 +45,8 @@ const OIDC_CALLBACK_PATH = '/connect/slack/oidc/callback';
  * Decode a JWT's payload WITHOUT signature verification. Safe here because the
  * `id_token` arrives directly from Slack's token endpoint over TLS in a
  * confidential-client code exchange — the transport authenticates the issuer,
- * which is the standard OIDC allowance for this flow. `iss`/`aud` are still
- * checked by the caller.
+ * which is the standard OIDC allowance for this flow. `iss`/`aud`/`exp` are
+ * still checked by the caller.
  */
 function decodeJwtPayload(jwt: string): Record<string, unknown> | null {
   const payload = jwt.split('.')[1];
@@ -165,10 +165,15 @@ export function createSlackConnectRoutes(deps: {
         // mean the settings list falls back to ids.
         const teamName = claims?.['https://slack.com/team_name'];
         const userName = claims?.name;
+        // `exp` is seconds since the epoch. A missing or past `exp` means the
+        // assertion is not currently valid, so it cannot bind an account.
+        const expiresAt = typeof claims?.exp === 'number' ? claims.exp * 1000 : null;
         if (
           !claims ||
           claims.iss !== 'https://slack.com' ||
           claims.aud !== oidc!.clientId ||
+          expiresAt === null ||
+          expiresAt <= Date.now() ||
           typeof teamId !== 'string' ||
           typeof slackUserId !== 'string'
         ) {

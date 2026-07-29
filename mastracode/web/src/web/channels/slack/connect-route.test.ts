@@ -304,6 +304,7 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
   const validClaims = {
     iss: 'https://slack.com',
     aud: 'client-1',
+    exp: Math.floor(Date.now() / 1000) + 300,
     'https://slack.com/team_id': 'T-77',
     'https://slack.com/user_id': 'U-77',
   };
@@ -430,6 +431,38 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ ok: true, id_token: makeIdToken({ ...validClaims, aud: 'someone-else' }) }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { routes, saveAccountLink } = oidcRoutes();
+    const c = fakeCtx(tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'code-1' });
+
+    await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
+
+    expect(saveAccountLink).not.toHaveBeenCalled();
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=error');
+  });
+
+  it('callback rejects an expired id_token', async () => {
+    const expired = { ...validClaims, exp: Math.floor(Date.now() / 1000) - 1 };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, id_token: makeIdToken(expired) }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { routes, saveAccountLink } = oidcRoutes();
+    const c = fakeCtx(tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'code-1' });
+
+    await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
+
+    expect(saveAccountLink).not.toHaveBeenCalled();
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=error');
+  });
+
+  it('callback rejects an id_token with no expiry claim', async () => {
+    const { exp: _dropped, ...noExp } = validClaims;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, id_token: makeIdToken(noExp) }),
     });
     vi.stubGlobal('fetch', fetchMock);
     const { routes, saveAccountLink } = oidcRoutes();
