@@ -3,9 +3,11 @@ import type { WorkspaceChanges, WorkspaceDiff } from '../../../../../../api/type
 export const workspaceChangesFixture = {
   workspacePath: '/home/user/project',
   available: true,
+  additions: 8,
+  deletions: 1,
   changes: [
-    { path: 'src/edited.ts', status: 'modified' },
-    { path: 'src/new.ts', status: 'untracked' },
+    { path: 'src/edited.ts', status: 'modified', additions: 3, deletions: 1 },
+    { path: 'src/new.ts', status: 'untracked', additions: 5, deletions: 0 },
   ],
 } satisfies WorkspaceChanges;
 

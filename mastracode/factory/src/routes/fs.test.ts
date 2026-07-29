@@ -12,6 +12,7 @@ import {
   listSessionWorkspaceChanges,
   listWorkspaceRenderedPath,
   parseWorkspaceChanges,
+  parseWorkspaceChangeStats,
   readSessionWorkspaceDiff,
   readSessionWorkspaceFile,
   readWorkspaceFile,
@@ -411,12 +412,53 @@ describe('workspace changes', () => {
     ]);
   });
 
-  it('lists pending changes with one lightweight git status command', async () => {
-    const { fleet, executeCommand } = makeFleet((_script, command, args) => {
-      expect(command).toBe('git');
-      expect(args).toEqual(['-C', WORKDIR, 'status', '--porcelain=v1', '-z', '--untracked-files=all']);
-      return { exitCode: 0, stdout: ' M src/edited.ts\0' };
+  it('parses text, binary, and renamed file counts from null-delimited numstat output', () => {
+    const output = ['12\t3\tsrc/edited.ts', '-\t-\tpublic/image.png', '4\t2\t', 'src/old.ts', 'src/new.ts', ''].join(
+      '\0',
+    );
+
+    expect([...parseWorkspaceChangeStats(output)]).toEqual([
+      ['src/edited.ts', { additions: 12, deletions: 3 }],
+      ['public/image.png', { binary: true }],
+      ['src/new.ts', { additions: 4, deletions: 2 }],
+    ]);
+  });
+
+  it('lists pending changes with per-file and total line counts', async () => {
+    const { fleet, executeCommand } = makeFleet((script, command, args) => {
+      if (command === 'git') {
+        expect(args).toEqual(['-C', WORKDIR, 'status', '--porcelain=v1', '-z', '--untracked-files=all']);
+        return { exitCode: 0, stdout: ' M src/edited.ts\0?? src/new.ts\0' };
+      }
+
+      expect(command).toBe('sh');
+      expect(script).toContain('diff --numstat -z --find-renames');
+      expect(script).toContain('ls-files --others --exclude-standard -z');
+      expect(script).toContain('GIT_OBJECT_DIRECTORY="$object_dir"');
+      expect(args.slice(2)).toEqual(['mastracode-numstat', WORKDIR]);
+      return { exitCode: 0, stdout: '3\t1\tsrc/edited.ts\0' + '5\t0\t\0/dev/null\0src/new.ts\0' };
     });
+
+    const session = makeSession();
+    await expect(listSessionWorkspaceChanges(fleet, session)).resolves.toEqual({
+      workspacePath: session.sessionId,
+      available: true,
+      additions: 8,
+      deletions: 1,
+      changes: [
+        { path: 'src/edited.ts', status: 'modified', additions: 3, deletions: 1 },
+        { path: 'src/new.ts', status: 'untracked', additions: 5, deletions: 0 },
+      ],
+    });
+    expect(executeCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps file statuses available when line counting fails', async () => {
+    const { fleet } = makeFleet((_script, command) =>
+      command === 'git'
+        ? { exitCode: 0, stdout: ' M src/edited.ts\0' }
+        : { exitCode: 1, stdout: '', stderr: 'numstat failed' },
+    );
 
     const session = makeSession();
     await expect(listSessionWorkspaceChanges(fleet, session)).resolves.toEqual({
@@ -424,7 +466,6 @@ describe('workspace changes', () => {
       available: true,
       changes: [{ path: 'src/edited.ts', status: 'modified' }],
     });
-    expect(executeCommand).toHaveBeenCalledTimes(1);
   });
 
   it('returns a bounded unified diff for one selected file', async () => {

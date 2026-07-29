@@ -87,12 +87,17 @@ export interface WorkspaceChange {
   path: string;
   previousPath?: string;
   status: WorkspaceChangeStatus;
+  additions?: number;
+  deletions?: number;
+  binary?: boolean;
 }
 
 export interface WorkspaceChanges {
   workspacePath: string;
   available: boolean;
   changes: WorkspaceChange[];
+  additions?: number;
+  deletions?: number;
 }
 
 export interface WorkspaceDiff {
@@ -114,6 +119,25 @@ export interface ArtifactListing {
 
 const MAX_TEXT_FILE_BYTES = 512 * 1024;
 const MAX_DIFF_BYTES = 512 * 1024;
+const WORKSPACE_NUMSTAT_SCRIPT = `
+set -e
+workdir=$1
+index_file=$(mktemp)
+untracked_file=$(mktemp)
+object_dir=$(mktemp -d)
+trap 'rm -f "$index_file" "$untracked_file"; rm -rf "$object_dir"' EXIT
+rm -f "$index_file"
+git -C "$workdir" diff --numstat -z --find-renames --no-ext-diff --no-textconv HEAD
+git -C "$workdir" ls-files --others --exclude-standard -z >"$untracked_file"
+git_dir=$(git -C "$workdir" rev-parse --absolute-git-dir)
+export GIT_INDEX_FILE="$index_file"
+export GIT_OBJECT_DIRECTORY="$object_dir"
+export GIT_ALTERNATE_OBJECT_DIRECTORIES="$git_dir/objects"
+git -C "$workdir" read-tree --empty
+git -C "$workdir" update-index --add -z --stdin <"$untracked_file"
+empty_tree=$(git -C "$workdir" hash-object -t tree /dev/null)
+git -C "$workdir" diff --cached --numstat -z --no-ext-diff --no-textconv "$empty_tree"
+`;
 const BOUNDED_GIT_DIFF_SCRIPT = `
 allow_exit_one=$1
 shift
@@ -561,20 +585,80 @@ export function parseWorkspaceChanges(output: string): WorkspaceChange[] {
   return changes.toSorted((a, b) => a.path.localeCompare(b.path));
 }
 
+export function parseWorkspaceChangeStats(output: string) {
+  const records = output.split('\0');
+  const stats = new Map<string, { additions?: number; deletions?: number; binary?: boolean }>();
+
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    if (!record) continue;
+    const firstTab = record.indexOf('\t');
+    const secondTab = record.indexOf('\t', firstTab + 1);
+    if (firstTab < 0 || secondTab < 0) continue;
+
+    const additionsText = record.slice(0, firstTab);
+    const deletionsText = record.slice(firstTab + 1, secondTab);
+    let path = record.slice(secondTab + 1);
+    if (!path) {
+      const renamedPath = records[index + 2];
+      if (!renamedPath) continue;
+      path = renamedPath;
+      index += 2;
+    }
+    if (path.startsWith('./')) path = path.slice(2);
+
+    if (additionsText === '-' || deletionsText === '-') {
+      stats.set(path, { binary: true });
+      continue;
+    }
+
+    const additions = Number(additionsText);
+    const deletions = Number(deletionsText);
+    if (Number.isFinite(additions) && Number.isFinite(deletions)) stats.set(path, { additions, deletions });
+  }
+
+  return stats;
+}
+
+function unavailableWorkspaceChanges(workspacePath: string): WorkspaceChanges {
+  return { workspacePath, available: false, changes: [] };
+}
+
 export async function listSessionWorkspaceChanges(
   fleet: SandboxFleet,
   session: SourceControlSession,
 ): Promise<WorkspaceChanges> {
   const handle = await sessionSandbox(fleet, session);
-  if (!handle) return { workspacePath: session.sessionId, available: false, changes: [] };
+  if (!handle) return unavailableWorkspaceChanges(session.sessionId);
 
-  const result = await handle.sandbox.executeCommand(
-    'git',
-    ['-C', handle.workdir, 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
-    { timeout: 30_000 },
-  );
-  if (result.exitCode !== 0) return { workspacePath: session.sessionId, available: false, changes: [] };
-  return { workspacePath: session.sessionId, available: true, changes: parseWorkspaceChanges(result.stdout) };
+  const [statusResult, statsResult] = await Promise.all([
+    handle.sandbox.executeCommand(
+      'git',
+      ['-C', handle.workdir, 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
+      { timeout: 30_000 },
+    ),
+    handle.sandbox.executeCommand('sh', ['-c', WORKSPACE_NUMSTAT_SCRIPT, 'mastracode-numstat', handle.workdir], {
+      timeout: 30_000,
+    }),
+  ]);
+  if (statusResult.exitCode !== 0) return unavailableWorkspaceChanges(session.sessionId);
+
+  const changes = parseWorkspaceChanges(statusResult.stdout);
+  if (statsResult.exitCode !== 0) {
+    return { workspacePath: session.sessionId, available: true, changes };
+  }
+
+  const stats = parseWorkspaceChangeStats(statsResult.stdout);
+  let additions = 0;
+  let deletions = 0;
+  const changesWithStats = changes.map(change => {
+    const changeStats = stats.get(change.path);
+    additions += changeStats?.additions ?? 0;
+    deletions += changeStats?.deletions ?? 0;
+    return { ...change, ...changeStats };
+  });
+
+  return { workspacePath: session.sessionId, available: true, changes: changesWithStats, additions, deletions };
 }
 
 async function executeBoundedGitDiff(sandbox: MaterializationSandbox, args: string[], allowExitOne = false) {
@@ -757,7 +841,7 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
         try {
           const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
-          if (!session || !sessionFs) return c.json({ workspacePath, available: false, changes: [] });
+          if (!session || !sessionFs) return c.json(unavailableWorkspaceChanges(workspacePath));
           return c.json(await listSessionWorkspaceChanges(sessionFs.fleet, session));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);

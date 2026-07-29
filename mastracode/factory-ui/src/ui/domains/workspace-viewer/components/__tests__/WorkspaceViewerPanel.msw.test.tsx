@@ -201,7 +201,9 @@ describe('WorkspaceViewerPanel', () => {
         HttpResponse.json({
           workspacePath: WORKSPACE,
           available: true,
-          changes: [{ path: 'docs/README.md', status: 'modified' }],
+          additions: 3,
+          deletions: 1,
+          changes: [{ path: 'docs/README.md', status: 'modified', additions: 3, deletions: 1 }],
         }),
       ),
     );
@@ -221,7 +223,17 @@ describe('WorkspaceViewerPanel', () => {
         HttpResponse.json({
           workspacePath: WORKSPACE,
           available: true,
-          changes: [{ path: 'src/new-name.ts', previousPath: 'src/old-name.ts', status: 'renamed' }],
+          additions: 4,
+          deletions: 2,
+          changes: [
+            {
+              path: 'src/new-name.ts',
+              previousPath: 'src/old-name.ts',
+              status: 'renamed',
+              additions: 4,
+              deletions: 2,
+            },
+          ],
         }),
       ),
       http.get(DIFF_URL, ({ request }) => {
@@ -237,7 +249,7 @@ describe('WorkspaceViewerPanel', () => {
     renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} renderedPaths={renderedPaths} />);
 
     await user.click(screen.getByRole('tab', { name: 'Changes' }));
-    await user.click(await screen.findByRole('treeitem', { name: /^old-name\.ts → new-name\.ts.*Renamed$/ }));
+    await user.click(await screen.findByRole('treeitem', { name: /^old-name\.ts → new-name\.ts.*Renamed/ }));
 
     expect(await screen.findByText('+new name')).toBeInTheDocument();
     expect(requestedPreviousPath).toBe('src/old-name.ts');
@@ -265,6 +277,10 @@ describe('WorkspaceViewerPanel', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Changes' }));
     expect(await screen.findByText('Changes (2)')).toBeInTheDocument();
+    expect(screen.getByText('2 files changed')).toBeInTheDocument();
+    expect(screen.getByLabelText('8 additions and 1 deletion')).toBeInTheDocument();
+    expect(screen.getByLabelText('3 additions and 1 deletion')).toBeInTheDocument();
+    expect(screen.getByLabelText('5 additions and 0 deletions')).toBeInTheDocument();
     expect(diffRequests).toEqual([]);
 
     expect(screen.getByText('src')).toHaveClass('text-neutral4!');
@@ -277,14 +293,14 @@ describe('WorkspaceViewerPanel', () => {
     expect(screen.queryByRole('treeitem', { name: /edited\.ts.*Modified/ })).not.toBeInTheDocument();
     await user.click(screen.getByText('src'));
 
-    const editedFile = screen.getByRole('treeitem', { name: /^edited\.ts.*Modified$/ });
+    const editedFile = screen.getByRole('treeitem', { name: /^edited\.ts.*Modified/ });
     await user.click(editedFile);
 
     expect(await screen.findByText('-old value')).toBeInTheDocument();
     expect(screen.getByTestId('workspace-preview-interactive')).toHaveAttribute('data-drawer-content');
     expect(screen.getByText('+new value')).toHaveClass('whitespace-pre-wrap', 'break-words');
     expect(screen.queryByText(/diff --git/)).not.toBeInTheDocument();
-    expect(screen.getByRole('treeitem', { name: /^edited\.ts.*Modified$/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('treeitem', { name: /^edited\.ts.*Modified/ })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('button', { name: 'Refresh changes' }).parentElement).toHaveClass('pr-12');
 
     await user.click(screen.getByRole('button', { name: 'Open full-screen changes viewer' }));
@@ -294,7 +310,7 @@ describe('WorkspaceViewerPanel', () => {
     expect(screen.getByRole('tab', { name: 'Changes (2)' })).toBeVisible();
     expect(diffRequests).toEqual(['src/edited.ts']);
 
-    const newFile = screen.getByRole('treeitem', { name: /^new\.ts.*Untracked$/ });
+    const newFile = screen.getByRole('treeitem', { name: /^new\.ts.*Untracked/ });
     await user.click(newFile);
     await waitFor(() => expect(diffRequests).toEqual(['src/edited.ts', 'src/new.ts']));
     expect(await screen.findByText('+new file contents')).toBeInTheDocument();
@@ -310,12 +326,14 @@ describe('WorkspaceViewerPanel', () => {
         return HttpResponse.json({
           workspacePath: WORKSPACE,
           available: true,
+          additions: requests === 1 ? 3 : 8,
+          deletions: 1,
           changes:
             requests === 1
-              ? [{ path: 'src/edited.ts', status: 'modified' }]
+              ? [{ path: 'src/edited.ts', status: 'modified', additions: 3, deletions: 1 }]
               : [
-                  { path: 'src/edited.ts', status: 'modified' },
-                  { path: 'src/new.ts', status: 'untracked' },
+                  { path: 'src/edited.ts', status: 'modified', additions: 3, deletions: 1 },
+                  { path: 'src/new.ts', status: 'untracked', additions: 5, deletions: 0 },
                 ],
         });
       }),

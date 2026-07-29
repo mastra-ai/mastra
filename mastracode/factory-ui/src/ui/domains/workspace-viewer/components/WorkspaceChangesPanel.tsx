@@ -31,6 +31,25 @@ const STATUS_CLASSES: Record<WorkspaceChangeStatus, string> = {
 };
 const FOLDER_CLASS = 'text-neutral4!';
 
+function ChangeCounts({ additions, deletions, binary }: Pick<WorkspaceChange, 'additions' | 'deletions' | 'binary'>) {
+  if (binary) {
+    return <span className="text-ui-xs text-icon3 shrink-0 font-medium">Binary</span>;
+  }
+  if (additions === undefined || deletions === undefined) return null;
+
+  return (
+    <span
+      className="text-ui-xs flex shrink-0 items-center gap-1 font-mono tabular-nums"
+      aria-label={`${additions} ${additions === 1 ? 'addition' : 'additions'} and ${deletions} ${
+        deletions === 1 ? 'deletion' : 'deletions'
+      }`}
+    >
+      <span className="text-notice-success/70">+{additions}</span>
+      <span className="text-notice-destructive/70">−{deletions}</span>
+    </span>
+  );
+}
+
 interface ParsedDiffLine {
   line: string;
   oldNumber?: number;
@@ -219,8 +238,11 @@ function ChangeTreeItem({
       <Tree.Label className={`font-mono ${colorClass}`}>
         {node.change.previousPath ? `${splitPath(node.change.previousPath).name} → ${node.name}` : node.name}
       </Tree.Label>
-      <span className={`text-ui-xs ml-auto shrink-0 font-medium ${STATUS_CLASSES[node.change.status]}`}>
-        {STATUS_LABELS[node.change.status]}
+      <span className="ml-auto flex shrink-0 items-center gap-2">
+        <span className={`text-ui-xs shrink-0 font-medium ${STATUS_CLASSES[node.change.status]}`}>
+          {STATUS_LABELS[node.change.status]}
+        </span>
+        <ChangeCounts {...node.change} />
       </span>
     </Tree.File>
   );
@@ -274,8 +296,11 @@ function DiffViewer({
           </Txt>
         </div>
         {change ? (
-          <span className={`text-ui-xs shrink-0 font-medium ${STATUS_CLASSES[change.status]}`}>
-            {STATUS_LABELS[change.status]}
+          <span className="flex shrink-0 items-center gap-2">
+            <span className={`text-ui-xs shrink-0 font-medium ${STATUS_CLASSES[change.status]}`}>
+              {STATUS_LABELS[change.status]}
+            </span>
+            <ChangeCounts {...change} />
           </span>
         ) : null}
         <Button
@@ -409,6 +434,14 @@ export function WorkspaceChangesPanel({
             {changes.isFetching ? <Spinner size="sm" /> : <RefreshCw size={14} />}
           </Button>
         </div>
+        {changes.data?.changes.length ? (
+          <div className="border-border1 flex items-center justify-between gap-3 border-b px-3 py-2">
+            <Txt variant="ui-xs" className="text-icon3">
+              {changes.data.changes.length} {changes.data.changes.length === 1 ? 'file' : 'files'} changed
+            </Txt>
+            <ChangeCounts additions={changes.data.additions} deletions={changes.data.deletions} />
+          </div>
+        ) : null}
         <div className="min-h-0 flex-1 overflow-y-auto">
           {changes.isLoading ? (
             <div className="flex h-full items-center justify-center">
