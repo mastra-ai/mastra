@@ -3,7 +3,7 @@ services:
     # Pinned to 7.x: MongoDB 8.x fatally refuses to start on Linux kernel 6.19+
     # (TCMalloc rseq incompatibility, SERVER-121912), which is what the CI runner
     # fleet runs. Do not bump back to 8.x until MongoDB ships a patched TCMalloc.
-    image: mongo:7.0.37
+    image: mongo:8.3.7
     container_name: 'mongodb-storage-test-db'
     ports:
       - '27017:27017'
