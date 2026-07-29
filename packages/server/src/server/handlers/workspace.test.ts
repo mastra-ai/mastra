@@ -531,7 +531,8 @@ describe('Workspace Handlers', () => {
         id: 'agent-owned-ws',
         name: 'Agent Owned Workspace',
       });
-      expect(resolver).toHaveBeenCalled();
+      expect(resolver).toHaveBeenCalledWith('agent-owned-ws', expect.objectContaining({ mastra }));
+      expect(resolver).toHaveBeenCalledTimes(1);
     });
   });
 
