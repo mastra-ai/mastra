@@ -76,7 +76,8 @@ export function useBoardItems({ factoryProjectId, kind }: { factoryProjectId: st
         metadata,
       });
       if (toStage !== 'intake') requestTransition(item, toStage);
-    })();
+      // swallowed — the failure already reaches the user through mutationError
+    })().catch(() => {});
   };
 
   return {
