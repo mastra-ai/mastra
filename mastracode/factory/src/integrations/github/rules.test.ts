@@ -157,10 +157,12 @@ describe('GithubRules', () => {
       rules,
     });
     const deliveredSignals: Array<{ id: string; contents: string; threadId: string; user: unknown }> = [];
+    const deliveredNotifications: Array<{ kind: string; summary: string; threadId: string; user: unknown }> = [];
     const sessions = new Map<string, ReturnType<typeof makeSession>>();
 
     function makeSession(key: string, initialThreadId?: string) {
       let threadId: string | undefined = initialThreadId;
+      const consumeStream = vi.fn(async () => {});
       const session = {
         thread: {
           list: vi.fn(async () => []),
@@ -194,7 +196,19 @@ describe('GithubRules', () => {
         ),
         state: { set: vi.fn(async () => {}) },
         sendMessage: vi.fn(async () => {}),
-        sendNotificationSignal: vi.fn(async () => ({ persisted: Promise.resolve(), accepted: Promise.resolve() })),
+        sendNotificationSignal: vi.fn(
+          (
+            input: { kind: string; summary: string },
+            options: { requestContext: { get(key: string): unknown } },
+          ) => {
+            if (!threadId) throw new Error('Notification delivered before thread persistence.');
+            deliveredNotifications.push({ ...input, threadId, user: options.requestContext.get('user') });
+            return {
+              persisted: Promise.resolve(),
+              accepted: Promise.resolve({ action: 'wake', output: { consumeStream } }),
+            };
+          },
+        ),
       };
       sessions.set(key, session);
       return session;
@@ -220,7 +234,7 @@ describe('GithubRules', () => {
       storage: workItems,
       ownerId: 'worker-1',
       primeCredentials,
-      prepareBinding: async ({ record, item, role }) => {
+      prepareBinding: async ({ record, item, role, invocation }) => {
         await coordinator.prepare({
           orgId: record.orgId,
           userId: 'user-1',
@@ -230,13 +244,18 @@ describe('GithubRules', () => {
           kickoffKey: record.idempotencyKey,
           destinationStage: 'triage',
           workItem: { id: item.id, role, input: item },
+          ...(invocation ? { invocation } : {}),
         });
       },
     });
 
     await service.ingest(issueOpened('delivery-full-flow'));
+    // Cycle 1: upsertLinkedWorkItem → transition to triage → invokeSkill deferred
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    // Cycle 2: invokeSkill → prepareBinding (with invocation) → pending start created
     await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+    // Cycle 3: pending start → sendNotificationSignal with run-kickoff
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:02Z'));
 
     const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(item).toMatchObject({
@@ -251,10 +270,12 @@ describe('GithubRules', () => {
       },
     });
     expect(primeCredentials).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
-    expect(deliveredSignals).toEqual([
+    // Skill kickoff delivered via pending start notification (not inline sendSignal)
+    expect(deliveredNotifications).toEqual([
       expect.objectContaining({
+        kind: 'run-kickoff',
         threadId: 'session-issue-42',
-        contents: expect.stringContaining('<skill name="factory-triage">'),
+        summary: expect.stringContaining('<skill name="factory-triage">'),
         user: { workosId: 'user-1', organizationId: 'org-1' },
       }),
     ]);
@@ -272,6 +293,7 @@ describe('GithubRules', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:02Z'));
     await dispatcher.runOnce(new Date('2030-01-01T00:00:03Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:04Z'));
 
     const [rematerialized] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(rematerialized).toMatchObject({
@@ -279,7 +301,12 @@ describe('GithubRules', () => {
       stages: ['triage'],
     });
     expect(rematerialized?.id).not.toBe(item?.id);
-    expect(deliveredSignals).toHaveLength(2);
+    expect(deliveredNotifications).toHaveLength(2);
+    expect((await workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.status)).toEqual([
+      'succeeded',
+      'succeeded',
+      'succeeded',
+    ]);
   });
 
   it('prefers canonical board identities over legacy GitHub rows during ingress', async () => {

@@ -874,7 +874,8 @@ describe('FactoryDecisionDispatcher', () => {
       idempotencyKey: 'skill-auto-start',
     });
     const { controller, session } = createSession();
-    const prepareBinding = vi.fn(async () => {
+    const prepareBinding = vi.fn(async (input: { invocation?: { skillName: string } }) => {
+      const kickoffMessage = input.invocation ? `<skill name="${input.invocation.skillName}">\n</skill>` : null;
       await storage.prepareRunStart({
         orgId: 'org-1',
         userId: 'user-1',
@@ -893,7 +894,7 @@ describe('FactoryDecisionDispatcher', () => {
         session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
         resourceId: PROJECT_ID,
         kickoffKey: 'skill-auto-start',
-        kickoffMessage: null,
+        kickoffMessage,
       });
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -904,14 +905,31 @@ describe('FactoryDecisionDispatcher', () => {
       prepareBinding,
     });
 
+    // Cycle 1: invokeSkill → prepareBinding (with invocation) → pending start created
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect(prepareBinding).toHaveBeenCalledWith(
-      expect.objectContaining({ item: expect.objectContaining({ id: item.id }), role: 'triage' }),
+      expect.objectContaining({
+        item: expect.objectContaining({ id: item.id }),
+        role: 'triage',
+        invocation: { type: 'skill', skillName: 'understand-issue', arguments: '' },
+      }),
     );
-    expect(session.sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ contents: expect.stringContaining('<skill name="understand-issue">') }),
-      { requestContext: expect.anything(), requireDelivery: true },
+    // Inline skill sending should NOT happen — pending start handles it
+    expect(session.sendSignal).not.toHaveBeenCalled();
+
+    // Cycle 2: pending start → sendNotificationSignal with run-kickoff
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+
+    expect(session.sendNotificationSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'run-kickoff',
+        summary: expect.stringContaining('<skill name="understand-issue">'),
+      }),
+      expect.objectContaining({
+        ifActive: { behavior: 'deliver' },
+        ifIdle: { behavior: 'wake' },
+      }),
     );
   });
 
@@ -945,7 +963,8 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const { controller, session } = createSession();
     controller.getSessionByResource.mockResolvedValueOnce(undefined as never).mockResolvedValue(session);
-    const prepareBinding = vi.fn(async () => {
+    const prepareBinding = vi.fn(async (input: { invocation?: { skillName: string } }) => {
+      const kickoffMessage = input.invocation ? `<skill name="${input.invocation.skillName}">\n</skill>` : null;
       await storage.prepareRunStart({
         orgId: 'org-1',
         userId: 'user-1',
@@ -964,7 +983,7 @@ describe('FactoryDecisionDispatcher', () => {
         session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-2' },
         resourceId: PROJECT_ID,
         kickoffKey: 'skill-session-recovery-replacement',
-        kickoffMessage: null,
+        kickoffMessage,
       });
     });
     const dispatcher = new FactoryDecisionDispatcher({
@@ -975,15 +994,31 @@ describe('FactoryDecisionDispatcher', () => {
       prepareBinding,
     });
 
+    // Cycle 1: invokeSkill → existing binding but no session → prepareBinding → pending start created
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect(prepareBinding).toHaveBeenCalledWith(
-      expect.objectContaining({ item: expect.objectContaining({ id: item.id }), role: 'triage' }),
+      expect.objectContaining({
+        item: expect.objectContaining({ id: item.id }),
+        role: 'triage',
+        invocation: { type: 'skill', skillName: 'understand-issue', arguments: '' },
+      }),
     );
+    expect(session.sendSignal).not.toHaveBeenCalled();
+
+    // Cycle 2: pending start → sendNotificationSignal with run-kickoff
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+
     expect(session.thread.switch).toHaveBeenCalledWith({ threadId: 'thread-2' });
-    expect(session.sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ contents: expect.stringContaining('<skill name="understand-issue">') }),
-      { requestContext: expect.anything(), requireDelivery: true },
+    expect(session.sendNotificationSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'run-kickoff',
+        summary: expect.stringContaining('<skill name="understand-issue">'),
+      }),
+      expect.objectContaining({
+        ifActive: { behavior: 'deliver' },
+        ifIdle: { behavior: 'wake' },
+      }),
     );
   });
 

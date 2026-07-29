@@ -46,6 +46,7 @@ export interface FactoryBindingPreparationInput {
   record: FactoryDeferredDecisionRecord;
   item: WorkItemRow;
   role: string;
+  invocation?: { type: 'skill'; skillName: string; arguments: string };
 }
 
 export interface FactoryDecisionDispatcherOptions {
@@ -317,7 +318,49 @@ export class FactoryDecisionDispatcher {
         return;
       }
       case 'invokeSkill': {
-        const binding = await this.#requireOrPrepareBinding(record, decision.role);
+        const invocation = {
+          type: 'skill' as const,
+          skillName: decision.skillName,
+          arguments: decision.arguments ?? '',
+        };
+        const { binding, prepared } = await this.#requireOrPrepareBinding(record, decision.role, invocation);
+        if (prepared) {
+          // The pending start has the skill kickoff message. It will be
+          // dispatched by #dispatchPendingStart in the next dispatch cycle.
+          // Only send the preceding message here (if any) so it arrives before
+          // the kickoff.
+          const item = record.workItemId
+            ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId })
+            : null;
+          const startedBy = item?.sessions[binding.role]?.startedBy;
+          if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
+          await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+          const requestContext = new RequestContext();
+          requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
+          if (decision.precedingMessage) {
+            const session = await this.#requireSession(binding);
+            await awaitNotification(
+              await session.sendNotificationSignal(
+                {
+                  source: 'factory',
+                  kind: 'stage-transition',
+                  summary: decision.precedingMessage,
+                  priority: 'medium',
+                  payload: { message: decision.precedingMessage },
+                  sourceId: `${record.id}:stage-transition`,
+                  dedupeKey: `${record.idempotencyKey}:stage-transition`,
+                },
+                {
+                  ifActive: { behavior: 'deliver' },
+                  ifIdle: { behavior: 'persist' },
+                  requestContext,
+                },
+              ),
+            );
+          }
+          return;
+        }
+        // Existing binding found — resolve and send the skill inline.
         const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
         const startedBy = item?.sessions[binding.role]?.startedBy;
         if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
@@ -377,7 +420,7 @@ export class FactoryDecisionDispatcher {
       }
       case 'sendMessage': {
         const binding = decision.prepareBinding
-          ? await this.#requireOrPrepareBinding(record, decision.role)
+          ? (await this.#requireOrPrepareBinding(record, decision.role)).binding
           : await this.#requireBinding(record, decision.role);
         const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
         const startedBy = item?.sessions[binding.role]?.startedBy;
@@ -516,18 +559,20 @@ export class FactoryDecisionDispatcher {
   async #requireOrPrepareBinding(
     record: FactoryDeferredDecisionRecord,
     role: string,
-  ): Promise<FactoryRunBindingRecord> {
+    invocation?: { type: 'skill'; skillName: string; arguments: string },
+  ): Promise<{ binding: FactoryRunBindingRecord; prepared: boolean }> {
     const binding = await this.#findBinding(record, role);
     if (binding) {
       const session = await this.#controller.getSessionByResource(binding.resourceId);
-      if (session) return binding;
+      if (session) return { binding, prepared: false };
     }
     if (!this.#prepareBinding) {
       throw new Error(binding ? 'Bound Factory session not found.' : `No active Factory binding for role ${role}.`);
     }
     const item = await this.#requireItem(record);
-    await this.#prepareBinding({ record, item, role });
-    return this.#requireBinding(record, role);
+    await this.#prepareBinding({ record, item, role, ...(invocation ? { invocation } : {}) });
+    const newBinding = await this.#requireBinding(record, role);
+    return { binding: newBinding, prepared: true };
   }
 
   async #requireSession(binding: FactoryRunBindingRecord): Promise<DispatcherSession> {
