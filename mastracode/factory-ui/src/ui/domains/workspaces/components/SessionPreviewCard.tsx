@@ -44,19 +44,19 @@ export function SessionPreviewCard({
       className="w-80 max-w-[calc(100vw-2rem)]"
     >
       <div className="flex flex-col gap-1">
-        <Txt as="p" variant="ui-sm" className="m-0 font-medium text-icon6 whitespace-normal wrap-anywhere">
+        <Txt as="p" variant="ui-sm" className="text-icon6 m-0 font-medium wrap-anywhere whitespace-normal">
           {name}
         </Txt>
-        <Txt as="p" variant="ui-xs" className="m-0 text-icon3">
+        <Txt as="p" variant="ui-xs" className="text-icon3 m-0">
           {statusLabel ? `${details.kind} · ${statusLabel}` : details.kind}
         </Txt>
         {details.itemLabel && (
-          <Txt as="p" variant="ui-xs" className="m-0 text-icon4">
+          <Txt as="p" variant="ui-xs" className="text-icon4 m-0">
             {details.itemLabel}
           </Txt>
         )}
         {itemTitle && itemTitle !== name && (
-          <Txt as="p" variant="ui-sm" className="m-0 text-icon5 whitespace-normal wrap-anywhere">
+          <Txt as="p" variant="ui-sm" className="text-icon5 m-0 wrap-anywhere whitespace-normal">
             {itemTitle}
           </Txt>
         )}
