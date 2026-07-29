@@ -473,9 +473,22 @@ export class MemoryMySQL extends MemoryStorage {
 
     const includeMessages: MastraDBMessage[] = [];
     const seenIds = new Set<string>();
+    const unresolvedIds = include.filter(inc => !inc.threadId).map(inc => inc.id);
+    const resolvedThreadIds = new Map<string, string>();
+
+    if (unresolvedIds.length > 0) {
+      const placeholders = unresolvedIds.map(() => '?').join(', ');
+      const [rows] = await this.pool.execute<RowDataPacket[]>(
+        `SELECT id, thread_id FROM ${formatTableName(TABLE_MESSAGES)} WHERE id IN (${placeholders})`,
+        unresolvedIds,
+      );
+      for (const row of rows) {
+        resolvedThreadIds.set(row.id, row.thread_id);
+      }
+    }
 
     for (const inc of include) {
-      const targetThreadId = inc.threadId ?? threadId;
+      const targetThreadId = inc.threadId ?? resolvedThreadIds.get(inc.id) ?? threadId;
 
       let threadMessages = messagesByThread.get(targetThreadId);
       if (!threadMessages) {
@@ -486,6 +499,7 @@ export class MemoryMySQL extends MemoryStorage {
 
       // If the current cached set might be partial (e.g., paginated main thread), reload full thread
       const needsContext =
+        !threadMessages.some(message => message.id === inc.id) ||
         (inc.withPreviousMessages ?? 0) > 0 ||
         (inc.withNextMessages ?? 0) > 0 ||
         threadMessages.length < (inc.withNextMessages ?? 0) + (inc.withPreviousMessages ?? 0) + 1;

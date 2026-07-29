@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type {
+  ConfiguredExternalRepositoryKey,
   CreateProjectSourceControlConnectionInput,
   CreateSourceControlSessionInput,
   ExternalRepositoryProjectTarget,
@@ -144,6 +145,41 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       this.repositoriesRows.push(created);
       return created;
     },
+    migrateInstallation: async ({
+      orgId,
+      id,
+      newInstallationId,
+    }: {
+      orgId: string;
+      id: string;
+      newInstallationId: string;
+    }) => {
+      const existing = await this.repositories.get({ orgId, id });
+      if (!existing) {
+        throw new Error(`Repository ${id} not found in organization ${orgId}`);
+      }
+      if (!(await this.installations.get({ orgId, id: newInstallationId }))) {
+        throw new Error('Source-control installation not found');
+      }
+      // Check if a repository with the same external_id exists under the new installation
+      const conflict = this.repositoriesRows.find(
+        row => row.installationId === newInstallationId && row.externalId === existing.externalId,
+      );
+      if (conflict) {
+        // Return the existing repository under the new installation
+        return conflict;
+      }
+      // Update the repository's installation
+      existing.installationId = newInstallationId;
+      existing.updatedAt = new Date();
+      // Migrate dependent connections to the new installation
+      for (const conn of this.connectionsRows) {
+        if (conn.installationId === existing.installationId) {
+          conn.installationId = newInstallationId;
+        }
+      }
+      return existing;
+    },
   };
 
   readonly connections = {
@@ -188,6 +224,22 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       (await this.connections.get({ orgId, id: connectionId }))
         ? this.projectRepositoriesRows.filter(row => row.connectionId === connectionId)
         : [],
+    listConfiguredExternalKeys: async (): Promise<ConfiguredExternalRepositoryKey[]> => {
+      const keys = new Map<string, ConfiguredExternalRepositoryKey>();
+      for (const connection of this.connectionsRows.filter(row => row.integrationId === this.integrationId)) {
+        const installation = this.installationsRows.find(row => row.id === connection.installationId);
+        if (!installation) continue;
+        for (const link of this.projectRepositoriesRows.filter(row => row.connectionId === connection.id)) {
+          const repository = this.repositoriesRows.find(row => row.id === link.repositoryId);
+          if (!repository) continue;
+          keys.set(`${installation.externalId}\u0000${repository.externalId}`, {
+            installationExternalId: installation.externalId,
+            repositoryExternalId: repository.externalId,
+          });
+        }
+      }
+      return [...keys.values()];
+    },
     listByExternalRepository: async ({
       installationExternalId,
       repositoryExternalId,

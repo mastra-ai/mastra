@@ -184,7 +184,9 @@ describe('Model provider onboarding', () => {
           }),
         ),
         http.put(`${TEST_BASE_URL}/web/config/providers/openai/key`, async ({ request }) => {
-          expect(await request.json()).toEqual({ key: 'sk-test', envVar: 'OPENAI_API_KEY', scope: 'user' });
+          // Factory setup defaults to an org-wide key so the whole team can
+          // use the factory default model, not just the person setting it up.
+          expect(await request.json()).toEqual({ key: 'sk-test', envVar: 'OPENAI_API_KEY', scope: 'org' });
           connected = true;
           return HttpResponse.json({ ok: true });
         }),

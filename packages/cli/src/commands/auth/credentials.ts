@@ -24,6 +24,17 @@ export interface Credentials {
   currentOrgId?: string;
 }
 
+export interface LoginOptions {
+  skipOnInput?: boolean;
+}
+
+export class LoginCancelledError extends Error {
+  constructor() {
+    super('Login skipped.');
+    this.name = 'LoginCancelledError';
+  }
+}
+
 export async function saveCredentials(creds: Credentials): Promise<void> {
   await mkdir(CREDENTIALS_DIR, { recursive: true, mode: 0o700 });
   await writeFile(CREDENTIALS_FILE, JSON.stringify(creds, null, 2), { mode: 0o600 });
@@ -179,7 +190,39 @@ function callbackPage({ success }: { success: boolean }): string {
 </html>`;
 }
 
-export async function login(signal?: AbortSignal): Promise<Credentials> {
+function listenForSkipInput(onSkip: () => void): () => void {
+  const stdin = process.stdin;
+  if (!stdin.isTTY || typeof stdin.setRawMode !== 'function') return () => {};
+
+  const wasRaw = stdin.isRaw;
+  const wasPaused = stdin.isPaused();
+  let listening = true;
+
+  const cleanup = () => {
+    if (!listening) return;
+    listening = false;
+    stdin.removeListener('data', handleInput);
+    if (!wasRaw) stdin.setRawMode(false);
+    if (wasPaused) stdin.pause();
+  };
+
+  const handleInput = (input: Buffer | string) => {
+    const data = typeof input === 'string' ? Buffer.from(input) : input;
+    cleanup();
+    if (data.includes(3)) {
+      process.kill(process.pid, 'SIGINT');
+      return;
+    }
+    onSkip();
+  };
+
+  stdin.setRawMode(true);
+  stdin.resume();
+  stdin.once('data', handleInput);
+  return cleanup;
+}
+
+export async function login(signal?: AbortSignal, options: LoginOptions = {}): Promise<Credentials> {
   signal?.throwIfAborted();
   console.info('\n   Logging in to Mastra...\n');
 
@@ -197,7 +240,11 @@ export async function login(signal?: AbortSignal): Promise<Credentials> {
 
   const loginUrl = `${MASTRA_PLATFORM_API_URL}/v1/auth/login?product=cli&cli_port=${port}&state=${state}`;
   console.info(`   Opening browser...\n`);
-  console.info(`   Waiting for your input. Skip this step with Ctrl+C\n`);
+  console.info(
+    options.skipOnInput
+      ? `   Waiting for browser sign-in. Press any key to skip this step.\n`
+      : `   Waiting for browser sign-in...\n`,
+  );
 
   try {
     openBrowser(loginUrl);
@@ -216,11 +263,13 @@ export async function login(signal?: AbortSignal): Promise<Credentials> {
     organizationId: string;
   }>((resolve, reject) => {
     let settled = false;
+    let stopListeningForSkip = () => {};
     const finish = (callback: () => void) => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
       signal?.removeEventListener('abort', handleAbort);
+      stopListeningForSkip();
       server.close(callback);
       server.closeAllConnections();
     };
@@ -235,6 +284,9 @@ export async function login(signal?: AbortSignal): Promise<Credentials> {
     if (signal?.aborted) {
       handleAbort();
       return;
+    }
+    if (options.skipOnInput) {
+      stopListeningForSkip = listenForSkipInput(() => finish(() => reject(new LoginCancelledError())));
     }
 
     server.on('request', (req, res) => {
@@ -279,7 +331,7 @@ function isInteractive(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY) && !process.env.CI;
 }
 
-export async function getToken(signal?: AbortSignal): Promise<string> {
+export async function getToken(signal?: AbortSignal, options: LoginOptions = {}): Promise<string> {
   signal?.throwIfAborted();
 
   // CI/CD headless path
@@ -292,7 +344,7 @@ export async function getToken(signal?: AbortSignal): Promise<string> {
     if (!isInteractive()) {
       throw new Error('Not logged in. Run `mastra auth login` interactively or set MASTRA_API_TOKEN.');
     }
-    const newCreds = await login(signal);
+    const newCreds = await login(signal, options);
     return newCreds.token;
   }
 
@@ -308,7 +360,7 @@ export async function getToken(signal?: AbortSignal): Promise<string> {
   if (!isInteractive()) {
     throw new Error('Session expired. Run `mastra auth login` interactively or set MASTRA_API_TOKEN.');
   }
-  const newCreds = await login(signal);
+  const newCreds = await login(signal, options);
   return newCreds.token;
 }
 

@@ -44,6 +44,8 @@ export function showFormattedError(
         errorType?: string;
         retryable?: boolean;
         retryDelay?: number;
+        retryAttempt?: number;
+        maxRetries?: number;
       }
     | Error,
 ): void {
@@ -63,14 +65,18 @@ export function showFormattedError(
   const retryable = 'retryable' in event ? event.retryable : parsed.retryable;
   const retryDelay = 'retryDelay' in event ? event.retryDelay : parsed.retryDelay;
   if (retryable && retryDelay) {
-    const seconds = Math.ceil(retryDelay / 1000);
-    errorText += theme.fg('muted', ` (retry in ${seconds}s)`);
+    const seconds = retryDelay / 1000;
+    const retryAttempt = 'retryAttempt' in event ? event.retryAttempt : undefined;
+    const maxRetries = 'maxRetries' in event ? event.maxRetries : undefined;
+    const retryProgress = retryAttempt && maxRetries ? ` ${retryAttempt}/${maxRetries}` : '';
+    errorText += theme.fg('muted', ` (retry${retryProgress} in ${seconds}s)`);
   }
 
   const lines: Text[] = [new Text(theme.fg('error', errorText), 1, 0)];
 
-  // Add helpful hints based on error type
-  const hint = getErrorHint(parsed.type);
+  const isObservationalMemoryError = /observational memory|\bOM (?:observation|reflection)/i.test(error.message);
+  const omRole = /reflect/i.test(error.message) ? state.session.om.reflector : state.session.om.observer;
+  const hint = withOMGuidance(getErrorHint(parsed.type), isObservationalMemoryError ? omRole.modelId() : undefined);
   if (hint) {
     lines.push(new Text(theme.fg('muted', `  Hint: ${hint}`), 1, 0));
   }
@@ -78,6 +84,13 @@ export function showFormattedError(
   const component = new InfoMessageComponent(lines);
   insertChatComponentWithBoundarySpacing(state.chatContainer, component);
   state.ui.requestRender();
+}
+
+function withOMGuidance(typeHint: string | null, omModelId: string | undefined): string | null {
+  if (!omModelId) return typeHint;
+  return [`Observational Memory is using ${omModelId}`, typeHint, 'Use /memory to choose another OM model']
+    .filter(Boolean)
+    .join('. ');
 }
 
 function getErrorHint(errorType: string): string | null {

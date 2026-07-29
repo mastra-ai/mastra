@@ -7,7 +7,7 @@ packages:
 
 # Quick Checks
 
-Quick Checks are zero-LLM, composable micro-scorers for common assertions. They plug into the existing `scorers: [...]` array anywhere scorers are used — in `runEvals`, live scoring, experiments, and Studio.
+Quick Checks are zero-LLM, composable micro-scorers for common assertions. They plug into the existing `scorers: [...]` array anywhere scorers are used: in `runEvals`, live scoring, experiments, and Studio.
 
 Internally they're standard `createScorer()` instances, so they have the same observability, storage, and pipeline integration as any other scorer.
 
@@ -120,7 +120,7 @@ Returns: `1` if equal, `0` otherwise.
 
 ### `checks.matches(pattern, options?)`
 
-Scores 1 if the output matches the given regular expression.
+Scores 1 if the output matches the regular expression.
 
 ```typescript
 checks.matches(/\d+°[FC]/)
@@ -232,7 +232,7 @@ Returns: `1` if the tool wasn't called, `0` otherwise.
 
 ### `checks.toolOrder(expectedOrder)`
 
-Scores 1 if the tools were called in the specified order. Uses relaxed matching — other tool calls between the expected tools are allowed.
+Scores 1 if the tools were called in the specified order. Uses relaxed matching. Other tool calls between the expected tools are allowed.
 
 ```typescript
 checks.toolOrder(['search', 'summarize', 'respond'])

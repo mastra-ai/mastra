@@ -14,7 +14,7 @@ A supervisor agent coordinates multiple subagents using [`Agent.stream()`](/refe
 
 ## When to use supervisor agents
 
-Use supervisor agents when a task requires multiple agents with different specializations to work together. The supervisor handles delegation decisions, context passing, and result synthesis.
+Use supervisor agents when a task requires multiple agents with different specializations to work together. The supervisor handles delegation decisions and context passing, plus result synthesis.
 
 Common use cases:
 
@@ -126,7 +126,7 @@ The `context` object includes:
 
 ### `onDelegationComplete`
 
-Called after a delegation finishes. Use it to inspect results, provide feedback, or stop execution:
+Called after a delegation finishes. Use it to inspect results or provide feedback, or alternatively stop execution:
 
 - `context.bail()`: Stop the supervisor loop immediately
 - Return `{ feedback: '...' }`: Add feedback that gets saved to the supervisor's memory and is visible to subsequent iterations
@@ -161,7 +161,7 @@ The `context` object includes:
 
 ## Message filtering
 
-By default, subagents receive the full conversation context from the supervisor. Use `messageFilter` to control what messages are shared — for example, to remove sensitive data or limit context size.
+By default, subagents receive the full conversation context from the supervisor. Use `messageFilter` to control what messages are shared, for example, to remove sensitive data or limit context size.
 
 ```typescript title="src/mastra/agents/supervisor.ts"
 const stream = await supervisor.stream('Research AI trends', {
@@ -187,7 +187,9 @@ The callback receives `messages` (the full conversation history), `primitiveId` 
 
 When a subagent completes, the supervisor model receives the subagent's text response in later iterations. Nested tool calls and subagent metadata, such as thread and resource IDs, aren't added to the supervisor model context.
 
-Application code and UI integrations can still inspect the raw delegation result, including `subAgentToolResults`, from the tool result payload. This keeps debugging and display data available without sending nested tool arguments or outputs back into the supervisor's next model call.
+Application code and UI integrations can still inspect `subAgentToolResults` and the rest of the raw delegation result in the tool result payload.
+
+This keeps debugging and display data available without sending nested tool arguments or outputs back into the supervisor's next model call.
 
 Set `includeSubAgentToolResultsInModelContext` to include the full subagent result, including nested tool results and subagent metadata, in the supervisor model context.
 
@@ -201,7 +203,7 @@ await supervisor.generate('Research AI trends', {
 
 ## Iteration monitoring
 
-`onIterationComplete` is called after each iteration of the supervisor loop. Use it to log progress, inject feedback, or stop execution early.
+`onIterationComplete` is called after each iteration of the supervisor loop. Use it to log progress or inject feedback, or alternatively stop execution early.
 
 ```typescript title="src/mastra/agents/supervisor.ts"
 const stream = await supervisor.stream('Research AI trends', {
@@ -228,7 +230,7 @@ const stream = await supervisor.stream('Research AI trends', {
 })
 ```
 
-Return `{ continue: true }` to keep iterating, or `{ continue: false }` to stop. Include optional `feedback` to inject guidance into the conversation. When `feedback` is combined with `continue: false`, the model may get one final turn to produce a text response incorporating the feedback, but only if the current iteration is still active (e.g., after tool calls) — otherwise no extra turn is granted.
+Return `{ continue: true }` to keep iterating, or `{ continue: false }` to stop. Include optional `feedback` to inject guidance into the conversation. When `feedback` is combined with `continue: false`, the model may get one final turn to produce a text response incorporating the feedback, but only if the current iteration is still active (e.g., after tool calls), otherwise no extra turn is granted.
 
 ## Memory isolation
 
@@ -240,7 +242,7 @@ How it works:
 1. **Scoped memory saves**: Only the delegation prompt and the subagent's response are saved to the subagent's memory
 1. **Fresh thread per invocation**: Each delegation uses a unique thread ID, ensuring clean separation
 
-This ensures subagents have the context they need without cluttering their memory with the entire supervisor conversation. Visit [memory in multi-agent systems](/docs/memory/overview#memory-in-multi-agent-systems) for more details.
+As a result, subagents have the context they need without cluttering their memory with the entire supervisor conversation. Visit [memory in multi-agent systems](/docs/memory/overview#memory-in-multi-agent-systems) for more details.
 
 ## Tool approval propagation
 
@@ -323,7 +325,7 @@ const stream = await supervisor.stream('Research AI in education', {
 
 The built-in rubric scorer lets you define what "correct" looks like as a checklist and have the agent self-evaluate and iterate until every criterion is satisfied or `maxSteps` is reached.
 
-It works as an **LLM-as-judge** scorer: a separate grader model reviews the agent's output against the rubric after each iteration. If every required criterion passes, the loop ends. If anything falls short, per-criterion feedback is injected back into the conversation and the agent tries again.
+It works as an **LLM-as-judge** scorer. After each iteration, a separate grader model reviews the agent's output against the rubric. The loop ends when every required criterion passes. A failed criterion adds its feedback to the conversation so the agent can try again.
 
 This is most effective for tasks with clear, verifiable success criteria. You can use it like so:
 
@@ -359,9 +361,13 @@ For full API details, see the [rubric scorer reference](/reference/evals/rubric)
 
 ## Writing effective instructions
 
-Clear instructions are essential for effective delegation. Your supervisor's `instructions` should specify available resources, when to use each one, how to coordinate them, and success criteria.
+Clear instructions are essential for effective delegation.
 
-Each subagent should have a clear `description` that explains what it does, what format it returns, and when to use it. The supervisor uses these descriptions to make delegation decisions.
+Your supervisor's `instructions` should specify the available resources and when to use each one. They should also define coordination behavior and success criteria.
+
+Each subagent should have a clear `description` that explains its purpose and return format, including when the supervisor should use it.
+
+The supervisor uses these descriptions to make delegation decisions.
 
 ```typescript
 const supervisor = new Agent({

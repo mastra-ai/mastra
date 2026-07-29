@@ -15,6 +15,7 @@ test-outputs/
 # Dev artifacts
 .dev/db/*
 .pr-review/
+.artifacts/
 
 .env
 .env.local
@@ -84,3 +85,4 @@ om-reflector-fixture.json
 !.mastracode/resources/
 !.mastracode/resources/CRITICAL_PATHS.md
 .tmp-mc-e2e-vitest/
+.local/

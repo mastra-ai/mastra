@@ -38,6 +38,7 @@ import {
 } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
+import type { GithubIssueTriageInput, GithubIssueTriageResult } from './integrations/github/issue-triage.js';
 import { recordFactoryPullRequestProvenance } from './integrations/github/provenance.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
@@ -159,6 +160,16 @@ export interface MastraFactoryConfig {
    * Omitted → conservative built-in rules for the current deployment.
    */
   rules?: FactoryRules;
+
+  /**
+   * Platform-specific overrides. When the Platform-backed GitHub integration
+   * is active, it derives a `runIssueTriage` runner from the mounted
+   * controller automatically. An explicit `runIssueTriage` here takes
+   * precedence over the controller-derived default.
+   */
+  platform?: {
+    runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
+  };
 }
 
 export interface MastraFactorySandboxConfig {
@@ -321,7 +332,11 @@ export class MastraFactory {
     const integrations = [...(this.#config.integrations ?? [])];
     if (hasPlatformSecretKey()) {
       if (!integrations.some(integration => integration.id === 'github')) {
-        integrations.push(new PlatformGithubIntegration());
+        integrations.push(
+          new PlatformGithubIntegration({
+            runIssueTriage: this.#config.platform?.runIssueTriage,
+          }),
+        );
       }
       if (!integrations.some(integration => integration.id === 'linear')) {
         integrations.push(new PlatformLinearIntegration());

@@ -353,14 +353,54 @@ describe('defaultFactoryRules', () => {
     });
   });
 
-  it('reminds the linked Work agent after merge without transitioning to Done', async () => {
+  it('moves the merged Review card to Done and carries a session-only message', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    const context = githubContext('pullRequestMerged');
+    context.item = { ...item, source: 'github-pr', sourceKey: 'github-pr:17' };
+    context.board = 'review';
+    context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: true };
+    const decision = await rules.github.pullRequestMerged?.onEvent?.(context);
+    expect(decision).toMatchObject({
+      type: 'transition',
+      board: 'review',
+      stage: 'done',
+      message: { text: expect.stringContaining('merged') },
+    });
+  });
+
+  it('reminds the provenance-linked Work agent after merge without transitioning the Work item', async () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     const context = githubContext('pullRequestMerged');
     context.item = item;
+    context.board = 'work';
     context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: true };
     const decision = await rules.github.pullRequestMerged?.onEvent?.(context);
     expect(decision).toMatchObject({ type: 'sendMessage', role: 'work' });
     expect(decision).not.toMatchObject({ type: 'transition', stage: 'done' });
+  });
+
+  it('cancels the Review card when the PR is closed without merging', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    const context = githubContext('pullRequestClosed');
+    context.item = { ...item, source: 'github-pr', sourceKey: 'github-pr:17' };
+    context.board = 'review';
+    context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: false };
+    const decision = await rules.github.pullRequestClosed?.onEvent?.(context);
+    expect(decision).toMatchObject({
+      type: 'transition',
+      board: 'review',
+      stage: 'canceled',
+      message: { text: expect.stringContaining('closed without merging') },
+    });
+  });
+
+  it('leaves non-review items alone when a PR is closed without merging', async () => {
+    const rules = defaultFactoryRules({ version: 'deployment-7' });
+    const context = githubContext('pullRequestClosed');
+    context.item = item;
+    context.board = 'work';
+    context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: false };
+    expect(await rules.github.pullRequestClosed?.onEvent?.(context)).toBeUndefined();
   });
 
   it('replaces exact handler leaves while preserving siblings', () => {

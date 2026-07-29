@@ -31,6 +31,11 @@ const sidebars = {
       items: [
         {
           type: 'doc',
+          id: 'what-is-mastra',
+          label: 'What is Mastra?',
+        },
+        {
+          type: 'doc',
           id: 'getting-started/manual-install',
           label: 'Manual Install',
         },
@@ -280,9 +285,6 @@ const sidebars = {
             {
               type: 'category',
               label: 'Agent Builder',
-              customProps: {
-                tags: ['new'],
-              },
               items: [
                 { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
                 { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
@@ -504,8 +506,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'voice/livekit',
-              label: 'LiveKit',
+              id: 'voice/realtime-voice',
+              label: 'Realtime Voice',
             },
           ],
         },
@@ -737,6 +739,14 @@ const sidebars = {
                   type: 'doc',
                   id: 'server/auth/workos',
                   label: 'WorkOS',
+                },
+                {
+                  type: 'doc',
+                  id: 'server/auth/workers',
+                  label: 'Workers',
+                  customProps: {
+                    tags: ['beta'],
+                  },
                 },
               ],
             },
@@ -1007,6 +1017,14 @@ const sidebars = {
               id: 'deployment/workflow-runners',
               label: 'Workflow Runners',
             },
+            {
+              type: 'doc',
+              id: 'deployment/workers',
+              label: 'Workers',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
           ],
         },
       ],
@@ -1053,6 +1071,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'mastra-platform/trace-intelligence',
+          label: 'Trace Intelligence',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'mastra-platform/studio',
           label: 'Studio',
         },
@@ -1065,9 +1091,6 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/github',
           label: 'GitHub integration',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',

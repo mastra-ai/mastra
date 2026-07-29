@@ -111,3 +111,51 @@ describe('NewPage default-model guard', () => {
     );
   });
 });
+
+describe('NewPage credential guard', () => {
+  it('replaces the composer with an actionable empty state when the caller has no credential for the default model provider', async () => {
+    stubFactory({ id: 'fp-1', name: 'Mastra', defaultModelId: 'anthropic/claude-sonnet-4-5' });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+        HttpResponse.json({ providers: [{ provider: 'anthropic', source: 'none', orgKey: false }] }),
+      ),
+    );
+
+    renderNewPage();
+
+    expect(await screen.findByRole('heading', { name: "You don't have access to Anthropic" })).toBeInTheDocument();
+    expect(screen.getByText(/ask an org admin to share an org-wide key/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Model settings' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/model',
+    );
+    expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
+  });
+
+  it('renders the composer when the caller has a shared org credential for the default model provider', async () => {
+    stubFactory({ id: 'fp-1', name: 'Mastra', defaultModelId: 'anthropic/claude-sonnet-4-5' });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+        HttpResponse.json({ providers: [{ provider: 'anthropic', source: 'stored-org', orgKey: true }] }),
+      ),
+    );
+
+    renderNewPage();
+
+    expect(await screen.findByLabelText('Message')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: "You don't have access to Anthropic" })).not.toBeInTheDocument();
+  });
+
+  it('fails open for providers not in the catalog (custom providers manage keys separately)', async () => {
+    stubFactory({ id: 'fp-1', name: 'Mastra', defaultModelId: 'my-custom/self-hosted-model' });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+        HttpResponse.json({ providers: [{ provider: 'anthropic', source: 'none' }] }),
+      ),
+    );
+
+    renderNewPage();
+
+    expect(await screen.findByLabelText('Message')).toBeInTheDocument();
+  });
+});

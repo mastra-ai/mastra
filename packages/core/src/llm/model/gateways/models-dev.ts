@@ -368,7 +368,7 @@ export class ModelsDevGateway extends MastraModelGateway {
           modelId,
         ) as unknown as GatewayLanguageModel;
       case 'xai':
-        return createXai({ apiKey, baseURL, headers: mastraHeaders })(modelId);
+        return createXai({ apiKey, baseURL, headers: mastraHeaders }).responses(modelId);
       case 'deepseek':
         return createDeepSeek({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'perplexity':

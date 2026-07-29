@@ -44,8 +44,11 @@ import type {
 } from '../../../storage/domains/source-control/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
 import type { GithubIntegration, GithubRepositoryPermission, RepoSummary } from '../../github/integration.js';
+import type { GithubIssueTriageInput, GithubIssueTriageResult } from '../../github/issue-triage.js';
+import { runGithubIssueTriage } from '../../github/issue-triage.js';
 import { buildGithubRoutes } from '../../github/routes.js';
-import { attachGithubRules } from '../../github/rules.js';
+import { attachGithubReconciler, attachGithubRules } from '../../github/rules.js';
+import type { ReconcilePullRequestState } from '../../github/rules.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -186,12 +189,14 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly #endpointHost: string;
   readonly #pollingEnabled: boolean;
   readonly #pollingIntervalMs: number | undefined;
+  readonly #reconcileEnabled: boolean;
   #storage: SourceControlStorageHandle | undefined;
   #integrationStorage: GithubSubscriptionStorage | undefined;
   /** installationId → cached repository listing (TTL-bounded). */
   readonly #installationReposCache = new Map<number, { repos: RepoSummary[]; expiresAt: number }>();
   /** `orgId:repositoryId` → cached repository access (TTL-bounded). */
   readonly #repositoryAccessCache = new Map<string, { access: RepositoryAccess; expiresAt: number }>();
+  readonly #runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
 
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
@@ -358,20 +363,59 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       const installationId = parsePositiveInteger(installation.externalId);
       if (installationId === null) throw new Error('GitHub installation id is invalid.');
       const repositoryName = splitRepository(repository.slug).repo;
-      const token = await this.#client.request<{ token: string }>(
-        'POST',
-        `${API_PREFIX}/github-app/installations/${installationId}/token`,
-        { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
-      );
-      const access: RepositoryAccess = {
-        cloneUrl,
-        authorization: { scheme: 'bearer', token: token.token },
-      };
-      setBounded(this.#repositoryAccessCache, cacheKey, {
-        access,
-        expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
-      });
-      return access;
+
+      try {
+        const token = await this.#client.request<{ token: string }>(
+          'POST',
+          `${API_PREFIX}/github-app/installations/${installationId}/token`,
+          { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+        );
+        const access: RepositoryAccess = {
+          cloneUrl,
+          authorization: { scheme: 'bearer', token: token.token },
+        };
+        setBounded(this.#repositoryAccessCache, cacheKey, {
+          access,
+          expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
+        });
+        return access;
+      } catch (err) {
+        // Recover from stale installation: when a GitHub App is uninstalled and reinstalled,
+        // GitHub assigns a new installation ID. Platform creates a new installation row,
+        // and Factory's intake.listSources creates a new local installation row with the
+        // new externalId. Try to find the new installation by accountName.
+        if (!isNotFound(err) || !installation.accountName) throw err;
+        const installations = await this.storage.installations.list({ orgId });
+        const newInstallation = installations.find(
+          inst => inst.accountName === installation.accountName && inst.id !== installation.id,
+        );
+        if (!newInstallation) throw err;
+        const newInstallationId = parsePositiveInteger(newInstallation.externalId);
+        if (newInstallationId === null) throw err;
+
+        // Persist the migration so we don't hit the 404 path on every call.
+        // This updates the repository's installation_id to the new installation.
+        await this.storage.repositories.migrateInstallation({
+          orgId,
+          id: repositoryId,
+          newInstallationId: newInstallation.id,
+        });
+
+        const token = await this.#client.request<{ token: string }>(
+          'POST',
+          `${API_PREFIX}/github-app/installations/${newInstallationId}/token`,
+          { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+        );
+        const access: RepositoryAccess = {
+          cloneUrl,
+          authorization: { scheme: 'bearer', token: token.token },
+        };
+        setBounded(this.#repositoryAccessCache, cacheKey, {
+          access,
+          expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
+        });
+        return access;
+      }
     },
     listPullRequests: input => this.#listPullRequests(input),
     getPullRequest: input => this.#getPullRequest(input),
@@ -399,12 +443,18 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     removeRequestedReviewers: input => this.#requestedReviewers('DELETE', input),
   };
 
-  constructor() {
+  constructor(
+    options: {
+      runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
+    } = {},
+  ) {
     const config = platformApiClientConfigFromEnv();
     this.#client = new PlatformApiClient(config);
     this.#endpointHost = new URL(config.baseUrl).host;
     this.#pollingEnabled = process.env.MASTRA_PLATFORM_GITHUB_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
     this.#pollingIntervalMs = optionalPositiveIntegerEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS');
+    this.#reconcileEnabled = process.env.MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED?.trim().toLowerCase() !== 'false';
+    this.#runIssueTriage = options.runIssueTriage;
   }
 
   get storage(): SourceControlStorageHandle {
@@ -450,6 +500,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       endpointHost: this.#endpointHost,
       pollingEnabled: this.#pollingEnabled,
       pollingIntervalMs: this.#pollingIntervalMs,
+      reconcileEnabled: this.#reconcileEnabled,
     });
   }
 
@@ -470,6 +521,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         projects: ctx.storage.projects,
         emitAudit: ctx.hooks?.emitAudit,
         ingestFactoryEvent,
+        runIssueTriage:
+          this.#runIssueTriage ??
+          (ctx.controller ? input => runGithubIssueTriage({ controller: ctx.controller!, input }) : undefined),
       }).filter(
         route =>
           route.path !== '/web/github/status' &&
@@ -629,7 +683,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   workers(ctx: IntegrationContext): PlatformGithubEventWorker[] {
-    if (!this.#pollingEnabled) return [];
+    if (!this.#pollingEnabled && !this.#reconcileEnabled) return [];
     if (!ctx.controller) {
       throw new Error('Platform GitHub event polling requires the mounted Mastra Code controller.');
     }
@@ -640,9 +694,58 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         github: this,
         storage: ctx.storage.generic as unknown as PlatformGithubEventStorage,
         ingestFactoryEvent: attachGithubRules(this, ctx),
+        reconcileFactoryState: this.#reconcileEnabled
+          ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
+          : undefined,
+        pollEventsEnabled: this.#pollingEnabled,
         intervalMs: this.#pollingIntervalMs,
       }),
     ];
+  }
+
+  /**
+   * Reads live PR state through the Platform GitHub proxy for the merge
+   * reconciler. Returns undefined when the PR cannot be resolved (missing,
+   * proxy error) so a sweep never fabricates a merge.
+   */
+  async fetchPullRequestState(input: {
+    installationId: number;
+    repository: string;
+    number: number;
+  }): Promise<ReconcilePullRequestState | undefined> {
+    let repository: { owner: string; repo: string };
+    try {
+      repository = splitRepository(input.repository);
+    } catch {
+      return undefined;
+    }
+    try {
+      const result = await this.#client.request<{
+        title?: string;
+        html_url?: string;
+        state?: string;
+        merged?: boolean;
+        created_at?: string;
+        merged_by?: { login?: string } | null;
+        head?: { ref?: string };
+        base?: { ref?: string };
+      }>(
+        'GET',
+        `${API_PREFIX}/github/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/pulls/${input.number}`,
+      );
+      return {
+        title: result.title ?? `PR ${input.number}`,
+        url: result.html_url ?? `https://github.com/${input.repository}/pull/${input.number}`,
+        state: result.state === 'closed' ? 'closed' : 'open',
+        merged: result.merged === true,
+        headBranch: result.head?.ref ?? '',
+        baseBranch: result.base?.ref ?? '',
+        ...(result.created_at ? { createdAt: result.created_at } : {}),
+        ...(result.merged_by?.login ? { mergedBy: result.merged_by.login } : {}),
+      };
+    } catch {
+      return undefined;
+    }
   }
 
   sessionTools({ requestContext }: { requestContext: RequestContext }): IntegrationTools {
@@ -671,6 +774,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         enabled: this.#pollingEnabled,
         ...(this.#pollingIntervalMs === undefined ? {} : { intervalMs: this.#pollingIntervalMs }),
       },
+      reconcile: { enabled: this.#reconcileEnabled },
     };
   }
 

@@ -4,6 +4,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import {
@@ -15,11 +16,14 @@ import {
   GitCompareArrows,
   GitPullRequest,
   Link2,
+  MessageSquare,
+  MessagesSquare,
+  Play,
   Plus,
   Stethoscope,
   Trash2,
 } from 'lucide-react';
-import type { ComponentType, DragEvent } from 'react';
+import type { ComponentType, DragEvent, ReactElement } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 
@@ -30,6 +34,7 @@ import { SkeletonRows } from '../ui/SkeletonRows';
 import { GithubIcon } from '../ui/icons';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
 import { FactoryItemActions, actionIcon } from '../domains/factory/components/FactoryItemActions';
+import { InlineWorkItemComposer } from '../domains/factory/components/InlineWorkItemComposer';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import {
@@ -84,17 +89,30 @@ function SourceTitle({ source, title }: { source: WorkItemSource; title: string 
   );
 }
 
-function hasLabel(labels: readonly string[], label: string): boolean {
-  return labels.some(item => item.toLowerCase() === label);
+/**
+ * Card titles are clipped to one line, so the full text is only reachable on
+ * hover. The tooltip anchors to the whole card rather than the title span: in
+ * `WorkItemCard` the click target is an `absolute inset-0 z-10` overlay that
+ * paints over the title, so a trigger on the title itself would never see a
+ * pointer event.
+ */
+function CardTitleTooltip({ title, children }: { title: string; children: ReactElement }) {
+  return (
+    // The app-wide provider uses a 0ms delay, which is fine for icon buttons but
+    // makes a card-sized target fire while the pointer merely crosses the board.
+    <TooltipProvider delay={400}>
+      <Tooltip>
+        <TooltipTrigger render={children} />
+        <TooltipContent side="top" className="max-w-90">
+          <span className="wrap-anywhere whitespace-pre-wrap">{title}</span>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
-function githubNewIssueUrl(repoFullName: string): string | undefined {
-  const [owner, repo, extra] = repoFullName.split('/');
-  if (extra || !owner || !repo || repo === '.' || repo === '..') return undefined;
-  if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(owner) || !/^[A-Za-z0-9_.-]+$/.test(repo)) {
-    return undefined;
-  }
-  return `https://github.com/${owner}/${repo}/issues/new`;
+function hasLabel(labels: readonly string[], label: string): boolean {
+  return labels.some(item => item.toLowerCase() === label);
 }
 
 function metadataLabels(metadata: Record<string, unknown>): string[] {
@@ -576,7 +594,7 @@ function BoardContent({
   const availableIntakeSources: IntakeSource[] = review
     ? ['github-prs']
     : [...(githubIntakeActive ? (['github'] as const) : []), ...(linearReady ? (['linear'] as const) : [])];
-  const newIssueUrl = !review && config && githubIntakeActive ? githubNewIssueUrl(repository.slug) : undefined;
+  const [createStage, setCreateStage] = useState<BoardStageId>();
   const [intakeSource, setIntakeSource] = useState<IntakeSource>(review ? 'github-prs' : 'github');
   const showIntakeSourceSwitch = availableIntakeSources.length > 1;
   const activeIntakeSource: IntakeSource | null = availableIntakeSources.includes(intakeSource)
@@ -590,6 +608,9 @@ function BoardContent({
   const linearIssues = useLinearIssuesQuery(activeIntakeSource === 'linear' ? factoryProjectId : undefined);
 
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
+  const manualCreate = useUpsertWorkItemMutation(factoryProjectId);
+  const manualUpdate = useUpdateWorkItemMutation(factoryProjectId);
+  const manualTransition = useTransitionWorkItemMutation(factoryProjectId);
   const transition = useTransitionWorkItemMutation(factoryProjectId);
   const [transitionReasons, setTransitionReasons] = useState<Record<string, string>>({});
   const update = useUpdateWorkItemMutation(factoryProjectId);
@@ -602,6 +623,22 @@ function BoardContent({
   const boardPositionKey = `${factory.id}:${kind}`;
   const autoPositionedBoardRef = useRef<string | undefined>(undefined);
   const userPositionedBoardRef = useRef<string | undefined>(undefined);
+  const manualCreatedItemRef = useRef<{ stage: BoardStageId; title: string; item: WorkItem } | undefined>(undefined);
+  const createTriggerRefs = useRef(new Map<BoardStageId, HTMLButtonElement>());
+  const closedComposerStageRef = useRef<BoardStageId | undefined>(undefined);
+
+  const closeComposer = (stage: BoardStageId) => {
+    if (manualCreatedItemRef.current?.stage === stage) manualCreatedItemRef.current = undefined;
+    closedComposerStageRef.current = stage;
+    setCreateStage(current => (current === stage ? undefined : current));
+  };
+
+  useEffect(() => {
+    const stage = closedComposerStageRef.current;
+    if (createStage !== undefined || stage === undefined) return;
+    closedComposerStageRef.current = undefined;
+    createTriggerRefs.current.get(stage)?.focus();
+  }, [createStage]);
 
   // Workspaces that still exist. A card's session ref whose workspace was
   // deleted is stale: its thread is gone (workspace deletion cascades onto its
@@ -611,6 +648,32 @@ function BoardContent({
     () => new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId)),
     [workspaces.data],
   );
+
+  // A card click refetches worktrees and items before it can decide whether to
+  // open an existing thread or mint a new session. That wait is several round
+  // trips long and the run mutation isn't pending yet, so without this the card
+  // sits completely silent after the click.
+  const [preparingItems, setPreparingItems] = useState<Record<string, string>>({});
+  // Guarded by a ref, not by preparingItems: two clicks landing in the same
+  // render both read the pre-click state, so the state value can't reject the
+  // second one. Preparing is several round trips long and each pass mints its
+  // own kickoffKey, so the server's start lock keys differently per click and
+  // won't collapse them either.
+  const preparingRef = useRef<Set<string>>(new Set());
+  const beginPreparingItem = (itemId: string, label: string) => {
+    if (preparingRef.current.has(itemId)) return false;
+    preparingRef.current.add(itemId);
+    setPreparingItems(current => ({ ...current, [itemId]: label }));
+    return true;
+  };
+  const clearPreparingItem = (itemId: string) => {
+    preparingRef.current.delete(itemId);
+    setPreparingItems(current => {
+      if (!(itemId in current)) return current;
+      const { [itemId]: _cleared, ...rest } = current;
+      return rest;
+    });
+  };
 
   const openThread = async (session: WorkItemSessionRef) => {
     navigate(`/factories/${factory.id}/workspaces/${session.sessionId}/threads/${session.threadId}`);
@@ -628,32 +691,46 @@ function BoardContent({
   };
 
   const openOrCreateSession = async (item: WorkItem, destinationStage: string) => {
-    const refreshed = await refreshItemAndWorktrees(item.id);
-    if (!refreshed) return;
-    const liveSessions = Object.fromEntries(
-      Object.entries(refreshed.item.sessions).filter(([, session]) => refreshed.paths.has(session.sessionId)),
-    );
-    const existingSession = itemThreadSession(liveSessions);
-    if (existingSession) {
-      await openThread(existingSession);
-      return;
+    if (!beginPreparingItem(item.id, 'Preparing session…')) return;
+    try {
+      const refreshed = await refreshItemAndWorktrees(item.id);
+      if (!refreshed) return;
+      const liveSessions = Object.fromEntries(
+        Object.entries(refreshed.item.sessions).filter(([, session]) => refreshed.paths.has(session.sessionId)),
+      );
+      const existingSession = itemThreadSession(liveSessions);
+      if (existingSession) {
+        await openThread(existingSession);
+        return;
+      }
+      const spec = itemSessionSpec(refreshed.item);
+      start.mutate({
+        branch: spec.branch,
+        threadTitle: spec.threadTitle,
+        workItem: {
+          id: refreshed.item.id,
+          role: 'chat',
+          stages: [destinationStage],
+          source: refreshed.item.source,
+          sourceKey: refreshed.item.sourceKey,
+          title: refreshed.item.title,
+        },
+      });
+    } finally {
+      clearPreparingItem(item.id);
     }
-    const spec = itemSessionSpec(refreshed.item);
-    start.mutate({
-      branch: spec.branch,
-      threadTitle: spec.threadTitle,
-      workItem: {
-        id: refreshed.item.id,
-        role: 'chat',
-        stages: [destinationStage],
-        source: refreshed.item.source,
-        sourceKey: refreshed.item.sourceKey,
-        title: refreshed.item.title,
-      },
-    });
   };
 
   const openOrStartRun = async (item: WorkItem, role: RunAction['role']) => {
+    if (!beginPreparingItem(item.id, 'Preparing run…')) return;
+    try {
+      await startRunForItem(item, role);
+    } finally {
+      clearPreparingItem(item.id);
+    }
+  };
+
+  const startRunForItem = async (item: WorkItem, role: RunAction['role']) => {
     const refreshed = await refreshItemAndWorktrees(item.id);
     if (!refreshed) return;
     const existingSession = refreshed.item.sessions[role];
@@ -844,23 +921,34 @@ function BoardContent({
               taskCount={stageContentCount(stage.id, stages, workItems, candidates)}
               totalTaskCount={totalTaskCount}
               loading={loadingStages.has(stage.id)}
+              composerOpen={createStage === stage.id}
               laneRef={element => {
                 if (element) laneRefs.current.set(stage.id, element);
                 else laneRefs.current.delete(stage.id);
               }}
               onDrop={handleDrop}
               headerAction={
-                stage.id === 'intake' && newIssueUrl ? (
-                  <a
-                    href={newIssueUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="Create GitHub issue"
-                    title="Create GitHub issue"
-                    className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
+                !review &&
+                !loadingStages.has(stage.id) &&
+                stage.id !== 'done' &&
+                stage.id !== 'canceled' &&
+                (createStage === undefined || createStage === stage.id) ? (
+                  <Button
+                    ref={element => {
+                      if (element) createTriggerRefs.current.set(stage.id, element);
+                      else createTriggerRefs.current.delete(stage.id);
+                    }}
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Create work item in ${stage.label}`}
+                    title={`Create work item in ${stage.label}`}
+                    aria-expanded={createStage === stage.id}
+                    aria-controls={`new-work-item-${stage.id}`}
+                    onClick={() => setCreateStage(stage.id)}
                   >
                     <Plus size={13} aria-hidden />
-                  </a>
+                  </Button>
                 ) : undefined
               }
               headerExtras={
@@ -886,6 +974,42 @@ function BoardContent({
                 ) : undefined
               }
             >
+              {createStage === stage.id ? (
+                <InlineWorkItemComposer
+                  stage={stage.id}
+                  stageLabel={stage.label}
+                  onCreate={async title => {
+                    const pendingItem =
+                      manualCreatedItemRef.current?.stage === stage.id ? manualCreatedItemRef.current : undefined;
+                    let item: WorkItem;
+                    if (pendingItem === undefined) {
+                      item = await manualCreate.mutateAsync({
+                        source: 'manual',
+                        sourceKey: null,
+                        title,
+                        stages: ['intake'],
+                      });
+                      manualCreatedItemRef.current = { stage: stage.id, title, item };
+                    } else if (pendingItem.title !== title) {
+                      item = await manualUpdate.mutateAsync({ id: pendingItem.item.id, patch: { title } });
+                      manualCreatedItemRef.current = { stage: stage.id, title, item };
+                    } else {
+                      item = pendingItem.item;
+                    }
+                    if (stage.id !== 'intake') {
+                      const result = await manualTransition.mutateAsync({
+                        item,
+                        board: 'work',
+                        stage: stage.id,
+                        cause: 'manual_creation',
+                      });
+                      if (result.status === 'rejected') throw new Error(result.reason);
+                    }
+                    manualCreatedItemRef.current = undefined;
+                  }}
+                  onClose={() => closeComposer(stage.id)}
+                />
+              ) : null}
               {workItems
                 .filter(item => itemAppearsInStage(item, stage.id, stages))
                 .map(item => (
@@ -901,6 +1025,7 @@ function BoardContent({
                     // for a perfectly live thread. Hold run/create actions until
                     // liveness is known.
                     runDisabled={!runEnabled || !workspaces.isSuccess}
+                    preparing={preparingItems[item.id]}
                     evaluatingStage={evaluatingStages.get(item.id)}
                     transitionReason={transitionReasons[item.id]}
                     decision={decisionByItem.get(item.id)}
@@ -953,9 +1078,11 @@ function BoardContent({
               {loadingStages.has(stage.id) && (
                 <SkeletonRows label={`Loading ${stage.label} column`} rows={3} rowClassName="h-24 w-full" />
               )}
-              {!loadingStages.has(stage.id) && stageContentCount(stage.id, stages, workItems, candidates) === 0 && (
-                <BoardColumnEmptyState stage={stage.id} kind={kind} hasIntakeSource={activeIntakeSource !== null} />
-              )}
+              {!loadingStages.has(stage.id) &&
+                createStage !== stage.id &&
+                stageContentCount(stage.id, stages, workItems, candidates) === 0 && (
+                  <BoardColumnEmptyState stage={stage.id} kind={kind} hasIntakeSource={activeIntakeSource !== null} />
+                )}
               {stage.id === 'intake' && (
                 <IntakeColumnExtras
                   source={activeIntakeSource}
@@ -1112,12 +1239,16 @@ function dropLinePosition(cardList: HTMLDivElement, pointerY: number): number {
   return lastCard ? lastCard.offsetTop + lastCard.offsetHeight + BOARD_CARD_GAP_PX / 2 : 0;
 }
 
+const COLUMN_ACTION_REVEAL_CLASS =
+  'pointer-events-none opacity-0 transition-opacity group-hover/column:pointer-events-auto group-hover/column:opacity-100 group-focus-within/column:pointer-events-auto group-focus-within/column:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100 any-pointer-coarse:pointer-events-auto any-pointer-coarse:opacity-100 motion-reduce:transition-none';
+
 function BoardColumn({
   stage,
   label,
   taskCount,
   totalTaskCount,
   loading = false,
+  composerOpen = false,
   laneRef,
   onDrop,
   headerAction,
@@ -1130,6 +1261,7 @@ function BoardColumn({
   totalTaskCount: number;
   /** While loading, the task badge is hidden so a false "0/0" never flashes. */
   loading?: boolean;
+  composerOpen?: boolean;
   laneRef: (element: HTMLElement | null) => void;
   onDrop: (payload: DragPayload, toStage: BoardStageId) => void;
   headerAction?: React.ReactNode;
@@ -1140,7 +1272,7 @@ function BoardColumn({
   const [dragOver, setDragOver] = useState(false);
   const [dropLineTop, setDropLineTop] = useState(0);
   const cardListRef = useRef<HTMLDivElement>(null);
-  const collapsed = stage !== 'intake' && !loading && taskCount === 0;
+  const collapsed = stage !== 'intake' && !loading && !composerOpen && taskCount === 0;
 
   return (
     <section
@@ -1148,7 +1280,7 @@ function BoardColumn({
       aria-label={collapsed ? `${label}, empty` : label}
       data-testid={`board-column-${stage}`}
       className={cn(
-        'flex min-h-0 shrink-0 flex-col transition-[width,background-color] motion-reduce:transition-none',
+        'group/column flex min-h-0 shrink-0 flex-col transition-[width,background-color] motion-reduce:transition-none',
         collapsed ? 'w-14 rounded-lg' : 'w-80 gap-4',
         collapsed && dragOver && 'bg-surface2 ring-1 ring-border1',
       )}
@@ -1173,9 +1305,23 @@ function BoardColumn({
     >
       {collapsed ? (
         <div className="flex min-h-0 flex-1 flex-col items-center gap-3 py-1">
-          <span aria-hidden className="text-ui-xs text-icon3 flex h-8 items-center font-medium tabular-nums">
-            {taskCount}
-          </span>
+          <div className="relative flex h-8 w-full items-center justify-center">
+            <span
+              aria-hidden
+              className={cn(
+                'text-ui-xs text-icon3 flex h-8 items-center font-medium tabular-nums',
+                headerAction &&
+                  'transition-opacity group-hover/column:opacity-0 group-focus-within/column:opacity-0 pointer-coarse:opacity-0 any-pointer-coarse:opacity-0 motion-reduce:transition-none',
+              )}
+            >
+              {taskCount}
+            </span>
+            {headerAction ? (
+              <div className={cn('absolute inset-0 flex items-center justify-center', COLUMN_ACTION_REVEAL_CLASS)}>
+                {headerAction}
+              </div>
+            ) : null}
+          </div>
           <Txt as="h2" variant="ui-smd" className="text-icon3 m-0 font-semibold [writing-mode:vertical-rl]">
             {label}
           </Txt>
@@ -1194,7 +1340,9 @@ function BoardColumn({
                 <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
               )}
             </div>
-            {headerAction && <div className="flex h-8 shrink-0 items-center">{headerAction}</div>}
+            {headerAction ? (
+              <div className={cn('flex h-8 shrink-0 items-center', COLUMN_ACTION_REVEAL_CLASS)}>{headerAction}</div>
+            ) : null}
           </div>
           {headerExtras}
           {/* Cards scroll inside the swimlane; the page stays fixed. */}
@@ -1343,6 +1491,7 @@ function WorkItemCard({
   allItems,
   liveWorktreePaths,
   runDisabled,
+  preparing,
   evaluatingStage,
   transitionReason,
   decision,
@@ -1360,6 +1509,8 @@ function WorkItemCard({
   /** Worktrees that still exist; session refs outside this set are stale. */
   liveWorktreePaths: ReadonlySet<string>;
   runDisabled: boolean;
+  /** Status text while the click is resolving, before the run mutation starts. */
+  preparing?: string;
   /** Destination stage of an in-flight transition; undefined = not moving. */
   evaluatingStage?: string;
   transitionReason?: string;
@@ -1379,7 +1530,7 @@ function WorkItemCard({
     className: 'text-icon3',
   };
   const evaluating = evaluatingStage !== undefined;
-  const runPending = pendingRunRoles.size > 0;
+  const runPending = pendingRunRoles.size > 0 || preparing !== undefined;
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const runSpec = itemRunSpec(item);
   // Session refs whose worktree was deleted are stale: their threads went with
@@ -1394,185 +1545,215 @@ function WorkItemCard({
   const labels = metadataLabels(item.metadata);
 
   return (
-    <article
-      draggable={!evaluating}
-      aria-label={item.title}
-      aria-busy={evaluating || runPending || undefined}
-      data-testid="work-item-card"
-      data-related={relatedItems.length > 0 ? 'true' : undefined}
-      onDragStart={event => {
-        if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
-      }}
-      className={cn(
-        'group relative flex flex-col gap-3 rounded-xl border border-border1/50 bg-neutral6/5 p-3 outline-none transition-colors hover:bg-surface3',
-        evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
-        runPending && 'opacity-70',
-      )}
-    >
-      {threadSession !== null ? (
-        <Link
-          to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
-          draggable={false}
-          aria-label={`Open thread for ${item.title}`}
-          className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
-        />
-      ) : (
-        // Card click starts the default run (first unused action, e.g. Review
-        // for PRs) so clicking a card kicks off its work; cards with no run
-        // spec fall back to opening a plain chat session on the item's branch.
-        <button
-          type="button"
-          draggable={false}
-          disabled={runDisabled}
-          aria-busy={pendingRunRoles.size > 0 || undefined}
-          aria-label={
-            runSpec !== null && runActions[0] !== undefined
-              ? `${runActions[0].label} ${item.title}`
-              : `Create thread for ${item.title}`
-          }
-          className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
-          onClick={() =>
-            runSpec !== null && runActions[0] !== undefined
-              ? onStartRun(runSpec, runActions[0])
-              : onCreateSession(itemSessionSpec(item))
-          }
-        />
-      )}
-      <div className="absolute top-2 right-2 z-20">
-        <DropdownMenu>
-          <DropdownMenu.Trigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                disabled={evaluating}
-                aria-label={`Actions for ${item.title}`}
-              >
-                <EllipsisVertical size={13} aria-hidden />
-              </Button>
+    <CardTitleTooltip title={item.title}>
+      <article
+        draggable={!evaluating}
+        aria-label={item.title}
+        aria-busy={evaluating || runPending || undefined}
+        data-testid="work-item-card"
+        data-related={relatedItems.length > 0 ? 'true' : undefined}
+        onDragStart={event => {
+          if (!evaluating) setDragPayload(event, { kind: 'work-item', id: item.id, fromStage: columnStage });
+        }}
+        className={cn(
+          'group relative flex flex-col gap-3 rounded-xl border border-border1/50 bg-neutral6/5 p-3 outline-none transition-colors hover:bg-surface3',
+          evaluating ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing',
+          runPending && 'opacity-70',
+        )}
+      >
+        {threadSession !== null ? (
+          <Link
+            to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
+            draggable={false}
+            aria-label={`Open session for ${item.title}`}
+            className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
+          />
+        ) : (
+          // Card click starts the default run (first unused action, e.g. Review
+          // for PRs) so clicking a card kicks off its work; cards with no run
+          // spec fall back to opening a plain chat session on the item's branch.
+          <button
+            type="button"
+            draggable={false}
+            disabled={runDisabled || runPending}
+            aria-busy={runPending || undefined}
+            aria-label={
+              runSpec !== null && runActions[0] !== undefined
+                ? `${runActions[0].label} ${item.title}`
+                : `Start session for ${item.title}`
+            }
+            className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
+            onClick={() =>
+              runSpec !== null && runActions[0] !== undefined
+                ? onStartRun(runSpec, runActions[0])
+                : onCreateSession(itemSessionSpec(item))
             }
           />
-          <DropdownMenu.Content align="end" className="min-w-44">
-            {runSpec !== null &&
-              runActions.map(action => {
-                const starting = pendingRunRoles.has(action.role);
-                return (
-                  <DropdownMenu.Item
-                    key={action.label}
-                    disabled={runDisabled || starting}
-                    onClick={() => onStartRun(runSpec, action)}
-                  >
-                    {actionIcon(action.label)}
-                    <span>{starting ? 'Starting…' : action.label}</span>
-                  </DropdownMenu.Item>
-                );
-              })}
-            {columnStage === 'intake' &&
-              item.url !== null &&
-              (item.source === 'github-issue' || item.source === 'linear-issue') && (
+        )}
+        <div className="absolute top-2 right-2 z-20">
+          <DropdownMenu>
+            <DropdownMenu.Trigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  disabled={evaluating}
+                  aria-label={`Actions for ${item.title}`}
+                >
+                  <EllipsisVertical size={13} aria-hidden />
+                </Button>
+              }
+            />
+            <DropdownMenu.Content align="end" className="min-w-44">
+              {runSpec !== null &&
+                runActions.map(action => {
+                  const starting = pendingRunRoles.has(action.role);
+                  return (
+                    <DropdownMenu.Item
+                      key={action.label}
+                      disabled={runDisabled || starting}
+                      onClick={() => onStartRun(runSpec, action)}
+                    >
+                      {actionIcon(action.label)}
+                      <span>{starting ? 'Starting…' : action.label}</span>
+                    </DropdownMenu.Item>
+                  );
+                })}
+              {item.url !== null && (
                 <DropdownMenu.Item render={<a href={item.url} target="_blank" rel="noreferrer" />}>
                   <ArrowUpRight aria-hidden />
                   <span>{externalLinkLabel(item.source)}</span>
                 </DropdownMenu.Item>
               )}
-            {itemStageOptions(item)
-              .filter(stage => stage.id !== columnStage)
-              .map(stage => (
-                <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
-                  <BoardStageIcon stage={stage.id} />
-                  <span>{stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}</span>
-                </DropdownMenu.Item>
-              ))}
-            <DropdownMenu.Item onClick={onRemove}>
-              <Trash2 aria-hidden />
-              <span>Remove</span>
-            </DropdownMenu.Item>
-          </DropdownMenu.Content>
-        </DropdownMenu>
-      </div>
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <span className="text-ui-xs text-icon2 truncate pr-8">{workItemMeta(item)}</span>
-        <div className="flex min-w-0 items-center gap-1.5">
-          <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
-          <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
-            <SourceTitle source={item.source} title={item.title} />
-          </span>
+              {itemStageOptions(item)
+                .filter(stage => stage.id !== columnStage)
+                .map(stage => (
+                  <DropdownMenu.Item key={stage.id} onClick={() => onMove(stage.id)}>
+                    <BoardStageIcon stage={stage.id} />
+                    <span>{stage.id === 'done' ? 'Mark done' : `Move to ${stage.label}`}</span>
+                  </DropdownMenu.Item>
+                ))}
+              <DropdownMenu.Item onClick={onRemove}>
+                <Trash2 aria-hidden />
+                <span>Remove</span>
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu>
         </div>
-      </div>
-      <CardLabels labels={labels} />
-      {relatedItems.map(related => {
-        const relationText = relationshipLabel(related);
-        const relatedLiveSessions = Object.fromEntries(
-          Object.entries(related.sessions).filter(([, session]) => liveWorktreePaths.has(session.sessionId)),
-        );
-        const relatedSession = itemThreadSession(relatedLiveSessions);
-        return (
-          <Link
-            key={related.id}
-            to={
-              relatedSession
-                ? `/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`
-                : relationshipPath(related, factoryId)
-            }
-            className="text-ui-xs text-icon4 hover:text-icon6 relative z-20 flex items-center gap-1 hover:underline"
-            aria-label={`Open ${relationText}`}
-          >
-            <Link2 size={11} aria-hidden />
-            <span className="truncate">{relationText}</span>
-          </Link>
-        );
-      })}
-      {otherStages.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {otherStages.map(stage => (
-            <span key={stage} className="border-border1 text-ui-xs text-icon4 rounded-full border px-2 py-0.5">
-              {itemStageLabel(item, stage)}
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-ui-xs text-icon2 truncate pr-8">{workItemMeta(item)}</span>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Icon size={16} className={cn('shrink-0', iconClassName)} aria-hidden />
+            <span className="text-ui-smd text-icon6 min-w-0 flex-1 truncate font-semibold">
+              <SourceTitle source={item.source} title={item.title} />
             </span>
-          ))}
+          </div>
         </div>
-      )}
-      {evaluatingStage !== undefined && (
-        <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
-          <Spinner size="sm" aria-hidden className="size-3" />
-          {evaluatingStage === 'done' ? 'Marking done…' : `Moving to ${itemStageLabel(item, evaluatingStage)}…`}
-        </span>
-      )}
-      {[...pendingRunRoles].map(([role, phase]) => (
-        <span key={role} role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
-          <Spinner size="sm" aria-hidden className="size-3" />
-          {runSpec?.actions.find(action => action.role === role)?.label ?? 'Starting run'} —{' '}
-          {phase !== undefined ? RUN_PHASE_LABELS[phase] : 'starting…'}
-        </span>
-      ))}
-      {!evaluating && decision !== undefined && (
-        <div className="flex items-center justify-between gap-2">
-          <span
-            role={decision.status === 'failed' ? 'alert' : 'status'}
-            className={cn('text-ui-xs', decision.status === 'failed' ? 'text-error' : 'text-icon4')}
-          >
-            {decisionStatusText(decision)}
+        <CardLabels labels={labels} />
+        {threadSession !== null && (
+          <span className="text-ui-xs text-accent1 flex items-center gap-1">
+            <MessagesSquare size={11} aria-hidden />
+            <span className="truncate">Session · {threadSession.branch}</span>
           </span>
-          {decision.status === 'failed' ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="relative z-20"
-              disabled={retryingDecisionId === decision.id}
-              onClick={() => onRetryDecision(decision.id)}
+        )}
+        {relatedItems.map(related => {
+          const relationText = relationshipLabel(related);
+          const relatedLiveSessions = Object.fromEntries(
+            Object.entries(related.sessions).filter(([, session]) => liveWorktreePaths.has(session.sessionId)),
+          );
+          const relatedSession = itemThreadSession(relatedLiveSessions);
+          return (
+            <Link
+              key={related.id}
+              to={
+                relatedSession
+                  ? `/factories/${factoryId}/workspaces/${relatedSession.sessionId}/threads/${relatedSession.threadId}`
+                  : relationshipPath(related, factoryId)
+              }
+              className="text-ui-xs text-icon4 hover:text-icon6 relative z-20 flex items-center gap-1 hover:underline"
+              aria-label={`Open ${relationText}`}
             >
-              {retryingDecisionId === decision.id ? 'Retrying…' : 'Retry'}
-            </Button>
-          ) : null}
-        </div>
-      )}
-      {!evaluating && transitionReason !== undefined && (
-        <span role="alert" className="text-ui-xs text-error">
-          {transitionReason}
-        </span>
-      )}
-    </article>
+              <Link2 size={11} aria-hidden />
+              <span className="truncate">{relationText}</span>
+            </Link>
+          );
+        })}
+        {otherStages.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {otherStages.map(stage => (
+              <span key={stage} className="border-border1 text-ui-xs text-icon4 rounded-full border px-2 py-0.5">
+                {itemStageLabel(item, stage)}
+              </span>
+            ))}
+          </div>
+        )}
+        {evaluatingStage !== undefined && (
+          <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
+            <Spinner size="sm" aria-hidden className="size-3" />
+            {evaluatingStage === 'done' ? 'Marking done…' : `Moving to ${itemStageLabel(item, evaluatingStage)}…`}
+          </span>
+        )}
+        {pendingRunRoles.size === 0 && preparing !== undefined && (
+          <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
+            <Spinner size="sm" aria-hidden className="size-3" />
+            {preparing}
+          </span>
+        )}
+        {[...pendingRunRoles].map(([role, phase]) => (
+          <span key={role} role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
+            <Spinner size="sm" aria-hidden className="size-3" />
+            {runSpec?.actions.find(action => action.role === role)?.label ?? 'Starting run'} —{' '}
+            {phase !== undefined ? RUN_PHASE_LABELS[phase] : 'starting…'}
+          </span>
+        ))}
+        {!evaluating && !runPending && (
+          <span
+            aria-hidden
+            className="text-ui-xs text-icon3 group-hover:text-icon5 group-focus-within:text-icon5 flex items-center gap-1.5 transition-colors motion-reduce:transition-none"
+          >
+            {threadSession !== null ? (
+              <>
+                <MessageSquare size={11} aria-hidden />
+                Open session
+              </>
+            ) : (
+              <>
+                <Play size={11} aria-hidden />
+                {runSpec !== null && runActions[0] !== undefined ? runActions[0].label : 'Start session'}
+              </>
+            )}
+          </span>
+        )}
+        {!evaluating && decision !== undefined && (
+          <div className="flex items-center justify-between gap-2">
+            <span
+              role={decision.status === 'failed' ? 'alert' : 'status'}
+              className={cn('text-ui-xs', decision.status === 'failed' ? 'text-error' : 'text-icon4')}
+            >
+              {decisionStatusText(decision)}
+            </span>
+            {decision.status === 'failed' ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="relative z-20"
+                disabled={retryingDecisionId === decision.id}
+                onClick={() => onRetryDecision(decision.id)}
+              >
+                {retryingDecisionId === decision.id ? 'Retrying…' : 'Retry'}
+              </Button>
+            ) : null}
+          </div>
+        )}
+        {!evaluating && transitionReason !== undefined && (
+          <span role="alert" className="text-ui-xs text-error">
+            {transitionReason}
+          </span>
+        )}
+      </article>
+    </CardTitleTooltip>
   );
 }
 
@@ -1601,79 +1782,81 @@ function CandidateCard({
   const showTriage = candidate.source === 'github-issue' && !hasLabel(labels, AUTO_TRIAGED_LABEL) && onTriage;
   const [defaultAction, ...otherActions] = candidate.runActions;
   return (
-    <article
-      draggable
-      aria-label={candidate.title}
-      data-testid="candidate-card"
-      onDragStart={event =>
-        setDragPayload(event, {
-          kind: 'candidate',
-          candidate: {
-            source: candidate.source,
-            sourceKey: candidate.sourceKey,
-            title: candidate.title,
-            url: candidate.url,
-            metadata: candidate.metadata,
-          },
-        })
-      }
-      className="group border-border1/50 bg-neutral6/5 hover:bg-surface3 flex cursor-grab flex-col gap-3 rounded-xl border p-3 transition-colors outline-none active:cursor-grabbing"
-    >
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <span className="text-ui-xs text-icon2 block truncate">{candidate.meta}</span>
-        <div className="flex min-w-0 items-center gap-1.5">
-          <Icon size={16} className={cn('shrink-0', candidate.iconClassName)} aria-hidden />
-          <button
-            type="button"
-            disabled={disabled}
-            aria-busy={pendingRunRoles.has(defaultAction.role) || undefined}
-            // Title click starts the default run — same as the primary action
-            // button — so clicking a candidate always kicks off its work.
-            onClick={() => onRun(defaultAction)}
-            className="text-ui-smd text-icon6 min-w-0 flex-1 truncate text-left font-semibold hover:underline disabled:opacity-60"
-          >
-            <SourceTitle source={candidate.source} title={candidate.title} />
-          </button>
-          <a
-            href={candidate.url}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={externalLinkLabel(candidate.source)}
-            className="text-icon3 hover:text-icon5 shrink-0 transition-[opacity,translate] focus-visible:translate-x-0 focus-visible:translate-y-0 focus-visible:opacity-100 motion-reduce:transition-none pointer-fine:-translate-x-1 pointer-fine:translate-y-1 pointer-fine:opacity-0 pointer-fine:group-hover:translate-x-0 pointer-fine:group-hover:translate-y-0 pointer-fine:group-hover:opacity-100"
-          >
-            <ArrowUpRight size={12} aria-hidden />
-          </a>
-        </div>
-      </div>
-      <CardLabels labels={labels} />
-      <FactoryItemActions
-        actionLabel={defaultAction.label}
-        itemLabel={candidate.title}
-        starting={pendingRunRoles.has(defaultAction.role)}
-        disabled={disabled}
-        onAction={() => onRun(defaultAction)}
-        extraActions={otherActions.map(action => ({
-          label: action.label,
-          starting: pendingRunRoles.has(action.role),
-          onAction: () => onRun(action),
-        }))}
-        onRunPrompt={prompt => onRun(defaultAction, prompt)}
-        menuExtras={
-          <>
-            {showTriage && (
-              <DropdownMenu.Item disabled={triageStarting} onClick={onTriage}>
-                <Stethoscope aria-hidden />
-                <span>{triageStarting ? 'Starting…' : 'Triage issue'}</span>
-              </DropdownMenu.Item>
-            )}
-            <DropdownMenu.Item onClick={onFile}>
-              <Plus aria-hidden />
-              <span>Add to board</span>
-            </DropdownMenu.Item>
-          </>
+    <CardTitleTooltip title={candidate.title}>
+      <article
+        draggable
+        aria-label={candidate.title}
+        data-testid="candidate-card"
+        onDragStart={event =>
+          setDragPayload(event, {
+            kind: 'candidate',
+            candidate: {
+              source: candidate.source,
+              sourceKey: candidate.sourceKey,
+              title: candidate.title,
+              url: candidate.url,
+              metadata: candidate.metadata,
+            },
+          })
         }
-      />
-    </article>
+        className="group border-border1/50 bg-neutral6/5 hover:bg-surface3 flex cursor-grab flex-col gap-3 rounded-xl border p-3 transition-colors outline-none active:cursor-grabbing"
+      >
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <span className="text-ui-xs text-icon2 block truncate">{candidate.meta}</span>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Icon size={16} className={cn('shrink-0', candidate.iconClassName)} aria-hidden />
+            <button
+              type="button"
+              disabled={disabled}
+              aria-busy={pendingRunRoles.has(defaultAction.role) || undefined}
+              // Title click starts the default run — same as the primary action
+              // button — so clicking a candidate always kicks off its work.
+              onClick={() => onRun(defaultAction)}
+              className="text-ui-smd text-icon6 min-w-0 flex-1 truncate text-left font-semibold hover:underline disabled:opacity-60"
+            >
+              <SourceTitle source={candidate.source} title={candidate.title} />
+            </button>
+            <a
+              href={candidate.url}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={externalLinkLabel(candidate.source)}
+              className="text-icon3 hover:text-icon5 shrink-0 transition-[opacity,translate] focus-visible:translate-x-0 focus-visible:translate-y-0 focus-visible:opacity-100 motion-reduce:transition-none pointer-fine:-translate-x-1 pointer-fine:translate-y-1 pointer-fine:opacity-0 pointer-fine:group-hover:translate-x-0 pointer-fine:group-hover:translate-y-0 pointer-fine:group-hover:opacity-100"
+            >
+              <ArrowUpRight size={12} aria-hidden />
+            </a>
+          </div>
+        </div>
+        <CardLabels labels={labels} />
+        <FactoryItemActions
+          actionLabel={defaultAction.label}
+          itemLabel={candidate.title}
+          starting={pendingRunRoles.has(defaultAction.role)}
+          disabled={disabled}
+          onAction={() => onRun(defaultAction)}
+          extraActions={otherActions.map(action => ({
+            label: action.label,
+            starting: pendingRunRoles.has(action.role),
+            onAction: () => onRun(action),
+          }))}
+          onRunPrompt={prompt => onRun(defaultAction, prompt)}
+          menuExtras={
+            <>
+              {showTriage && (
+                <DropdownMenu.Item disabled={triageStarting} onClick={onTriage}>
+                  <Stethoscope aria-hidden />
+                  <span>{triageStarting ? 'Starting…' : 'Triage issue'}</span>
+                </DropdownMenu.Item>
+              )}
+              <DropdownMenu.Item onClick={onFile}>
+                <Plus aria-hidden />
+                <span>Add to board</span>
+              </DropdownMenu.Item>
+            </>
+          }
+        />
+      </article>
+    </CardTitleTooltip>
   );
 }
 

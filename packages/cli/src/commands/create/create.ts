@@ -7,7 +7,7 @@ import { getAnalytics } from '../../analytics/index';
 import { cloneTemplate, installDependencies } from '../../utils/clone-template';
 import { findTemplateByName, loadTemplates, selectTemplate } from '../../utils/template-utils';
 import type { Template } from '../../utils/template-utils';
-import { getToken } from '../auth/credentials.js';
+import { getToken, LoginCancelledError } from '../auth/credentials.js';
 import { OrgSelectionCancelledError, resolveCurrentOrg } from '../auth/orgs.js';
 import { provisionObservabilityProject } from '../init/observability-provision';
 import { installMastraSkills } from '../init/skills-install';
@@ -248,7 +248,6 @@ export const create = async (args: CreateOptions): Promise<void> => {
   let llmApiKey = options.llmApiKey;
   let providerSelectionMethod: 'cli_args' | 'interactive' | undefined;
   let observabilityEnabled = false;
-  let platformSetupActive = false;
   let platformSetupController: AbortController | undefined;
   let platformSetupPromise: Promise<PlatformSetupResult> | undefined;
 
@@ -276,12 +275,9 @@ export const create = async (args: CreateOptions): Promise<void> => {
       });
       if (observabilityEnabled) {
         platformSetupController = new AbortController();
-        platformSetupActive = true;
-        const cancelPlatformSetup = () => platformSetupController?.abort();
-        process.on('SIGINT', cancelPlatformSetup);
         platformSetupPromise = (async (): Promise<PlatformSetupResult> => {
           try {
-            const token = await getToken(platformSetupController!.signal);
+            const token = await getToken(platformSetupController!.signal, { skipOnInput: true });
             const org = await resolveCurrentOrg(token, {
               forcePrompt: true,
               exitOnCancel: false,
@@ -289,13 +285,10 @@ export const create = async (args: CreateOptions): Promise<void> => {
             });
             return { status: 'ready', token, org };
           } catch (error) {
-            if (platformSetupController!.signal.aborted || error instanceof OrgSelectionCancelledError) {
+            if (error instanceof LoginCancelledError || error instanceof OrgSelectionCancelledError) {
               return { status: 'cancelled' };
             }
             return { status: 'failed', error };
-          } finally {
-            platformSetupActive = false;
-            process.removeListener('SIGINT', cancelPlatformSetup);
           }
         })();
       }
@@ -328,10 +321,6 @@ export const create = async (args: CreateOptions): Promise<void> => {
   const materializationController = new AbortController();
   let interruptionSignal: 'SIGINT' | 'SIGTERM' | undefined;
   const interrupt = (signal: 'SIGINT' | 'SIGTERM') => {
-    if (signal === 'SIGINT' && platformSetupActive) {
-      platformSetupController?.abort();
-      return;
-    }
     interruptionSignal ??= signal;
     materializationController.abort();
     platformSetupController?.abort();
