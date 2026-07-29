@@ -1,5 +1,29 @@
 # @mastra/core
 
+## 1.55.0-alpha.0
+
+### Minor Changes
+
+- Added retry callbacks for stream error policies and ensured explicit matcher policies override provider retry metadata. ([#19724](https://github.com/mastra-ai/mastra/pull/19724))
+
+- Added a built-in web search tool that resolves to provider-native search for supported models. ([#20345](https://github.com/mastra-ai/mastra/pull/20345))
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { webSearchTool } from '@mastra/core/tools';
+
+  export const agent = new Agent({
+    name: 'web-search-agent',
+    instructions: 'Use web search for current information.',
+    model: 'openai/gpt-5-mini',
+    tools: { webSearch: webSearchTool },
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`3f472b4`](https://github.com/mastra-ai/mastra/commit/3f472b468892a1ff14ccb43cc0343b86f7d8fd7d))
+
 ## 1.54.0
 
 ### Minor Changes
