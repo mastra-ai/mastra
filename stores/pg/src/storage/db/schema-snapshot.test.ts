@@ -1,7 +1,7 @@
 import { TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { TABLE_NAMES } from '@mastra/core/storage';
 import { Client, Pool } from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { PostgresStore } from '..';
 import { TEST_CONFIG, connectionString } from '../test-utils';
 import { PgDB } from '.';
@@ -129,6 +129,46 @@ describe('init catalog snapshot', () => {
     // The spans PRIMARY KEY is index-backed, so the snapshot answers it too.
     expect(count(statements, CONSTRAINT_PROBE)).toBe(0);
   }, 60000);
+
+  it('skips the schemata existence probe on a warm init in a fresh process', async () => {
+    const schema = uniqueSchema('snapshot_fresh');
+    await admin(`CREATE SCHEMA "${schema}"`);
+
+    const cold = await newStore(schema);
+    await cold.init();
+    await cold.close();
+
+    // The per-process schemaSetupRegistry hides the `information_schema.schemata`
+    // probe from same-process re-inits, which is how it went unmeasured: a fresh
+    // process (a CLI invocation, a serverless cold start) pays it on every warm
+    // init. Reset the module graph so the registry starts empty, like a fresh
+    // process would.
+    vi.resetModules();
+    const { PostgresStore: FreshPostgresStore } = await import('..');
+    const warm = new FreshPostgresStore({ ...TEST_CONFIG, id: `snapshot-fresh-${schema}`, schemaName: schema });
+
+    const statements = await captureStatements(() => warm.init());
+    await warm.close();
+
+    // Snapshot reads present (capture hook sanity), schemata probe absent: the
+    // snapshot's tables prove the schema exists.
+    expect(count(statements, /pg_catalog\.pg_tables/i)).toBe(1);
+    expect(count(statements, /information_schema\.schemata/i)).toBe(0);
+
+    // A cold schema in a fresh process still probes and creates it.
+    vi.resetModules();
+    const { PostgresStore: ColdFreshStore } = await import('..');
+    const coldSchema = uniqueSchema('snapshot_fresh_cold');
+    const coldFresh = new ColdFreshStore({
+      ...TEST_CONFIG,
+      id: `snapshot-fresh-${coldSchema}`,
+      schemaName: coldSchema,
+    });
+    const coldStatements = await captureStatements(() => coldFresh.init());
+    await coldFresh.close();
+    expect(count(coldStatements, /information_schema\.schemata/i)).toBe(1);
+    expect((await tablesIn(coldSchema)).length).toBeGreaterThan(0);
+  }, 120000);
 
   it('converges a cold schema to the same tables and columns as another cold init', async () => {
     const schemaA = uniqueSchema('snapshot_cold_a');

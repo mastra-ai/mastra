@@ -615,6 +615,17 @@ export class PgDB extends MastraBase {
       return;
     }
 
+    // During the init window, a snapshot holding tables for this schema proves
+    // the schema exists (the snapshot queries are scoped to it), so the
+    // `information_schema.schemata` probe below would be a warm init's one
+    // remaining per-process round trip. Skip it and mark setup complete. A
+    // cold schema yields an empty snapshot and falls through to the probe.
+    const snapshot = this.schemaSnapshot;
+    if (snapshot && snapshot.tables.size > 0) {
+      schemaSetupRegistry.set(this.schemaName, { promise: null, complete: true });
+      return;
+    }
+
     const quotedSchemaName = getSchemaName(this.schemaName);
 
     if (!registryEntry?.promise) {
