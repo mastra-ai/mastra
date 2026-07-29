@@ -31,7 +31,7 @@ import { SkeletonRows } from '../ui/SkeletonRows';
 import { GithubIcon } from '../ui/icons';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
 import { FactoryItemActions, actionIcon } from '../domains/factory/components/FactoryItemActions';
-import { CreateWorkItemDrawer } from '../domains/factory/components/CreateWorkItemDrawer';
+import { InlineWorkItemComposer } from '../domains/factory/components/InlineWorkItemComposer';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import {
@@ -605,6 +605,9 @@ function BoardContent({
   const linearIssues = useLinearIssuesQuery(activeIntakeSource === 'linear' ? factoryProjectId : undefined);
 
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
+  const manualCreate = useUpsertWorkItemMutation(factoryProjectId);
+  const manualUpdate = useUpdateWorkItemMutation(factoryProjectId);
+  const manualTransition = useTransitionWorkItemMutation(factoryProjectId);
   const transition = useTransitionWorkItemMutation(factoryProjectId);
   const [transitionReasons, setTransitionReasons] = useState<Record<string, string>>({});
   const update = useUpdateWorkItemMutation(factoryProjectId);
@@ -617,6 +620,22 @@ function BoardContent({
   const boardPositionKey = `${factory.id}:${kind}`;
   const autoPositionedBoardRef = useRef<string | undefined>(undefined);
   const userPositionedBoardRef = useRef<string | undefined>(undefined);
+  const manualCreatedItemRef = useRef<{ stage: BoardStageId; title: string; item: WorkItem } | undefined>(undefined);
+  const createTriggerRefs = useRef(new Map<BoardStageId, HTMLButtonElement>());
+  const closedComposerStageRef = useRef<BoardStageId | undefined>(undefined);
+
+  const closeComposer = (stage: BoardStageId) => {
+    if (manualCreatedItemRef.current?.stage === stage) manualCreatedItemRef.current = undefined;
+    closedComposerStageRef.current = stage;
+    setCreateStage(current => (current === stage ? undefined : current));
+  };
+
+  useEffect(() => {
+    const stage = closedComposerStageRef.current;
+    if (createStage !== undefined || stage === undefined) return;
+    closedComposerStageRef.current = undefined;
+    createTriggerRefs.current.get(stage)?.focus();
+  }, [createStage]);
 
   // Workspaces that still exist. A card's session ref whose workspace was
   // deleted is stale: its thread is gone (workspace deletion cascades onto its
@@ -859,19 +878,30 @@ function BoardContent({
               taskCount={stageContentCount(stage.id, stages, workItems, candidates)}
               totalTaskCount={totalTaskCount}
               loading={loadingStages.has(stage.id)}
+              composerOpen={createStage === stage.id}
               laneRef={element => {
                 if (element) laneRefs.current.set(stage.id, element);
                 else laneRefs.current.delete(stage.id);
               }}
               onDrop={handleDrop}
               headerAction={
-                !review && stage.id !== 'done' && stage.id !== 'canceled' ? (
+                !review &&
+                !loadingStages.has(stage.id) &&
+                stage.id !== 'done' &&
+                stage.id !== 'canceled' &&
+                (createStage === undefined || createStage === stage.id) ? (
                   <Button
+                    ref={element => {
+                      if (element) createTriggerRefs.current.set(stage.id, element);
+                      else createTriggerRefs.current.delete(stage.id);
+                    }}
                     type="button"
                     variant="ghost"
                     size="icon-sm"
                     aria-label={`Create work item in ${stage.label}`}
                     title={`Create work item in ${stage.label}`}
+                    aria-expanded={createStage === stage.id}
+                    aria-controls={`new-work-item-${stage.id}`}
                     onClick={() => setCreateStage(stage.id)}
                   >
                     <Plus size={13} aria-hidden />
@@ -901,6 +931,42 @@ function BoardContent({
                 ) : undefined
               }
             >
+              {createStage === stage.id ? (
+                <InlineWorkItemComposer
+                  stage={stage.id}
+                  stageLabel={stage.label}
+                  onCreate={async title => {
+                    const pendingItem =
+                      manualCreatedItemRef.current?.stage === stage.id ? manualCreatedItemRef.current : undefined;
+                    let item: WorkItem;
+                    if (pendingItem === undefined) {
+                      item = await manualCreate.mutateAsync({
+                        source: 'manual',
+                        sourceKey: null,
+                        title,
+                        stages: ['intake'],
+                      });
+                      manualCreatedItemRef.current = { stage: stage.id, title, item };
+                    } else if (pendingItem.title !== title) {
+                      item = await manualUpdate.mutateAsync({ id: pendingItem.item.id, patch: { title } });
+                      manualCreatedItemRef.current = { stage: stage.id, title, item };
+                    } else {
+                      item = pendingItem.item;
+                    }
+                    if (stage.id !== 'intake') {
+                      const result = await manualTransition.mutateAsync({
+                        item,
+                        board: 'work',
+                        stage: stage.id,
+                        cause: 'manual_creation',
+                      });
+                      if (result.status === 'rejected') throw new Error(result.reason);
+                    }
+                    manualCreatedItemRef.current = undefined;
+                  }}
+                  onClose={() => closeComposer(stage.id)}
+                />
+              ) : null}
               {workItems
                 .filter(item => itemAppearsInStage(item, stage.id, stages))
                 .map(item => (
@@ -968,9 +1034,11 @@ function BoardContent({
               {loadingStages.has(stage.id) && (
                 <SkeletonRows label={`Loading ${stage.label} column`} rows={3} rowClassName="h-24 w-full" />
               )}
-              {!loadingStages.has(stage.id) && stageContentCount(stage.id, stages, workItems, candidates) === 0 && (
-                <BoardColumnEmptyState stage={stage.id} kind={kind} hasIntakeSource={activeIntakeSource !== null} />
-              )}
+              {!loadingStages.has(stage.id) &&
+                createStage !== stage.id &&
+                stageContentCount(stage.id, stages, workItems, candidates) === 0 && (
+                  <BoardColumnEmptyState stage={stage.id} kind={kind} hasIntakeSource={activeIntakeSource !== null} />
+                )}
               {stage.id === 'intake' && (
                 <IntakeColumnExtras
                   source={activeIntakeSource}
@@ -983,14 +1051,6 @@ function BoardContent({
           ))}
         </div>
       </ScrollArea>
-      {createStage !== undefined ? (
-        <CreateWorkItemDrawer
-          factoryProjectId={factoryProjectId}
-          stage={createStage}
-          stageLabel={stageLabel(createStage)}
-          onClose={() => setCreateStage(undefined)}
-        />
-      ) : null}
     </div>
   );
 }
@@ -1136,7 +1196,7 @@ function dropLinePosition(cardList: HTMLDivElement, pointerY: number): number {
 }
 
 const COLUMN_ACTION_REVEAL_CLASS =
-  'pointer-events-none opacity-0 transition-opacity group-hover/column:pointer-events-auto group-hover/column:opacity-100 group-focus-within/column:pointer-events-auto group-focus-within/column:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100 motion-reduce:transition-none';
+  'pointer-events-none opacity-0 transition-opacity group-hover/column:pointer-events-auto group-hover/column:opacity-100 group-focus-within/column:pointer-events-auto group-focus-within/column:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100 any-pointer-coarse:pointer-events-auto any-pointer-coarse:opacity-100 motion-reduce:transition-none';
 
 function BoardColumn({
   stage,
@@ -1144,6 +1204,7 @@ function BoardColumn({
   taskCount,
   totalTaskCount,
   loading = false,
+  composerOpen = false,
   laneRef,
   onDrop,
   headerAction,
@@ -1156,6 +1217,7 @@ function BoardColumn({
   totalTaskCount: number;
   /** While loading, the task badge is hidden so a false "0/0" never flashes. */
   loading?: boolean;
+  composerOpen?: boolean;
   laneRef: (element: HTMLElement | null) => void;
   onDrop: (payload: DragPayload, toStage: BoardStageId) => void;
   headerAction?: React.ReactNode;
@@ -1166,7 +1228,7 @@ function BoardColumn({
   const [dragOver, setDragOver] = useState(false);
   const [dropLineTop, setDropLineTop] = useState(0);
   const cardListRef = useRef<HTMLDivElement>(null);
-  const collapsed = stage !== 'intake' && !loading && taskCount === 0;
+  const collapsed = stage !== 'intake' && !loading && !composerOpen && taskCount === 0;
 
   return (
     <section
@@ -1205,7 +1267,7 @@ function BoardColumn({
               className={cn(
                 'text-ui-xs text-icon3 flex h-8 items-center font-medium tabular-nums',
                 headerAction &&
-                  'transition-opacity group-hover/column:opacity-0 group-focus-within/column:opacity-0 pointer-coarse:opacity-0 motion-reduce:transition-none',
+                  'transition-opacity group-hover/column:opacity-0 group-focus-within/column:opacity-0 pointer-coarse:opacity-0 any-pointer-coarse:opacity-0 motion-reduce:transition-none',
               )}
             >
               {taskCount}
