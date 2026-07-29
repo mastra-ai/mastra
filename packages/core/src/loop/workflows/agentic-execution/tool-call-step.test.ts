@@ -441,12 +441,13 @@ describe('createToolCallStep tool approval workflow', () => {
       },
     } as any);
 
+    suspend.mockResolvedValueOnce('completed');
     const executePromise = readOnlyStep.execute(makeExecuteParams());
     await new Promise(resolve => setImmediate(resolve));
 
     expect(suspend).toHaveBeenCalled();
     expect(flushMessages).not.toHaveBeenCalled();
-    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+    await expect(executePromise).resolves.toBe('completed');
   });
 
   it('should handle declined tool calls without executing the tool', async () => {
