@@ -1,7 +1,10 @@
+import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
+import { convertArrayToReadableStream, MockLanguageModelV3 } from 'ai/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -17,6 +20,23 @@ const objectSchema = (properties: Record<string, unknown>, required: string[]) =
 
 const stringSchema = { type: 'string' };
 const numberSchema = { type: 'number' };
+const arraySchema = (items: Record<string, unknown>) => ({ type: 'array', items });
+const customerSchema = objectSchema({ customerId: stringSchema, email: stringSchema, plan: stringSchema }, [
+  'customerId',
+  'email',
+  'plan',
+]);
+const ticketSchema = objectSchema({ ticketId: stringSchema, status: stringSchema }, ['ticketId', 'status']);
+const fromStep = (step: string | string[], path: string) => ({ step, path });
+const fromInput = (path: string) => ({ initData: true, path });
+
+const addNumbers = createTool({
+  id: 'add-numbers',
+  description: 'Adds two numbers.',
+  inputSchema: z.object({ a: z.number(), b: z.number() }),
+  outputSchema: z.object({ result: z.number() }),
+  execute: async ({ a, b }) => ({ result: a + b }),
+});
 
 const lookupCustomer = createTool({
   id: 'lookup-customer',
@@ -25,6 +45,70 @@ const lookupCustomer = createTool({
   outputSchema: z.object({ customerId: z.string(), email: z.string(), plan: z.string() }),
   execute: async ({ email }) => ({ customerId: 'customer-123', email, plan: 'pro' }),
 });
+
+const createSupportTicket = createTool({
+  id: 'create-support-ticket',
+  description: 'Creates a support ticket.',
+  inputSchema: z.object({ customerId: z.string(), summary: z.string() }),
+  outputSchema: z.object({ ticketId: z.string(), status: z.string() }),
+  execute: async () => ({ ticketId: 'ticket-456', status: 'open' }),
+});
+
+const supportResponse = (prompt: unknown) => {
+  const serializedPrompt = JSON.stringify(prompt);
+  return serializedPrompt.includes('Production is down')
+    ? 'Urgent support response for Production is down'
+    : serializedPrompt.includes('Cannot sign in')
+      ? 'Prepared support answer for Cannot sign in'
+      : 'Reset your password from account settings.';
+};
+
+const modelUsage = {
+  inputTokens: { total: 10, noCache: 10, cacheRead: undefined, cacheWrite: undefined },
+  outputTokens: { total: 5, text: 5, reasoning: undefined },
+};
+
+const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Answer support questions.',
+  model: new MockLanguageModelV3({
+    doGenerate: async ({ prompt }) => ({
+      content: [{ type: 'text', text: supportResponse(prompt) }],
+      finishReason: { unified: 'stop', raw: 'stop' },
+      usage: modelUsage,
+      warnings: [],
+    }),
+    doStream: async ({ prompt }) => {
+      const text = supportResponse(prompt);
+      return {
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'support-response', modelId: 'support-model', timestamp: new Date(0) },
+          { type: 'text-start', id: 'support-text' },
+          { type: 'text-delta', id: 'support-text', delta: text },
+          { type: 'text-end', id: 'support-text' },
+          { type: 'finish', finishReason: { unified: 'stop', raw: 'stop' }, usage: modelUsage },
+        ]),
+      };
+    },
+  }),
+});
+
+const buildGreeting = createStep({
+  id: 'build-greeting',
+  inputSchema: z.object({ name: z.string() }),
+  outputSchema: z.object({ message: z.string() }),
+  execute: async ({ inputData }) => ({ message: `Hello, ${inputData.name}!` }),
+});
+
+const greetingWorkflow = createWorkflow({
+  id: 'greeting-workflow',
+  inputSchema: z.object({ name: z.string() }),
+  outputSchema: z.object({ message: z.string() }),
+})
+  .then(buildGreeting)
+  .commit();
 
 function createWorkflowBuilderAgent(mastra: Mastra, definition: unknown) {
   return {
@@ -56,8 +140,15 @@ const scenarios = [
     definition: {
       id: 'addition-workflow',
       inputSchema: objectSchema({ a: numberSchema, b: numberSchema }, ['a', 'b']),
-      outputSchema: {},
-      graph: [{ type: 'mapping', id: 'add-numbers-result', mapConfig: { result: { value: 5 } } }],
+      outputSchema: objectSchema({ result: numberSchema }, ['result']),
+      graph: [
+        { type: 'tool', id: 'add-numbers-step', toolId: 'addNumbers' },
+        {
+          type: 'mapping',
+          id: 'add-numbers-result',
+          mapConfig: { result: fromStep('add-numbers-step', 'result') },
+        },
+      ],
     },
   },
   {
@@ -67,12 +158,25 @@ const scenarios = [
     definition: {
       id: 'customer-ticket-workflow',
       inputSchema: objectSchema({ email: stringSchema, summary: stringSchema }, ['email', 'summary']),
-      outputSchema: {},
+      outputSchema: ticketSchema,
       graph: [
+        { type: 'tool', id: 'lookup-customer-step', toolId: 'lookupCustomer' },
+        {
+          type: 'mapping',
+          id: 'ticket-input',
+          mapConfig: {
+            customerId: fromStep('lookup-customer-step', 'customerId'),
+            summary: fromInput('summary'),
+          },
+        },
+        { type: 'tool', id: 'create-ticket-step', toolId: 'createSupportTicket' },
         {
           type: 'mapping',
           id: 'ticket-result',
-          mapConfig: { ticketId: { value: 'ticket-456' }, status: { value: 'open' } },
+          mapConfig: {
+            ticketId: fromStep('create-ticket-step', 'ticketId'),
+            status: fromStep('create-ticket-step', 'status'),
+          },
         },
       ],
     },
@@ -107,12 +211,13 @@ const scenarios = [
     definition: {
       id: 'support-answer-workflow',
       inputSchema: objectSchema({ prompt: stringSchema }, ['prompt']),
-      outputSchema: {},
+      outputSchema: objectSchema({ response: stringSchema }, ['response']),
       graph: [
+        { type: 'agent', id: 'support-agent-step', agentId: 'support-agent' },
         {
           type: 'mapping',
           id: 'support-answer-result',
-          mapConfig: { response: { value: 'Reset your password from account settings.' } },
+          mapConfig: { response: fromStep('support-agent-step', 'text') },
         },
       ],
     },
@@ -124,8 +229,15 @@ const scenarios = [
     definition: {
       id: 'nested-greeting-workflow',
       inputSchema: objectSchema({ name: stringSchema }, ['name']),
-      outputSchema: {},
-      graph: [{ type: 'mapping', id: 'nested-greeting-result', mapConfig: { message: { value: 'Hello, Ada!' } } }],
+      outputSchema: objectSchema({ message: stringSchema }, ['message']),
+      graph: [
+        { type: 'workflow', id: 'invoke-greeting', workflowId: 'greetingWorkflow' },
+        {
+          type: 'mapping',
+          id: 'nested-greeting-result',
+          mapConfig: { message: fromStep('invoke-greeting', 'message') },
+        },
+      ],
     },
   },
   {
@@ -134,8 +246,8 @@ const scenarios = [
     expected: [{ customerId: 'customer-123', email: 'ada@example.com', plan: 'pro' }],
     definition: {
       id: 'foreach-customer-lookup-workflow',
-      inputSchema: { type: 'array', items: objectSchema({ email: stringSchema }, ['email']) },
-      outputSchema: {},
+      inputSchema: arraySchema(objectSchema({ email: stringSchema }, ['email'])),
+      outputSchema: arraySchema(customerSchema),
       graph: [
         {
           type: 'foreach',
@@ -152,12 +264,28 @@ const scenarios = [
     definition: {
       id: 'priority-support-router',
       inputSchema: objectSchema({ prompt: stringSchema, priority: stringSchema }, ['prompt', 'priority']),
-      outputSchema: {},
+      outputSchema: objectSchema({ response: stringSchema }, ['response']),
       graph: [
         {
           type: 'mapping',
+          id: 'route-input',
+          mapConfig: { prompt: fromInput('prompt') },
+        },
+        {
+          type: 'conditional',
+          steps: [
+            { type: 'agent', id: 'urgent-support', agentId: 'support-agent' },
+            { type: 'agent', id: 'normal-support', agentId: 'support-agent' },
+          ],
+          predicates: [
+            { op: 'eq', left: { path: 'initData.priority' }, right: { literal: 'urgent' } },
+            { op: 'ne', left: { path: 'initData.priority' }, right: { literal: 'urgent' } },
+          ],
+        },
+        {
+          type: 'mapping',
           id: 'priority-support-result',
-          mapConfig: { response: { value: 'Urgent support response for Production is down' } },
+          mapConfig: { response: fromStep(['urgent-support', 'normal-support'], 'text') },
         },
       ],
     },
@@ -172,14 +300,30 @@ const scenarios = [
     definition: {
       id: 'mixed-support-pipeline',
       inputSchema: objectSchema({ email: stringSchema, summary: stringSchema }, ['email', 'summary']),
-      outputSchema: {},
+      outputSchema: objectSchema({ response: stringSchema, ticket: ticketSchema }, ['response', 'ticket']),
       graph: [
+        { type: 'tool', id: 'lookup-customer-step', toolId: 'lookupCustomer' },
+        {
+          type: 'mapping',
+          id: 'agent-input',
+          mapConfig: { prompt: { template: 'Prepare a support answer for ${initData.summary}' } },
+        },
+        { type: 'agent', id: 'support-agent-step', agentId: 'support-agent' },
+        {
+          type: 'mapping',
+          id: 'ticket-input',
+          mapConfig: {
+            customerId: fromStep('lookup-customer-step', 'customerId'),
+            summary: fromInput('summary'),
+          },
+        },
+        { type: 'tool', id: 'create-ticket-step', toolId: 'createSupportTicket' },
         {
           type: 'mapping',
           id: 'mixed-support-result',
           mapConfig: {
-            response: { value: 'Prepared support answer for Cannot sign in' },
-            ticket: { value: { ticketId: 'ticket-456', status: 'open' } },
+            response: fromStep('support-agent-step', 'text'),
+            ticket: fromStep('create-ticket-step', ''),
           },
         },
       ],
@@ -195,7 +339,9 @@ describe('Mastra Code registry-backed Workflow Builder prompt lifecycle', () => 
         const mastra = new Mastra({
           logger: false,
           storage: new InMemoryStore({ id: `shared-prompt-${id}` }),
-          tools: { lookupCustomer },
+          agents: { supportAgent },
+          tools: { addNumbers, lookupCustomer, createSupportTicket },
+          workflows: { greetingWorkflow },
         });
         const parsedDefinition = (saveWorkflowTool as any).inputSchema.parse(definition);
         const workflowBuilder = createWorkflowBuilderAgent(mastra, parsedDefinition);
