@@ -26,6 +26,7 @@ import { useBoardScroll } from '../domains/factory/hooks/useBoardScroll';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
 import { SkeletonRows } from '../ui/SkeletonRows';
 import { GithubIcon } from '../ui/icons';
+import { settingsSectionPath } from '../domains/settings/settingsSections';
 
 /**
  * Factory › Board: an org-wide kanban over the repository's work items. The
@@ -57,15 +58,15 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
           titleSlot={review ? 'Connect a repository to start reviewing' : 'Connect a repository to start intake'}
           descriptionSlot={
             review
-              ? 'Link a GitHub repository in Source Control settings. Its pull requests will appear in Intake, ready to move through review.'
-              : 'Link a GitHub repository in Source Control settings. Its issues will appear in Intake, ready to move through planning and build.'
+              ? 'Link a GitHub repository in Repository settings. Its pull requests will appear in Intake, ready to move through review.'
+              : 'Link a GitHub repository in Repository settings. Its issues will appear in Intake, ready to move through planning and build.'
           }
           actionSlot={
             <Link
-              to={`/factories/${factory.id}/settings/source-control`}
+              to={settingsSectionPath(factory.id, 'repositories')}
               className={buttonVariants({ variant: 'primary' })}
             >
-              Open Source Control settings
+              Open Repository settings
             </Link>
           }
         />

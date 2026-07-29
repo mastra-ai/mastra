@@ -519,6 +519,7 @@ describe('Board card pending states', () => {
     const composer = await within(planningColumn).findByRole('form', { name: 'New work item in Planning' });
     expect(planningColumn).toHaveAccessibleName('Planning');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(within(composer).getByText('Manual · new')).toBeInTheDocument();
     expect(within(composer).getByRole('textbox', { name: 'Work item title' })).toHaveFocus();
 
     await user.keyboard('{Escape}');
