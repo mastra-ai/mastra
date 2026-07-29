@@ -2,8 +2,12 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ExternalLink, Link2 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router';
 
+import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { PullRequestLinks } from '../../chat/components/PullRequestLinks';
+import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
+import { useChatTranscript } from '../../chat/context/useChatTranscript';
 import { relatedWorkItems, relationshipLabel, relationshipPath } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
@@ -43,6 +47,12 @@ export function FactorySessionHeader() {
   const projectRepositoryId = sessionQuery.data?.projectRepositoryId;
   const items = useWorkItemsQuery(factoryId);
   const workspaces = useWorkspacesQuery(projectRepositoryId);
+  const factoryQuery = useFactoryQuery(factoryId);
+  const { baseUrl, resourceId, projectPath } = useChatSessionContext();
+  const { transcript, busy } = useChatTranscript();
+  const repository = factoryQuery.data?.repositories.find(
+    candidate => candidate.projectRepositoryId === projectRepositoryId,
+  );
 
   if (!threadId || !factoryId || !sessionId) return null;
 
@@ -80,7 +90,7 @@ export function FactorySessionHeader() {
           </span>
           <span className="text-icon6 truncate">{sessionTitle(currentItem)}</span>
         </nav>
-        {hasHeaderActions ? (
+        {hasHeaderActions || isReview ? (
           <div className="flex shrink-0 flex-wrap items-center gap-1">
             {currentItem.url ? (
               <Button
@@ -125,6 +135,20 @@ export function FactorySessionHeader() {
                 </Button>
               );
             })}
+            {isReview ? (
+              <PullRequestLinks
+                baseUrl={baseUrl}
+                resourceId={resourceId}
+                projectPath={projectPath}
+                projectRepositoryId={projectRepositoryId}
+                reviewItem={currentItem}
+                repositorySlug={repository?.slug}
+                threadId={threadId}
+                transcriptEntries={transcript.entries}
+                busy={busy}
+                size="sm"
+              />
+            ) : null}
           </div>
         ) : null}
       </div>
