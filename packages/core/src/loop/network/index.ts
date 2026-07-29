@@ -215,7 +215,7 @@ export async function getRoutingAgent({
     .map(([name, tool]) => {
       // Use 'in' check for type narrowing, then nullish coalescing for undefined values
       const inputSchema = 'inputSchema' in tool ? (tool.inputSchema ?? z.object({})) : z.object({});
-      const description = 'description' in tool ? tool.description : undefined;
+      const description = 'description' in tool ? (tool.description ?? '') : '';
       return ` - **${name}**: ${description}, input schema: ${JSON.stringify(schemaToJsonSchema(inputSchema))}`;
     })
     .join('\n');

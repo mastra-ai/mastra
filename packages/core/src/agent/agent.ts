@@ -2446,7 +2446,7 @@ export class Agent<
   }): Promise<string | undefined> {
     const tools: Array<{ mcpMetadata?: McpMetadata } | undefined> = [];
 
-    const assignedTools = await this.listTools({ requestContext });
+    const assignedTools = await this.listTools({ requestContext, resolveWebSearch: false });
     tools.push(...(Object.values(assignedTools || {}) as { mcpMetadata?: McpMetadata }[]));
 
     for (const toolset of Object.values(toolsets || {})) {

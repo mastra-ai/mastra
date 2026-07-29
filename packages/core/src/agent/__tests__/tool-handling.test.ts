@@ -708,6 +708,44 @@ describe('webSearchTool agent resolution', () => {
     });
   });
 
+  it('does not resolve web search during MCP guidance before applying a supported per-call model override', async () => {
+    let capturedTools: Record<string, any> | undefined;
+    const overrideModel = new MockLanguageModelV2({
+      provider: 'anthropic',
+      modelId: 'claude-sonnet-4-20250514',
+      doGenerate: async ({ tools }) => {
+        capturedTools = tools;
+        return {
+          content: [{ type: 'text', text: 'ok' }],
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          warnings: [],
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'web-search-agent',
+      name: 'web-search-agent',
+      instructions: 'Search the web.',
+      model: 'unsupported/model',
+      tools: {
+        searchTheWeb: webSearchTool,
+      },
+    });
+
+    await agent.generate('search', { model: overrideModel });
+
+    const capturedWebSearchTool = Array.isArray(capturedTools)
+      ? capturedTools.find(tool => tool.name === 'web_search')
+      : capturedTools?.searchTheWeb;
+
+    expect(capturedWebSearchTool).toMatchObject({
+      type: 'provider-defined',
+      id: 'anthropic.web_search_20250305',
+      name: 'web_search',
+    });
+  });
+
   it('throws for unsupported providers', async () => {
     const agent = new Agent({
       id: 'web-search-agent',
