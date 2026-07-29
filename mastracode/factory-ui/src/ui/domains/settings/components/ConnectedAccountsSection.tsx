@@ -9,6 +9,44 @@ import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
 import { connectSlackUrl } from '../services/channelAccounts';
 import { SettingsCard, SettingsRow } from './SettingsCard';
 
+/** The env the server needs before any Slack route exists. */
+const SLACK_ENV_VARS = [
+  'SLACK_APP_SIGNING_SECRET',
+  'SLACK_APP_BOT_TOKEN',
+  'SLACK_APP_CLIENT_ID',
+  'SLACK_APP_CLIENT_SECRET',
+];
+
+/**
+ * Shown when the server mounts no channel routes at all. Names the env rather
+ * than offering a Connect button that would 404.
+ */
+export function SlackNotConfigured() {
+  return (
+    <SettingsCard>
+      <SettingsRow
+        label={
+          <span className="flex items-center gap-3">
+            <SlackLogo className="size-7 shrink-0 opacity-50" />
+            <span className="flex flex-col gap-0.5">
+              <Txt as="span" variant="ui-md">
+                Slack
+              </Txt>
+              <Txt as="span" variant="ui-sm" className="text-icon3 whitespace-nowrap">
+                Not configured
+              </Txt>
+            </span>
+          </span>
+        }
+      >
+        <Txt as="span" variant="ui-xs" className="text-icon3 max-w-80 text-left">
+          Missing required environment variables: {SLACK_ENV_VARS.join(', ')}
+        </Txt>
+      </SettingsRow>
+    </SettingsCard>
+  );
+}
+
 /** Connected-account overview for the active factory settings surface. */
 export function ConnectedAccountsSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -32,6 +70,8 @@ export function ConnectedAccountsSection() {
       </Txt>
     );
   }
+
+  if (accountsQuery.data?.unavailable) return <SlackNotConfigured />;
 
   const slackLabel = (
     <span className="flex items-center gap-3">

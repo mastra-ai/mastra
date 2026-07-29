@@ -17,6 +17,7 @@ import { useFactoriesQuery } from '../../hooks/useFactories';
 import { ConnectionSettingsShell } from '../domains/settings/components/ConnectionSettingsShell';
 import { IdentityWithTooltip } from '../domains/settings/components/IdentityWithTooltip';
 import { SettingsCard, SettingsRow } from '../domains/settings/components/SettingsCard';
+import { SlackNotConfigured } from '../domains/settings/components/ConnectedAccountsSection';
 import { SettingsSubsection } from '../domains/settings/components/SettingsSubsection';
 import { connectSlackUrl, type ConnectedChannelAccount } from '../domains/settings/services/channelAccounts';
 import { SlackLogo } from '../ui/SlackLogo';
@@ -108,6 +109,10 @@ export function SlackConnectionSettings() {
         <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
           {accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load Slack connection'}
         </Txt>
+      ) : accountsQuery.data?.unavailable ? (
+        <SettingsSubsection title="Connection">
+          <SlackNotConfigured />
+        </SettingsSubsection>
       ) : accounts.length === 0 ? (
         <SettingsSubsection title="Connection">
           <SettingsCard>

@@ -33,6 +33,13 @@ export interface ChannelAccountsPayload {
   accounts: ConnectedChannelAccount[];
   /** Whether the server has the "Sign in with Slack" (OIDC) connect flow configured. */
   canConnect: boolean;
+  /**
+   * The server has no channel integration mounted at all. Slack routes only
+   * exist when the Slack app env is set, so an unconfigured deployment answers
+   * this path with the SPA's own `index.html` instead of JSON. That is a
+   * configuration state to explain, not a request failure to raise.
+   */
+  unavailable: boolean;
 }
 
 /** List the caller's own linked channel accounts. */
@@ -41,12 +48,17 @@ export async function listChannelAccounts(baseUrl: string): Promise<ChannelAccou
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });
+  const unavailable = { accounts: [], canConnect: false, unavailable: true };
+  if (res.status === 404) return unavailable;
   if (!res.ok) throw await parseError(res);
+  // The SPA fallback returns 200 with HTML, so the content type is the only
+  // signal that no channel route handled this.
+  if (!res.headers.get('content-type')?.includes('application/json')) return unavailable;
   const { accounts, canConnect } = (await res.json()) as {
     accounts: ConnectedChannelAccount[];
     canConnect?: boolean;
   };
-  return { accounts, canConnect: canConnect === true };
+  return { accounts, canConnect: canConnect === true, unavailable: false };
 }
 
 /**

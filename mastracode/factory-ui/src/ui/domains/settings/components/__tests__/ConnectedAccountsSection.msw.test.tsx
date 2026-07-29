@@ -36,6 +36,24 @@ function renderSection() {
 }
 
 describe('ConnectedAccountsSection', () => {
+  // Without the Slack app env the integration never mounts, so the route is
+  // absent and the SPA's index.html answers instead. The old code fed that HTML
+  // to res.json() and rendered the parse error ("Unexpected token '<'").
+  it('given Slack is not configured on the server, when rendered, then it names the missing env instead of a parse error', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/channel-accounts`, () =>
+        HttpResponse.html('<!doctype html><html><body>app shell</body></html>'),
+      ),
+    );
+
+    renderSection();
+
+    expect(await screen.findByText('Not configured')).toBeInTheDocument();
+    expect(screen.getByText(/^Missing required environment variables: SLACK_APP_SIGNING_SECRET/)).toBeInTheDocument();
+    expect(screen.queryByText(/is not valid JSON/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Connect/ })).not.toBeInTheDocument();
+  });
+
   it('given a linked Slack account, when rendered, then it shows Slack as connected with a configure link', async () => {
     mockAccounts([slackLink], true);
 

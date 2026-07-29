@@ -51,6 +51,21 @@ function renderPage(slackWorkItemsEnabled = false) {
 }
 
 describe('SlackConnectionPage', () => {
+  it('given Slack is not configured on the server, when rendered, then it names the missing env instead of a parse error', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/channel-accounts`, () =>
+        HttpResponse.html('<!doctype html><html><body>app shell</body></html>'),
+      ),
+    );
+
+    renderPage();
+
+    expect(await screen.findByText('Not configured')).toBeInTheDocument();
+    expect(screen.getByText(/^Missing required environment variables: SLACK_APP_SIGNING_SECRET/)).toBeInTheDocument();
+    expect(screen.queryByText(/is not valid JSON/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Connect Slack/ })).not.toBeInTheDocument();
+  });
+
   it('given a linked account, when rendered, then it identifies the workspace, user, link date, and default factory', async () => {
     mockAccounts([slackLink]);
 
