@@ -13,6 +13,12 @@ export interface SessionPreviewDetails {
   updatedAt: string;
 }
 
+function getStatusLabel(status: 'running' | 'attention' | undefined) {
+  if (status === 'running') return 'Agent working';
+  if (status === 'attention') return 'Agent finished';
+  return undefined;
+}
+
 export function SessionPreviewCard({
   name,
   status,
@@ -22,7 +28,7 @@ export function SessionPreviewCard({
   status?: 'running' | 'attention';
   details: SessionPreviewDetails;
 }) {
-  const statusLabel = status === 'running' ? 'Agent working' : status === 'attention' ? 'Agent finished' : undefined;
+  const statusLabel = getStatusLabel(status);
   const itemTitle = details.itemTitle?.trim();
   const updated = relativeTime(details.updatedAt);
   const valueClassName = 'overflow-visible text-clip whitespace-normal wrap-anywhere';

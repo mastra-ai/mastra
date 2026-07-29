@@ -3,7 +3,6 @@
  * and agent-controller reads are driven through MSW so the card exercises the
  * same joins used by the live sidebar without adding a hover-time request.
  */
-import type { AgentControllerThreadInfo } from '@mastra/client-js';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -13,166 +12,39 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import { ChatSessionConfigProvider } from '../../../chat/context/ChatSessionProvider';
-import type { FactoryUserSession } from '../../services/github';
 import { WorkspacesSection } from '../WorkspacesSection';
-
-const factoryId = 'fp-1';
-const projectRepositoryId = 'ghp-1';
-const workSessionId = 'session-work';
-const reviewSessionId = 'session-review';
-const workName = 'Investigate the authentication regression across long-running sessions';
-const reviewName = 'Review the authentication refresh fix before release';
-
-function workspace({ id, branch, updatedAt }: { id: string; branch: string; updatedAt: string }): FactoryUserSession {
-  return {
-    id: `row-${id}`,
-    sessionId: id,
-    projectRepositoryId,
-    orgId: 'org-1',
-    userId: 'user-1',
-    branch,
-    baseBranch: 'main',
-    sandboxId: null,
-    sandboxWorkdir: null,
-    materializedAt: null,
-    createdAt: updatedAt,
-    updatedAt,
-  };
-}
+import {
+  createSessionHoverDetailsFixtures,
+  factoryId,
+  projectRepositoryId,
+  reviewName,
+  reviewSessionId,
+  workName,
+  workSessionId,
+} from './fixtures/sessionHoverDetails';
 
 function stubSessionDetails(updatedAt: string) {
-  const workWorkspace = workspace({
-    id: workSessionId,
-    branch: 'factory/issue-42-authentication-regression',
-    updatedAt,
-  });
-  const reviewWorkspace = workspace({
-    id: reviewSessionId,
-    branch: 'factory/pr-99-authentication-refresh',
-    updatedAt,
-  });
-  const threads: AgentControllerThreadInfo[] = [
-    {
-      id: workSessionId,
-      title: workName,
-      resourceId: workSessionId,
-      tags: { projectPath: workSessionId },
-      state: 'active',
-      createdAt: updatedAt,
-      updatedAt,
-    },
-    {
-      id: reviewSessionId,
-      title: reviewName,
-      resourceId: workSessionId,
-      tags: { projectPath: reviewSessionId },
-      state: 'idle',
-      createdAt: updatedAt,
-      updatedAt,
-    },
-  ];
+  const fixtures = createSessionHoverDetailsFixtures(updatedAt);
 
   server.use(
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: factoryId, name: 'Mastra' }] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json(fixtures.projectsResponse)),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/source-control-connections`, () =>
-      HttpResponse.json({
-        connections: [
-          {
-            id: 'connection-1',
-            installationId: 'installation-1',
-            repositories: [
-              {
-                id: projectRepositoryId,
-                branch: 'main',
-                sandboxWorkdir: '/workspace/mastra',
-                repository: { slug: 'mastra-ai/mastra', defaultBranch: 'main' },
-              },
-            ],
-          },
-        ],
-      }),
+      HttpResponse.json(fixtures.connectionsResponse),
     ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
-      HttpResponse.json({ sessions: [workWorkspace, reviewWorkspace] }),
+      HttpResponse.json(fixtures.sessionsResponse),
     ),
     http.get(`${TEST_BASE_URL}/web/user-sessions/${workSessionId}`, () =>
-      HttpResponse.json({ session: workWorkspace }),
+      HttpResponse.json(fixtures.currentSessionResponse),
     ),
     http.post(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/ensure`, () =>
-      HttpResponse.json({
-        resourceId: workSessionId,
-        factoryProjectId: factoryId,
-        projectRepositoryId,
-        sandboxId: 'sandbox-1',
-        sandboxWorkdir: '/workspace/mastra',
-      }),
+      HttpResponse.json(fixtures.ensureResponse),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/work-items`, () =>
-      HttpResponse.json({
-        workItems: [
-          {
-            id: 'issue-42',
-            orgId: 'org-1',
-            createdBy: 'user-1',
-            factoryProjectId: factoryId,
-            externalSource: {
-              integrationId: 'github',
-              type: 'issue',
-              externalId: '42',
-              url: 'https://github.com/mastra-ai/mastra/issues/42',
-            },
-            parentWorkItemId: null,
-            title: 'Authentication fails after token refresh',
-            stages: ['execute'],
-            stageHistory: [],
-            sessions: {
-              implementation: {
-                sessionId: workSessionId,
-                branch: workWorkspace.branch,
-                threadId: workSessionId,
-                startedBy: 'user-1',
-              },
-            },
-            metadata: { number: 42 },
-            revision: 1,
-            createdAt: updatedAt,
-            updatedAt,
-          },
-          {
-            id: 'pr-99',
-            orgId: 'org-1',
-            createdBy: 'user-1',
-            factoryProjectId: factoryId,
-            externalSource: {
-              integrationId: 'github',
-              type: 'pull-request',
-              externalId: '99',
-              url: 'https://github.com/mastra-ai/mastra/pull/99',
-            },
-            parentWorkItemId: 'issue-42',
-            title: 'Fix authentication refresh handling',
-            stages: ['review'],
-            stageHistory: [],
-            sessions: {
-              review: {
-                sessionId: reviewSessionId,
-                branch: reviewWorkspace.branch,
-                threadId: reviewSessionId,
-                startedBy: 'user-1',
-              },
-            },
-            metadata: { number: 99 },
-            revision: 1,
-            createdAt: updatedAt,
-            updatedAt,
-          },
-        ],
-      }),
+      HttpResponse.json(fixtures.workItemsResponse),
     ),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${workSessionId}/threads`, () =>
-      HttpResponse.json({ threads }),
+      HttpResponse.json(fixtures.threadsResponse),
     ),
   );
 }
@@ -194,54 +66,89 @@ function renderSection() {
   );
 }
 
+async function setupSessionRows() {
+  stubSessionDetails(new Date().toISOString());
+  const user = userEvent.setup();
+  renderSection();
+
+  return {
+    user,
+    workRow: await screen.findByRole('button', { name: workName }),
+    reviewRow: await screen.findByRole('button', { name: reviewName }),
+  };
+}
+
 describe('Workspace session hover details', () => {
-  it('shows work and review metadata on hover or keyboard focus without taking over row actions', async () => {
-    const updatedAt = new Date().toISOString();
-    stubSessionDetails(updatedAt);
-    const user = userEvent.setup();
+  describe('when a work session is hovered', () => {
+    it('shows the related work metadata', async () => {
+      const { user, workRow } = await setupSessionRows();
 
-    renderSection();
+      await user.hover(workRow);
 
-    const workRow = await screen.findByRole('button', { name: workName });
-    const reviewRow = await screen.findByRole('button', { name: reviewName });
-    expect(screen.queryByLabelText(`${workName} session details`)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(`${reviewName} session details`)).not.toBeInTheDocument();
+      const card = await screen.findByLabelText(`${workName} session details`);
+      expect(within(card).getByText(workName)).toBeInTheDocument();
+      expect(within(card).getByText('Work session · Agent working')).toBeInTheDocument();
+      expect(within(card).getByText('Work item: Issue #42')).toBeInTheDocument();
+      expect(within(card).getByText('Authentication fails after token refresh')).toBeInTheDocument();
+      expect(within(card).getByText('factory/issue-42-authentication-regression')).toBeInTheDocument();
+      expect(within(card).getByText('main')).toBeInTheDocument();
+      expect(within(card).getByText('just now')).toBeInTheDocument();
+      expect(workRow).not.toHaveAttribute('title');
+    });
 
-    await user.hover(workRow);
+    it('closes the details when the pointer leaves', async () => {
+      const { user, workRow } = await setupSessionRows();
+      await user.hover(workRow);
+      expect(await screen.findByLabelText(`${workName} session details`)).toBeInTheDocument();
 
-    const workCard = await screen.findByLabelText(`${workName} session details`);
-    expect(within(workCard).getByText(workName)).toBeInTheDocument();
-    expect(within(workCard).getByText('Work session · Agent working')).toBeInTheDocument();
-    expect(within(workCard).getByText('Work item: Issue #42')).toBeInTheDocument();
-    expect(within(workCard).getByText('Authentication fails after token refresh')).toBeInTheDocument();
-    expect(within(workCard).getByText('factory/issue-42-authentication-regression')).toBeInTheDocument();
-    expect(within(workCard).getByText('main')).toBeInTheDocument();
-    expect(within(workCard).getByText('just now')).toBeInTheDocument();
-    expect(workRow).not.toHaveAttribute('title');
+      await user.unhover(workRow);
 
-    await user.unhover(workRow);
-    await waitFor(() => expect(screen.queryByLabelText(`${workName} session details`)).not.toBeInTheDocument());
+      await waitFor(() => expect(screen.queryByLabelText(`${workName} session details`)).not.toBeInTheDocument());
+    });
+  });
 
-    await user.tab();
-    await user.tab();
-    await user.tab();
-    expect(reviewRow).toHaveFocus();
+  describe('when a review session receives keyboard focus', () => {
+    it('shows the related review metadata', async () => {
+      const { user, reviewRow } = await setupSessionRows();
 
-    const reviewCard = await screen.findByLabelText(`${reviewName} session details`);
-    expect(within(reviewCard).getByText(reviewName)).toBeInTheDocument();
-    expect(within(reviewCard).getByText('Review session')).toBeInTheDocument();
-    expect(within(reviewCard).getByText('Review: PR #99')).toBeInTheDocument();
-    expect(within(reviewCard).getByText('Fix authentication refresh handling')).toBeInTheDocument();
-    expect(within(reviewCard).getByText('factory/pr-99-authentication-refresh')).toBeInTheDocument();
-    expect(within(reviewCard).getByText('main')).toBeInTheDocument();
-    expect(within(reviewCard).getByText('just now')).toBeInTheDocument();
-    expect(reviewRow).not.toHaveAttribute('title');
+      await user.tab();
+      await user.tab();
+      await user.tab();
 
-    await user.tab();
-    await waitFor(() => expect(screen.queryByLabelText(`${reviewName} session details`)).not.toBeInTheDocument());
+      expect(reviewRow).toHaveFocus();
+      const card = await screen.findByLabelText(`${reviewName} session details`);
+      expect(within(card).getByText(reviewName)).toBeInTheDocument();
+      expect(within(card).getByText('Review session')).toBeInTheDocument();
+      expect(within(card).getByText('Review: PR #99')).toBeInTheDocument();
+      expect(within(card).getByText('Fix authentication refresh handling')).toBeInTheDocument();
+      expect(within(card).getByText('factory/pr-99-authentication-refresh')).toBeInTheDocument();
+      expect(within(card).getByText('main')).toBeInTheDocument();
+      expect(within(card).getByText('just now')).toBeInTheDocument();
+      expect(reviewRow).not.toHaveAttribute('title');
+    });
 
-    const reviewActions = screen.getByRole('button', { name: `Session actions for ${reviewName}` });
-    await user.click(reviewActions);
-    expect(await screen.findByRole('menuitem', { name: 'Delete' })).toBeInTheDocument();
+    it('closes the details when focus moves away', async () => {
+      const { user, reviewRow } = await setupSessionRows();
+      await user.tab();
+      await user.tab();
+      await user.tab();
+      expect(reviewRow).toHaveFocus();
+      expect(await screen.findByLabelText(`${reviewName} session details`)).toBeInTheDocument();
+
+      await user.tab();
+
+      await waitFor(() => expect(screen.queryByLabelText(`${reviewName} session details`)).not.toBeInTheDocument());
+    });
+  });
+
+  describe('when session actions are used', () => {
+    it('opens the delete menu independently from the details trigger', async () => {
+      const { user } = await setupSessionRows();
+      const actions = screen.getByRole('button', { name: `Session actions for ${reviewName}` });
+
+      await user.click(actions);
+
+      expect(await screen.findByRole('menuitem', { name: 'Delete' })).toBeInTheDocument();
+    });
   });
 });
