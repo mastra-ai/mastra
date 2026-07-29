@@ -5,8 +5,10 @@ import { RequestContext } from '../di';
 import { MastraError, MastraNonRetryableError, ErrorDomain, ErrorCategory } from '../error';
 import type { PubSub } from '../events';
 import { EventEmitterPubSub } from '../events/event-emitter';
+import { createWorkflow } from './create';
 import { DefaultExecutionEngine } from './default';
 import type { FormattedWorkflowResult, StepResult } from './types';
+import { createStep } from './workflow';
 
 class TestableExecutionEngine extends DefaultExecutionEngine {
   async fmtReturnValuePublic(
@@ -1543,6 +1545,81 @@ describe('DefaultExecutionEngine.executeStepWithRetry', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.nonRetryable).toBeUndefined();
+    }
+  });
+});
+
+describe('DefaultExecutionEngine — requestContext serialization gating', () => {
+  const ioSchema = z.object({ n: z.number() });
+  const buildStep = (id: string) =>
+    createStep({
+      id,
+      inputSchema: ioSchema,
+      outputSchema: ioSchema,
+      execute: async ({ inputData }) => ({ n: inputData.n + 1 }),
+    });
+
+  it('does not serialize the requestContext during execution on the default engine', async () => {
+    const spy = vi.spyOn(DefaultExecutionEngine.prototype, 'serializeRequestContext');
+    try {
+      const workflow = createWorkflow({
+        id: 'no-context-serialize-wf',
+        inputSchema: ioSchema,
+        outputSchema: ioSchema,
+        // Keep snapshot persistence (which legitimately serializes the
+        // context) out of the count — this test pins the execution path only.
+        options: { shouldPersistSnapshot: () => false },
+      })
+        .then(buildStep('step-1'))
+        .then(buildStep('step-2'))
+        .commit();
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: { n: 0 }, requestContext });
+
+      expect(result.status).toBe('success');
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('serializes the requestContext for engines that require durable context serialization', async () => {
+    class DurableContextEngine extends DefaultExecutionEngine {
+      requiresDurableContextSerialization(): boolean {
+        return true;
+      }
+    }
+    const engine = new DurableContextEngine({
+      mastra: undefined,
+      options: { validateInputs: false, shouldPersistSnapshot: () => false },
+    });
+    const spy = vi.spyOn(engine, 'serializeRequestContext');
+
+    const workflow = createWorkflow({
+      id: 'durable-context-serialize-wf',
+      inputSchema: ioSchema,
+      outputSchema: ioSchema,
+      executionEngine: engine,
+      options: { shouldPersistSnapshot: () => false },
+    })
+      .then(buildStep('step-1'))
+      .then(buildStep('step-2'))
+      .commit();
+
+    const requestContext = new RequestContext();
+    requestContext.set('userId', 'user-123');
+
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: { n: 0 }, requestContext });
+
+    expect(result.status).toBe('success');
+    expect(spy).toHaveBeenCalled();
+    for (const call of spy.mock.results) {
+      expect(call.value).toMatchObject({ userId: 'user-123' });
     }
   });
 });
