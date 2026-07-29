@@ -2,4 +2,4 @@
 mastra: patch
 ---
 
-Improved Factory settings by separating preferences, Factory management, repository access, Work Intake, and agent configuration. Worktree setup now appears with its repositories, and custom providers now live under Models.
+Reorganized Factory settings into Preferences, Factory, Repositories, Work Intake, Models, and Behavior. Worktree setup and the GitHub connection now sit with the repositories they configure, and custom providers moved under Models. Removing a Factory now asks for confirmation first.

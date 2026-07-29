@@ -10,6 +10,7 @@ import {
   useSaveGithubPatMutation,
 } from '../../../../hooks/useGithubPat';
 import type { GithubPatKind } from '../../workspaces/services/github';
+import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 
 /**
@@ -30,7 +31,7 @@ export function GithubPatBlock() {
       title="GitHub CLI tokens"
       description="Classic PATs agents use for gh CLI commands in sandboxes. The token's account needs access to the linked repositories."
     >
-      <div className="flex flex-col gap-4">
+      <SettingsCard>
         <TokenRow
           kind="default"
           title="Worker token"
@@ -43,7 +44,7 @@ export function GithubPatBlock() {
           description="Used by review sessions so PR reviews come from a different account. Falls back to the worker token."
           configured={statusQuery.data?.reviewerConfigured === true}
         />
-      </div>
+      </SettingsCard>
     </SettingsSubsection>
   );
 }
@@ -81,7 +82,7 @@ function TokenRow({
   };
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 px-4 py-3">
       <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center gap-2">

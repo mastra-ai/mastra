@@ -13,19 +13,17 @@ export function SettingsSubsection({
   children?: ReactNode;
 }) {
   return (
-    <section className="flex flex-col gap-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <Txt as="h2" variant="ui-md" className="text-icon6 font-semibold">
-            {title}
+    <section className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1">
+        <Txt as="h2" variant="ui-sm" className="text-icon6 leading-ui-md font-semibold">
+          {title}
+        </Txt>
+        {description && (
+          <Txt as="p" variant="ui-sm" className="text-icon3">
+            {description}
           </Txt>
-          {description && (
-            <Txt as="p" variant="ui-sm" className="text-icon3">
-              {description}
-            </Txt>
-          )}
-        </div>
-        {action}
+        )}
+        {action && <div className="mt-1 flex">{action}</div>}
       </div>
       {children}
     </section>

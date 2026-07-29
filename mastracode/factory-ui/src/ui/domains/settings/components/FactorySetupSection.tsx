@@ -10,6 +10,7 @@ import { useState } from 'react';
 
 import { useRepositorySettingsQuery, useSaveRepositorySettingsMutation } from '../../../../hooks/useRepositorySettings';
 import type { FactoryProject } from '../../workspaces/services/github';
+import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 
 function RepositorySetupRow({ projectRepositoryId, label }: { projectRepositoryId: string; label: string }) {
@@ -34,7 +35,7 @@ function RepositorySetupRow({ projectRepositoryId, label }: { projectRepositoryI
   };
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5 px-4 py-3">
       <Txt as="span" variant="ui-md" className="text-icon5">
         {label}
       </Txt>
@@ -74,7 +75,7 @@ export function FactorySetupSection({ factory }: { factory: FactoryProject }) {
 
   return (
     <SettingsSubsection title="Worktree setup" description="Runs in every new worktree before any agent starts.">
-      <div className="flex flex-col gap-4">
+      <SettingsCard>
         {rows.map(row => (
           <RepositorySetupRow
             key={row.projectRepositoryId}
@@ -82,7 +83,7 @@ export function FactorySetupSection({ factory }: { factory: FactoryProject }) {
             label={row.label}
           />
         ))}
-      </div>
+      </SettingsCard>
     </SettingsSubsection>
   );
 }

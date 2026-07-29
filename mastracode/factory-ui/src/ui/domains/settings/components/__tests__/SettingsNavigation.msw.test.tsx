@@ -26,11 +26,7 @@ afterEach(() => window.localStorage.removeItem(STORAGE_KEY));
 describe('SettingsNavigation', () => {
   it('separates code repositories, work intake, and agent settings into named groups', () => {
     renderNavigation();
-    expect(screen.getByRole('link', { name: 'Factory' })).toHaveAttribute(
-      'href',
-      '/factories/fp-1/settings/factory',
-    );
-
+    expect(screen.getByRole('link', { name: 'Factory' })).toHaveAttribute('href', '/factories/fp-1/settings/factory');
 
     const sources = screen.getByRole('region', { name: 'Sources' });
     expect(within(sources).getByRole('link', { name: 'Repositories' })).toHaveAttribute(

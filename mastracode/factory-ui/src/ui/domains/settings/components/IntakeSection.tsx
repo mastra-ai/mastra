@@ -18,6 +18,7 @@ import { connectLinear, isLinearReauthError } from '../../factory/services/linea
 import type { LinearProject } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import { SettingsCard, SettingsRow } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 
 /**
@@ -138,11 +139,8 @@ function SourcePickerSection({
   );
 }
 
-const INTAKE_INTRO = (
-  <Txt as="p" variant="ui-sm" className="text-icon3 max-w-3xl">
-    Which sources feed issues into Intake, for your whole account. Code access is set under Repositories.
-  </Txt>
-);
+const INTAKE_INTRO =
+  'Which sources feed issues into Intake, for your whole account. Code access is set under Repositories.';
 
 export function IntakeSection() {
   const { baseUrl } = useApiConfig();
@@ -158,23 +156,20 @@ export function IntakeSection() {
   const config = configQuery.data;
   const linkedRepositories = (factoriesQuery.data ?? []).flatMap(factory => factory.repositories);
 
-
   if (configQuery.isPending) {
     return (
-      <div className="flex flex-col gap-4">
-        {INTAKE_INTRO}
+      <SettingsSubsection title="Issue sources" description={INTAKE_INTRO}>
         <SkeletonRows label="Loading intake sources" rows={4} />
-      </div>
+      </SettingsSubsection>
     );
   }
   if (configQuery.isError || !config) {
     return (
-      <div className="flex flex-col gap-4">
-        {INTAKE_INTRO}
+      <SettingsSubsection title="Issue sources" description={INTAKE_INTRO}>
         <Txt as="p" variant="ui-sm" className="text-icon3">
           Intake configuration is unavailable. Connect GitHub or Linear first.
         </Txt>
-      </div>
+      </SettingsSubsection>
     );
   }
 
@@ -187,61 +182,60 @@ export function IntakeSection() {
   const busy = saveMutation.isPending;
 
   return (
-    <div className="flex flex-col gap-6">
-      {INTAKE_INTRO}
-      <SettingsSubsection
-        title="GitHub issues"
-        description="Open issues from the selected repositories. Pull requests always appear in Review."
-        action={
+    <SettingsSubsection title="Issue sources" description={INTAKE_INTRO}>
+      <SettingsCard>
+        <SettingsRow
+          label="GitHub issues"
+          hint="Open issues from the selected repositories. Pull requests always appear in Review."
+        >
           <Switch
             aria-label="Sync GitHub issues"
             checked={config.github.enabled}
             disabled={busy}
             onCheckedChange={enabled => update({ ...config, github: { ...config.github, enabled } })}
           />
-        }
-      >
-        {config.github.enabled &&
-          (linkedRepositories.length === 0 ? (
-            <Txt as="span" variant="ui-sm" className="text-icon3">
-              No linked repositories yet — link a repository to a factory to add one.
-            </Txt>
-          ) : (
-            <SourcePickerGroup>
-              <SourcePickerSection
-                label="Repositories"
-                items={linkedRepositories.map(repository => ({ id: repository.slug, label: repository.slug }))}
-                selectedIds={config.github.sourceIds}
-                disabled={busy}
-                pending={busy}
-                onToggleItem={slug =>
-                  update({
-                    ...config,
-                    github: {
-                      ...config.github,
-                      sourceIds: toggleId(config.github.sourceIds, slug),
-                    },
-                  })
-                }
-              />
-            </SourcePickerGroup>
-          ))}
-      </SettingsSubsection>
+        </SettingsRow>
 
-      <SettingsSubsection
-        title="Linear issues"
-        description="Active issues from the selected projects."
-        action={
+        {config.github.enabled && (
+          <div className="px-4">
+            {linkedRepositories.length === 0 ? (
+              <Txt as="p" variant="ui-sm" className="text-icon3 py-3">
+                No linked repositories yet — link a repository to a factory to add one.
+              </Txt>
+            ) : (
+              <SourcePickerGroup>
+                <SourcePickerSection
+                  label="Repositories"
+                  items={linkedRepositories.map(repository => ({ id: repository.slug, label: repository.slug }))}
+                  selectedIds={config.github.sourceIds}
+                  disabled={busy}
+                  pending={busy}
+                  onToggleItem={slug =>
+                    update({
+                      ...config,
+                      github: {
+                        ...config.github,
+                        sourceIds: toggleId(config.github.sourceIds, slug),
+                      },
+                    })
+                  }
+                />
+              </SourcePickerGroup>
+            )}
+          </div>
+        )}
+
+        <SettingsRow label="Linear issues" hint="Active issues from the selected projects.">
           <Switch
             aria-label="Sync Linear issues"
             checked={config.linear.enabled}
             disabled={busy || !linearConnected}
             onCheckedChange={enabled => update({ ...config, linear: { ...config.linear, enabled } })}
           />
-        }
-      >
+        </SettingsRow>
+
         {!linearConnected ? (
-          <div className="flex items-center gap-3 pl-1">
+          <div className="flex items-center gap-3 px-4 py-3">
             <Txt as="span" variant="ui-sm" className="text-icon3">
               {linearStatus?.enabled === false
                 ? 'Linear is not configured on this server.'
@@ -255,7 +249,7 @@ export function IntakeSection() {
           </div>
         ) : config.linear.enabled && isLinearReauthError(linearProjectsQuery.error) ? (
           // Expired token still reports connected; offer OAuth again.
-          <div className="flex items-center gap-3 pl-1">
+          <div className="flex items-center gap-3 px-4 py-3">
             <Txt as="span" variant="ui-sm" className="text-icon3">
               Linear authorization expired. Reconnect to keep syncing issues.
             </Txt>
@@ -265,7 +259,7 @@ export function IntakeSection() {
           </div>
         ) : (
           config.linear.enabled && (
-            <div className="flex flex-col gap-2.5">
+            <div className="flex flex-col gap-2.5 px-4 py-3">
               <div className="flex items-center gap-2">
                 <Txt as="span" variant="ui-sm" className="text-icon3">
                   Connected to {linearStatus?.workspace?.name ?? 'a Linear workspace'}
@@ -297,8 +291,8 @@ export function IntakeSection() {
             </div>
           )
         )}
-      </SettingsSubsection>
-    </div>
+      </SettingsCard>
+    </SettingsSubsection>
   );
 }
 

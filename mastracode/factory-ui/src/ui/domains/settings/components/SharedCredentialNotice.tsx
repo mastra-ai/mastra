@@ -25,7 +25,8 @@ export function SharedCredentialNotice({ modelId }: { modelId?: string }) {
 
   return (
     <Txt as="p" variant="ui-sm" className="text-icon4 m-0" role="note">
-      Personal {providerDisplayName(provider.provider)} key — teammates without their own can&apos;t run this model.
+      Personal {providerDisplayName(provider.provider)} credential — teammates without their own can&apos;t run this
+      model.
     </Txt>
   );
 }

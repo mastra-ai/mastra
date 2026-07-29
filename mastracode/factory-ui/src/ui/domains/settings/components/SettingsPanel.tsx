@@ -20,6 +20,7 @@ import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
 import { IntakeSection } from './IntakeSection';
 import { ModelPacksSection } from './ModelPacksSection';
 import { RepositoriesSection } from './RepositoriesSection';
+import { SettingsCard } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
@@ -73,32 +74,40 @@ export function SettingsPanel() {
         {section === 'models' && (
           <div className="flex flex-col gap-8">
             <SettingsSubsection title="Defaults">
-              <div className="divide-border1/40 divide-y">
+              <SettingsCard>
                 <FactoryDefaultModelSection models={models} />
                 <ModelSettings
                   settings={settings}
                   updating={updateSettingsMutation.isPending}
                   onBehaviorChange={onBehaviorChange}
                 />
-              </div>
+              </SettingsCard>
             </SettingsSubsection>
             <SettingsSubsection title="Provider access">
-              <ProviderAccessSection />
+              <SettingsCard className="p-4">
+                <ProviderAccessSection />
+              </SettingsCard>
             </SettingsSubsection>
             <SettingsSubsection title="Custom providers">
-              <CustomProvidersSection />
+              <SettingsCard className="p-4">
+                <CustomProvidersSection />
+              </SettingsCard>
             </SettingsSubsection>
             <SettingsSubsection
               title="Model packs"
               description="A pack sets a model for each mode (build / plan / fast)."
             >
-              <ModelPacksSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+              <SettingsCard className="p-4">
+                <ModelPacksSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+              </SettingsCard>
             </SettingsSubsection>
             <SettingsSubsection
               title="Observational memory"
               description="Choose the models and token thresholds used to summarize and retain conversation context."
             >
-              <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+              <SettingsCard className="p-4">
+                <OMSection resourceId={sessionResourceId} scope={sessionScope} models={models} />
+              </SettingsCard>
             </SettingsSubsection>
           </div>
         )}

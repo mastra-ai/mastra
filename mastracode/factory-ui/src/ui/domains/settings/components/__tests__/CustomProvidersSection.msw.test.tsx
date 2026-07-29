@@ -60,7 +60,10 @@ describe('CustomProvidersSection', () => {
 
       renderWithProviders(<CustomProvidersSection />);
 
-      expect(await screen.findByRole('button', { name: 'Add provider' })).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.queryByRole('status', { name: 'Loading custom providers' })).not.toBeInTheDocument(),
+      );
+      expect(screen.getByRole('button', { name: 'Add provider' })).toBeInTheDocument();
       expect(screen.queryByRole('list')).not.toBeInTheDocument();
     });
   });

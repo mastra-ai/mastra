@@ -1,10 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useApiConfig } from '../../../../api/config';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { GithubIcon } from '../../../ui/icons';
 import { connectUserGithub } from '../../workspaces/services/github';
+import { SettingsCard, SettingsRow } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 
 /**
@@ -27,12 +27,17 @@ export function UserGithubConnectionRow() {
   if (status.userConnected) {
     return (
       <SettingsSubsection title="GitHub account">
-        <div className="flex items-center gap-2">
-          <GithubIcon size={16} className="text-icon3 shrink-0" />
-          <Txt variant="ui-sm">
-            Connected as <span className="text-icon6 font-medium">@{status.userGithubUsername ?? 'unknown'}</span>
-          </Txt>
-        </div>
+        <SettingsCard>
+          <SettingsRow
+            label={
+              <span className="flex items-center gap-2">
+                <GithubIcon size={16} className="text-icon3 shrink-0" />
+                {`@${status.userGithubUsername ?? 'unknown'}`}
+              </span>
+            }
+            hint="Issues and PRs you create are authored as you."
+          />
+        </SettingsCard>
       </SettingsSubsection>
     );
   }
@@ -40,15 +45,15 @@ export function UserGithubConnectionRow() {
   if (status.userConnected !== false) return undefined;
 
   return (
-    <SettingsSubsection
-      title="GitHub account"
-      description="Connect it so issues and PRs you create are authored as you."
-      action={
-        <Button size="xs" variant="outline" onClick={() => connectUserGithub(baseUrl)}>
-          <GithubIcon size={14} />
-          Connect GitHub
-        </Button>
-      }
-    />
+    <SettingsSubsection title="GitHub account">
+      <SettingsCard>
+        <SettingsRow label="Not connected" hint="Connect it so issues and PRs you create are authored as you.">
+          <Button size="xs" variant="outline" onClick={() => connectUserGithub(baseUrl)}>
+            <GithubIcon size={14} />
+            Connect GitHub
+          </Button>
+        </SettingsRow>
+      </SettingsCard>
+    </SettingsSubsection>
   );
 }
