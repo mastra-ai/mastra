@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import type { MastraBase } from '../../../base';
+import type { GuardrailsConfig } from '../../../guardrails';
 import type { MastraLLMVNext } from '../../../llm/model/model.loop';
 import type { Mastra } from '../../../mastra';
 import type {
@@ -28,18 +29,21 @@ export type AgentCapabilities = {
     | ((args: {
         requestContext: RequestContext;
         overrides?: OutputProcessorOrWorkflow[];
+        guardrailOverrides?: GuardrailsConfig;
       }) => Promise<OutputProcessorOrWorkflow[]> | OutputProcessorOrWorkflow[]);
   inputProcessors?:
     | InputProcessorOrWorkflow[]
     | ((args: {
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
+        guardrailOverrides?: GuardrailsConfig;
       }) => Promise<InputProcessorOrWorkflow[]> | InputProcessorOrWorkflow[]);
   llmRequestInputProcessors?:
     | InputProcessorOrWorkflow[]
     | ((args: {
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
+        guardrailOverrides?: GuardrailsConfig;
       }) => Promise<InputProcessorOrWorkflow[]> | InputProcessorOrWorkflow[]);
   errorProcessors?:
     | ErrorProcessorOrWorkflow[]

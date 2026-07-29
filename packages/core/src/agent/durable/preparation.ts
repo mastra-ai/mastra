@@ -1,4 +1,6 @@
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
+import type { GuardrailsConfig } from '../../guardrails';
+import { GuardrailResolutionError } from '../../guardrails/errors';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
@@ -117,14 +119,26 @@ interface DurablePreparationAgent {
     delegation?: DelegationConfig;
     methodType?: AgentMethodType;
   }): Promise<Record<string, CoreTool>>;
-  listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
-  listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
+  __listInputProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+    guardrailOverrides?: GuardrailsConfig,
+  ): Promise<InputProcessorOrWorkflow[]>;
+  __listOutputProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: OutputProcessorOrWorkflow[],
+    guardrailOverrides?: GuardrailsConfig,
+  ): Promise<OutputProcessorOrWorkflow[]>;
   listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]>;
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined;
   getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   __getGoalConfig(): GoalConfig | undefined;
-  __listLLMRequestProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
+  __listLLMRequestProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+    guardrailOverrides?: GuardrailsConfig,
+  ): Promise<InputProcessorOrWorkflow[]>;
 }
 
 /**
@@ -373,17 +387,28 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   let errorProcessors: ErrorProcessorOrWorkflow[] = [];
 
   try {
-    inputProcessors = await typedAgent.listInputProcessors(requestContext);
+    inputProcessors = await typedAgent.__listInputProcessors(
+      requestContext,
+      execOptions?.inputProcessors,
+      execOptions?.guardrails,
+    );
     // Uncombined processors for processLLMRequest — combined (workflow-wrapped)
     // processors are skipped by ProcessorRunner.runProcessLLMRequest.
-    llmRequestInputProcessors = await typedAgent.__listLLMRequestProcessors(requestContext);
-    // Call-time outputProcessors replace constructor-level ones (parity with
-    // Agent.listResolvedOutputProcessors which uses overrides-first semantics).
-    outputProcessors = execOptions?.outputProcessors
-      ? execOptions.outputProcessors
-      : await typedAgent.listOutputProcessors(requestContext);
+    llmRequestInputProcessors = await typedAgent.__listLLMRequestProcessors(
+      requestContext,
+      execOptions?.inputProcessors,
+      execOptions?.guardrails,
+    );
+    outputProcessors = await typedAgent.__listOutputProcessors(
+      requestContext,
+      execOptions?.outputProcessors,
+      execOptions?.guardrails,
+    );
     errorProcessors = await typedAgent.listErrorProcessors(requestContext);
   } catch (error) {
+    if (error instanceof GuardrailResolutionError) {
+      throw error;
+    }
     logger?.warn?.(`[DurableAgent] Error resolving processors: ${error}`);
   }
 

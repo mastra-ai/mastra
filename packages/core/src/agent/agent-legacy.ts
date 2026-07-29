@@ -4,6 +4,7 @@ import type { CoreMessage, UIMessage, Tool } from '@internal/ai-sdk-v4';
 import deepEqual from 'fast-deep-equal';
 import type { JSONSchema7 } from 'json-schema';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import type { GuardrailsConfig } from '../guardrails';
 import type { MastraLLMV1 } from '../llm/model';
 import type {
   GenerateObjectResult,
@@ -115,6 +116,7 @@ export interface AgentLegacyCapabilities {
       requestContext: RequestContext;
       messageList: MessageList;
       inputProcessorOverrides?: InputProcessorOrWorkflow[];
+      guardrailOverrides?: GuardrailsConfig;
     } & ObservabilityContext,
   ): Promise<{
     messageList: MessageList;
@@ -132,6 +134,7 @@ export interface AgentLegacyCapabilities {
       messageList: MessageList;
       stepNumber?: number;
       inputProcessorOverrides?: InputProcessorOrWorkflow[];
+      guardrailOverrides?: GuardrailsConfig;
       tools?: Record<string, CoreTool>;
       runId?: string;
       threadId?: string;
@@ -188,13 +191,18 @@ export interface AgentLegacyCapabilities {
   /** Agent network append flag */
   _agentNetworkAppend?: boolean;
   /** List resolved output processors */
-  listResolvedOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
+  listResolvedOutputProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: OutputProcessorOrWorkflow[],
+    guardrailOverrides?: GuardrailsConfig,
+  ): Promise<OutputProcessorOrWorkflow[]>;
   /** Run output processors */
   __runOutputProcessors(
     args: {
       requestContext: RequestContext;
       messageList: MessageList;
       outputProcessorOverrides?: OutputProcessorOrWorkflow[];
+      guardrailOverrides?: GuardrailsConfig;
     } & ObservabilityContext,
   ): Promise<{
     messageList: MessageList;
@@ -246,6 +254,7 @@ export class AgentLegacyHandler {
     methodType,
     tracingOptions,
     inputProcessors,
+    guardrails,
     providerOptions,
     hooks,
     ...rest
@@ -264,6 +273,7 @@ export class AgentLegacyHandler {
     methodType: 'generate' | 'stream';
     tracingOptions?: TracingOptions;
     inputProcessors?: InputProcessorOrWorkflow[];
+    guardrails?: GuardrailsConfig;
     providerOptions?: ProviderOptions;
     hooks?: ToolHooks;
   } & Partial<ObservabilityContext>) {
@@ -337,6 +347,7 @@ export class AgentLegacyHandler {
             ...innerObservabilityContext,
             messageList,
             inputProcessorOverrides: inputProcessors,
+            guardrailOverrides: guardrails,
           });
           // Run processInputStep for step 0 (legacy path compatibility)
           if (!tripwire) {
@@ -346,6 +357,7 @@ export class AgentLegacyHandler {
               messageList,
               stepNumber: 0,
               inputProcessorOverrides: inputProcessors,
+              guardrailOverrides: guardrails,
               tools: convertedTools,
               providerOptions,
               runId,
@@ -439,6 +451,7 @@ export class AgentLegacyHandler {
           ...innerObservabilityContext,
           messageList,
           inputProcessorOverrides: inputProcessors,
+          guardrailOverrides: guardrails,
         });
         messageList = processedMessageList;
 
@@ -453,6 +466,7 @@ export class AgentLegacyHandler {
             messageList,
             stepNumber: 0,
             inputProcessorOverrides: inputProcessors,
+            guardrailOverrides: guardrails,
             tools: convertedTools,
             providerOptions,
             runId,
@@ -818,6 +832,7 @@ export class AgentLegacyHandler {
       methodType,
       tracingOptions,
       inputProcessors,
+      guardrails: args.guardrails,
       providerOptions: args.providerOptions,
       hooks,
       ...resolveObservabilityContext(args as Partial<ObservabilityContext>),
@@ -1041,6 +1056,7 @@ export class AgentLegacyHandler {
         requestContext: contextWithMemory || new RequestContext(),
         ...observabilityContext,
         outputProcessorOverrides: finalOutputProcessors,
+        guardrailOverrides: mergedGenerateOptions.guardrails,
         messageList, // Use the full message list with complete conversation history
       });
 
@@ -1171,6 +1187,7 @@ export class AgentLegacyHandler {
     const outputProcessorResult = await this.capabilities.__runOutputProcessors({
       requestContext: contextWithMemory || new RequestContext(),
       ...observabilityContext,
+      guardrailOverrides: mergedGenerateOptions.guardrails,
       messageList, // Use the full message list with complete conversation history
     });
 
@@ -1393,7 +1410,11 @@ export class AgentLegacyHandler {
         experimental_output,
         ...observabilityContext,
         requestContext,
-        outputProcessors: await this.capabilities.listResolvedOutputProcessors(requestContext),
+        outputProcessors: await this.capabilities.listResolvedOutputProcessors(
+          requestContext,
+          undefined,
+          mergedStreamOptions.guardrails,
+        ),
         onFinish: async result => {
           try {
             messageList.add(result.response.messages, 'response');
@@ -1402,6 +1423,7 @@ export class AgentLegacyHandler {
             const outputProcessorResult = await this.capabilities.__runOutputProcessors({
               requestContext,
               ...observabilityContext,
+              guardrailOverrides: mergedStreamOptions.guardrails,
               messageList,
             });
 
@@ -1480,6 +1502,7 @@ export class AgentLegacyHandler {
           const outputProcessorResult = await this.capabilities.__runOutputProcessors({
             requestContext,
             ...observabilityContext,
+            guardrailOverrides: mergedStreamOptions.guardrails,
             messageList,
           });
 

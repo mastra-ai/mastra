@@ -231,6 +231,16 @@
         "default": "./dist/evals/index.cjs"
       }
     },
+    "./guardrails": {
+      "import": {
+        "types": "./dist/guardrails/index.d.ts",
+        "default": "./dist/guardrails/index.js"
+      },
+      "require": {
+        "types": "./dist/guardrails/index.d.ts",
+        "default": "./dist/guardrails/index.cjs"
+      }
+    },
     "./evals/scoreTraces": {
       "import": {
         "types": "./dist/evals/scoreTraces/index.d.ts",

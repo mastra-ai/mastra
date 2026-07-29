@@ -9,6 +9,8 @@ packages:
 
 Processors transform, validate, or control messages as they pass through an agent. They run at specific points in the agent's execution pipeline, allowing you to modify inputs before they reach the language model or outputs before they're returned to users.
 
+For safety, privacy, moderation, and cost policies, start with [Guardrails](/docs/agents/guardrails). Guardrails compile policy groups into processors with sensible defaults. Use processors when you need advanced runtime customization or custom lifecycle hooks.
+
 Processors are configured as:
 
 - **`inputProcessors`**: Run before messages reach the language model.
@@ -24,16 +26,14 @@ Some built-in processors also send hidden system reminder signals. These signals
 
 Use processors to:
 
-- Normalize or validate user input
-- Add guardrails to your agent
-- Detect and prevent prompt injection or jailbreak attempts
-- Moderate content for safety or compliance
-- Transform messages (e.g., translate languages, filter tool calls)
-- Limit token usage or message history length
-- Redact sensitive information (PII)
-- Apply custom business logic to messages
+- Add custom lifecycle behavior before or after model calls.
+- Transform messages, such as translating language or filtering tool calls.
+- Limit token usage or message history length in a custom way.
+- Add reliability behavior such as retries, provider compatibility, or caching.
+- Build custom safety checks that aren't covered by guardrail policy groups.
+- Apply custom business logic to messages.
 
-Mastra includes several processors for common use cases. You can also create custom processors for application-specific requirements.
+Mastra includes several processors for common use cases. For built-in safety and compliance checks, use [Guardrails](/docs/agents/guardrails) first and drop down to processors when you need more control.
 
 ## Quickstart
 

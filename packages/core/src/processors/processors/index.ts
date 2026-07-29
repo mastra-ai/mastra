@@ -28,7 +28,13 @@ export {
 } from './language-detector';
 export { StructuredOutputProcessor, type StructuredOutputOptions } from './structured-output';
 export { type LastMessageOnlyOption } from './message-selection';
-export { BatchPartsProcessor, type BatchPartsOptions, type BatchPartsState } from './batch-parts';
+export {
+  BatchPartsProcessor,
+  type BatchPartsCheckEvery,
+  type BatchPartsLookback,
+  type BatchPartsOptions,
+  type BatchPartsState,
+} from './batch-parts';
 export {
   TokenLimiterProcessor,
   TokenLimiterProcessor as TokenLimiter,
