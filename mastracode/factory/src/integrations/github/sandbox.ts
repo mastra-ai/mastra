@@ -418,13 +418,17 @@ async function scrubRemote(
  * branch can't be fast-forwarded — not that anything is broken. The shared
  * workdir is routinely left on a session's working branch, which may have
  * local commits diverging from upstream, no upstream at all (session branches
- * are created from `FETCH_HEAD`), or a detached HEAD. In all of those cases
- * the checkout is intact and holds the session's work; materialization must
- * keep it rather than fail the workspace open.
+ * are created from `FETCH_HEAD`), or a detached HEAD. A checkout can also
+ * hold uncommitted or untracked files (a build or script run left residue,
+ * or an older session worked directly in the shared checkout), which makes
+ * git refuse the merge outright. In all of these cases the checkout is
+ * intact and may hold real work; materialization must keep it as-is rather
+ * than fail the workspace open — and must never discard the local state to
+ * force the pull through.
  */
 function isBenignNonFastForward(result: SandboxCommandResult): boolean {
   const output = `${result.stderr || ''}\n${result.stdout || ''}`;
-  return /Not possible to fast-forward|Diverging branches can't be fast-forwarded|no tracking information for the current branch|You are not currently on a branch/i.test(
+  return /Not possible to fast-forward|Diverging branches can't be fast-forwarded|no tracking information for the current branch|You are not currently on a branch|Your local changes to the following files would be overwritten by merge|untracked working tree files would be overwritten by merge/i.test(
     output,
   );
 }
