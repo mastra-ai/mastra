@@ -77,9 +77,16 @@ export function buildFullPrompt(ctx: PromptContext): string {
   // keeps the prompt prefix stable across task updates (preserving prompt cache)
   // while still surviving observational-memory truncation.
 
-  // Load and inject agent instructions from AGENTS.md/CLAUDE.md files
+  // Load and inject agent instructions from AGENTS.md/CLAUDE.md files.
+  // Untrusted checkouts (e.g. a PR branch under review) skip project-scope
+  // files entirely: their AGENTS.md is attacker-writable and would otherwise
+  // land in the system prompt as trusted configuration. Global (operator
+  // machine) instructions still load.
   const configDir = ctx.state?.configDir as string | undefined;
-  const instructionSources = loadAgentInstructions(ctx.workingDir, configDir);
+  const untrustedCheckout = ctx.state?.untrustedCheckout === true;
+  const instructionSources = loadAgentInstructions(ctx.workingDir, configDir).filter(
+    source => !untrustedCheckout || source.scope !== 'project',
+  );
   const instructionsSection = formatAgentInstructions(instructionSources);
 
   const sections = [base, instructionsSection.trim(), modelSpecific.trim(), modeSpecific.trim()].filter(Boolean);

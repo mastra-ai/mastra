@@ -41,6 +41,13 @@ export interface ToolResultReminderOptions {
   isDirectory?: (path: string) => boolean;
   readFile?: (path: string) => string;
   getIgnoredInstructionPaths?: (args: ProcessInputStepArgs) => string[];
+  /**
+   * When provided and returning false for a request, no instruction-file
+   * reminders are injected at all. Lets hosts suppress ingestion of
+   * instruction files from untrusted checkouts (e.g. a PR branch under
+   * review), where AGENTS.md content is attacker-controlled.
+   */
+  isEnabled?: (args: ProcessInputStepArgs) => boolean;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -242,6 +249,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
   private readonly isDirectory: (path: string) => boolean;
   private readonly readFile: (path: string) => string;
   private readonly getIgnoredInstructionPaths?: (args: ProcessInputStepArgs) => string[];
+  private readonly isEnabled?: (args: ProcessInputStepArgs) => boolean;
 
   constructor(options: ToolResultReminderOptions) {
     this.reminderText = options.reminderText;
@@ -258,10 +266,14 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
       });
     this.readFile = options.readFile ?? (path => readFileSync(path, 'utf-8'));
     this.getIgnoredInstructionPaths = options.getIgnoredInstructionPaths;
+    this.isEnabled = options.isEnabled;
   }
 
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
     const { messageList } = args;
+    if (this.isEnabled && !this.isEnabled(args)) {
+      return messageList;
+    }
     const messages = messageList.get.all.db();
     const responseMessages = getCurrentStepResponseMessages(messageList);
     const completedToolCalls = getCompletedToolCalls(responseMessages);
