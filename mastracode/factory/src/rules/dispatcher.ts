@@ -24,6 +24,10 @@ const BATCH_SIZE = 10;
 const MAX_ATTEMPTS = 5;
 const MAX_ERROR_LENGTH = 512;
 const MAX_BACKOFF_MS = 60_000;
+// Dispatches can legitimately run for minutes (skill kickoffs consume the
+// agent's run stream; binding preparation clones repositories), so they run
+// detached from the poll loop under this concurrency cap.
+const MAX_IN_FLIGHT = 25;
 
 interface DispatcherSession extends SkillSession {
   thread: {
@@ -32,8 +36,8 @@ interface DispatcherSession extends SkillSession {
   };
   sendSignal(
     input: { id: string; type: 'user'; tagName: 'user'; contents: string },
-    options: { requestContext: RequestContext },
-  ): { accepted: Promise<unknown> };
+    options: { requestContext: RequestContext; requireDelivery?: boolean },
+  ): { accepted: Promise<{ accepted: true; runId?: string; action?: string }> };
 }
 
 type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
@@ -52,6 +56,7 @@ export interface FactoryDecisionDispatcherOptions {
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  maxInFlight?: number;
 }
 
 function sanitizeDispatchError(error: unknown): string {
@@ -130,8 +135,10 @@ export class FactoryDecisionDispatcher {
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
+  readonly #maxInFlight: number;
   #timer?: ReturnType<typeof setInterval>;
-  #activeRun?: Promise<void>;
+  #activeClaim?: Promise<void>;
+  readonly #inFlight = new Set<Promise<void>>();
 
   constructor(options: FactoryDecisionDispatcherOptions) {
     this.#controller = options.controller;
@@ -141,6 +148,8 @@ export class FactoryDecisionDispatcher {
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
+    const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
+    this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
   }
 
   start(): void {
@@ -153,41 +162,73 @@ export class FactoryDecisionDispatcher {
   async stop(): Promise<void> {
     if (this.#timer) clearInterval(this.#timer);
     this.#timer = undefined;
-    await this.#activeRun;
+    await this.#activeClaim;
+    await Promise.allSettled([...this.#inFlight]);
   }
 
   async runOnce(now = new Date()): Promise<void> {
+    await Promise.all(await this.#claimAndStart(now));
+  }
+
+  /**
+   * Claims a batch and starts dispatches without awaiting their completion.
+   * Dispatches can legitimately take minutes (skill kickoffs consume the
+   * agent's run stream; binding preparation provisions sandboxes), so awaiting
+   * them here would freeze the poll loop and starve every other queued
+   * decision. In-flight records stay protected from re-claim by lease renewal.
+   */
+  async #claimAndStart(now: Date): Promise<Array<Promise<void>>> {
     await this.#reconcileToolResults?.();
+    const capacity = this.#maxInFlight - this.#inFlight.size;
+    if (capacity <= 0) return [];
+    const limit = Math.min(BATCH_SIZE, capacity);
     const leaseExpiresAt = new Date(now.getTime() + LEASE_MS);
-    const [decisions, starts] = await Promise.all([
-      this.#storage.claimDeferredDecisions({
-        ownerId: this.#ownerId,
-        now,
-        leaseExpiresAt,
-        limit: BATCH_SIZE,
-      }),
-      this.#storage.claimPendingStarts({
-        ownerId: this.#ownerId,
-        now,
-        leaseExpiresAt,
-        limit: BATCH_SIZE,
-      }),
-    ]);
-    await Promise.all([
-      ...decisions.map(decision => this.#dispatchDecision(decision, now)),
-      ...starts.map(start => this.#dispatchPendingStart(start, now)),
-    ]);
+    const decisions = await this.#storage.claimDeferredDecisions({
+      ownerId: this.#ownerId,
+      now,
+      leaseExpiresAt,
+      limit,
+    });
+    const startsLimit = limit - decisions.length;
+    const starts =
+      startsLimit > 0
+        ? await this.#storage.claimPendingStarts({
+            ownerId: this.#ownerId,
+            now,
+            leaseExpiresAt,
+            limit: startsLimit,
+          })
+        : [];
+    return [
+      ...decisions.map(decision => this.#track(this.#dispatchDecision(decision, now))),
+      ...starts.map(start => this.#track(this.#dispatchPendingStart(start, now))),
+    ];
+  }
+
+  #track(dispatch: Promise<void>): Promise<void> {
+    this.#inFlight.add(dispatch);
+    void dispatch.catch(() => {}).then(() => this.#inFlight.delete(dispatch));
+    return dispatch;
   }
 
   async #tick(): Promise<void> {
-    if (this.#activeRun) return;
-    this.#activeRun = this.runOnce().catch(error => {
-      console.error('Factory decision dispatch cycle failed', sanitizeDispatchError(error));
-    });
+    if (this.#activeClaim) return;
+    this.#activeClaim = this.#claimAndStart(new Date()).then(
+      dispatches => {
+        for (const dispatch of dispatches) {
+          dispatch.catch(error => {
+            console.error('Factory decision dispatch failed', sanitizeDispatchError(error));
+          });
+        }
+      },
+      error => {
+        console.error('Factory decision dispatch cycle failed', sanitizeDispatchError(error));
+      },
+    );
     try {
-      await this.#activeRun;
+      await this.#activeClaim;
     } finally {
-      this.#activeRun = undefined;
+      this.#activeClaim = undefined;
     }
   }
 
@@ -237,6 +278,38 @@ export class FactoryDecisionDispatcher {
           causalChain: nextChain,
         });
         if (result.status === 'rejected') throw new Error(`${result.code}: ${result.reason}`);
+        if (!decision.message) return;
+        // Best-effort recipient lookup: no active binding (or no authenticated
+        // session owner) means nobody is engaged with this item, so the
+        // transition itself is the whole effect. A retry after a delivery
+        // failure is safe because the transition replays by ingress identity.
+        const binding = await this.#findBinding(record, decision.message.role);
+        if (!binding) return;
+        const startedBy = item.sessions[binding.role]?.startedBy;
+        if (!startedBy) return;
+        await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+        const requestContext = new RequestContext();
+        requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
+        const session = await this.#requireSession(binding);
+        await awaitNotification(
+          await session.sendNotificationSignal(
+            {
+              source: 'factory',
+              kind: 'rule-message',
+              summary: decision.message.text,
+              priority: 'high',
+              payload: { message: decision.message.text },
+              sourceId: record.id,
+              dedupeKey: record.idempotencyKey,
+            },
+            {
+              ifActive: { behavior: 'deliver' },
+              ifIdle: { behavior: 'wake' },
+              requestContext,
+            },
+          ),
+          true,
+        );
         return;
       }
       case 'upsertLinkedWorkItem': {
@@ -287,9 +360,19 @@ export class FactoryDecisionDispatcher {
             tagName: 'user',
             contents: resolved.message,
           },
-          { requestContext },
+          // Without `requireDelivery` the session resolves `accepted` on the
+          // next tick and swallows wake failures, so a kickoff that never
+          // reached the agent would be marked succeeded and the thread would
+          // stay empty forever.
+          { requestContext, requireDelivery: true },
         );
-        await result.accepted;
+        const settled = await result.accepted;
+        if (settled.action !== 'wake' && settled.action !== 'deliver') {
+          // An undefined action means the session did not verify delivery at
+          // all — with `requireDelivery` set that is a contract violation, not
+          // a success.
+          throw new Error(`Factory skill invocation signal did not reach the agent (${String(settled.action)}).`);
+        }
         return;
       }
       case 'sendMessage': {
@@ -547,5 +630,6 @@ export const FACTORY_DISPATCH_CONSTANTS = {
   maxAttempts: MAX_ATTEMPTS,
   maxErrorLength: MAX_ERROR_LENGTH,
   maxBackoffMs: MAX_BACKOFF_MS,
+  maxInFlight: MAX_IN_FLIGHT,
   stages: FACTORY_RULE_STAGES,
 } as const;

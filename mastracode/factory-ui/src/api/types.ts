@@ -41,6 +41,8 @@ export type {
 
 export interface ProvidersResponse {
   providers: ProviderInfo[];
+  /** Tenant mode: whether the caller may write org-wide keys. Absent locally. */
+  orgKeyAdmin?: boolean;
 }
 
 export interface CustomProvidersResponse {

@@ -223,6 +223,23 @@ export function getAvailableOmPacks(access: ProviderAccess): OMPack[] {
   return packs;
 }
 
+/** Best reachable built-in OM pack: preferred provider, then OAuth, then built-in order. */
+export function selectPreferredOMPack(access: ProviderAccess, preferredProviderId?: string): OMPack | undefined {
+  const available = getAvailableOmPacks(access).filter(pack => pack.id !== 'custom');
+
+  if (preferredProviderId) {
+    const preferredPackId = resolveProviderOMDefault(preferredProviderId).id;
+    const preferred = available.find(pack => pack.id === preferredPackId);
+    if (preferred) return preferred;
+  }
+
+  const oauth = available.find(pack => {
+    const definition = BUILTIN_OM_PACKS.find(candidate => candidate.id === pack.id);
+    return definition ? access[definition.providerId] === 'oauth' : false;
+  });
+  return oauth ?? available[0];
+}
+
 // ---------------------------------------------------------------------------
 // Current onboarding version — bump when adding new steps
 // ---------------------------------------------------------------------------
