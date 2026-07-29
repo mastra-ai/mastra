@@ -148,7 +148,8 @@ export class FactoryDecisionDispatcher {
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
-    this.#maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
+    const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
+    this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
   }
 
   start(): void {
@@ -182,20 +183,22 @@ export class FactoryDecisionDispatcher {
     if (capacity <= 0) return [];
     const limit = Math.min(BATCH_SIZE, capacity);
     const leaseExpiresAt = new Date(now.getTime() + LEASE_MS);
-    const [decisions, starts] = await Promise.all([
-      this.#storage.claimDeferredDecisions({
-        ownerId: this.#ownerId,
-        now,
-        leaseExpiresAt,
-        limit,
-      }),
-      this.#storage.claimPendingStarts({
-        ownerId: this.#ownerId,
-        now,
-        leaseExpiresAt,
-        limit,
-      }),
-    ]);
+    const decisions = await this.#storage.claimDeferredDecisions({
+      ownerId: this.#ownerId,
+      now,
+      leaseExpiresAt,
+      limit,
+    });
+    const startsLimit = limit - decisions.length;
+    const starts =
+      startsLimit > 0
+        ? await this.#storage.claimPendingStarts({
+            ownerId: this.#ownerId,
+            now,
+            leaseExpiresAt,
+            limit: startsLimit,
+          })
+        : [];
     return [
       ...decisions.map(decision => this.#track(this.#dispatchDecision(decision, now))),
       ...starts.map(start => this.#track(this.#dispatchPendingStart(start, now))),

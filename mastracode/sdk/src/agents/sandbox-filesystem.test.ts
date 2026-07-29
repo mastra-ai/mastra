@@ -97,6 +97,28 @@ describe('SandboxFilesystem', () => {
     expect(sandbox.calls.some(c => c.includes('base64 -d >'))).toBe(false);
   });
 
+  it('rejects deleting a file whose parent directory is a symlink escaping the workspace', async () => {
+    // `evil` is an in-workdir symlink to /etc — deleting `evil/passwd` would
+    // remove a file outside the workspace.
+    const { fs, sandbox } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult('/etc');
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await expect(fs.deleteFile('/evil/passwd')).rejects.toThrow(/escapes workspace root \(symlink\)/);
+    expect(sandbox.calls.some(c => c.includes('rm '))).toBe(false);
+  });
+
+  it('rejects recursive rmdir whose parent directory is a symlink escaping the workspace', async () => {
+    const { fs, sandbox } = makeFs(script => {
+      if (isContainmentCheck(script)) return realpathResult('/etc');
+      return { exitCode: 0, stdout: '', stderr: '' };
+    });
+
+    await expect(fs.rmdir('/evil/dir', { recursive: true })).rejects.toThrow(/escapes workspace root \(symlink\)/);
+    expect(sandbox.calls.some(c => c.includes('rm -r'))).toBe(false);
+  });
+
   it('allows a write when the parent realpath stays inside the workspace', async () => {
     const { fs, sandbox } = makeFs(script => {
       if (isContainmentCheck(script)) return realpathResult(`${WORKDIR}/src`);
@@ -221,7 +243,7 @@ describe('SandboxFilesystem', () => {
   it('removes a file via rm', async () => {
     const { sandbox, fs } = makeFs();
     await fs.deleteFile('/old.txt', { force: true });
-    expect(sandbox.calls[0]).toContain(`rm -f '${WORKDIR}/old.txt'`);
+    expect(sandbox.calls.some(c => c.includes(`rm -f '${WORKDIR}/old.txt'`))).toBe(true);
   });
 
   it('reports existence from the exit code', async () => {
