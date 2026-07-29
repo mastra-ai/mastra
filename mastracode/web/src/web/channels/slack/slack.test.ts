@@ -1,5 +1,4 @@
 import { RequestContext } from '@mastra/core/request-context';
-import { createChannelLinkStateSigner } from '@mastra/factory';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -68,18 +67,12 @@ describe('resolveLinkedSender', () => {
     expect(thread.postEphemeral).not.toHaveBeenCalled();
   });
 
-  it('blocks the run and posts an ephemeral signed Connect card for an unlinked sender', async () => {
+  it('blocks the run and posts an ephemeral Connect card for an unlinked sender', async () => {
     process.env.MASTRACODE_CHANNELS_PUBLIC_URL = 'https://mc.example.com';
     const thread = makeThread();
     const accountLinks = makeStore(null);
-    const channelLinkStateSigner = createChannelLinkStateSigner('secret');
 
-    const result = await resolveLinkedSender({
-      thread,
-      message: makeMessage('T-1'),
-      accountLinks,
-      channelLinkStateSigner,
-    });
+    const result = await resolveLinkedSender({ thread, message: makeMessage('T-1'), accountLinks });
 
     expect(result).toEqual({ status: 'blocked' });
     expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
@@ -89,39 +82,26 @@ describe('resolveLinkedSender', () => {
     expect(user).toEqual(thread.postEphemeral.mock.calls[0][0]);
     expect(options).toEqual({ fallbackToDM: true });
 
-    // The deep-link state round-trips back to the exact Slack identity.
+    // The link carries NO identity: Slack proves the account during OIDC, so
+    // a forwarded card can't bind the original sender to whoever clicks it.
     const card = thread.postEphemeral.mock.calls[0][1];
     const actions = card.children.find((c: any) => c.type === 'actions');
     const linkButton = actions.children.find((c: any) => c.type === 'link-button');
-    const url: string = linkButton.url;
-    expect(url.startsWith('https://mc.example.com/connect/slack?state=')).toBe(true);
-    const state = decodeURIComponent(new URL(url).searchParams.get('state')!);
-    expect(channelLinkStateSigner.verify(state)).toEqual({
-      platform: 'slack',
-      externalTeamId: 'T-1',
-      externalUserId: 'U-sender',
-      channelId: 'C-1',
-    });
+    expect(linkButton.url).toBe('https://mc.example.com/connect/slack');
   });
 
-  it('treats a missing team id as unlinked and blocks the run (no card without a team id)', async () => {
+  it('treats a missing team id as unlinked and blocks the run, still offering the card', async () => {
     process.env.MASTRACODE_CHANNELS_PUBLIC_URL = 'https://mc.example.com';
     const thread = makeThread();
     const accountLinks = makeStore({ orgId: 'org-1', userId: 'user-1' });
-    const channelLinkStateSigner = createChannelLinkStateSigner('secret');
 
-    const result = await resolveLinkedSender({
-      thread,
-      message: makeMessage(undefined),
-      accountLinks,
-      channelLinkStateSigner,
-    });
+    const result = await resolveLinkedSender({ thread, message: makeMessage(undefined), accountLinks });
 
     // No team id → never even looks up the (workspace-scoped) link, blocks run.
     expect(result).toEqual({ status: 'blocked' });
     expect(accountLinks.getAccountLink).not.toHaveBeenCalled();
-    // Without a team id there's nothing safe to sign into the deep link.
-    expect(thread.postEphemeral).not.toHaveBeenCalled();
+    // The card needs no team id now, and connecting is still the way out.
+    expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
   });
 
   it('blocks the run without a card when no public URL is configured', async () => {
@@ -129,14 +109,8 @@ describe('resolveLinkedSender', () => {
     delete process.env.MASTRACODE_PUBLIC_URL;
     const thread = makeThread();
     const accountLinks = makeStore(null);
-    const channelLinkStateSigner = createChannelLinkStateSigner('secret');
 
-    const result = await resolveLinkedSender({
-      thread,
-      message: makeMessage('T-1'),
-      accountLinks,
-      channelLinkStateSigner,
-    });
+    const result = await resolveLinkedSender({ thread, message: makeMessage('T-1'), accountLinks });
 
     expect(result).toEqual({ status: 'blocked' });
     expect(thread.postEphemeral).not.toHaveBeenCalled();
@@ -351,7 +325,6 @@ describe('handler dispatch gating', () => {
     const defaultHandler = vi.fn();
     const handlers = createHandlers({
       accountLinks,
-      channelLinkStateSigner: createChannelLinkStateSigner('test-secret'),
     });
 
     const ctx = handlerCtx();

@@ -811,10 +811,9 @@ describe('MastraFactory.prepare integrations', () => {
 
       expect(setChannels).toHaveBeenCalledWith(channelsInstance);
       // Channels get the same context shape as routes()/workers(), plus the
-      // two fields only a channel integration needs.
+      // storage domain only a channel integration needs.
       const ctx = channels.mock.calls[0]![0];
       expect(ctx.storage.channelIdentity).toBeDefined();
-      expect(ctx.channelLinkStateSigner).toBeDefined();
       expect(ctx.auth).toBeDefined();
     });
 

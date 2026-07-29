@@ -61,7 +61,7 @@ import { SandboxFleet } from './sandbox/fleet.js';
 import { registerSandboxReattach } from './sandbox/reattach.js';
 import { handleServerError } from './server-error.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
-import { createChannelLinkStateSigner, createStateSigner } from './state-signing.js';
+import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { AuditDomain } from './storage/domains/audit/domain.js';
@@ -425,10 +425,6 @@ export class MastraFactory {
     // replica-stable secret when needed; otherwise local development gets a
     // per-process random signer (`stable: false`).
     const stateSigner = createStateSigner(this.#config.stateSecret);
-    // Same secret, separate signer: channel account-link deep links carry a
-    // different payload shape than OAuth state, and a link signed on one
-    // replica must verify on any other.
-    const channelLinkStateSigner = createChannelLinkStateSigner(this.#config.stateSecret);
 
     // One-time provider initialization with factory-level context (e.g.
     // better-auth builds its default instance on the backend's auth
@@ -670,7 +666,6 @@ export class MastraFactory {
             factoryStorage: storage,
             integrationStorage,
             sourceControlStorage,
-            channelLinkStateSigner,
             domains,
             integrations: integrationRegistrations,
             intakeReady,
@@ -775,7 +770,6 @@ export class MastraFactory {
               publicOrigin,
               auth: routeAuth,
               stateSigner,
-              channelLinkStateSigner,
               fleet,
               factoryStorage: storage,
               integrationStorage,
@@ -806,7 +800,6 @@ export class MastraFactory {
               publicOrigin,
               auth: routeAuth,
               stateSigner,
-              channelLinkStateSigner,
               fleet,
               factoryStorage: storage,
               integrationStorage,

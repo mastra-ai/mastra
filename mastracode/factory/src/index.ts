@@ -11,8 +11,8 @@ export { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 export type { FactoryProject } from './storage/domains/projects/base.js';
 export { WorkItemsStorage } from './storage/domains/work-items/base.js';
 export type { CreateWorkItemInput, WorkItemRow } from './storage/domains/work-items/base.js';
-export { createChannelLinkStateSigner, createStateSigner } from './state-signing.js';
-export type { ChannelLinkState, ChannelLinkStateSigner, StateSigner, StateTenant } from './state-signing.js';
+export { createStateSigner } from './state-signing.js';
+export type { StateSigner, StateTenant } from './state-signing.js';
 export { createFactoryRouteAuth } from './auth.js';
 export type { RouteAuth } from './routes/route.js';
 // The integration seam, so a host can implement `FactoryIntegration` from

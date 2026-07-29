@@ -87,7 +87,6 @@ export class SlackIntegration implements FactoryIntegration {
         botToken: this.#config.botToken,
       },
       accountLinks: ctx.storage.channelIdentity,
-      channelLinkStateSigner: ctx.channelLinkStateSigner,
       projects: ctx.storage.projects,
       sourceControl: this.#config.sourceControl,
     });
@@ -98,9 +97,6 @@ export class SlackIntegration implements FactoryIntegration {
     return createSlackConnectRoutes({
       auth: ctx.auth,
       accountLinks: ctx.storage.channelIdentity,
-      // The factory only omits this when it has no state secret at all, which
-      // `requiresStableStateSigner` already fails the boot on.
-      channelLinkStateSigner: ctx.channelLinkStateSigner!,
       tenantStateSigner: ctx.stateSigner,
       oidc:
         clientId && clientSecret && oidcRedirectBaseUrl

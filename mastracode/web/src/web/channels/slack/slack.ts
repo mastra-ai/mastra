@@ -13,7 +13,6 @@ import type {
   ChannelAccountLink,
   ChannelAccountLinkKey,
   ChannelIdentityStorage,
-  ChannelLinkStateSigner,
   FactoryProjectsStorage,
 } from '@mastra/factory';
 import { createSlackAdapter } from '@mastra/slack';
@@ -37,12 +36,6 @@ interface SlackChannelDeps {
    * get an ephemeral "connect your account" card instead.
    */
   accountLinks?: ChannelIdentityStorage;
-  /**
-   * Signs the account-linking deep-link `state` so a forged `?teamId=&userId=`
-   * can't hijack a link. Required to render the Connect card; without it the
-   * unlinked path silently skips (defense-in-depth still blocks the run).
-   */
-  channelLinkStateSigner?: ChannelLinkStateSigner;
   /**
    * Factory projects domain. When provided (alongside `accountLinks`), a
    * linked sender's run must also resolve to a Factory project before it
@@ -201,19 +194,17 @@ export type LinkedSenderResult =
 
 /**
  * Resolve the sender's account link, posting an ephemeral "connect your
- * account" card (visible only to the sender) with a signed deep link into the
- * web UI's Slack-connect flow when they're unlinked.
+ * account" card (visible only to the sender) linking into the web UI's
+ * Slack-connect flow when they're unlinked.
  */
 export async function resolveLinkedSender({
   thread,
   message,
   accountLinks,
-  channelLinkStateSigner,
 }: {
   thread: HandlerThread;
   message: HandlerMessage;
   accountLinks?: ChannelIdentityStorage;
-  channelLinkStateSigner?: ChannelLinkStateSigner;
 }): Promise<LinkedSenderResult> {
   if (!accountLinks) return { status: 'ungated' };
   const platform = thread.adapter.name;
@@ -226,49 +217,28 @@ export async function resolveLinkedSender({
   if (link && key) return { status: 'linked', link, key };
 
   const publicUrl = webPublicUrl();
-  // Need both a signer (anti-spoofing) and a public origin to build a usable
-  // Connect link. Missing either → still block the run, just no card.
-  if (channelLinkStateSigner && publicUrl && externalTeamId) {
-    await thread.postEphemeral(
-      message.author,
-      buildConnectCard({
-        signer: channelLinkStateSigner,
-        publicUrl,
-        platform,
-        externalTeamId,
-        externalUserId,
-        channelId: thread.channelId,
-      }),
-      { fallbackToDM: true },
-    );
+  // A public origin is all the card needs. The link carries no identity: the
+  // web app authenticates the visitor, then Slack's OIDC flow proves which
+  // Slack account they control. Without an origin, still block, just no card.
+  if (publicUrl) {
+    await thread.postEphemeral(message.author, buildConnectCard(publicUrl), { fallbackToDM: true });
   }
   return { status: 'blocked' };
 }
 
-/** The "connect your account" card with its signed deep link into the web UI. */
-function buildConnectCard({
-  signer,
-  publicUrl,
-  platform,
-  externalTeamId,
-  externalUserId,
-  channelId,
-}: {
-  signer: ChannelLinkStateSigner;
-  publicUrl: string;
-  platform: string;
-  externalTeamId: string;
-  externalUserId: string;
-  channelId: string;
-}) {
-  const state = signer.sign({ platform, externalTeamId, externalUserId, channelId });
+/**
+ * The "connect your account" card. The link is deliberately identity-free —
+ * `/connect/slack` sends the visitor to Connected accounts, where "Connect
+ * Slack" runs the OIDC flow and Slack itself asserts the (team, user) pair.
+ */
+function buildConnectCard(publicUrl: string) {
   return Card({
     title: 'Connect your account',
     children: [
       CardText('Connect your account to use this agent.'),
       Actions([
         LinkButton({
-          url: `${publicUrl}/connect/slack?state=${encodeURIComponent(state)}`,
+          url: `${publicUrl}/connect/slack`,
           label: 'Connect account',
         }),
       ]),
@@ -482,10 +452,10 @@ async function findInternalThread(mastra: Mastra | undefined, thread: HandlerThr
 async function gateDispatch(
   thread: HandlerThread,
   message: HandlerMessage,
-  { accountLinks, channelLinkStateSigner, projects }: SlackChannelDeps,
+  { accountLinks, projects }: SlackChannelDeps,
   ctx: ChannelHandlerContext,
 ): Promise<{ routed?: { link: ChannelAccountLink; factoryProjectId: string } } | null> {
-  const sender = await resolveLinkedSender({ thread, message, accountLinks, channelLinkStateSigner });
+  const sender = await resolveLinkedSender({ thread, message, accountLinks });
   if (sender.status === 'blocked') return null;
   // Linked senders must also route to a Factory project before a run starts.
   if (sender.status === 'linked' && accountLinks) {

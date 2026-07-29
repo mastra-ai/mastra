@@ -29,7 +29,7 @@ import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
 import type { FactoryRules } from '../rules/types.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
-import type { ChannelLinkStateSigner, StateSigner } from '../state-signing.js';
+import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
@@ -86,13 +86,6 @@ export interface IntegrationContext {
    * every integration's OAuth flow signs and verifies with the same secret.
    */
   stateSigner?: StateSigner;
-  /**
-   * Signs the channel account-link `state`, so a chat platform's deep link
-   * can't be forged into binding someone else's sender identity. Shares the
-   * factory's state secret with `stateSigner`, so a link signed on one replica
-   * verifies on any other. Only channel integrations need it.
-   */
-  channelLinkStateSigner?: ChannelLinkStateSigner;
   /** Persistence handles pre-scoped to this integration's stable id. */
   storage: {
     generic: IntegrationStorageHandle;

@@ -14,7 +14,7 @@ import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
-import type { ChannelLinkStateSigner, StateSigner } from '../state-signing.js';
+import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
@@ -53,8 +53,6 @@ export interface FactoryApiRoutesDeps {
   fsRoot?: string;
   publicOrigin: string;
   stateSigner?: StateSigner;
-  /** Channel account-link signer, forwarded to channel integrations. */
-  channelLinkStateSigner?: ChannelLinkStateSigner;
   /** Sandbox fleet constructed by the factory (disabled when no machine). */
   fleet: SandboxFleet;
   /** Root factory storage backend (distributed locks, app-db diagnostics). */
@@ -206,7 +204,6 @@ export function buildIntegrationContext(
     'controller' | 'publicOrigin' | 'auth' | 'fleet' | 'factoryStorage' | 'integrationStorage' | 'sourceControlStorage'
   > & {
     stateSigner: StateSigner;
-    channelLinkStateSigner?: ChannelLinkStateSigner;
     emitAudit?: AuditEmitter['emit'];
     rules: FactoryRules;
     factoryReady: boolean;
@@ -221,7 +218,6 @@ export function buildIntegrationContext(
     baseUrl: deps.publicOrigin,
     controller: deps.controller,
     stateSigner: deps.stateSigner,
-    ...(deps.channelLinkStateSigner ? { channelLinkStateSigner: deps.channelLinkStateSigner } : {}),
     storage: {
       generic: deps.integrationStorage.forIntegration(integrationId),
       sourceControl: deps.sourceControlStorage.forIntegration(integrationId),

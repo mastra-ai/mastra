@@ -1,4 +1,4 @@
-import { createChannelLinkStateSigner, createStateSigner } from '@mastra/factory';
+import { createStateSigner } from '@mastra/factory';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createSlackConnectRoutes } from './connect-route.js';
@@ -54,88 +54,55 @@ function getHandler(routes: ReturnType<typeof createSlackConnectRoutes>, method 
 }
 
 describe('/connect/slack route', () => {
-  const signer = createChannelLinkStateSigner('secret');
-  const identity = { platform: 'slack', externalTeamId: 'T-1', externalUserId: 'U-1', channelId: 'C-1' };
-
-  it('writes the account link for an authed tenant with a valid signed state', async () => {
+  // The Slack-side entry point carries no identity and writes no link — it
+  // only lands the visitor on Connected accounts, where the OIDC flow (which
+  // makes Slack assert the account) starts.
+  it('redirects to the connected-accounts surface without writing a link', async () => {
     const { store, saveAccountLink } = fakeStore();
     const routes = createSlackConnectRoutes({
       auth: fakeAuth({ orgId: 'org-9', userId: 'user-9' }),
       accountLinks: store,
-      channelLinkStateSigner: signer,
+      tenantStateSigner: createStateSigner('secret'),
+      oidc: {
+        clientId: 'client-1',
+        clientSecret: 'shh',
+        redirectBaseUrl: 'https://tunnel.example',
+        uiOrigin: 'http://localhost:5173',
+      },
     });
-    const c = fakeCtx(signer.sign(identity));
 
-    await getHandler(routes)(c);
+    await getHandler(routes)(fakeCtx());
 
-    expect(saveAccountLink).toHaveBeenCalledWith({
-      platform: 'slack',
-      externalTeamId: 'T-1',
-      externalUserId: 'U-1',
-      orgId: 'org-9',
-      userId: 'user-9',
-    });
-    expect(c.redirect).toHaveBeenCalledWith('/?slack=connected');
+    expect(saveAccountLink).not.toHaveBeenCalled();
   });
 
-  it('redirects to login (preserving state) when not authenticated', async () => {
+  it('redirects signed-out visitors too, since it reads no tenant', async () => {
     const { store, saveAccountLink } = fakeStore();
-    const state = signer.sign(identity);
-    const routes = createSlackConnectRoutes({
-      auth: fakeAuth(undefined),
-      accountLinks: store,
-      channelLinkStateSigner: signer,
-    });
-    const c = fakeCtx(state);
+    const routes = createSlackConnectRoutes({ auth: fakeAuth(undefined), accountLinks: store });
+    const c = fakeCtx();
 
     await getHandler(routes)(c);
 
     expect(saveAccountLink).not.toHaveBeenCalled();
-    const target = c.redirect.mock.calls[0][0];
-    expect(target.startsWith('/auth/login?returnTo=')).toBe(true);
-    expect(decodeURIComponent(target)).toContain('/connect/slack?state=');
+    expect(c.redirect).toHaveBeenCalledWith('/settings/connected-accounts');
   });
 
-  it('rejects an invalid/forged state without writing', async () => {
+  it('ignores a state query parameter entirely', async () => {
     const { store, saveAccountLink } = fakeStore();
     const routes = createSlackConnectRoutes({
       auth: fakeAuth({ orgId: 'org-9', userId: 'user-9' }),
       accountLinks: store,
-      channelLinkStateSigner: signer,
     });
-    const c = fakeCtx('tampered.state');
+    const c = fakeCtx('anything-at-all');
 
     await getHandler(routes)(c);
 
     expect(saveAccountLink).not.toHaveBeenCalled();
-    expect(c.redirect).toHaveBeenCalledWith('/?slack=error');
-  });
-
-  it('links a personal account (no org id)', async () => {
-    const { store, saveAccountLink } = fakeStore();
-    const routes = createSlackConnectRoutes({
-      auth: fakeAuth({ userId: 'solo' }),
-      accountLinks: store,
-      channelLinkStateSigner: signer,
-    });
-    const c = fakeCtx(signer.sign(identity));
-
-    await getHandler(routes)(c);
-
-    expect(saveAccountLink).toHaveBeenCalledWith({
-      platform: 'slack',
-      externalTeamId: 'T-1',
-      externalUserId: 'U-1',
-      orgId: undefined,
-      userId: 'solo',
-    });
-    expect(c.redirect).toHaveBeenCalledWith('/?slack=connected');
+    expect(c.redirect).toHaveBeenCalledWith('/settings/connected-accounts');
   });
 });
 
 describe('/web/channel-accounts routes', () => {
-  const signer = createChannelLinkStateSigner('secret');
-
   it('lists only the caller own links as payloads', async () => {
     const { store, listAccountLinksForUser } = fakeStore();
     const linkedAt = new Date('2026-07-23T17:57:43.368Z');
@@ -145,7 +112,6 @@ describe('/web/channel-accounts routes', () => {
     const routes = createSlackConnectRoutes({
       auth: fakeAuth({ orgId: 'org-9', userId: 'user-9' }),
       accountLinks: store,
-      channelLinkStateSigner: signer,
     });
     const c = fakeCtx();
 
@@ -170,7 +136,6 @@ describe('/web/channel-accounts routes', () => {
     const routes = createSlackConnectRoutes({
       auth: fakeAuth(undefined),
       accountLinks: store,
-      channelLinkStateSigner: signer,
     });
 
     const listResult = await getHandler(routes, 'GET', '/web/channel-accounts')(fakeCtx());
@@ -191,7 +156,6 @@ describe('/web/channel-accounts routes', () => {
     const routes = createSlackConnectRoutes({
       auth: fakeAuth({ orgId: 'org-9', userId: 'user-9' }),
       accountLinks: store,
-      channelLinkStateSigner: signer,
     });
     const c = fakeCtx(undefined, { platform: 'slack', externalTeamId: 'T-1', externalUserId: 'U-1' });
 
@@ -211,7 +175,6 @@ describe('/web/channel-accounts routes', () => {
     const routes = createSlackConnectRoutes({
       auth: fakeAuth({ userId: 'user-9' }),
       accountLinks: store,
-      channelLinkStateSigner: signer,
     });
     const c = fakeCtx(undefined, { platform: 'slack' });
 
@@ -237,7 +200,6 @@ describe('/web/channel-accounts routes', () => {
     const routes = createSlackConnectRoutes({
       auth: fakeAuth({ orgId: 'org-9', userId: 'user-9' }),
       accountLinks: store,
-      channelLinkStateSigner: signer,
     });
 
     const result = await getHandler(routes, 'GET', '/web/channel-accounts')(fakeCtx());
@@ -247,7 +209,6 @@ describe('/web/channel-accounts routes', () => {
 });
 
 describe('PATCH /web/channel-accounts/default-factory', () => {
-  const signer = createChannelLinkStateSigner('secret');
   const senderKey = { platform: 'slack', externalTeamId: 'T-1', externalUserId: 'U-1' };
 
   function patchRoutes(overrides?: Partial<Parameters<typeof createSlackConnectRoutes>[0]>) {
@@ -255,7 +216,6 @@ describe('PATCH /web/channel-accounts/default-factory', () => {
     const routes = createSlackConnectRoutes({
       auth: fakeAuth({ orgId: 'org-9', userId: 'user-9' }),
       accountLinks: store,
-      channelLinkStateSigner: signer,
       projects: fakeProjects([{ id: 'fp-1' }, { id: 'fp-2' }]),
       ...overrides,
     });
@@ -316,7 +276,6 @@ describe('PATCH /web/channel-accounts/default-factory', () => {
 });
 
 describe('/connect/slack/oidc (Sign in with Slack)', () => {
-  const linkSigner = createChannelLinkStateSigner('secret');
   const tenantSigner = createStateSigner('secret');
   const oidc = {
     clientId: 'client-1',
@@ -330,7 +289,6 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     const routes = createSlackConnectRoutes({
       auth: fakeAuth({ orgId: 'org-9', userId: 'user-9' }),
       accountLinks: store,
-      channelLinkStateSigner: linkSigner,
       tenantStateSigner: tenantSigner,
       oidc,
       ...overrides,
@@ -421,6 +379,21 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=connected');
   });
 
+  it('callback links a personal account with no org id', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, id_token: makeIdToken(validClaims) }) }),
+    );
+    const { routes, saveAccountLink } = oidcRoutes({ auth: fakeAuth({ userId: 'solo' }) });
+    const c = fakeCtx(tenantSigner.sign('', 'solo'), undefined, { code: 'code-1' });
+
+    await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
+
+    expect(saveAccountLink).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: undefined, userId: 'solo', externalTeamId: 'T-77', externalUserId: 'U-77' }),
+    );
+  });
+
   it('callback stores display names from the profile claims when present', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -489,9 +462,9 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     expect(result.payload).toEqual({ accounts: [], canConnect: true });
   });
 
-  it('routes the Connect card deep link to the settings surface instead of the legacy state write', async () => {
+  it('routes the Connect card deep link to the settings surface', async () => {
     const { routes, saveAccountLink } = oidcRoutes();
-    const c = fakeCtx(linkSigner.sign({ platform: 'slack', externalTeamId: 'T-1', externalUserId: 'U-1' }));
+    const c = fakeCtx();
 
     await getHandler(routes, 'GET', '/connect/slack')(c);
 

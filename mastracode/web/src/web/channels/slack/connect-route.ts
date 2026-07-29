@@ -1,12 +1,6 @@
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
-import type {
-  ChannelIdentityStorage,
-  ChannelLinkStateSigner,
-  FactoryProjectsStorage,
-  RouteAuth,
-  StateSigner,
-} from '@mastra/factory';
+import type { ChannelIdentityStorage, FactoryProjectsStorage, RouteAuth, StateSigner } from '@mastra/factory';
 
 /**
  * Payload shape for the connected-accounts list: the platform sender key +
@@ -65,25 +59,17 @@ function decodeJwtPayload(jwt: string): Record<string, unknown> | null {
 }
 
 /**
- * The authed `/connect/slack` route: binds the Slack identity carried by a
- * signed deep-link `state` to the currently signed-in Mastra tenant.
+ * Slack account-linking routes.
  *
- * The `state` is HMAC-signed by the bot when it prompts an unlinked sender
- * (see `slack.ts` `resolveLinkedSender`), so the Slack identity it carries is
- * trustworthy and a forged `?teamId=&userId=` is rejected. Auth supplies the
- * tenant `(orgId, userId)`; the write is the reverse-index row that lets a
- * later Slack message from that sender resolve this tenant's model credentials.
- *
- * NOTE: this trusts the signed `state` to name the Slack identity rather than
- * proving the web user controls it (a forwarded Connect link could bind
- * someone else's Slack identity to your tenant — self-harm only, since it
- * routes THEIR messages to YOUR credentials). The OIDC routes below offer the
- * proven path; this stays as the low-friction Slack-side entry.
+ * A link is only ever written by the OIDC flow below, where Slack itself
+ * asserts the `(team, user)` pair in the id_token — so the web user has to
+ * actually control the Slack account they bind. `/connect/slack` is just the
+ * Slack-side entry point: it carries no identity and writes nothing, it only
+ * sends the visitor to Connected accounts, where the flow starts.
  */
 export function createSlackConnectRoutes(deps: {
   auth: RouteAuth;
   accountLinks: ChannelIdentityStorage;
-  channelLinkStateSigner: ChannelLinkStateSigner;
   /** Signs the OIDC `state`, binding the round-trip to the initiating tenant. */
   tenantStateSigner?: StateSigner;
   oidc?: SlackOidcConfig;
@@ -93,7 +79,7 @@ export function createSlackConnectRoutes(deps: {
    */
   projects?: FactoryProjectsStorage;
 }): ApiRoute[] {
-  const { auth, accountLinks, channelLinkStateSigner, tenantStateSigner, oidc, projects } = deps;
+  const { auth, accountLinks, tenantStateSigner, oidc, projects } = deps;
   const oidcEnabled = Boolean(oidc && tenantStateSigner);
   const uiOrigin = oidc?.uiOrigin?.replace(/\/$/, '') ?? '';
 
@@ -108,44 +94,10 @@ export function createSlackConnectRoutes(deps: {
   return [
     registerApiRoute('/connect/slack', {
       method: 'GET',
-      // Authenticated via the same bearer/cookie path the factory routes use;
-      // handled explicitly below so we can return a friendly redirect on 401.
+      // No auth: nothing here reads a tenant or writes a link. The SPA route
+      // this lands on requires a session and bounces through login itself.
       requiresAuth: false,
-      handler: async c => {
-        // With OIDC configured, the Connect card lands on the Connected
-        // accounts settings surface: the SPA guarantees the visitor is
-        // authenticated, and its Connect Slack button starts the proven OIDC
-        // flow — Slack itself asserts the (team, user) pair, superseding the
-        // card-carried identity (which then only serves as the prompt).
-        if (oidcEnabled) {
-          return c.redirect(`${uiOrigin}/settings/connected-accounts`);
-        }
-
-        await auth.ensureUser(loose(c));
-        const tenant = auth.tenant(loose(c));
-        if (!tenant) {
-          // Not signed in — send them through login, preserving the state so
-          // they land back here after authenticating.
-          const state = c.req.query('state') ?? '';
-          const returnTo = `/connect/slack?state=${encodeURIComponent(state)}`;
-          return c.redirect(`/auth/login?returnTo=${encodeURIComponent(returnTo)}`);
-        }
-
-        const identity = channelLinkStateSigner.verify(c.req.query('state'));
-        if (!identity) {
-          return c.redirect('/?slack=error');
-        }
-
-        await accountLinks.saveAccountLink({
-          platform: identity.platform,
-          externalTeamId: identity.externalTeamId,
-          externalUserId: identity.externalUserId,
-          orgId: tenant.orgId,
-          userId: tenant.userId,
-        });
-
-        return c.redirect('/?slack=connected');
-      },
+      handler: async c => c.redirect(`${uiOrigin}/settings/connected-accounts`),
     }),
     // Web-initiated connect: "Sign in with Slack" (OIDC). Unlike the deep-link
     // route above (which trusts the bot-signed Slack identity), this proves the
