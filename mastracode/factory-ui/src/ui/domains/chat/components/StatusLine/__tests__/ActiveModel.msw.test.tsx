@@ -6,29 +6,46 @@
  * flags models whose provider has no usable credentials.
  */
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/ui/render';
 import { ChatConnectionContext } from '../../../context/ChatConnectionContext';
 import type { ChatConnectionApi } from '../../../context/ChatConnectionContext';
 import { ChatModelsContext } from '../../../context/ChatModelsContext';
+import { ChatSessionContext } from '../../../context/ChatSessionContext';
+import type { ChatSessionContextApi } from '../../../context/ChatSessionContext';
 import { ActiveModel } from '../ActiveModel';
+
+const factorySession: ChatSessionContextApi = {
+  resourceId: 'session-1',
+  sessionEnabled: true,
+  resourceEnabled: true,
+  baseUrl: TEST_BASE_URL,
+  kind: 'factory',
+};
 
 function renderActiveModel({
   activeModelId,
   status,
+  kind = 'user',
+  setModel = () => Promise.resolve(),
 }: {
   activeModelId: string | undefined;
   status: ChatConnectionApi['status'];
+  kind?: ChatSessionContextApi['kind'];
+  setModel?: (modelId: string) => Promise<void>;
 }) {
   return renderWithProviders(
-    <ChatConnectionContext.Provider value={{ status }}>
-      <ChatModelsContext.Provider value={{ activeModelId, setModel: () => Promise.resolve() }}>
-        <ActiveModel />
-      </ChatModelsContext.Provider>
-    </ChatConnectionContext.Provider>,
+    <ChatSessionContext.Provider value={{ ...factorySession, kind }}>
+      <ChatConnectionContext.Provider value={{ status }}>
+        <ChatModelsContext.Provider value={{ activeModelId, setModel }}>
+          <ActiveModel />
+        </ChatModelsContext.Provider>
+      </ChatConnectionContext.Provider>
+    </ChatSessionContext.Provider>,
   );
 }
 
@@ -43,7 +60,7 @@ function stubModelCatalog(ids: string[]) {
 }
 
 describe('ActiveModel', () => {
-  describe('given the connection is still resolving and no model id is known yet', () => {
+  describe('when the connection is still resolving and no model id is known yet', () => {
     it('shows a loading skeleton instead of a "No model" label', () => {
       renderActiveModel({ activeModelId: undefined, status: 'connecting' });
 
@@ -52,7 +69,7 @@ describe('ActiveModel', () => {
     });
   });
 
-  describe('given the connection is ready but reports no model', () => {
+  describe('when the connection is ready but reports no model', () => {
     it('falls back to the explicit "No model" label', () => {
       renderActiveModel({ activeModelId: undefined, status: 'ready' });
 
@@ -61,7 +78,7 @@ describe('ActiveModel', () => {
     });
   });
 
-  describe('given a connected session with a credentialed model', () => {
+  describe('when a connected session has a credentialed model', () => {
     it('renders the formatted model name without a warning', async () => {
       stubModelCatalog(['anthropic/claude-sonnet-4-5']);
       renderActiveModel({ activeModelId: 'anthropic/claude-sonnet-4-5', status: 'ready' });
@@ -71,12 +88,50 @@ describe('ActiveModel', () => {
     });
   });
 
-  describe('given the active model is missing from the credentialed catalog', () => {
+  describe('when the active model is missing from the credentialed catalog', () => {
     it('flags the model as not configured', async () => {
       stubModelCatalog(['openai/gpt-5']);
       renderActiveModel({ activeModelId: 'anthropic/claude-sonnet-4-5', status: 'ready' });
 
       expect(await screen.findByLabelText('Claude Sonnet 4.5 is not configured')).toBeInTheDocument();
+    });
+  });
+
+  describe('when a factory review session has multiple credentialed models', () => {
+    it('switches the session model selected from the status line', async () => {
+      const user = userEvent.setup();
+      const setModel = vi.fn<(modelId: string) => Promise<void>>().mockResolvedValue();
+      stubModelCatalog(['anthropic/claude-sonnet-4-5', 'openai/gpt-5.6-sol']);
+      renderActiveModel({
+        activeModelId: 'anthropic/claude-sonnet-4-5',
+        status: 'ready',
+        kind: 'factory',
+        setModel,
+      });
+
+      await user.click(await screen.findByLabelText('Session model'));
+      await user.click(await screen.findByRole('option', { name: 'openai / openai/gpt-5.6-sol' }));
+
+      expect(setModel).toHaveBeenCalledWith('openai/gpt-5.6-sol');
+    });
+
+    it('disables further model changes while a switch is pending', async () => {
+      const user = userEvent.setup();
+      const setModel = vi.fn<(modelId: string) => Promise<void>>(() => new Promise(() => {}));
+      stubModelCatalog(['anthropic/claude-sonnet-4-5', 'openai/gpt-5.6-sol']);
+      renderActiveModel({
+        activeModelId: 'anthropic/claude-sonnet-4-5',
+        status: 'ready',
+        kind: 'factory',
+        setModel,
+      });
+
+      const trigger = await screen.findByLabelText('Session model');
+      await user.click(trigger);
+      await user.click(await screen.findByRole('option', { name: 'openai / openai/gpt-5.6-sol' }));
+
+      expect(trigger).toHaveAttribute('aria-busy', 'true');
+      expect(trigger).toBeDisabled();
     });
   });
 });
