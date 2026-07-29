@@ -61,7 +61,7 @@ export {
 } from './regex-filter';
 export { ToolCallFilter } from './tool-call-filter';
 
-export { AgentsMDInjector, type ToolResultReminderOptions } from '../tool-result-reminder';
+export { AgentsMDInjector, type ToolResultReminderOptions, type ReminderFileReader } from '../tool-result-reminder';
 
 export {
   ToolSearchProcessor,
