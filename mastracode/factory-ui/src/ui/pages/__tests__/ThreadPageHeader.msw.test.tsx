@@ -1,9 +1,3 @@
-/**
- * Regression coverage for the thread route's header chrome: the sidebar toggle
- * and the session breadcrumb used to live in two stacked bars. They must share
- * one header, and a toggle must already be there while the session resolves —
- * a fully collapsed sidebar has no other way back.
- */
 import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -66,7 +60,6 @@ function deferred() {
   return { promise, resolve };
 }
 
-/** Stubs the thread routes, optionally holding the session lookup that drives the loading shell. */
 function stubThreadRoute({ gateSession = false } = {}) {
   const sessionGate = deferred();
 

@@ -90,7 +90,6 @@ describe('ChatHeader', () => {
 
     expect(screen.getByTestId('desktop-sidebar-state')).toHaveTextContent('default');
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
-    // Nothing left to host: no dead bar above the page.
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
   });
 });

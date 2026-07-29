@@ -43,7 +43,7 @@ function SettingsPageContent() {
   return (
     <PageLayout
       sidebar={<Sidebar />}
-      header={<ChatHeader mobileContent={isMobile ? <SettingsHeader autoFocus placement="mobile" /> : undefined} />}
+      header={<ChatHeader mobileContent={<SettingsHeader autoFocus placement="mobile" />} />}
     >
       <SettingsPanel />
     </PageLayout>

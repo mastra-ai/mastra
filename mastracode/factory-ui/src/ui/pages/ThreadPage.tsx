@@ -33,8 +33,7 @@ export function ThreadPage() {
       sidebar={<Sidebar />}
       main={
         resolvingSession ? (
-          // The session header owns the sidebar toggle but needs the workspace
-          // provider, so the bare bar stands in until the session resolves.
+          // bare bar stands in — the session header needs WorkspaceFilesProvider
           <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
             <ChatHeader />
             <div className="grid min-h-0 place-items-center">
@@ -57,7 +56,7 @@ function ThreadPageMain() {
   useGlobalShortcuts();
 
   return (
-    // minmax(0,1fr) col — implicit auto col sizes to max-content, long breadcrumb widens the column
+    // explicit col — implicit auto col sizes to max-content, long breadcrumb widens the column
     <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_auto_auto] overflow-hidden">
       <FactorySessionHeader />
       {/* Flex, not block — ChatMessageBoundary's loading state sizes itself with flex-1. */}

@@ -54,7 +54,6 @@ function activeWorkItem(
   );
 }
 
-/** The thread column's only header: the shared bar with the session content inside it. */
 export function FactorySessionHeader() {
   const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId: string; threadId: string }>();
   const sessionQuery = useUserSessionQuery(sessionId);

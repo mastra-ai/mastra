@@ -3,32 +3,27 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
 type ChatHeaderProps = ComponentPropsWithoutRef<'header'> & {
-  /** Rendered on mobile only — pages gate it on their own viewport check. */
   mobileContent?: ReactNode;
 };
 
-/**
- * The one header bar of a page: the sidebar trigger for the current viewport
- * plus optional page content. Contentless chrome collapses away, so an expanded
- * desktop sidebar (which carries its own toggle) leaves no dead bar behind.
- */
+/** The single header bar of a page. Renders nothing when it would hold neither a trigger nor content. */
 export function ChatHeader({ mobileContent, children, className, ...props }: ChatHeaderProps) {
-  // Both triggers off the same `isMobile`, never a `md:` media query: the
-  // provider's breakpoint is px and `md:` is rem, so a moved rem base would
-  // open a band with two toggles or none.
+  // both triggers off one signal — px matchMedia vs rem `md:` drifts into two toggles or none
   const { isMobile, desktopState } = useMainSidebar();
+
   const trigger = isMobile ? (
     <MainSidebar.MobileTrigger id="mobile-navigation-trigger" />
   ) : desktopState === 'collapsed' ? (
     <MainSidebar.Trigger className="mx-0 shrink-0" />
   ) : null;
+  const content = isMobile ? mobileContent : null;
 
-  if (!trigger && !mobileContent && !children) return null;
+  if (!trigger && !content && !children) return null;
 
   return (
     <header className={cn('flex min-w-0 shrink-0 items-center gap-2 px-3 py-2', className)} {...props}>
       {trigger}
-      {mobileContent}
+      {content}
       {children}
     </header>
   );
