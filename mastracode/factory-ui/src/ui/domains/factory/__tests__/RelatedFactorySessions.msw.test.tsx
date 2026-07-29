@@ -110,6 +110,7 @@ describe('FactorySessionHeader', () => {
       expect(link).toHaveAttribute('href', issueUrl);
       expect(link).toHaveAttribute('target', '_blank');
       expect(link).toHaveAttribute('rel', 'noreferrer');
+      expect(link.querySelector('.lucide-circle-dot')).toBeInTheDocument();
     });
   });
 
@@ -124,6 +125,7 @@ describe('FactorySessionHeader', () => {
       expect(link).toHaveAttribute('href', issueUrl);
       expect(link).toHaveAttribute('target', '_blank');
       expect(link).toHaveAttribute('rel', 'noreferrer');
+      expect(link.querySelector('.lucide-external-link')).toBeInTheDocument();
     });
   });
 

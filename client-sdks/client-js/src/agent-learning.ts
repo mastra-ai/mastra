@@ -1,5 +1,14 @@
 export type TraceSignalName = 'goal' | 'sentiment' | 'behavior' | 'outcome';
 
+export type EntityLearningProgressStatus = 'collecting' | 'processing' | 'ready';
+
+export interface EntityLearningProgressResponse {
+  status: EntityLearningProgressStatus;
+  traceCount: number;
+  signals: Record<TraceSignalName, { generated: number; embedded: number }>;
+  availableSignals: TraceSignalName[];
+}
+
 export interface ThemeLearningEntity {
   entityId: string;
   entityType: string;

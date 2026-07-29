@@ -1,4 +1,5 @@
 export type {
+  EntityLearningProgressResponse,
   NoiseExamplesResponse,
   NoiseResponse,
   ThemeDetailResponse,
