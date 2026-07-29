@@ -2,14 +2,12 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ExternalLink, Link2 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router';
 
-import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
-import { PullRequestLinks } from '../../chat/components/PullRequestLinks';
-import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
-import { useChatTranscript } from '../../chat/context/useChatTranscript';
 import { relatedWorkItems, relationshipLabel, relationshipPath } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
+import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
+import { FactoryReviewPullRequestLinks } from './FactoryReviewPullRequestLinks';
 
 function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): WorkItemSessionRef | undefined {
   return Object.values(item.sessions)
@@ -47,12 +45,6 @@ export function FactorySessionHeader() {
   const projectRepositoryId = sessionQuery.data?.projectRepositoryId;
   const items = useWorkItemsQuery(factoryId);
   const workspaces = useWorkspacesQuery(projectRepositoryId);
-  const factoryQuery = useFactoryQuery(factoryId);
-  const { baseUrl, resourceId, projectPath } = useChatSessionContext();
-  const { transcript, busy } = useChatTranscript();
-  const repository = factoryQuery.data?.repositories.find(
-    candidate => candidate.projectRepositoryId === projectRepositoryId,
-  );
 
   if (!threadId || !factoryId || !sessionId) return null;
 
@@ -71,8 +63,9 @@ export function FactorySessionHeader() {
   const isReview = currentItem.source === 'github-pr';
   const section = isReview ? 'Review' : 'Work';
   const sectionPath = isReview ? `/factories/${factoryId}/review` : `/factories/${factoryId}/work`;
+  const externalItemUrl = genericExternalWorkItemUrl(currentItem);
   const externalItemLabel = externalWorkItemLabel(currentItem);
-  const hasHeaderActions = Boolean(currentItem.url) || destinations.length > 0;
+  const hasHeaderActions = Boolean(externalItemUrl) || destinations.length > 0;
 
   const openSession = (session: WorkItemSessionRef) => {
     void navigate(`/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
@@ -92,12 +85,12 @@ export function FactorySessionHeader() {
         </nav>
         {hasHeaderActions || isReview ? (
           <div className="flex shrink-0 flex-wrap items-center gap-1">
-            {currentItem.url ? (
+            {externalItemUrl ? (
               <Button
                 as="a"
                 variant="ghost"
                 size="sm"
-                href={currentItem.url}
+                href={externalItemUrl}
                 target="_blank"
                 rel="noreferrer"
                 aria-label={`Open ${externalItemLabel}`}
@@ -136,17 +129,11 @@ export function FactorySessionHeader() {
               );
             })}
             {isReview ? (
-              <PullRequestLinks
-                baseUrl={baseUrl}
-                resourceId={resourceId}
-                projectPath={projectPath}
+              <FactoryReviewPullRequestLinks
+                factoryId={factoryId}
                 projectRepositoryId={projectRepositoryId}
                 reviewItem={currentItem}
-                repositorySlug={repository?.slug}
                 threadId={threadId}
-                transcriptEntries={transcript.entries}
-                busy={busy}
-                size="sm"
               />
             ) : null}
           </div>

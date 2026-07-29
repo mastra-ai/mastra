@@ -177,6 +177,18 @@ describe('ThreadPage pull request link placement', () => {
       expect(link).toHaveAttribute('href', PULL_REQUEST_URL);
       expect(within(composer).queryByRole('link', { name: PULL_REQUEST_ACCESSIBLE_NAME })).not.toBeInTheDocument();
     });
+
+    it('shows one link to the reviewed pull request', async () => {
+      stubThreadRoute(createWireWorkItem('pull-request'), pullRequestSubscriptions);
+      renderThreadRoute();
+
+      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      const pullRequestLinks = within(factorySession)
+        .getAllByRole('link')
+        .filter(link => link.getAttribute('href') === PULL_REQUEST_URL);
+
+      expect(pullRequestLinks).toHaveLength(1);
+    });
   });
 
   describe('when the current Factory session is ordinary work', () => {

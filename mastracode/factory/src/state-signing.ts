@@ -1,7 +1,8 @@
 /**
  * Shared OAuth/install `state` signing for web integrations.
  *
- * Both the GitHub and Linear OAuth flows round-trip a signed `state` value
+ * The GitHub, Linear, and Slack OAuth/OIDC flows each round-trip a signed `state`
+ * value
  * through the third party to bind the callback to the `(orgId, userId)` tenant
  * that initiated it (CSRF protection + tenant routing). The signer is a system
  * facility: `MastraFactory` creates ONE signer at boot and hands it to every
@@ -28,6 +29,12 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 export interface StateTenant {
   orgId: string;
   userId: string;
+  /**
+   * Per-`state` random value. A signed `state` stays valid for its whole
+   * lifetime, so a flow that must not run twice off one `state` (account
+   * binding, for instance) can key single-use bookkeeping on this.
+   */
+  nonce: string;
 }
 
 /** Signs and verifies OAuth `state` values bound to a `(orgId, userId)` tenant. */
@@ -91,9 +98,10 @@ export function createStateSigner(secret?: string): StateSigner {
         const parsed = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as StatePayload;
         if (typeof parsed.orgId !== 'string' || typeof parsed.userId !== 'string') return null;
         if (typeof parsed.issuedAt !== 'number' || !Number.isFinite(parsed.issuedAt)) return null;
+        if (typeof parsed.nonce !== 'string' || parsed.nonce.length === 0) return null;
         const age = Date.now() - parsed.issuedAt;
         if (age < 0 || age > STATE_MAX_AGE_MS) return null;
-        return { orgId: parsed.orgId, userId: parsed.userId };
+        return { orgId: parsed.orgId, userId: parsed.userId, nonce: parsed.nonce };
       } catch {
         return null;
       }
