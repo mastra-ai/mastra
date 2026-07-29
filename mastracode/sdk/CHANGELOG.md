@@ -1,5 +1,16 @@
 # @mastra/code-sdk
 
+## 1.1.1-alpha.1
+
+### Patch Changes
+
+- Fixed sandbox file tools (view, write, edit, list) failing with "Path not found" in Factory sessions when called with absolute paths inside the session working directory. File tools now also work on macOS-hosted local sandboxes, not just Linux VMs. ([#20325](https://github.com/mastra-ai/mastra/pull/20325))
+
+- Sandbox filesystem operations now behave like local ones: missing files, existing destinations, and directory misuse raise typed errors instead of generic ones, reading a directory as a file fails instead of returning empty content, moving or copying a file into a new directory works, overwrite protection can no longer be raced by concurrent writers, and each filesystem reports a unique id and status. ([#20325](https://github.com/mastra-ai/mastra/pull/20325))
+
+- Updated dependencies [[`ba369f2`](https://github.com/mastra-ai/mastra/commit/ba369f2a0aaf998da0d6aa033d26f64f96bef8ac), [`dcfed93`](https://github.com/mastra-ai/mastra/commit/dcfed93e1e256c6abfa792cbb7ca836f5d0e8638), [`2876e15`](https://github.com/mastra-ai/mastra/commit/2876e15b4d2f616a3bc1ed3af57d546c268384ce), [`598080f`](https://github.com/mastra-ai/mastra/commit/598080f224edb3f0f5b801035b067fac50a56a03)]:
+  - @mastra/core@1.55.0-alpha.1
+
 ## 1.1.1-alpha.0
 
 ### Patch Changes

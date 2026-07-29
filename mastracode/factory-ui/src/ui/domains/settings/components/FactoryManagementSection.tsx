@@ -20,7 +20,7 @@ export function FactoryManagementSection() {
   return (
     <div className="flex flex-col gap-8">
       <SettingsSubsection title="Danger zone" description="Removing a Factory cannot be undone.">
-        <div className="border-border1 flex items-center justify-between gap-4 border-y py-4">
+        <div className="flex items-center justify-between gap-4 py-3">
           <div className="flex min-w-0 flex-col">
             <Txt variant="ui-md" className="text-icon5 truncate">
               Remove {factory.name}

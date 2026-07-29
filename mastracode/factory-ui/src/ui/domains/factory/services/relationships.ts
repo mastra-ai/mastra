@@ -29,7 +29,10 @@ export function relatedWorkItems(item: WorkItem, allItems: WorkItem[]): WorkItem
   });
 }
 
-export function inferredParentWorkItemId(metadata: Record<string, unknown>, allItems: WorkItem[]): string | undefined {
+export function inferredParentWorkItemId(
+  metadata: Record<string, unknown>,
+  allItems: readonly WorkItem[],
+): string | undefined {
   const headBranch = metadata.headBranch;
   if (typeof headBranch !== 'string') return undefined;
   return allItems.find(
