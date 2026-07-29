@@ -413,8 +413,6 @@ onDirectMessage: async (thread, message, defaultHandler, ctx) => {
 
 Anything the run reads from its request context can be decided per message this way, such as which user a platform sender maps to.
 
-`ctx` is not optional. Mastra always passes it. Handlers that declare fewer parameters still satisfy the type, so a three-parameter handler needs no change, but code that calls a `ChannelHandler` value directly must pass all four arguments.
-
 ## Resource ID resolution
 
 By default a channel thread's memory `resourceId` is `${platform}:${message.author.userId}`. The sender owns the memory, scoped per platform. For apps with a shared identity, such as single sign-on (SSO), this splits memory: the same user gets `feishu:user_123` in a Feishu DM but `user_123` on the web.
