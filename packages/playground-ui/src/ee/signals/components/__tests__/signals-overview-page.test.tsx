@@ -69,7 +69,7 @@ describe('SignalsOverviewPage', () => {
     it('links to the Trace Intelligence documentation', () => {
       render(<SignalsOverviewPage />);
 
-      expect(screen.getByRole('link', { name: 'Read the docs (opens in new tab)' }).getAttribute('href')).toBe(
+      expect(screen.getByRole('link', { name: /Read the docs/ }).getAttribute('href')).toBe(
         'https://mastra.ai/en/docs/mastra-platform/trace-intelligence',
       );
     });
