@@ -13,6 +13,7 @@
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
+    "moonshotai/Kimi-K3",
     "stepfun-ai/Step-3.7-Flash",
     "zai-org/GLM-4.5V"
   ],
@@ -38,6 +39,7 @@
     "Qwen/Qwen3.6-27B",
     "Qwen/Qwen3.6-35B-A3B",
     "XiaomiMiMo/MiMo-V2-Flash",
+    "XiaomiMiMo/MiMo-V2.5",
     "XiaomiMiMo/MiMo-V2.5-Pro",
     "deepseek-ai/DeepSeek-R1",
     "deepseek-ai/DeepSeek-R1-0528",
@@ -78,6 +80,7 @@
     "Qwen/Qwen3.5-9B",
     "Qwen/Qwen3.6-27B",
     "Qwen/Qwen3.6-35B-A3B",
+    "XiaomiMiMo/MiMo-V2.5",
     "XiaomiMiMo/MiMo-V2.5-Pro",
     "deepseek-ai/DeepSeek-R1",
     "deepseek-ai/DeepSeek-V4-Flash",
@@ -86,6 +89,7 @@
     "google/gemma-4-31B-it",
     "meta-llama/Llama-3.3-70B-Instruct",
     "moonshotai/Kimi-K2.7-Code",
+    "moonshotai/Kimi-K3",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
     "zai-org/GLM-5.2"

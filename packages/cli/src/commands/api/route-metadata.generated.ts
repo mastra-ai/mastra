@@ -3422,6 +3422,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "agents",
       "authorId",
+      "autoPublish",
       "browser",
       "changeMessage",
       "defaultOptions",
@@ -5857,7 +5858,8 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "resourceId",
       "sessionScope",
-      "tags"
+      "tags",
+      "threadId"
     ],
     "hasQuery": false,
     "hasBody": true,

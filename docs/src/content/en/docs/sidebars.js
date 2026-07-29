@@ -280,9 +280,6 @@ const sidebars = {
             {
               type: 'category',
               label: 'Agent Builder',
-              customProps: {
-                tags: ['new'],
-              },
               items: [
                 { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
                 { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
@@ -504,8 +501,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'voice/livekit',
-              label: 'LiveKit',
+              id: 'voice/realtime-voice',
+              label: 'Realtime Voice',
             },
           ],
         },
@@ -601,6 +598,11 @@ const sidebars = {
               type: 'doc',
               id: 'agent-controller/tool-approvals',
               label: 'Tool Approvals',
+            },
+            {
+              type: 'doc',
+              id: 'agent-controller/channels',
+              label: 'Channels',
             },
           ],
         },
@@ -1048,6 +1050,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'mastra-platform/trace-intelligence',
+          label: 'Trace Intelligence',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'mastra-platform/studio',
           label: 'Studio',
         },
@@ -1060,9 +1070,6 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/github',
           label: 'GitHub integration',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',

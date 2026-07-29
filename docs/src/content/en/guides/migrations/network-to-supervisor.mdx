@@ -9,13 +9,13 @@ Supervisor agents using `Agent.stream()` and `Agent.generate()` are the recommen
 
 :::warning[.network() Deprecation]
 
-`.network()` is deprecated and will be removed in a future release. While existing code will continue to work until then, no new features will be added to it. Migrate to supervisor agents as soon as possible.
+`.network()` is deprecated and will be removed in a future release. Existing code will continue to work until then, but development now focuses on supervisor agents. Migrate to supervisor agents as soon as possible.
 
 :::
 
 ## Replace `.network()` with `.stream()` or `.generate()`
 
-The core change is replacing `.network()` calls with `.stream()` (for streaming) or `.generate()` (for non-streaming). The agent configuration stays the same -- you still define `agents`, `workflows`, `tools`, and `memory` on the agent. The difference is how you call it and how you process the results.
+The core change is replacing `.network()` calls with `.stream()` (for streaming) or `.generate()` (for non-streaming). The agent configuration stays the same. You still define `agents`, `workflows`, `tools`, and `memory` on the agent. The difference is how you call it and how you process the results.
 
 With `.network()`, you iterated over custom event types like `network-execution-event-step-finish`. With `.stream()`, you use the standard `textStream` or `fullStream` iterators.
 
@@ -57,9 +57,9 @@ console.log(result.text)
 
 ## Write clear supervisor instructions
 
-With `.network()`, the routing agent relied on generic instructions and primitive descriptions to decide what to call. Supervisor agents work the same way, but clear and specific instructions significantly improve delegation accuracy.
+With `.network()`, the routing agent relied on generic instructions and primitive descriptions to decide what to call. Supervisor agents work the same way, but clear and specific instructions improve delegation accuracy.
 
-Your supervisor's `instructions` should specify what resources are available, when to use each one, how to coordinate them, and when the task is complete.
+Your supervisor's `instructions` should identify the available resources and when to use each one. They should also explain how to coordinate those resources and recognize when the task is complete.
 
 **Before:**
 
@@ -99,7 +99,7 @@ Success criteria:
 
 ## Add descriptions to subagents
 
-Each subagent should have a `description` field that explains what it does, what format it returns, and when it should be used. The supervisor uses these descriptions to decide which agent to delegate to.
+Each subagent should have a `description` field that explains its purpose and return format. The description should also state when to use the subagent. The supervisor uses these descriptions to decide which agent to delegate to.
 
 ```typescript
 const researchAgent = new Agent({
@@ -136,7 +136,7 @@ If you were handling specific `.network()` events, update them to use the standa
 
 Supervisor agents let you hook into the delegation lifecycle to monitor, modify, or reject delegations. These hooks can be configured in the agent's `defaultOptions` or passed per-call.
 
-`onDelegationStart` is called before the supervisor delegates to a subagent. You can modify the prompt, limit the subagent's steps, or reject the delegation entirely:
+`onDelegationStart` is called before the supervisor delegates to a subagent. You can modify the prompt or limit the subagent's steps. The hook can also reject the delegation entirely:
 
 ```typescript
 const stream = await supervisorAgent.stream('Research AI in education', {
@@ -166,7 +166,7 @@ const stream = await supervisorAgent.stream('Research AI in education', {
 })
 ```
 
-`onDelegationComplete` is called after a delegation finishes. You can inspect the result, call `context.bail()` to stop the supervisor loop, and return feedback that gets saved to the supervisor's memory:
+`onDelegationComplete` is called after a delegation finishes. Inspect the result and call `context.bail()` when the supervisor loop should stop. You can also return feedback that gets saved to the supervisor's memory:
 
 ```typescript
 const stream = await supervisorAgent.stream('Research AI in education', {
@@ -186,7 +186,7 @@ const stream = await supervisorAgent.stream('Research AI in education', {
 
 ## Add message filtering
 
-By default, subagents receive the full conversation context from the supervisor. Use `messageFilter` to control what messages are shared -- for example, to remove sensitive data or limit the number of messages:
+By default, subagents receive the full conversation context from the supervisor. Use `messageFilter` to control what messages are shared. For example, remove sensitive data or limit the number of messages:
 
 ```typescript
 const stream = await supervisorAgent.stream('Research AI in education', {
@@ -207,7 +207,7 @@ const stream = await supervisorAgent.stream('Research AI in education', {
 
 ## Add iteration monitoring
 
-`onIterationComplete` is called after each iteration of the supervisor loop. You can use it to log progress, provide feedback to guide the agent, or stop execution early:
+`onIterationComplete` is called after each iteration of the supervisor loop. Use it to log progress or provide feedback that guides the agent. The hook can also stop execution early:
 
 ```typescript
 const stream = await supervisorAgent.stream('Research AI in education', {

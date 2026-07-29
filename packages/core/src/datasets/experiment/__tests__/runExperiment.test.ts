@@ -150,6 +150,28 @@ describe('runExperiment', () => {
       expect(firstCallOptions.requestContext).toBeInstanceOf(RequestContext);
       expect(firstCallOptions.requestContext.all).toEqual(requestContext);
     });
+
+    it('resolves an agent target with the requested version', async () => {
+      const mockAgent = createMockAgent('Draft response');
+      const getAgentById = vi.fn().mockReturnValue(mockAgent);
+      const localMastra = {
+        ...mastra,
+        getAgentById,
+      } as unknown as Mastra;
+
+      await runExperiment(localMastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        agentVersion: 'draft-version-id',
+      });
+
+      expect(getAgentById).toHaveBeenCalledWith('test-agent', { versionId: 'draft-version-id' });
+      expect(mockAgent.generate).toHaveBeenCalled();
+      const resolveOrder = getAgentById.mock.invocationCallOrder[0]!;
+      const generateOrder = mockAgent.generate.mock.invocationCallOrder[0]!;
+      expect(resolveOrder).toBeLessThan(generateOrder);
+    });
   });
 
   describe('status transitions', () => {

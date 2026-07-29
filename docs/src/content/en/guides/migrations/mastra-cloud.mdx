@@ -54,7 +54,7 @@ The Mastra platform replaces Mastra Cloud with separate Studio and Server produc
 
 Mastra Cloud provided a managed libSQL database, backed by [Turso](https://turso.tech). The Mastra platform doesn't host a database for you, so you need to point your storage at an externally hosted instance.
 
-If you were already using a hosted database ("bring your own"), no changes are needed. Ensure the connection string is set as an environment variable in the dashboard rather than hardcoded.
+If you were already using a hosted database ("bring your own"), keep the existing database configuration. Ensure the connection string is set as an environment variable in the dashboard rather than hardcoded.
 
 If you were using Cloud Store, follow the steps below to export your data and load it into a new libSQL database that you control.
 
@@ -62,7 +62,7 @@ If you were using Cloud Store, follow the steps below to export your data and lo
 
 You can export your Cloud Store data in two ways: download it from the dashboard, or create a manual dump with the Turso CLI.
 
-#### Option A — Export from the dashboard (recommended)
+#### Option A: Export from the dashboard (recommended)
 
 Open your project in the [Mastra dashboard](https://projects.mastra.ai) and navigate to **Runtime → Settings → Storage**. Click the **Export Database** button. The dashboard generates a full `.sql` dump of your Cloud Store and downloads it directly to your Downloads folder.
 
@@ -74,7 +74,7 @@ sqlite3 mydb.db < ~/Downloads/mastra-cloud-dump.sql
 
 You now have a portable `mydb.db` file you can inspect locally, back up, or use as the source for the new database in the steps that follow.
 
-#### Option B — Export via the Turso CLI
+#### Option B: Export via the Turso CLI
 
 If you prefer to work from the command line, or need to script the export, you can dump the database directly using the [Turso CLI](https://docs.turso.tech/cli). This approach requires the database URL and an auth token, both surfaced in the dashboard.
 
@@ -265,7 +265,7 @@ Deploy your hosted Studio instance:
 mastra studio deploy
 ```
 
-The CLI builds your project, uploads the artifact, and deploys it. On first deploy, a `.mastra-project.json` file is created to link your local project to the platform. Commit this file to your repository.
+The CLI builds your project and uploads the artifact before deploying it. On first deploy, a `.mastra-project.json` file is created to link your local project to the platform. Commit this file to your repository.
 
 A local env file is optional. When a `.env` or `.env.*` file is present in the project directory, the deploy bundles its environment variables.
 
@@ -279,14 +279,14 @@ See [Studio deployment](/docs/studio/deployment#mastra-platform) for details.
 
 ### Multiple environments
 
-A single Mastra platform project runs the same codebase across multiple named [environments](/docs/mastra-platform/environments), such as `production` and `staging`. Deploy to each with the unified [`mastra deploy`](/docs/mastra-platform/deploy) command:
+A single Mastra platform project runs the same codebase across multiple [environments](/docs/mastra-platform/environments), such as `production` and `staging`. Deploy to each with the unified [`mastra deploy`](/docs/mastra-platform/deploy) command:
 
 ```bash
 mastra deploy --env production --yes
 mastra deploy --env staging --env-file .env.staging --yes
 ```
 
-Each environment gets its own URL, its own environment variables, and its own deploy history.
+Each environment has a dedicated URL and environment variables, along with a separate deploy history.
 
 ## Deploy Server (optional)
 

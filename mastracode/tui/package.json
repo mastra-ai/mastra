@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.31.1-alpha.10",
+  "version": "0.32.3",
   "description": "",
   "type": "module",
   "files": [
@@ -77,13 +77,14 @@
   "scripts": {
     "cli": "tsx src/main.ts",
     "check": "tsc --noEmit",
-    "build:lib": "tsup --silent --config tsup.config.ts",
+    "build:lib": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "render-smoke:install": "node scripts/install-render-smoke-settings.mjs",
     "render-smoke:server": "node scripts/render-smoke-server.mjs",
     "render-smoke:uninstall": "node scripts/uninstall-render-smoke-settings.mjs",
     "test": "vitest",
-    "lint": "eslint .",
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix .",
     "e2e:list": "tsx e2e-list.ts",
     "e2e:smoke": "vitest run --config e2e/vitest.shards.config.ts",
     "e2e:test": "MC_E2E_VITEST_SCENARIOS=all vitest run --config e2e/vitest.shards.config.ts"
@@ -139,7 +140,7 @@
     "@vitest/ui": "catalog:",
     "@xterm/headless": "6.0.0",
     "eslint": "^10.7.0",
-    "tsup": "^8.5.1",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "typescript-eslint": "^8.57.0",

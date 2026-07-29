@@ -15,12 +15,14 @@ import { mkdir, rm, stat, access, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
+import { analyzeEntryProjectType } from '@mastra/deployer/build';
 import { ZipArchive } from 'archiver';
 import pc from 'picocolors';
 
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
 import type { CLI_ORIGIN } from '../../analytics/index.js';
 import { writeBarLine } from '../../utils/clack-bar.js';
+import { findMastraEntryFile } from '../../utils/find-mastra-entry.js';
 import { runBuild } from '../../utils/run-build.js';
 import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
@@ -40,14 +42,20 @@ import { assertDeployDir } from './validate-dir.js';
  * Derive the public studio/server URLs from the environment slug.
  * These are the user-facing URLs, not the internal Railway instanceUrl.
  */
-function derivePublicUrls(slug: string): { studioUrl: string; serverUrl: string } {
+function derivePublicUrls(
+  slug: string,
+  projectType?: string,
+): { studioUrl: string; serverUrl: string; serverLabel: string } {
   // Determine if we're targeting staging or production
   const isStaging = MASTRA_PLATFORM_API_URL.includes('staging');
   const baseDomain = isStaging ? 'staging.mastra.cloud' : 'mastra.cloud';
+  const isFactory = projectType === 'factory';
+  const serverSubdomain = isFactory ? 'factory' : 'server';
 
   return {
     studioUrl: `https://${slug}.studio.${baseDomain}`,
-    serverUrl: `https://${slug}.server.${baseDomain}`,
+    serverUrl: `https://${slug}.${serverSubdomain}.${baseDomain}`,
+    serverLabel: isFactory ? 'Factory' : 'Server',
   };
 }
 
@@ -702,7 +710,13 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   // Check build staleness
   const mastraDir = join(targetDir, 'src', 'mastra');
   const outputDirectory = join(targetDir, '.mastra');
-  const staleness = await checkBuildStaleness(targetDir, mastraDir, outputDirectory);
+  // Detect project type so staleness hashing includes Factory UI inputs
+  const mastraEntryFile = findMastraEntryFile(mastraDir);
+  let projectType: string | undefined;
+  if (mastraEntryFile) {
+    projectType = await analyzeEntryProjectType(mastraEntryFile);
+  }
+  const staleness = await checkBuildStaleness(targetDir, mastraDir, outputDirectory, projectType);
 
   if (opts.skipBuild) {
     if (staleness.isStale && staleness.reason !== 'no-build') {
@@ -899,9 +913,9 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   const finalStatus = await pollEnvironmentDeploy(token, orgId, projectId, environment.id, deployResult.id);
 
   if (finalStatus.status === 'running') {
-    const { studioUrl, serverUrl } = derivePublicUrls(environment.slug);
+    const { studioUrl, serverUrl, serverLabel } = derivePublicUrls(environment.slug, projectType);
     p.log.info(`  Studio: ${pc.cyan(studioUrl)}`);
-    p.log.info(`  Server: ${pc.cyan(serverUrl)}`);
+    p.log.info(`  ${serverLabel}: ${pc.cyan(serverUrl)}`);
     p.outro(`Deploy succeeded in ${elapsed(performance.now() - tTotal)}!`);
   } else if (finalStatus.status === 'failed') {
     p.log.error(`Deploy failed: ${finalStatus.error}`);
