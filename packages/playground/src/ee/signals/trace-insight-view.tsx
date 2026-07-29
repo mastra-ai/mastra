@@ -67,7 +67,7 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
       {insight.signals.length > 0 && (
         <section aria-labelledby="trace-insight-signals-heading">
           <h2 id="trace-insight-signals-heading" className="text-neutral3 font-mono text-xs tracking-wider uppercase">
-            Signal summaries
+            Trace signal summaries
           </h2>
           <ul className="mt-3 space-y-3">
             {insight.signals.map(signal => (

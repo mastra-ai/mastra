@@ -97,9 +97,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('Signals trace insight', () => {
+describe('Trace signals trace insight', () => {
   describe('when a theme example is opened', () => {
-    it('requests the trace insight and shows the summary, observations, and signal texts', async () => {
+    it('requests the trace insight and shows the summary, observations, and trace signal texts', async () => {
       useThemeDrilldownHandlers();
       server.use(
         http.get(`${BASE_URL}/api/learning/traces/trace-1/summary`, () => HttpResponse.json(traceInsightResponse)),
