@@ -336,6 +336,16 @@ export interface SourceControlStorageHandle {
     findByExternalId(args: { orgId: string; externalId: string }): Promise<SourceControlRepository | null>;
     findBySlug(args: { orgId: string; installationId: string; slug: string }): Promise<SourceControlRepository | null>;
     upsert(args: { orgId: string; input: UpsertSourceControlRepositoryInput }): Promise<SourceControlRepository>;
+    /**
+     * Migrate a repository and its dependent connections to a new installation.
+     * Used when a GitHub App is reinstalled with a new installation ID on the same account.
+     * Returns the repository under the new installation (either migrated or existing).
+     */
+    migrateInstallation(args: {
+      orgId: string;
+      id: string;
+      newInstallationId: string;
+    }): Promise<SourceControlRepository>;
   };
   readonly connections: {
     list(args: { orgId: string; factoryProjectId: string }): Promise<ProjectSourceControlConnection[]>;
@@ -755,6 +765,36 @@ export class SourceControlStorage extends FactoryStorageDomain {
             updated_at: now,
           });
           return toRepository(row);
+        },
+        migrateInstallation: async ({ orgId, id, newInstallationId }) => {
+          const existing = await getRepository({ orgId, id });
+          if (!existing) {
+            throw new Error(`Repository ${id} not found in organization ${orgId}`);
+          }
+          await requireInstallation({ orgId, id: newInstallationId });
+          try {
+            await db().updateMany(REPOSITORIES, { id }, { installation_id: newInstallationId, updated_at: new Date() });
+            // Migrate dependent connections to the new installation
+            await db().updateMany(
+              CONNECTIONS,
+              { installation_id: existing.installationId },
+              { installation_id: newInstallationId },
+            );
+            // Return the updated repository
+            const updated = await getRepository({ orgId, id });
+            if (!updated) throw new Error('Repository disappeared after update');
+            return updated;
+          } catch (error) {
+            // Unique constraint violation: repository already exists under the new installation
+            if (!(error instanceof UniqueViolationError)) throw error;
+            // Find and return the existing repository under the new installation
+            const conflictRow = await db().findOne<RepositoryDbRow>(REPOSITORIES, {
+              installation_id: newInstallationId,
+              external_id: existing.externalId,
+            });
+            if (!conflictRow) throw error; // Should never happen if we got a unique violation
+            return toRepository(conflictRow);
+          }
         },
       },
       connections: {

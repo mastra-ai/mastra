@@ -44,6 +44,8 @@ export function showFormattedError(
         errorType?: string;
         retryable?: boolean;
         retryDelay?: number;
+        retryAttempt?: number;
+        maxRetries?: number;
       }
     | Error,
 ): void {
@@ -63,8 +65,11 @@ export function showFormattedError(
   const retryable = 'retryable' in event ? event.retryable : parsed.retryable;
   const retryDelay = 'retryDelay' in event ? event.retryDelay : parsed.retryDelay;
   if (retryable && retryDelay) {
-    const seconds = Math.ceil(retryDelay / 1000);
-    errorText += theme.fg('muted', ` (retry in ${seconds}s)`);
+    const seconds = retryDelay / 1000;
+    const retryAttempt = 'retryAttempt' in event ? event.retryAttempt : undefined;
+    const maxRetries = 'maxRetries' in event ? event.maxRetries : undefined;
+    const retryProgress = retryAttempt && maxRetries ? ` ${retryAttempt}/${maxRetries}` : '';
+    errorText += theme.fg('muted', ` (retry${retryProgress} in ${seconds}s)`);
   }
 
   const lines: Text[] = [new Text(theme.fg('error', errorText), 1, 0)];

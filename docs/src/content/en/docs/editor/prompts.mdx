@@ -8,7 +8,11 @@ packages:
 
 # Prompts
 
-Prompt blocks are reusable instruction templates that you compose into an agent's system prompt. Each block can contain plain text, template variables, and display conditions. Non-technical team members can edit prompt content, test different phrasings, and publish changes. Every edit is versioned, so you can compare prompt variations, roll back, and track what changed over time. You can create and manage prompt blocks through the Studio UI or programmatically through the server API, then reference them across multiple agents.
+Prompt blocks are reusable instruction templates that you compose into an agent's system prompt. Each block can contain plain text, template variables, and display conditions.
+
+Non-technical team members can edit and test prompt content before publishing changes. Every edit is versioned, so you can compare prompt variations and roll back. The history also records what changed over time.
+
+You can create and manage prompt blocks through the Studio UI or programmatically through the server API, then reference them across multiple agents.
 
 ## Quickstart
 
@@ -34,7 +38,7 @@ To turn an inline block into a reusable prompt block, open the block's menu and 
 
 ## Template variables
 
-Prompt blocks support `{{variable}}` syntax for dynamic content. Variables are resolved at runtime from the agent's variables and request context.
+Prompt blocks support `{{variable}}` syntax for runtime content. Variables are resolved at runtime from the agent's variables and request context.
 
 ```text
 You are helping {{userName}} with their {{task || 'request'}}.
@@ -69,7 +73,7 @@ In the Studio, open a block's **Display conditions** panel to set up rules visua
 
 ## Programmatic control
 
-Prompt blocks can be managed from code through [`mastra.getEditor().prompt`](/reference/editor/mastra-editor#namespaces). This is useful for seeding a set of starter prompts, syncing blocks between environments, or generating prompt variants from a script.
+Prompt blocks can be managed from code through [`mastra.getEditor().prompt`](/reference/editor/mastra-editor#namespaces). This is useful for seeding a set of starter prompts or syncing blocks between environments, or alternatively generating prompt variants from a script.
 
 Create a new prompt block with `editor.prompt.create()`:
 
@@ -132,7 +136,7 @@ See the [MastraEditor reference](/reference/editor/mastra-editor#namespaces) for
 
 ## Versioning
 
-Prompt blocks follow the same [versioning lifecycle](/docs/editor/overview#versioning) as agents. Each prompt block has a draft that you can edit and publish as a versioned snapshot. This means prompt content can be versioned and rolled back independently from the agent that uses it.
+Prompt blocks follow the same [versioning lifecycle](/docs/editor/overview#versioning) as agents. Each prompt block has a draft that you can edit and publish as a versioned snapshot. As a result, prompt content can be versioned and rolled back independently from the agent that uses it.
 
 When an agent references a prompt block, the resolved content comes from the block's active published version by default. During editing, draft content is used for previews. This separation makes it safe for non-technical team members to experiment with prompt wording. The published version stays stable until they explicitly activate a new one.
 
