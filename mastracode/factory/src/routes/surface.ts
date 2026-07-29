@@ -14,8 +14,9 @@ import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
-import type { StateSigner } from '../state-signing.js';
+import type { ChannelLinkStateSigner, StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
@@ -52,6 +53,8 @@ export interface FactoryApiRoutesDeps {
   fsRoot?: string;
   publicOrigin: string;
   stateSigner?: StateSigner;
+  /** Channel account-link signer, forwarded to channel integrations. */
+  channelLinkStateSigner?: ChannelLinkStateSigner;
   /** Sandbox fleet constructed by the factory (disabled when no machine). */
   fleet: SandboxFleet;
   /** Root factory storage backend (distributed locks, app-db diagnostics). */
@@ -68,6 +71,7 @@ export interface FactoryApiRoutesDeps {
     projects: FactoryProjectsStorage;
     queueHealth: QueueHealthStorage;
     workItems: WorkItemsStorage;
+    channelIdentity: ChannelIdentityStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
@@ -202,10 +206,11 @@ export function buildIntegrationContext(
     'controller' | 'publicOrigin' | 'auth' | 'fleet' | 'factoryStorage' | 'integrationStorage' | 'sourceControlStorage'
   > & {
     stateSigner: StateSigner;
+    channelLinkStateSigner?: ChannelLinkStateSigner;
     emitAudit?: AuditEmitter['emit'];
     rules: FactoryRules;
     factoryReady: boolean;
-    domains: Pick<FactoryApiRoutesDeps['domains'], 'projects' | 'intake' | 'workItems'>;
+    domains: Pick<FactoryApiRoutesDeps['domains'], 'projects' | 'intake' | 'workItems' | 'channelIdentity'>;
   },
   integrationId: string,
 ): IntegrationContext {
@@ -216,11 +221,13 @@ export function buildIntegrationContext(
     baseUrl: deps.publicOrigin,
     controller: deps.controller,
     stateSigner: deps.stateSigner,
+    ...(deps.channelLinkStateSigner ? { channelLinkStateSigner: deps.channelLinkStateSigner } : {}),
     storage: {
       generic: deps.integrationStorage.forIntegration(integrationId),
       sourceControl: deps.sourceControlStorage.forIntegration(integrationId),
       projects: deps.domains.projects,
       intake: deps.domains.intake,
+      channelIdentity: deps.domains.channelIdentity,
     },
     ...(deps.factoryReady ? { rules: { config: deps.rules, workItems: deps.domains.workItems } } : {}),
     ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),

@@ -61,7 +61,7 @@ import { SandboxFleet } from './sandbox/fleet.js';
 import { registerSandboxReattach } from './sandbox/reattach.js';
 import { handleServerError } from './server-error.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
-import { createStateSigner } from './state-signing.js';
+import { createChannelLinkStateSigner, createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { AuditDomain } from './storage/domains/audit/domain.js';
@@ -425,6 +425,10 @@ export class MastraFactory {
     // replica-stable secret when needed; otherwise local development gets a
     // per-process random signer (`stable: false`).
     const stateSigner = createStateSigner(this.#config.stateSecret);
+    // Same secret, separate signer: channel account-link deep links carry a
+    // different payload shape than OAuth state, and a link signed on one
+    // replica must verify on any other.
+    const channelLinkStateSigner = createChannelLinkStateSigner(this.#config.stateSecret);
 
     // One-time provider initialization with factory-level context (e.g.
     // better-auth builds its default instance on the backend's auth
@@ -477,7 +481,13 @@ export class MastraFactory {
     // providers additionally require the source-control storage domain. Readiness
     // is derived solely from capability presence, never from provider ids.
     const integrationRegistrations = integrations.map(integration => {
-      const requiredDomains = ['integrations', ...(integration.versionControl ? ['source-control'] : [])];
+      const requiredDomains = [
+        'integrations',
+        ...(integration.versionControl ? ['source-control'] : []),
+        // Channels resolve an inbound sender to a tenant through the reverse
+        // index; without it every message would dispatch tenant-less.
+        ...(integration.channels ? ['channel-identity'] : []),
+      ];
       return {
         integration,
         ready: requiredDomains.every(domain => storage.isDomainReady(domain)),
@@ -660,6 +670,7 @@ export class MastraFactory {
             factoryStorage: storage,
             integrationStorage,
             sourceControlStorage,
+            channelLinkStateSigner,
             domains,
             integrations: integrationRegistrations,
             intakeReady,
@@ -737,6 +748,48 @@ export class MastraFactory {
     this.#prepared = prepared;
     this.#factoryProcessor = factoryProcessor;
 
+    // Chat-platform channels (Slack, Discord, …) contributed by integrations,
+    // attached to the mounted controller so inbound platform messages reach
+    // the same agents the web UI drives. READY integrations only — an
+    // integration whose `channel-identity` domain isn't migrated can't resolve
+    // a sender's tenant, and attaching it anyway would dispatch runs on
+    // default credentials.
+    const channelRegistrations = integrationRegistrations.filter(
+      ({ integration, ready }) => ready && integration.channels,
+    );
+    // `setChannels` replaces rather than merges, so a second provider would
+    // silently never receive a message. Fail loud instead.
+    if (channelRegistrations.length > 1) {
+      throw new Error(
+        `MastraFactory: integrations [${channelRegistrations
+          .map(({ integration }) => integration.id)
+          .join(', ')}] all provide channels, but only one may. Remove all but one.`,
+      );
+    }
+    for (const { integration } of channelRegistrations) {
+      prepared.base.controller.setChannels(
+        integration.channels!(
+          buildIntegrationContext(
+            {
+              controller: prepared.base.controller,
+              publicOrigin,
+              auth: routeAuth,
+              stateSigner,
+              channelLinkStateSigner,
+              fleet,
+              factoryStorage: storage,
+              integrationStorage,
+              sourceControlStorage,
+              rules,
+              factoryReady,
+              domains,
+            },
+            integration.id,
+          ),
+        ),
+      );
+    }
+
     // Integration lifecycle workers (e.g. polling an upstream without
     // webhooks): collected from READY integrations only, folded into the
     // constructor args so `new Mastra(...)` merges them with the default
@@ -753,6 +806,7 @@ export class MastraFactory {
               publicOrigin,
               auth: routeAuth,
               stateSigner,
+              channelLinkStateSigner,
               fleet,
               factoryStorage: storage,
               integrationStorage,

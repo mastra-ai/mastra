@@ -18,6 +18,7 @@
  */
 
 import type { MastraCodeConfig, MountedMastraCode } from '@mastra/code-sdk';
+import type { AgentControllerChannels } from '@mastra/core/channels';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
@@ -28,9 +29,10 @@ import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
 import type { FactoryRules } from '../rules/types.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
-import type { StateSigner } from '../state-signing.js';
+import type { ChannelLinkStateSigner, StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorageHandle } from '../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -84,6 +86,13 @@ export interface IntegrationContext {
    * every integration's OAuth flow signs and verifies with the same secret.
    */
   stateSigner?: StateSigner;
+  /**
+   * Signs the channel account-link `state`, so a chat platform's deep link
+   * can't be forged into binding someone else's sender identity. Shares the
+   * factory's state secret with `stateSigner`, so a link signed on one replica
+   * verifies on any other. Only channel integrations need it.
+   */
+  channelLinkStateSigner?: ChannelLinkStateSigner;
   /** Persistence handles pre-scoped to this integration's stable id. */
   storage: {
     generic: IntegrationStorageHandle;
@@ -92,6 +101,12 @@ export interface IntegrationContext {
     projects: FactoryProjectsStorage;
     /** Cross-integration intake selection (which sources are synced). */
     intake: IntakeStorage;
+    /**
+     * Reverse index from a chat-platform sender to a Mastra tenant. Channel
+     * integrations resolve an inbound sender through this to run under the
+     * right user's credentials.
+     */
+    channelIdentity: ChannelIdentityStorage;
   };
   /**
    * Factory rule runtime available when the work-item domain is ready.
@@ -158,6 +173,23 @@ export interface FactoryIntegration {
    * duplicates fail the `new Mastra(...)` construction loudly.
    */
   workers?(ctx: IntegrationContext): MastraWorker[];
+  /**
+   * Chat-platform channels this integration contributes (Slack, Discord, …).
+   * Called once at boot for READY integrations only; the factory attaches the
+   * result to the mounted agent controller via `setChannels`, so inbound
+   * platform messages reach the same agents the web UI drives.
+   *
+   * An integration providing this slot also declares a dependency on the
+   * `channel-identity` domain, which the factory folds into its readiness
+   * gate — so an integration whose reverse index isn't migrated yet reports
+   * not-ready and its channels never attach, rather than dispatching runs it
+   * can't resolve a tenant for.
+   *
+   * Only one integration may provide channels; the factory fails loud at boot
+   * on a second, because `setChannels` replaces rather than merges and the
+   * loser would silently never receive a message.
+   */
+  channels?(ctx: IntegrationContext): AgentControllerChannels;
   /**
    * Non-secret config snapshot (booleans + names only, never values). The
    * factory merges it into system diagnostics/startup logs.

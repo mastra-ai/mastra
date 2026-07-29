@@ -15,3 +15,12 @@ export { createChannelLinkStateSigner, createStateSigner } from './state-signing
 export type { ChannelLinkState, ChannelLinkStateSigner, StateSigner, StateTenant } from './state-signing.js';
 export { createFactoryRouteAuth } from './auth.js';
 export type { RouteAuth } from './routes/route.js';
+// The integration seam, so a host can implement `FactoryIntegration` from
+// outside this package — the contract's stated design for third parties, and
+// the path Slack takes (its `@mastra/slack`/`chat` deps live in the host).
+export type {
+  FactoryIntegration,
+  IntegrationContext,
+  IntegrationHooks,
+  IntegrationTools,
+} from './integrations/base.js';

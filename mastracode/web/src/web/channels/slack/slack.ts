@@ -595,16 +595,21 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
   };
 };
 
-export function createAgentControllerSlackChannels(deps: SlackChannelDeps): AgentControllerChannels {
+/** Slack app credentials, passed in explicitly rather than read from env here. */
+export interface SlackCredentials {
+  clientId?: string;
+  clientSecret?: string;
+  signingSecret: string;
+  botToken?: string;
+}
+
+export function createAgentControllerSlackChannels(
+  deps: SlackChannelDeps & { slack: SlackCredentials },
+): AgentControllerChannels {
   const channels = new AgentControllerChannels({
     adapters: {
       slack: {
-        adapter: createSlackAdapter({
-          clientId: process.env.SLACK_APP_CLIENT_ID,
-          clientSecret: process.env.SLACK_APP_CLIENT_SECRET,
-          signingSecret: process.env.SLACK_APP_SIGNING_SECRET,
-          botToken: process.env.SLACK_APP_BOT_TOKEN,
-        }),
+        adapter: createSlackAdapter(deps.slack),
         toolDisplay: 'hidden',
       },
     },

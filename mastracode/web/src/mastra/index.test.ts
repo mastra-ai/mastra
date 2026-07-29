@@ -45,6 +45,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
         'GITHUB_APP_WEBHOOK_SECRET',
         'LINEAR_CLIENT_ID',
         'LINEAR_CLIENT_SECRET',
+        'SLACK_APP_SIGNING_SECRET',
       ]) {
         vi.stubEnv(name, '');
       }
@@ -134,9 +135,37 @@ describe('platform entry (src/mastra/index.ts)', () => {
       async () => {
         vi.resetModules();
         vi.stubEnv('SLACK_APP_SIGNING_SECRET', 'test-signing-secret');
+        // Slack signs the account-link state, so it needs a replica-stable
+        // secret like the GitHub and Linear integrations do.
+        vi.stubEnv('WORKOS_COOKIE_PASSWORD', 'stable-state-secret');
         const mod = await import('./index.js');
         const controller = mod.mastra.getAgentController('code');
         expect(controller?.getChannels()).not.toBeNull();
+      },
+    );
+
+    it('registers the Slack connect routes through the integration', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      vi.stubEnv('SLACK_APP_SIGNING_SECRET', 'test-signing-secret');
+      vi.stubEnv('WORKOS_COOKIE_PASSWORD', 'stable-state-secret');
+      const mod = await import('./index.js');
+      const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
+      // The entry no longer splices these on by hand — their presence proves the
+      // factory collected them from the integration's `routes()`.
+      expect(paths).toContain('/connect/slack');
+    });
+
+    it(
+      'fails the boot when Slack is configured without a replica-stable state secret',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        vi.stubEnv('SLACK_APP_SIGNING_SECRET', 'test-signing-secret');
+        // A per-process random signer means a link signed on one replica cannot be
+        // verified on another — silently broken linking. Fail loud instead.
+        vi.stubEnv('GITHUB_APP_WEBHOOK_SECRET', '');
+        vi.stubEnv('WORKOS_COOKIE_PASSWORD', '');
+        await expect(import('./index.js')).rejects.toThrow(/'slack' signs OAuth state/);
       },
     );
   });
