@@ -121,11 +121,11 @@ The agent will return a formatted description with sections in English, Spanish,
 
 ## GitHub actions
 
-GitHub Actions run your workflows in short-lived environments on GitHub's infrastructure. Each run starts with a clean virtual machine, checks out your code, installs dependencies, runs your workflow steps, and then shuts down. Nothing persists between runs unless you explicitly save it as an artifact or cache.
+GitHub Actions run your workflows in short-lived environments on GitHub's infrastructure. Each run starts with a clean virtual machine and checks out your code. It installs dependencies before running your workflow steps. The environment shuts down when the run completes. Nothing persists between runs unless you explicitly save it as an artifact or cache.
 
 ### Create the workflow
 
-GitHub Actions workflows live in the `.github/workflows` directory. Create a `.github` directory at the root of your project, then create a `workflows` directory inside it. Add a file named `pr-description.yml`.
+GitHub Actions workflows live in the `.github/workflows` directory. Create a `.github` directory at the root of your project, then create a `workflows` directory inside it. Add `pr-description.yml`.
 
 This workflow runs whenever a pull request is opened or updated. It generates a diff for the PR, calls the Mastra agent to describe the changes, and writes the description directly into the PR in the GitHub UI.
 
@@ -191,7 +191,7 @@ The workflow excludes `package-lock.json` when generating the diff. Lockfiles ar
 
 ### Create the workflow script
 
-Create a `scripts` directory inside `.github` and add a file named `generate-description.ts`.
+Create a `scripts` directory inside `.github` and add `generate-description.ts`.
 
 This script reads the PR diff from `PR_DIFF_FILE`, generates a description using the Mastra agent, and writes the result to `PR_DESCRIPTION_FILE` for the workflow to publish to the pull request.
 
@@ -233,7 +233,7 @@ ${readFileSync(process.env.PR_DIFF_FILE!, 'utf-8')}
 
 You now have a GitHub Action that generates multi-language PR descriptions using a Mastra agent. Once the workflow and supporting files are merged into your main branch, the agent will run automatically the next time a pull request is created or updated. You can monitor the run in the **Actions** tab of your repository.
 
-From here, you can customize the agent instructions, change the output languages, or extend the workflow to handle other events.
+From here, customize the agent instructions or change the output languages. You can also extend the workflow to handle other events.
 
 To learn more:
 

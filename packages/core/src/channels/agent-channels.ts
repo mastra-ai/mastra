@@ -40,6 +40,7 @@ import type {
   ChannelAdapterConfig,
   ChannelConfig,
   ChannelContext,
+  ChannelHandlerContext,
   ChannelHandlers,
   PostableMessage,
   ResolveResourceId,
@@ -200,6 +201,154 @@ export class AgentChannels {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Protected dispatch seams
+  //
+  // These are the exact points where inbound platform events are routed into
+  // the owning agent. A subclass can override them to route events into a
+  // different execution surface while reusing all of the shared machinery
+  // (thread mapping, event/render context, approval cards, drivers).
+  // -------------------------------------------------------------------------
+
+  /**
+   * Id of the entity that owns this channels instance, used in webhook route
+   * paths. Returns `null` when no owner is bound yet, in which case
+   * `getWebhookRoutes()` returns no routes.
+   */
+  protected getOwnerId(): string | null {
+    return this.agent?.id ?? null;
+  }
+
+  /** Base path for webhook routes, e.g. `/api/agents/{agentId}`. */
+  protected getWebhookBasePath(): string {
+    return `/api/agents/${this.getOwnerId()}`;
+  }
+
+  /** Resolve the Mastra instance from the bound owner. */
+  protected getMastra(): Mastra | undefined {
+    return this.agent?.getMastraInstance();
+  }
+
+  /**
+   * The memory resourceId (owner) used when `processChatMessage` creates a new
+   * channel-backed thread. Returns a thunk when a `resolveResourceId` hook is
+   * configured so the hook only runs when a new thread is actually created,
+   * never when reusing an existing one (which keeps its stored owner).
+   */
+  protected resolveChannelResourceId(args: {
+    platform: string;
+    chatThread: Thread;
+    message: Message;
+    defaultResourceId: string;
+  }): string | (() => string | Promise<string>) {
+    const { platform, chatThread, message, defaultResourceId } = args;
+    return this.resolveResourceId
+      ? () => this.resolveResourceId!({ platform, thread: chatThread, message, defaultResourceId })
+      : defaultResourceId;
+  }
+
+  /**
+   * Route an inbound chat message into the owning agent's signal pipeline.
+   * The message either gets delivered into an already-running agent loop or
+   * wakes the thread with an idle stream.
+   */
+  protected async dispatchInboundMessage(args: {
+    signalContents: AgentSignalContents;
+    attributes: Record<string, string | undefined>;
+    providerOptions: MastraProviderMetadata;
+    requestContext: RequestContext;
+    /** The mapped Mastra thread for the chat thread this message arrived on. */
+    thread: StorageThreadType;
+    memory: { thread: string; resource: string };
+    /** Set when the adapter can't render approval buttons, to avoid runs parking forever. */
+    autoResumeSuspendedTools: true | undefined;
+  }): Promise<void> {
+    const { signalContents, attributes, providerOptions, requestContext, memory, autoResumeSuspendedTools } = args;
+
+    const result = this.agent.sendMessage(
+      {
+        contents: signalContents,
+        attributes,
+        providerOptions,
+      },
+      {
+        resourceId: memory.resource,
+        threadId: memory.thread,
+        ifIdle: {
+          behavior: 'wake',
+          streamOptions: {
+            requestContext,
+            memory,
+            // Without approval-button rendering, auto-approve tools to
+            // avoid getting stuck waiting for input we can't ask for.
+            autoResumeSuspendedTools,
+          },
+        },
+      },
+    );
+
+    // When this call wakes a new run, drive it to completion before returning.
+    // Without this, serverless runtimes (Vercel, Lambda, etc.) terminate the
+    // invocation as soon as the webhook handler returns and kill the run
+    // mid-flight. `consumeStream()` is idempotent and safe to call alongside
+    // the existing per-thread subscription consumer.
+    try {
+      const accepted = await result.accepted;
+      // Only the `wake` action means this process started and owns the run.
+      // Any other action (deliver/persist/discard) handed the signal off, so
+      // there is nothing to drive to completion here.
+      if (accepted.action === 'wake') {
+        await accepted.output.consumeStream();
+      }
+    } catch (err) {
+      this.log('debug', 'accepted consume failed', err);
+    }
+  }
+
+  /**
+   * Resume a suspended run with an approval and drive the resumed stream to
+   * completion (serverless safety).
+   */
+  protected async dispatchApproval(args: {
+    runId: string;
+    toolCallId: string;
+    requestContext: RequestContext;
+    memory: { thread: string; resource: string };
+  }): Promise<void> {
+    const resumed = await this.agent.approveToolCall({
+      runId: args.runId,
+      toolCallId: args.toolCallId,
+      requestContext: args.requestContext,
+      memory: args.memory,
+    });
+    // Drive the run to completion so serverless runtimes don't kill it.
+    void resumed.consumeStream().catch(err => {
+      this.log('error', 'Error consuming resumed approval stream', err);
+    });
+  }
+
+  /**
+   * Resume a suspended run with a denial and drive the resumed stream to
+   * completion (serverless safety).
+   */
+  protected async dispatchDecline(args: {
+    runId: string;
+    toolCallId: string;
+    requestContext: RequestContext;
+    memory: { thread: string; resource: string };
+  }): Promise<void> {
+    const resumed = await this.agent.declineToolCall({
+      runId: args.runId,
+      toolCallId: args.toolCallId,
+      requestContext: args.requestContext,
+      memory: args.memory,
+    });
+    // Drive the run to completion so serverless runtimes don't kill it.
+    void resumed.consumeStream().catch(err => {
+      this.log('error', 'Error consuming resumed decline stream', err);
+    });
+  }
+
   /**
    * Check if an adapter is registered for the given platform.
    */
@@ -263,17 +412,29 @@ export class AgentChannels {
         ...this.chatOptions,
       });
 
-      // Default handler that routes messages to the agent
-      const defaultHandler = (chatThread: Thread, message: Message) =>
-        this.handleChatMessage(chatThread, message, mastra);
-
       // Register handlers with optional overrides
       const { onDirectMessage, onMention, onSubscribedMessage } = this.handlerOverrides;
 
+      // Per-message dispatch scope. The request context and the handler context
+      // MUST be built per message, never once at initialize() time: a custom
+      // handler may write the sender's tenant onto the request context, and a
+      // shared instance would leak that tenant into the next message's run.
+      const beginMessage = () => {
+        const requestContext = new RequestContext();
+        const defaultHandler = (chatThread: Thread, message: Message) =>
+          this.handleChatMessage(chatThread, message, mastra, requestContext);
+        // Context handed to custom handlers so they can reach the resolved Mastra
+        // instance without being injected with an external accessor, and
+        // contribute to the request context the run will dispatch with.
+        const handlerContext: ChannelHandlerContext = { mastra, requestContext };
+        return { defaultHandler, handlerContext };
+      };
+
       if (onDirectMessage !== false) {
         chat.onDirectMessage((thread, message) => {
+          const { defaultHandler, handlerContext } = beginMessage();
           if (typeof onDirectMessage === 'function') {
-            return onDirectMessage(thread, message, defaultHandler);
+            return onDirectMessage(thread, message, defaultHandler, handlerContext);
           }
           return defaultHandler(thread, message);
         });
@@ -281,8 +442,9 @@ export class AgentChannels {
 
       if (onMention !== false) {
         chat.onNewMention((thread, message) => {
+          const { defaultHandler, handlerContext } = beginMessage();
           if (typeof onMention === 'function') {
-            return onMention(thread, message, defaultHandler);
+            return onMention(thread, message, defaultHandler, handlerContext);
           }
           return defaultHandler(thread, message);
         });
@@ -290,8 +452,9 @@ export class AgentChannels {
 
       if (onSubscribedMessage !== false) {
         chat.onSubscribedMessage((thread, message) => {
+          const { defaultHandler, handlerContext } = beginMessage();
           if (typeof onSubscribedMessage === 'function') {
-            return onSubscribedMessage(thread, message, defaultHandler);
+            return onSubscribedMessage(thread, message, defaultHandler, handlerContext);
           }
           return defaultHandler(thread, message);
         });
@@ -321,13 +484,19 @@ export class AgentChannels {
           if (!adapter) throw new Error(`No adapter for platform "${platform}"`);
 
           const externalThreadId = this.resolveExternalThreadId({ platform, chatThread, messageId });
-          const mastraThread = await this.getOrCreateThread({
+          const { thread: mastraThread } = await this.findThreadMapping({
             externalThreadId,
             channelId: chatThread.channelId,
             platform,
-            resourceId: `${platform}:${event.user.userId}`,
             mastra,
           });
+          if (!mastraThread) {
+            // Approval cards can only continue runs on threads created by an
+            // earlier message. Do not mint a replacement from the clicker's
+            // identity when that durable mapping is missing.
+            this.log('warn', `No mapped channel thread found for tool approval action toolCallId=${toolCallId}`);
+            return;
+          }
 
           // Look up the runId for this toolCallId. Prefer the in-memory
           // `pendingApprovalCards` map (set when the approval card was posted)
@@ -435,7 +604,7 @@ export class AgentChannels {
             requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
             try {
-              const resumed = await this.agent.declineToolCall({
+              await this.dispatchDecline({
                 runId,
                 toolCallId,
                 requestContext,
@@ -443,10 +612,6 @@ export class AgentChannels {
                   thread: mastraThread.id,
                   resource: mastraThread.resourceId,
                 },
-              });
-              // Drive the run to completion so serverless runtimes don't kill it.
-              void resumed.consumeStream().catch(err => {
-                this.log('error', 'Error consuming resumed decline stream', err);
               });
             } catch (err) {
               const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
@@ -486,7 +651,7 @@ export class AgentChannels {
           const renderContext = this._buildRenderContext(chatThread, platform, { toolCallId, messageId });
           requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
-          const resumed = await this.agent.approveToolCall({
+          await this.dispatchApproval({
             runId,
             toolCallId,
             requestContext,
@@ -494,10 +659,6 @@ export class AgentChannels {
               thread: mastraThread.id,
               resource: mastraThread.resourceId,
             },
-          });
-          // Drive the run to completion so serverless runtimes don't kill it.
-          void resumed.consumeStream().catch(err => {
-            this.log('error', 'Error consuming resumed approval stream', err);
           });
         } catch (err) {
           const isStaleApproval = err instanceof Error && err.message.includes('No snapshot found');
@@ -554,9 +715,9 @@ export class AgentChannels {
    * Skips platforms that are externally managed (e.g., by SlackProvider).
    */
   getWebhookRoutes(): ApiRoute[] {
-    if (!this.agent) return [];
+    if (!this.getOwnerId()) return [];
 
-    const agentId = this.agent.id;
+    const basePath = this.getWebhookBasePath();
     const routes: ApiRoute[] = [];
 
     for (const platform of Object.keys(this.adapters)) {
@@ -566,7 +727,7 @@ export class AgentChannels {
       }
       const self = this;
       routes.push({
-        path: `/api/agents/${agentId}/channels/${platform}/webhook`,
+        path: `${basePath}/channels/${platform}/webhook`,
         method: 'POST',
         requiresAuth: false,
         _mastraInternal: true,
@@ -836,9 +997,14 @@ export class AgentChannels {
    * and onSubscribedMessage. Streams the Mastra agent response and
    * updates the channel message in real-time via edits.
    */
-  private async handleChatMessage(chatThread: Thread, message: Message, mastra: Mastra): Promise<void> {
+  private async handleChatMessage(
+    chatThread: Thread,
+    message: Message,
+    mastra: Mastra,
+    requestContext: RequestContext,
+  ): Promise<void> {
     try {
-      await this.processChatMessage(chatThread, message, mastra);
+      await this.processChatMessage(chatThread, message, mastra, requestContext);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       this.log('error', `[${chatThread.adapter.name}] Error handling message`, {
@@ -858,7 +1024,12 @@ export class AgentChannels {
     }
   }
 
-  private async processChatMessage(chatThread: Thread, message: Message, mastra: Mastra): Promise<void> {
+  private async processChatMessage(
+    chatThread: Thread,
+    message: Message,
+    mastra: Mastra,
+    requestContext: RequestContext,
+  ): Promise<void> {
     const platform = chatThread.adapter.name;
 
     // Map to a Mastra thread for memory/history.
@@ -873,9 +1044,7 @@ export class AgentChannels {
       platform,
       // Lazily resolved: the hook only runs when we're actually creating a new
       // thread, never when reusing an existing one (which keeps its stored owner).
-      resourceId: this.resolveResourceId
-        ? () => this.resolveResourceId!({ platform, thread: chatThread, message, defaultResourceId })
-        : defaultResourceId,
+      resourceId: this.resolveChannelResourceId({ platform, chatThread, message, defaultResourceId }),
       // Same laziness for the thread id hook; it runs after the resourceId
       // resolves so hosts can align the two (e.g. thread id = session id).
       threadId: this.resolveThreadId
@@ -1046,7 +1215,10 @@ export class AgentChannels {
       actor: message.author,
     });
 
-    const requestContext = new RequestContext();
+    // NOTE: `requestContext` is constructed per message at the handler boundary
+    // (see `beginMessage` in initialize) so a custom handler can contribute to
+    // it — e.g. stamping the tenant — before the run dispatches. Core only
+    // enriches it here.
     requestContext.set('channel', channelContext);
 
     // Stash the per-event render deps so `ChatChannelOutputProcessor` can
@@ -1067,47 +1239,18 @@ export class AgentChannels {
     // Otherwise pass the parts array directly — both shapes match AgentSignalContents.
     const signalContents: AgentSignalContents = parts.length === 1 && parts[0]?.type === 'text' ? parts[0].text : parts;
 
-    const result = this.agent.sendMessage(
-      {
-        contents: signalContents,
-        attributes,
-        providerOptions,
+    await this.dispatchInboundMessage({
+      signalContents,
+      attributes,
+      providerOptions,
+      requestContext,
+      thread: mastraThread,
+      memory: {
+        thread: mastraThread.id,
+        resource: threadResourceId,
       },
-      {
-        resourceId: threadResourceId,
-        threadId: mastraThread.id,
-        ifIdle: {
-          behavior: 'wake',
-          streamOptions: {
-            requestContext,
-            memory: {
-              thread: mastraThread.id,
-              resource: threadResourceId,
-            },
-            // Without approval-button rendering, auto-approve tools to
-            // avoid getting stuck waiting for input we can't ask for.
-            autoResumeSuspendedTools: canRenderApprovalButtons ? undefined : true,
-          },
-        },
-      },
-    );
-
-    // When this call wakes a new run, drive it to completion before returning.
-    // Without this, serverless runtimes (Vercel, Lambda, etc.) terminate the
-    // invocation as soon as the webhook handler returns and kill the run
-    // mid-flight. `consumeStream()` is idempotent and safe to call alongside
-    // the existing per-thread subscription consumer.
-    try {
-      const accepted = await result.accepted;
-      // Only the `wake` action means this process started and owns the run.
-      // Any other action (deliver/persist/discard) handed the signal off, so
-      // there is nothing to drive to completion here.
-      if (accepted.action === 'wake') {
-        await accepted.output.consumeStream();
-      }
-    } catch (err) {
-      this.log('debug', 'accepted consume failed', err);
-    }
+      autoResumeSuspendedTools: canRenderApprovalButtons ? undefined : true,
+    });
   }
 
   /**
@@ -1227,7 +1370,7 @@ export class AgentChannels {
    * via `chat.thread(externalThreadId)`.
    */
   async buildRenderContextForThread(threadId: string): Promise<ChatChannelRenderContext | null> {
-    const mastra = this.agent?.getMastraInstance();
+    const mastra = this.getMastra();
     const storage = mastra?.getStorage();
     if (!storage) return null;
 
@@ -1325,6 +1468,47 @@ export class AgentChannels {
   }
 
   /**
+   * Look up a channel-backed Mastra thread and retain the store/metadata needed
+   * by the create path when no mapping exists.
+   */
+  private async findThreadMapping({
+    externalThreadId,
+    channelId,
+    platform,
+    mastra,
+  }: {
+    externalThreadId: string;
+    channelId: string;
+    platform: string;
+    mastra: Mastra;
+  }) {
+    const storage = mastra.getStorage();
+    if (!storage) {
+      throw new Error('Storage is required for channel thread mapping. Configure storage in your Mastra instance.');
+    }
+
+    const memoryStore = await storage.getStore('memory');
+    if (!memoryStore) {
+      throw new Error(
+        'Memory store is required for channel thread mapping. Configure storage in your Mastra instance.',
+      );
+    }
+
+    const metadata = {
+      channel_platform: platform,
+      channel_externalThreadId: externalThreadId,
+      channel_externalChannelId: channelId,
+    };
+
+    const { threads } = await memoryStore.listThreads({
+      filter: { metadata },
+      perPage: 1,
+    });
+
+    return { thread: threads[0], memoryStore, metadata };
+  }
+
+  /**
    * Resolves an existing Mastra thread for the given external IDs, or creates one.
    */
   private async getOrCreateThread({
@@ -1352,32 +1536,17 @@ export class AgentChannels {
     threadId?: (resolvedResourceId: string, defaultThreadId: string) => string | Promise<string>;
     mastra: Mastra;
   }): Promise<StorageThreadType> {
-    const storage = mastra.getStorage();
-    if (!storage) {
-      throw new Error('Storage is required for channel thread mapping. Configure storage in your Mastra instance.');
-    }
-
-    const memoryStore = await storage.getStore('memory');
-    if (!memoryStore) {
-      throw new Error(
-        'Memory store is required for channel thread mapping. Configure storage in your Mastra instance.',
-      );
-    }
-
-    const metadata = {
-      channel_platform: platform,
-      channel_externalThreadId: externalThreadId,
-      channel_externalChannelId: channelId,
-    };
-
-    const { threads } = await memoryStore.listThreads({
-      filter: { metadata },
-      perPage: 1,
+    const {
+      thread: existingThread,
+      memoryStore,
+      metadata,
+    } = await this.findThreadMapping({
+      externalThreadId,
+      channelId,
+      platform,
+      mastra,
     });
-
-    if (threads.length > 0) {
-      return threads[0]!;
-    }
+    if (existingThread) return existingThread;
 
     const resolvedResourceId = typeof resourceId === 'function' ? await resourceId() : resourceId;
     const defaultThreadId = crypto.randomUUID();
@@ -1574,7 +1743,7 @@ export class AgentChannels {
     return { resolved: toolDisplay, fn };
   }
 
-  private log(level: 'info' | 'warn' | 'error' | 'debug', message: string, ...args: unknown[]): void {
+  protected log(level: 'info' | 'warn' | 'error' | 'debug', message: string, ...args: unknown[]): void {
     if (!this.logger) return;
     if (level === 'error') {
       this.logger.error(message, { args });

@@ -786,6 +786,13 @@ export async function executeEntry(
     result: execResults,
     stepResults,
     mutableContext: engine.buildMutableContext(executionContext),
-    requestContext: entryRequestContext ?? engine.serializeRequestContext(requestContext),
+    // Serialize requestContext only for engines that restore it from serialized
+    // results (Inngest memoization). The default engine keeps the original
+    // reference and never reads this field, so serializing here would be pure
+    // per-entry overhead — RequestContext.toJSON() probes every stored value
+    // with JSON.stringify.
+    requestContext:
+      entryRequestContext ??
+      (engine.requiresDurableContextSerialization() ? engine.serializeRequestContext(requestContext) : undefined),
   };
 }

@@ -671,6 +671,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'streaming/ChunkType', label: 'ChunkType' },
+        { type: 'doc', id: 'streaming/smoothStream', label: 'smoothStream()' },
         {
           type: 'category',
           label: 'Agents',
@@ -720,6 +721,12 @@ const sidebars = {
         { type: 'doc', id: 'tools/graph-rag-tool', label: 'createGraphRAGTool()' },
         { type: 'doc', id: 'tools/create-tool', label: 'createTool()' },
         { type: 'doc', id: 'tools/vector-query-tool', label: 'createVectorQueryTool()' },
+        {
+          type: 'doc',
+          id: 'tools/isolated-vm-transport',
+          label: 'IsolatedVmCodeModeTransport',
+          customProps: { tags: ['beta'] },
+        },
         { type: 'doc', id: 'tools/mcp-client', label: 'MCPClient' },
         { type: 'doc', id: 'tools/mcp-server', label: 'MCPServer' },
         { type: 'doc', id: 'tools/perplexity', label: 'Perplexity Tools' },
@@ -791,6 +798,12 @@ const sidebars = {
         { type: 'doc', id: 'voice/voice.speak', label: '.speak()' },
         { type: 'doc', id: 'voice/voice.updateConfig', label: '.updateConfig()' },
       ],
+    },
+    {
+      type: 'category',
+      label: 'Workers',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'workers/overview', label: 'Overview' }],
     },
     {
       type: 'category',

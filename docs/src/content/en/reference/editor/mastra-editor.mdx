@@ -128,10 +128,10 @@ Each provider field above takes a record keyed by provider id. See the per-provi
 
 The `builder` field enables the [Agent Builder](/docs/agent-builder/overview), a browser-based UI for creating and editing stored agents. See:
 
-- [Agent Builder overview](/docs/agent-builder/overview) — concepts and getting started.
-- [AgentBuilderOptions](/reference/editor/agent-builder/agent-builder-options) — full options schema.
-- [BuilderAgentDefaults](/reference/editor/agent-builder/builder-agent-defaults) — admin-pinned defaults for new agents.
-- [builder.configuration.agent.models](/reference/editor/agent-builder/builder-models) — model allowlist and default model.
+- [Agent Builder overview](/docs/agent-builder/overview): Concepts and getting started.
+- [AgentBuilderOptions](/reference/editor/agent-builder/agent-builder-options): Full options schema.
+- [BuilderAgentDefaults](/reference/editor/agent-builder/builder-agent-defaults): Admin-pinned defaults for new agents.
+- [builder.configuration.agent.models](/reference/editor/agent-builder/builder-models): Model allowlist and default model.
 
 ### Registering the Builder agent
 
@@ -150,7 +150,7 @@ export const mastra = new Mastra({
 })
 ```
 
-The key name (`builderAgent`) is conventional — any key works. The `@mastra/editor/ee` subpath is gated by the Mastra Enterprise Edition license at runtime.
+The key name (`builderAgent`) is conventional. Any key works. The `@mastra/editor/ee` subpath is gated by the Mastra Enterprise Edition license at runtime.
 
 See the [Agent Builder overview](/docs/agent-builder/overview#prerequisites) for the full setup checklist.
 

@@ -35,6 +35,7 @@ export const createConfig = async ({ e18e = false } = {}) =>
       ignores: [
         '**/.tsup/**',
         '**/.mastra/**',
+        '**/.vercel/**',
         '**/.cache/**',
         '**/node_modules/**',
         '**/playwright-report/**',

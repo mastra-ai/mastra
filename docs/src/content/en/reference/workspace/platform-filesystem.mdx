@@ -106,7 +106,7 @@ await fs.writeFile('/analyses/repo.md', 'x') // throws WorkspaceReadOnlyError
 
 ### Appending files
 
-`appendFile` is a read-modify-write and is not atomic. Concurrent appends to the same path can overwrite each other. For concurrent writers, use `writeFile` with distinct keys.
+`appendFile` is a read-modify-write and isn't atomic. Concurrent appends to the same path can overwrite each other. For concurrent writers, use `writeFile` with distinct keys.
 
 ## Constructor parameters
 
@@ -211,7 +211,7 @@ await fs.writeFile('/analyses/repo.md', 'x') // throws WorkspaceReadOnlyError
 
 Filesystem-specific errors match the standard workspace error types:
 
-- `FileNotFoundError`: The path does not exist. Thrown by `readFile`, `stat`, and `deleteFile` (unless `force: true` is set).
+- `FileNotFoundError`: The path doesn't exist. Thrown by `readFile`, `stat`, and `deleteFile` (unless `force: true` is set).
 - `FileExistsError`: `writeFile` was called with `overwrite: false` and the destination already exists.
 - `WorkspaceReadOnlyError`: A mutating call was made on a read-only filesystem.
 
@@ -234,7 +234,7 @@ try {
 }
 ```
 
-`code` and `proxyMessage` are `undefined` when the response body is not JSON, for example an HTML 502 from a load balancer.
+`code` and `proxyMessage` are `undefined` when the response body isn't JSON, for example an HTML 502 from a load balancer.
 
 ## Related
 

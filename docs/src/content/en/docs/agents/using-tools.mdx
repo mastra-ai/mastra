@@ -75,6 +75,31 @@ export const weatherAgent = new Agent({
 })
 ```
 
+## Use provider web search
+
+Import `webSearchTool` from `@mastra/core/tools` when you want the model provider to run its native web search tool. The tool has no local `execute` function. Mastra resolves it at run time from the active model, then passes the provider-managed tool to the model.
+
+```typescript {2,14} title="src/mastra/agents/research-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { webSearchTool } from '@mastra/core/tools'
+
+export const researchAgent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  instructions: `
+    You are a helpful research assistant.
+    Use web search when you need current information.`,
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: {
+    webSearch: webSearchTool,
+  },
+})
+```
+
+`webSearchTool` supports OpenAI, Anthropic, Google Gemini, and xAI models. If Mastra can't infer one of those providers from the active model, the agent run fails with a `MastraError`.
+
+Only the `webSearchTool` value triggers provider web search. Custom tools with the names `webSearch` or `web_search` stay unchanged.
+
 ## Define schemas
 
 You can define the tool's `inputSchema` and `outputSchema` with any library that supports [Standard JSON Schema](https://standardschema.dev/json-schema). This includes libraries like [Zod](https://zod.dev/), [Valibot](https://valibot.dev/), and [ArkType](https://arktype.io/).
@@ -157,7 +182,7 @@ You can define the tool's `inputSchema` and `outputSchema` with any library that
 
 ## Multiple tools
 
-An agent can use multiple tools to handle more complex tasks by delegating specific parts to individual tools. The agent decides which tools to use based on the user's message, the agent's instructions, and the tool descriptions and schemas.
+An agent can use multiple tools to handle more complex tasks by delegating specific parts to individual tools. The agent decides which tools to use based on the user's message and the agent's instructions, plus the tool descriptions and schemas.
 
 ```typescript {13} title="src/mastra/agents/weather-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -178,7 +203,7 @@ export const weatherAgent = new Agent({
 
 ## Agents as tools
 
-Add subagents through the `agents` configuration to create a [supervisor](/docs/agents/supervisor-agents). Mastra converts each subagent to a tool named `agent-<key>`. Include a `description` on each subagent so the supervisor knows when to delegate.
+Add subagents through the `agents` configuration to create a [supervisor](/docs/agents/supervisor-agents). Mastra converts each subagent to an `agent-<key>` tool. Include a `description` on each subagent so the supervisor knows when to delegate.
 
 ```typescript title="src/mastra/agents/supervisor.ts"
 import { Agent } from '@mastra/core/agent'
@@ -203,7 +228,7 @@ export const supervisor = new Agent({
 
 ## Workflows as tools
 
-Add workflows through the `workflows` configuration. Mastra converts each workflow to a tool named `workflow-<key>`, using the workflow's `inputSchema` and `outputSchema`. Include a `description` on the workflow so the agent knows when to trigger it.
+Add workflows through the `workflows` configuration. Mastra converts each workflow to a `workflow-<key>` tool that uses the workflow's `inputSchema` and `outputSchema`. Include a `description` on the workflow so the agent knows when to trigger it.
 
 ```typescript title="src/mastra/agents/research-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -328,7 +353,7 @@ export const supportAgent = new Agent({
 })
 ```
 
-`beforeToolCall` runs before the tool executes and receives the tool name, input, and execution context. Return `{ proceed: false, output }` to skip the tool call entirely — the agent receives `output` as the tool result:
+`beforeToolCall` runs before the tool executes and receives the tool name, input, and execution context. Return `{ proceed: false, output }` to skip the tool call entirely, the agent receives `output` as the tool result:
 
 ```typescript
 const guardedAgent = new Agent({
@@ -414,9 +439,9 @@ export const weatherTool = createTool({
 
 ### Streaming tool input in UIs
 
-When a model generates a tool call, the arguments arrive incrementally as `tool-call-delta` stream chunks before the final `tool-call` chunk. UIs can listen for the corresponding `tool_input_start`, `tool_input_delta`, and `tool_input_end` events to render tool arguments as they stream in — for example, showing a file path or command immediately rather than waiting for the complete tool call.
+When a model generates a tool call, the arguments arrive incrementally as `tool-call-delta` stream chunks before the final `tool-call` chunk. UIs can listen for the corresponding `tool_input_start`, `tool_input_delta`, and `tool_input_end` events to render tool arguments as they stream in, for example, showing a file path or command immediately rather than waiting for the complete tool call.
 
-Using a partial JSON parser on the accumulated `argsTextDelta` fragments lets you extract usable argument values before the JSON is complete. This enables features like live diff previews for edit tools, streaming file content for write tools, and instant display of search patterns or file paths.
+Using a partial JSON parser on the accumulated `argsTextDelta` fragments lets you extract usable argument values before the JSON is complete. It enables features like live diff previews for edit tools, streaming file content for write tools, and instant display of search patterns or file paths.
 
 ## Control tool selection
 
@@ -478,12 +503,12 @@ const orchestrator = new Agent({
 
 Note that for subagents, you'll see two different identifiers in stream responses:
 
-- `toolName: "agent-weather"` in tool call events — the generated tool wrapper name
-- `id: "weather-agent"` in `data-tool-agent` chunks — the subagent's actual `id` property
+- `toolName: "agent-weather"` in tool call events: the generated tool wrapper name
+- `id: "weather-agent"` in `data-tool-agent` chunks: the subagent's actual `id` property
 
 ## Built-in tools
 
-Mastra ships agent-agnostic built-in tools in `@mastra/core/tools` that add interactive and organizational capabilities to any agent.
+Mastra includes agent-agnostic built-in tools in `@mastra/core/tools` that add interactive and organizational capabilities to any agent.
 
 | Tool | Purpose |
 | - | - |
@@ -496,7 +521,9 @@ Mastra ships agent-agnostic built-in tools in `@mastra/core/tools` that add inte
 
 ### Ask the user a question
 
-Import [`askUserTool`](/reference/tools/ask-user-tool) and add it to the agent's toolset. The tool suspends the run, emits a `tool-call-suspended` event with the question, and resumes when you call `resumeStream()` with the user's answer.
+Import [`askUserTool`](/reference/tools/ask-user-tool) and add it to the agent's toolset.
+
+The tool suspends the run and emits a `tool-call-suspended` event with the question. It resumes when you call `resumeStream()` with the user's answer.
 
 ```typescript title="src/mastra/agents/index.ts"
 import { Agent } from '@mastra/core/agent'
@@ -546,7 +573,7 @@ for await (const chunk of stream.fullStream) {
 
 ### Task tracking
 
-The four task tools manage a structured, durable task list for an agent run. They require [Memory](/docs/memory/overview) so the list is persisted in a thread-scoped store.
+The task tools manage a structured, durable task list for an agent run. They require [Memory](/docs/memory/overview) so the list is persisted in a thread-scoped store.
 
 Add task tracking through [`TaskSignalProvider`](/reference/signals/task-signal-provider), which bundles all four tools and the `TaskStateProcessor` in a single registration:
 
@@ -567,7 +594,7 @@ const agent = new Agent({
 
 Only one task can be `in_progress` at a time. The list is stored in the thread-scoped `threadState` storage domain and projected onto the agent's [state-signal](/docs/long-running-agents/signals) lane, so it survives observational-memory truncation. See the [Task tools reference](/reference/tools/task-tools) for full schemas.
 
-The [AgentController](/docs/agent-controller/overview) automatically includes all built-in tools in every mode — you don't need to add them manually. See [Tool approvals](/docs/agent-controller/tool-approvals#built-in-tools) for AgentController-specific behavior.
+The [AgentController](/docs/agent-controller/overview) automatically includes all built-in tools in every mode, you don't need to add them manually. See [Tool approvals](/docs/agent-controller/tool-approvals#built-in-tools) for AgentController-specific behavior.
 
 ## Related
 

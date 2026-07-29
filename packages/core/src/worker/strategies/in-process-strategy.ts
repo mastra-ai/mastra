@@ -25,7 +25,9 @@ export class InProcessStrategy implements StepExecutionStrategy {
       throw new Error('InProcessStrategy requires Mastra instance. Call __registerMastra() first.');
     }
 
-    const workflow = this.#mastra.getWorkflow(params.workflowId);
+    // Use getWorkflowById — events carry the workflow's `id` property
+    // (e.g. "scheduled-workflow"), not the config key ("scheduledWorkflow").
+    const workflow = this.#mastra.getWorkflowById(params.workflowId);
     const step = getStep(workflow, params.executionPath);
 
     if (!step) {

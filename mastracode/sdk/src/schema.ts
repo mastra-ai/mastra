@@ -28,6 +28,19 @@ export interface MastraCodeState {
   worktreePath?: string;
   /** Active feature branch checked out in the worktree. */
   branch?: string;
+  /**
+   * The session's checkout contains third-party content (e.g. a PR branch
+   * under review). Project-level instruction files (AGENTS.md, CLAUDE.md)
+   * are attacker-writable there and must not be ingested into the system
+   * prompt or injected as reminders.
+   */
+  untrustedCheckout?: boolean;
+  /**
+   * Trusted git ref (typically the PR's base branch) to serve project
+   * instruction files from when the checkout is untrusted. Without it,
+   * project-scope instruction files are skipped entirely.
+   */
+  baseRef?: string;
   configDir: string;
   homeDir?: string;
   gitBranch?: string;
@@ -95,6 +108,10 @@ export const stateSchema = z.object({
   sandboxWorkdir: z.string().optional(),
   worktreePath: z.string().optional(),
   branch: z.string().optional(),
+  // Session operates on an untrusted checkout — suppress AGENTS.md ingestion.
+  untrustedCheckout: z.boolean().optional(),
+  // Trusted ref to serve instruction files from on untrusted checkouts.
+  baseRef: z.string().optional(),
   configDir: z.string().default(DEFAULT_CONFIG_DIR),
   homeDir: z.string().optional(),
   gitBranch: z.string().optional(),

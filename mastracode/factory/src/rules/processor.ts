@@ -72,6 +72,9 @@ type PhaseSnapshotValue = {
 function workItemSource(item: WorkItemRow) {
   if (!item.externalSource) return 'manual' as const;
   if (item.externalSource.integrationId === 'linear') return 'linear-issue' as const;
+  // See transition-service: non-GitHub, non-Linear provenance (Slack threads)
+  // is a plain work item, not a GitHub issue.
+  if (item.externalSource.integrationId !== 'github') return 'manual' as const;
   return item.externalSource.type === 'pull-request' ? ('github-pr' as const) : ('github-issue' as const);
 }
 

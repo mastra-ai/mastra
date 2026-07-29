@@ -1,4 +1,4 @@
-import { EntityType } from '@mastra/core/observability';
+import type { EntityType } from '@mastra/core/observability';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { Label } from '@mastra/playground-ui/components/Label';
@@ -138,7 +138,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   const { data: availableTags = [], isPending: isTagsLoading } = useTags();
   const { data: rootEntityNameSuggestions = [], isPending: isEntityNamesLoading } = useEntityNames({
-    entityType: url.selectedEntityOption?.entityType,
+    entityType: url.selectedEntityOption?.entityType as EntityType | undefined,
     rootOnly: true,
   });
   const { data: discoveredEnvironments = [], isPending: isEnvironmentsLoading } = useEnvironments();
@@ -173,7 +173,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const traceFilters = useMemo(
     () =>
       buildTraceListFilters({
-        rootEntityType: url.selectedEntityOption?.entityType,
+        rootEntityType: url.selectedEntityOption?.entityType as EntityType | undefined,
         status: url.selectedStatus,
         dateFrom: url.selectedDateFrom,
         dateTo: url.selectedDateTo,
@@ -260,7 +260,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     const rootSpan = anchorSpanId
       ? lightSpans?.find(s => s.spanId === anchorSpanId)
       : lightSpans?.find(s => s.parentSpanId == null);
-    return rootSpan?.entityType === EntityType.AGENT;
+    return rootSpan?.entityType === 'agent';
   }, [lightSpans, anchorSpanId]);
 
   const filtersApplied =
@@ -481,9 +481,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
                     isTopLevelSpan={!Boolean(span.parentSpanId)}
                     spanId={sid}
                     entityType={
-                      span.attributes?.agentId || span.entityType === EntityType.AGENT
+                      span.attributes?.agentId || span.entityType === 'agent'
                         ? 'Agent'
-                        : span.attributes?.workflowId || span.entityType === EntityType.WORKFLOW_RUN
+                        : span.attributes?.workflowId || span.entityType === 'workflow_run'
                           ? 'Workflow'
                           : undefined
                     }

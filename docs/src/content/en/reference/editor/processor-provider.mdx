@@ -9,8 +9,8 @@ packages:
 
 `ProcessorProvider` is the interface a package implements to register a configurable processor with [`MastraEditor`](/reference/editor/mastra-editor). Processor providers serve two purposes:
 
-1. **Discovery** — the UI uses `info`, `configSchema`, and `availablePhases` to render configuration forms.
-1. **Runtime** — the editor calls `createProcessor(config)` during agent hydration to instantiate processors from stored configuration.
+1. **Discovery:** The UI uses `info`, `configSchema`, and `availablePhases` to render configuration forms.
+1. **Runtime:** The editor calls `createProcessor(config)` during agent hydration to instantiate processors from stored configuration.
 
 Providers are supplied via `MastraEditorConfig.processorProviders`.
 
@@ -104,4 +104,4 @@ export const myProcessorProvider: ProcessorProvider = {
 
 ## Related
 
-- [MastraEditor class](/reference/editor/mastra-editor) — provider registry.
+- [MastraEditor class](/reference/editor/mastra-editor): Provider registry.

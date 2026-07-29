@@ -54,7 +54,7 @@ import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
-import { resolveNotificationDeliveryDecision } from '../notifications/delivery-policy';
+import { resolveDeliveryFailureUpdate, resolveNotificationDeliveryDecision } from '../notifications/delivery-policy';
 import {
   createNotificationSignal,
   createNotificationSummarySignal,
@@ -95,6 +95,7 @@ import { ChunkFrom } from '../stream';
 import type { ChunkType, MastraAgentNetworkStream, MastraOnFinishCallback } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 import { createTool } from '../tools';
+import { createWebSearchProviderTool, isWebSearchTool, normalizeWebSearchProvider } from '../tools/builtin/web-search';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
 import { isMastraTool, isProviderTool } from '../tools/toolchecks';
@@ -2445,7 +2446,7 @@ export class Agent<
   }): Promise<string | undefined> {
     const tools: Array<{ mcpMetadata?: McpMetadata } | undefined> = [];
 
-    const assignedTools = await this.listTools({ requestContext });
+    const assignedTools = await this.listTools({ requestContext, resolveWebSearch: false });
     tools.push(...(Object.values(assignedTools || {}) as { mcpMetadata?: McpMetadata }[]));
 
     for (const toolset of Object.values(toolsets || {})) {
@@ -2756,19 +2757,11 @@ export class Agent<
    * console.log(Object.keys(tools)); // ['calculator', 'weather', ...]
    * ```
    */
-  public listTools({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | TTools
-    | Promise<TTools> {
-    if (typeof this.#tools !== 'function') {
-      return ensureToolProperties(this.#tools) as TTools;
-    }
-
-    const result = this.#tools({
-      requestContext: requestContext as RequestContext<TRequestContext>,
-      mastra: this.#mastra,
-    });
-
-    return resolveMaybePromise(result, tools => {
+  public async listTools({
+    requestContext = new RequestContext(),
+    resolveWebSearch = true,
+  }: { requestContext?: RequestContext; resolveWebSearch?: boolean } = {}): Promise<TTools> {
+    const resolveToolList = async (tools: ToolsInput | undefined): Promise<TTools> => {
       if (!tools) {
         const mastraError = new MastraError({
           id: 'AGENT_GET_TOOLS_FUNCTION_EMPTY_RETURN',
@@ -2783,8 +2776,30 @@ export class Agent<
         throw mastraError;
       }
 
-      return ensureToolProperties(tools) as TTools;
+      const ensuredTools = ensureToolProperties(tools) as ToolsInput;
+      if (!resolveWebSearch || !Object.values(ensuredTools).some(isWebSearchTool)) {
+        return ensuredTools as TTools;
+      }
+
+      const model = await this.getModel({ requestContext });
+      return Object.fromEntries(
+        Object.entries(ensuredTools).map(([key, tool]) => [
+          key,
+          isWebSearchTool(tool) ? createWebSearchProviderTool(normalizeWebSearchProvider(model)) : tool,
+        ]),
+      ) as TTools;
+    };
+
+    if (typeof this.#tools !== 'function') {
+      return resolveToolList(this.#tools as ToolsInput | undefined);
+    }
+
+    const result = this.#tools({
+      requestContext: requestContext as RequestContext<TRequestContext>,
+      mastra: this.#mastra,
     });
+
+    return resolveMaybePromise(result, tools => resolveToolList(tools as ToolsInput | undefined));
   }
 
   /**
@@ -4318,6 +4333,7 @@ export class Agent<
     outputWriter,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
+    model: activeModel,
     ...rest
   }: {
     runId?: string;
@@ -4328,6 +4344,7 @@ export class Agent<
     outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
+    model?: MastraLanguageModel | MastraLegacyLanguageModel;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -4335,7 +4352,7 @@ export class Agent<
     const memory = await this.getMemory({ requestContext });
 
     // Mastra tools passed into the Agent
-    const assignedTools = await this.listTools({ requestContext });
+    const assignedTools = await this.listTools({ requestContext, resolveWebSearch: false });
 
     const assignedToolEntries = Object.entries(assignedTools || {});
 
@@ -4344,6 +4361,11 @@ export class Agent<
         if (!tool) {
           return;
         }
+
+        const model = activeModel ?? (await this.getModel({ requestContext }));
+        const toolToConvert = isWebSearchTool(tool)
+          ? createWebSearchProviderTool(normalizeWebSearchProvider(model))
+          : tool;
 
         const options: ToolOptions = {
           name: k,
@@ -4357,13 +4379,13 @@ export class Agent<
           agentId: this.id,
           requestContext,
           ...observabilityContext,
-          model: await this.getModel({ requestContext }),
+          model,
           outputWriter,
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
           backgroundConfig: (tool as any).background,
         };
-        return [k, makeCoreTool(tool, options, undefined, autoResumeSuspendedTools, backgroundTaskEnabled)];
+        return [k, makeCoreTool(toolToConvert, options, undefined, autoResumeSuspendedTools, backgroundTaskEnabled)];
       }),
     );
 
@@ -4465,6 +4487,7 @@ export class Agent<
     clientTools,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
+    model: activeModel,
     ...rest
   }: {
     runId?: string;
@@ -4475,6 +4498,7 @@ export class Agent<
     clientTools?: ToolsInput;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
+    model?: MastraLanguageModel | MastraLegacyLanguageModel;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     let toolsForRequest: Record<string, CoreTool> = {};
@@ -4484,8 +4508,16 @@ export class Agent<
     if (clientToolsForInput.length > 0) {
       this.logger.debug('Adding client tools', { agent: this.name, tools: Object.keys(clientTools || {}), runId });
       for (const [toolName, tool] of clientToolsForInput) {
-        const { execute, ...toolRest } = tool;
-        const toolToConvert = isProviderTool(tool) ? tool : toolRest;
+        const model = activeModel ?? (await this.getModel({ requestContext }));
+        let toolToConvert: ToolToConvert;
+        if (isWebSearchTool(tool)) {
+          toolToConvert = createWebSearchProviderTool(normalizeWebSearchProvider(model));
+        } else if (isProviderTool(tool)) {
+          toolToConvert = tool;
+        } else {
+          const { execute, ...toolRest } = tool;
+          toolToConvert = toolRest;
+        }
         const options: ToolOptions = {
           name: toolName,
           runId,
@@ -4498,7 +4530,7 @@ export class Agent<
           agentId: this.id,
           requestContext,
           ...observabilityContext,
-          model: await this.getModel({ requestContext }),
+          model,
           tracingPolicy: this.#options?.tracingPolicy,
           requireApproval: (tool as any).requireApproval,
           backgroundConfig: (tool as any).background,
@@ -5825,6 +5857,7 @@ export class Agent<
     backgroundTaskEnabled,
     inputProcessors,
     hooks,
+    model,
     ...rest
   }: {
     toolsets?: ToolsetsInput;
@@ -5841,6 +5874,7 @@ export class Agent<
     backgroundTaskEnabled?: boolean;
     inputProcessors?: InputProcessorOrWorkflow[];
     hooks?: ToolHooks;
+    model?: MastraLanguageModel | MastraLegacyLanguageModel;
   } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
     const observabilityContext = resolveObservabilityContext(rest);
     let mastraProxy = undefined;
@@ -5860,6 +5894,7 @@ export class Agent<
       outputWriter,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      model,
     });
 
     const memoryTools = await this.listMemoryTools({
@@ -5897,6 +5932,7 @@ export class Agent<
       clientTools: clientTools!,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
+      model,
     });
 
     const agentTools = await this.listAgentTools({
@@ -6566,7 +6602,7 @@ export class Agent<
 
     const user = requestContext?.get('user');
     const executionResourceId = this.#getAgentExecutionResourceId({ requestContext, memory, snapshotMemoryInfo });
-    const { getAgentFGAResourceId, requireFGA } = await import(/* @vite-ignore */ '../auth/ee/fga-check');
+    const { getAgentFGAResourceId, requireFGA } = await import('../auth/ee/fga-check');
     await requireFGA({
       fgaProvider,
       user,
@@ -7836,7 +7872,10 @@ export class Agent<
             const failed = await notifications.updateNotification({
               id: updated.id,
               threadId: updated.threadId,
-              deliveryAttempts: (updated.deliveryAttempts ?? 0) + 1,
+              // `summaryAt` was cleared to emit this summary. Restore it so the
+              // record stays due and the dispatcher can retry it.
+              summaryAt: now,
+              ...resolveDeliveryFailureUpdate(updated),
               lastDeliveryAttemptAt: new Date(),
               lastDeliveryError: error instanceof Error ? error.message : 'Notification summary signal was rejected',
             });
@@ -7890,7 +7929,7 @@ export class Agent<
         const failed = await notifications.updateNotification({
           id: record.id,
           threadId: record.threadId,
-          deliveryAttempts: (record.deliveryAttempts ?? 0) + 1,
+          ...resolveDeliveryFailureUpdate(record),
           lastDeliveryAttemptAt: new Date(),
           lastDeliveryError: error instanceof Error ? error.message : 'Notification signal was rejected',
           deliveryReason: decision.reason,
