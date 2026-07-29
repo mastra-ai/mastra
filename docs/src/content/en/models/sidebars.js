@@ -523,6 +523,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/modal',
+          label: 'Modal',
+        },
+        {
+          type: 'doc',
           id: 'providers/model-oracle-ai',
           label: 'Model Oracle AI',
         },
