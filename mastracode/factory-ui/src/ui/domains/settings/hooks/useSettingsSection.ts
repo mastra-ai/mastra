@@ -13,6 +13,7 @@ import { isSettingsSection, type SettingsSection } from '../settingsSections';
 export function useSettingsSection(): SettingsSection {
   const { pathname } = useLocation();
   const section =
+    matchPath('/factories/:factoryId/settings/:section/*', pathname)?.params.section ??
     matchPath('/factories/:factoryId/settings/:section', pathname)?.params.section ??
     matchPath('/settings/:section', pathname)?.params.section;
   return isSettingsSection(section) ? section : 'preferences';

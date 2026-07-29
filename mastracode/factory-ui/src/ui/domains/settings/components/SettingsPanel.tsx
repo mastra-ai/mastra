@@ -13,6 +13,7 @@ import {
   useUpdateAgentControllerSettingsMutation,
 } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { ConnectedAccountsSection } from './ConnectedAccountsSection';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { SettingsHeader } from './SettingsHeader';
 import { FactoryManagementSection } from './FactoryManagementSection';
@@ -69,6 +70,14 @@ export function SettingsPanel() {
         {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
         {section === 'preferences' && <GeneralSettings theme={theme} onThemeChange={setTheme} />}
         {section === 'factory' && <FactoryManagementSection />}
+        {section === 'connected-accounts' && (
+          <SettingsSubsection
+            title="Connected accounts"
+            description="Connect communication services to run Factory sessions as your Mastra account."
+          >
+            <ConnectedAccountsSection />
+          </SettingsSubsection>
+        )}
         {section === 'repositories' && <RepositoriesSection />}
         {section === 'intake' && <IntakeSection />}
         {section === 'models' && (

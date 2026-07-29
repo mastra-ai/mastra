@@ -1,7 +1,7 @@
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ArrowLeft, Bot, Building2, GitBranch, Inbox, Palette, Search, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, Bot, Building2, Cable, GitBranch, Inbox, Palette, Search, SlidersHorizontal } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
@@ -37,6 +37,18 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.factory,
         icon: Building2,
         searchText: 'factory project organization remove delete danger',
+      },
+    ],
+  },
+  {
+    id: 'account',
+    label: 'Account',
+    items: [
+      {
+        id: 'connected-accounts',
+        label: SETTINGS_SECTION_LABELS['connected-accounts'],
+        icon: Cable,
+        searchText: 'connections connected accounts slack communication integrations',
       },
     ],
   },

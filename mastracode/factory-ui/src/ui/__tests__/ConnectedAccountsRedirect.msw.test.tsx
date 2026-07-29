@@ -14,7 +14,7 @@ function renderAt(url: string) {
 }
 
 describe('Connected accounts deep link (/settings/connected-accounts)', () => {
-  it('forwards to the first factory general settings, where the Connect Slack button lives', async () => {
+  it('forwards to the first factory Connected accounts settings', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -29,6 +29,6 @@ describe('Connected accounts deep link (/settings/connected-accounts)', () => {
 
     const router = renderAt('/settings/connected-accounts');
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/factories/fp-1/settings/general'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/factories/fp-1/settings/connected-accounts'));
   });
 });
