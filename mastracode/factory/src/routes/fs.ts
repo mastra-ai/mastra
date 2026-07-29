@@ -682,6 +682,7 @@ export async function readSessionWorkspaceDiff(
 
   const pathspecs = safePreviousPath ? [safePreviousPath, safePath] : [safePath];
   let result = await executeBoundedGitDiff(handle.sandbox, [
+    '--literal-pathspecs',
     '-C',
     handle.workdir,
     'diff',
@@ -698,7 +699,7 @@ export async function readSessionWorkspaceDiff(
   if (!result.stdout) {
     const untracked = await handle.sandbox.executeCommand(
       'git',
-      ['-C', handle.workdir, 'ls-files', '--others', '--exclude-standard', '--', safePath],
+      ['--literal-pathspecs', '-C', handle.workdir, 'ls-files', '--others', '--exclude-standard', '--', safePath],
       { timeout: 30_000 },
     );
     if (untracked.exitCode === 0 && untracked.stdout.trim()) {

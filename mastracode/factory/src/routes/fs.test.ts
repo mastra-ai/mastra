@@ -483,6 +483,7 @@ describe('workspace changes', () => {
       expect(script).toContain('head -c 524289');
       expect(args.slice(3)).toEqual([
         '0',
+        '--literal-pathspecs',
         '-C',
         WORKDIR,
         'diff',
@@ -512,6 +513,7 @@ describe('workspace changes', () => {
       expect(command).toBe('sh');
       expect(args.slice(3)).toEqual([
         '0',
+        '--literal-pathspecs',
         '-C',
         WORKDIR,
         'diff',
@@ -532,6 +534,32 @@ describe('workspace changes', () => {
     );
   });
 
+  it('treats pathspec magic in file names literally', async () => {
+    const path = 'src/:(exclude)*.ts';
+    const { fleet } = makeFleet((_script, command, args) => {
+      expect(command).toBe('sh');
+      expect(args.slice(3)).toEqual([
+        '0',
+        '--literal-pathspecs',
+        '-C',
+        WORKDIR,
+        'diff',
+        '--find-renames',
+        '--no-ext-diff',
+        '--no-color',
+        '--unified=3',
+        'HEAD',
+        '--',
+        path,
+      ]);
+      return { exitCode: 0, stdout: 'literal path diff' };
+    });
+
+    await expect(readSessionWorkspaceDiff(fleet, makeSession(), path)).resolves.toEqual(
+      expect.objectContaining({ path, patch: 'literal path diff' }),
+    );
+  });
+
   it('creates a bounded diff for an untracked file', async () => {
     let commandIndex = 0;
     const { fleet, executeCommand } = makeFleet((script, command, args) => {
@@ -542,7 +570,16 @@ describe('workspace changes', () => {
       }
       if (commandIndex === 2) {
         expect(command).toBe('git');
-        expect(args).toEqual(['-C', WORKDIR, 'ls-files', '--others', '--exclude-standard', '--', 'src/new.ts']);
+        expect(args).toEqual([
+          '--literal-pathspecs',
+          '-C',
+          WORKDIR,
+          'ls-files',
+          '--others',
+          '--exclude-standard',
+          '--',
+          'src/new.ts',
+        ]);
         return { exitCode: 0, stdout: 'src/new.ts\n' };
       }
       expect(command).toBe('sh');
