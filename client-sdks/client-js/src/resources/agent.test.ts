@@ -2493,7 +2493,9 @@ describe('Agent.processStreamResponse client-tool synthetic chunks', () => {
     const body = new ReadableStream<Uint8Array>({
       start(controller) {
         for (const chunk of chunks) {
-          controller.enqueue(chunk instanceof Uint8Array ? chunk : encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+          controller.enqueue(
+            chunk instanceof Uint8Array ? chunk : encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`),
+          );
         }
         controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
         controller.close();

@@ -223,20 +223,19 @@ describe('AgentBuilder Streaming Methods (fetch-mocked)', () => {
   it('streams agent builder records split across network chunks', async () => {
     const encoded = new TextEncoder().encode('{"type":"live","payload":{"message":"mañana"}}\x1E');
     const splitAt = encoded.indexOf(0xc3) + 1;
-    fetchMock.mockImplementationOnce(
-      () =>
-        Promise.resolve(
-          new Response(
-            new ReadableStream({
-              start(controller) {
-                controller.enqueue(encoded.slice(0, splitAt));
-                controller.enqueue(encoded.slice(splitAt));
-                controller.close();
-              },
-            }),
-            { status: 200 },
-          ),
+    fetchMock.mockImplementationOnce(() =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(encoded.slice(0, splitAt));
+              controller.enqueue(encoded.slice(splitAt));
+              controller.close();
+            },
+          }),
+          { status: 200 },
         ),
+      ),
     );
 
     const stream = await agentBuilder.observeStream({ runId: 'run-fragmented' });

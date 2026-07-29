@@ -2075,7 +2075,9 @@ export class Agent extends BaseResource {
         const lines = pendingText.split('\n\n');
         pendingText = isFinal ? '' : (lines.pop() ?? '');
 
-        const readableLines = lines.filter(line => line.trim() !== '[DONE]' && line.trim() !== 'data: [DONE]').join('\n\n');
+        const readableLines = lines
+          .filter(line => line.trim() !== '[DONE]' && line.trim() !== 'data: [DONE]')
+          .join('\n\n');
         if (readableLines) {
           controller.enqueue(new TextEncoder().encode(`${readableLines}\n\n`));
         }

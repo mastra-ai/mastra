@@ -32,10 +32,7 @@ describe('createRecordSeparatorJsonTransform', () => {
   it('preserves a UTF-8 code point split across chunks', async () => {
     const encoded = encoder.encode('{"message":"mañana"}\x1E');
     const splitAt = encoded.indexOf(0xc3) + 1;
-    const chunks = [
-      encoded.slice(0, splitAt).buffer as ArrayBuffer,
-      encoded.slice(splitAt).buffer as ArrayBuffer,
-    ];
+    const chunks = [encoded.slice(0, splitAt).buffer as ArrayBuffer, encoded.slice(splitAt).buffer as ArrayBuffer];
 
     await expect(readAll(createRecordSeparatorJsonTransform(), chunks)).resolves.toEqual([{ message: 'mañana' }]);
   });
@@ -54,9 +51,9 @@ describe('createRecordSeparatorJsonTransform', () => {
   });
 
   it('does not parse JSON primitives until their separator arrives', async () => {
-    await expect(readAll(createRecordSeparatorJsonTransform<number>(), [bytes('12'), bytes('34\x1E')])).resolves.toEqual([
-      1234,
-    ]);
+    await expect(
+      readAll(createRecordSeparatorJsonTransform<number>(), [bytes('12'), bytes('34\x1E')]),
+    ).resolves.toEqual([1234]);
   });
 
   it('rejects malformed terminated records instead of combining them with later records', async () => {
@@ -66,7 +63,9 @@ describe('createRecordSeparatorJsonTransform', () => {
   });
 
   it('parses a valid final record without a separator', async () => {
-    await expect(readAll(createRecordSeparatorJsonTransform(), [bytes('{"final":true}')])).resolves.toEqual([{ final: true }]);
+    await expect(readAll(createRecordSeparatorJsonTransform(), [bytes('{"final":true}')])).resolves.toEqual([
+      { final: true },
+    ]);
   });
 
   it.each(['{"bad":', '{"unterminated"'])('rejects malformed or incomplete EOF data: %s', async record => {
@@ -78,24 +77,21 @@ describe('createSseJsonTransform', () => {
   it('parses CRLF frames, ignores comments, and preserves split UTF-8 payloads', async () => {
     const encoded = encoder.encode(': keepalive\r\ndata: {"message":"mañana"}\r\n\r\n');
     const splitAt = encoded.indexOf(0xc3) + 1;
-    const chunks = [
-      encoded.slice(0, splitAt).buffer as ArrayBuffer,
-      encoded.slice(splitAt).buffer as ArrayBuffer,
-    ];
+    const chunks = [encoded.slice(0, splitAt).buffer as ArrayBuffer, encoded.slice(splitAt).buffer as ArrayBuffer];
 
     await expect(readAll(createSseJsonTransform(), chunks)).resolves.toEqual([{ message: 'mañana' }]);
   });
 
   it('joins multiple data fields and rejects malformed complete payloads', async () => {
-    await expect(readAll(createSseJsonTransform(), [bytes('event: task\ndata: {"id":\ndata: 1}\n\n')])).resolves.toEqual([
-      { id: 1 },
-    ]);
+    await expect(
+      readAll(createSseJsonTransform(), [bytes('event: task\ndata: {"id":\ndata: 1}\n\n')]),
+    ).resolves.toEqual([{ id: 1 }]);
     await expect(readAll(createSseJsonTransform(), [bytes('data: {"bad":}\n\n')])).rejects.toThrow(SyntaxError);
   });
 
   it('ignores the SSE data: [DONE] terminator instead of JSON.parse-ing it', async () => {
-    await expect(
-      readAll(createSseJsonTransform(), [bytes('data: {"id":1}\n\ndata: [DONE]\n\n')]),
-    ).resolves.toEqual([{ id: 1 }]);
+    await expect(readAll(createSseJsonTransform(), [bytes('data: {"id":1}\n\ndata: [DONE]\n\n')])).resolves.toEqual([
+      { id: 1 },
+    ]);
   });
 });
