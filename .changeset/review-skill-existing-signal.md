@@ -2,4 +2,11 @@
 '@mastra/factory': patch
 ---
 
-The factory-review skill now collects existing review signal before forming a verdict — submitted reviews, top-level comments, and unresolved inline threads from bots (CodeRabbit, scanners) and humans — and must disposition every substantive prior finding as confirmed, addressed, or refuted with evidence. Verdict calibration was tightened to stop lenient approvals: a severity rubric defines what is blocking (user-visible failures under any supported configuration, security holes, wrong package/API contracts, defects with cheap concrete fixes), any concrete change the author should make before merge forces a request-changes verdict, borderline calls tie-break toward request changes, and confirmed findings can no longer be laundered into assumptions or relabeled non-blocking to protect an approval. The reviewer must also execute the change rather than only read it — running the changed packages' tests and typecheck in the session sandbox, writing repros for suspected bugs, and reporting every command with its outcome in the handoff — and every approve verdict must first survive an adversarial self-check arguing the strongest case for request changes. Conflicting PRs still receive a full review but can never be approved: resolving the conflicts becomes a discrete requested change, conflicts overlapping the PR's own files are flagged as semantic rework risk, verification is qualified as head-branch-only, and the reviewer never resolves conflicts itself.
+Factory review verdicts are stricter and grounded in the full review record:
+
+- The reviewer reads existing reviews first — bot and human — and every substantive prior finding is confirmed, addressed, or refuted with evidence. Confirmed unaddressed major findings block approval.
+- Approval is earned: any concrete change the author should make before merge means "request changes", borderline calls tie-break toward "request changes", and real defects can't be relabeled non-blocking to protect an approval.
+- The reviewer runs the changed packages' tests and typecheck itself instead of trusting green CI, and every approval must survive an adversarial self-check.
+- PRs with merge conflicts still get a full review but are never approved and never have their conflicts resolved by the reviewer.
+
+Reviews arrive on the pull request itself, published via `gh pr review --approve` or `gh pr review --request-changes` before the review pass completes.

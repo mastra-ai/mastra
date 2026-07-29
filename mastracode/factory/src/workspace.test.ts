@@ -280,10 +280,15 @@ describe('getFactoryWorkspace', () => {
     expect(review).toContain('gh pr review <number> --approve --body-file');
     expect(review).toContain('gh pr review <number> --request-changes --body-file');
     expect(review).toContain('gh pr comment <number> --body-file');
-    // Existing review signal (bot and human) must be collected and dispositioned,
-    // and a confirmed major finding must block approval.
+    // Existing review signal (bot and human) must be collected from every
+    // source — submitted reviews, unresolved inline threads with their
+    // metadata, and top-level comments — and dispositioned, and a confirmed
+    // major finding must block approval.
     expect(review).toContain('Existing Review Signal');
+    expect(review).toContain('--json reviews');
     expect(review).toContain('reviewThreads');
+    expect(review).toContain('isResolved isOutdated path line');
+    expect(review).toContain('--json comments');
     expect(review).toContain('Existing review disposition');
     expect(review).toContain('confirmed major finding from an existing reviewer that remains unaddressed');
     expect(review).toContain('Approval is earned, not the default');
@@ -302,6 +307,9 @@ describe('getFactoryWorkspace', () => {
     expect(review).toContain("Merge conflicts don't excuse skipping the review");
     expect(review).toContain('A conflicting PR cannot be approved');
     expect(review).toContain('Never resolve the conflicts yourself');
+    // Terminal ordering: publish the verdict and transition before the final
+    // conversation message, so the pass can't stop early with an unpublished review.
+    expect(review).toContain('post the handoff as your final conversation message');
   });
 
   it('adds read-only Web Factory skills and keeps them authoritative over project shadows', async () => {
