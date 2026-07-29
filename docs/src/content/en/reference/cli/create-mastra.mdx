@@ -57,6 +57,8 @@ npx create-mastra@latest my-empty-project --empty
 
 ## Automatic setup
 
+Default starter and empty scaffold projects pin generated Mastra dependencies to exact versions from the invoked release channel (for example, the exact `alpha` version rather than the `alpha` tag). If the CLI can't resolve exact versions, it warns and uses the channel tag instead. Custom templates remain template-owned — their dependencies are not modified.
+
 After installing dependencies, the command:
 
 1. Detects supported coding assistants on `PATH` and installs Mastra skills. If none are detected, it installs universal skills.
