@@ -84,40 +84,37 @@ To run workers separately, configure a distributed [PubSub](/docs/server/pubsub)
 
 <Tabs>
   <TabItem value="redis" label="Redis Streams + PostgreSQL">
+    ```typescript title="src/mastra/index.ts"
+    import { Mastra } from '@mastra/core/mastra'
+    import { RedisStreamsPubSub } from '@mastra/redis-streams'
+    import { PostgresStore } from '@mastra/pg'
 
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra'
-import { RedisStreamsPubSub } from '@mastra/redis-streams'
-import { PostgresStore } from '@mastra/pg'
-
-export const mastra = new Mastra({
-  storage: new PostgresStore({
-    connectionString: process.env.DATABASE_URL!,
-  }),
-  pubsub: new RedisStreamsPubSub({
-    url: process.env.REDIS_URL!,
-  }),
-})
-```
-
+    export const mastra = new Mastra({
+      storage: new PostgresStore({
+        connectionString: process.env.DATABASE_URL!,
+      }),
+      pubsub: new RedisStreamsPubSub({
+        url: process.env.REDIS_URL!,
+      }),
+    })
+    ```
   </TabItem>
+
   <TabItem value="gcp" label="Google Cloud Pub/Sub + LibSQL">
+    ```typescript title="src/mastra/index.ts"
+    import { Mastra } from '@mastra/core/mastra'
+    import { GoogleCloudPubSub } from '@mastra/google-cloud-pubsub'
+    import { LibSQLStore } from '@mastra/libsql'
 
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra'
-import { GoogleCloudPubSub } from '@mastra/google-cloud-pubsub'
-import { LibSQLStore } from '@mastra/libsql'
-
-export const mastra = new Mastra({
-  storage: new LibSQLStore({
-    url: process.env.DATABASE_URL!,
-  }),
-  pubsub: new GoogleCloudPubSub({
-    projectId: process.env.GCP_PROJECT_ID!,
-  }),
-})
-```
-
+    export const mastra = new Mastra({
+      storage: new LibSQLStore({
+        url: process.env.DATABASE_URL!,
+      }),
+      pubsub: new GoogleCloudPubSub({
+        projectId: process.env.GCP_PROJECT_ID!,
+      }),
+    })
+    ```
   </TabItem>
 </Tabs>
 

@@ -35,40 +35,37 @@ Point the `Mastra` instance at a distributed PubSub backend and a shared databas
 
 <Tabs>
   <TabItem value="redis" label="Redis Streams + PostgreSQL">
+    ```typescript title="src/mastra/index.ts"
+    import { Mastra } from '@mastra/core/mastra'
+    import { RedisStreamsPubSub } from '@mastra/redis-streams'
+    import { PostgresStore } from '@mastra/pg'
 
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra'
-import { RedisStreamsPubSub } from '@mastra/redis-streams'
-import { PostgresStore } from '@mastra/pg'
-
-export const mastra = new Mastra({
-  storage: new PostgresStore({
-    connectionString: process.env.DATABASE_URL!,
-  }),
-  pubsub: new RedisStreamsPubSub({
-    url: process.env.REDIS_URL!,
-  }),
-})
-```
-
+    export const mastra = new Mastra({
+      storage: new PostgresStore({
+        connectionString: process.env.DATABASE_URL!,
+      }),
+      pubsub: new RedisStreamsPubSub({
+        url: process.env.REDIS_URL!,
+      }),
+    })
+    ```
   </TabItem>
+
   <TabItem value="gcp" label="Google Cloud Pub/Sub + LibSQL">
+    ```typescript title="src/mastra/index.ts"
+    import { Mastra } from '@mastra/core/mastra'
+    import { GoogleCloudPubSub } from '@mastra/google-cloud-pubsub'
+    import { LibSQLStore } from '@mastra/libsql'
 
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core/mastra'
-import { GoogleCloudPubSub } from '@mastra/google-cloud-pubsub'
-import { LibSQLStore } from '@mastra/libsql'
-
-export const mastra = new Mastra({
-  storage: new LibSQLStore({
-    url: process.env.DATABASE_URL!,
-  }),
-  pubsub: new GoogleCloudPubSub({
-    projectId: process.env.GCP_PROJECT_ID!,
-  }),
-})
-```
-
+    export const mastra = new Mastra({
+      storage: new LibSQLStore({
+        url: process.env.DATABASE_URL!,
+      }),
+      pubsub: new GoogleCloudPubSub({
+        projectId: process.env.GCP_PROJECT_ID!,
+      }),
+    })
+    ```
   </TabItem>
 </Tabs>
 
@@ -78,147 +75,139 @@ Any [supported storage backend](/reference/workers/overview#supported-storage-ba
 
 <Steps>
   <StepItem>
+    Build your Mastra application. The output runs in every container.
 
-Build your Mastra application. The output runs in every container.
+    ```bash
+    mastra build
+    ```
 
-```bash
-mastra build
-```
-
-This produces a self-contained `.mastra/output/` directory. See [Deploy a Mastra server](/docs/deployment/mastra-server) for details on the build output.
-
+    This produces a self-contained `.mastra/output/` directory. See [Deploy a Mastra server](/docs/deployment/mastra-server) for details on the build output.
   </StepItem>
 
   <StepItem>
+    Create a Dockerfile that copies the pre-built output and installs production dependencies:
 
-Create a Dockerfile that copies the pre-built output and installs production dependencies:
+    ```dockerfile title="app/Dockerfile"
+    FROM node:22-alpine
 
-```dockerfile title="app/Dockerfile"
-FROM node:22-alpine
+    WORKDIR /app
 
-WORKDIR /app
+    COPY .mastra/output/package.json .mastra/output/.npmrc* ./
+    RUN npm install --omit=dev
 
-COPY .mastra/output/package.json .mastra/output/.npmrc* ./
-RUN npm install --omit=dev
+    COPY .mastra/output/ .
 
-COPY .mastra/output/ .
-
-EXPOSE 4111
-CMD ["node", "index.mjs"]
-```
-
+    EXPOSE 4111
+    CMD ["node", "index.mjs"]
+    ```
   </StepItem>
 
   <StepItem>
+    Create a `docker-compose.yml` that runs the fully split topology. The file defines six services: a database, a PubSub backend, the API server, and three workers. Each worker container runs the same image with a different `MASTRA_WORKERS` value to control which worker starts.
 
-Create a `docker-compose.yml` that runs the fully split topology. The file defines six services: a database, a PubSub backend, the API server, and three workers. Each worker container runs the same image with a different `MASTRA_WORKERS` value to control which worker starts.
+    The API container sets `MASTRA_WORKERS: "false"` to disable all event processing. The orchestration worker sets `MASTRA_STEP_EXECUTION_URL` to point step execution requests at the API's internal URL. See [step execution URL](#step-execution-url) for details.
 
-The API container sets `MASTRA_WORKERS: "false"` to disable all event processing. The orchestration worker sets `MASTRA_STEP_EXECUTION_URL` to point step execution requests at the API's internal URL. See [step execution URL](#step-execution-url) for details.
-
-```yaml title="docker-compose.yml"
-services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: mastra
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: mastra
-    ports:
-      - '5432:5432'
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U mastra']
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - '6379:6379'
-    healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  api:
-    build: ./app
-    ports:
-      - '4111:4111'
-    environment:
-      DATABASE_URL: postgres://mastra:${POSTGRES_PASSWORD}@postgres:5432/mastra
-      REDIS_URL: redis://redis:6379
-      MASTRA_WORKERS: 'false'
-    depends_on:
+    ```yaml title="docker-compose.yml"
+    services:
       postgres:
-        condition: service_healthy
+        image: postgres:16-alpine
+        environment:
+          POSTGRES_USER: mastra
+          POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+          POSTGRES_DB: mastra
+        ports:
+          - '5432:5432'
+        volumes:
+          - pgdata:/var/lib/postgresql/data
+        healthcheck:
+          test: ['CMD-SHELL', 'pg_isready -U mastra']
+          interval: 5s
+          timeout: 3s
+          retries: 5
+
       redis:
-        condition: service_healthy
-    healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:4111/api/agents']
-      interval: 5s
-      timeout: 3s
-      retries: 5
+        image: redis:7-alpine
+        ports:
+          - '6379:6379'
+        healthcheck:
+          test: ['CMD', 'redis-cli', 'ping']
+          interval: 5s
+          timeout: 3s
+          retries: 5
 
-  orchestration-worker:
-    build: ./app
-    environment:
-      DATABASE_URL: postgres://mastra:${POSTGRES_PASSWORD}@postgres:5432/mastra
-      REDIS_URL: redis://redis:6379
-      MASTRA_WORKERS: orchestration
-      MASTRA_STEP_EXECUTION_URL: http://api:4111/api
-    depends_on:
       api:
-        condition: service_healthy
+        build: ./app
+        ports:
+          - '4111:4111'
+        environment:
+          DATABASE_URL: postgres://mastra:${POSTGRES_PASSWORD}@postgres:5432/mastra
+          REDIS_URL: redis://redis:6379
+          MASTRA_WORKERS: 'false'
+        depends_on:
+          postgres:
+            condition: service_healthy
+          redis:
+            condition: service_healthy
+        healthcheck:
+          test: ['CMD', 'wget', '-qO-', 'http://localhost:4111/api/agents']
+          interval: 5s
+          timeout: 3s
+          retries: 5
 
-  scheduler-worker:
-    build: ./app
-    environment:
-      DATABASE_URL: postgres://mastra:${POSTGRES_PASSWORD}@postgres:5432/mastra
-      REDIS_URL: redis://redis:6379
-      MASTRA_WORKERS: scheduler
-    depends_on:
-      api:
-        condition: service_healthy
+      orchestration-worker:
+        build: ./app
+        environment:
+          DATABASE_URL: postgres://mastra:${POSTGRES_PASSWORD}@postgres:5432/mastra
+          REDIS_URL: redis://redis:6379
+          MASTRA_WORKERS: orchestration
+          MASTRA_STEP_EXECUTION_URL: http://api:4111/api
+        depends_on:
+          api:
+            condition: service_healthy
 
-  background-task-worker:
-    build: ./app
-    environment:
-      DATABASE_URL: postgres://mastra:${POSTGRES_PASSWORD}@postgres:5432/mastra
-      REDIS_URL: redis://redis:6379
-      MASTRA_WORKERS: backgroundTasks
-    depends_on:
-      api:
-        condition: service_healthy
+      scheduler-worker:
+        build: ./app
+        environment:
+          DATABASE_URL: postgres://mastra:${POSTGRES_PASSWORD}@postgres:5432/mastra
+          REDIS_URL: redis://redis:6379
+          MASTRA_WORKERS: scheduler
+        depends_on:
+          api:
+            condition: service_healthy
 
-volumes:
-  pgdata:
-```
+      background-task-worker:
+        build: ./app
+        environment:
+          DATABASE_URL: postgres://mastra:${POSTGRES_PASSWORD}@postgres:5432/mastra
+          REDIS_URL: redis://redis:6379
+          MASTRA_WORKERS: backgroundTasks
+        depends_on:
+          api:
+            condition: service_healthy
 
-Create a `.env` file next to your `docker-compose.yml`:
+    volumes:
+      pgdata:
+    ```
 
-```bash title=".env"
-POSTGRES_PASSWORD=your-secure-password
-```
+    Create a `.env` file next to your `docker-compose.yml`:
 
-:::note
-Remember to set any other environment variables your application needs (e.g., your [model provider](/models/providers) API key).
-:::
+    ```bash title=".env"
+    POSTGRES_PASSWORD=your-secure-password
+    ```
 
+    :::note
+    Remember to set any other environment variables your application needs (e.g., your [model provider](/models/providers) API key).
+    :::
   </StepItem>
 
   <StepItem>
+    Start the stack and verify the API responds:
 
-Start the stack and verify the API responds:
-
-```bash
-docker compose up -d
-docker compose ps
-curl http://localhost:4111/api/agents
-```
-
+    ```bash
+    docker compose up -d
+    docker compose ps
+    curl http://localhost:4111/api/agents
+    ```
   </StepItem>
 </Steps>
 
