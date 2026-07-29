@@ -381,7 +381,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         // GitHub assigns a new installation ID. Platform creates a new installation row,
         // and Factory's intake.listSources creates a new local installation row with the
         // new externalId. Try to find the new installation by accountName.
-        if (!(err instanceof PlatformApiError) || err.status !== 404 || !installation.accountName) throw err;
+        if (!isNotFound(err) || !installation.accountName) throw err;
         const installations = await this.storage.installations.list({ orgId });
         const newInstallation = installations.find(
           inst => inst.accountName === installation.accountName && inst.id !== installation.id,
