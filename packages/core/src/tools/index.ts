@@ -10,7 +10,6 @@ export { askUserTool, formatQuestionAnswer } from './builtin/ask-user';
 export type { AskUserAnswer, AskUserOption, AskUserSelectionMode, AskUserSuspendPayload } from './builtin/ask-user';
 export { webFetchTool } from './builtin/web-fetch';
 export { webSearchTool } from './builtin/web-search';
-export type { WebSearchToolPlaceholder } from './builtin/web-search';
 export { submitPlanTool } from './builtin/submit-plan';
 export type { SubmitPlanResumeData, SubmitPlanSuspendPayload } from './builtin/submit-plan';
 export {
