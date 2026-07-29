@@ -12,15 +12,11 @@
  *   --named    persistent tunnel + stable hostname (needs `setup` once)
  *   setup      create the named tunnel and its DNS record
  *
- * A quick tunnel gets a new hostname every run, which would normally mean
- * re-editing the Slack app by hand each time. With app configuration tokens
- * set, the script pushes the new URLs into the app's manifest itself, so the
- * throwaway hostname stops being a chore. Without them it just prints the
- * values to paste, since those drifting apart is the usual failure.
+ * A quick tunnel gets a new hostname every run, so on connect it prints the
+ * exact values to update in the Slack app and .env — those drifting apart is
+ * the usual failure. See slack-app-manifest.example.json for the app itself.
  */
 import { spawn } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 
 const PORT = process.env.PORT ?? '5873';
 const ORIGIN = `http://127.0.0.1:${PORT}`;
@@ -61,14 +57,14 @@ async function requireCloudflared() {
 const webhookUrl = publicUrl => `${publicUrl}/api/agent-controllers/${CONTROLLER_ID}/channels/slack/webhook`;
 const oauthRedirectUrl = publicUrl => `${publicUrl}/connect/slack/oidc/callback`;
 
-function printSlackConfig(publicUrl, { synced = false } = {}) {
+function printSlackConfig(publicUrl) {
   console.log(
     [
       '',
       '─'.repeat(72),
       `Tunnel origin: ${publicUrl}  →  ${ORIGIN}`,
       '',
-      synced ? 'Slack app manifest updated automatically:' : 'Slack app config (https://api.slack.com/apps):',
+      'Slack app config (https://api.slack.com/apps):',
       `  Event Subscriptions → Request URL`,
       `    ${webhookUrl(publicUrl)}`,
       `  OAuth & Permissions → Redirect URLs`,
@@ -82,86 +78,6 @@ function printSlackConfig(publicUrl, { synced = false } = {}) {
       '',
     ].join('\n'),
   );
-}
-
-/**
- * Push the tunnel's URLs into the Slack app manifest.
- *
- * Requires app configuration tokens (https://api.slack.com/apps > "Your App
- * Configuration Tokens") plus the target app id. Access tokens last 12 hours
- * and refresh tokens are single-use, so each rotation writes the new pair back
- * to .env — otherwise the next run would fail with an invalid refresh token.
- */
-async function syncManifest(publicUrl) {
-  const appId = process.env.SLACK_APP_MANIFEST_APP_ID?.trim();
-  const token = process.env.SLACK_APP_CONFIG_TOKEN?.trim();
-  const refreshToken = process.env.SLACK_APP_REFRESH_TOKEN?.trim();
-  if (!appId || !refreshToken) return false;
-
-  const { SlackManifestClient, buildManifest } = await import('@mastra/slack');
-
-  const client = new SlackManifestClient({
-    token: token ?? '',
-    refreshToken,
-    onTokenRotation: async tokens => {
-      persistEnv({
-        SLACK_APP_CONFIG_TOKEN: tokens.token,
-        SLACK_APP_REFRESH_TOKEN: tokens.refreshToken,
-      });
-    },
-  });
-
-  // No explicit rotateToken() here: updateApp() rotates first thing, and
-  // refresh tokens are single-use, so rotating twice burns one for nothing.
-  await client.updateApp(
-    appId,
-    buildManifest({
-      name: process.env.SLACK_APP_NAME ?? 'Mastra Code (dev)',
-      webhookUrl: webhookUrl(publicUrl),
-      oauthRedirectUrl: oauthRedirectUrl(publicUrl),
-    }),
-  );
-  return true;
-}
-
-/** Rewrite keys in place in .env, appending any that aren't there yet. */
-function persistEnv(updates) {
-  const path = join(process.cwd(), '.env');
-  let contents = '';
-  try {
-    contents = readFileSync(path, 'utf8');
-  } catch {
-    // No .env yet — start from empty and let the writes create it.
-  }
-
-  for (const [key, value] of Object.entries(updates)) {
-    const line = `${key}=${value}`;
-    const pattern = new RegExp(`^${key}=.*$`, 'm');
-    contents = pattern.test(contents) ? contents.replace(pattern, line) : `${contents.trimEnd()}\n${line}\n`;
-  }
-
-  writeFileSync(path, contents);
-}
-
-/** Sync the manifest if configured, else fall back to printing the values. */
-async function announce(publicUrl) {
-  try {
-    const synced = await syncManifest(publicUrl);
-    printSlackConfig(publicUrl, { synced });
-    if (!synced) {
-      console.log(
-        [
-          'Tip: set SLACK_APP_MANIFEST_APP_ID + SLACK_APP_REFRESH_TOKEN in .env and this',
-          'script will update the Slack app for you on every start.',
-          'Tokens: https://api.slack.com/apps > "Your App Configuration Tokens"',
-          '',
-        ].join('\n'),
-      );
-    }
-  } catch (error) {
-    printSlackConfig(publicUrl);
-    console.error(`Could not update the Slack app manifest: ${error.message}\n`);
-  }
 }
 
 /** Ephemeral tunnel: no account, no DNS, throwaway URL that changes each run. */
@@ -179,7 +95,7 @@ async function quick() {
     const match = text.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/);
     if (match && !announced) {
       announced = true;
-      void announce(match[0]);
+      printSlackConfig(match[0]);
     }
   });
 
@@ -194,7 +110,7 @@ async function named() {
   await requireCloudflared();
   const hostname = process.env.TUNNEL_HOSTNAME;
   console.log(`Starting tunnel "${TUNNEL_NAME}" → ${ORIGIN}\n`);
-  if (hostname) await announce(`https://${hostname}`);
+  if (hostname) printSlackConfig(`https://${hostname}`);
   // `--url` supplies the single ingress rule, so no config file is needed.
   await run('cloudflared', ['tunnel', '--url', ORIGIN, 'run', TUNNEL_NAME]);
 }
@@ -232,7 +148,7 @@ async function setup() {
   await run('cloudflared', ['tunnel', 'route', 'dns', TUNNEL_NAME, hostname]);
 
   console.log(`\nDone. Start it with:\n\n  TUNNEL_HOSTNAME=${hostname} pnpm tunnel:run\n`);
-  await announce(`https://${hostname}`);
+  printSlackConfig(`https://${hostname}`);
 }
 
 if (args[0] === 'setup') await setup();

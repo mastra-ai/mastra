@@ -78,35 +78,19 @@ Open `http://localhost:5173`.
 
 ### Slack channels (optional)
 
-Slack only calls public HTTPS origins, so a local server needs a tunnel. This
-requires [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+Slack sends events to public HTTPS origins only, so a local server needs a
+tunnel. Install [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
 (`brew install cloudflared`).
 
-Run the dev server, then in a second terminal:
+#### 1. Start a tunnel
 
 ```shell
 pnpm --dir mastracode/web tunnel
 ```
 
 This needs no Cloudflare account and writes no config file. It prints the
-tunnel URL along with the exact Slack app settings and the
-`MASTRACODE_CHANNELS_PUBLIC_URL` value to add to `.env`.
-
-The hostname changes on every run. To avoid re-editing the Slack app each
-time, add app configuration tokens from
-[Your App Configuration Tokens](https://api.slack.com/apps) to `.env`:
-
-```dotenv
-SLACK_APP_CONFIG_TOKEN=
-SLACK_APP_REFRESH_TOKEN=
-SLACK_APP_MANIFEST_APP_ID=
-```
-
-`SLACK_APP_MANIFEST_APP_ID` is the app's own id (`A0…`) from its Basic
-Information page, which is not the same value as `SLACK_APP_CLIENT_ID`.
-
-The tunnel then rewrites the app's webhook and OAuth URLs itself on each start,
-rotating the tokens and writing the new pair back to `.env`.
+tunnel URL and the values that depend on it. Keep it running; the hostname is
+valid until you stop it.
 
 For a hostname that survives restarts, use a domain on your own Cloudflare
 account:
@@ -115,6 +99,34 @@ account:
 TUNNEL_HOSTNAME=mc-you.example.com pnpm --dir mastracode/web tunnel:setup
 TUNNEL_HOSTNAME=mc-you.example.com pnpm --dir mastracode/web tunnel:run
 ```
+
+#### 2. Create the Slack app
+
+At [api.slack.com/apps](https://api.slack.com/apps), choose **Create New App →
+From a manifest**, then paste
+[`slack-app-manifest.example.json`](./slack-app-manifest.example.json) with
+every `YOUR-TUNNEL-HOSTNAME` replaced by the tunnel's hostname.
+
+Install it to your workspace, then copy these from **Basic Information → App
+Credentials** into `.env`:
+
+```dotenv
+MASTRACODE_CHANNELS_PUBLIC_URL=https://your-tunnel-hostname
+SLACK_APP_SIGNING_SECRET=
+SLACK_APP_CLIENT_ID=
+SLACK_APP_CLIENT_SECRET=
+```
+
+Restart the dev server — varlock reads `.env` at startup.
+
+#### 3. Link your account
+
+DM the bot. It replies with a Connect card; that flow binds your Slack identity
+to your Mastra user, and messages then run as you.
+
+A quick tunnel gets a new hostname each run. When it changes, update
+`MASTRACODE_CHANNELS_PUBLIC_URL` and the two request URLs in the Slack app
+(**Event Subscriptions** and **OAuth & Permissions**) — the tunnel prints both.
 
 ### Optional local services
 
