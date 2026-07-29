@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.22.0`
 
-Channels connect agents to messaging and collaboration platforms like Slack, Microsoft Teams, Discord, Telegram, WhatsApp, GitHub, and Linear. When a user sends a message or comment on a platform, the agent receives it, processes it through the normal agent pipeline, and streams the response back to the conversation. Mastra uses [Chat SDK](https://chat-sdk.dev/) for this channel layer.
+Channels connect agents to messaging and collaboration platforms like Slack, Microsoft Teams, Discord, Telegram, WhatsApp, GitHub, and Linear. When a user sends a message or comment on a platform, the agent receives it and processes it through the normal agent pipeline, plus streams the response back to the conversation. Mastra uses [Chat SDK](https://chat-sdk.dev/) for this channel layer.
 
 Start with the page for your platform:
 
@@ -75,7 +75,7 @@ export const mastra = new Mastra({
 
 ## Webhook routes
 
-Platforms send channel activity to Mastra through webhooks. A webhook is an HTTP endpoint that the platform calls when something happens, such as a new message, a mention, or a user selecting "Approve" on an interactive tool approval card. This is how your agent receives a new message, starts processing it, and responds in the same channel.
+Platforms send channel activity to Mastra through webhooks. A webhook is an HTTP endpoint that the platform calls when something happens, such as a new message, a mention, or a user selecting "Approve" on an interactive tool approval card. This is how your agent receives a new message and starts processing it, plus responds in the same channel.
 
 Mastra registers a webhook route for each configured adapter and handles the request for you:
 
@@ -223,7 +223,11 @@ Vercel and AWS Lambda require `waitUntil`, since they freeze the function as soo
 
 ### Coordinate instances with a shared pub/sub
 
-Channels route messages through the agent's [signal pipeline](/docs/long-running-agents/signals), and each run acquires a lease on its thread so one run owns the conversation at a time. The default in-memory pub/sub can't cross instance boundaries, so on serverless a follow-up message can land on a different instance than the one running the agent. Without a shared pub/sub, that instance can't reach the active run and starts its own, leaving the original run untouched and the thread processed twice.
+Channels route messages through the agent's [signal pipeline](/docs/long-running-agents/signals), and each run acquires a lease on its thread so one run owns the conversation at a time.
+
+The default in-memory pub/sub can't cross instance boundaries, so on serverless a follow-up message can be routed to a different instance than the one running the agent.
+
+Without a shared pub/sub, that instance can't reach the active run and starts its own, leaving the original run untouched and the thread processed twice.
 
 Configure a shared pub/sub backed by Redis Streams on the `Mastra` instance so leases and signals coordinate across instances:
 

@@ -9,7 +9,7 @@ packages:
 
 # PubSub
 
-Mastra uses a publish/subscribe (pub/sub) system as its internal event bus. Components publish events to named topics, and other components subscribe to those topics to react. The backend you configure decides how far those events travel: within one process, across processes on one host, or across separate instances.
+Mastra uses a publish/subscribe (pub/sub) system as its internal event bus. Components publish events to topics, and other components subscribe to those topics to react. The backend you configure decides how far those events travel: within one process or across processes on one host, or alternatively across separate instances.
 
 You set the backend once on the `Mastra` instance, and the rest of the system uses it without changes. By default, Mastra uses an in-process backend that needs no setup.
 
@@ -75,7 +75,9 @@ export const mastra = new Mastra({
 
 ### Distributed deployments
 
-Use a distributed backend when you run more than one instance or host, so every instance receives the same events. This matters whenever a request handled by one instance must reach work running on another. For example, sending a signal to an agent run requires the signal event to cross the process boundary to the instance that owns the run. With the in-process default, that instance never receives the event.
+Use a distributed backend when you run more than one instance or host, so every instance receives the same events. This matters whenever a request handled by one instance must reach work running on another.
+
+For example, sending a signal to an agent run requires the signal event to cross the process boundary to the instance that owns the run. With the in-process default, that instance never receives the event.
 
 Both backends below deliver across processes and hosts and persist events for redelivery.
 
