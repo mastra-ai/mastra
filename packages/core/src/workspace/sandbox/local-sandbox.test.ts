@@ -1085,6 +1085,83 @@ describe('LocalSandbox', () => {
 
       await seatbeltSandbox._destroy();
     });
+
+    it('should correctly distinguish between Mastra-generated and user-authored profiles across restarts/clones', async () => {
+      if (os.platform() !== 'darwin') {
+        return;
+      }
+
+      // Case 1: Mastra-generated profile path (initially missing)
+      const generatedProfilePath = path.join(tempDir, 'restart-generated-profile.sb');
+
+      const sandbox1 = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: {
+          seatbeltProfilePath: generatedProfilePath,
+        },
+      });
+
+      await sandbox1._start();
+      expect((sandbox1 as any)._isCustomProfileLoaded).toBe(false);
+      await sandbox1._destroy(); // Sandbox is destroyed, but file remains (because userProvidedProfilePath is true)
+
+      // Start a second sandbox sharing the same path (simulated restart)
+      const sandbox2 = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: {
+          seatbeltProfilePath: generatedProfilePath,
+        },
+      });
+
+      await sandbox2._start();
+      // Even though the file now exists on disk, it has the Mastra signature comment,
+      // so it should not be marked as custom-authored!
+      expect((sandbox2 as any)._isCustomProfileLoaded).toBe(false);
+
+      const initialProfile = (sandbox2 as any)._seatbeltProfile;
+      const canonicalSourcePath = path.join(tempDir, 'src-dir-restart');
+      const expectedWriteRule = `(allow file-write* (subpath "${canonicalSourcePath}"))`;
+
+      // Mount should still trigger regeneration
+      const mockFs = {
+        id: 'test-fs',
+        name: 'MockFs',
+        provider: 'local',
+        getMountConfig: () => ({ type: 'local', basePath: canonicalSourcePath }),
+      } as any;
+      await fs.mkdir(canonicalSourcePath, { recursive: true });
+      await sandbox2.mount(mockFs, '/my-mount-restart');
+
+      const regeneratedProfile = (sandbox2 as any)._seatbeltProfile;
+      expect(regeneratedProfile).not.toBe(initialProfile);
+      expect(regeneratedProfile).toContain(expectedWriteRule);
+
+      await sandbox2._destroy();
+
+      // Case 2: True user-authored profile (exists on disk and has no Mastra header)
+      const userProfilePath = path.join(tempDir, 'true-user-profile.sb');
+      const customContent = ';; my custom profile\n(version 1)\n(allow default)\n';
+      await fs.writeFile(userProfilePath, customContent, 'utf-8');
+
+      const sandbox3 = new LocalSandbox({
+        workingDirectory: tempDir,
+        isolation: 'seatbelt',
+        nativeSandbox: {
+          seatbeltProfilePath: userProfilePath,
+        },
+      });
+
+      await sandbox3._start();
+      expect((sandbox3 as any)._isCustomProfileLoaded).toBe(true);
+
+      // Mount should NOT trigger regeneration
+      await sandbox3.mount(mockFs, '/my-mount-user');
+      expect((sandbox3 as any)._seatbeltProfile).toBe(customContent);
+
+      await sandbox3._destroy();
+    });
   });
 
   // ===========================================================================

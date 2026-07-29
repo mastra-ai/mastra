@@ -263,14 +263,15 @@ export class LocalSandbox extends MastraSandbox {
 
         // Check if file exists at user's path
         try {
-          this._seatbeltProfile = await fs.readFile(userProvidedPath, 'utf-8');
-          this._isCustomProfileLoaded = true;
+          const content = await fs.readFile(userProvidedPath, 'utf-8');
+          this._seatbeltProfile = content;
+          this._isCustomProfileLoaded = !content.startsWith(';; Mastra Generated Sandbox Profile');
         } catch (err: unknown) {
           if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
             throw err;
           }
           // File doesn't exist, generate default and write to user's path
-          this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
+          this._seatbeltProfile = ';; Mastra Generated Sandbox Profile\n' + generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
           // Ensure parent directory exists
           await fs.mkdir(path.dirname(userProvidedPath), { recursive: true });
           await fs.writeFile(userProvidedPath, this._seatbeltProfile, 'utf-8');
