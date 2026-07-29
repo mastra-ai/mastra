@@ -88,13 +88,11 @@ function ChannelThreadRedirect() {
 }
 
 /**
- * Factory-agnostic deep link to the Connected accounts settings surface, used
- * by server-built links that don't know a factory id (e.g. the Slack Connect
- * card). Lands on the first factory's Connected accounts settings — routing
- * through the SPA guarantees the visitor is authenticated before they start
- * the OIDC flow.
+ * Factory-agnostic entry to Connections, used by server-built links that do not
+ * know a Factory id. Routing through the SPA guarantees the visitor is
+ * authenticated before they start the OIDC flow.
  */
-function ConnectedAccountsRedirect() {
+function ConnectionsRedirect() {
   const { data: factories, isPending } = useFactoriesQuery();
 
   if (isPending) return null;
@@ -164,7 +162,7 @@ export function createAppRoutes(): RouteObject[] {
         },
         // Server-built thread deep links without a factory id (Slack cards).
         { path: 'threads/:threadId', element: <ChannelThreadRedirect /> },
-        { path: 'settings/connected-accounts', element: <ConnectedAccountsRedirect /> },
+        { path: 'settings/connections', element: <ConnectionsRedirect /> },
         // Legacy deep links (the app used to serve everything at any path).
         { path: '*', element: <Navigate to="/" replace /> },
       ],

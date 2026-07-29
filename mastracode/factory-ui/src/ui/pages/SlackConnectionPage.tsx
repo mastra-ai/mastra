@@ -50,7 +50,7 @@ export function SlackConnectionSettings() {
   const factory = factories.find(candidate => candidate.id === factoryId);
 
   const connectSlack = () => {
-    window.location.assign(connectSlackUrl(baseUrl));
+    window.location.assign(connectSlackUrl(baseUrl, factoryId));
   };
 
   const disconnect = (account: ConnectedChannelAccount) => {

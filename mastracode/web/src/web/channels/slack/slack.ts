@@ -236,8 +236,8 @@ export async function resolveLinkedSender({
 
 /**
  * The "connect your account" card. The link is deliberately identity-free —
- * `/connect/slack` sends the visitor to Connected accounts, where "Connect
- * Slack" runs the OIDC flow and Slack itself asserts the (team, user) pair.
+ * `/connect/slack` sends the visitor to Connections, where "Connect Slack"
+ * runs the OIDC flow and Slack itself asserts the (team, user) pair.
  */
 function buildConnectCard(publicUrl: string) {
   return Card({
@@ -329,7 +329,7 @@ export async function resolveFactoryForLink({
           ),
           Actions([
             LinkButton({
-              url: `${publicUrl}/settings/connected-accounts`,
+              url: `${publicUrl}/settings/connections`,
               label: 'Open settings',
             }),
           ]),

@@ -209,7 +209,7 @@ describe('resolveFactoryForLink', () => {
     const card = thread.postEphemeral.mock.calls[0][1];
     const actions = card.children.find((c: any) => c.type === 'actions');
     const linkButton = actions.children.find((c: any) => c.type === 'link-button');
-    expect(linkButton.url).toBe('https://mc.example.com/settings/connected-accounts');
+    expect(linkButton.url).toBe('https://mc.example.com/settings/connections');
     expect(accountLinks.setDefaultFactory).not.toHaveBeenCalled();
   });
 

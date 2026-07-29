@@ -18,7 +18,7 @@ export function ConnectedAccountsSection() {
   const canConnect = accountsQuery.data?.canConnect ?? false;
 
   const connectSlack = () => {
-    window.location.assign(connectSlackUrl(baseUrl));
+    window.location.assign(connectSlackUrl(baseUrl, factoryId));
   };
 
   if (accountsQuery.isPending) {

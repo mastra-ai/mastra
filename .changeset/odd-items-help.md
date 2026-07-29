@@ -2,4 +2,4 @@
 '@mastra/factory': minor
 ---
 
-Added a per-Factory Slack work-item setting so new Slack sessions only create Work-board cards when the Factory opts in.
+Added per-Factory Slack session settings and optional Factory context in signed integration state, allowing new Slack sessions to create Work-board cards when enabled and OAuth flows to return to the initiating Factory.

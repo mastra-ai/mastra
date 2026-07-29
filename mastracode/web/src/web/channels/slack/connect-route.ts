@@ -3,7 +3,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { ChannelIdentityStorage, FactoryProjectsStorage, RouteAuth, StateSigner } from '@mastra/factory';
 
 /**
- * Payload shape for the connected-accounts list: the platform sender key +
+ * Payload shape for the Connections list: the platform sender key +
  * link time, without the tenant ids (the caller IS the tenant).
  */
 interface ConnectedChannelAccountPayload {
@@ -68,7 +68,7 @@ function decodeJwtPayload(jwt: string): Record<string, unknown> | null {
  * asserts the `(team, user)` pair in the id_token — so the web user has to
  * actually control the Slack account they bind. `/connect/slack` is just the
  * Slack-side entry point: it carries no identity and writes nothing, it only
- * sends the visitor to Connected accounts, where the flow starts.
+ * sends the visitor to Connections, where the flow starts.
  */
 export function createSlackConnectRoutes(deps: {
   auth: RouteAuth;
@@ -118,7 +118,7 @@ export function createSlackConnectRoutes(deps: {
       // No auth: nothing here reads a tenant or writes a link. The SPA route
       // this lands on requires a session and bounces through login itself.
       requiresAuth: false,
-      handler: async c => c.redirect(`${uiOrigin}/settings/connected-accounts`),
+      handler: async c => c.redirect(`${uiOrigin}/settings/connections`),
     }),
     // Web-initiated connect: "Sign in with Slack" (OIDC). The only route that
     // writes a link, because it is the only one that proves the signed-in web
@@ -130,21 +130,26 @@ export function createSlackConnectRoutes(deps: {
       handler: async c => {
         if (!oidcEnabled) return c.redirect(`${uiOrigin}/?slack=error`);
 
+        const factoryProjectId = c.req.query('factoryId')?.trim() || undefined;
+        const startPath = factoryProjectId
+          ? `/connect/slack/oidc/start?factoryId=${encodeURIComponent(factoryProjectId)}`
+          : '/connect/slack/oidc/start';
+
         await auth.ensureUser(loose(c));
         const tenant = auth.tenant(loose(c));
         if (!tenant) {
-          return c.redirect(`/auth/login?returnTo=${encodeURIComponent('/connect/slack/oidc/start')}`);
+          return c.redirect(`/auth/login?returnTo=${encodeURIComponent(startPath)}`);
         }
 
         const params = new URLSearchParams({
           response_type: 'code',
           // `profile` adds display-name claims (user name, team name) to the
-          // id_token so the Connected accounts list can show names, not ids.
+          // id_token so Connections can show names instead of ids.
           scope: 'openid profile',
           client_id: oidc!.clientId,
           // Personal accounts have no org; the signer requires a string, so an
           // empty org round-trips and is mapped back to undefined on save.
-          state: tenantStateSigner!.sign(tenant.orgId ?? '', tenant.userId),
+          state: tenantStateSigner!.sign(tenant.orgId ?? '', tenant.userId, { factoryProjectId }),
           redirect_uri: `${oidc!.redirectBaseUrl.replace(/\/$/, '')}${OIDC_CALLBACK_PATH}`,
         });
         return c.redirect(`${SLACK_AUTHORIZE_URL}?${params.toString()}`);
@@ -218,11 +223,14 @@ export function createSlackConnectRoutes(deps: {
           externalUserName: typeof userName === 'string' ? userName : undefined,
         });
 
-        return c.redirect(`${uiOrigin}/?slack=connected`);
+        const successPath = tenant.factoryProjectId
+          ? `/factories/${encodeURIComponent(tenant.factoryProjectId)}/settings/connections/slack`
+          : '/settings/connections';
+        return c.redirect(`${uiOrigin}${successPath}?slack=connected`);
       },
     }),
-    // The caller's own linked channel accounts, for the Connected accounts
-    // settings surface. Tenant-scoped: you only ever see your own links.
+    // The caller's own linked channel accounts for Connections. Tenant-scoped:
+    // you only ever see your own links.
     registerApiRoute('/web/channel-accounts', {
       method: 'GET',
       requiresAuth: false,
