@@ -298,6 +298,10 @@ describe('getFactoryWorkspace', () => {
     expect(review).toContain('CI green is corroboration, not a substitute');
     expect(review).toContain('argue the strongest case for request changes');
     expect(review).toContain('An approve without a surviving adversarial check is not an approve');
+    // Conflicting PRs: still reviewed, never approved, never self-resolved.
+    expect(review).toContain("Merge conflicts don't excuse skipping the review");
+    expect(review).toContain('A conflicting PR cannot be approved');
+    expect(review).toContain('Never resolve the conflicts yourself');
   });
 
   it('adds read-only Web Factory skills and keeps them authoritative over project shadows', async () => {
