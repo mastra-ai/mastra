@@ -127,6 +127,21 @@ export interface SandboxBindingStore {
 }
 
 /**
+ * Stable identity for one binding's in-flight provision work, used to coalesce
+ * concurrent `ensureSandbox` calls. Prefer `checkpointName` — it is a pure
+ * function of the owning session and is set before the first provision, which
+ * is exactly when the herd forms (the stored `sandboxId` is still null then).
+ * Fall back to the stored provider id, and skip coalescing entirely for
+ * bindings with neither: keying those on a shared constant would wrongly
+ * funnel *different* bindings onto one sandbox.
+ */
+function coalesceKey(store: SandboxBindingStore): string | undefined {
+  if (store.checkpointName) return `checkpoint:${store.checkpointName}`;
+  if (store.sandboxId) return `sandbox:${store.sandboxId}`;
+  return undefined;
+}
+
+/**
  * Adapt a cloned `WorkspaceSandbox` to the minimal surface this module needs.
  * Lifecycle goes through the `_`-prefixed wrappers when present (they add
  * status tracking and concurrency safety on `MastraSandbox` subclasses),
@@ -217,6 +232,8 @@ export class SandboxFleet {
   readonly #config: SandboxFleetConfig | undefined;
   #factory: SandboxFactory | undefined;
   #liveCount = 0;
+  /** In-flight `ensureSandbox` work, keyed per binding so concurrent callers coalesce. */
+  readonly #inflight = new Map<string, Promise<MaterializationSandbox>>();
 
   constructor(config?: SandboxFleetConfig) {
     this.#config = config;
@@ -352,6 +369,13 @@ export class SandboxFleet {
   /**
    * Provision a new sandbox (persisting its provider id on first open) or
    * reattach to the stored one. Returns a started, live sandbox.
+   *
+   * Concurrent calls for the same binding coalesce onto one in-flight
+   * provision/reattach and share its sandbox handle — N simultaneous requests
+   * for one cold session (e.g. several browser tabs polling right after boot)
+   * must not each fire their own `POST /sandbox` against the provider.
+   * Failures are not cached: once the shared attempt settles, the next call
+   * starts fresh.
    */
   async ensureSandbox(store: SandboxBindingStore, onProgress?: ProgressFn): Promise<MaterializationSandbox>;
   async ensureSandbox(
@@ -373,6 +397,28 @@ export class SandboxFleet {
       typeof envOrProgress === 'function'
         ? ((progressOrOptions as EnsureSandboxOptions | undefined) ?? {})
         : maybeOptions;
+
+    const key = coalesceKey(store);
+    if (!key) return this.#ensureSandboxUncoalesced(store, env, onProgress, options);
+
+    const existing = this.#inflight.get(key);
+    if (existing) return existing;
+
+    const promise = this.#ensureSandboxUncoalesced(store, env, onProgress, options).finally(() => {
+      // Only clear when this is still the entry we own.
+      if (this.#inflight.get(key) === promise) this.#inflight.delete(key);
+    });
+    this.#inflight.set(key, promise);
+    return promise;
+  }
+
+  /** The single provision/reattach attempt behind {@link ensureSandbox}. */
+  async #ensureSandboxUncoalesced(
+    store: SandboxBindingStore,
+    env: Record<string, string> | undefined,
+    onProgress: ProgressFn | undefined,
+    options: EnsureSandboxOptions,
+  ): Promise<MaterializationSandbox> {
     const idleTimeoutMinutes = this.idleMinutes;
     const checkpointName = store.checkpointName;
 

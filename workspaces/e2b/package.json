@@ -1,6 +1,6 @@
 {
   "name": "@mastra/e2b",
-  "version": "0.7.0",
+  "version": "0.8.0-alpha.0",
   "description": "E2B cloud sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -51,7 +51,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.12.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.55.0-0 <2.0.0-0"
   },
   "files": [
     "dist",

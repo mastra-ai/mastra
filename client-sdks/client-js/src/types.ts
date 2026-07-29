@@ -1424,13 +1424,20 @@ export interface CreateStoredAgentParams {
   /** Browser config. `true` = use admin default, `false` = no browser. */
   browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
+  /**
+   * Publish the initial version so the agent resolves at `status: 'published'`.
+   * Defaults to true when omitted. Pass false to stage the agent as an unpublished
+   * draft — useful when overriding a code-defined agent, whose code definition keeps
+   * serving traffic until the override is published.
+   */
+  autoPublish?: boolean;
 }
 
 /**
  * Parameters for updating a stored agent
  */
 export type ExportStoredAgentParams = Partial<
-  Omit<CreateStoredAgentParams, 'id' | 'authorId' | 'visibility' | 'metadata'>
+  Omit<CreateStoredAgentParams, 'id' | 'authorId' | 'visibility' | 'metadata' | 'autoPublish'>
 >;
 
 export type OpenStoredAgentChangeRequestParams = ExportStoredAgentParams & {
