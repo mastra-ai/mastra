@@ -580,15 +580,24 @@ export class AgentController<TState = {}> {
             })
           : threads;
 
-      // Resume the most recent same-resource candidate, or create a new thread.
-      if (candidates.length === 0) {
-        await session.thread.create();
-      } else {
-        const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
-        await this.config.threadLock?.acquire(mostRecent.id);
-        session.thread.set({ threadId: mostRecent.id });
+      const sortedCandidates = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+      let selectedThread: (typeof sortedCandidates)[number] | undefined;
+      for (const candidate of sortedCandidates) {
+        if (this.config.threadLock?.tryAcquire) {
+          if (!(await this.config.threadLock.tryAcquire(candidate.id))) continue;
+        } else {
+          await this.config.threadLock?.acquire(candidate.id);
+        }
+        selectedThread = candidate;
+        break;
+      }
+
+      if (selectedThread) {
+        session.thread.set({ threadId: selectedThread.id });
         await session.thread.loadMetadata();
         await session.thread.ensureCurrentSubscription();
+      } else {
+        await session.thread.create();
       }
     }
 

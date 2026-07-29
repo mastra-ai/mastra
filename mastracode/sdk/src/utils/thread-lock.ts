@@ -42,6 +42,20 @@ function isProcessAlive(pid: number): boolean {
   }
 }
 
+function getErrorCode(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null || !('code' in error)) return undefined;
+  return typeof error.code === 'string' ? error.code : undefined;
+}
+
+function writeNewLock(lockPath: string, pid: number): void {
+  const file = fs.openSync(lockPath, 'wx', 0o644);
+  try {
+    fs.writeFileSync(file, String(pid), 'utf-8');
+  } finally {
+    fs.closeSync(file);
+  }
+}
+
 /**
  * Attempt to acquire a lock for the given thread.
  * Throws ThreadLockError if another live process holds the lock.
@@ -51,24 +65,44 @@ export function acquireThreadLock(threadId: string): void {
   const lockPath = getLockPath(threadId);
   const myPid = process.pid;
 
-  // Check for existing lock
-  if (fs.existsSync(lockPath)) {
+  while (true) {
+    try {
+      writeNewLock(lockPath, myPid);
+      return;
+    } catch (error) {
+      if (getErrorCode(error) !== 'EEXIST') throw error;
+    }
+
+    let ownerPid: number;
     try {
       const content = fs.readFileSync(lockPath, 'utf-8').trim();
-      const ownerPid = parseInt(content, 10);
-
-      if (!isNaN(ownerPid) && ownerPid !== myPid && isProcessAlive(ownerPid)) {
-        throw new ThreadLockError(threadId, ownerPid);
-      }
-      // Stale lock (dead process) or our own lock — reclaim it
+      ownerPid = parseInt(content, 10);
     } catch (error) {
-      if (error instanceof ThreadLockError) throw error;
-      // File read error — try to overwrite
+      if (getErrorCode(error) === 'ENOENT') continue;
+      throw error;
+    }
+
+    if (ownerPid === myPid) return;
+    if (!isNaN(ownerPid) && isProcessAlive(ownerPid)) {
+      throw new ThreadLockError(threadId, ownerPid);
+    }
+
+    try {
+      fs.unlinkSync(lockPath);
+    } catch (error) {
+      if (getErrorCode(error) !== 'ENOENT') throw error;
     }
   }
+}
 
-  // Write our PID to the lock file
-  fs.writeFileSync(lockPath, String(myPid), { mode: 0o644 });
+export function tryAcquireThreadLock(threadId: string): boolean {
+  try {
+    acquireThreadLock(threadId);
+    return true;
+  } catch (error) {
+    if (error instanceof ThreadLockError) return false;
+    throw error;
+  }
 }
 
 /**
