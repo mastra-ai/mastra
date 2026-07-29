@@ -8,6 +8,7 @@ import type {
   ThemeHistoryResponse,
   ThemePathsResponse,
   ThemeSnapshotsResponse,
+  TraceInsightResponse,
   TraceSignalName,
 } from './types';
 
@@ -154,6 +155,10 @@ function fetchThemePathsPage(
   return learningJson<ThemePathsResponse>(
     `/api/learning/entities/${encodeURIComponent(entityId)}/theme-paths?${query}`,
   );
+}
+
+export function fetchTraceInsight(traceId: string) {
+  return learningJson<TraceInsightResponse>(`/api/learning/traces/${encodeURIComponent(traceId)}/summary`);
 }
 
 function themePath(entityId: string, themeId: string, suffix: string) {

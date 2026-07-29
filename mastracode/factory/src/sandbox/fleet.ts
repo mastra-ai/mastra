@@ -51,7 +51,11 @@ export interface MaterializationSandbox {
 export interface SandboxCreateOptions {
   /** Reattach to this existing provider VM instead of provisioning a new one. */
   providerSandboxId?: string;
-  /** Environment variables baked into the sandbox. */
+  /**
+   * Environment variables for commands run in the sandbox. Adapter-level
+   * only: merged into every `executeCommand`, never baked into the provider
+   * VM (see `SandboxFleet.#build`).
+   */
   env?: Record<string, string>;
   /** Provider working directory for this sandbox. */
   workingDirectory?: string;
@@ -352,13 +356,20 @@ export class SandboxFleet {
    * passed both as the logical `id` (providers that reattach by construction
    * id, e.g. local) and as the provider-native `sandboxId` hint (Railway) so
    * reattach works across the provider matrix.
+   *
+   * `env` is deliberately NOT forwarded to the provider clone: remote
+   * providers bake creation-time env into the VM for its whole lifetime
+   * (`POST /sandbox`), which would persist credentials like `GH_TOKEN` inside
+   * a VM that can outlive the session and be reused by another user via the
+   * sandbox pool. Instead the env lives only on the adapter, which merges it
+   * into every `executeCommand` — commands see the (refreshable) token, but
+   * the VM itself never stores it.
    */
   #build(opts: SandboxCreateOptions): MaterializationSandbox {
     if (this.#factory) return this.#factory(opts);
     if (!this.#config) throw new Error('No sandbox configured');
     const clone = this.#config.machine.clone!({
       ...(opts.providerSandboxId ? { id: opts.providerSandboxId, sandboxId: opts.providerSandboxId } : {}),
-      ...(opts.env ? { env: opts.env } : {}),
       ...(opts.workingDirectory ? { workingDirectory: opts.workingDirectory } : {}),
       ...(opts.idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes: opts.idleTimeoutMinutes } : {}),
       ...(opts.checkpointName ? { checkpointName: opts.checkpointName } : {}),

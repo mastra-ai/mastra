@@ -203,6 +203,38 @@ describe('sandbox option forwarding', () => {
     );
   });
 
+  it('never bakes env into the machine clone — commands get it per execution', async () => {
+    const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
+    const clone = vi.fn(() => ({
+      id: 'derived-1',
+      provider: 'local',
+      executeCommand,
+      _start: vi.fn(async () => {}),
+      getInfo: vi.fn(async () => ({ metadata: { sandboxId: 'derived-1' } })),
+    }));
+    const subject = new SandboxFleet({
+      machine: { id: 'template', name: 'Template', provider: 'local', clone } as unknown as WorkspaceSandbox,
+      workdirBase: '/workspace',
+    });
+    const store = {
+      sandboxId: null as string | null,
+      setSandboxId: vi.fn(async (id: string | null) => {
+        store.sandboxId = id;
+      }),
+      clear: vi.fn(async () => {}),
+    };
+
+    const sandbox = await subject.ensureSandbox(store, { GH_TOKEN: 'secret-token' });
+    await sandbox.executeCommand('gh auth status');
+
+    // Remote providers persist creation-time env inside the VM for its whole
+    // lifetime; a pooled VM claimed by another user must not carry this token.
+    expect(clone).toHaveBeenCalledWith(expect.not.objectContaining({ env: expect.anything() }));
+    expect(executeCommand).toHaveBeenCalledWith('gh auth status', undefined, {
+      env: { GH_TOKEN: 'secret-token' },
+    });
+  });
+
   it('uses refreshed environment variables for future sandbox commands', async () => {
     const executeCommand = vi.fn(async () => ({ exitCode: 0, stdout: '', stderr: '' }));
     const clone = vi.fn(() => ({

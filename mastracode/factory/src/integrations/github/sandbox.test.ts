@@ -19,6 +19,7 @@ import {
   materializeRepo as materializeRepoWithStorage,
   MaterializeError,
   pushBranch,
+  recycleClaimedWorkdir,
   resolveGitIdentity,
   runWorktreeSetup,
   safeBranchDir,
@@ -495,6 +496,59 @@ describe('materializeRepo', () => {
     expect(err).toBeInstanceOf(MaterializeError);
     expect(err.code).toBe('pull-failed');
     expect(String(err.message)).toContain('scrub');
+  });
+});
+
+describe('recycleClaimedWorkdir', () => {
+  it('is a no-op when the claimed workdir has no checkout yet', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('rev-parse') ? { exitCode: 128, stdout: '', stderr: 'not a git repository' } : OK,
+    );
+
+    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
+
+    expect(sandbox.calls).toHaveLength(1);
+    expect(sandbox.calls[0]).toContain('rev-parse --is-inside-work-tree');
+  });
+
+  it('resets the previous session state back to the default branch', async () => {
+    const sandbox = new FakeSandbox();
+
+    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
+
+    const recycle = sandbox.calls[1]!;
+    expect(recycle).toContain("checkout -f 'main'");
+    expect(recycle).toContain('reset --hard');
+    // `-x` included: gitignored files (.env, caches) must not leak between sessions.
+    expect(recycle).toContain('clean -fdx');
+    expect(sandbox.calls.some(call => call.startsWith('rm -rf'))).toBe(false);
+  });
+
+  it('wipes a wedged checkout so materialization re-clones inside the same VM', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('checkout -f') ? { exitCode: 1, stdout: '', stderr: 'index locked' } : OK,
+    );
+
+    await recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main');
+
+    expect(sandbox.calls.at(-1)).toBe("rm -rf '/workspace/hello'");
+  });
+
+  it('throws when the wedged checkout cannot even be wiped', async () => {
+    const sandbox = new FakeSandbox(script =>
+      script.includes('rev-parse') ? OK : { exitCode: 1, stdout: '', stderr: 'device busy' },
+    );
+
+    await expect(recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main')).rejects.toBeInstanceOf(MaterializeError);
+  });
+
+  it('refuses shell-hostile default branch names', async () => {
+    const sandbox = new FakeSandbox();
+
+    await expect(recycleClaimedWorkdir(sandbox, '/workspace/hello', 'main; rm -rf /')).rejects.toBeInstanceOf(
+      MaterializeError,
+    );
+    expect(sandbox.calls).toHaveLength(0);
   });
 });
 
