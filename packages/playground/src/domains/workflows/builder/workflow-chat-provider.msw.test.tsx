@@ -8,13 +8,7 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { WorkflowChatProvider } from './workflow-chat-provider';
-import type { WorkflowDraftValidationIssue } from './workflow-draft';
-import {
-  checkpointWorkflowDraft,
-  createWorkflowDraftAuthoringState,
-  finalizeWorkflowDraft,
-  mutateWorkflowDraftAuthoringState,
-} from './workflow-draft';
+import { createWorkflowDraftAuthoringState } from './workflow-draft';
 import type { WorkflowDraftToolResult } from './workflow-draft-tools';
 import { createWorkflowDraftTools } from './workflow-draft-tools';
 import { useStreamMessages, useStreamSend } from '@/domains/agent-builder/contexts/stream-chat-context';
@@ -47,6 +41,18 @@ function Providers({ children }: { children: ReactNode }) {
   );
 }
 
+function registerStreamingHandlers(captureBody?: (body: Record<string, unknown>) => void) {
+  server.use(
+    http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+    http.post(`${BASE_URL}/api/editor/workflow-builder/stream`, async ({ request }) => {
+      captureBody?.((await request.json()) as Record<string, unknown>);
+      return new HttpResponse(new ReadableStream({ start: () => {} }), {
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    }),
+  );
+}
+
 describe('WorkflowChatProvider', () => {
   beforeEach(() => {
     (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
@@ -62,7 +68,6 @@ describe('WorkflowChatProvider', () => {
     it('hydrates the conversation without replacing later live messages', async () => {
       server.use(http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })));
       const authoringState = createWorkflowDraftAuthoringState('support-workflow');
-      const createTools = () => ({});
       const persistedMessage = {
         id: 'persisted-user-message',
         role: 'user',
@@ -76,7 +81,7 @@ describe('WorkflowChatProvider', () => {
             threadId="workflow-builder-project-support-workflow"
             authoringState={authoringState}
             initialMessages={[]}
-            createTools={createTools}
+            createTools={() => ({})}
           >
             <MessageCount />
           </WorkflowChatProvider>
@@ -84,14 +89,13 @@ describe('WorkflowChatProvider', () => {
       );
 
       expect(screen.getByText('0 messages')).not.toBeNull();
-
       view.rerender(
         <Providers>
           <WorkflowChatProvider
             threadId="workflow-builder-project-support-workflow"
             authoringState={authoringState}
             initialMessages={[persistedMessage]}
-            createTools={createTools}
+            createTools={() => ({})}
           >
             <MessageCount />
           </WorkflowChatProvider>
@@ -102,34 +106,29 @@ describe('WorkflowChatProvider', () => {
     });
   });
 
-  describe('when the builder exhausts its structured repair budget', () => {
-    it('stops the generation after three rejected checkpoints', async () => {
-      server.use(
-        http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
-        http.post(
-          `${BASE_URL}/api/editor/workflow-builder/stream`,
-          () =>
-            new HttpResponse(new ReadableStream({ start: () => {} }), {
-              headers: { 'content-type': 'text/event-stream' },
-            }),
-        ),
-      );
-      let reportResult: ((event: WorkflowDraftToolResult) => void) | undefined;
-      let failureCode: string | undefined;
+  describe('when a workflow generation starts', () => {
+    it('advertises only the two unified authoring tools', async () => {
+      let requestBody: Record<string, unknown> | undefined;
+      registerStreamingHandlers(body => (requestBody = body));
+      const state = createWorkflowDraftAuthoringState('two-tool-workflow');
 
       render(
         <Providers>
           <WorkflowChatProvider
-            threadId="workflow-builder-repair-budget"
-            authoringState={createWorkflowDraftAuthoringState('repair-budget')}
+            threadId="workflow-builder-two-tool-workflow"
+            authoringState={state}
             initialMessages={[]}
-            createTools={(_, onResult) => {
-              reportResult = onResult;
-              return {};
-            }}
-            onGenerationFailure={failure => {
-              failureCode = failure?.code;
-            }}
+            createTools={(isCurrent, onResult, candidate, onCandidateChange) =>
+              createWorkflowDraftTools({
+                getState: () => state,
+                checkpoint: () => ({ ok: false, state, error: 'Not used' }),
+                finalize: () => ({ ok: false, state, error: 'Not used' }),
+                isCurrentGeneration: isCurrent,
+                onResult,
+                candidate,
+                onCandidateChange,
+              })
+            }
           >
             <Composer message="Build a workflow" />
           </WorkflowChatProvider>
@@ -139,49 +138,30 @@ describe('WorkflowChatProvider', () => {
       await act(async () => {
         await new Promise(resolve => setTimeout(resolve, 20));
       });
-      const rejectedCheckpoint: WorkflowDraftToolResult = {
-        toolId: 'checkpoint-workflow-draft',
-        result: { success: false, error: 'Invalid draft' },
-      };
-
-      act(() => {
-        reportResult?.(rejectedCheckpoint);
-        reportResult?.(rejectedCheckpoint);
-        reportResult?.(rejectedCheckpoint);
-      });
-
-      expect(failureCode).toBe('repair-budget-exhausted');
+      expect(Object.keys((requestBody?.clientTools ?? {}) as object)).toEqual([
+        'inspect-workflow-resources',
+        'submit-workflow-draft',
+      ]);
     });
   });
 
-  describe('when construction advances into repair', () => {
-    it('tracks construction and repair rejection budgets independently', async () => {
-      server.use(
-        http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
-        http.post(
-          `${BASE_URL}/api/editor/workflow-builder/stream`,
-          () =>
-            new HttpResponse(new ReadableStream({ start: () => {} }), {
-              headers: { 'content-type': 'text/event-stream' },
-            }),
-        ),
-      );
+  describe('when equivalent complete definitions are rejected three times', () => {
+    it('stops generation with the bounded retry failure', async () => {
+      registerStreamingHandlers();
       let reportResult: ((event: WorkflowDraftToolResult) => void) | undefined;
       let failureCode: string | undefined;
 
       render(
         <Providers>
           <WorkflowChatProvider
-            threadId="workflow-builder-separated-budgets"
-            authoringState={createWorkflowDraftAuthoringState('separated-budgets')}
+            threadId="workflow-builder-retry-budget"
+            authoringState={createWorkflowDraftAuthoringState('retry-budget')}
             initialMessages={[]}
             createTools={(_, onResult) => {
               reportResult = onResult;
               return {};
             }}
-            onGenerationFailure={failure => {
-              failureCode = failure?.code;
-            }}
+            onGenerationFailure={failure => (failureCode = failure?.code)}
           >
             <Composer message="Build a workflow" />
           </WorkflowChatProvider>
@@ -191,73 +171,36 @@ describe('WorkflowChatProvider', () => {
       await act(async () => {
         await new Promise(resolve => setTimeout(resolve, 20));
       });
-      const rejectedConstruction: WorkflowDraftToolResult = {
-        toolId: 'checkpoint-workflow-draft',
-        result: { success: false, error: 'Invalid initial draft' },
-      };
-      const rejectedFinalize: WorkflowDraftToolResult = {
-        toolId: 'finalize-workflow-draft',
+      const rejected: WorkflowDraftToolResult = {
+        toolId: 'submit-workflow-draft',
         result: {
           success: false,
-          error: 'Strict validation failed',
-          issues: [{ code: 'incompatible-schema', path: 'graph.0', message: 'Incompatible input' }],
+          error: 'Invalid definition',
+          issues: [{ code: 'invalid-map-config', path: 'graph.0.mapConfig.message', message: 'Invalid source' }],
         },
       };
-      const rejectedRepair: WorkflowDraftToolResult = {
-        toolId: 'set-workflow-mapping-source',
-        result: {
-          success: false,
-          error: 'Repair remains invalid',
-          issues: [{ code: 'incompatible-schema', path: 'graph.0', message: 'Incompatible input' }],
-        },
-      };
-
       act(() => {
-        reportResult?.(rejectedConstruction);
-        reportResult?.(rejectedConstruction);
-        reportResult?.({
-          toolId: 'checkpoint-workflow-draft',
-          result: { success: true, lifecycle: 'constructing', revision: 1 },
-        });
-        reportResult?.(rejectedFinalize);
-        reportResult?.(rejectedRepair);
-        reportResult?.(rejectedRepair);
+        reportResult?.(rejected);
+        reportResult?.(rejected);
+        reportResult?.(rejected);
       });
-      expect(failureCode).toBeUndefined();
 
-      act(() => reportResult?.(rejectedRepair));
       expect(failureCode).toBe('repair-budget-exhausted');
     });
   });
 
-  describe('when rejected repairs make diagnostic progress', () => {
-    it('preserves the repair budget until the same rejection repeats three times', async () => {
-      server.use(
-        http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
-        http.post(
-          `${BASE_URL}/api/editor/workflow-builder/stream`,
-          () =>
-            new HttpResponse(new ReadableStream({ start: () => {} }), {
-              headers: { 'content-type': 'text/event-stream' },
-            }),
-        ),
-      );
-      let reportResult: ((event: WorkflowDraftToolResult) => void) | undefined;
-      let failureCode: string | undefined;
+  describe('when authoring instructions are sent to the editor route', () => {
+    it('describe canonical direct-input mappings and whole-definition retries', async () => {
+      let requestBody: Record<string, unknown> | undefined;
+      registerStreamingHandlers(body => (requestBody = body));
 
       render(
         <Providers>
           <WorkflowChatProvider
-            threadId="workflow-builder-progress-aware-repair"
-            authoringState={createWorkflowDraftAuthoringState('progress-aware-repair')}
+            threadId="workflow-builder-instructions"
+            authoringState={createWorkflowDraftAuthoringState('instructions')}
             initialMessages={[]}
-            createTools={(_, onResult) => {
-              reportResult = onResult;
-              return {};
-            }}
-            onGenerationFailure={failure => {
-              failureCode = failure?.code;
-            }}
+            createTools={() => ({})}
           >
             <Composer message="Build a workflow" />
           </WorkflowChatProvider>
@@ -267,215 +210,10 @@ describe('WorkflowChatProvider', () => {
       await act(async () => {
         await new Promise(resolve => setTimeout(resolve, 20));
       });
-      const rejection = (code: WorkflowDraftValidationIssue['code']): WorkflowDraftToolResult => ({
-        toolId: 'checkpoint-workflow-draft',
-        result: { success: false, error: 'Invalid draft', issues: [{ code, path: 'graph.0', message: code }] },
-      });
-
-      act(() => {
-        reportResult?.(rejection('invalid-map-config'));
-        reportResult?.(rejection('invalid-schema'));
-        reportResult?.(rejection('incompatible-schema'));
-        reportResult?.(rejection('incompatible-schema'));
-      });
-      expect(failureCode).toBeUndefined();
-
-      act(() => {
-        reportResult?.(rejection('incompatible-schema'));
-      });
-      expect(failureCode).toBe('repair-budget-exhausted');
-    });
-  });
-
-  describe('when an accepted checkpoint awaits finalization', () => {
-    it('enforces checkpoint, repair, and finalize phases without discarding accepted progress', async () => {
-      server.use(
-        http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
-        http.post(
-          `${BASE_URL}/api/editor/workflow-builder/stream`,
-          () =>
-            new HttpResponse(new ReadableStream({ start: () => {} }), {
-              headers: { 'content-type': 'text/event-stream' },
-            }),
-        ),
-      );
-      let reportResult: ((event: WorkflowDraftToolResult) => void) | undefined;
-      let isCurrentGeneration: (() => boolean) | undefined;
-      let canExecute: ((toolId: string) => string | undefined) | undefined;
-      let autoFinalizeRepair = false;
-
-      render(
-        <Providers>
-          <WorkflowChatProvider
-            threadId="workflow-builder-phase-enforcement"
-            authoringState={createWorkflowDraftAuthoringState('phase-enforcement')}
-            initialMessages={[]}
-            createTools={(isCurrent, onResult, __, ___, toolGuard, shouldAutoFinalizeRepair) => {
-              isCurrentGeneration = isCurrent;
-              reportResult = onResult;
-              canExecute = toolGuard;
-              autoFinalizeRepair = shouldAutoFinalizeRepair ?? false;
-              return {};
-            }}
-          >
-            <Composer message="Build a workflow" />
-          </WorkflowChatProvider>
-        </Providers>,
-      );
-
-      await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 20));
-      });
-
-      act(() => {
-        reportResult?.({
-          toolId: 'checkpoint-workflow-draft',
-          result: { success: true, lifecycle: 'constructing', revision: 1 },
-        });
-      });
-
-      expect(canExecute?.('checkpoint-workflow-draft')).toContain('Call finalize-workflow-draft');
-      expect(canExecute?.('update-workflow-step')).toContain('Call finalize-workflow-draft');
-      expect(canExecute?.('finalize-workflow-draft')).toBeUndefined();
-
-      act(() => {
-        reportResult?.({
-          toolId: 'finalize-workflow-draft',
-          result: {
-            success: false,
-            error: 'Invalid draft',
-            issues: [{ code: 'incompatible-schema', path: 'graph.1', message: 'Insert a mapping step.' }],
-          },
-        });
-      });
-
-      expect(canExecute?.('checkpoint-workflow-draft')).toContain('targeted workflow-step repair tools');
-      expect(canExecute?.('finalize-workflow-draft')).toContain('checkpoint-workflow-candidate');
-      expect(canExecute?.('update-workflow-step')).toBeUndefined();
-
-      act(() => {
-        reportResult?.({
-          toolId: 'update-workflow-step',
-          result: { success: true, lifecycle: 'constructing', revision: 1, candidateRevision: 1 },
-        });
-        reportResult?.({
-          toolId: 'checkpoint-workflow-candidate',
-          result: { success: true, lifecycle: 'ready', revision: 2, finalizedRevision: 2, candidateRevision: 0 },
-        });
-      });
-
-      expect(autoFinalizeRepair).toBe(true);
-      expect(isCurrentGeneration?.()).toBe(false);
-    });
-  });
-
-  describe('when a checkpoint conflicts with a newer accepted revision', () => {
-    it('does not consume the structured repair budget', async () => {
-      server.use(
-        http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
-        http.post(
-          `${BASE_URL}/api/editor/workflow-builder/stream`,
-          () =>
-            new HttpResponse(new ReadableStream({ start: () => {} }), {
-              headers: { 'content-type': 'text/event-stream' },
-            }),
-        ),
-      );
-      let reportResult: ((event: WorkflowDraftToolResult) => void) | undefined;
-      let failureCode: string | undefined;
-
-      render(
-        <Providers>
-          <WorkflowChatProvider
-            threadId="workflow-builder-revision-conflict"
-            authoringState={createWorkflowDraftAuthoringState('revision-conflict')}
-            initialMessages={[]}
-            createTools={(_, onResult) => {
-              reportResult = onResult;
-              return {};
-            }}
-            onGenerationFailure={failure => {
-              failureCode = failure?.code;
-            }}
-          >
-            <Composer message="Build a workflow" />
-          </WorkflowChatProvider>
-        </Providers>,
-      );
-
-      await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 20));
-      });
-      const conflict: WorkflowDraftToolResult = {
-        toolId: 'checkpoint-workflow-candidate',
-        result: { success: false, error: 'Draft changed before this operation completed.' },
-      };
-
-      act(() => {
-        reportResult?.(conflict);
-        reportResult?.(conflict);
-        reportResult?.(conflict);
-      });
-
-      expect(failureCode).toBeUndefined();
-    });
-  });
-
-  describe('when a workflow author sends a message', () => {
-    it('streams through the hidden editor route with the current draft as hidden instructions', async () => {
-      let capturedBody: Record<string, unknown> | undefined;
-      server.use(
-        http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
-        http.post(`${BASE_URL}/api/editor/workflow-builder/stream`, async ({ request }) => {
-          capturedBody = (await request.json()) as Record<string, unknown>;
-          return new HttpResponse(new ReadableStream({ start: controller => controller.close() }), {
-            headers: { 'content-type': 'text/event-stream' },
-          });
-        }),
-      );
-
-      let authoringState = createWorkflowDraftAuthoringState('support-workflow');
-      const apply = (result: ReturnType<typeof checkpointWorkflowDraft>) => {
-        authoringState = result.state;
-        return result;
-      };
-      const tools = createWorkflowDraftTools({
-        getState: () => authoringState,
-        checkpoint: (expectedRevision, draft) =>
-          apply(checkpointWorkflowDraft(authoringState, expectedRevision, draft)),
-        finalize: expectedRevision => apply(finalizeWorkflowDraft(authoringState, expectedRevision)),
-        mutateCandidate: (candidateState, expectedRevision, mutation) =>
-          mutateWorkflowDraftAuthoringState(candidateState, expectedRevision, mutation),
-      });
-
-      await act(async () => {
-        render(
-          <Providers>
-            <WorkflowChatProvider
-              threadId="workflow-builder-project-support-workflow"
-              authoringState={authoringState}
-              validationContext={{ agents: { 'support-agent': {} }, workflowCatalog: 'unavailable' }}
-              initialMessages={[]}
-              createTools={() => tools}
-            >
-              <Composer message="Build a support workflow" />
-            </WorkflowChatProvider>
-          </Providers>,
-        );
-      });
-
-      await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 50));
-      });
-
-      expect(capturedBody).toBeDefined();
-      expect(capturedBody?.instructions).toContain('Current unsaved workflow authoring state');
-      expect(capturedBody?.instructions).toContain('Lifecycle: untouched');
-      expect(capturedBody?.instructions).toContain('"workflowCatalog": "unavailable"');
-      expect(capturedBody?.instructions).toContain('support-agent');
-      expect(capturedBody?.instructions).toContain('support-workflow');
-      expect(JSON.stringify(capturedBody?.messages)).toContain('Build a support workflow');
-      expect(JSON.stringify(capturedBody?.messages)).not.toContain('Current persisted workflow definition');
+      const serialized = JSON.stringify(requestBody);
+      expect(serialized).toContain('submit-workflow-draft');
+      expect(serialized).toContain('\\"initData\\": true');
+      expect(serialized).not.toContain('\\"initData\\": \\"prompt\\"');
     });
   });
 });

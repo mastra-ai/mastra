@@ -46,8 +46,7 @@ const objectSchema = (properties: Record<string, unknown>, required: string[] = 
 });
 
 const promptSuiteFixture = (definition: Record<string, unknown>) => [
-  toolCallTurn([['workflow-checkpoint', 'checkpoint-workflow-draft', definition]]),
-  toolCallTurn([['workflow-finalize', 'finalize-workflow-draft', { expectedRevision: 1 }]]),
+  toolCallTurn([['workflow-submit', 'submit-workflow-draft', definition]]),
   stopTurn(String(definition.id)),
 ];
 

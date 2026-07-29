@@ -9,13 +9,16 @@ describe('EditorWorkflowBuilder', () => {
     expect(builder.getAgent().id).toBe('workflow-builder-agent');
   });
 
-  it('instructs the hidden agent to checkpoint, finalize, and leave persistence to explicit Save', async () => {
+  it('instructs the hidden agent to submit one complete draft and leave persistence to explicit Save', async () => {
     const builder = new EditorWorkflowBuilder();
 
     const instructions = await builder.getAgent().getInstructions();
 
-    expect(instructions).toContain('checkpoint-workflow-draft');
-    expect(instructions).toContain('finalize-workflow-draft');
+    expect(instructions).toContain('submit-workflow-draft exactly once');
+    expect(instructions).toContain('Do not submit alternative definitions in parallel');
+    expect(instructions).toContain('Stop calling tools after a successful submission');
+    expect(instructions).not.toContain('checkpoint-workflow-draft');
+    expect(instructions).not.toContain('finalize-workflow-draft');
     expect(instructions).toContain('explicit Studio Save action');
     expect(instructions).toContain('# The composition rule — schemas MUST match');
     expect(instructions).toContain('# Mappings — how to reshape data between steps');

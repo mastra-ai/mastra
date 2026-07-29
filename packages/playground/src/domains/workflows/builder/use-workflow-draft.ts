@@ -136,22 +136,19 @@ export function useWorkflowDraft(
       onResult?: (event: WorkflowDraftToolResult) => void,
       candidate?: WorkflowDraftCandidate,
       onCandidateChange?: (candidate: WorkflowDraftCandidate) => void,
-      getToolBlockReason?: (toolId: string) => string | undefined,
-      autoFinalizeRepair?: boolean,
     ) =>
       createWorkflowDraftTools({
         getState: () => stateRef.current,
-        checkpoint: (expectedRevision, draft) =>
-          applyResult(checkpointWorkflowDraft(stateRef.current, expectedRevision, draft, validationContext)),
+        checkpoint: (expectedRevision, draft) => {
+          const result = checkpointWorkflowDraft(stateRef.current, expectedRevision, draft, validationContext);
+          if (result.ok) applyResult(result);
+          return result;
+        },
         finalize: expectedRevision =>
           applyResult(finalizeWorkflowDraft(stateRef.current, expectedRevision, validationContext)),
-        mutateCandidate: (candidateState, expectedRevision, mutation) =>
-          mutateWorkflowDraftAuthoringState(candidateState, expectedRevision, mutation, validationContext),
         candidate,
         validationContext,
         isCurrentGeneration,
-        getToolBlockReason,
-        autoFinalizeRepair,
         onResult,
         onCandidateChange,
       }),

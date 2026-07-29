@@ -42,8 +42,8 @@ const stopTurn = (text: string) => [
 export const workflowBuilderLifecycleFixture = [
   toolCallTurn([
     [
-      'workflow-checkpoint',
-      'checkpoint-workflow-draft',
+      'workflow-submit',
+      'submit-workflow-draft',
       {
         id: 'support-intake-workflow',
         description: 'Processes a support request into a deterministic response.',
@@ -62,7 +62,6 @@ export const workflowBuilderLifecycleFixture = [
         ],
       },
     ],
-    ['workflow-finalize', 'finalize-workflow-draft', { expectedRevision: 1 }],
   ]),
   stopTurn('Done — I created support-intake-workflow with one mapping step.'),
 ];

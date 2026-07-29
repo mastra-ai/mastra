@@ -55,10 +55,11 @@ ${JSON.stringify(catalogContext, null, 2)}
 \`\`\`
 
 ## Workflow construction rules
-Mapping steps use canonical descriptor objects, never template expressions or stringified objects. Examples:
-- Workflow input: { "initData": "prompt", "path": "" }
+Use inspect-workflow-resources to batch-inspect authoritative registered resource identities and schemas when the workflow depends on tools, agents, or nested workflows.
+Submit one complete canonical WorkflowDefinition with submit-workflow-draft. Mapping steps use canonical descriptor objects, never template expressions or stringified objects. Examples:
+- Workflow input: { "initData": true, "path": "prompt" }
 - Preceding step output: { "step": "lookup-customer", "path": "customerId" }
-Use mapConfig as a JSON object whose output fields each contain exactly one source descriptor. After a successful checkpoint, Finalize immediately unless the requested workflow still needs another candidate edit.
+Use mapConfig as a JSON object whose output fields each contain exactly one source descriptor. If validation rejects the definition, correct the complete definition using every returned diagnostic and submit it again. Studio automatically makes valid definitions Ready; never persist them because only the user may explicitly Save.
 
 ## Current accepted workflow definition
 \`\`\`json

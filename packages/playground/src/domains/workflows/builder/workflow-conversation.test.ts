@@ -31,8 +31,9 @@ describe('workflow conversation', () => {
       expect(instructions).toContain('"workflowCatalog": "unavailable"');
       expect(instructions).toContain('support-agent');
       expect(instructions).toContain('"id": "daily-report"');
-      expect(instructions).toContain('{ "initData": "prompt", "path": "" }');
-      expect(instructions).toContain('After a successful checkpoint, Finalize immediately');
+      expect(instructions).toContain('{ "initData": true, "path": "prompt" }');
+      expect(instructions).toContain('submit-workflow-draft');
+      expect(instructions).toContain('correct the complete definition');
     });
 
     it('retains the original request while repairing a persisted conversation', () => {
