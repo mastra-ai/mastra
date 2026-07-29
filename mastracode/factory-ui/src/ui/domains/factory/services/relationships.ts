@@ -1,7 +1,13 @@
 import type { WorkItem } from './workItems';
 
-function sourceNumber(item: WorkItem): string | undefined {
-  const number = item.metadata.number;
+export function workItemSourceNumber(item: WorkItem): string | undefined {
+  const metadataKey =
+    item.source === 'github-pr'
+      ? 'githubPullRequestNumber'
+      : item.source === 'github-issue'
+        ? 'githubIssueNumber'
+        : undefined;
+  const number = (metadataKey ? item.metadata[metadataKey] : undefined) ?? item.metadata.number;
   if (typeof number === 'number' || typeof number === 'string') return String(number);
 
   const sourceKeyNumber = item.sourceKey?.split(':').at(-1);
@@ -42,7 +48,7 @@ export function relationshipPath(item: WorkItem, factoryId: string): string {
 }
 
 export function relationshipLabel(item: WorkItem): string {
-  const number = sourceNumber(item);
+  const number = workItemSourceNumber(item);
   if (item.source === 'github-pr') return number ? `Review: PR #${number}` : `Review: ${item.title}`;
   if (item.source === 'github-issue') return number ? `Work item: Issue #${number}` : `Work item: ${item.title}`;
   if (item.source === 'linear-issue') {

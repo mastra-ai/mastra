@@ -2,14 +2,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { GitBranch, MoreHorizontal, Trash2 } from 'lucide-react';
+import { GitBranch, GitMerge, MoreHorizontal, Trash2 } from 'lucide-react';
 
-/**
- * Shared sidebar row for workspace/user sessions. Built on `MainSidebar.NavLink`
- * so every session list (work, review, user) renders with identical density,
- * hover, and active states. The optional status dot (agent running/finished)
- * hides on hover so the actions menu can take its place.
- */
 export function SessionNavRow({
   name,
   title,
@@ -18,6 +12,7 @@ export function SessionNavRow({
   disabled,
   loading,
   status,
+  merged,
   onSelect,
   onDelete,
 }: {
@@ -27,8 +22,8 @@ export function SessionNavRow({
   url: string;
   active: boolean;
   disabled: boolean;
-  /** True while this row's async open is in flight — shows a spinner and blocks clicks. */
   loading?: boolean;
+  merged?: boolean;
   status?: 'running' | 'attention';
   onSelect: () => void;
   onDelete: () => void;
@@ -52,11 +47,11 @@ export function SessionNavRow({
           {loading ? (
             <Spinner size="sm" aria-label={`Opening ${name}`} className="text-icon3 ml-auto shrink-0" />
           ) : status === 'running' ? (
-            <span
-              role="status"
+            <Spinner
+              size="sm"
+              variant="default"
               aria-label={`Agent working in ${name}`}
-              title="Agent working"
-              className="bg-accent1 ml-auto size-2 shrink-0 animate-pulse rounded-full group-hover/session:opacity-0"
+              className="text-icon3 ml-auto shrink-0 group-hover/session:opacity-0"
             />
           ) : status === 'attention' ? (
             <span
@@ -65,6 +60,15 @@ export function SessionNavRow({
               title="Agent finished — open to dismiss"
               className="bg-accent1 ml-auto size-2 shrink-0 rounded-full group-hover/session:opacity-0"
             />
+          ) : merged ? (
+            <span
+              role="img"
+              aria-label={`Pull request merged for ${name}`}
+              title="Pull request merged"
+              className="ml-auto flex shrink-0 group-hover/session:opacity-0"
+            >
+              <GitMerge aria-hidden className="text-accent3!" />
+            </span>
           ) : null}
         </button>
       }
