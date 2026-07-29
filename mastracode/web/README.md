@@ -88,9 +88,14 @@ tunnel. Install [`cloudflared`](https://developers.cloudflare.com/cloudflare-one
 cloudflared tunnel --url http://127.0.0.1:5873
 ```
 
-This needs no Cloudflare account or config file. Keep it running and copy the
-`trycloudflare.com` hostname it prints. The hostname is valid until you stop
+Any HTTPS tunnel can be used. The command above starts a temporary Cloudflare
+Quick Tunnel without an account or config file. Keep it running and copy the
+`trycloudflare.com` hostname it prints; that hostname is valid until you stop
 the command.
+
+If you have a Cloudflare account and a domain, use a named tunnel with a stable
+hostname instead. Then the Slack manifest can keep the same public URL across
+local restarts instead of being updated for every new Quick Tunnel hostname.
 
 #### 2. Create the Slack app
 
