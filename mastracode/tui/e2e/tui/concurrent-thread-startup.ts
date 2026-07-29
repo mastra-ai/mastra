@@ -33,7 +33,7 @@ export const concurrentThreadStartupScenario: McE2eScenario = {
     try {
       const locksDir = join(appDataDir, 'locks');
       mkdirSync(locksDir, { recursive: true });
-      writeFileSync(join(locksDir, `${LOCKED_THREAD_ID}.lock`), String(lockOwner.pid));
+      writeFileSync(join(locksDir, `${LOCKED_THREAD_ID}.1.lock`), String(lockOwner.pid));
 
       const now = new Date().toISOString();
       const metadata = JSON.stringify({ projectPath: projectDir });

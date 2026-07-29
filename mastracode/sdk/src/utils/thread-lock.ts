@@ -1,13 +1,21 @@
 /**
  * Thread lock — ensures only one process writes to a thread at a time.
  *
- * Uses filesystem lock files: <appDataDir>/locks/<threadId>.lock
- * Each lock file contains the PID of the owning process.
- * Stale locks (from crashed processes) are detected and reclaimed.
+ * Lock files live at <appDataDir>/locks/<threadId>.<generation>.lock and contain
+ * the owning PID. The owner is the highest generation present, and claiming is an
+ * exclusive create one generation above it, so a stale lock is superseded rather
+ * than deleted: no process ever removes a file a live process may have created.
+ * Invariant this relies on — a lock file is only removed by its own owner or by a
+ * claimant that already holds a higher generation.
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { getAppDataDir } from './project.js';
+
+const LOCK_SUFFIX = '.lock';
+const FIRST_GENERATION = 1;
+// pre-generation lock file written by older mastracode versions
+const LEGACY_GENERATION = 0;
 
 export class ThreadLockError extends Error {
   constructor(
@@ -27,10 +35,33 @@ function getLocksDir(): string {
   return dir;
 }
 
-function getLockPath(threadId: string): string {
-  // Sanitize thread ID for filesystem safety
-  const safeId = threadId.replace(/[^a-zA-Z0-9_-]/g, '_');
-  return path.join(getLocksDir(), `${safeId}.lock`);
+function getSafeThreadId(threadId: string): string {
+  return threadId.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function parseGeneration(fileName: string, safeThreadId: string): number | undefined {
+  if (!fileName.startsWith(`${safeThreadId}.`) || !fileName.endsWith(LOCK_SUFFIX)) return undefined;
+  const generation = fileName.slice(safeThreadId.length + 1, -LOCK_SUFFIX.length);
+  if (generation === '') return LEGACY_GENERATION;
+  return /^\d+$/.test(generation) ? Number(generation) : undefined;
+}
+
+type LockFile = { generation: number; filePath: string };
+
+/** Newest generation first. */
+function listLockFiles(threadId: string): { locksDir: string; safeThreadId: string; files: LockFile[] } {
+  const locksDir = getLocksDir();
+  const safeThreadId = getSafeThreadId(threadId);
+  const files: LockFile[] = [];
+
+  for (const fileName of fs.readdirSync(locksDir)) {
+    const generation = parseGeneration(fileName, safeThreadId);
+    if (generation === undefined) continue;
+    files.push({ generation, filePath: path.join(locksDir, fileName) });
+  }
+
+  files.sort((a, b) => b.generation - a.generation);
+  return { locksDir, safeThreadId, files };
 }
 
 function isProcessAlive(pid: number): boolean {
@@ -47,8 +78,34 @@ function getErrorCode(error: unknown): string | undefined {
   return typeof error.code === 'string' ? error.code : undefined;
 }
 
-function readLockContent(lockPath: string): string {
-  return fs.readFileSync(lockPath, 'utf-8').trim();
+/** Throws on read failures other than a lock file that vanished. */
+function readOwnerPid(filePath: string): number | undefined {
+  const ownerPid = parseInt(fs.readFileSync(filePath, 'utf-8').trim(), 10);
+  return isNaN(ownerPid) ? undefined : ownerPid;
+}
+
+function readOwnerPidIfPresent(filePath: string): number | undefined {
+  try {
+    return readOwnerPid(filePath);
+  } catch {
+    return undefined;
+  }
+}
+
+function findLiveOwner(files: LockFile[], myPid: number): number | undefined {
+  for (const file of files) {
+    const ownerPid = readOwnerPidIfPresent(file.filePath);
+    if (ownerPid !== undefined && ownerPid !== myPid && isProcessAlive(ownerPid)) return ownerPid;
+  }
+  return undefined;
+}
+
+function removeLockFile(filePath: string): void {
+  try {
+    fs.unlinkSync(filePath);
+  } catch {
+    // Best-effort — a superseded lock left behind is reclaimed by the next generation
+  }
 }
 
 function writeNewLock(lockPath: string, pid: number): void {
@@ -63,46 +120,47 @@ function writeNewLock(lockPath: string, pid: number): void {
 /**
  * Attempt to acquire a lock for the given thread.
  * Throws ThreadLockError if another live process holds the lock.
- * Reclaims stale locks from dead processes.
+ * Supersedes stale locks from dead processes.
  */
 export function acquireThreadLock(threadId: string): void {
-  const lockPath = getLockPath(threadId);
   const myPid = process.pid;
 
   while (true) {
-    try {
-      writeNewLock(lockPath, myPid);
+    const { locksDir, safeThreadId, files } = listLockFiles(threadId);
+    const current = files[0];
+    let ownerPid: number | undefined;
+
+    if (current) {
       try {
-        if (readLockContent(lockPath) === String(myPid)) return;
+        ownerPid = readOwnerPid(current.filePath);
       } catch (error) {
         if (getErrorCode(error) === 'ENOENT') continue;
         throw error;
       }
-      continue;
-    } catch (error) {
-      if (getErrorCode(error) !== 'EEXIST') throw error;
+      if (ownerPid === myPid) return;
+      // a dead owner stays dead, so this observation cannot go stale under us
+      if (ownerPid !== undefined && isProcessAlive(ownerPid)) throw new ThreadLockError(threadId, ownerPid);
     }
 
-    let ownerContent: string;
+    const generation = current ? current.generation + 1 : FIRST_GENERATION;
+    const lockPath = path.join(locksDir, `${safeThreadId}.${generation}${LOCK_SUFFIX}`);
     try {
-      ownerContent = readLockContent(lockPath);
+      writeNewLock(lockPath, myPid);
     } catch (error) {
-      if (getErrorCode(error) === 'ENOENT') continue;
+      if (getErrorCode(error) === 'EEXIST') continue;
       throw error;
     }
 
-    const ownerPid = parseInt(ownerContent, 10);
-    if (ownerPid === myPid) return;
-    if (!isNaN(ownerPid) && isProcessAlive(ownerPid)) {
-      throw new ThreadLockError(threadId, ownerPid);
+    const superseded = listLockFiles(threadId).files.filter(file => file.generation < generation);
+    // a live owner below us means the generation counter was reset behind our snapshot
+    const liveOwner = findLiveOwner(superseded, myPid);
+    if (liveOwner !== undefined) {
+      removeLockFile(lockPath);
+      throw new ThreadLockError(threadId, liveOwner);
     }
 
-    try {
-      if (readLockContent(lockPath) !== ownerContent) continue;
-      fs.unlinkSync(lockPath);
-    } catch (error) {
-      if (getErrorCode(error) !== 'ENOENT') throw error;
-    }
+    for (const file of superseded) removeLockFile(file.filePath);
+    return;
   }
 }
 
@@ -120,18 +178,11 @@ export function tryAcquireThreadLock(threadId: string): boolean {
  * Release the lock for the given thread (only if we own it).
  */
 export function releaseThreadLock(threadId: string): void {
-  const lockPath = getLockPath(threadId);
   const myPid = process.pid;
 
   try {
-    if (!fs.existsSync(lockPath)) return;
-
-    const content = fs.readFileSync(lockPath, 'utf-8').trim();
-    const ownerPid = parseInt(content, 10);
-
-    // Only remove if we own it
-    if (ownerPid === myPid) {
-      fs.unlinkSync(lockPath);
+    for (const file of listLockFiles(threadId).files) {
+      if (readOwnerPidIfPresent(file.filePath) === myPid) removeLockFile(file.filePath);
     }
   } catch {
     // Best-effort cleanup — ignore errors
@@ -143,19 +194,14 @@ export function releaseThreadLock(threadId: string): void {
  * Returns the PID of the owner if locked, null otherwise.
  */
 export function getThreadLockOwner(threadId: string): number | null {
-  const lockPath = getLockPath(threadId);
-
   try {
-    if (!fs.existsSync(lockPath)) return null;
+    const current = listLockFiles(threadId).files[0];
+    if (!current) return null;
 
-    const content = fs.readFileSync(lockPath, 'utf-8').trim();
-    const ownerPid = parseInt(content, 10);
+    const ownerPid = readOwnerPidIfPresent(current.filePath);
+    if (ownerPid === undefined || ownerPid === process.pid) return null;
 
-    if (isNaN(ownerPid)) return null;
-    if (ownerPid === process.pid) return null;
-    if (!isProcessAlive(ownerPid)) return null;
-
-    return ownerPid;
+    return isProcessAlive(ownerPid) ? ownerPid : null;
   } catch {
     return null;
   }
@@ -169,19 +215,12 @@ export function releaseAllThreadLocks(): void {
   try {
     const locksDir = getLocksDir();
     const files = fs.readdirSync(locksDir);
-    const myPid = String(process.pid);
+    const myPid = process.pid;
 
     for (const file of files) {
-      if (!file.endsWith('.lock')) continue;
+      if (!file.endsWith(LOCK_SUFFIX)) continue;
       const lockPath = path.join(locksDir, file);
-      try {
-        const content = fs.readFileSync(lockPath, 'utf-8').trim();
-        if (content === myPid) {
-          fs.unlinkSync(lockPath);
-        }
-      } catch {
-        // Best-effort
-      }
+      if (readOwnerPidIfPresent(lockPath) === myPid) removeLockFile(lockPath);
     }
   } catch {
     // Best-effort
