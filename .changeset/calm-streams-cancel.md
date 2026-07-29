@@ -2,4 +2,4 @@
 '@mastra/hono': patch
 ---
 
-Fixed client disconnects from crashing servers when stream cancellation rejects.
+Fixed server crashes when clients disconnect during streaming.
