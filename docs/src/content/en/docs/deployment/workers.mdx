@@ -11,15 +11,15 @@ packages:
 
 # Workers
 
+:::experimental
+
+This feature is in beta. The API is stable enough for production use, but some details may change. See [known limitations](#known-limitations) for current gaps.
+
+:::
+
 Workers handle background processing outside the request-response cycle. Workflow step execution, cron-based scheduling, and long-running tool calls all run in workers, keeping the API responsive.
 
 By default, workers run in the same process as the API. For production workloads, you can split them into separate processes or containers and scale each one independently.
-
-:::note
-
-Workers are a beta feature. The API is stable enough for production use, but some details may change. See [known limitations](#known-limitations) for current gaps.
-
-:::
 
 ## When to use workers
 
@@ -178,6 +178,7 @@ If a worker-related feature needs an HTTP route (for example, token minting for 
 
 - [Worker deployment guide](/docs/deployment/worker-deployment): Docker Compose example and topology options
 - [Worker authentication](/docs/deployment/worker-auth): Secure worker-to-API communication
-- [Worker configuration reference](/docs/deployment/worker-reference): Environment variables, CLI commands, and config options
+- [Workers reference](/reference/workers/overview): Environment variables, worker types, and storage backends
+- [CLI reference](/reference/cli/mastra#mastra-worker-build): `mastra worker build` and `mastra worker start`
 - [PubSub](/docs/server/pubsub): Event delivery backends
 - [Scheduled workflows](/docs/workflows/scheduled-workflows): Declare cron schedules on workflows

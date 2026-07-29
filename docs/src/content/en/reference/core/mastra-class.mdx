@@ -279,5 +279,87 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
       },
     ],
   },
+  {
+    name: 'workers',
+    type: 'MastraWorker[] | false',
+    description:
+      'Configure which [workers](/docs/deployment/workers) run in this Mastra instance. Set to `false` to disable all event processing. Pass an array of `MastraWorker` instances to use specific workers. When omitted, Mastra auto-creates workers based on PubSub and config.',
+    isOptional: true,
+  },
+  {
+    name: 'backgroundTasks',
+    type: 'BackgroundTaskManagerConfig',
+    description:
+      'Configure [background task](/docs/long-running-agents/background-tasks) execution for agents. See [background tasks configuration reference](/reference/configuration#backgroundtasks) for all options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'BackgroundTaskManagerConfig',
+        parameters: [
+          {
+            name: 'enabled',
+            type: 'boolean',
+            isOptional: true,
+            defaultValue: 'false',
+            description: 'Enable background task dispatch.',
+          },
+          {
+            name: 'globalConcurrency',
+            type: 'number',
+            isOptional: true,
+            defaultValue: '10',
+            description: 'Max concurrent tasks across all agents.',
+          },
+          {
+            name: 'perAgentConcurrency',
+            type: 'number',
+            isOptional: true,
+            defaultValue: '5',
+            description: 'Max concurrent tasks per agent.',
+          },
+          {
+            name: 'backpressure',
+            type: "'queue' | 'reject' | 'fallback-sync'",
+            isOptional: true,
+            defaultValue: "'queue'",
+            description: 'Behavior when concurrency limit is reached.',
+          },
+          {
+            name: 'defaultTimeoutMs',
+            type: 'number',
+            isOptional: true,
+            defaultValue: '300000',
+            description: 'Default task timeout in milliseconds.',
+          },
+          {
+            name: 'defaultRetries',
+            type: 'RetryConfig',
+            isOptional: true,
+            description: 'Default retry configuration.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'scheduler',
+    type: 'object',
+    description:
+      'Configure the [scheduler worker](/docs/deployment/workers#scheduler-worker) for cron-driven workflow triggers. Auto-enables when any workflow declares a `schedule`. See [Scheduled workflows](/docs/workflows/scheduled-workflows).',
+    isOptional: true,
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'enabled',
+            type: 'boolean',
+            isOptional: true,
+            description: 'Explicitly enable or disable the scheduler.',
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />

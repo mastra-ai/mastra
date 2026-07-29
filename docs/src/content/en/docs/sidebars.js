@@ -1031,14 +1031,7 @@ const sidebars = {
                 tags: ['beta'],
               },
             },
-            {
-              type: 'doc',
-              id: 'deployment/worker-reference',
-              label: 'Worker Reference',
-              customProps: {
-                tags: ['beta'],
-              },
-            },
+
           ],
         },
       ],
