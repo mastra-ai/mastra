@@ -2,6 +2,7 @@ import type {
   NoiseExamplesResponse,
   NoiseResponse,
   ThemeDetailResponse,
+  EntityLearningProgressResponse,
   ThemeEntitiesResponse,
   ThemeExamplesResponse,
   ThemeFlowResponse,
@@ -15,6 +16,13 @@ import type {
 export function fetchThemeEntities(entityType: string) {
   const query = new URLSearchParams({ entityType });
   return learningJson<ThemeEntitiesResponse>(`/api/learning/entities?${query}`);
+}
+
+export function fetchEntityLearningProgress(entityId: string, entityType: string) {
+  const query = new URLSearchParams({ entityType });
+  return learningJson<EntityLearningProgressResponse>(
+    `/api/learning/entities/${encodeURIComponent(entityId)}/progress?${query}`,
+  );
 }
 
 export function fetchThemeSnapshots(

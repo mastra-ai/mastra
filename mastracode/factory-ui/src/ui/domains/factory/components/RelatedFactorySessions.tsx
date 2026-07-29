@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ExternalLink, Link2 } from 'lucide-react';
+import { CircleDot, ExternalLink, Link2 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router';
 
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
@@ -128,6 +128,7 @@ function WorkItemActions({
   const navigate = useNavigate();
   const externalItemUrl = genericExternalWorkItemUrl(item);
   const externalItemLabel = externalWorkItemLabel(item);
+  const ExternalItemIcon = item.source === 'github-issue' ? CircleDot : ExternalLink;
 
   const openSession = (session: WorkItemSessionRef) => {
     void navigate(`/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
@@ -145,7 +146,7 @@ function WorkItemActions({
           rel="noreferrer"
           aria-label={`Open ${externalItemLabel}`}
         >
-          <ExternalLink size={13} aria-hidden />
+          <ExternalItemIcon size={13} aria-hidden />
           {externalItemLabel}
         </Button>
       ) : null}

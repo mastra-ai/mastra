@@ -1,5 +1,35 @@
 # @mastra/deployer-sandbox
 
+## 0.2.0-alpha.1
+
+### Minor Changes
+
+- Run isolated non-HTTP workers with bounded input, separate byte-preserving output streams, cancellation, relaunch, and cleanup controls. ([#19641](https://github.com/mastra-ai/mastra/pull/19641))
+
+  ```ts
+  import { deployWorkerToSandbox } from '@mastra/deployer-sandbox';
+
+  const worker = await deployWorkerToSandbox({
+    sandbox,
+    dir: './dist/worker',
+    executionId: 'job-1',
+    command: 'node',
+    args: ['index.mjs'],
+    input: { type: 'stdin', data: request },
+  });
+
+  const stdout = await worker.readOutput('stdout');
+  await worker.cancel();
+  const retry = await worker.relaunch({ executionId: 'job-2' });
+  await retry.destroy();
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`55c9e24`](https://github.com/mastra-ai/mastra/commit/55c9e248c27c1d72b5bb7e94ea6b8a3999eee49f), [`07f5b4b`](https://github.com/mastra-ai/mastra/commit/07f5b4ba9d608d88865030732e580298296adf99)]:
+  - @mastra/core@1.55.0-alpha.2
+  - @mastra/deployer@1.55.0-alpha.2
+
 ## 0.1.4-alpha.0
 
 ### Patch Changes
