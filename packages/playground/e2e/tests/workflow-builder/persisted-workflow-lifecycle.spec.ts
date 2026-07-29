@@ -31,8 +31,7 @@ test.describe('Persisted Workflow Builder', () => {
       await expect(page.getByText('Ready to save')).toBeVisible();
       await expect(page.getByTestId('workflow-definition-graph')).toContainText('answer-request');
       await expect(page.getByTestId('agent-builder-chat-generic-tool')).toContainText([
-        'Completed checkpoint-workflow-draft',
-        'Completed finalize-workflow-draft',
+        'Completed submit-workflow-draft',
       ]);
 
       await page.getByRole('button', { name: 'Save', exact: true }).click();

@@ -142,6 +142,13 @@ describe('WorkflowChatProvider', () => {
         'inspect-workflow-resources',
         'submit-workflow-draft',
       ]);
+      const serializedTools = JSON.stringify(requestBody?.clientTools);
+      expect(serializedTools).toContain('${initData.name}');
+      expect(serializedTools).toContain('Default agents consume { prompt: string } and return { text: string }');
+      expect(serializedTools).toContain('id must exactly equal workflowId');
+      expect(serializedTools).toContain('Each child receives the same preceding input');
+      expect(serializedTools).toContain('Each item is passed directly to the child step');
+      expect(serializedTools).toContain('The workflow result is exactly the final top-level entry output');
     });
   });
 

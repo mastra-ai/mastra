@@ -246,6 +246,86 @@ describe('storage round-trip', () => {
     ).resolves.toBeDefined();
   });
 
+  it('resolves nested workflow references by intrinsic workflow id even when the registration key differs', async () => {
+    // Registration key `innerWorkflow` differs from the workflow's own id
+    // `inner-wf` — the same shape as `workflows: { greetingWorkflow }` where
+    // the workflow declares `id: 'greeting-workflow'`. Stored definitions
+    // reference the intrinsic workflow id (that is what discovery advertises
+    // as authoritative), so rehydration must resolve it like agents do:
+    // intrinsic id first, registration key as fallback.
+    const inner = makeInnerWorkflow('inner-wf');
+    const mastra = new Mastra({
+      logger: false,
+      workflows: { innerWorkflow: inner },
+      storage: new InMemoryStore({ id: 'nested-intrinsic-id' }),
+    });
+
+    await mastra.addStoredWorkflow({
+      id: 'outer-intrinsic-wf',
+      inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      graph: [{ type: 'workflow', id: 'inner-wf', workflowId: 'inner-wf' }],
+    });
+
+    const run = await mastra.getWorkflow('outer-intrinsic-wf').createRun();
+    const result = await run.start({ inputData: { value: 41 } });
+    expect(result.status).toBe('success');
+    expect((result as any).result).toEqual({ value: 42 });
+  });
+
+  it('still resolves nested workflow references by registration key', async () => {
+    const inner = makeInnerWorkflow('inner-wf');
+    const mastra = new Mastra({
+      logger: false,
+      workflows: { innerWorkflow: inner },
+      storage: new InMemoryStore({ id: 'nested-registration-key' }),
+    });
+
+    await mastra.addStoredWorkflow({
+      id: 'outer-key-wf',
+      inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      graph: [{ type: 'workflow', id: 'innerWorkflow', workflowId: 'innerWorkflow' }],
+    });
+
+    const run = await mastra.getWorkflow('outer-key-wf').createRun();
+    const result = await run.start({ inputData: { value: 9 } });
+    expect(result.status).toBe('success');
+    expect((result as any).result).toEqual({ value: 10 });
+  });
+
+  it('runs a rehydrated unstructured agent step and yields the default { text } envelope', async () => {
+    // Runtime fact the authoring contract depends on: a declarative agent
+    // entry with no structured outputSchema consumes `{ prompt }` and
+    // resolves to `{ text }` (see runAgentEntry) — so mappings must read
+    // `stepResults.<stepId>.text`, never invented fields like `response`.
+    const supportAgent = fixedResponseAgent('support-agent', 'resolved');
+    const mastra = new Mastra({
+      logger: false,
+      agents: { supportAgent },
+      storage: new InMemoryStore({ id: 'agent-text-envelope' }),
+    });
+
+    await mastra.addStoredWorkflow({
+      id: 'agent-envelope-wf',
+      inputSchema: { type: 'object', properties: { prompt: { type: 'string' } }, required: ['prompt'] },
+      outputSchema: { type: 'object', properties: { response: { type: 'string' } }, required: ['response'] },
+      graph: [
+        { type: 'agent', id: 'answer-request', agentId: 'support-agent' },
+        {
+          type: 'mapping',
+          id: 'output',
+          mapConfig: JSON.stringify({ response: { step: 'answer-request', path: 'text' } }),
+        },
+      ],
+    });
+
+    const run = await mastra.getWorkflow('agent-envelope-wf').createRun();
+    const result = await run.start({ inputData: { prompt: 'help' } });
+    expect(result.status).toBe('success');
+    expect((result as any).result).toEqual({ response: 'resolved' });
+  });
+
   it('rejects nested workflow call-site ids that cannot be preserved by live rehydration', async () => {
     const inner = makeInnerWorkflow('inner-wf');
     const mastra = new Mastra({

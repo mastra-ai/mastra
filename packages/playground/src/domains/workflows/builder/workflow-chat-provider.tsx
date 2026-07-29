@@ -110,6 +110,7 @@ function WorkflowChatSession({
         return;
       }
       if (
+        result.reason === 'superseded' ||
         result.error === 'Draft changed before this operation completed.' ||
         result.error === 'Submission was superseded.'
       )

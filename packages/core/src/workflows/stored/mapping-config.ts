@@ -27,6 +27,9 @@ export function parseMapConfig(raw: string, stepId: string): Record<string, any>
   }
 }
 
+/** A recognizable Handlebars/Mustache placeholder: `{{ name }}`, `{{a.b}}`, … */
+const HANDLEBARS_PLACEHOLDER = /\{\{\s*[\w$][\w.$-]*\s*\}\}/;
+
 export interface MapConfigAnalysisOptions {
   /** Issue path prefix of the mapping entry, e.g. `graph.2`. */
   path: string;
@@ -104,6 +107,11 @@ export function analyzeMapConfig(rawConfig: string, opts: MapConfigAnalysisOptio
         validateTemplate(descriptor.template);
       } catch (err) {
         syntaxError = (err as Error).message;
+      }
+      // Handlebars-style `{{name}}` is not a workflow placeholder — the runtime
+      // would emit it literally, which is never what the author meant.
+      if (syntaxError === undefined && HANDLEBARS_PLACEHOLDER.test(descriptor.template)) {
+        syntaxError = `Templates use \${...} placeholders (e.g. "\${initData.name}"), not {{...}}. "${descriptor.template}" would be emitted literally.`;
       }
       const unknownStep =
         syntaxError === undefined

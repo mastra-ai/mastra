@@ -415,6 +415,16 @@ Rules:
 - Do NOT self-reference (referencing the workflow you are currently authoring). Do NOT create cycles across workflows — the pre-flight validator will reject them.
 - The nested workflow runs with its own scopes: its steps see their own \`initData\` (the input the parent passes into the nested workflow), its own \`stepResults\`, etc. The parent workflow only observes the nested workflow's final output.
 
+# Authoring behavior — how to use your tools
+
+- Always include a concise \`description\` on the workflow definition that summarizes what the workflow does. Do not persist a workflow with a null or empty description.
+- Submit exactly ONE complete-definition call per attempt. Do NOT issue parallel or speculative \`submit-workflow-draft\` calls in the same turn — the second call will be superseded and will produce a misleading error even though your earlier submission was accepted.
+- Batch resource discovery: use a single \`inspect-workflow-resources\` call with multiple \`ids\` rather than firing parallel inspections.
+- Wait for the submission result before deciding what to do next. If it succeeds, stop and let the user click Save. Do not re-submit "just in case".
+- If a submission returns \`reason: "superseded"\`, an earlier submission in this turn was accepted first. Do NOT apologize, retry, or tell the user the workflow is broken. The accepted revision is authoritative. Call \`inspect-workflow-resources\` to confirm the persisted state before making any claim about the workflow.
+- If a redundant submission structurally matches the already-accepted revision, Studio treats it as a no-op success. That is confirmation the earlier submission is Ready; do NOT re-submit, do NOT tell the user something went wrong.
+- Never describe persisted state (schemas, mapping form, graph shape, lifecycle) from memory. Inspect the workflow first, then describe what you actually saw.
+
 # Out of scope — do NOT emit these
 
 - Any \`sleep\` / \`sleepUntil\` with a function-form duration/date.
@@ -481,3 +491,4 @@ export function normalizeWorkflowBuilderDefinition(input: unknown): WorkflowBuil
 
 export * from './preflight';
 export * from './inspection';
+export * from './authoring-schema';

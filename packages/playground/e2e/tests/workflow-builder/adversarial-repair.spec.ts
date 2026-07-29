@@ -37,7 +37,8 @@ const getRunOutput = async (page: Page, workflowId: CanonicalWorkflowScenarioId,
 
 // FEATURE: Workflow Builder adversarial repair journeys
 // USER STORY: A Studio user can recover a valid accepted draft after strict validation rejects a complex workflow.
-// BEHAVIOR UNDER TEST: Inspection and typed repairs checkpoint and finalize authoritatively before explicit Save.
+// BEHAVIOR UNDER TEST: An invalid complete submission returns diagnostics without touching accepted state; the
+// corrected whole-definition resubmission becomes Ready before explicit Save.
 test.describe('Workflow Builder adversarial repair journeys', () => {
   test.setTimeout(90_000);
 

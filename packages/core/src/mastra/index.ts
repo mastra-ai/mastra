@@ -4656,10 +4656,12 @@ export class Mastra<
     }
     const workflows: Record<string, WorkflowRegistrySchemas> = {};
     for (const [key, workflow] of Object.entries(this.#workflows as Record<string, AnyWorkflow>)) {
-      workflows[key] = {
+      const schemas: WorkflowRegistrySchemas = {
         inputSchema: toJsonSchemaOrUndefined(workflow.inputSchema),
         outputSchema: toJsonSchemaOrUndefined(workflow.outputSchema),
       };
+      workflows[key] = schemas;
+      workflows[workflow.id] = schemas;
     }
     return { agents, tools, workflows };
   }

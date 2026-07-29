@@ -2,6 +2,7 @@ import type { Agent } from '../agent';
 import type { AgentBuilderOptions, BuilderModelPolicy, IAgentBuilder } from '../agent-builder/ee';
 import type { MastraBrowser } from '../browser/browser';
 import type { MastraScorer } from '../evals';
+import type { MastraModelConfig } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
 import type { MCPServerBase } from '../mcp';
@@ -170,6 +171,8 @@ export interface WorkflowBuilderOptions {
   enabled?: boolean;
   /** Admin-controlled model/provider policy for Studio workflow authoring. */
   modelPolicy?: BuilderModelPolicy;
+  /** Model used by the hidden workflow builder agent. Defaults to the built-in model when omitted. */
+  model?: MastraModelConfig;
 }
 
 export interface IWorkflowBuilder {

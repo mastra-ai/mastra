@@ -27,6 +27,14 @@ describe('EditorWorkflowBuilder', () => {
     expect(instructions).not.toContain('set-workflow-schemas');
   });
 
+  it('uses the configured model for the hidden agent and falls back to the default model', async () => {
+    const configured = new EditorWorkflowBuilder({ model: 'anthropic/claude-opus-4-7' });
+    const fallback = new EditorWorkflowBuilder();
+
+    expect((await configured.getAgent().getModel()).modelId).toBe('claude-opus-4-7');
+    expect((await fallback.getAgent().getModel()).modelId).toBe('gpt-5.5');
+  });
+
   it('preserves the configured model policy', () => {
     const modelPolicy = {
       active: true,

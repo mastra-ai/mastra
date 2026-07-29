@@ -300,6 +300,66 @@ describe('validateStoredWorkflow', () => {
       ]);
     });
 
+    it('rejects Handlebars-style placeholders that the runtime would emit literally', () => {
+      const issues = validateStoredWorkflow(
+        def({
+          graph: [
+            {
+              type: 'mapping',
+              id: 'greet',
+              mapConfig: JSON.stringify({
+                message: { template: 'Hello, {{name}}!' },
+                literal: { template: 'no placeholders here' },
+              }),
+            },
+          ],
+        }),
+      );
+      expect(issues).toEqual([
+        expect.objectContaining({
+          code: 'invalid-map-reference',
+          path: 'graph.0.mapConfig.message.template',
+          message: expect.stringContaining('${'),
+        }),
+      ]);
+    });
+
+    it('treats an unstructured agent as returning { text } so invented output paths are rejected', () => {
+      const invented = validateStoredWorkflow(
+        def({
+          graph: [
+            { type: 'agent', id: 'ask-support', agentId: 'support-agent' },
+            {
+              type: 'mapping',
+              id: 'final',
+              mapConfig: JSON.stringify({ response: { step: 'ask-support', path: 'response' } }),
+            },
+          ],
+        }),
+      );
+      expect(invented).toEqual([
+        expect.objectContaining({
+          code: 'invalid-map-config',
+          path: 'graph.1.mapConfig.response.path',
+          message: expect.stringContaining('does not exist'),
+        }),
+      ]);
+
+      const canonical = validateStoredWorkflow(
+        def({
+          graph: [
+            { type: 'agent', id: 'ask-support', agentId: 'support-agent' },
+            {
+              type: 'mapping',
+              id: 'final',
+              mapConfig: JSON.stringify({ response: { step: 'ask-support', path: 'text' } }),
+            },
+          ],
+        }),
+      );
+      expect(canonical).toEqual([]);
+    });
+
     it('allows mappings and templates to reference a preceding code-step descriptor', () => {
       const issues = validateStoredWorkflow(
         def({

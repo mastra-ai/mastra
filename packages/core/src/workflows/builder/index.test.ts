@@ -48,7 +48,19 @@ describe('workflow builder authoring contract', () => {
     );
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Conditional branches and loops — declarative predicates');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Nested workflows — compose one workflow inside another');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Authoring behavior — how to use your tools');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Out of scope — do NOT emit these');
+  });
+
+  it('tells authoring frontends how to behave: description, no parallel submits, batch inspects, inspect before claiming state', () => {
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('Always include a concise `description`');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain(
+      'Do NOT issue parallel or speculative `submit-workflow-draft` calls',
+    );
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('Batch resource discovery');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('reason: "superseded"');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('Do NOT apologize');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('Never describe persisted state');
   });
 
   it('documents canonical direct mapping sources and container output semantics', () => {

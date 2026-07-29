@@ -37,6 +37,17 @@ const agentInputSchema: JsonSchema = {
   required: ['prompt'],
 };
 
+/**
+ * An agent entry without declared structured output returns exactly
+ * `{ text }` at runtime (`runAgentEntry`), so invented output paths like
+ * `.response` are provably wrong rather than unknown.
+ */
+const agentTextOutputSchema: JsonSchema = {
+  type: 'object',
+  properties: { text: { type: 'string' } },
+  required: ['text'],
+};
+
 function inputSchemaOf(entry: SerializedSingleStepEntry, index: WorkflowRegistryIndex): JsonSchema | undefined {
   switch (entry.type) {
     case 'agent':
@@ -54,7 +65,7 @@ function inputSchemaOf(entry: SerializedSingleStepEntry, index: WorkflowRegistry
 function outputSchemaOf(entry: SerializedSingleStepEntry, index: WorkflowRegistryIndex): JsonSchema | undefined {
   switch (entry.type) {
     case 'agent':
-      return entry.outputSchema ?? index.agents?.[entry.agentId]?.outputSchema;
+      return entry.outputSchema ?? index.agents?.[entry.agentId]?.outputSchema ?? agentTextOutputSchema;
     case 'tool':
       return index.tools?.[entry.toolId]?.outputSchema;
     case 'workflow':

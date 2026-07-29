@@ -336,8 +336,24 @@ function tryGetAgentById(mastra: Mastra, id: string): any | undefined {
   }
 }
 
+/**
+ * Workflow references resolve like agent references: intrinsic workflow id
+ * first (`getWorkflowById` scans registered workflows by their own `id`),
+ * falling back to the registration key. Stored definitions reference the
+ * intrinsic id — the identity discovery advertises — which may differ from
+ * the key the workflow was registered under (`workflows: { greetingWorkflow }`
+ * vs `id: 'greeting-workflow'`).
+ */
 function tryGetWorkflowById(mastra: Mastra, id: string): any | undefined {
-  if (!id || typeof (mastra as any).getWorkflow !== 'function') return undefined;
+  if (!id) return undefined;
+  if (typeof (mastra as any).getWorkflowById === 'function') {
+    try {
+      return (mastra as any).getWorkflowById(id);
+    } catch {
+      // fall through to registration-key lookup
+    }
+  }
+  if (typeof (mastra as any).getWorkflow !== 'function') return undefined;
   try {
     return (mastra as any).getWorkflow(id);
   } catch {

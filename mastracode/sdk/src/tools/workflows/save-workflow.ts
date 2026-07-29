@@ -2,180 +2,21 @@
  * Sub-agent tool: persist the static workflow definition and live-register it.
  * Calls `mastra.addStoredWorkflow()` — the same path `POST /api/stored/workflows`
  * takes. After this returns the workflow is immediately runnable.
+ *
+ * The complete-definition authoring contract (graph families, mapping sources,
+ * predicate DSL, and all model-facing guidance) is shared with Studio's
+ * `submit-workflow-draft` and lives in `@mastra/core/workflows/builder`.
  */
 import type { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
-import { normalizeWorkflowBuilderDefinition } from '@mastra/core/workflows/builder';
+import { normalizeWorkflowBuilderDefinition, workflowBuilderDefinitionSchema } from '@mastra/core/workflows/builder';
 import { z } from 'zod';
 
-// Optional step-level knobs that round-trip on both agent and tool entries.
-// Keep this shape JSON-safe — no closures, no live handles.
-const stepOptions = z
-  .object({
-    retries: z.number().int().nonnegative().optional().describe('Retry count on failure. Static number only.'),
-    metadata: z.record(z.string(), z.any()).optional().describe('Arbitrary JSON-safe metadata attached to the step.'),
-  })
-  .optional()
-  .describe(
-    'JSON-safe subset of step options that round-trips through storage. `onFinish` callbacks and function-valued scorers are NOT supported.',
-  );
-
-// Single-step-like entries — the shapes that can appear at the top level AND
-// nested inside `parallel.steps` / `foreach.step`.
-const agentEntry = z.object({
-  type: z.literal('agent'),
-  id: z.string().describe('Step id — kebab-case, unique within the workflow.'),
-  agentId: z.string().describe('Id of an agent registered on this Mastra instance (see list-available-agents).'),
-  outputSchema: z
-    .any()
-    .optional()
-    .describe(
-      "OPTIONAL JSON Schema (Draft 2020-12) describing the structured output the agent must produce for this step. When set, the agent runs with structured output and the step's output IS that shape (not `{ text: string }`). Use this when a downstream step needs a machine-readable field — for example, an agent that reads a directory listing and emits `{ files: string[] }`, which a subsequent `foreach` iterates over.",
-    ),
-  options: stepOptions,
-});
-const toolEntry = z.object({
-  type: z.literal('tool'),
-  id: z.string().describe('Step id — kebab-case, unique within the workflow.'),
-  toolId: z.string().describe('Id of a tool registered on this Mastra instance (see list-available-tools).'),
-  options: stepOptions,
-});
-export const MAPPING_CONFIG_DESCRIPTION =
-  'A JSON-ENCODED STRING (not an object) of an object whose top-level keys become the mapping output fields. Each value must use exactly one canonical source form: { "template": "<text with ${placeholders}>" }, { "value": <constant> }, { "step": "<stepId>", "path": "<field.path>" }, { "initData": true, "path": "<workflow-input-field.path>" }, or { "requestContextPath": "<field.path>" }. IMPORTANT: initData is the boolean true, never a field name string; put the workflow input field name in path.';
-
-const mappingEntry = z.object({
-  type: z.literal('mapping'),
-  id: z.string().describe('Step id — kebab-case, unique within the workflow.'),
-  mapConfig: z.string().describe(MAPPING_CONFIG_DESCRIPTION),
-});
-const workflowEntry = z.object({
-  type: z.literal('workflow'),
-  id: z.string().describe('Step id — kebab-case, unique within the parent workflow.'),
-  workflowId: z
-    .string()
-    .describe(
-      'Id of another workflow registered on this Mastra instance (code-defined or stored). The referenced workflow runs as a single step; its input is the current step input and its output becomes this step output. Cycles are rejected at load time.',
-    ),
-  options: stepOptions,
-});
-const singleStepEntry = z.discriminatedUnion('type', [agentEntry, toolEntry, mappingEntry, workflowEntry]);
-
-// ---------------------------------------------------------------------------
-// Predicate DSL — declarative condition used by conditional (branch) and loop
-// entries. Mirrors `Predicate` in `@mastra/core/workflows/predicate`. Kept in
-// sync manually because this file uses zod v3 while core exports zod v4.
-// ---------------------------------------------------------------------------
-const literalScalar = z.union([z.string(), z.number(), z.boolean(), z.null()]);
-const pathOrLiteral: z.ZodType<any> = z.union([
-  z.object({ path: z.string().min(1) }).strict(),
-  z.object({ literal: literalScalar }).strict(),
-]);
-const predicate: z.ZodType<any> = z.lazy(() =>
-  z.union([
-    z
-      .object({
-        op: z.enum(['eq', 'ne', 'lt', 'lte', 'gt', 'gte']),
-        left: pathOrLiteral,
-        right: pathOrLiteral,
-      })
-      .strict(),
-    z
-      .object({
-        op: z.enum(['in', 'notIn']),
-        value: pathOrLiteral,
-        set: z.array(literalScalar).min(1),
-      })
-      .strict(),
-    z.object({ op: z.enum(['exists', 'notExists']), path: z.string().min(1) }).strict(),
-    z.object({ op: z.enum(['truthy', 'falsy']), value: pathOrLiteral }).strict(),
-    z.object({ op: z.enum(['and', 'or']), args: z.array(predicate).min(1) }).strict(),
-    z.object({ op: z.literal('not'), arg: predicate }).strict(),
-  ]),
-);
-
-// Foreach inner step — same discriminated shape as agent/tool at the top level.
-// `mapping` is deliberately excluded: a mapping's output is always an object
-// keyed by mapConfig fields, so iterating it per-element is meaningless and the
-// rehydrator rejects it.
-const foreachInnerStep = z.discriminatedUnion('type', [agentEntry, toolEntry, workflowEntry]);
-
-// Full top-level entry union — includes container step types (parallel, foreach,
-// sleep, sleepUntil) in addition to the single-step-like entries above.
-const graphEntry = z.discriminatedUnion('type', [
-  agentEntry,
-  toolEntry,
-  mappingEntry,
-  workflowEntry,
-  z.object({
-    type: z.literal('parallel'),
-    steps: z
-      .array(singleStepEntry)
-      .describe(
-        'Children run in parallel on the same input. Each child MUST be agent/tool/mapping/nested workflow — no nested containers.',
-      ),
-  }),
-  z.object({
-    type: z.literal('foreach'),
-    step: foreachInnerStep.describe(
-      "The inner step, run once per element of the previous step's array output. MUST be `agent`, `tool`, or nested `workflow` — mapping steps cannot be foreach inner steps. Give this inner step its own unique `id` distinct from surrounding steps.",
-    ),
-    opts: z
-      .object({ concurrency: z.number().int().positive() })
-      .optional()
-      .describe('Optional concurrency control; defaults to 1 (sequential).'),
-  }),
-  z.object({
-    type: z.literal('sleep'),
-    id: z.string(),
-    duration: z.number().describe('Milliseconds to wait. Static number only — function form does not round-trip.'),
-  }),
-  z.object({
-    type: z.literal('sleepUntil'),
-    id: z.string(),
-    date: z
-      .string()
-      .describe('ISO 8601 wall-clock date to wait until. Static string only — function form does not round-trip.'),
-  }),
-  z.object({
-    type: z.literal('conditional'),
-    steps: z
-      .array(singleStepEntry)
-      .describe(
-        'One step per branch. The predicate at the same index decides whether that branch fires. Multiple predicates may match; each matching branch runs.',
-      ),
-    predicates: z
-      .array(predicate)
-      .describe(
-        'Declarative predicate per branch, aligned by index with `steps`. Each predicate is a small JSON expression (see the `op` shapes) — no JS closures. Reference workflow inputs via `{ path: "initData.<field>" }`, previous step output via `{ path: "inputData.<field>" }`, and other step outputs via `{ path: "stepResults.<stepId>.<field>" }`.',
-      ),
-  }),
-  z.object({
-    type: z.literal('loop'),
-    step: singleStepEntry.describe('The step executed each iteration.'),
-    loopType: z
-      .enum(['dowhile', 'dountil'])
-      .describe(
-        '`dowhile` keeps looping while the predicate is TRUE; `dountil` keeps looping until the predicate is TRUE (exit condition).',
-      ),
-    predicate: predicate.describe('Declarative predicate — no JS closures. Same path scopes as `conditional`.'),
-  }),
-]);
+export { WORKFLOW_BUILDER_MAPPING_CONFIG_DESCRIPTION as MAPPING_CONFIG_DESCRIPTION } from '@mastra/core/workflows/builder';
 
 export const workflowDefinitionInputSchema = z.preprocess(
   normalizeWorkflowBuilderDefinition,
-  z.object({
-    id: z.string().describe('Workflow id — kebab-case, descriptive.'),
-    description: z.string().optional(),
-    inputSchema: z.any().describe('JSON Schema (Draft 2020-12) for the workflow input.'),
-    outputSchema: z.any().describe('JSON Schema (Draft 2020-12) for the workflow output.'),
-    stateSchema: z.any().optional().describe('Optional JSON Schema for persisted workflow state.'),
-    requestContextSchema: z.any().optional().describe('Optional JSON Schema for request context values.'),
-    graph: z
-      .array(graphEntry)
-      .describe(
-        'The workflow as an ordered array covering all ten persisted graph families: agent, tool, mapping, nested workflow, parallel, foreach, sleep, sleepUntil, conditional, and loop.',
-      ),
-  }),
+  workflowBuilderDefinitionSchema,
 );
 
 export const saveWorkflowTool = createTool({

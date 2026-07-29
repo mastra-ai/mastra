@@ -117,7 +117,13 @@ describe('workflow draft client tools', () => {
         resources: [
           { type: 'tool', found: true, registryKey: 'lookupCustomer', runtimeId: 'lookup-customer' },
           { type: 'agent', found: true, registryKey: 'supportAgent', runtimeId: 'support-agent' },
-          { type: 'workflow', found: true, registryKey: 'greetingWorkflow', runtimeId: 'greeting-workflow' },
+          {
+            type: 'workflow',
+            found: true,
+            registryKey: 'greetingWorkflow',
+            runtimeId: 'greeting-workflow',
+            authoritativeWorkflowId: 'greeting-workflow',
+          },
         ],
       });
     });
@@ -183,13 +189,61 @@ describe('workflow draft client tools', () => {
     });
   });
 
-  describe('when a previous submission is superseded', () => {
-    it('rejects before mutating the accepted draft', async () => {
+  describe('when a submission is superseded', () => {
+    it('returns an anti-apology superseded response that references the earlier accepted submission', async () => {
       const store = createStore({ isCurrentGeneration: () => false, context: validationContext });
       const result = await executeTool(store.tools['submit-workflow-draft'], validDefinition);
 
-      expect(result).toEqual({ success: false, error: 'Submission was superseded.' });
+      expect(result).toMatchObject({
+        success: false,
+        reason: 'superseded',
+        error: 'Submission was superseded.',
+      });
+      expect(result.message).toContain('earlier call');
+      expect(result.message).toContain('inspect-workflow-resources');
+      expect(result.message).toContain('Do NOT apologize');
       expect(store.state.revision).toBe(0);
+    });
+  });
+
+  describe('when submit-workflow-draft is called with empty arguments', () => {
+    it('returns an actionable diagnostic that names the provider truncation failure mode instead of a raw TypeError', async () => {
+      const store = createStore({ context: validationContext });
+      const result = await executeTool(store.tools['submit-workflow-draft'], {});
+
+      expect(result).toMatchObject({ success: false });
+      expect(result.error).toContain('No workflow definition arguments');
+      expect(result.message).toContain('provider may have truncated');
+      expect(result.message).toContain('complete WorkflowDefinition');
+      expect(result.message).toContain('Do NOT');
+      expect(store.state).toMatchObject({ revision: 0, lifecycle: 'untouched' });
+    });
+  });
+
+  describe('when a superseded submission structurally matches the accepted definition', () => {
+    it('confirms it as a no-op success referencing the earlier accepted revision', async () => {
+      // First accept a definition through a live store.
+      const live = createStore({ context: validationContext });
+      const first = await executeTool(live.tools['submit-workflow-draft'], validDefinition);
+      expect(first).toMatchObject({ success: true, lifecycle: 'ready' });
+
+      // Now issue a superseded resubmission with the same definition.
+      const supersededTools = createWorkflowDraftTools({
+        getState: () => live.state,
+        checkpoint: () => ({ ok: false, state: live.state, error: 'unexpected checkpoint' }),
+        finalize: () => ({ ok: false, state: live.state, error: 'unexpected finalize' }),
+        validationContext,
+        isCurrentGeneration: () => false,
+      });
+      const result = await executeTool(supersededTools['submit-workflow-draft'], validDefinition);
+
+      expect(result).toMatchObject({
+        success: true,
+        lifecycle: 'ready',
+        finalizedRevision: live.state.finalizedRevision,
+      });
+      expect(result.message).toContain('earlier');
+      expect(result.message).toContain('no-op');
     });
   });
 });

@@ -1,5 +1,9 @@
 import { createTool } from '@mastra/client-js';
-import { normalizeWorkflowBuilderDefinition } from '@mastra/core/workflows/builder';
+import {
+  normalizeWorkflowBuilderDefinition,
+  workflowBuilderDefinitionInputSchema,
+  workflowBuilderDefinitionSchema,
+} from '@mastra/core/workflows/builder';
 import type { WorkflowBuilderDefinition } from '@mastra/core/workflows/builder';
 import type { ClientToolsInput } from '@mastra/react';
 import { z } from 'zod-v4';
@@ -8,19 +12,16 @@ import type {
   WorkflowDraft,
   WorkflowDraftAuthoringResult,
   WorkflowDraftAuthoringState,
-  WorkflowDraftStep,
   WorkflowDraftValidationContext,
   WorkflowDraftValidationIssue,
 } from './workflow-draft';
 import { validateWorkflowDraft } from './workflow-draft';
-
-type WorkflowPredicate = Extract<WorkflowDraftStep, { type: 'conditional' }>['predicates'][number];
-
-const jsonSchema = z.record(z.string(), z.unknown());
 const inspectionResultSchema = z.record(z.string(), z.unknown());
 const resultSchema = z.object({
   success: z.boolean(),
+  reason: z.enum(['superseded']).optional(),
   error: z.string().optional(),
+  message: z.string().optional(),
   issues: z.array(z.object({ code: z.string(), path: z.string(), message: z.string() })).optional(),
   lifecycle: z.enum(['untouched', 'constructing', 'ready']).optional(),
   revision: z.number().int().nonnegative().optional(),
@@ -29,176 +30,13 @@ const resultSchema = z.object({
   baseAcceptedRevision: z.number().int().nonnegative().optional(),
 });
 
-const stepOptionsSchema = z
-  .object({ retries: z.number().int().nonnegative().optional(), metadata: jsonSchema.optional() })
-  .optional();
-const agentStepSchema = z.object({
-  type: z.literal('agent'),
-  id: z.string().min(1),
-  agentId: z.string().min(1),
-  outputSchema: jsonSchema.optional(),
-  options: stepOptionsSchema,
-});
-const agentStepInputSchema = z.object({
-  type: z.literal('agent'),
-  id: z.string().min(1),
-  agentId: z.string().min(1).optional(),
-  agent: z.string().min(1).optional(),
-  outputSchema: jsonSchema.optional(),
-  options: stepOptionsSchema,
-});
-const toolStepSchema = z.object({
-  type: z.literal('tool'),
-  id: z.string().min(1),
-  toolId: z.string().min(1),
-  options: stepOptionsSchema,
-});
-const mappingDescriptorInputSchema = z
-  .union([
-    z.object({ value: z.unknown() }).strict().describe('Constant source: { "value": <JSON value> }.'),
-    z
-      .object({ template: z.string().min(1) })
-      .strict()
-      .describe('Template source: { "template": "..." }.'),
-    z.object({ requestContextPath: z.string().min(1) }).strict(),
-    z
-      .object({ initData: z.literal(true), path: z.string().min(1) })
-      .strict()
-      .describe('Workflow-input source: { "initData": true, "path": "field.path" }. initData must be true.'),
-    z
-      .object({ step: z.union([z.string().min(1), z.array(z.string().min(1)).min(1)]), path: z.string() })
-      .strict()
-      .describe('Prior-step source: { "step": "step-id", "path": "field.path" }.'),
-  ])
-  .describe('Use exactly one source form. Never combine initData and step.');
-const mappingConfigInputSchema = z.record(z.string(), mappingDescriptorInputSchema);
-const mappingStepSchema = z.object({ type: z.literal('mapping'), id: z.string().min(1), mapConfig: z.string().min(1) });
-const mappingStepInputSchema = z
-  .object({
-    type: z.literal('mapping'),
-    id: z.string().min(1),
-    mapConfig: mappingConfigInputSchema.optional(),
-    output: mappingConfigInputSchema.optional(),
-  })
-  .refine(step => (step.mapConfig === undefined) !== (step.output === undefined), {
-    message: 'Provide exactly one of mapConfig or output.',
-  });
-const nestedWorkflowStepSchema = z.object({
-  type: z.literal('workflow'),
-  id: z.string().min(1),
-  workflowId: z.string().min(1),
-  options: stepOptionsSchema,
-});
-const executableInnerStepSchema = z.union([agentStepSchema, toolStepSchema, nestedWorkflowStepSchema]);
-const executableInnerStepInputSchema = z.union([agentStepInputSchema, toolStepSchema, nestedWorkflowStepSchema]);
-const literalScalarSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
-const predicatePathSchema = z
-  .string()
-  .regex(/^(initData|inputData|stepResults|state)(\.[A-Za-z0-9_-]+)*$/, 'Use a canonical predicate path root.');
-const pathOrLiteralSchema = z.union([
-  z.object({ path: predicatePathSchema }),
-  z.object({ literal: literalScalarSchema }),
-]);
-const predicateSchema: z.ZodType<WorkflowPredicate> = z.lazy(() =>
-  z.union([
-    z.object({
-      op: z.enum(['eq', 'ne', 'lt', 'lte', 'gt', 'gte']),
-      left: pathOrLiteralSchema,
-      right: pathOrLiteralSchema,
-    }),
-    z.object({ op: z.enum(['in', 'notIn']), value: pathOrLiteralSchema, set: z.array(literalScalarSchema).min(1) }),
-    z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }),
-    z.object({ op: z.enum(['truthy', 'falsy']), value: pathOrLiteralSchema }),
-    z.object({ op: z.enum(['and', 'or']), args: z.array(predicateSchema).min(1) }),
-    z.object({ op: z.literal('not'), arg: predicateSchema }),
-  ]),
+export const workflowDefinitionInputSchema = workflowBuilderDefinitionInputSchema.describe(
+  'One complete canonical WorkflowDefinition. Submit exactly one candidate per attempt, never parallel alternatives. After diagnostics, correct and resubmit the whole definition. A successful submission becomes Ready automatically but is not persisted until the user clicks Save.',
 );
-const parallelStepSchema = z.object({ type: z.literal('parallel'), steps: z.array(executableInnerStepSchema).min(1) });
-const parallelStepInputSchema = z.object({
-  type: z.literal('parallel'),
-  steps: z.array(executableInnerStepInputSchema).min(1),
-});
-const foreachStepSchema = z.object({
-  type: z.literal('foreach'),
-  step: executableInnerStepSchema,
-  opts: z.object({ concurrency: z.number().int().positive() }).optional(),
-});
-const foreachStepInputSchema = z.object({
-  type: z.literal('foreach'),
-  step: executableInnerStepInputSchema,
-  opts: z.object({ concurrency: z.number().int().positive() }).optional(),
-});
-const sleepStepSchema = z.object({
-  type: z.literal('sleep'),
-  id: z.string().min(1),
-  duration: z.number().nonnegative(),
-});
-const sleepUntilStepSchema = z.object({
-  type: z.literal('sleepUntil'),
-  id: z.string().min(1),
-  date: z.string().min(1),
-});
-const conditionalStepSchema = z.object({
-  type: z.literal('conditional'),
-  steps: z.array(executableInnerStepSchema).min(1),
-  predicates: z.array(predicateSchema).min(1),
-});
-const conditionalStepInputSchema = z.object({
-  type: z.literal('conditional'),
-  steps: z.array(executableInnerStepInputSchema).min(1),
-  predicates: z.array(predicateSchema).min(1),
-});
-const loopStepSchema = z.object({
-  type: z.literal('loop'),
-  step: executableInnerStepSchema,
-  loopType: z.enum(['dowhile', 'dountil']),
-  predicate: predicateSchema,
-});
-const loopStepInputSchema = z.object({
-  type: z.literal('loop'),
-  step: executableInnerStepInputSchema,
-  loopType: z.enum(['dowhile', 'dountil']),
-  predicate: predicateSchema,
-});
-const workflowStepSchema = z.discriminatedUnion('type', [
-  agentStepSchema,
-  toolStepSchema,
-  mappingStepSchema,
-  nestedWorkflowStepSchema,
-  parallelStepSchema,
-  foreachStepSchema,
-  sleepStepSchema,
-  sleepUntilStepSchema,
-  conditionalStepSchema,
-  loopStepSchema,
-]);
-const workflowStepInputSchema = z.discriminatedUnion('type', [
-  agentStepInputSchema,
-  toolStepSchema,
-  mappingStepInputSchema,
-  nestedWorkflowStepSchema,
-  parallelStepInputSchema,
-  foreachStepInputSchema,
-  sleepStepSchema,
-  sleepUntilStepSchema,
-  conditionalStepInputSchema,
-  loopStepInputSchema,
-]);
-
-export const workflowDefinitionInputSchema = z.object({
-  id: z.string().min(1),
-  description: z.string().optional(),
-  inputSchema: jsonSchema,
-  outputSchema: jsonSchema,
-  stateSchema: jsonSchema.nullish(),
-  requestContextSchema: jsonSchema.nullish(),
-  graph: z.array(workflowStepInputSchema).min(1),
-});
-const normalizedWorkflowDefinitionSchema = workflowDefinitionInputSchema.extend({ graph: z.array(workflowStepSchema) });
 
 export function parseWorkflowDefinitionInput(input: unknown): WorkflowBuilderDefinition {
   const normalized = normalizeWorkflowBuilderDefinition(input);
-  normalizedWorkflowDefinitionSchema.parse(normalized);
+  workflowBuilderDefinitionSchema.parse(normalized);
   return normalized;
 }
 
@@ -211,7 +49,7 @@ function parseWorkflowDraftInput(input: unknown): WorkflowDraft {
     outputSchema: normalized.outputSchema,
     stateSchema: normalized.stateSchema,
     requestContextSchema: normalized.requestContextSchema,
-    graph: normalized.graph.map(step => workflowStepSchema.parse(step)),
+    graph: normalized.graph as WorkflowDraft['graph'],
   };
 }
 
@@ -249,7 +87,69 @@ export interface WorkflowDraftToolStore {
   onCandidateChange?: (candidate: WorkflowDraftCandidate) => void;
 }
 
-const supersededResult = { success: false as const, error: 'Submission was superseded.' };
+const SUPERSEDED_MESSAGE =
+  'This tool call was superseded by another call in the same turn. An earlier call for this workflow was accepted first and remains the current accepted state. Do NOT apologize, retry, or claim the workflow is broken based on this response. Call inspect-workflow-resources to see the actual accepted definition before saying anything about persistence, schema, mapping form, or graph shape.';
+
+const SUPERSEDED_NOOP_MESSAGE =
+  'This submission structurally matched the earlier accepted revision for this workflow; treating it as a no-op confirmation. The workflow is Ready and awaiting the user’s explicit Save. Do NOT resubmit, apologize, or claim the workflow is broken.';
+
+const EMPTY_ARGUMENTS_ERROR = 'No workflow definition arguments were received.';
+const EMPTY_ARGUMENTS_MESSAGE =
+  'submit-workflow-draft was invoked without any arguments. The provider may have truncated or dropped the tool call payload. Retry once by sending a single complete WorkflowDefinition object as the tool arguments (id, description, inputSchema, outputSchema, graph). Do NOT retry with the same empty payload, do NOT apologize, and do NOT claim the workflow is broken.';
+
+function isEmptyArguments(input: unknown): boolean {
+  if (input === undefined || input === null) return true;
+  if (typeof input !== 'object') return false;
+  return Object.keys(input as Record<string, unknown>).length === 0;
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const keys = Object.keys(value as Record<string, unknown>).sort();
+  const entries = keys
+    .map(k => {
+      const v = (value as Record<string, unknown>)[k];
+      if (v === undefined) return undefined;
+      return `${JSON.stringify(k)}:${stableStringify(v)}`;
+    })
+    .filter((entry): entry is string => entry !== undefined);
+  return `{${entries.join(',')}}`;
+}
+
+function draftsStructurallyEqual(a: WorkflowDraft, b: WorkflowDraft): boolean {
+  return stableStringify(a) === stableStringify(b);
+}
+
+function makeSupersededResult(store: WorkflowDraftToolStore, input?: unknown) {
+  const state = store.getState();
+  if (state.lifecycle === 'ready' && input !== undefined) {
+    try {
+      const submitted = parseWorkflowDraftInput(input);
+      if (draftsStructurallyEqual(submitted, state.draft)) {
+        return {
+          success: true as const,
+          lifecycle: state.lifecycle,
+          revision: state.revision,
+          finalizedRevision: state.finalizedRevision,
+          baseAcceptedRevision: state.revision,
+          message: SUPERSEDED_NOOP_MESSAGE,
+        };
+      }
+    } catch {
+      // Fall through to the superseded rejection path.
+    }
+  }
+  return {
+    success: false as const,
+    reason: 'superseded' as const,
+    error: 'Submission was superseded.',
+    message: SUPERSEDED_MESSAGE,
+    lifecycle: state.lifecycle,
+    finalizedRevision: state.finalizedRevision,
+    baseAcceptedRevision: state.revision,
+  };
+}
 
 function publishCandidate(store: WorkflowDraftToolStore, candidate: WorkflowDraftCandidate) {
   store.onCandidateChange?.({ ...candidate, draft: structuredClone(candidate.draft), issues: [...candidate.issues] });
@@ -279,7 +179,7 @@ function inspectResource(store: WorkflowDraftToolStore, request: z.infer<typeof 
     runtimeId: entry.runtimeId,
     inputSchema: entry.inputSchema,
     outputSchema: entry.outputSchema,
-    ...(request.type === 'workflow' ? { authoritativeWorkflowId: request.registryKey } : {}),
+    ...(request.type === 'workflow' ? { authoritativeWorkflowId: entry.runtimeId ?? request.registryKey } : {}),
   };
 }
 
@@ -325,7 +225,19 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
       inputSchema: workflowDefinitionInputSchema,
       outputSchema: resultSchema,
       execute: async input => {
-        if (store.isCurrentGeneration?.() === false) return supersededResult;
+        if (store.isCurrentGeneration?.() === false) return makeSupersededResult(store, input);
+
+        if (isEmptyArguments(input)) {
+          const state = store.getState();
+          return reportResult(store, 'submit-workflow-draft', {
+            success: false as const,
+            error: EMPTY_ARGUMENTS_ERROR,
+            message: EMPTY_ARGUMENTS_MESSAGE,
+            lifecycle: state.lifecycle,
+            finalizedRevision: state.finalizedRevision,
+            baseAcceptedRevision: state.revision,
+          });
+        }
 
         candidate.draft = parseWorkflowDraftInput(input);
         candidate.revision += 1;
@@ -359,7 +271,7 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
           });
         }
 
-        if (store.isCurrentGeneration?.() === false) return supersededResult;
+        if (store.isCurrentGeneration?.() === false) return makeSupersededResult(store, input);
         const finalize = store.finalize(checkpoint.state.revision);
         if (!finalize.ok) {
           candidate.issues = finalize.issues ?? [];

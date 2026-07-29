@@ -47,27 +47,93 @@ const objectSchema = (properties: Record<string, unknown>, required: string[]) =
 
 const stringSchema = { type: 'string' };
 
-const repairFixture = (
-  definition: Record<string, unknown>,
-  inspection: [string, Record<string, unknown>],
-  repair: [string, Record<string, unknown>],
-  candidateRevision: number,
-) => [
-  toolCallTurn([['workflow-checkpoint', 'checkpoint-workflow-draft', definition]]),
-  toolCallTurn([['workflow-finalize-rejected', 'finalize-workflow-draft', { expectedRevision: 1 }]]),
-  toolCallTurn([[`${definition.id}-inspect`, inspection[0], inspection[1]]]),
-  toolCallTurn([[`${definition.id}-repair`, repair[0], repair[1]]]),
-  toolCallTurn([[`${definition.id}-checkpoint`, 'checkpoint-workflow-candidate', { candidateRevision }]]),
-  stopTurn(String(definition.id)),
+/**
+ * Deterministic adversarial journey under the unified 2-tool contract:
+ * the first `submit-workflow-draft` carries a provably invalid complete
+ * definition (rejected with Core diagnostics, accepted state untouched),
+ * the second carries the corrected complete definition and becomes Ready.
+ */
+const repairFixture = (invalidDefinition: Record<string, unknown>, correctedDefinition: Record<string, unknown>) => [
+  toolCallTurn([[`${correctedDefinition.id}-submit-invalid`, 'submit-workflow-draft', invalidDefinition]]),
+  toolCallTurn([[`${correctedDefinition.id}-submit-corrected`, 'submit-workflow-draft', correctedDefinition]]),
+  stopTurn(String(correctedDefinition.id)),
 ];
 
+const customerTicketCorrected = {
+  id: 'customer-ticket-workflow',
+  description: 'Creates a customer support ticket.',
+  inputSchema: objectSchema({ email: stringSchema, summary: stringSchema }, ['email', 'summary']),
+  outputSchema: objectSchema({ ticketId: stringSchema, status: stringSchema }, ['ticketId', 'status']),
+  graph: [
+    {
+      type: 'mapping',
+      id: 'shape-ticket-input',
+      mapConfig: { ticketId: { value: 'ticket-456' }, status: { value: 'open' } },
+    },
+  ],
+};
+
+const parallelLookupCorrected = {
+  id: 'parallel-customer-lookup-workflow',
+  description: 'Looks up two customers.',
+  inputSchema: objectSchema({ firstEmail: stringSchema, secondEmail: stringSchema }, ['firstEmail', 'secondEmail']),
+  outputSchema: objectSchema({ firstCustomer: {}, secondCustomer: {} }, ['firstCustomer', 'secondCustomer']),
+  graph: [
+    {
+      type: 'mapping',
+      id: 'lookup-customers',
+      mapConfig: {
+        firstCustomer: { value: { customerId: 'customer-123', email: 'ada@example.com', plan: 'pro' } },
+        secondCustomer: { value: { customerId: 'customer-123', email: 'grace@example.com', plan: 'pro' } },
+      },
+    },
+  ],
+};
+
+const priorityRouterCorrected = {
+  id: 'priority-support-router',
+  description: 'Routes urgent support requests.',
+  inputSchema: objectSchema({ prompt: stringSchema, priority: stringSchema }, ['prompt', 'priority']),
+  outputSchema: objectSchema({ branch: stringSchema, response: stringSchema }, ['branch', 'response']),
+  graph: [
+    {
+      type: 'conditional',
+      steps: [{ type: 'tool', id: 'urgent', toolId: 'urgentSupport' }],
+      predicates: [{ op: 'eq', left: { path: 'initData.priority' }, right: { literal: 'urgent' } }],
+    },
+    {
+      type: 'mapping',
+      id: 'shape-priority-result',
+      mapConfig: {
+        branch: { value: 'urgent' },
+        response: { step: 'urgent', path: 'response' },
+      },
+    },
+  ],
+};
+
+const mixedPipelineCorrected = {
+  id: 'mixed-support-pipeline',
+  description: 'Builds a mixed support response.',
+  inputSchema: objectSchema({ email: stringSchema, summary: stringSchema }, ['email', 'summary']),
+  outputSchema: {},
+  graph: [
+    {
+      type: 'mapping',
+      id: 'support-parallel',
+      mapConfig: {
+        agentText: { value: 'Reset your password.' },
+        ticket: { value: { ticketId: 'ticket-456', status: 'open' } },
+      },
+    },
+  ],
+};
+
 export const workflowBuilderAdversarialRepairFixtures = {
+  // Invalid: mapping references a step that does not exist.
   'workflow-builder-adversarial-customer-ticket': repairFixture(
     {
-      id: 'customer-ticket-workflow',
-      description: 'Creates a customer support ticket.',
-      inputSchema: objectSchema({ email: stringSchema, summary: stringSchema }, ['email', 'summary']),
-      outputSchema: objectSchema({ ticketId: stringSchema, status: stringSchema }, ['ticketId', 'status']),
+      ...customerTicketCorrected,
       graph: [
         {
           type: 'mapping',
@@ -76,99 +142,55 @@ export const workflowBuilderAdversarialRepairFixtures = {
         },
       ],
     },
-    ['get-tool-schema', { registryKey: 'lookupCustomer' }],
-    [
-      'set-workflow-mapping-source',
-      { mappingStepId: 'shape-ticket-input', field: 'status', source: { value: 'open' } },
-    ],
-    1,
+    customerTicketCorrected,
   ),
+  // Invalid: Handlebars-style template placeholders the runtime would emit literally.
   'workflow-builder-adversarial-parallel-lookup': repairFixture(
     {
-      id: 'parallel-customer-lookup-workflow',
-      description: 'Looks up two customers.',
-      inputSchema: objectSchema({ firstEmail: stringSchema, secondEmail: stringSchema }, ['firstEmail', 'secondEmail']),
-      outputSchema: objectSchema({ firstCustomer: {}, secondCustomer: {} }, ['firstCustomer', 'secondCustomer']),
+      ...parallelLookupCorrected,
       graph: [
         {
           type: 'mapping',
           id: 'lookup-customers',
           mapConfig: {
-            firstCustomer: { value: { customerId: 'customer-123', email: 'ada@example.com', plan: 'pro' } },
+            firstCustomer: { template: 'Customer {{firstEmail}}' },
             secondCustomer: { value: { customerId: 'customer-123', email: 'grace@example.com', plan: 'pro' } },
           },
         },
       ],
     },
-    ['list-compatible-sources', { targetStepId: 'lookup-customers' }],
-    [
-      'insert-workflow-mapping-before',
-      {
-        targetStepId: 'lookup-customers',
-        mappingStepId: 'shape-parallel-input',
-        mapConfig: { secondEmail: { value: 'grace@example.com' } },
-      },
-    ],
-    2,
+    parallelLookupCorrected,
   ),
+  // Invalid: conditional predicate references a step result that does not exist.
   'workflow-builder-adversarial-priority-router': repairFixture(
     {
-      id: 'priority-support-router',
-      description: 'Routes urgent support requests.',
-      inputSchema: objectSchema({ prompt: stringSchema, priority: stringSchema }, ['prompt', 'priority']),
-      outputSchema: objectSchema({ branch: stringSchema, response: stringSchema }, ['branch', 'response']),
+      ...priorityRouterCorrected,
       graph: [
         {
           type: 'conditional',
           steps: [{ type: 'tool', id: 'urgent', toolId: 'urgentSupport' }],
           predicates: [{ op: 'truthy', value: { path: 'stepResults.missing' } }],
         },
-        {
-          type: 'mapping',
-          id: 'shape-priority-result',
-          mapConfig: {
-            branch: { value: 'urgent' },
-            response: { step: 'urgent', path: 'response' },
-          },
-        },
+        (priorityRouterCorrected.graph as Array<Record<string, unknown>>)[1]!,
       ],
     },
-    ['explain-validation-issue', { code: 'invalid-predicate-reference', path: 'graph.0.predicates.0.value.path' }],
-    [
-      'set-workflow-predicate',
-      {
-        targetStepId: 'urgent',
-        predicate: { op: 'eq', left: { path: 'initData.priority' }, right: { literal: 'urgent' } },
-      },
-    ],
-    1,
+    priorityRouterCorrected,
   ),
+  // Invalid: Handlebars-style template placeholder in the final mapping.
   'workflow-builder-adversarial-mixed-pipeline': repairFixture(
     {
-      id: 'mixed-support-pipeline',
-      description: 'Builds a mixed support response.',
-      inputSchema: objectSchema({ email: stringSchema, summary: stringSchema }, ['email', 'summary']),
-      outputSchema: {},
+      ...mixedPipelineCorrected,
       graph: [
         {
           type: 'mapping',
           id: 'support-parallel',
           mapConfig: {
-            agentText: { value: 'Reset your password.' },
+            agentText: { template: 'Answer: {{summary}}' },
             ticket: { value: { ticketId: 'ticket-456', status: 'open' } },
           },
         },
       ],
     },
-    ['get-workflow-schema', { registryKey: 'complexWorkflow' }],
-    [
-      'insert-workflow-mapping-before',
-      {
-        targetStepId: 'support-parallel',
-        mappingStepId: 'shape-mixed-input',
-        mapConfig: { email: { value: 'ada@example.com' } },
-      },
-    ],
-    2,
+    mixedPipelineCorrected,
   ),
 } as const;
