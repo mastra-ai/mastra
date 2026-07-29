@@ -7,3 +7,10 @@
 ---
 
 Added persistence for dataset item undeclared tool policies.
+
+```typescript
+await dataset.addItem({
+  input: 'What is the weather?',
+  unmockedToolPolicy: 'deny',
+});
+```

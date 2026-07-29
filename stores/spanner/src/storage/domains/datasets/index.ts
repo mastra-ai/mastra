@@ -161,7 +161,7 @@ export class DatasetsSpanner extends DatasetsStorage {
     await this.db.alterTable({
       tableName: TABLE_DATASET_ITEMS,
       schema: TABLE_SCHEMAS[TABLE_DATASET_ITEMS],
-      ifNotExists: ['organizationId', 'projectId', 'externalId'],
+      ifNotExists: ['organizationId', 'projectId', 'externalId', 'unmockedToolPolicy'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
