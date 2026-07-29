@@ -24,29 +24,26 @@ function mockAccounts(accounts: ConnectedChannelAccount[], canConnect = true) {
   server.use(http.get(`${TEST_BASE_URL}/web/channel-accounts`, () => HttpResponse.json({ accounts, canConnect })));
 }
 
-function mockFactories() {
+function mockFactories(slackWorkItemsEnabled = false) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
         projects: [
-          { id: 'fp-1', name: 'OM Game' },
-          { id: 'fp-2', name: 'Mastra OSS' },
+          { id: 'fp-1', name: 'OM Game', slackWorkItemsEnabled },
+          { id: 'fp-2', name: 'Mastra OSS', slackWorkItemsEnabled: false },
         ],
       }),
     ),
   );
 }
 
-function renderPage() {
-  mockFactories();
+function renderPage(slackWorkItemsEnabled = false) {
+  mockFactories(slackWorkItemsEnabled);
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1/settings/connected-accounts/slack']}>
       <MainSidebarProvider storageKey="slack-connection-page-test" mobileBreakpoint={0}>
         <Routes>
-          <Route
-            path="/factories/:factoryId/settings/connected-accounts/slack"
-            element={<SlackConnectionPage />}
-          />
+          <Route path="/factories/:factoryId/settings/connected-accounts/slack" element={<SlackConnectionPage />} />
         </Routes>
       </MainSidebarProvider>
     </MemoryRouter>,
@@ -72,6 +69,26 @@ describe('SlackConnectionPage', () => {
 
     expect(await screen.findByText('Not connected')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Connect Slack' })).toBeEnabled();
+  });
+
+  it('given a linked account, when work-item creation is enabled, then it updates the active Factory', async () => {
+    mockAccounts([slackLink]);
+    let patchBody: unknown;
+    server.use(
+      http.patch(`${TEST_BASE_URL}/web/factory/projects/fp-1`, async ({ request }) => {
+        patchBody = await request.json();
+        return HttpResponse.json({ project: { id: 'fp-1', name: 'OM Game', slackWorkItemsEnabled: true } });
+      }),
+    );
+    const { client } = renderPage();
+    const user = userEvent.setup();
+    const workItemSwitch = await screen.findByRole('switch', { name: 'Create work item for new Slack threads' });
+    expect(workItemSwitch).not.toBeChecked();
+
+    await user.click(workItemSwitch);
+
+    await waitFor(() => expect(patchBody).toEqual({ slackWorkItemsEnabled: true }));
+    await waitFor(() => expect(client.isMutating()).toBe(0));
   });
 
   it('given a linked account, when disconnected, then it sends the sender key and returns to the connect state', async () => {

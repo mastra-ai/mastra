@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
+import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Slack } from 'lucide-react';
@@ -11,6 +12,7 @@ import {
   useDisconnectChannelAccountMutation,
   useSetDefaultFactoryMutation,
 } from '../../hooks/useChannelAccounts';
+import { useSetFactorySlackWorkItemsMutation } from '../../hooks/useFactoryDefaultModel';
 import { useFactoriesQuery } from '../../hooks/useFactories';
 import { ConnectionSettingsShell } from '../domains/settings/components/ConnectionSettingsShell';
 import { SettingsCard, SettingsRow } from '../domains/settings/components/SettingsCard';
@@ -38,10 +40,12 @@ export function SlackConnectionSettings() {
   const factoriesQuery = useFactoriesQuery();
   const disconnectMutation = useDisconnectChannelAccountMutation();
   const setDefaultFactoryMutation = useSetDefaultFactoryMutation();
+  const slackWorkItemsMutation = useSetFactorySlackWorkItemsMutation(factoryId);
 
   const account = accountsQuery.data?.accounts.find(candidate => candidate.platform === 'slack');
   const canConnect = accountsQuery.data?.canConnect ?? false;
   const factories = factoriesQuery.data ?? [];
+  const factory = factories.find(candidate => candidate.id === factoryId);
 
   const connectSlack = () => {
     window.location.assign(connectSlackUrl(baseUrl));
@@ -147,6 +151,28 @@ export function SlackConnectionSettings() {
                     ))}
                   </SelectContent>
                 </Select>
+              </SettingsRow>
+            </SettingsCard>
+          </SettingsSubsection>
+
+          <SettingsSubsection title="Session behavior">
+            <SettingsCard>
+              <SettingsRow
+                label="Create work item for new threads"
+                hint="Add new Slack thread sessions to this Factory's Work board in Building."
+              >
+                <Switch
+                  aria-label="Create work item for new Slack threads"
+                  checked={factory?.slackWorkItemsEnabled ?? false}
+                  disabled={!factoryId || factoriesQuery.isPending || slackWorkItemsMutation.isPending}
+                  onCheckedChange={enabled =>
+                    slackWorkItemsMutation.mutate(enabled, {
+                      onSuccess: () => toast.success('Slack session behavior updated'),
+                      onError: error =>
+                        toast.error(error instanceof Error ? error.message : 'Failed to update Slack session behavior'),
+                    })
+                  }
+                />
               </SettingsRow>
             </SettingsCard>
           </SettingsSubsection>

@@ -18,7 +18,6 @@ import { useEffect, useRef, useState } from 'react';
 
 import { DONE_SOUND_OPTIONS, loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
 import type { DoneSound } from '../services/doneSound';
-import { ConnectedAccountsSection } from './ConnectedAccountsSection';
 import { SettingsCard, SettingsRow } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 
@@ -53,36 +52,28 @@ export function GeneralSettings({ theme, onThemeChange }: GeneralSettingsProps) 
     playDoneSound(next);
   };
   return (
-    <div className="flex flex-col gap-8">
-      <SettingsCard>
-        <SettingsRow label="Theme" hint="Color scheme for the interface">
-          <Segmented
-            ariaLabel="Theme"
-            value={theme}
-            options={[
-              { value: 'system', label: 'System' },
-              { value: 'light', label: 'Light' },
-              { value: 'dark', label: 'Dark' },
-            ]}
-            onChange={onThemeChange}
-          />
-        </SettingsRow>
-        <SettingsRow label="Completion sound" hint="Played when an agent run finishes in a workspace">
-          <Segmented
-            ariaLabel="Completion sound"
-            value={doneSound}
-            options={DONE_SOUND_OPTIONS}
-            onChange={changeDoneSound}
-          />
-        </SettingsRow>
-      </SettingsCard>
-      <SettingsSubsection
-        title="Connected accounts"
-        description="Connect communication services to run Factory sessions as your Mastra account."
-      >
-        <ConnectedAccountsSection />
-      </SettingsSubsection>
-    </div>
+    <SettingsCard>
+      <SettingsRow label="Theme" hint="Color scheme for the interface">
+        <Segmented
+          ariaLabel="Theme"
+          value={theme}
+          options={[
+            { value: 'system', label: 'System' },
+            { value: 'light', label: 'Light' },
+            { value: 'dark', label: 'Dark' },
+          ]}
+          onChange={onThemeChange}
+        />
+      </SettingsRow>
+      <SettingsRow label="Completion sound" hint="Played when an agent run finishes in a workspace">
+        <Segmented
+          ariaLabel="Completion sound"
+          value={doneSound}
+          options={DONE_SOUND_OPTIONS}
+          onChange={changeDoneSound}
+        />
+      </SettingsRow>
+    </SettingsCard>
   );
 }
 

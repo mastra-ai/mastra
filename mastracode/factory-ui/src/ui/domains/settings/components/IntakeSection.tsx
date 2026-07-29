@@ -9,18 +9,15 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
-import { useSetFactorySlackWorkItemsMutation } from '../../../../hooks/useFactoryDefaultModel';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { connectLinear, isLinearReauthError } from '../../factory/services/linear';
 import type { LinearProject } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
-import { useFactoriesQuery, useFactoryQuery } from '../../../../hooks/useFactories';
+import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { SettingsCard, SettingsRow } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 
@@ -146,14 +143,10 @@ const INTAKE_INTRO =
   'Which sources feed issues into Intake, for your whole account. Code access is set under Repositories.';
 
 export function IntakeSection() {
-  const { factoryId } = useParams<{ factoryId: string }>();
   const { baseUrl } = useApiConfig();
   const configQuery = useIntakeConfigQuery();
   const saveMutation = useSaveIntakeConfigMutation();
   const factoriesQuery = useFactoriesQuery();
-  const factoryQuery = useFactoryQuery(factoryId);
-  const slackAccountsQuery = useChannelAccountsQuery();
-  const slackMutation = useSetFactorySlackWorkItemsMutation(factoryId);
   const linearStatusQuery = useLinearStatusQuery();
 
   const linearStatus = linearStatusQuery.data;
@@ -162,10 +155,6 @@ export function IntakeSection() {
 
   const config = configQuery.data;
   const linkedRepositories = (factoriesQuery.data ?? []).flatMap(factory => factory.repositories);
-  const slackConfigured = Boolean(
-    slackAccountsQuery.data?.canConnect ||
-    slackAccountsQuery.data?.accounts.some(account => account.platform === 'slack'),
-  );
 
   if (configQuery.isPending) {
     return (
@@ -303,30 +292,6 @@ export function IntakeSection() {
               </div>
             )
           )}
-        </SettingsCard>
-      </SettingsSubsection>
-
-      <SettingsSubsection
-        title="Slack sessions"
-        description="Choose whether new Slack sessions create cards in this Factory's Work board."
-      >
-        <SettingsCard>
-          <SettingsRow
-            label="Create work items"
-            hint={slackConfigured ? 'New Slack threads start in Building.' : 'Slack is not configured on this server.'}
-          >
-            <Switch
-              aria-label="Create work items for Slack sessions"
-              checked={factoryQuery.data?.slackWorkItemsEnabled ?? false}
-              disabled={!factoryId || !slackConfigured || factoryQuery.isPending || slackMutation.isPending}
-              onCheckedChange={enabled =>
-                slackMutation.mutate(enabled, {
-                  onSuccess: () => toast.success('Slack intake updated'),
-                  onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save Slack intake'),
-                })
-              }
-            />
-          </SettingsRow>
         </SettingsCard>
       </SettingsSubsection>
     </>
