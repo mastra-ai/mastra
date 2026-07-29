@@ -81,6 +81,8 @@ describe('ChatLayout', () => {
         <ChatLayout sidebar={<div />} content={<div>second-content</div>} rightPanel={<StatefulRightPanel />} />,
       );
 
+      expect(screen.getByText('second-content')).toBeInTheDocument();
+      expect(screen.queryByText('first-content')).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'right-panel-opened' })).toBeInTheDocument();
     });
 
