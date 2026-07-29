@@ -120,8 +120,6 @@ describe('workspaceDepsWatcher', () => {
 
       // Edit workspace package only — this is the core HMR bug case.
       await writeFile(sourceFile, `export const PACKAGE_VALUE = 'Package value is AFTER.';\n`);
-      // Ensure mtime is newer than lastOptimizedAt set during first buildStart.
-      await new Promise(resolve => setTimeout(resolve, 20));
 
       await buildStart.call({ addWatchFile });
 
@@ -135,7 +133,6 @@ describe('workspaceDepsWatcher', () => {
         entryFile,
         `import { PACKAGE_VALUE } from '@internal/shared-lib';\nexport const APP_SUFFIX = 'App value is AFTER.';\nexport const value = \`\${PACKAGE_VALUE} \${APP_SUFFIX}\`;\n`,
       );
-      await new Promise(resolve => setTimeout(resolve, 20));
 
       await buildStart.call({ addWatchFile });
 

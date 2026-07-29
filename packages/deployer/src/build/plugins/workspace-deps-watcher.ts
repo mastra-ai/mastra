@@ -40,7 +40,6 @@ export function workspaceDepsWatcher(options: WorkspaceDepsWatcherOptions): Plug
     options;
 
   let isFirstBuild = true;
-  let lastOptimizedAt = Date.now();
 
   const usedPackageRoots = collectUsedPackageRoots(depsToOptimize, workspaceMap);
   const cachePaths = collectAbsoluteCachePaths(optimizedDependencyFiles, workspaceRoot);
@@ -57,12 +56,10 @@ export function workspaceDepsWatcher(options: WorkspaceDepsWatcherOptions): Plug
       // Initial optimize already ran in getWatcherInputOptions / analyzeBundle.
       if (isFirstBuild) {
         isFirstBuild = false;
-        lastOptimizedAt = Date.now();
         return;
       }
 
-      const needsReoptimize =
-        (await isCacheMissing(cachePaths)) || (await isSourceNewerThan(sourceFiles, lastOptimizedAt));
+      const needsReoptimize = await isWorkspaceOutputStale(sourceFiles, cachePaths);
 
       if (!needsReoptimize) {
         return;
@@ -82,8 +79,6 @@ export function workspaceDepsWatcher(options: WorkspaceDepsWatcherOptions): Plug
         workspaceMap,
         platform,
       });
-
-      lastOptimizedAt = Date.now();
     },
   };
 }
@@ -146,11 +141,25 @@ async function isCacheMissing(cachePaths: string[]): Promise<boolean> {
   return false;
 }
 
-async function isSourceNewerThan(sourceFiles: string[], lastOptimizedAt: number): Promise<boolean> {
+async function isWorkspaceOutputStale(sourceFiles: string[], cachePaths: string[]): Promise<boolean> {
+  if (await isCacheMissing(cachePaths)) {
+    return true;
+  }
+
+  let cacheBaselineMs = 0;
+  for (const cachePath of cachePaths) {
+    try {
+      const { mtimeMs } = await stat(cachePath);
+      cacheBaselineMs = Math.max(cacheBaselineMs, mtimeMs);
+    } catch {
+      return true;
+    }
+  }
+
   for (const file of sourceFiles) {
     try {
       const { mtimeMs } = await stat(file);
-      if (mtimeMs >= lastOptimizedAt) {
+      if (mtimeMs > cacheBaselineMs) {
         return true;
       }
     } catch {
@@ -158,6 +167,7 @@ async function isSourceNewerThan(sourceFiles: string[], lastOptimizedAt: number)
       return true;
     }
   }
+
   return false;
 }
 
