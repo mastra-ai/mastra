@@ -4,6 +4,7 @@ import { Agent } from '../../agent';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
 import { AgentChannels } from '../agent-channels';
+import { getChatModule } from '../chat-lazy';
 import { matchesDomain, extractUrls } from '../inline-media';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
@@ -725,6 +726,53 @@ describe('AgentChannels', () => {
         expect.objectContaining({ resourceId: 'original-owner' }),
       );
     });
+
+    it('does not create a thread when an approval action has no mapping', async () => {
+      const adapter = createMockAdapter('discord');
+      adapter.channelIdFromThreadId.mockImplementation((id: string) => id.split(':')[0]);
+      const resolveResourceId = vi.fn(async () => 'sso-owner');
+      const resolveThreadId = vi.fn(async () => 'resolved-thread');
+      const channels = new AgentChannels({
+        adapters: { discord: adapter },
+        resolveResourceId,
+        resolveThreadId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+      channels.__setLogger(logger as any);
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+
+      await (channels.sdk as any).processAction({
+        actionId: 'tool_approve:tool-call-1',
+        adapter,
+        messageId: 'approval-card-1',
+        threadId: 'channel-1:thread-1',
+        user: { userId: 'clicker-1', userName: 'clicker', fullName: 'Clicker' },
+        raw: {},
+      });
+
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      const { threads } = await memoryStore.listThreads({
+        filter: {
+          metadata: {
+            channel_platform: 'discord',
+            channel_externalThreadId: 'channel-1:thread-1',
+            channel_externalChannelId: 'channel-1',
+          },
+        },
+        perPage: 10,
+      });
+      expect(threads).toHaveLength(0);
+      expect(resolveResourceId).not.toHaveBeenCalled();
+      expect(resolveThreadId).not.toHaveBeenCalled();
+      expect(adapter.editMessage).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('No mapped channel thread found for tool approval action'),
+        expect.anything(),
+      );
+    });
   });
 
   describe('resolveThreadId', () => {
@@ -903,6 +951,69 @@ describe('AgentChannels', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('handler context', () => {
+    const message = {
+      id: 'message-1',
+      text: 'hi',
+      author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+      attachments: [],
+    } as any;
+
+    function makeMastra() {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      return {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+    }
+
+    function makeChatThread(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: true,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+        ...overrides,
+      } as any;
+    }
+
+    it('passes the resolved Mastra instance to a custom handler as ctx.mastra', async () => {
+      const chatMod = await getChatModule();
+      // Capture the wrapper AgentChannels registers with the Chat SDK so we can
+      // drive it directly and inspect what it forwards to our custom handler.
+      let registeredDMWrapper: ((thread: any, message: any) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const onDirectMessage = vi.fn(async () => {});
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+
+      expect(registeredDMWrapper).toBeTypeOf('function');
+
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, message);
+
+      expect(onDirectMessage).toHaveBeenCalledTimes(1);
+      // 4th arg is the handler context carrying the resolved Mastra instance.
+      const ctx = onDirectMessage.mock.calls[0]![3];
+      expect(ctx).toEqual({ mastra: mockMastra });
+
+      spy.mockRestore();
     });
   });
 });

@@ -156,6 +156,63 @@ describe('SankeyChart', () => {
     });
   });
 
+  describe('when the chart is narrower than its labels need', () => {
+    const longChannel = 'A deliberately long channel label';
+    const signalsMargin = { top: 64, right: 32, bottom: 24, left: 32 };
+
+    function renderAtWidth(width: number, chartColumns = columns) {
+      vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(width);
+      return render(
+        <Sankey data={[{ channel: longChannel, region: 'EU', outcome: 'Won' }]} columns={chartColumns}>
+          <SankeyChart margin={signalsMargin} />
+        </Sankey>,
+      );
+    }
+
+    function getVisibleText(element: Element | undefined) {
+      return [...(element?.childNodes ?? [])]
+        .filter(node => node.nodeType === Node.TEXT_NODE)
+        .map(node => node.textContent)
+        .join('');
+    }
+
+    it('truncates node labels further than a wide chart does', async () => {
+      const findFirstColumnLabel = (container: HTMLElement) =>
+        [...container.querySelectorAll('svg text[font-size="11"]')].find(
+          label => label.getAttribute('text-anchor') === 'start',
+        );
+
+      const wide = renderAtWidth(800);
+      await screen.findAllByText('EU');
+      const wideLabel = getVisibleText(findFirstColumnLabel(wide.container));
+      cleanup();
+
+      const narrow = renderAtWidth(400);
+      await screen.findAllByText('EU');
+      const narrowLabel = getVisibleText(findFirstColumnLabel(narrow.container));
+
+      expect(wideLabel.endsWith('…')).toBe(true);
+      expect(narrowLabel.endsWith('…')).toBe(true);
+      expect(narrowLabel.length).toBeLessThan(wideLabel.length);
+    });
+
+    it('truncates column headers and keeps the full name in a title', async () => {
+      const { container } = renderAtWidth(400, [
+        { id: 'channel', label: 'Acquisition channel grouping' },
+        { id: 'region', label: 'Region' },
+        { id: 'outcome', label: 'Outcome' },
+      ]);
+      await screen.findAllByText('EU');
+
+      const header = [...container.querySelectorAll('svg text[font-size="12"]')].find(label =>
+        label.textContent?.includes('Acquisition'),
+      );
+
+      expect(getVisibleText(header).endsWith('…')).toBe(true);
+      expect(header?.querySelector('title')?.textContent).toBe('Acquisition channel grouping');
+    });
+  });
+
   describe('when current values change within stable layout weights', () => {
     it('changes bar height without moving its center', async () => {
       const renderFrame = (count: number) => (

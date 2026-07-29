@@ -41,12 +41,15 @@ const mocks = vi.hoisted(() => ({
   ),
 }));
 
-vi.mock('./integrations/github/sandbox', () => ({
+vi.mock('./integrations/github/sandbox', async importOriginal => ({
+  // Keep the real MaterializeError so `instanceof` checks in workspace.ts work.
+  MaterializeError: (await importOriginal<typeof import('./integrations/github/sandbox.js')>()).MaterializeError,
   materializeRepo: (...args: unknown[]) => (mocks.materializeRepo as any)(...args),
   checkoutSessionBranch: (...args: unknown[]) => (mocks.checkoutSessionBranch as any)(...args),
   runWorktreeSetup: (...args: unknown[]) => (mocks.runWorktreeSetup as any)(...args),
 }));
 
+import { MaterializeError } from './integrations/github/sandbox.js';
 import { injectGithubToken } from './integrations/github/token-refresh.js';
 import { SandboxFleet } from './sandbox/fleet.js';
 import { checkpointNameForSession, createWorkspaceFactory, getFactoryWorkspace } from './workspace.js';
@@ -92,11 +95,15 @@ function createGithubRequestContext(
   user: Record<string, unknown> = { organizationId: 'org-1', workosId: 'user-1' },
 ) {
   const requestContext = createRequestContext('/unused');
+  const state: Record<string, unknown> = { factoryProjectId: projectId };
   requestContext.set('controller', {
     modeId: 'build',
     resourceId: sessionId,
     threadId: sessionId,
-    getState: () => ({ factoryProjectId: projectId }),
+    getState: () => state,
+    setState: async (updates: Record<string, unknown>) => {
+      Object.assign(state, updates);
+    },
     session: { id: sessionId },
   });
   requestContext.set('user', user);
@@ -269,6 +276,10 @@ describe('getFactoryWorkspace', () => {
     const review = await read('factory-review');
     expect(review).toContain('Verdict: approve');
     expect(review).toContain('Verdict: request changes');
+    // The verdict must be published on the PR itself, unprompted.
+    expect(review).toContain('gh pr review <number> --approve --body-file');
+    expect(review).toContain('gh pr review <number> --request-changes --body-file');
+    expect(review).toContain('gh pr comment <number> --body-file');
   });
 
   it('adds read-only Web Factory skills and keeps them authoritative over project shadows', async () => {
@@ -366,6 +377,100 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.runWorktreeSetup).toHaveBeenCalledTimes(2);
     expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe(workdirA);
     expect(mocks.sessions.find(session => session.id === 'session-b')?.sandboxWorkdir).toBe(workdirB);
+  });
+
+  it('pins the session workdir into controller state so the agent prompt never points at the host checkout', async () => {
+    const { root, workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({ requestContext });
+
+    const ctx = requestContext.get('controller') as {
+      getState: () => { projectPath?: string; projectName?: string };
+    };
+    expect(ctx.getState().projectPath).toBe(path.join(root, 'github-sessions', 'octocat', 'hello', 'session-a'));
+    expect(ctx.getState().projectName).toBe('octocat/hello');
+  });
+
+  it('tears down a git-less sandbox and retries once on a fresh one', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    // First materialization lands on a bare base image (template build failed
+    // platform-side): git preflight raises `git-missing`. The retry succeeds.
+    mocks.materializeRepo.mockImplementationOnce(async () => {
+      throw new MaterializeError('git is not installed in the sandbox.', 'git-missing');
+    });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(2);
+    expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
+    expect(mocks.checkoutSessionBranch).toHaveBeenCalledTimes(1);
+    // The poisoned sandbox id was cleared before re-provisioning, so a later
+    // open cannot reattach to the git-less VM.
+    expect(mocks.updates.map(update => update.set.sandboxId)).toEqual(['sandbox-1', null, 'sandbox-1']);
+    expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxId).toBe('sandbox-1');
+  });
+
+  it('clears the binding and rethrows when the fresh sandbox also lacks git', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.materializeRepo.mockImplementation(async () => {
+      throw new MaterializeError('git is not installed in the sandbox.', 'git-missing');
+    });
+
+    await expect(
+      workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
+    ).rejects.toMatchObject({ code: 'git-missing' });
+
+    mocks.materializeRepo.mockImplementation(async () => {});
+    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(2);
+    expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
+    expect(mocks.checkoutSessionBranch).not.toHaveBeenCalled();
+    // Both poisoned sandboxes were torn down, so the next manual retry
+    // provisions fresh instead of reattaching to a bare VM.
+    expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxId).toBeNull();
+  });
+
+  it('does not retry materialization for non git-missing failures', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.materializeRepo.mockImplementationOnce(async () => {
+      throw new MaterializeError('git clone failed: network unreachable', 'clone-failed');
+    });
+
+    await expect(
+      workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
+    ).rejects.toMatchObject({ code: 'clone-failed' });
+
+    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+    expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
+    // The sandbox itself is healthy — keep the binding for reattach.
+    expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxId).toBe('sandbox-1');
+  });
+
+  it('deduplicates concurrent materializations of the same session workspace', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    // Hold materialization open long enough for the follower to arrive while
+    // the leader is still in flight.
+    mocks.materializeRepo.mockImplementationOnce(() => new Promise(resolve => setTimeout(resolve, 20)));
+
+    const [first, second] = await Promise.all([
+      workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
+      workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') }),
+    ]);
+
+    expect(second).toBe(first);
+    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+    expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
+    expect(mocks.checkoutSessionBranch).toHaveBeenCalledTimes(1);
   });
 
   it('uses repository-scoped access when materializing a Factory session', async () => {

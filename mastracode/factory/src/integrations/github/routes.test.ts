@@ -1072,6 +1072,26 @@ describe('repos route', () => {
     expect(res.status).toBe(500);
     expect(tables.installations).toHaveLength(1);
   });
+
+  it('lists multiple installations concurrently', async () => {
+    install(7, 'octo');
+    install(8, 'other');
+    let inFlight = 0;
+    let maxInFlight = 0;
+    vi.mocked(listInstallationRepos).mockImplementation(async (installationId: number) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise(resolve => setTimeout(resolve, 5));
+      inFlight -= 1;
+      return defaultImpl(installationId);
+    });
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+
+    expect(res.status).toBe(200);
+    // Serial listing would never overlap; the route must fan out.
+    expect(maxInFlight).toBe(2);
+  });
 });
 
 describe('auth scoping', () => {
@@ -1286,6 +1306,48 @@ describe('ensure (materialize)', () => {
     expect(res.status).toBe(404);
   });
 
+  it('self-heals a stale sandbox provider by recomputing the workdir against the current fleet', async () => {
+    // The row was linked while a different provider was active — its workdir
+    // points into that provider's filesystem and would fail to clone here.
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: 'p1',
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        repoFullName: 'octo/hello',
+        defaultBranch: 'main',
+        sandboxProvider: 'platform',
+        sandboxWorkdir: '/old-provider/hello',
+      }),
+    );
+    // A per-user binding already inherited the stale workdir and thinks it is materialized.
+    tables.sandboxes.push(
+      sandboxRow({
+        id: 'sbrow-1',
+        projectRepositoryId: 'p1',
+        userId: 'u1',
+        sandboxId: 'sb-old',
+        sandboxWorkdir: '/old-provider/hello',
+        materializedAt: new Date(),
+      }),
+    );
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/ensure', { method: 'POST' });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ projectRepositoryId: 'p1', sandboxWorkdir: '/workspace/hello' });
+    // The project row was healed to the current fleet's provider + workdir…
+    expect(tables.projectRepositories[0]).toMatchObject({
+      sandboxProvider: 'railway',
+      sandboxWorkdir: '/workspace/hello',
+    });
+    // …and the per-user binding was re-pointed and forced to re-materialize.
+    expect(tables.sandboxes[0]).toMatchObject({ sandboxWorkdir: '/workspace/hello', materializedAt: null });
+    expect(materializeRepo).toHaveBeenCalledOnce();
+    expect(materializeRepo).toHaveBeenCalledWith(
+      expect.objectContaining({ row: expect.objectContaining({ sandboxWorkdir: '/workspace/hello' }) }),
+    );
+  });
+
   it('streams server-side progress events when the client accepts an event stream', async () => {
     tables.projectRepositories.push(
       projectRepositoryRow({
@@ -1473,6 +1535,7 @@ describe('issues route', () => {
       branch: 'factory/issue-12',
     });
     expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 12, ['auto-triaged']);
+    expect(addIssueLabels).toHaveBeenCalledOnce();
     expect(runIssueTriage).toHaveBeenCalledWith({
       repository: 'octo/hello',
       issueNumber: 12,
@@ -1483,7 +1546,36 @@ describe('issues route', () => {
       resourceId: 'factory-p1',
       projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
       branch: 'factory/issue-12',
+      defaultModelId: undefined,
     });
+  });
+
+  it('normalises labels through the shared wrapper and resolves the default model', async () => {
+    seedMaterializedProject();
+    const runIssueTriage = vi.fn(async () => ({ threadId: 'thread-triage' }));
+    const res = await buildApp({ workosId: 'u1' }, { runIssueTriage }).request(
+      '/web/github/projects/p1/issues/5/triage',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Normalise labels',
+          url: 'https://github.com/octo/hello/issues/5',
+          labels: ['enhancement'],
+        }),
+      },
+    );
+    expect(res.status).toBe(202);
+    // The wrapper calls addIssueLabels exactly once (no duplicate from the handler).
+    expect(addIssueLabels).toHaveBeenCalledOnce();
+    expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 5, ['auto-triaged']);
+    // The runner receives labels with 'auto-triaged' appended by the wrapper.
+    expect(runIssueTriage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        labels: ['enhancement', 'auto-triaged'],
+        defaultModelId: undefined,
+      }),
+    );
   });
 
   it('400s when manual triage receives a non-canonical issue URL', async () => {

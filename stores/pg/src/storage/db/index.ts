@@ -21,6 +21,7 @@ import { Pool } from 'pg';
 import type { DbClient, QueryValues, TxClient } from '../client';
 import { PoolAdapter } from '../client';
 import { buildConstraintName } from './constraint-utils';
+import { isDuplicateRelationError, isDuplicateSchemaError } from './pg-errors';
 
 // Re-export DbClient for external use
 export type { DbClient } from '../client';
@@ -547,11 +548,18 @@ export class PgDB extends MastraBase {
               await this.client.none(`CREATE SCHEMA IF NOT EXISTS ${quotedSchemaName}`);
               this.logger.info(`Schema "${schemaNameCapture}" created successfully`);
             } catch (error) {
-              this.logger.error(`Failed to create schema "${schemaNameCapture}"`, { error });
-              throw new Error(
-                `Unable to create schema "${schemaNameCapture}". This requires CREATE privilege on the database. ` +
-                  `Either create the schema manually or grant CREATE privilege to the user.`,
-              );
+              // `CREATE SCHEMA IF NOT EXISTS` is not atomic; a concurrent
+              // backend can race past the existence probe and create the
+              // schema first. Treat duplicate-schema errors as success.
+              if (isDuplicateSchemaError(error)) {
+                this.logger.debug(`Schema "${schemaNameCapture}" was created by another process`);
+              } else {
+                this.logger.error(`Failed to create schema "${schemaNameCapture}"`, { error });
+                throw new Error(
+                  `Unable to create schema "${schemaNameCapture}". This requires CREATE privilege on the database. ` +
+                    `Either create the schema manually or grant CREATE privilege to the user.`,
+                );
+              }
             }
           }
 
@@ -699,7 +707,14 @@ export class PgDB extends MastraBase {
 
       const sql = generateTableSQL({ tableName, schema, schemaName: this.schemaName, compositePrimaryKey });
 
-      await this.client.none(sql);
+      try {
+        await this.client.none(sql);
+      } catch (error) {
+        // `CREATE TABLE IF NOT EXISTS` is not atomic across concurrent
+        // backends. Two processes can both pass the existence probe and one
+        // surfaces a catalog duplicate error. Treat it as "already created".
+        if (!isDuplicateRelationError(error)) throw error;
+      }
 
       await this.alterTable({
         tableName,
@@ -1026,6 +1041,20 @@ export class PgDB extends MastraBase {
 
       this.logger?.info?.(`Added PRIMARY KEY constraint ${constraintName} to ${fullTableName}`);
     } catch (error) {
+      // Another process may have added the same constraint concurrently
+      // (TOCTOU between the EXISTS check and the ALTER TABLE). Treat the
+      // resulting duplicate-relation / duplicate-object error as success,
+      // but only after confirming the PRIMARY KEY is actually present.
+      // isDuplicateRelationError can also match on unrelated name collisions
+      // (e.g. a stale index with the same name), so the post-check prevents
+      // silently swallowing errors when the constraint is still missing.
+      if (isDuplicateRelationError(error)) {
+        const confirmed = await this.spansPrimaryKeyExists();
+        if (confirmed) {
+          this.logger?.debug?.(`PRIMARY KEY constraint ${constraintName} was created by another process`);
+          return;
+        }
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'ADD_SPANS_PRIMARY_KEY', 'FAILED'),

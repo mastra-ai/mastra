@@ -255,6 +255,18 @@ describe('SourceControlStorage', () => {
     ).toBeNull();
   });
 
+  it('re-points a sandbox binding workdir and clears its materialization', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const binding = await github.sandboxes.getOrCreate({ projectRepository: link, userId: 'user-1' });
+    await github.sandboxes.markMaterialized({ id: binding.id });
+
+    await github.sandboxes.setWorkdir({ id: binding.id, sandboxWorkdir: '/local/mastra-ai/mastra' });
+
+    const updated = await github.sandboxes.getById({ id: binding.id });
+    expect(updated).toMatchObject({ sandboxWorkdir: '/local/mastra-ai/mastra', materializedAt: null });
+  });
+
   it('rejects cross-org, cross-provider, and cross-installation links', async () => {
     const project = await createProject();
     const otherProject = await createProject({ orgId: 'org-2', name: 'Other org' });

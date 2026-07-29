@@ -38,7 +38,7 @@ export function NoiseDetailPanel({ entityId, entityType, snapshotId, signalName,
       <DrawerContent>
         <DrawerHeader className="border-border1 border-b">
           <DrawerTitle>Noise</DrawerTitle>
-          <DrawerDescription className="sr-only">Noise details for the {signalName} signal</DrawerDescription>
+          <DrawerDescription className="sr-only">Noise details for the {signalName} trace signal</DrawerDescription>
         </DrawerHeader>
         <DrawerBody className="grid content-start gap-6 overflow-y-auto p-6">
           <section aria-labelledby="noise-summary-heading">
@@ -46,7 +46,7 @@ export function NoiseDetailPanel({ entityId, entityType, snapshotId, signalName,
               Summary
             </h2>
             <p className="text-neutral5 mt-3 text-sm">
-              Noise contains signal summaries that did not consistently match a recurring theme in this snapshot.
+              Noise contains trace signal summaries that did not consistently match a recurring theme in this snapshot.
             </p>
             {noiseQuery.isPending && <p className="text-neutral3 mt-4 text-sm">Loading noise details…</p>}
             {noiseQuery.isError && <p className="mt-4 text-sm text-red-500">Unable to load noise details.</p>}
