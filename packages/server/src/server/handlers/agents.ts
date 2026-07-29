@@ -439,7 +439,7 @@ export async function getSerializedAgentTools(
   partial: boolean = false,
 ): Promise<Record<string, SerializedTool>> {
   return Object.entries(tools || {}).reduce<Record<string, SerializedTool>>((acc, [key, tool]) => {
-    const toolId = 'id' in tool && typeof tool.id === 'string' ? tool.id : `tool-${key}`;
+    const toolId = 'id' in tool && typeof tool.id === 'string' && tool.id.length > 0 ? tool.id : `tool-${key}`;
 
     let inputSchemaForReturn: string | undefined = undefined;
     let outputSchemaForReturn: string | undefined = undefined;

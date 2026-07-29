@@ -1447,7 +1447,11 @@ export class MCPServer extends MCPServerBase {
         continue;
       }
 
-      if (!('execute' in toolInstance) || typeof toolInstance.execute !== 'function') {
+      if (
+        (typeof toolInstance !== 'object' && typeof toolInstance !== 'function') ||
+        !('execute' in toolInstance) ||
+        typeof toolInstance.execute !== 'function'
+      ) {
         this.logger.warn('Tool has no execute function, skipping', { tool: toolName });
         continue;
       }
