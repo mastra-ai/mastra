@@ -13,7 +13,7 @@ export const platformSandboxProvider: SandboxProvider<PlatformSandboxOptions> = 
     properties: {
       accessToken: {
         type: 'string',
-        description: 'Mastra Platform access token (falls back to MASTRA_PLATFORM_ACCESS_TOKEN)',
+        description: 'Mastra Platform secret key (falls back to MASTRA_PLATFORM_SECRET_KEY)',
       },
       projectId: { type: 'string', description: 'Platform project ID (falls back to MASTRA_PROJECT_ID)' },
       environmentId: { type: 'string', description: 'Platform environment ID (falls back to MASTRA_ENVIRONMENT_ID)' },
@@ -41,7 +41,7 @@ export const platformFilesystemProvider: FilesystemProvider<PlatformFilesystemOp
     properties: {
       accessToken: {
         type: 'string',
-        description: 'Mastra Platform access token (falls back to MASTRA_PLATFORM_ACCESS_TOKEN)',
+        description: 'Mastra Platform secret key (falls back to MASTRA_PLATFORM_SECRET_KEY)',
       },
       projectId: { type: 'string', description: 'Platform project ID (falls back to MASTRA_PROJECT_ID)' },
       bucketName: {

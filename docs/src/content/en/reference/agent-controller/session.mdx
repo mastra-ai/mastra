@@ -13,7 +13,7 @@ The `AgentController` feature is in beta stage and subject to breaking changes i
 
 :::
 
-A `Session` owns all the state tied to a single conversation. The [`AgentController`](/reference/agent-controller/agent-controller-class) is the shared host — agents, storage, config, the thread lock, and the event bus — while the `Session` holds everything that's per-conversation: identity, the active thread binding and reads, mode and model selection, run and abort state, the live agent stream, tool suspensions, follow-ups, approvals, permission grants, token usage, and the display-state snapshot.
+A `Session` owns all the state tied to a single conversation. The [`AgentController`](/reference/agent-controller/agent-controller-class) is the shared host (agents, storage, config, the thread lock, and the event bus) while the `Session` holds everything that's per-conversation: identity, the active thread binding and reads, mode and model selection, run and abort state, the live agent stream, tool suspensions, follow-ups, approvals, permission grants, token usage, and the display-state snapshot.
 
 Access the session through `agentController.session`.
 
@@ -124,7 +124,7 @@ Returns: `Workspace`
 
 ### Permissions
 
-Session-scoped grants auto-approve tools without prompting. Grants are ephemeral — they reset when the session restarts and are never persisted.
+Session-scoped grants auto-approve tools without prompting. Grants are ephemeral: they reset when the session restarts and are never persisted.
 
 #### `grantCategory(category)`
 
@@ -175,7 +175,7 @@ const runId = agentController.session.getCurrentRunId()
 
 #### `abortRun()`
 
-Abort the in-flight run: aborts the live stream, requests abort on the run, and clears parked tool suspensions.
+Abort the in-flight run: aborts the live stream and requests abort on the run. It also clears parked tool suspensions.
 
 ```typescript
 agentController.session.abortRun()
@@ -330,7 +330,7 @@ const mode = agentController.session.mode.resolve()
 
 ### `session.mode.switch({ modeId })`
 
-Switch to a different mode. Aborts any in-progress generation, saves the current model to the outgoing mode, loads the incoming mode's model, and emits `mode_changed` and `model_changed` events.
+Switch to a different mode. Aborts any in-progress generation and saves the current model to the outgoing mode. It then loads the incoming mode's model and emits `mode_changed` and `model_changed` events.
 
 ```typescript
 await agentController.session.mode.switch({ modeId: 'build' })
@@ -426,7 +426,7 @@ const observerModel = agentController.session.om.observer.resolvedModel()
 
 ## Permissions
 
-`session.permissions` owns the persisted tool-approval _policy_ — the per-category and per-tool rules consulted during approval resolution. These are distinct from the in-memory session _grants_ documented under [Methods → Permissions](#permissions); grants reset each session, whereas these rules are persisted in session state.
+`session.permissions` owns the persisted tool-approval _policy_: the per-category and per-tool rules consulted during approval resolution. These are distinct from the in-memory session _grants_ documented under [Methods → Permissions](#permissions); grants reset each session, whereas these rules are persisted in session state.
 
 ### `session.permissions.getRules()`
 
@@ -611,7 +611,7 @@ After every event the agentController emits `display_state_changed`, so high-fre
 
 ## State
 
-`session.state` owns the schema-validated AgentController state for the conversation. It holds the current snapshot, validates updates against the `stateSchema` passed to the AgentController, serializes concurrent writes, and emits a `state_changed` event on every change.
+`session.state` owns the schema-validated AgentController state for the conversation. It holds the current snapshot and validates updates against the `stateSchema` passed to the AgentController. Updates are serialized, and every change emits a `state_changed` event.
 
 ### `session.state.get()`
 

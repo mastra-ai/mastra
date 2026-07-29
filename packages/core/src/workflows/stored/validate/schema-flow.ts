@@ -12,16 +12,19 @@
  * `fold` takes the incoming schema and returns the outgoing one — no
  * closure-mutable `currentSchema` with save/restore tricks.
  */
+import type { PathOrLiteral, Predicate } from '../../predicate';
 import type { SerializedSingleStepEntry } from '../../types';
 import type { JsonSchema } from '../json-schema-to-zod';
 import { analyzeMapConfig } from '../mapping-config';
-import { isRecord, schemaCompatibility } from './schema-utils';
+import { isCanonicalMappingPath, isRecord, schemaAtPath, schemaCompatibility } from './schema-utils';
 import { leafEntryId } from './types';
 import type { WorkflowRegistryIndex, WorkflowValidationInput, WorkflowValidationIssue } from './types';
 
 export interface GraphSchemaInference {
-  /** Output schema of each id-bearing top-level step (undefined = unknown). */
+  /** Output schema of each runtime-visible step id (undefined = unknown). */
   stepOutputs: Map<string, JsonSchema | undefined>;
+  /** Input schema reaching each evaluated graph path (undefined = unknown). */
+  entryInputs: Map<string, JsonSchema | undefined>;
   /** Inferred output of the last entry in the graph (undefined = unknown). */
   finalOutput: JsonSchema | undefined;
   issues: WorkflowValidationIssue[];
@@ -62,9 +65,102 @@ function outputSchemaOf(entry: SerializedSingleStepEntry, index: WorkflowRegistr
   }
 }
 
+function validatePredicate(
+  predicate: Predicate,
+  path: string,
+  context: {
+    initData: JsonSchema;
+    inputData: JsonSchema | undefined;
+    state: JsonSchema | undefined;
+    stepResults: Map<string, JsonSchema | undefined>;
+  },
+): WorkflowValidationIssue[] {
+  const issues: WorkflowValidationIssue[] = [];
+
+  const validatePath = (rawPath: string, issuePath: string) => {
+    if (!isCanonicalMappingPath(rawPath)) {
+      issues.push({
+        code: 'invalid-predicate-reference',
+        path: issuePath,
+        message: 'Predicate paths must use plain dotted segments rooted at initData, inputData, stepResults, or state.',
+      });
+      return;
+    }
+
+    const [root, ...segments] = rawPath.split('.');
+    let schema: JsonSchema | undefined;
+    let schemaPath = segments.join('.');
+    if (root === 'initData') schema = context.initData;
+    else if (root === 'inputData') schema = context.inputData;
+    else if (root === 'state') schema = context.state;
+    else if (root === 'stepResults') {
+      const stepId = segments.shift();
+      if (!stepId || !context.stepResults.has(stepId)) {
+        issues.push({
+          code: 'invalid-predicate-reference',
+          path: issuePath,
+          message: stepId
+            ? `Predicate step result "${stepId}" must reference a preceding top-level step.`
+            : 'Predicate stepResults paths must include a preceding top-level step id.',
+        });
+        return;
+      }
+      schema = context.stepResults.get(stepId);
+      schemaPath = segments.join('.');
+    } else {
+      issues.push({
+        code: 'invalid-predicate-reference',
+        path: issuePath,
+        message: 'Predicate paths must be rooted at initData, inputData, stepResults, or state.',
+      });
+      return;
+    }
+
+    if (schemaPath && isRecord(schema) && typeof schema.type === 'string' && !schemaAtPath(schema, schemaPath)) {
+      issues.push({
+        code: 'invalid-predicate-reference',
+        path: issuePath,
+        message: `Predicate path "${rawPath}" does not exist in the known schema.`,
+      });
+    }
+  };
+
+  const validateRef = (ref: PathOrLiteral, refPath: string) => {
+    if ('path' in ref) validatePath(ref.path, `${refPath}.path`);
+  };
+
+  switch (predicate.op) {
+    case 'and':
+    case 'or':
+      predicate.args.forEach((arg, index) => issues.push(...validatePredicate(arg, `${path}.args.${index}`, context)));
+      break;
+    case 'not':
+      issues.push(...validatePredicate(predicate.arg, `${path}.arg`, context));
+      break;
+    case 'exists':
+    case 'notExists':
+      validatePath(predicate.path, `${path}.path`);
+      break;
+    case 'truthy':
+    case 'falsy':
+      validateRef(predicate.value, `${path}.value`);
+      break;
+    case 'in':
+    case 'notIn':
+      validateRef(predicate.value, `${path}.value`);
+      break;
+    default:
+      validateRef(predicate.left, `${path}.left`);
+      validateRef(predicate.right, `${path}.right`);
+  }
+
+  return issues;
+}
+
 export function inferGraphSchemas(def: WorkflowValidationInput, index: WorkflowRegistryIndex): GraphSchemaInference {
   const issues: WorkflowValidationIssue[] = [];
   const stepOutputs = new Map<string, JsonSchema | undefined>();
+  const entryInputs = new Map<string, JsonSchema | undefined>();
 
   /** Evaluates one leaf entry: checks its input against `incoming`, returns its output. */
   const evalLeaf = (
@@ -73,6 +169,7 @@ export function inferGraphSchemas(def: WorkflowValidationInput, index: WorkflowR
     incoming: JsonSchema | undefined,
     container: boolean,
   ): JsonSchema | undefined => {
+    entryInputs.set(path, incoming);
     if (entry.type === 'mapping') {
       // Container placement is a structural issue; don't analyze the config twice.
       if (container) return undefined;
@@ -114,11 +211,27 @@ export function inferGraphSchemas(def: WorkflowValidationInput, index: WorkflowR
       case 'parallel':
       case 'conditional': {
         const incoming = current;
+        if (entry.type === 'conditional') {
+          entry.predicates?.forEach((predicate, predicateIndex) => {
+            if (!predicate) return;
+            issues.push(
+              ...validatePredicate(predicate, `${path}.predicates.${predicateIndex}`, {
+                initData: def.inputSchema,
+                inputData: incoming,
+                state: def.stateSchema,
+                stepResults: stepOutputs,
+              }),
+            );
+          });
+        }
         const properties: Record<string, JsonSchema> = {};
         entry.steps.forEach((child, childIndex) => {
           const output = evalLeaf(child, `${path}.steps.${childIndex}`, incoming, true);
           const childId = leafEntryId(child);
-          if (output && childId) properties[childId] = output;
+          if (childId) {
+            stepOutputs.set(childId, output);
+            if (output) properties[childId] = output;
+          }
         });
         current = {
           type: 'object',
@@ -134,11 +247,26 @@ export function inferGraphSchemas(def: WorkflowValidationInput, index: WorkflowR
         }
         const items = isRecord(incoming?.items) ? (incoming.items as JsonSchema) : undefined;
         const output = evalLeaf(entry.step, `${path}.step`, items, true);
+        const childId = leafEntryId(entry.step);
+        if (childId) stepOutputs.set(childId, output);
         current = output ? { type: 'array', items: output } : output;
         break;
       }
       case 'loop': {
         const output = evalLeaf(entry.step, `${path}.step`, current, true);
+        const stepId = leafEntryId(entry.step);
+        if (stepId) stepOutputs.set(stepId, output);
+        if (entry.predicate) {
+          const loopStepOutputs = new Map(stepOutputs);
+          issues.push(
+            ...validatePredicate(entry.predicate, `${path}.predicate`, {
+              initData: def.inputSchema,
+              inputData: output,
+              state: def.stateSchema,
+              stepResults: loopStepOutputs,
+            }),
+          );
+        }
         if (schemaCompatibility(output, inputSchemaOf(entry.step, index)) === 'incompatible') {
           issues.push({
             code: 'incompatible-schema',
@@ -168,5 +296,5 @@ export function inferGraphSchemas(def: WorkflowValidationInput, index: WorkflowR
       message: 'Workflow output schema is incompatible with the final step output.',
     });
   }
-  return { stepOutputs, finalOutput: current, issues };
+  return { stepOutputs, entryInputs, finalOutput: current, issues };
 }

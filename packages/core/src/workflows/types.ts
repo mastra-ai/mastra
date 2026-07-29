@@ -248,7 +248,9 @@ export type ExtractSchemaFromStep<
 export type VariableReference<
   TStep extends Step<string, any, any> = Step<string, any, any>,
   TVarPath extends PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '' | '.' =
-    PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>> | '' | '.',
+    | PathsToStringProps<ExtractSchemaType<ExtractSchemaFromStep<TStep, 'outputSchema'>>>
+    | ''
+    | '.',
 > =
   | {
       step: TStep;
@@ -1176,7 +1178,8 @@ export type StepExecutionResult = {
   result: StepResult<any, any, any, any>;
   stepResults: Record<string, StepResult<any, any, any, any>>;
   mutableContext: MutableContext;
-  requestContext: Record<string, any>;
+  /** Serialized requestContext — only set by engines where `requiresDurableContextSerialization()` is true. */
+  requestContext?: Record<string, any>;
 };
 
 /**
@@ -1187,7 +1190,8 @@ export type EntryExecutionResult = {
   result: StepResult<any, any, any, any>;
   stepResults: Record<string, StepResult<any, any, any, any>>;
   mutableContext: MutableContext;
-  requestContext: Record<string, any>;
+  /** Serialized requestContext — only set by engines where `requiresDurableContextSerialization()` is true. */
+  requestContext?: Record<string, any>;
 };
 
 // =============================================================================

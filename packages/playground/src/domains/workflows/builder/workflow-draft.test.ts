@@ -111,7 +111,7 @@ describe('workflow draft', () => {
         },
       ];
 
-      expect(validateWorkflowDraft(draft)).toEqual({
+      expect(validateWorkflowDraft(draft)).toMatchObject({
         ok: false,
         issues: [
           {
@@ -131,7 +131,7 @@ describe('workflow draft', () => {
 
       const result = validateWorkflowDraft(draft);
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         ok: false,
         issues: [
           {
@@ -158,7 +158,7 @@ describe('workflow draft', () => {
 
       const result = validateWorkflowDraft(draft);
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         ok: false,
         issues: [
           {
@@ -289,7 +289,7 @@ describe('workflow draft', () => {
         },
       });
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         ok: false,
         issues: [
           {

@@ -327,7 +327,24 @@ describe('validateStoredWorkflow', () => {
         }),
         { tools: { lookupCustomer: lookupTool } },
       );
-      expect(issues).toEqual([expect.objectContaining({ code: 'incompatible-schema', path: 'graph.0' })]);
+      expect(issues).toEqual([
+        expect.objectContaining({
+          code: 'incompatible-schema',
+          path: 'graph.0',
+          repair: {
+            issueCode: 'incompatible-schema',
+            path: 'graph.0',
+            entryId: 't1',
+            expectedSchema: lookupTool.inputSchema,
+            actualSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+            legalSources: [],
+            operation: 'insert-workflow-mapping-before',
+            arguments: { targetStepId: 't1' },
+            blocksCheckpoint: false,
+            blocksFinalize: true,
+          },
+        }),
+      ]);
     });
 
     it('assumes agents accept { prompt } unless the registry says otherwise', () => {
@@ -372,6 +389,107 @@ describe('validateStoredWorkflow', () => {
       ]);
     });
 
+    it('allows mappings to reference parallel and conditional child results', () => {
+      const childTool = {
+        outputSchema: {
+          type: 'object',
+          properties: { value: { type: 'string' } },
+          required: ['value'],
+        },
+      };
+      const issues = validateStoredWorkflow(
+        def({
+          graph: [
+            {
+              type: 'parallel',
+              steps: [
+                { type: 'tool', id: 'parallel-a', toolId: 'childTool' },
+                { type: 'tool', id: 'parallel-b', toolId: 'childTool' },
+              ],
+            },
+            {
+              type: 'conditional',
+              steps: [{ type: 'tool', id: 'conditional-child', toolId: 'childTool' }],
+              predicates: [{ op: 'truthy', value: { literal: true } }],
+              serializedConditions: [{ id: 'conditional-child', fn: '() => true' }],
+            },
+            {
+              type: 'mapping',
+              id: 'result',
+              mapConfig: JSON.stringify({
+                parallelA: { step: 'parallel-a', path: 'value' },
+                parallelB: { step: 'parallel-b', path: 'value' },
+                conditional: { step: 'conditional-child', path: 'value' },
+              }),
+            },
+          ],
+        }),
+        { tools: { childTool } },
+      );
+
+      expect(issues).toEqual([]);
+    });
+
+    it('allows mappings to reference a foreach child result', () => {
+      const itemSchema = {
+        type: 'object',
+        properties: { value: { type: 'string' } },
+        required: ['value'],
+      };
+      const childTool = { inputSchema: itemSchema, outputSchema: itemSchema };
+      const issues = validateStoredWorkflow(
+        def({
+          inputSchema: { type: 'array', items: itemSchema },
+          graph: [
+            {
+              type: 'foreach',
+              step: { type: 'tool', id: 'foreach-child', toolId: 'childTool' },
+              opts: { concurrency: 1 },
+            },
+            {
+              type: 'mapping',
+              id: 'result',
+              mapConfig: JSON.stringify({ value: { step: 'foreach-child', path: 'value' } }),
+            },
+          ],
+        }),
+        { tools: { childTool } },
+      );
+
+      expect(issues).toEqual([]);
+    });
+
+    it('allows mappings to reference a loop child result', () => {
+      const itemSchema = {
+        type: 'object',
+        properties: { value: { type: 'string' } },
+        required: ['value'],
+      };
+      const childTool = { inputSchema: itemSchema, outputSchema: itemSchema };
+      const issues = validateStoredWorkflow(
+        def({
+          inputSchema: itemSchema,
+          graph: [
+            {
+              type: 'loop',
+              step: { type: 'tool', id: 'loop-child', toolId: 'childTool' },
+              loopType: 'dountil',
+              predicate: { op: 'truthy', value: { literal: true } },
+              serializedCondition: { id: 'loop-child', fn: '() => true' },
+            },
+            {
+              type: 'mapping',
+              id: 'result',
+              mapConfig: JSON.stringify({ value: { step: 'loop-child', path: 'value' } }),
+            },
+          ],
+        }),
+        { tools: { childTool } },
+      );
+
+      expect(issues).toEqual([]);
+    });
+
     it('flags loop bodies whose output cannot feed the next iteration', () => {
       const issues = validateStoredWorkflow(
         def({
@@ -394,6 +512,90 @@ describe('validateStoredWorkflow', () => {
           message: expect.stringContaining('subsequent iteration'),
         }),
       ]);
+    });
+
+    it('validates predicate namespaces and known paths against the execution context', () => {
+      const inputSchema = {
+        type: 'object',
+        properties: { priority: { type: 'string' } },
+        required: ['priority'],
+      };
+      const issues = validateStoredWorkflow(
+        def({
+          inputSchema,
+          graph: [
+            {
+              type: 'conditional',
+              steps: [{ type: 'tool', id: 'route', toolId: 'routeTool' }],
+              predicates: [
+                {
+                  op: 'eq',
+                  left: { path: '$.priority' },
+                  right: { path: 'inputData.missing' },
+                },
+              ],
+            },
+          ],
+        }),
+        { tools: { routeTool: { inputSchema } } },
+      );
+
+      expect(issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'invalid-predicate-reference',
+            path: 'graph.0.predicates.0.left.path',
+            message: expect.stringContaining('initData, inputData, stepResults, or state'),
+          }),
+          expect.objectContaining({
+            code: 'invalid-predicate-reference',
+            path: 'graph.0.predicates.0.right.path',
+            message: expect.stringContaining('does not exist'),
+          }),
+        ]),
+      );
+    });
+
+    it('accepts predicate references to workflow input and preceding step results', () => {
+      const inputSchema = {
+        type: 'object',
+        properties: { priority: { type: 'string' } },
+        required: ['priority'],
+      };
+      const outputSchema = {
+        type: 'object',
+        properties: { customerId: { type: 'string' } },
+        required: ['customerId'],
+      };
+      const issues = validateStoredWorkflow(
+        def({
+          inputSchema,
+          graph: [
+            { type: 'tool', id: 'lookup', toolId: 'lookupTool' },
+            {
+              type: 'conditional',
+              steps: [{ type: 'tool', id: 'route', toolId: 'routeTool' }],
+              predicates: [
+                {
+                  op: 'and',
+                  args: [
+                    { op: 'eq', left: { path: 'initData.priority' }, right: { literal: 'urgent' } },
+                    { op: 'exists', path: 'stepResults.lookup.customerId' },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+        {
+          tools: {
+            lookupTool: { inputSchema, outputSchema },
+            routeTool: { inputSchema: outputSchema },
+          },
+        },
+      );
+
+      expect(issues).toEqual([]);
     });
 
     it('flags a workflow output schema the final step cannot satisfy', () => {

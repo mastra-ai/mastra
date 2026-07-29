@@ -16,6 +16,7 @@ import { simpleMcpServer } from './mcps';
 import { loggingProcessor, contentFilterProcessor } from './processors';
 import { responseQualityScorer, responseTimeScorer } from './scorers';
 import { initE2EStorage, storage } from './storage';
+import { lookupCustomer, urgentSupport } from './tools';
 import { complexWorkflow, enumWorkflow, lessComplexWorkflow } from './workflows/complex-workflow';
 import { scheduledWorkflow, multiScheduledWorkflow } from './workflows/scheduled-workflow';
 import { E2EEditor } from './workflow-builder-editor';
@@ -24,6 +25,7 @@ await initE2EStorage();
 
 export const mastra = new Mastra({
   workflows: { complexWorkflow, lessComplexWorkflow, enumWorkflow, scheduledWorkflow, multiScheduledWorkflow },
+  tools: { lookupCustomer, urgentSupport },
   agents: {
     weatherAgent,
     omAgent,
@@ -74,6 +76,11 @@ export const mastra = new Mastra({
           const workflowStore = await storage.getStore('workflows');
           if (workflowStore) {
             clearTasks.push(workflowStore.dangerouslyClearAll());
+          }
+
+          const workflowDefinitionsStore = await storage.getStore('workflowDefinitions');
+          if (workflowDefinitionsStore) {
+            clearTasks.push(workflowDefinitionsStore.dangerouslyClearAll());
           }
 
           const memoryStore = await storage.getStore('memory');

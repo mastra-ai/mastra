@@ -1,5 +1,51 @@
 # @mastra/auth-studio
 
+## 1.3.3
+
+### Patch Changes
+
+- Speed up Factory hot paths: ([#20261](https://github.com/mastra-ai/mastra/pull/20261))
+
+  - Much lower latency on authenticated requests — successful auth verifications are cached briefly instead of hitting the platform on every request, and credential verification requests time out after 15 seconds instead of hanging
+  - Faster GitHub repository listing and connecting
+  - Opening the same session concurrently no longer provisions duplicate sandboxes, and stuck sandbox commands now fail with a clear error instead of hanging
+  - Factory run dispatching stays fast as work-item history grows
+
+## 1.3.3-alpha.0
+
+### Patch Changes
+
+- Speed up Factory hot paths: ([#20261](https://github.com/mastra-ai/mastra/pull/20261))
+
+  - Much lower latency on authenticated requests — successful auth verifications are cached briefly instead of hitting the platform on every request, and credential verification requests time out after 15 seconds instead of hanging
+  - Faster GitHub repository listing and connecting
+  - Opening the same session concurrently no longer provisions duplicate sandboxes, and stuck sandbox commands now fail with a clear error instead of hanging
+  - Factory run dispatching stays fast as work-item history grows
+
+## 1.3.2
+
+### Patch Changes
+
+- `MastraAuthStudio` now automatically creates a personal organization for users who don't belong to one yet, and can check whether a user is an organization admin — matching the behavior already available in `MastraAuthWorkos` and `MastraAuthBetterAuth`. This lets hosts like a self-hosted MastraCode deployment authorize organization-level actions without users needing to manually set up an organization first. ([#19858](https://github.com/mastra-ai/mastra/pull/19858))
+
+- `MastraAuthStudio.ensureOrganization` now dedupes concurrent bootstraps for the same user, so parallel tabs or requests for a brand-new sign-in no longer end up creating duplicate personal organizations. ([#19858](https://github.com/mastra-ai/mastra/pull/19858))
+
+- Changed the default shared API URL for Studio auth from http://localhost:3010/v1 to https://platform.mastra.ai/v1, so deployed instances work against the production platform without extra configuration. Set MASTRA_SHARED_API_URL or the sharedApiUrl option to point at a different environment. Production cookie settings (Secure + Domain=.mastra.ai) are now only auto-enabled when the shared API URL is explicitly configured on .mastra.ai, keeping local development cookies host-only. ([#19958](https://github.com/mastra-ai/mastra/pull/19958))
+
+## 1.3.2-alpha.1
+
+### Patch Changes
+
+- Changed the default shared API URL for Studio auth from http://localhost:3010/v1 to https://platform.mastra.ai/v1, so deployed instances work against the production platform without extra configuration. Set MASTRA_SHARED_API_URL or the sharedApiUrl option to point at a different environment. Production cookie settings (Secure + Domain=.mastra.ai) are now only auto-enabled when the shared API URL is explicitly configured on .mastra.ai, keeping local development cookies host-only. ([#19958](https://github.com/mastra-ai/mastra/pull/19958))
+
+## 1.3.2-alpha.0
+
+### Patch Changes
+
+- `MastraAuthStudio` now automatically creates a personal organization for users who don't belong to one yet, and can check whether a user is an organization admin — matching the behavior already available in `MastraAuthWorkos` and `MastraAuthBetterAuth`. This lets hosts like a self-hosted MastraCode deployment authorize organization-level actions without users needing to manually set up an organization first. ([#19858](https://github.com/mastra-ai/mastra/pull/19858))
+
+- `MastraAuthStudio.ensureOrganization` now dedupes concurrent bootstraps for the same user, so parallel tabs or requests for a brand-new sign-in no longer end up creating duplicate personal organizations. ([#19858](https://github.com/mastra-ai/mastra/pull/19858))
+
 ## 1.3.1
 
 ### Patch Changes

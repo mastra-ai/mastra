@@ -52,6 +52,26 @@ describe('workflow draft save orchestration', () => {
     });
   });
 
+  describe('when authoring metadata is supplied for the save', () => {
+    it('persists the workflow conversation association', async () => {
+      const requests = vi.fn();
+      server.use(
+        http.post(`${BASE_URL}/api/stored/workflows`, async ({ request }) => {
+          requests(await request.json());
+          return HttpResponse.json({ ok: true as const, id: definition.id });
+        }),
+      );
+      const draft = renderHook(() => useWorkflowDraft(definition, definition.id), { wrapper: createWrapper() });
+      const metadata = { workflowBuilderConversation: { threadId: 'authoring-thread' } };
+
+      await act(async () => {
+        await expect(draft.result.current.save(metadata)).resolves.toEqual({ ok: true, id: definition.id });
+      });
+
+      expect(requests).toHaveBeenCalledWith(expect.objectContaining({ metadata }));
+    });
+  });
+
   describe('when the stored-workflow API rejects the save', () => {
     it('exposes the server failure after releasing the save reservation', async () => {
       server.use(

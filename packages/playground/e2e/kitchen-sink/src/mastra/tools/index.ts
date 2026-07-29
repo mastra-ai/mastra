@@ -46,3 +46,27 @@ export const simpleMcpTool = createTool({
     };
   },
 });
+
+export const lookupCustomer = createTool({
+  id: 'lookup-customer',
+  description: 'Look up a customer by email for Workflow Builder comparison tests',
+  inputSchema: z.object({ email: z.string() }),
+  outputSchema: z.object({
+    customerId: z.string(),
+    email: z.string(),
+    plan: z.string(),
+  }),
+  execute: async ({ email }) => ({
+    customerId: 'customer-123',
+    email,
+    plan: 'pro',
+  }),
+});
+
+export const urgentSupport = createTool({
+  id: 'urgent-support',
+  description: 'Produce a deterministic response for urgent support workflows',
+  inputSchema: z.object({ prompt: z.string(), priority: z.string() }),
+  outputSchema: z.object({ response: z.string() }),
+  execute: async () => ({ response: 'Production incident response started.' }),
+});

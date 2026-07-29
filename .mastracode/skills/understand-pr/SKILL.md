@@ -1,7 +1,8 @@
 ---
 name: understand-pr
 description: Guided interactive PR review — understand the history and context before forming opinions
-goal: true
+metadata:
+  goal: true
 ---
 
 # Understand PR

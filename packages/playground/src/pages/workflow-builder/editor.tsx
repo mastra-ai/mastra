@@ -22,13 +22,16 @@ import {
   WorkflowDefinitionGraphView,
 } from '@/domains/workflows/builder';
 import type {
-  WorkflowDraftStepSchema,
+  WorkflowDraftCandidate,
   WorkflowDraftValidationContext,
   WorkflowGenerationFailure,
 } from '@/domains/workflows/builder';
+import { parseWorkflowCatalogSchema } from '@/domains/workflows/builder/workflow-catalog-schema';
 import {
+  createWorkflowConversationMetadata,
   getWorkflowConversationThreadId,
   rememberWorkflowConversationThread,
+  WORKFLOW_BUILDER_AGENT_ID,
 } from '@/domains/workflows/builder/workflow-conversation-thread';
 import { useDeleteStoredWorkflow, useStoredWorkflow } from '@/domains/workflows/hooks/use-stored-workflows';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
@@ -36,20 +39,6 @@ import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 const EMPTY_MESSAGES: MastraDBMessage[] = [];
 const WORKFLOW_BUILDER_ROUTE = '/workflow-builder';
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function parseSchema(schema: string | undefined): WorkflowDraftStepSchema['inputSchema'] | undefined {
-  if (!schema) return undefined;
-  try {
-    const parsed: unknown = JSON.parse(schema);
-    return isRecord(parsed) ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 export default function WorkflowBuilderEditorPage({ create = false }: { create?: boolean }) {
   const params = useParams();
@@ -62,6 +51,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
   const navigate = useNavigate();
   const access = useWorkflowBuilderAccess();
   const [generationFailure, setGenerationFailure] = useState<WorkflowGenerationFailure | null>(null);
+  const [generationCandidate, setGenerationCandidate] = useState<WorkflowDraftCandidate>();
   const workflowQuery = useStoredWorkflow(create ? undefined : routeWorkflowId);
   const agentsQuery = useAgents();
   const toolsQuery = useTools();
@@ -70,17 +60,26 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
     workflowsQuery.error instanceof Error && /403|forbidden|permission/i.test(workflowsQuery.error.message);
   const validationContext = useMemo<WorkflowDraftValidationContext>(
     () => ({
-      agents: Object.fromEntries(Object.keys(agentsQuery.data ?? {}).map(id => [id, {}])),
+      agents: Object.fromEntries(
+        Object.entries(agentsQuery.data ?? {}).map(([id, agent]) => [id, { runtimeId: agent.id }]),
+      ),
       tools: Object.fromEntries(
         Object.entries(toolsQuery.data ?? {}).map(([id, tool]) => [
           id,
-          { inputSchema: parseSchema(tool.inputSchema), outputSchema: parseSchema(tool.outputSchema) },
+          {
+            runtimeId: tool.id,
+            inputSchema: parseWorkflowCatalogSchema(tool.inputSchema),
+            outputSchema: parseWorkflowCatalogSchema(tool.outputSchema),
+          },
         ]),
       ),
       workflows: Object.fromEntries(
         Object.entries(workflowsQuery.data ?? {}).map(([id, workflow]) => [
           id,
-          { inputSchema: parseSchema(workflow.inputSchema), outputSchema: parseSchema(workflow.outputSchema) },
+          {
+            inputSchema: parseWorkflowCatalogSchema(workflow.inputSchema),
+            outputSchema: parseWorkflowCatalogSchema(workflow.outputSchema),
+          },
         ]),
       ),
       workflowCatalog: workflowCatalogUnavailable ? 'unavailable' : 'available',
@@ -88,8 +87,8 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
     [agentsQuery.data, toolsQuery.data, workflowCatalogUnavailable, workflowsQuery.data],
   );
   const workflowDraft = useWorkflowDraft(workflowQuery.data, initialWorkflowId, validationContext);
-  const threadId = getWorkflowConversationThreadId(initialWorkflowId);
-  const conversationQuery = useAgentMessages({ agentId: 'workflow-builder', threadId, memory: true });
+  const threadId = getWorkflowConversationThreadId(initialWorkflowId, workflowQuery.data?.metadata);
+  const conversationQuery = useAgentMessages({ agentId: WORKFLOW_BUILDER_AGENT_ID, threadId, memory: true });
   const initialMessages = conversationQuery.data?.messages ?? EMPTY_MESSAGES;
   const deleteWorkflow = useDeleteStoredWorkflow();
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -120,7 +119,9 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
 
   const handleSave = async () => {
     try {
-      const saved = await workflowDraft.save();
+      const saved = await workflowDraft.save(
+        createWorkflowConversationMetadata(workflowQuery.data?.metadata, threadId),
+      );
       rememberWorkflowConversationThread(saved.id, threadId);
       toast.success('Workflow saved');
       if (create) await navigate(`/workflow-builder/${encodeURIComponent(saved.id)}`, { replace: true });
@@ -132,7 +133,9 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
   const handleRun = async () => {
     try {
       if (access.canWrite && workflowDraft.isReady) {
-        const saved = await workflowDraft.save();
+        const saved = await workflowDraft.save(
+          createWorkflowConversationMetadata(workflowQuery.data?.metadata, threadId),
+        );
         rememberWorkflowConversationThread(saved.id, threadId);
       }
       await navigate(`/workflows/${encodeURIComponent(workflowDraft.draft.id)}/graph`);
@@ -160,6 +163,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
       initialMessages={initialMessages}
       createTools={workflowDraft.createTools}
       onGenerationFailure={setGenerationFailure}
+      onCandidateChange={setGenerationCandidate}
     >
       <PageLayout className="h-full px-4 md:px-8">
         <PageLayout.TopArea>
@@ -262,6 +266,21 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
               </Badge>
               <span className="text-ui-xs text-neutral3">{workflowDraft.draft.graph.length} top-level entries</span>
             </div>
+            {generationCandidate?.hasUncheckpointedChanges ? (
+              <div className="space-y-2 rounded-lg border border-border1 bg-surface2 p-3 text-ui-xs text-neutral3">
+                <div className="flex items-center justify-between gap-3">
+                  <span>Generation candidate has uncheckpointed changes</span>
+                  <span>Candidate revision {generationCandidate.revision}</span>
+                </div>
+                {generationCandidate.issues.length > 0 ? (
+                  <ul className="list-disc space-y-1 pl-5 text-red-400">
+                    {generationCandidate.issues.map(issue => (
+                      <li key={`${issue.path}-${issue.message}`}>{issue.message}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
             {generationFailure ? (
               <ErrorState title="Workflow generation stopped" message={generationFailure.message} />
             ) : null}

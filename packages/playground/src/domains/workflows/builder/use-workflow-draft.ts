@@ -20,7 +20,7 @@ import type {
   WorkflowDraftValidationIssue,
 } from './workflow-draft';
 import { createWorkflowDraftTools } from './workflow-draft-tools';
-import type { WorkflowDraftToolResult } from './workflow-draft-tools';
+import type { WorkflowDraftCandidate, WorkflowDraftToolResult } from './workflow-draft-tools';
 import { useUpsertStoredWorkflow } from '@/domains/workflows/hooks/use-stored-workflows';
 
 export class WorkflowDraftValidationError extends Error {
@@ -54,12 +54,7 @@ function initializeAuthoringState(
 
 function createValidationContextKey(validationContext?: WorkflowDraftValidationContext) {
   if (!validationContext) return 'pending';
-  const catalogEntries = (
-    catalog?: Record<
-      string,
-      { inputSchema?: WorkflowDraft['inputSchema']; outputSchema?: WorkflowDraft['outputSchema'] }
-    >,
-  ) =>
+  const catalogEntries = (catalog?: WorkflowDraftValidationContext['agents']) =>
     Object.entries(catalog ?? {})
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([id, schemas]) => [id, schemas]);
@@ -136,19 +131,26 @@ export function useWorkflowDraft(
   );
 
   const createTools = useCallback(
-    (isCurrentGeneration?: () => boolean, onResult?: (event: WorkflowDraftToolResult) => void) =>
+    (
+      isCurrentGeneration?: () => boolean,
+      onResult?: (event: WorkflowDraftToolResult) => void,
+      candidate?: WorkflowDraftCandidate,
+      onCandidateChange?: (candidate: WorkflowDraftCandidate) => void,
+    ) =>
       createWorkflowDraftTools({
         getState: () => stateRef.current,
-        checkpoint: (expectedRevision, draft) =>
-          applyResult(checkpointWorkflowDraft(stateRef.current, expectedRevision, draft, validationContext)),
+        checkpoint: (expectedRevision, draft) => {
+          const result = checkpointWorkflowDraft(stateRef.current, expectedRevision, draft, validationContext);
+          if (result.ok) applyResult(result);
+          return result;
+        },
         finalize: expectedRevision =>
           applyResult(finalizeWorkflowDraft(stateRef.current, expectedRevision, validationContext)),
-        mutate: (expectedRevision, mutation) =>
-          applyResult(
-            mutateWorkflowDraftAuthoringState(stateRef.current, expectedRevision, mutation, validationContext),
-          ),
+        candidate,
+        validationContext,
         isCurrentGeneration,
         onResult,
+        onCandidateChange,
       }),
     [applyResult, validationContext],
   );
@@ -169,7 +171,7 @@ export function useWorkflowDraft(
     [initialId, replaceState, validationContext],
   );
 
-  const save = async () => {
+  const save = async (metadata?: Record<string, unknown>) => {
     const expectedRevision = stateRef.current.revision;
     const reservation = reserveWorkflowDraftSave(stateRef.current, expectedRevision, validationContext);
     applyResult(reservation);
@@ -182,7 +184,7 @@ export function useWorkflowDraft(
     const reservedDraft = reservation.state.draft;
     const reservedIdentity = identityRef.current;
     try {
-      const result = await saveMutation.mutateAsync(reservedDraft);
+      const result = await saveMutation.mutateAsync({ ...reservedDraft, metadata });
       if (
         mountedRef.current &&
         identityRef.current === reservedIdentity &&

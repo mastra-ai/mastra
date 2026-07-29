@@ -40,14 +40,13 @@ const toolEntry = z.object({
   toolId: z.string().describe('Id of a tool registered on this Mastra instance (see list-available-tools).'),
   options: stepOptions,
 });
+export const MAPPING_CONFIG_DESCRIPTION =
+  'A JSON-ENCODED STRING (not an object) of an object whose top-level keys become the mapping output fields. Each value must use exactly one canonical source form: { "template": "<text with ${placeholders}>" }, { "value": <constant> }, { "step": "<stepId>", "path": "<field.path>" }, { "initData": true, "path": "<workflow-input-field.path>" }, or { "requestContextPath": "<field.path>" }. IMPORTANT: initData is the boolean true, never a field name string; put the workflow input field name in path.';
+
 const mappingEntry = z.object({
   type: z.literal('mapping'),
   id: z.string().describe('Step id — kebab-case, unique within the workflow.'),
-  mapConfig: z
-    .string()
-    .describe(
-      'A JSON-ENCODED STRING (not an object) of an object whose top-level keys become the mapping output fields. Each value is one of: { "template": "<text with ${placeholders}>" }, { "value": <constant> }, { "step": "<stepId>", "path": "<field.path>" }, { "initData": "<workflowId>", "path": "<field.path>" }, { "requestContextPath": "<field.path>" }.',
-    ),
+  mapConfig: z.string().describe(MAPPING_CONFIG_DESCRIPTION),
 });
 const workflowEntry = z.object({
   type: z.literal('workflow'),

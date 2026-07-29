@@ -3,9 +3,10 @@ import type { ClientToolsInput } from '@mastra/react';
 import { useCallback, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { serializeWorkflowDraftInstructions } from './workflow-conversation';
+import { getOriginalWorkflowRequest, serializeWorkflowDraftInstructions } from './workflow-conversation';
 import type { WorkflowDraftAuthoringState, WorkflowDraftValidationContext } from './workflow-draft';
-import type { WorkflowDraftToolResult } from './workflow-draft-tools';
+import { createWorkflowDraftCandidate } from './workflow-draft-tools';
+import type { WorkflowDraftCandidate, WorkflowDraftToolResult } from './workflow-draft-tools';
 import { StreamChatProvider } from '@/domains/agent-builder/contexts/stream-chat-provider';
 
 export interface WorkflowGenerationFailure {
@@ -22,8 +23,11 @@ export interface WorkflowChatProviderProps {
   createTools: (
     isCurrentGeneration?: () => boolean,
     onResult?: (event: WorkflowDraftToolResult) => void,
+    candidate?: WorkflowDraftCandidate,
+    onCandidateChange?: (candidate: WorkflowDraftCandidate) => void,
   ) => ClientToolsInput;
   onGenerationFailure?: (failure: WorkflowGenerationFailure | null) => void;
+  onCandidateChange?: (candidate: WorkflowDraftCandidate | undefined) => void;
   debounceTime?: number;
   children: ReactNode;
 }
@@ -41,12 +45,33 @@ function WorkflowChatSession({
   initialUserMessage,
   createTools,
   onGenerationFailure,
+  onCandidateChange,
   debounceTime = 300,
   children,
 }: WorkflowChatProviderProps) {
   const [hydrationMessages] = useState(initialMessages);
+  const [originalRequest] = useState(() => initialUserMessage ?? getOriginalWorkflowRequest(initialMessages));
+  const [candidateSnapshot, setCandidateSnapshot] = useState<WorkflowDraftCandidate>();
+  const candidateRef = useRef<WorkflowDraftCandidate | undefined>(undefined);
+  const authoringStateRef = useRef(authoringState);
+  authoringStateRef.current = authoringState;
   const generationRef = useRef(0);
-  const generationStateRef = useRef({ accepted: false, finalized: false, rejected: 0, stopped: false });
+  const generationStateRef = useRef({
+    accepted: false,
+    finalized: false,
+    rejected: 0,
+    rejectionSignature: '',
+    stopped: false,
+  });
+
+  const updateCandidate = useCallback(
+    (candidate: WorkflowDraftCandidate) => {
+      candidateRef.current = candidate;
+      setCandidateSnapshot(candidate);
+      onCandidateChange?.(candidate);
+    },
+    [onCandidateChange],
+  );
 
   const failGeneration = useCallback(
     (failure: WorkflowGenerationFailure) => {
@@ -58,23 +83,53 @@ function WorkflowChatSession({
 
   const createClientTools = useCallback(() => {
     const generation = ++generationRef.current;
-    generationStateRef.current = { accepted: false, finalized: false, rejected: 0, stopped: false };
+    const acceptedState = authoringStateRef.current;
+    const existingCandidate = candidateRef.current;
+    const candidate =
+      existingCandidate?.baseAcceptedRevision === acceptedState.revision
+        ? existingCandidate
+        : createWorkflowDraftCandidate(acceptedState);
+    generationStateRef.current = {
+      accepted: acceptedState.revision > 0,
+      finalized: false,
+      rejected: 0,
+      rejectionSignature: '',
+      stopped: false,
+    };
     onGenerationFailure?.(null);
+    updateCandidate(candidate);
 
     const onResult = ({ toolId, result }: WorkflowDraftToolResult) => {
       if (generation !== generationRef.current || generationStateRef.current.stopped) return;
+      if (toolId !== 'submit-workflow-draft') return;
       if (result.success) {
         generationStateRef.current.accepted = true;
-        if (toolId === 'finalize-workflow-draft') generationStateRef.current.finalized = true;
+        generationStateRef.current.finalized = result.finalizedRevision === result.revision;
+        generationStateRef.current.rejected = 0;
+        generationStateRef.current.rejectionSignature = '';
         return;
       }
-      if (toolId !== 'checkpoint-workflow-draft' && toolId !== 'finalize-workflow-draft') return;
-      generationStateRef.current.rejected += 1;
+      if (
+        result.error === 'Draft changed before this operation completed.' ||
+        result.error === 'Submission was superseded.'
+      )
+        return;
+
+      const signature = JSON.stringify({
+        issues: result.issues?.map(issue => ({ code: issue.code, path: issue.path })) ?? [],
+        error: result.issues?.length ? undefined : result.error,
+      });
+      if (generationStateRef.current.rejectionSignature === signature) {
+        generationStateRef.current.rejected += 1;
+      } else {
+        generationStateRef.current.rejectionSignature = signature;
+        generationStateRef.current.rejected = 1;
+      }
       if (generationStateRef.current.rejected >= 3) {
         failGeneration({
           code: 'repair-budget-exhausted',
           message:
-            'Workflow generation stopped after three rejected draft repairs. Review the latest issues and retry.',
+            'Workflow generation stopped after three equivalent rejected definitions. Review the latest issues and retry.',
         });
       }
     };
@@ -85,8 +140,10 @@ function WorkflowChatSession({
         !generationStateRef.current.stopped &&
         !generationStateRef.current.finalized,
       onResult,
+      candidate,
+      updateCandidate,
     );
-  }, [createTools, failGeneration, onGenerationFailure]);
+  }, [createTools, failGeneration, onGenerationFailure, updateCandidate]);
 
   const handleSendComplete = useCallback(() => {
     const state = generationStateRef.current;
@@ -94,7 +151,7 @@ function WorkflowChatSession({
     failGeneration({
       code: state.accepted ? 'generation-failed' : 'no-accepted-draft',
       message: state.accepted
-        ? 'Workflow generation ended before the draft was finalized. The last accepted draft was preserved.'
+        ? 'Workflow generation ended before the draft was ready. The last accepted draft was preserved.'
         : 'Workflow generation ended without creating an accepted draft. Retry with more specific workflow steps.',
     });
   }, [failGeneration]);
@@ -112,7 +169,12 @@ function WorkflowChatSession({
       initialMessages={hydrationMessages}
       initialUserMessage={initialUserMessage}
       createClientTools={createClientTools}
-      extraInstructions={serializeWorkflowDraftInstructions(authoringState, validationContext)}
+      extraInstructions={serializeWorkflowDraftInstructions(
+        authoringState,
+        validationContext,
+        candidateSnapshot,
+        originalRequest,
+      )}
       enableThreadSignals={false}
       debounceTime={debounceTime}
       maxSteps={10}

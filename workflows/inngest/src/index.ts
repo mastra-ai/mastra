@@ -693,7 +693,8 @@ function createStepFromProcessor<TProcessorId extends string>(
               const spanKey = `__outputStreamSpan_${processor.id}`;
               const mutableState = (state ?? {}) as Record<string, unknown>;
               let processorSpan = mutableState[spanKey] as
-                ReturnType<NonNullable<typeof parentSpan>['createChildSpan']> | undefined;
+                | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
+                | undefined;
 
               if (!processorSpan && parentSpan) {
                 // First chunk - create span for this processor
