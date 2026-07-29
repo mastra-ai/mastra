@@ -100,13 +100,35 @@ export type { ScreencastOptions, ScreencastStream } from '../browser/browser';
 export type ZodSchema = ZodSchemaV3 | ZodTypev4;
 
 /**
+ * A single tool entry in {@link ToolsInput}.
+ *
+ * The provider-defined tool branch is locally narrowed to require `id: string`
+ * so that bare function values (e.g. `myTool: () => realTool`) are rejected at
+ * compile time. The runtime already throws for function entries via
+ * `ensureToolProperties()`, but without this local narrowing the ambient
+ * `[key: string]: any` index signature on `ProviderDefinedTool` lets a plain
+ * function satisfy the union. Every real provider tool (e.g.
+ * `google.tools.googleSearch()`, `openai.tools.webSearch()`) already carries
+ * an `id` of the form `'<provider>.<tool_name>'`, so this matches the runtime
+ * check in `isProviderDefinedTool`. The public `ProviderDefinedTool` type in
+ * `@internal/external-types` stays unchanged (`id?: string`) — tightening it
+ * is deferred to the next major (see the TODO there). See #15229.
+ *
+ * Note: `AgentConfig.tools` itself accepts `DynamicArgument<ToolsInput>`, so a
+ * function that returns the whole `ToolsInput` map remains valid — only
+ * function values as *individual* Record entries are rejected.
+ */
+type ToolsInputValue =
+  | ToolAction<any, any, any, any, any>
+  | VercelTool
+  | VercelToolV5
+  | (ProviderDefinedTool & { id: string });
+
+/**
  * Accepts Mastra tools, Vercel AI SDK tools, and provider-defined tools
  * (e.g., google.tools.googleSearch()).
  */
-export type ToolsInput = Record<
-  string,
-  ToolAction<any, any, any, any, any> | VercelTool | VercelToolV5 | ProviderDefinedTool
->;
+export type ToolsInput = Record<string, ToolsInputValue>;
 
 export type AgentInstructions = SystemMessage;
 
