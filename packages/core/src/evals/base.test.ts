@@ -1236,6 +1236,41 @@ describe('createScorer', () => {
       );
     });
 
+    it('records a rejected fallback attempt without fabricating another model call', async () => {
+      const { model, getCallCount } = createJudgeModel([
+        'not valid JSON',
+        createProviderError(503, false, 'fallback provider failed'),
+      ]);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        const scorer = createScorer({
+          id: 'fallback-provider-failure-scorer',
+          description: 'Separates attempted fallback invocations from completed model calls',
+          judge: { model, instructions: 'Return a score.' },
+        }).generateScore({ description: 'score', createPrompt: () => 'score this output' });
+
+        const error = await scorer.run(testData.scoringInput).catch(error => error);
+
+        expect(getCallCount()).toBe(2);
+        expect(error).toBeInstanceOf(ScorerRunError);
+        expect(error.result).not.toHaveProperty('score');
+        expect(error.result?.judge?.generateScore?.executions).toHaveLength(1);
+        const failedExecution = error.result?.judge?.generateScore?.executions[0];
+        expect(failedExecution).toMatchObject({
+          status: 'failed',
+          prompt: 'score this output',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          attemptCount: 2,
+          modelCallCount: 1,
+          rawOutput: 'not valid JSON',
+        });
+        expect(failedExecution).not.toHaveProperty('output');
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
     it('records exhausted fallback attempts as one failed logical judge execution', async () => {
       const { model, getCallCount } = createJudgeModel(['not valid JSON', 'still not valid JSON']);
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});

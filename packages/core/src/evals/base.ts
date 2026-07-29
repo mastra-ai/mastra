@@ -518,7 +518,7 @@ function addScorerJudgeUsage(accumulated: ScorerJudgeUsage, usage: ScorerJudgeUs
 interface ScorerJudgeTelemetryAccumulator {
   usage: ScorerJudgeUsage;
   attemptCount: number;
-  completedAttemptCount: number;
+  recordedAttemptCount: number;
   modelCallCount: number;
   judgeModelId?: string;
   judgeProvider?: string;
@@ -1363,7 +1363,7 @@ class MastraScorer<
     const telemetry: ScorerJudgeTelemetryAccumulator = {
       usage: {},
       attemptCount: 0,
-      completedAttemptCount: 0,
+      recordedAttemptCount: 0,
       modelCallCount: 0,
       judgeModelId: judgeModel,
       judgeProvider: resolvedModel.provider,
@@ -1420,7 +1420,7 @@ class MastraScorer<
           Boolean(modelFinishReason && modelFinishReason !== 'error'));
 
       if (hasCompletedModelEvidence) {
-        telemetry.completedAttemptCount += 1;
+        telemetry.recordedAttemptCount += 1;
         telemetry.modelCallCount += Math.max(steps.length, pendingStepCount, 1);
         addScorerJudgeUsage(telemetry.usage, normalizedCompletedUsage);
         if (typeof rawOutput === 'string') {
@@ -1441,7 +1441,7 @@ class MastraScorer<
         throw consumeError;
       }
 
-      if (completedOnFinishCount < telemetry.completedAttemptCount) {
+      if (completedOnFinishCount < telemetry.recordedAttemptCount) {
         const lastStep = steps.at(-1);
         const finishEvent = {
           ...(lastStep ?? {}),
@@ -1457,7 +1457,7 @@ class MastraScorer<
       }
     };
     const recordLegacyUsage = (usage: unknown, steps: unknown) => {
-      telemetry.completedAttemptCount += 1;
+      telemetry.recordedAttemptCount += 1;
       telemetry.modelCallCount += Array.isArray(steps) ? Math.max(steps.length, 1) : 1;
       addScorerJudgeUsage(telemetry.usage, normalizeScorerJudgeUsage(usage));
     };
@@ -1481,7 +1481,7 @@ class MastraScorer<
       let modelCallCount = telemetry.modelCallCount;
       let rawOutput = telemetry.rawOutput;
       let finishReason = telemetry.finishReason;
-      const hasUnrecordedAttempt = telemetry.completedAttemptCount < telemetry.attemptCount;
+      const hasUnrecordedAttempt = telemetry.recordedAttemptCount < telemetry.attemptCount;
 
       if (hasUnrecordedAttempt) {
         const errorRecord = error && typeof error === 'object' ? (error as Record<string, unknown>) : undefined;
