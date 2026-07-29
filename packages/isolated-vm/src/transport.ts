@@ -165,8 +165,12 @@ export class IsolatedVmCodeModeTransport implements CodeModeTransport {
       }
       try {
         const result = await dispatch(tool, args);
+        // Serialize before reporting success so a non-serializable result
+        // (circular reference, BigInt) falls through to the error path without
+        // emitting a success event first.
+        const json = JSON.stringify({ ok: true, result } satisfies HostRpcEnvelope);
         notifyResult(tool, Date.now() - started);
-        return JSON.stringify({ ok: true, result } satisfies HostRpcEnvelope) ?? '{"ok":true}';
+        return json;
       } catch (error) {
         const err = error as { message?: string; name?: string };
         notifyResult(tool, Date.now() - started, error instanceof Error ? error : new Error(String(error)));

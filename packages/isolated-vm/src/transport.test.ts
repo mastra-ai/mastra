@@ -287,6 +287,20 @@ describe('IsolatedVmCodeModeTransport', () => {
     expect(onExternalResult).toHaveBeenCalledWith('fail', expect.any(Number), expect.any(Error));
     expect(onExternalResult.mock.calls[0]![2].message).toBe('boom');
   });
+
+  it('reports a single error outcome when the dispatch result is not JSON-serializable', async () => {
+    const onExternalResult = vi.fn();
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    const result = await run(`return await external_ping({});`, {
+      toolIds: ['ping'],
+      dispatch: async () => circular,
+      onExternalResult,
+    });
+    expect(result.success).toBe(false);
+    expect(onExternalResult).toHaveBeenCalledTimes(1);
+    expect(onExternalResult.mock.calls[0]![2]).toBeInstanceOf(Error);
+  });
 });
 
 describe('createCodeMode with IsolatedVmCodeModeTransport (no sandbox)', () => {
