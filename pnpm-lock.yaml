@@ -2473,6 +2473,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
+      '@internal/workspace-test-utils':
+        specifier: workspace:*
+        version: link:../../workspaces/_test-utils
       '@libsql/client':
         specifier: ^0.17.4
         version: 0.17.4(bufferutil@4.1.0)
@@ -4282,9 +4285,6 @@ importers:
       '@ai-sdk/provider-v7':
         specifier: npm:@ai-sdk/provider@4.0.3
         version: '@ai-sdk/provider@4.0.3'
-      '@ai-sdk/ui-utils-v5':
-        specifier: npm:@ai-sdk/ui-utils@1.2.11
-        version: '@ai-sdk/ui-utils@1.2.11(zod@4.4.3)'
       '@isaacs/ttlcache':
         specifier: ^2.1.4
         version: 2.1.4
@@ -4960,6 +4960,43 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.4.3
+
+  packages/isolated-vm:
+    dependencies:
+      esbuild:
+        specifier: ^0.28.0
+        version: 0.28.1
+      isolated-vm:
+        specifier: ^6.1.2
+        version: 6.1.2
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../_types-builder
+      '@mastra/core':
+        specifier: workspace:*
+        version: link:../core
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.10(vitest@4.1.10)
+      eslint:
+        specifier: ^10.7.0
+        version: 10.7.0(jiti@2.7.0)
+      tsdown:
+        specifier: 0.22.9
+        version: 0.22.9(@volar/typescript@2.4.23)(oxc-resolver@11.20.0)(tsx@4.23.1)(typescript@6.0.3)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))
 
   packages/loggers:
     dependencies:
@@ -25220,6 +25257,10 @@ packages:
   isobject@3.0.1:
     resolution: {integrity: sha512-WhB9zCku7EGTj/HQQRz5aUQEUeoQZH2bWcltRErOpymJ4boYE6wL9Tbr23krRPSZ+C5zqNSrSw+Cc7sZZ4b7vg==}
     engines: {node: '>=0.10.0'}
+
+  isolated-vm@6.1.2:
+    resolution: {integrity: sha512-GGfsHqtlZiiurZaxB/3kY7LLAXR3sgzDul0fom4cSyBjx6ZbjpTrFWiH3z/nUfLJGJ8PIq9LQmQFiAxu24+I7A==}
+    engines: {node: '>=22.0.0'}
 
   isomorphic-ws@5.0.0:
     resolution: {integrity: sha512-muId7Zzn9ywDsyXgTIafTry2sV3nySZeUDe6YedVd1Hvuuep5AsIlqK+XefWpYTyJG5e503F2xIuT2lcU6rCSw==}
@@ -49547,6 +49588,10 @@ snapshots:
   isexe@4.0.0: {}
 
   isobject@3.0.1: {}
+
+  isolated-vm@6.1.2:
+    dependencies:
+      node-gyp-build: 4.8.4
 
   isomorphic-ws@5.0.0(ws@8.21.0(bufferutil@4.1.0)):
     dependencies:

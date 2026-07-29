@@ -145,6 +145,41 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       this.repositoriesRows.push(created);
       return created;
     },
+    migrateInstallation: async ({
+      orgId,
+      id,
+      newInstallationId,
+    }: {
+      orgId: string;
+      id: string;
+      newInstallationId: string;
+    }) => {
+      const existing = await this.repositories.get({ orgId, id });
+      if (!existing) {
+        throw new Error(`Repository ${id} not found in organization ${orgId}`);
+      }
+      if (!(await this.installations.get({ orgId, id: newInstallationId }))) {
+        throw new Error('Source-control installation not found');
+      }
+      // Check if a repository with the same external_id exists under the new installation
+      const conflict = this.repositoriesRows.find(
+        row => row.installationId === newInstallationId && row.externalId === existing.externalId,
+      );
+      if (conflict) {
+        // Return the existing repository under the new installation
+        return conflict;
+      }
+      // Update the repository's installation
+      existing.installationId = newInstallationId;
+      existing.updatedAt = new Date();
+      // Migrate dependent connections to the new installation
+      for (const conn of this.connectionsRows) {
+        if (conn.installationId === existing.installationId) {
+          conn.installationId = newInstallationId;
+        }
+      }
+      return existing;
+    },
   };
 
   readonly connections = {

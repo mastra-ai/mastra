@@ -1043,7 +1043,8 @@ export type StepExecutionResult = {
   result: StepResult<any, any, any, any>;
   stepResults: Record<string, StepResult<any, any, any, any>>;
   mutableContext: MutableContext;
-  requestContext: Record<string, any>;
+  /** Serialized requestContext — only set by engines where `requiresDurableContextSerialization()` is true. */
+  requestContext?: Record<string, any>;
 };
 
 /**
@@ -1054,7 +1055,8 @@ export type EntryExecutionResult = {
   result: StepResult<any, any, any, any>;
   stepResults: Record<string, StepResult<any, any, any, any>>;
   mutableContext: MutableContext;
-  requestContext: Record<string, any>;
+  /** Serialized requestContext — only set by engines where `requiresDurableContextSerialization()` is true. */
+  requestContext?: Record<string, any>;
 };
 
 // =============================================================================

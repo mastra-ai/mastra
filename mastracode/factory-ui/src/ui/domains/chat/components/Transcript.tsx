@@ -1,4 +1,5 @@
 import type { PlanResume } from '@mastra/client-js';
+import { mastraDBMessageToSignal } from '@mastra/core/signals';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeBlock as DsCodeBlock } from '@mastra/playground-ui/components/CodeBlock';
@@ -21,6 +22,7 @@ import {
   GitMerge,
   Info,
   Layers,
+  Slack,
   Wrench,
   X,
 } from 'lucide-react';
@@ -675,9 +677,31 @@ function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry })
   );
 }
 
-/** Collapsible row for state/reminder/reactive signals, mirroring NotificationRow. */
+/** Compact row for state/reminder/reactive signals, collapsible when it has details. */
 function SignalRow({ kind, label, message }: { kind: string; label: string; message: string }) {
   const [expanded, setExpanded] = useState(false);
+  const icon =
+    kind === 'state' ? (
+      <Layers size={13} className="text-purple-400" />
+    ) : kind === 'reminder' ? (
+      <Info size={13} className="text-accent3" />
+    ) : (
+      <Info size={13} className="text-icon3" />
+    );
+
+  if (!message) {
+    return (
+      <div className="max-w-full min-w-0" data-signal-kind={kind} role="group" aria-label={`Signal: ${label}`}>
+        <span className="flex w-full items-center gap-2 px-2 py-1.5">
+          <span className="flex shrink-0 items-center">{icon}</span>
+          <Txt as="span" variant="ui-smd" className="text-icon5 shrink-0">
+            {label}
+          </Txt>
+        </span>
+      </div>
+    );
+  }
+
   return (
     <Collapsible
       open={expanded}
@@ -696,15 +720,7 @@ function SignalRow({ kind, label, message }: { kind: string; label: string; mess
               expanded ? 'rotate-0' : '-rotate-90',
             )}
           />
-          <span className="flex shrink-0 items-center">
-            {kind === 'state' ? (
-              <Layers size={13} className="text-purple-400" />
-            ) : kind === 'reminder' ? (
-              <Info size={13} className="text-accent3" />
-            ) : (
-              <Info size={13} className="text-icon3" />
-            )}
-          </span>
+          <span className="flex shrink-0 items-center">{icon}</span>
           <Txt as="span" variant="ui-smd" className="text-icon5 shrink-0">
             {label}
           </Txt>
@@ -820,6 +836,46 @@ export function TranscriptEntries({
   );
 }
 
+const CHANNEL_PLATFORM_LABEL: Record<string, string> = {
+  slack: 'Slack',
+};
+
+/**
+ * Channel provenance for a message that arrived via a channel adapter.
+ * `agent-channels` stamps `content.providerMetadata.mastra.channels.<platform>`
+ * with author facts on inbound messages exactly so UIs can show origin
+ * without unpacking the signal envelope.
+ */
+export function channelOrigin(entry: MessageEntry): { platform: string; authorName?: string } | undefined {
+  const mastra = entry.message.content.providerMetadata?.mastra;
+  const channels = isRecord(mastra) ? mastra.channels : undefined;
+  if (!isRecord(channels)) return undefined;
+  const platform = Object.keys(channels)[0];
+  if (!platform) return undefined;
+  const info = channels[platform];
+  const author = isRecord(info) && isRecord(info.author) ? info.author : undefined;
+  const authorName =
+    typeof author?.fullName === 'string'
+      ? author.fullName
+      : typeof author?.userName === 'string'
+        ? author.userName
+        : undefined;
+  return { platform, authorName };
+}
+
+export function ChannelOriginBadge({ origin }: { origin: { platform: string; authorName?: string } }) {
+  const label = CHANNEL_PLATFORM_LABEL[origin.platform] ?? origin.platform;
+  return (
+    <div className="text-ui-xs text-icon3 mt-1 flex items-center gap-1" aria-label={`Sent from ${label}`}>
+      {origin.platform === 'slack' && <Slack className="size-3" aria-hidden="true" />}
+      <span>
+        via {label}
+        {origin.authorName ? ` · ${origin.authorName}` : ''}
+      </span>
+    </div>
+  );
+}
+
 function MessageBubble({
   entry,
   suspensions,
@@ -854,6 +910,7 @@ function MessageBubble({
     return undefined;
   })();
 
+  const origin = channelOrigin(entry);
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
       <div className="my-3 flex w-full flex-col items-end">
@@ -864,6 +921,7 @@ function MessageBubble({
         >
           {children}
         </div>
+        {origin && <ChannelOriginBadge origin={origin} />}
       </div>
     ),
     Assistant: ({ children }) => <div className="max-w-full">{children}</div>,
@@ -884,12 +942,18 @@ function MessageBubble({
         );
       }
 
+      const showCursor = entry.streaming && part === lastTextPart;
       return (
         <div className="prose my-3">
-          <Markdown>{part.text}</Markdown>
-          {entry.streaming && part === lastTextPart && (
-            <span className="bg-accent1 ml-0.5 inline-block h-[1em] w-0.5 animate-pulse align-text-bottom" />
-          )}
+          <Markdown
+            className={
+              showCursor
+                ? "[&>:last-child]:after:bg-accent1 [&>:last-child]:after:ml-0.5 [&>:last-child]:after:inline-block [&>:last-child]:after:h-[1em] [&>:last-child]:after:w-0.5 [&>:last-child]:after:animate-pulse [&>:last-child]:after:align-text-bottom [&>:last-child]:after:content-['']"
+                : undefined
+            }
+          >
+            {part.text}
+          </Markdown>
         </div>
       );
     },
@@ -1079,9 +1143,11 @@ function signalNotifications(entry: MessageEntry): Array<NotificationEntry | Not
 }
 
 function signalPartsText(entry: MessageEntry): string {
-  return (entry.message.content.parts ?? [])
-    .map(part => (part.type === 'text' ? part.text : ''))
-    .filter(Boolean)
+  const { contents } = mastraDBMessageToSignal(entry.message);
+  if (typeof contents === 'string') return contents.trim();
+
+  return contents
+    .flatMap(part => (part.type === 'text' && part.text ? [part.text] : []))
     .join('\n')
     .trim();
 }

@@ -92,7 +92,7 @@ export function CustomProvidersSection() {
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-3">
         <Txt as="p" variant="ui-sm" className="text-icon3">
-          OpenAI-compatible endpoints. Mirrors the TUI <code>/custom-providers</code> command.
+          OpenAI-compatible endpoints.
         </Txt>
         {!draft && (
           <Button size="sm" onClick={startAdd} disabled={busy}>
@@ -168,11 +168,7 @@ export function CustomProvidersSection() {
 
       {loading ? (
         <SkeletonRows label="Loading custom providers" rows={3} rowClassName="h-9 w-full" />
-      ) : providers.length === 0 && !draft ? (
-        <Txt as="p" variant="ui-sm" className="text-icon3">
-          No custom providers yet. Add one above.
-        </Txt>
-      ) : (
+      ) : providers.length === 0 ? null : (
         <ul role="list" className="divide-border1 flex flex-col divide-y">
           {providers.map(p => (
             <li key={p.id} role="listitem" className="flex items-center justify-between gap-3 py-2">

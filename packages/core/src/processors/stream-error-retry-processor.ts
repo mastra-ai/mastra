@@ -15,6 +15,7 @@ export type StreamErrorRetryMatcherConfig = {
   match: StreamErrorRetryMatcher;
   maxRetries?: number;
   delayMs?: StreamErrorRetryDelayMs;
+  onRetry?: (args: ProcessAPIErrorArgs & { delayMs: number }) => void | Promise<void>;
 };
 
 /** A matcher entry: either a plain predicate or a config object with per-matcher policy. */
@@ -227,7 +228,11 @@ function isKnownTerminalAuthorizationError(error: unknown): boolean {
   return visit(error);
 }
 
-type MatchedPolicy = { maxRetries?: number; delayMs?: StreamErrorRetryDelayMs };
+type MatchedPolicy = {
+  maxRetries?: number;
+  delayMs?: StreamErrorRetryDelayMs;
+  onRetry?: StreamErrorRetryMatcherConfig['onRetry'];
+};
 
 function normalizeEntry(entry: StreamErrorRetryMatcherEntry): StreamErrorRetryMatcherConfig {
   return typeof entry === 'function' ? { match: entry } : entry;
@@ -235,9 +240,8 @@ function normalizeEntry(entry: StreamErrorRetryMatcherEntry): StreamErrorRetryMa
 
 /**
  * Walk the error cause chain and return the policy of the first matching
- * entry, or `undefined` when no matcher fires. Provider `isRetryable`
- * metadata is checked first (returns an empty policy so processor-level
- * defaults apply). Among user-supplied matchers, first-match wins.
+ * entry, or `undefined` when no matcher fires. Explicit matchers take
+ * precedence over provider `isRetryable` metadata, and first-match wins.
  */
 function findMatchingPolicy(error: unknown, entries: StreamErrorRetryMatcherConfig[]): MatchedPolicy | undefined {
   const visited = new WeakSet<object>();
@@ -248,14 +252,14 @@ function findMatchingPolicy(error: unknown, entries: StreamErrorRetryMatcherConf
       visited.add(candidate);
     }
 
-    if (isRetryableProviderMetadata(candidate)) {
-      return {};
-    }
-
     for (const entry of entries) {
       if (entry.match(candidate)) {
-        return { maxRetries: entry.maxRetries, delayMs: entry.delayMs };
+        return { maxRetries: entry.maxRetries, delayMs: entry.delayMs, onRetry: entry.onRetry };
       }
+    }
+
+    if (isRetryableProviderMetadata(candidate)) {
+      return {};
     }
 
     const cause = getObjectCause(candidate);
@@ -299,7 +303,9 @@ export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-
     const configuredDelayMs = effectiveDelay === undefined ? 0 : await resolveDelayMs(effectiveDelay, args);
     const retryAfterMs = getRetryAfterMs(error);
     const providerDelayMs = retryAfterMs === undefined ? 0 : Math.min(retryAfterMs, this.#maxRetryAfterMs);
-    await waitDelay(Math.max(configuredDelayMs, providerDelayMs), abortSignal);
+    const delayMs = Math.max(configuredDelayMs, providerDelayMs);
+    await policy.onRetry?.({ ...args, delayMs });
+    await waitDelay(delayMs, abortSignal);
 
     return { retry: true };
   }

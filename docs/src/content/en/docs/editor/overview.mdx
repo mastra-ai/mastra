@@ -21,9 +21,9 @@ The editor manages two types of resources alongside agents:
 Use the editor when you want to:
 
 - **Let non-developers iterate**: Give subject-matter experts and prompt engineers a way to tune agent behavior without touching code or waiting for deploys.
-- **Version everything**: Every save creates a snapshot so you can compare changes, roll back instantly, and audit what changed and when.
-- **Run experiments**: Route different users or requests to different agent versions for A/B testing, canary rollouts, or prompt experimentation.
-- **Target specific versions**: Pin a version per request, per user, or per environment so production stays stable while new versions are tested.
+- **Version everything**: Every save creates a snapshot so you can compare changes and roll back instantly, plus audit what changed and when.
+- **Run experiments**: Route different users or requests to different agent versions for A/B testing or canary rollouts, or alternatively prompt experimentation.
+- **Target specific versions**: Pin a version per request or per user, or alternatively per environment so production stays stable while new versions are tested.
 - **Manage tools at runtime**: Add integration tools from Composio or Arcade, or connect MCP servers, without updating code.
 - **Override code agents**: Change the instructions, tools, or variables of a code-defined agent while keeping the original code as the baseline.
 
@@ -82,7 +82,7 @@ When `source` is `'code'`, the editor writes each override to a deterministic JS
 
 The code source uses the Git history of each per-agent JSON file as its version history. Each commit that changes a file is shown as a read-only version in Studio, labeled with the commit message. Saving in Studio updates the working file in place rather than creating a database draft, so the version dropdown reflects your actual commit history.
 
-This means versions and rollbacks are managed through Git rather than through draft and publish actions.
+As a result, versions and rollbacks are managed through Git rather than through draft and publish actions.
 
 ## Studio
 
@@ -92,7 +92,7 @@ Modify the system prompt and save a new draft version. Afterwards, publish the d
 
 ## Programmatic control
 
-Everything you can do in Studio is also available programmatically through [`mastra.getEditor()`](/reference/core/getEditor). This is useful for scripting bulk updates, seeding stored configurations from code, or building automation that tunes agents based on evaluation results.
+Everything you can do in Studio is also available programmatically through [`mastra.getEditor()`](/reference/core/getEditor). This is useful for scripting bulk updates or seeding stored configurations from code, or alternatively building automation that tunes agents based on evaluation results.
 
 Call `mastra.getEditor()` from anywhere you have access to the `Mastra` instance. It returns the `MastraEditor` instance you registered, with namespaces for each resource type:
 
@@ -154,7 +154,7 @@ Because stored agents are data, you can build automation loops that tune agents 
 - Re-run the experiment against the draft and compare scores to the baseline.
 - Promote the draft to the published version when the scores improve.
 
-This turns agent tuning into a closed feedback loop. One agent owns the production configuration, another agent iterates on it, and every change is versioned so you can roll back if a round of automated edits makes things worse. Combine this with [version targeting](#version-targeting-and-experimentation) to keep production traffic on the published version while the draft is being tested. See the [MastraEditor reference](/reference/editor/mastra-editor) for the full namespace API.
+This turns agent tuning into a closed feedback loop. One agent owns the production configuration and another agent iterates on it, plus every change is versioned so you can roll back if a round of automated edits makes things worse. Combine this with [version targeting](#version-targeting-and-experimentation) to keep production traffic on the published version while the draft is being tested. See the [MastraEditor reference](/reference/editor/mastra-editor) for the full namespace API.
 
 ## What can be overridden
 
@@ -196,50 +196,56 @@ When a field is owned by code, Studio shows it as read-only and the server strip
 
 ## Versioning
 
-Every time you save changes to an agent or prompt block, a new version snapshot is created. Versions give you a full history of your agent's configuration. You can roll back to any previous state, compare what changed between two snapshots, and target specific versions per request for A/B testing or gradual rollouts.
+Every time you save changes to an agent or prompt block, a new version snapshot is created. Versions give you a full history of your agent's configuration. You can roll back to any previous state and compare what changed between two snapshots, plus target specific versions per request for A/B testing or gradual rollouts.
 
 Version management is available through the server Studio, REST API, the Client SDK, and the React SDK. See the [Client SDK agents reference](/reference/client-js/agents#version-management) for endpoints, SDK methods, and code examples.
 
 ### Version lifecycle
 
-Each version has one of three statuses:
+Version snapshots don't store a lifecycle status. Instead, the agent or prompt block stores an `activeVersionId` that identifies its published version.
 
-| Status | Description |
+| Term | Description |
 | - | - |
-| Draft | The latest working copy. Every save creates a new draft version. |
-| Published | The active version used in production. Only one version can be published at a time. |
-| Archived | A previous version that's no longer active. You can restore any archived version. |
+| Latest | The most recently saved version snapshot. |
+| Published | The version whose ID matches `activeVersionId`. Only one version can be active at a time. |
+| Draft | The latest version when it differs from the active version. If `activeVersionId` isn't set, the latest version remains unpublished. |
+| Historical | Any other saved version. Historical versions remain available for comparison, direct selection, and restoration. |
 
-The typical flow is: Edit the draft, test it, then activate it to make it the published version. The previously published version becomes archived so you can restore it if needed. You can do this through Studio or programmatically through the API.
+Saving a database-backed resource creates a new latest version. If an active version already exists, it continues to handle requests until you publish the new version. Publishing sets `activeVersionId` to the selected version without deleting or changing the previous active version.
 
-This lifecycle makes it safe to experiment. Non-technical team members can iterate on a draft without affecting production traffic, then publish when ready. If something goes wrong, restoring a previous version is a single API call.
+Restoring a historical version copies its configuration into a new draft that remains inactive until you publish it.
 
 ### Version targeting and experimentation
 
-Because every version has a unique ID, you can route different requests to different agent configurations. This opens up several patterns:
+Because every version has a unique ID, you can route different requests to different agent configurations. This supports several patterns:
 
-- **A/B testing**: Split traffic between two published versions and compare performance metrics.
-- **Canary rollouts**: Send a small percentage of requests to a new version before promoting it.
-- **Per-user targeting**: Pin specific users or accounts to a version while others use the default.
-- **Environment separation**: Use the draft version in staging and the published version in production.
+- **A/B testing**: Split traffic between specific version IDs and compare performance metrics.
+- **Canary rollouts**: Send a small percentage of requests to a draft or historical version before publishing it.
+- **Per-user targeting**: Pin specific users or accounts to a version while others use the active version.
+- **Environment separation**: Use the latest version in staging and the active version in production.
 
-Pass a `versionId` or `status` when calling the agent through the Client SDK, server query parameters, or React SDK `requestContext`, and the correct version is loaded automatically.
+Pass a `versionId` or `status` when calling the agent through the Client SDK, server query parameters, or React SDK `requestContext`. A `versionId` selects that exact snapshot, `status: 'draft'` selects the latest snapshot, and `status: 'published'` selects the active snapshot.
 
 ### Version selection
 
-By default, [`mastra.getAgentById()`](/reference/core/getAgentById) loads the published (active) version of the stored override. You can request a specific version, which is useful for testing a draft before publishing, running A/B experiments, or pinning a user to a known-good configuration:
+Calling [`mastra.getAgentById()`](/reference/core/getAgentById) without a version selector returns the registered code-defined agent. Pass a selector to apply a published, draft, or specific stored override:
 
 ```typescript title="Version selection"
-// Load the published version (default)
-const agent = mastra.getAgentById('support-agent')
+// Load the registered code-defined agent without stored overrides
+const codeAgent = mastra.getAgentById('support-agent')
 
-// Load the latest draft
-const agent = mastra.getAgentById('support-agent', {
+// Load the active published override
+const publishedAgent = await mastra.getAgentById('support-agent', {
+  status: 'published',
+})
+
+// Load the latest override
+const draftAgent = await mastra.getAgentById('support-agent', {
   status: 'draft',
 })
 
 // Load a specific version
-const agent = mastra.getAgentById('support-agent', {
+const versionedAgent = await mastra.getAgentById('support-agent', {
   versionId: 'abc-123',
 })
 ```
@@ -265,9 +271,9 @@ When a [supervisor agent](/docs/agents/supervisor-agents) delegates to sub-agent
 
 Set version overrides at three levels, with later levels taking priority:
 
-1. **Mastra instance config** — global defaults that apply to every `generate()` and `stream()` call.
-1. **Per-invocation options** — overrides passed directly to `generate()` or `stream()`.
-1. **Server request body** — overrides sent in the `versions` field of an API request.
+1. **Mastra instance config**: global defaults that apply to every `generate()` and `stream()` call.
+1. **Per-invocation options**: overrides passed directly to `generate()` or `stream()`.
+1. **Server request body**: overrides sent in the `versions` field of an API request.
 
 Resolution order: **per-invocation > request body > Mastra instance defaults > code-defined agent**.
 

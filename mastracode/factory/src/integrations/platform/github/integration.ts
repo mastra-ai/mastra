@@ -44,6 +44,8 @@ import type {
 } from '../../../storage/domains/source-control/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
 import type { GithubIntegration, GithubRepositoryPermission, RepoSummary } from '../../github/integration.js';
+import type { GithubIssueTriageInput, GithubIssueTriageResult } from '../../github/issue-triage.js';
+import { runGithubIssueTriage } from '../../github/issue-triage.js';
 import { buildGithubRoutes } from '../../github/routes.js';
 import { attachGithubReconciler, attachGithubRules } from '../../github/rules.js';
 import type { ReconcilePullRequestState } from '../../github/rules.js';
@@ -194,6 +196,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly #installationReposCache = new Map<number, { repos: RepoSummary[]; expiresAt: number }>();
   /** `orgId:repositoryId` → cached repository access (TTL-bounded). */
   readonly #repositoryAccessCache = new Map<string, { access: RepositoryAccess; expiresAt: number }>();
+  readonly #runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
 
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
@@ -360,20 +363,59 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       const installationId = parsePositiveInteger(installation.externalId);
       if (installationId === null) throw new Error('GitHub installation id is invalid.');
       const repositoryName = splitRepository(repository.slug).repo;
-      const token = await this.#client.request<{ token: string }>(
-        'POST',
-        `${API_PREFIX}/github-app/installations/${installationId}/token`,
-        { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
-      );
-      const access: RepositoryAccess = {
-        cloneUrl,
-        authorization: { scheme: 'bearer', token: token.token },
-      };
-      setBounded(this.#repositoryAccessCache, cacheKey, {
-        access,
-        expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
-      });
-      return access;
+
+      try {
+        const token = await this.#client.request<{ token: string }>(
+          'POST',
+          `${API_PREFIX}/github-app/installations/${installationId}/token`,
+          { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+        );
+        const access: RepositoryAccess = {
+          cloneUrl,
+          authorization: { scheme: 'bearer', token: token.token },
+        };
+        setBounded(this.#repositoryAccessCache, cacheKey, {
+          access,
+          expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
+        });
+        return access;
+      } catch (err) {
+        // Recover from stale installation: when a GitHub App is uninstalled and reinstalled,
+        // GitHub assigns a new installation ID. Platform creates a new installation row,
+        // and Factory's intake.listSources creates a new local installation row with the
+        // new externalId. Try to find the new installation by accountName.
+        if (!isNotFound(err) || !installation.accountName) throw err;
+        const installations = await this.storage.installations.list({ orgId });
+        const newInstallation = installations.find(
+          inst => inst.accountName === installation.accountName && inst.id !== installation.id,
+        );
+        if (!newInstallation) throw err;
+        const newInstallationId = parsePositiveInteger(newInstallation.externalId);
+        if (newInstallationId === null) throw err;
+
+        // Persist the migration so we don't hit the 404 path on every call.
+        // This updates the repository's installation_id to the new installation.
+        await this.storage.repositories.migrateInstallation({
+          orgId,
+          id: repositoryId,
+          newInstallationId: newInstallation.id,
+        });
+
+        const token = await this.#client.request<{ token: string }>(
+          'POST',
+          `${API_PREFIX}/github-app/installations/${newInstallationId}/token`,
+          { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+        );
+        const access: RepositoryAccess = {
+          cloneUrl,
+          authorization: { scheme: 'bearer', token: token.token },
+        };
+        setBounded(this.#repositoryAccessCache, cacheKey, {
+          access,
+          expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
+        });
+        return access;
+      }
     },
     listPullRequests: input => this.#listPullRequests(input),
     getPullRequest: input => this.#getPullRequest(input),
@@ -401,13 +443,18 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     removeRequestedReviewers: input => this.#requestedReviewers('DELETE', input),
   };
 
-  constructor() {
+  constructor(
+    options: {
+      runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
+    } = {},
+  ) {
     const config = platformApiClientConfigFromEnv();
     this.#client = new PlatformApiClient(config);
     this.#endpointHost = new URL(config.baseUrl).host;
     this.#pollingEnabled = process.env.MASTRA_PLATFORM_GITHUB_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
     this.#pollingIntervalMs = optionalPositiveIntegerEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS');
     this.#reconcileEnabled = process.env.MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED?.trim().toLowerCase() !== 'false';
+    this.#runIssueTriage = options.runIssueTriage;
   }
 
   get storage(): SourceControlStorageHandle {
@@ -474,6 +521,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         projects: ctx.storage.projects,
         emitAudit: ctx.hooks?.emitAudit,
         ingestFactoryEvent,
+        runIssueTriage:
+          this.#runIssueTriage ??
+          (ctx.controller ? input => runGithubIssueTriage({ controller: ctx.controller!, input }) : undefined),
       }).filter(
         route =>
           route.path !== '/web/github/status' &&

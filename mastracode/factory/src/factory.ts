@@ -38,6 +38,7 @@ import {
 } from './auth.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
+import type { GithubIssueTriageInput, GithubIssueTriageResult } from './integrations/github/issue-triage.js';
 import { recordFactoryPullRequestProvenance } from './integrations/github/provenance.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
@@ -65,6 +66,7 @@ import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { AuditDomain } from './storage/domains/audit/domain.js';
+import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
@@ -159,6 +161,16 @@ export interface MastraFactoryConfig {
    * Omitted → conservative built-in rules for the current deployment.
    */
   rules?: FactoryRules;
+
+  /**
+   * Platform-specific overrides. When the Platform-backed GitHub integration
+   * is active, it derives a `runIssueTriage` runner from the mounted
+   * controller automatically. An explicit `runIssueTriage` here takes
+   * precedence over the controller-derived default.
+   */
+  platform?: {
+    runIssueTriage?: (input: GithubIssueTriageInput) => Promise<GithubIssueTriageResult>;
+  };
 }
 
 export interface MastraFactorySandboxConfig {
@@ -321,7 +333,11 @@ export class MastraFactory {
     const integrations = [...(this.#config.integrations ?? [])];
     if (hasPlatformSecretKey()) {
       if (!integrations.some(integration => integration.id === 'github')) {
-        integrations.push(new PlatformGithubIntegration());
+        integrations.push(
+          new PlatformGithubIntegration({
+            runIssueTriage: this.#config.platform?.runIssueTriage,
+          }),
+        );
       }
       if (!integrations.some(integration => integration.id === 'linear')) {
         integrations.push(new PlatformLinearIntegration());
@@ -355,6 +371,9 @@ export class MastraFactory {
     const integrationStorage = storage.registerDomain(new IntegrationStorage());
     const factoryProjectsStorage = storage.registerDomain(new FactoryProjectsStorage());
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
+    // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
+    // tenant, so inbound channel events can resolve the sender's model creds.
+    const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -366,6 +385,7 @@ export class MastraFactory {
       projects: factoryProjectsStorage,
       queueHealth: queueHealthStorage,
       workItems: workItemsStorage,
+      channelIdentity: channelIdentityStorage,
     };
     const projectRoutes = new ProjectRoutes({
       auth: routeAuth,
@@ -472,7 +492,13 @@ export class MastraFactory {
     // providers additionally require the source-control storage domain. Readiness
     // is derived solely from capability presence, never from provider ids.
     const integrationRegistrations = integrations.map(integration => {
-      const requiredDomains = ['integrations', ...(integration.versionControl ? ['source-control'] : [])];
+      const requiredDomains = [
+        'integrations',
+        ...(integration.versionControl ? ['source-control'] : []),
+        // Channels resolve an inbound sender to a tenant through the reverse
+        // index; without it every message would dispatch tenant-less.
+        ...(integration.channels ? ['channel-identity'] : []),
+      ];
       return {
         integration,
         ready: requiredDomains.every(domain => storage.isDomainReady(domain)),
@@ -731,6 +757,47 @@ export class MastraFactory {
 
     this.#prepared = prepared;
     this.#factoryProcessor = factoryProcessor;
+
+    // Chat-platform channels (Slack, Discord, …) contributed by integrations,
+    // attached to the mounted controller so inbound platform messages reach
+    // the same agents the web UI drives. READY integrations only — readiness
+    // means the `channel-identity` domain's `init()` succeeded, so its link
+    // table is queryable. Without it a sender can't be resolved to a tenant,
+    // and attaching anyway would dispatch runs on default credentials.
+    const channelRegistrations = integrationRegistrations.filter(
+      ({ integration, ready }) => ready && integration.channels,
+    );
+    // `setChannels` replaces rather than merges, so a second provider would
+    // silently never receive a message. Fail loud instead.
+    if (channelRegistrations.length > 1) {
+      throw new Error(
+        `MastraFactory: integrations [${channelRegistrations
+          .map(({ integration }) => integration.id)
+          .join(', ')}] all provide channels, but only one may. Remove all but one.`,
+      );
+    }
+    for (const { integration } of channelRegistrations) {
+      prepared.base.controller.setChannels(
+        integration.channels!(
+          buildIntegrationContext(
+            {
+              controller: prepared.base.controller,
+              publicOrigin,
+              auth: routeAuth,
+              stateSigner,
+              fleet,
+              factoryStorage: storage,
+              integrationStorage,
+              sourceControlStorage,
+              rules,
+              factoryReady,
+              domains,
+            },
+            integration.id,
+          ),
+        ),
+      );
+    }
 
     // Integration lifecycle workers (e.g. polling an upstream without
     // webhooks): collected from READY integrations only, folded into the

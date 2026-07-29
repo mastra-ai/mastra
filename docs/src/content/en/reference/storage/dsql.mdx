@@ -264,7 +264,7 @@ storage.db // Database client for executing queries
 storage.pool // Underlying pg.Pool instance
 ```
 
-This enables direct queries and custom transaction management. When using these fields:
+It supports direct queries and custom transaction management. When using these fields:
 
 - You are responsible for proper connection and transaction handling.
 - Closing the store (`storage.close()`) will destroy the connection pool if it was created by the store.
@@ -280,7 +280,7 @@ Connections are authenticated with IAM. No database passwords are required. `@ma
 
 #### Single database, schema-based isolation
 
-Each cluster exposes a single database named `postgres`. Logical separation is done via schemas. The `schemaName` option controls where Mastra tables are created.
+Each cluster exposes a single database `postgres`. Logical separation is done via schemas. The `schemaName` option controls where Mastra tables are created.
 
 #### No PostgreSQL extensions
 

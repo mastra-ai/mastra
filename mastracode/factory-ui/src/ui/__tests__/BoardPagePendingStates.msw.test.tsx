@@ -45,6 +45,23 @@ const workItem = {
   updatedAt: '2026-07-18T00:00:00.000Z',
 };
 
+const manualWorkItem = {
+  id: 'manual-1',
+  orgId: 'org-1',
+  createdBy: 'user-1',
+  factoryProjectId: FACTORY_ID,
+  externalSource: null,
+  parentWorkItemId: null,
+  title: 'Plan onboarding',
+  stages: ['intake'],
+  stageHistory: [],
+  sessions: {},
+  metadata: {},
+  revision: 1,
+  createdAt: '2026-07-28T00:00:00.000Z',
+  updatedAt: '2026-07-28T00:00:00.000Z',
+};
+
 function deferred() {
   let resolve!: () => void;
   const promise = new Promise<void>(r => {
@@ -162,7 +179,7 @@ function stubBoardEndpoints() {
 
 function renderWorkBoard() {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
-  return renderWithProviders(<RouterProvider router={router} />);
+  return { ...renderWithProviders(<RouterProvider router={router} />), router };
 }
 
 describe('Board card pending states', () => {
@@ -195,8 +212,8 @@ describe('Board card pending states', () => {
     if (!card) throw new Error('Expected the title inside its work item card');
     expect(titleText.closest('a, button')).toBeNull();
 
-    const threadLink = within(card).getByRole('link', { name: 'Open thread for Fix login bug' });
-    expect(within(card).queryByText('Open thread')).not.toBeInTheDocument();
+    const threadLink = within(card).getByRole('link', { name: 'Open session for Fix login bug' });
+    expect(within(card).getByText('Open session')).toBeInTheDocument();
     // The link itself is an invisible overlay — a visible indicator must tell
     // the user this card already has a work session.
     expect(within(card).getByText('Session · fix-login')).toBeInTheDocument();
@@ -206,6 +223,119 @@ describe('Board card pending states', () => {
     );
     const matches = matchRoutes(createAppRoutes(), threadLink.getAttribute('href') ?? '');
     expect(matches?.at(-1)?.route.path).toBe('threads/:threadId');
+  });
+
+  it('names the click outcome differently for cards that have a session and cards that do not', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [workItem, { ...workItem, id: 'fresh-item', title: 'Unstarted work', sessions: {} }],
+        }),
+      ),
+    );
+    renderWorkBoard();
+
+    const started = (await screen.findByText('Fix login bug')).closest<HTMLElement>('[data-testid="work-item-card"]');
+    const unstarted = (await screen.findByText('Unstarted work')).closest<HTMLElement>(
+      '[data-testid="work-item-card"]',
+    );
+    if (!started || !unstarted) throw new Error('Expected both work item cards');
+
+    // The consequence of the click differs per card, so the card has to say which one it is.
+    expect(within(started).getByText('Open session')).toBeInTheDocument();
+    expect(within(started).queryByText('Start session')).not.toBeInTheDocument();
+    expect(within(unstarted).getByText('Start session')).toBeInTheDocument();
+    expect(within(unstarted).queryByText('Open session')).not.toBeInTheDocument();
+  });
+
+  it('acknowledges a session-starting card click while it is still resolving the session', async () => {
+    stubBoardEndpoints();
+    const refreshGate = deferred();
+    let workItemRequests = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async () => {
+        workItemRequests += 1;
+        // The click refetches before it can decide to open or create; hold that
+        // refetch open so the pre-mutation window is observable.
+        if (workItemRequests > 1) await refreshGate.promise;
+        return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
+      }),
+      http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+        HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, () =>
+        HttpResponse.json({
+          prepared: { workItemId: ITEM_ID, threadId: THREAD_ID, sessionId: SESSION_ID, kickoffStatus: 'sent' },
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(within(card).getByRole('button', { name: /Start session/ })).toBeEnabled());
+    await user.click(within(card).getByRole('button', { name: 'Start session for Fix login bug' }));
+
+    // No run mutation exists yet, so this row is the only feedback the click can produce.
+    const status = await screen.findByText('Preparing session…');
+    expect(status.closest('[role="status"]')).not.toBeNull();
+    expect(await screen.findByTestId('work-item-card')).toHaveAttribute('aria-busy', 'true');
+
+    refreshGate.resolve();
+    await waitFor(() => expect(screen.queryByText('Preparing session…')).not.toBeInTheDocument());
+  });
+
+  it('starts one run when a session-starting card is clicked twice before it resolves', async () => {
+    stubBoardEndpoints();
+    const refreshGate = deferred();
+    let workItemRequests = 0;
+    const runStarts: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async () => {
+        workItemRequests += 1;
+        if (workItemRequests > 1) await refreshGate.promise;
+        return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
+      }),
+      http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+        HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, async ({ request }) => {
+        const body = (await request.json()) as { kickoffKey?: string };
+        runStarts.push(body.kickoffKey ?? '');
+        return HttpResponse.json({
+          prepared: { workItemId: ITEM_ID, threadId: THREAD_ID, sessionId: SESSION_ID, kickoffStatus: 'sent' },
+        });
+      }),
+    );
+    // pointerEventsCheck is off so the second click still reaches the handler
+    // once the button goes disabled: the handler itself has to refuse it, since
+    // the disabled attribute alone wouldn't stop a programmatic re-dispatch.
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const { router } = renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(within(card).getByRole('button', { name: /Start session/ })).toBeEnabled());
+    const trigger = within(card).getByRole('button', { name: 'Start session for Fix login bug' });
+
+    await user.click(trigger);
+    await screen.findByText('Preparing session…');
+    await user.click(trigger);
+
+    refreshGate.resolve();
+    await waitFor(() => expect(screen.queryByText('Preparing session…')).not.toBeInTheDocument());
+    await waitFor(() => expect(runStarts).toHaveLength(1));
+
+    // Both clicks would unblock on the same gate release, so a duplicate start
+    // is already in flight by the time the first one navigates. Waiting on that
+    // navigation is deterministic, unlike a fixed sleep that a slower duplicate
+    // can outrun.
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
+      ),
+    );
+    expect(runStarts).toHaveLength(1);
   });
 
   it('offers "Open in GitHub" on review-board PR cards past intake', async () => {
@@ -333,5 +463,196 @@ describe('Board card pending states', () => {
 
     transitionGate.resolve();
     await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
+  });
+
+  it('creates a manual work item in the selected active column', async () => {
+    stubBoardEndpoints();
+    let created = false;
+    let stage = 'intake';
+    let revision = 1;
+    let createRequest: unknown;
+    let transitionRequest: unknown;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: created ? [workItem, { ...manualWorkItem, stages: [stage], revision }] : [workItem],
+        }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
+        createRequest = await request.json();
+        created = true;
+        return HttpResponse.json({ workItem: manualWorkItem });
+      }),
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/${manualWorkItem.id}/transition`,
+        async ({ request }) => {
+          transitionRequest = await request.json();
+          stage = 'planning';
+          revision = 2;
+          return HttpResponse.json({
+            result: {
+              status: 'accepted',
+              transitionId: 'transition-manual-1',
+              itemId: manualWorkItem.id,
+              revision,
+              stage,
+              decisions: [],
+            },
+          });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    const planningColumn = await screen.findByTestId('board-column-planning');
+    await waitFor(() => expect(planningColumn).toHaveAccessibleName('Planning, empty'));
+
+    for (const label of ['Intake', 'Triage', 'Planning', 'Building', 'Review']) {
+      expect(screen.getByRole('button', { name: `Create work item in ${label}` })).toBeInTheDocument();
+    }
+    expect(screen.queryByRole('button', { name: 'Create work item in Done' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create work item in Canceled' })).not.toBeInTheDocument();
+
+    const getPlanningTrigger = () => screen.getByRole('button', { name: 'Create work item in Planning' });
+    await user.click(getPlanningTrigger());
+    const composer = await within(planningColumn).findByRole('form', { name: 'New work item in Planning' });
+    expect(planningColumn).toHaveAccessibleName('Planning');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(within(composer).getByText('Manual · new')).toBeInTheDocument();
+    expect(within(composer).getByRole('textbox', { name: 'Work item title' })).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(screen.queryByRole('form', { name: 'New work item in Planning' })).not.toBeInTheDocument(),
+    );
+    expect(getPlanningTrigger()).toHaveAttribute('aria-expanded', 'false');
+    await waitFor(() => expect(getPlanningTrigger()).toHaveFocus());
+
+    await user.click(getPlanningTrigger());
+    const canceledComposer = await within(planningColumn).findByRole('form', { name: 'New work item in Planning' });
+    await user.click(within(canceledComposer).getByRole('button', { name: 'Cancel new work item' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('form', { name: 'New work item in Planning' })).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(getPlanningTrigger()).toHaveFocus());
+
+    await user.click(getPlanningTrigger());
+    const submittedComposer = await within(planningColumn).findByRole('form', {
+      name: 'New work item in Planning',
+    });
+    const titleInput = within(submittedComposer).getByRole('textbox', { name: 'Work item title' });
+    await user.type(titleInput, 'Plan onboarding');
+    await user.click(within(submittedComposer).getByRole('button', { name: 'Add work item to Planning' }));
+
+    await waitFor(() => expect(createRequest).toEqual({ title: 'Plan onboarding', stages: ['intake'] }));
+    await waitFor(() =>
+      expect(transitionRequest).toEqual(
+        expect.objectContaining({
+          board: 'work',
+          stage: 'planning',
+          expectedRevision: 1,
+          cause: 'manual_creation',
+        }),
+      ),
+    );
+    expect(await within(planningColumn).findByText('Plan onboarding')).toBeInTheDocument();
+    await waitFor(() => expect(getPlanningTrigger()).toHaveFocus());
+  });
+
+  it('keeps transition errors inline and retries the same manual work item', async () => {
+    stubBoardEndpoints();
+    let created = false;
+    let title = manualWorkItem.title;
+    let stage = 'intake';
+    let revision = 1;
+    let createRequests = 0;
+    const updateRequests: unknown[] = [];
+    const transitionRequests: unknown[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: created ? [workItem, { ...manualWorkItem, title, stages: [stage], revision }] : [workItem],
+        }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => {
+        createRequests += 1;
+        created = true;
+        return HttpResponse.json({ workItem: manualWorkItem });
+      }),
+      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${manualWorkItem.id}`, async ({ request }) => {
+        updateRequests.push(await request.json());
+        title = 'Plan onboarding v2';
+        revision = 2;
+        return HttpResponse.json({ workItem: { ...manualWorkItem, title, stages: [stage], revision } });
+      }),
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/${manualWorkItem.id}/transition`,
+        async ({ request }) => {
+          transitionRequests.push(await request.json());
+          if (transitionRequests.length === 1) {
+            return HttpResponse.json(
+              {
+                result: {
+                  status: 'rejected',
+                  code: 'planning_blocked',
+                  reason: 'Planning needs approval',
+                },
+              },
+              { status: 422 },
+            );
+          }
+
+          stage = 'planning';
+          revision = 3;
+          return HttpResponse.json({
+            result: {
+              status: 'accepted',
+              transitionId: 'transition-manual-2',
+              itemId: manualWorkItem.id,
+              revision,
+              stage,
+              decisions: [],
+            },
+          });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    const planningColumn = await screen.findByTestId('board-column-planning');
+    await waitFor(() => expect(planningColumn).toHaveAccessibleName('Planning, empty'));
+    await user.click(screen.getByRole('button', { name: 'Create work item in Planning' }));
+    const composer = await within(planningColumn).findByRole('form', { name: 'New work item in Planning' });
+    const titleInput = within(composer).getByRole('textbox', { name: 'Work item title' });
+    await user.type(titleInput, manualWorkItem.title);
+    await user.click(within(composer).getByRole('button', { name: 'Add work item to Planning' }));
+
+    expect(await within(composer).findByRole('alert')).toHaveTextContent('Planning needs approval');
+    const retryComposer = screen.getByRole('form', { name: 'New work item in Planning' });
+    const retryTitleInput = within(retryComposer).getByRole('textbox', { name: 'Work item title' });
+    expect(retryTitleInput).toHaveValue(manualWorkItem.title);
+    await waitFor(() => expect(retryTitleInput).toHaveFocus());
+    expect(createRequests).toBe(1);
+    expect(transitionRequests).toHaveLength(1);
+    expect(
+      await within(screen.getByTestId('board-column-intake')).findByText(manualWorkItem.title),
+    ).toBeInTheDocument();
+
+    await user.clear(retryTitleInput);
+    await user.type(retryTitleInput, 'Plan onboarding v2');
+    await user.click(within(retryComposer).getByRole('button', { name: 'Add work item to Planning' }));
+
+    await waitFor(() => expect(updateRequests).toEqual([{ title: 'Plan onboarding v2' }]));
+    await waitFor(() =>
+      expect(transitionRequests).toEqual([
+        expect.objectContaining({ expectedRevision: 1, cause: 'manual_creation' }),
+        expect.objectContaining({ expectedRevision: 2, cause: 'manual_creation' }),
+      ]),
+    );
+    expect(createRequests).toBe(1);
+    expect(await within(planningColumn).findByText('Plan onboarding v2')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create work item in Planning' })).toHaveFocus());
   });
 });

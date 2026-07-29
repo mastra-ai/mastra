@@ -32,7 +32,7 @@ npx @mastra/codemod@latest v1/mastra-plural-apis .
 
 ### `RuntimeContext` to `RequestContext`
 
-The `RuntimeContext` class has been renamed to `RequestContext` throughout the codebase. This change provides clearer naming that better describes its purpose as request-specific data and aligns with web framework conventions.
+The `RuntimeContext` class has been renamed to `RequestContext` throughout the codebase. The new name identifies the class as request-specific data and matches web framework conventions.
 
 To migrate, update all imports and parameter names from `RuntimeContext`/`runtimeContext` to `RequestContext`/`requestContext`.
 
@@ -86,7 +86,7 @@ npx @mastra/codemod@latest v1/agent-property-access .
 
 ### Voice methods moved to `agent.voice` namespace
 
-Voice-related methods have been moved from the Agent class to the `agent.voice` namespace. This change provides better organization and clearer separation of concerns.
+Voice-related methods have moved from the Agent class to the `agent.voice` namespace, which groups the voice APIs together.
 
 To migrate, update voice method calls to use the `agent.voice` namespace.
 
@@ -111,7 +111,7 @@ npx @mastra/codemod@latest v1/agent-voice .
 
 ### `agent.fetchMemory()` to `(await agent.getMemory()).recall()`
 
-The `fetchMemory()` method has been replaced with a more explicit API. This change provides better clarity about the asynchronous nature of memory access.
+The `fetchMemory()` method has been replaced with an API that makes asynchronous memory access explicit.
 
 To migrate, replace `fetchMemory()` calls with the new API.
 
@@ -170,7 +170,7 @@ Only update your imports if you want to standardize on one Zod version across yo
 
 ### Default options method renames for AI SDK versions
 
-Default options methods have been renamed to clarify legacy (AI SDK v4) vs new (AI SDK v5+) APIs. This change helps developers understand which AI SDK version they're targeting.
+Default options methods have been renamed to distinguish legacy (AI SDK v4) APIs from AI SDK v5+ APIs. The method name now indicates which AI SDK version it targets.
 
 To migrate, update method names based on which AI SDK version you're using.
 
@@ -187,7 +187,7 @@ To migrate, update method names based on which AI SDK version you're using.
 
 ### `modelSettings.abortSignal` to top-level `abortSignal`
 
-The `abortSignal` option has been moved from `modelSettings` to the top level of stream/generate options. This change provides a clearer separation between model-specific settings and execution control.
+The `abortSignal` option has moved from `modelSettings` to the top level of stream and generate options. Execution control now sits outside model-specific settings.
 
 To migrate, move `abortSignal` from `modelSettings` to the top level.
 
