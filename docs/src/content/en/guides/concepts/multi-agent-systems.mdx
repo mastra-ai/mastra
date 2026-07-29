@@ -9,7 +9,7 @@ packages:
 
 A multi-agent system distributes a task across multiple agents instead of asking one agent to do everything. In Mastra, this usually means combining agents, workflows, or both so each part of the system has a clear role.
 
-The goal is to assign the right context, tools, and responsibilities to the right component. When that split is clear, a multi-agent system can be easier to reason about than one agent with a long prompt, many tools, and too many responsibilities.
+The goal is to assign the right context, tools, and responsibilities to the right component. When that split is clear, a multi-agent system can be easier to reason about than one agent burdened with a long prompt and too many tools or responsibilities.
 
 ## When to use multi-agent systems
 
@@ -39,9 +39,9 @@ In Mastra, implement this pattern by combining [agents](/docs/agents/overview), 
 
 A workflow pattern defines the execution path in code. Instead of asking an agent to decide what happens next, you define the sequence through steps, branches, loops, and parallel blocks.
 
-Use workflows when the task is well understood and the execution path is known in advance. The main advantage is predictability: The system is easier to debug, reason about, and audit because the structure is explicit. The tradeoff is flexibility, since workflows are less adaptive when the task changes as it unfolds.
+Use workflows when the task is well understood and the execution path is known in advance. The main advantage is predictability: The explicit structure makes the system easier to debug and audit. The tradeoff is flexibility, since workflows are less adaptive when the task changes as it unfolds.
 
-In Mastra, [workflows](/docs/workflows/overview) can implement several coordination patterns, including handoffs and councils. What makes a workflow distinct isn't which agents it calls, but that the control logic lives in the workflow itself.
+In Mastra, [workflows](/docs/workflows/overview) can implement coordination patterns such as handoffs and councils. A workflow is distinct because its control logic lives in the workflow itself, regardless of which agents it calls.
 
 ## Supervisors
 
@@ -64,7 +64,7 @@ A council pattern asks multiple agents to work on the same problem independently
 
 Use this pattern when the question is ambiguous, evaluative, or high-stakes and answer quality matters more than speed. The tradeoff is cost, since councils intentionally duplicate effort and usually take longer and use more tokens than other patterns.
 
-Mastra doesn't provide a dedicated council primitive. In Mastra, implement this pattern with [agents](/docs/agents/overview) and [workflows](/docs/workflows/overview): Run multiple agents in parallel, collect their outputs, and add a final synthesis or review step. Workflow control flow methods such as `.parallel()` provide the structure for this pattern.
+Mastra doesn't provide a dedicated council primitive. In Mastra, implement this pattern with [agents](/docs/agents/overview) and [workflows](/docs/workflows/overview): Run multiple agents in parallel and collect their outputs. Then add a final synthesis or review step. Workflow control flow methods such as `.parallel()` provide the structure for this pattern.
 
 ## Choosing a pattern
 
@@ -74,7 +74,7 @@ These patterns differ mainly in how they distribute control:
 | - | - | - | - | - |
 | Handoffs | Current specialist | Ownership should move between specialists | Context transfer becomes more important | Agents with workflows and memory |
 | Workflows | Execution graph | The path is known in advance | Less adaptive when the task changes | [Workflows](/docs/workflows/overview) |
-| Supervisor agents | One lead agent | The task needs dynamic delegation | Results depend on good coordination and clear boundaries | [Supervisor agents](/docs/agents/supervisor-agents) |
+| Supervisor agents | One lead agent | Delegation must adapt during execution | Results depend on good coordination and clear boundaries | [Supervisor agents](/docs/agents/supervisor-agents) |
 | Council | Final synthesis step | The task needs multiple independent perspectives | Higher cost and latency | Agents with workflow parallelism |
 
 In practice, these patterns are often combined:

@@ -62,7 +62,7 @@ await voice.send(microphoneStream)
 voice.close()
 ```
 
-> Inworld API keys ship pre-Basic-encoded. Paste them verbatim into `INWORLD_API_KEY`; the package doesn't re-encode them.
+> Inworld API keys are pre-Basic-encoded. Paste them verbatim into `INWORLD_API_KEY`. The package doesn't re-encode them.
 
 ## Constructor parameters
 
@@ -256,7 +256,7 @@ Use the typed `session` field for documented Inworld realtime options. Fields co
 
 ### `providerData` (Inworld extensions)
 
-`providerData` is a typed object for Inworld-specific realtime extensions. It's sent under `session.providerData` on every `session.update`, and composes with any `session.providerData` you set via the `session` field — the constructor `providerData` wins on key collisions.
+`providerData` is a typed object for Inworld-specific realtime extensions. It's sent under `session.providerData` on every `session.update`, and composes with any `session.providerData` you set via the `session` field: the constructor `providerData` wins on key collisions.
 
 It has five branches plus two session-level fields:
 
@@ -285,7 +285,7 @@ const voice = new InworldRealtimeVoice({
 
 Opens the WebSocket connection, sends the initial `session.update`, and resolves once the server acknowledges with `session.updated`. Must be called before `speak()`, `listen()`, or `send()`.
 
-A pre-open `error` or `close` on the WebSocket — or a handshake that exceeds `connectTimeoutMs` (15s default) — surfaces as a rejected promise instead of an uncaught socket error. On reject, the half-open socket is closed.
+A pre-open `error` or `close` on the WebSocket (or a handshake that exceeds `connectTimeoutMs` (15s default)) surfaces as a rejected promise instead of an uncaught socket error. On reject, the half-open socket is closed.
 
 ```typescript
 await voice.connect()
@@ -465,7 +465,7 @@ Returns: `void`
 
 #### `clearOutput()`
 
-Clears the server's entire output audio buffer, stopping playback. This also stops any in-flight back-channel audio. The default barge-in path (`response.cancel` on `interrupted`) is back-channel-safe; prefer it. Use `clearOutput()` only when you want to flush everything.
+Clears the server's entire output audio buffer, stopping playback. This also stops any in-flight back-channel audio. The default barge-in path (`response.cancel` on `interrupted`) is back-channel-safe. Prefer it. Use `clearOutput()` only when you want to flush everything.
 
 ```typescript
 voice.clearOutput()
@@ -644,7 +644,7 @@ The `InworldRealtimeVoice` class emits the following events:
 
 ## Voices
 
-The package ships with a curated set of voice IDs returned from `getSpeakers()`:
+The package includes a curated set of voice IDs returned from `getSpeakers()`:
 
 - `Dennis`
 - `Hades`
@@ -661,7 +661,7 @@ Any voice ID from [Inworld's voice catalog](https://docs.inworld.ai/quickstart-t
 
 ## Notes
 
-- API keys can be provided via constructor options or the `INWORLD_API_KEY` environment variable. Keys are pre-Basic-encoded; don't re-encode them.
+- API keys can be provided via constructor options or the `INWORLD_API_KEY` environment variable. Keys are pre-Basic-encoded. Don't re-encode them.
 - The WebSocket URL appends `?key=<sessionId>&protocol=realtime`. The model is configured via the initial `session.update`, not the URL.
 - Per-call `speak(input, { speaker })` scopes the voice override to a single response (via the flat `response.voice` field) and doesn't mutate the session.
 - Audio output defaults to PCM16 at 24 kHz. Telephony `audio/pcmu` and `audio/pcma` at 8 kHz, and `audio/float32`, are also supported via `session.audio.output.format`.
@@ -669,4 +669,4 @@ Any voice ID from [Inworld's voice catalog](https://docs.inworld.ai/quickstart-t
 - The voice instance must be closed with `close()` or `disconnect()` to release the WebSocket.
 - `audio.input.turn_detection` defaults to semantic VAD when `session` doesn't supply it. Override with your own object, or pass `null` to disable turn detection entirely.
 - `audio.input.transcription` defaults to `{ model: 'inworld/inworld-stt-1' }`, so user-side `writing` events fire out of the box. Override with your own object, or pass `null` to disable user-side transcription.
-- `on()` and `off()` are typed against `InworldVoiceEventMap` — known event names yield a typed callback payload, unknown names fall back to `unknown`.
+- `on()` and `off()` are typed against `InworldVoiceEventMap`. Known event names yield a typed callback payload. Unknown names fall back to `unknown`.

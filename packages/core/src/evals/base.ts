@@ -278,17 +278,23 @@ export interface ScorerJudgeCost {
   source: string;
 }
 
-export interface ScorerJudgeExecution {
+interface ScorerJudgeExecutionBase {
   prompt: string;
-  output: JSONValue;
   judgeModelId: string;
   judgeProvider?: string;
-  usage: ScorerJudgeUsage;
   attemptCount: number;
   modelCallCount: number;
   durationMs: number;
+}
+
+export interface ScorerJudgeExecutionSuccess extends ScorerJudgeExecutionBase {
+  status: 'success';
+  output: JSONValue;
+  usage: ScorerJudgeUsage;
   cost?: ScorerJudgeCost;
 }
+
+export type ScorerJudgeExecution = ScorerJudgeExecutionSuccess;
 
 export interface ScorerJudgeStepResult {
   executions: ScorerJudgeExecution[];
@@ -340,7 +346,8 @@ const scorerJudgeUsageSchema = z.object({
   cacheCreationInputTokens: z.number().optional(),
 });
 
-const scorerJudgeExecutionSchema = z.object({
+const scorerJudgeExecutionSuccessSchema = z.object({
+  status: z.literal('success'),
   prompt: z.string(),
   output: jsonValueSchema,
   judgeModelId: z.string(),
@@ -359,7 +366,7 @@ const scorerJudgeExecutionSchema = z.object({
 });
 
 const scorerJudgeStepResultSchema = z.object({
-  executions: z.array(scorerJudgeExecutionSchema),
+  executions: z.array(scorerJudgeExecutionSuccessSchema),
 });
 
 const scorerJudgeResultsSchema = z.object({
@@ -1173,6 +1180,7 @@ class MastraScorer<
       addScorerJudgeUsage(telemetry.usage, normalizeScorerJudgeUsage(usage));
     };
     const createExecution = (output: JSONValue): ScorerJudgeExecution => ({
+      status: 'success',
       prompt,
       output,
       judgeModelId: telemetry.judgeModelId ?? judgeModel,

@@ -16,7 +16,9 @@ import {
   GitCompareArrows,
   GitPullRequest,
   Link2,
+  MessageSquare,
   MessagesSquare,
+  Play,
   Plus,
   Stethoscope,
   Trash2,
@@ -32,6 +34,7 @@ import { SkeletonRows } from '../ui/SkeletonRows';
 import { GithubIcon } from '../ui/icons';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
 import { FactoryItemActions, actionIcon } from '../domains/factory/components/FactoryItemActions';
+import { InlineWorkItemComposer } from '../domains/factory/components/InlineWorkItemComposer';
 import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import {
@@ -110,15 +113,6 @@ function CardTitleTooltip({ title, children }: { title: string; children: ReactE
 
 function hasLabel(labels: readonly string[], label: string): boolean {
   return labels.some(item => item.toLowerCase() === label);
-}
-
-function githubNewIssueUrl(repoFullName: string): string | undefined {
-  const [owner, repo, extra] = repoFullName.split('/');
-  if (extra || !owner || !repo || repo === '.' || repo === '..') return undefined;
-  if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(owner) || !/^[A-Za-z0-9_.-]+$/.test(repo)) {
-    return undefined;
-  }
-  return `https://github.com/${owner}/${repo}/issues/new`;
 }
 
 function metadataLabels(metadata: Record<string, unknown>): string[] {
@@ -600,7 +594,7 @@ function BoardContent({
   const availableIntakeSources: IntakeSource[] = review
     ? ['github-prs']
     : [...(githubIntakeActive ? (['github'] as const) : []), ...(linearReady ? (['linear'] as const) : [])];
-  const newIssueUrl = !review && config && githubIntakeActive ? githubNewIssueUrl(repository.slug) : undefined;
+  const [createStage, setCreateStage] = useState<BoardStageId>();
   const [intakeSource, setIntakeSource] = useState<IntakeSource>(review ? 'github-prs' : 'github');
   const showIntakeSourceSwitch = availableIntakeSources.length > 1;
   const activeIntakeSource: IntakeSource | null = availableIntakeSources.includes(intakeSource)
@@ -614,6 +608,9 @@ function BoardContent({
   const linearIssues = useLinearIssuesQuery(activeIntakeSource === 'linear' ? factoryProjectId : undefined);
 
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
+  const manualCreate = useUpsertWorkItemMutation(factoryProjectId);
+  const manualUpdate = useUpdateWorkItemMutation(factoryProjectId);
+  const manualTransition = useTransitionWorkItemMutation(factoryProjectId);
   const transition = useTransitionWorkItemMutation(factoryProjectId);
   const [transitionReasons, setTransitionReasons] = useState<Record<string, string>>({});
   const update = useUpdateWorkItemMutation(factoryProjectId);
@@ -626,6 +623,22 @@ function BoardContent({
   const boardPositionKey = `${factory.id}:${kind}`;
   const autoPositionedBoardRef = useRef<string | undefined>(undefined);
   const userPositionedBoardRef = useRef<string | undefined>(undefined);
+  const manualCreatedItemRef = useRef<{ stage: BoardStageId; title: string; item: WorkItem } | undefined>(undefined);
+  const createTriggerRefs = useRef(new Map<BoardStageId, HTMLButtonElement>());
+  const closedComposerStageRef = useRef<BoardStageId | undefined>(undefined);
+
+  const closeComposer = (stage: BoardStageId) => {
+    if (manualCreatedItemRef.current?.stage === stage) manualCreatedItemRef.current = undefined;
+    closedComposerStageRef.current = stage;
+    setCreateStage(current => (current === stage ? undefined : current));
+  };
+
+  useEffect(() => {
+    const stage = closedComposerStageRef.current;
+    if (createStage !== undefined || stage === undefined) return;
+    closedComposerStageRef.current = undefined;
+    createTriggerRefs.current.get(stage)?.focus();
+  }, [createStage]);
 
   // Workspaces that still exist. A card's session ref whose workspace was
   // deleted is stale: its thread is gone (workspace deletion cascades onto its
@@ -635,6 +648,32 @@ function BoardContent({
     () => new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId)),
     [workspaces.data],
   );
+
+  // A card click refetches worktrees and items before it can decide whether to
+  // open an existing thread or mint a new session. That wait is several round
+  // trips long and the run mutation isn't pending yet, so without this the card
+  // sits completely silent after the click.
+  const [preparingItems, setPreparingItems] = useState<Record<string, string>>({});
+  // Guarded by a ref, not by preparingItems: two clicks landing in the same
+  // render both read the pre-click state, so the state value can't reject the
+  // second one. Preparing is several round trips long and each pass mints its
+  // own kickoffKey, so the server's start lock keys differently per click and
+  // won't collapse them either.
+  const preparingRef = useRef<Set<string>>(new Set());
+  const beginPreparingItem = (itemId: string, label: string) => {
+    if (preparingRef.current.has(itemId)) return false;
+    preparingRef.current.add(itemId);
+    setPreparingItems(current => ({ ...current, [itemId]: label }));
+    return true;
+  };
+  const clearPreparingItem = (itemId: string) => {
+    preparingRef.current.delete(itemId);
+    setPreparingItems(current => {
+      if (!(itemId in current)) return current;
+      const { [itemId]: _cleared, ...rest } = current;
+      return rest;
+    });
+  };
 
   const openThread = async (session: WorkItemSessionRef) => {
     navigate(`/factories/${factory.id}/workspaces/${session.sessionId}/threads/${session.threadId}`);
@@ -652,32 +691,46 @@ function BoardContent({
   };
 
   const openOrCreateSession = async (item: WorkItem, destinationStage: string) => {
-    const refreshed = await refreshItemAndWorktrees(item.id);
-    if (!refreshed) return;
-    const liveSessions = Object.fromEntries(
-      Object.entries(refreshed.item.sessions).filter(([, session]) => refreshed.paths.has(session.sessionId)),
-    );
-    const existingSession = itemThreadSession(liveSessions);
-    if (existingSession) {
-      await openThread(existingSession);
-      return;
+    if (!beginPreparingItem(item.id, 'Preparing session…')) return;
+    try {
+      const refreshed = await refreshItemAndWorktrees(item.id);
+      if (!refreshed) return;
+      const liveSessions = Object.fromEntries(
+        Object.entries(refreshed.item.sessions).filter(([, session]) => refreshed.paths.has(session.sessionId)),
+      );
+      const existingSession = itemThreadSession(liveSessions);
+      if (existingSession) {
+        await openThread(existingSession);
+        return;
+      }
+      const spec = itemSessionSpec(refreshed.item);
+      start.mutate({
+        branch: spec.branch,
+        threadTitle: spec.threadTitle,
+        workItem: {
+          id: refreshed.item.id,
+          role: 'chat',
+          stages: [destinationStage],
+          source: refreshed.item.source,
+          sourceKey: refreshed.item.sourceKey,
+          title: refreshed.item.title,
+        },
+      });
+    } finally {
+      clearPreparingItem(item.id);
     }
-    const spec = itemSessionSpec(refreshed.item);
-    start.mutate({
-      branch: spec.branch,
-      threadTitle: spec.threadTitle,
-      workItem: {
-        id: refreshed.item.id,
-        role: 'chat',
-        stages: [destinationStage],
-        source: refreshed.item.source,
-        sourceKey: refreshed.item.sourceKey,
-        title: refreshed.item.title,
-      },
-    });
   };
 
   const openOrStartRun = async (item: WorkItem, role: RunAction['role']) => {
+    if (!beginPreparingItem(item.id, 'Preparing run…')) return;
+    try {
+      await startRunForItem(item, role);
+    } finally {
+      clearPreparingItem(item.id);
+    }
+  };
+
+  const startRunForItem = async (item: WorkItem, role: RunAction['role']) => {
     const refreshed = await refreshItemAndWorktrees(item.id);
     if (!refreshed) return;
     const existingSession = refreshed.item.sessions[role];
@@ -868,23 +921,34 @@ function BoardContent({
               taskCount={stageContentCount(stage.id, stages, workItems, candidates)}
               totalTaskCount={totalTaskCount}
               loading={loadingStages.has(stage.id)}
+              composerOpen={createStage === stage.id}
               laneRef={element => {
                 if (element) laneRefs.current.set(stage.id, element);
                 else laneRefs.current.delete(stage.id);
               }}
               onDrop={handleDrop}
               headerAction={
-                stage.id === 'intake' && newIssueUrl ? (
-                  <a
-                    href={newIssueUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="Create GitHub issue"
-                    title="Create GitHub issue"
-                    className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
+                !review &&
+                !loadingStages.has(stage.id) &&
+                stage.id !== 'done' &&
+                stage.id !== 'canceled' &&
+                (createStage === undefined || createStage === stage.id) ? (
+                  <Button
+                    ref={element => {
+                      if (element) createTriggerRefs.current.set(stage.id, element);
+                      else createTriggerRefs.current.delete(stage.id);
+                    }}
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Create work item in ${stage.label}`}
+                    title={`Create work item in ${stage.label}`}
+                    aria-expanded={createStage === stage.id}
+                    aria-controls={`new-work-item-${stage.id}`}
+                    onClick={() => setCreateStage(stage.id)}
                   >
                     <Plus size={13} aria-hidden />
-                  </a>
+                  </Button>
                 ) : undefined
               }
               headerExtras={
@@ -910,6 +974,42 @@ function BoardContent({
                 ) : undefined
               }
             >
+              {createStage === stage.id ? (
+                <InlineWorkItemComposer
+                  stage={stage.id}
+                  stageLabel={stage.label}
+                  onCreate={async title => {
+                    const pendingItem =
+                      manualCreatedItemRef.current?.stage === stage.id ? manualCreatedItemRef.current : undefined;
+                    let item: WorkItem;
+                    if (pendingItem === undefined) {
+                      item = await manualCreate.mutateAsync({
+                        source: 'manual',
+                        sourceKey: null,
+                        title,
+                        stages: ['intake'],
+                      });
+                      manualCreatedItemRef.current = { stage: stage.id, title, item };
+                    } else if (pendingItem.title !== title) {
+                      item = await manualUpdate.mutateAsync({ id: pendingItem.item.id, patch: { title } });
+                      manualCreatedItemRef.current = { stage: stage.id, title, item };
+                    } else {
+                      item = pendingItem.item;
+                    }
+                    if (stage.id !== 'intake') {
+                      const result = await manualTransition.mutateAsync({
+                        item,
+                        board: 'work',
+                        stage: stage.id,
+                        cause: 'manual_creation',
+                      });
+                      if (result.status === 'rejected') throw new Error(result.reason);
+                    }
+                    manualCreatedItemRef.current = undefined;
+                  }}
+                  onClose={() => closeComposer(stage.id)}
+                />
+              ) : null}
               {workItems
                 .filter(item => itemAppearsInStage(item, stage.id, stages))
                 .map(item => (
@@ -925,6 +1025,7 @@ function BoardContent({
                     // for a perfectly live thread. Hold run/create actions until
                     // liveness is known.
                     runDisabled={!runEnabled || !workspaces.isSuccess}
+                    preparing={preparingItems[item.id]}
                     evaluatingStage={evaluatingStages.get(item.id)}
                     transitionReason={transitionReasons[item.id]}
                     decision={decisionByItem.get(item.id)}
@@ -977,9 +1078,11 @@ function BoardContent({
               {loadingStages.has(stage.id) && (
                 <SkeletonRows label={`Loading ${stage.label} column`} rows={3} rowClassName="h-24 w-full" />
               )}
-              {!loadingStages.has(stage.id) && stageContentCount(stage.id, stages, workItems, candidates) === 0 && (
-                <BoardColumnEmptyState stage={stage.id} kind={kind} hasIntakeSource={activeIntakeSource !== null} />
-              )}
+              {!loadingStages.has(stage.id) &&
+                createStage !== stage.id &&
+                stageContentCount(stage.id, stages, workItems, candidates) === 0 && (
+                  <BoardColumnEmptyState stage={stage.id} kind={kind} hasIntakeSource={activeIntakeSource !== null} />
+                )}
               {stage.id === 'intake' && (
                 <IntakeColumnExtras
                   source={activeIntakeSource}
@@ -1136,12 +1239,16 @@ function dropLinePosition(cardList: HTMLDivElement, pointerY: number): number {
   return lastCard ? lastCard.offsetTop + lastCard.offsetHeight + BOARD_CARD_GAP_PX / 2 : 0;
 }
 
+const COLUMN_ACTION_REVEAL_CLASS =
+  'pointer-events-none opacity-0 transition-opacity group-hover/column:pointer-events-auto group-hover/column:opacity-100 group-focus-within/column:pointer-events-auto group-focus-within/column:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-100 any-pointer-coarse:pointer-events-auto any-pointer-coarse:opacity-100 motion-reduce:transition-none';
+
 function BoardColumn({
   stage,
   label,
   taskCount,
   totalTaskCount,
   loading = false,
+  composerOpen = false,
   laneRef,
   onDrop,
   headerAction,
@@ -1154,6 +1261,7 @@ function BoardColumn({
   totalTaskCount: number;
   /** While loading, the task badge is hidden so a false "0/0" never flashes. */
   loading?: boolean;
+  composerOpen?: boolean;
   laneRef: (element: HTMLElement | null) => void;
   onDrop: (payload: DragPayload, toStage: BoardStageId) => void;
   headerAction?: React.ReactNode;
@@ -1164,7 +1272,7 @@ function BoardColumn({
   const [dragOver, setDragOver] = useState(false);
   const [dropLineTop, setDropLineTop] = useState(0);
   const cardListRef = useRef<HTMLDivElement>(null);
-  const collapsed = stage !== 'intake' && !loading && taskCount === 0;
+  const collapsed = stage !== 'intake' && !loading && !composerOpen && taskCount === 0;
 
   return (
     <section
@@ -1172,7 +1280,7 @@ function BoardColumn({
       aria-label={collapsed ? `${label}, empty` : label}
       data-testid={`board-column-${stage}`}
       className={cn(
-        'flex min-h-0 shrink-0 flex-col transition-[width,background-color] motion-reduce:transition-none',
+        'group/column flex min-h-0 shrink-0 flex-col transition-[width,background-color] motion-reduce:transition-none',
         collapsed ? 'w-14 rounded-lg' : 'w-80 gap-4',
         collapsed && dragOver && 'bg-surface2 ring-1 ring-border1',
       )}
@@ -1197,9 +1305,23 @@ function BoardColumn({
     >
       {collapsed ? (
         <div className="flex min-h-0 flex-1 flex-col items-center gap-3 py-1">
-          <span aria-hidden className="text-ui-xs text-icon3 flex h-8 items-center font-medium tabular-nums">
-            {taskCount}
-          </span>
+          <div className="relative flex h-8 w-full items-center justify-center">
+            <span
+              aria-hidden
+              className={cn(
+                'text-ui-xs text-icon3 flex h-8 items-center font-medium tabular-nums',
+                headerAction &&
+                  'transition-opacity group-hover/column:opacity-0 group-focus-within/column:opacity-0 pointer-coarse:opacity-0 any-pointer-coarse:opacity-0 motion-reduce:transition-none',
+              )}
+            >
+              {taskCount}
+            </span>
+            {headerAction ? (
+              <div className={cn('absolute inset-0 flex items-center justify-center', COLUMN_ACTION_REVEAL_CLASS)}>
+                {headerAction}
+              </div>
+            ) : null}
+          </div>
           <Txt as="h2" variant="ui-smd" className="text-icon3 m-0 font-semibold [writing-mode:vertical-rl]">
             {label}
           </Txt>
@@ -1218,7 +1340,9 @@ function BoardColumn({
                 <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
               )}
             </div>
-            {headerAction && <div className="flex h-8 shrink-0 items-center">{headerAction}</div>}
+            {headerAction ? (
+              <div className={cn('flex h-8 shrink-0 items-center', COLUMN_ACTION_REVEAL_CLASS)}>{headerAction}</div>
+            ) : null}
           </div>
           {headerExtras}
           {/* Cards scroll inside the swimlane; the page stays fixed. */}
@@ -1367,6 +1491,7 @@ function WorkItemCard({
   allItems,
   liveWorktreePaths,
   runDisabled,
+  preparing,
   evaluatingStage,
   transitionReason,
   decision,
@@ -1384,6 +1509,8 @@ function WorkItemCard({
   /** Worktrees that still exist; session refs outside this set are stale. */
   liveWorktreePaths: ReadonlySet<string>;
   runDisabled: boolean;
+  /** Status text while the click is resolving, before the run mutation starts. */
+  preparing?: string;
   /** Destination stage of an in-flight transition; undefined = not moving. */
   evaluatingStage?: string;
   transitionReason?: string;
@@ -1403,7 +1530,7 @@ function WorkItemCard({
     className: 'text-icon3',
   };
   const evaluating = evaluatingStage !== undefined;
-  const runPending = pendingRunRoles.size > 0;
+  const runPending = pendingRunRoles.size > 0 || preparing !== undefined;
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const runSpec = itemRunSpec(item);
   // Session refs whose worktree was deleted are stale: their threads went with
@@ -1438,7 +1565,7 @@ function WorkItemCard({
           <Link
             to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
             draggable={false}
-            aria-label={`Open thread for ${item.title}`}
+            aria-label={`Open session for ${item.title}`}
             className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
           />
         ) : (
@@ -1448,12 +1575,12 @@ function WorkItemCard({
           <button
             type="button"
             draggable={false}
-            disabled={runDisabled}
-            aria-busy={pendingRunRoles.size > 0 || undefined}
+            disabled={runDisabled || runPending}
+            aria-busy={runPending || undefined}
             aria-label={
               runSpec !== null && runActions[0] !== undefined
                 ? `${runActions[0].label} ${item.title}`
-                : `Create thread for ${item.title}`
+                : `Start session for ${item.title}`
             }
             className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
             onClick={() =>
@@ -1567,6 +1694,12 @@ function WorkItemCard({
             {evaluatingStage === 'done' ? 'Marking done…' : `Moving to ${itemStageLabel(item, evaluatingStage)}…`}
           </span>
         )}
+        {pendingRunRoles.size === 0 && preparing !== undefined && (
+          <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
+            <Spinner size="sm" aria-hidden className="size-3" />
+            {preparing}
+          </span>
+        )}
         {[...pendingRunRoles].map(([role, phase]) => (
           <span key={role} role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
             <Spinner size="sm" aria-hidden className="size-3" />
@@ -1574,6 +1707,24 @@ function WorkItemCard({
             {phase !== undefined ? RUN_PHASE_LABELS[phase] : 'starting…'}
           </span>
         ))}
+        {!evaluating && !runPending && (
+          <span
+            aria-hidden
+            className="text-ui-xs text-icon3 group-hover:text-icon5 group-focus-within:text-icon5 flex items-center gap-1.5 transition-colors motion-reduce:transition-none"
+          >
+            {threadSession !== null ? (
+              <>
+                <MessageSquare size={11} aria-hidden />
+                Open session
+              </>
+            ) : (
+              <>
+                <Play size={11} aria-hidden />
+                {runSpec !== null && runActions[0] !== undefined ? runActions[0].label : 'Start session'}
+              </>
+            )}
+          </span>
+        )}
         {!evaluating && decision !== undefined && (
           <div className="flex items-center justify-between gap-2">
             <span
