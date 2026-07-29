@@ -4,14 +4,14 @@ import type { ReactNode } from 'react';
 
 import { useThreadWorkspacePath } from '../hooks/useThreadWorkspacePath';
 import { useWiderThan } from '../hooks/useWiderThan';
-import { DOCK_MIN_WIDTH, cardWidthClass, chatColumnClass, reservedSpaceClass } from '../layout';
+import { DOCK_MIN_REM, cardWidthClass, chatColumnClass, reservedSpaceClass } from '../layout';
 import { WorkspaceFilesContext } from './WorkspaceFilesContext';
 
 /** Owns the box the card measures itself against, and shares its state with the session header. */
 export function WorkspaceFilesProvider({ children }: { children: ReactNode }) {
   const { workspacePath } = useThreadWorkspacePath();
   const chatRef = useRef<HTMLDivElement>(null);
-  const canDock = useWiderThan(chatRef, DOCK_MIN_WIDTH);
+  const canDock = useWiderThan(chatRef, DOCK_MIN_REM);
   const [toggled, setToggled] = useState<{ whileDocked: boolean; open: boolean }>();
   const [viewingFile, setViewingFile] = useState(false);
 

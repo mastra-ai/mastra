@@ -2,9 +2,8 @@
 const CHAT_COLUMN_REM = 44;
 const CARD_REM = 21;
 const GUTTER_REM = 1.5;
-const ROOT_FONT_SIZE = 16;
 
-export const DOCK_MIN_WIDTH = (CHAT_COLUMN_REM + CARD_REM + GUTTER_REM * 2) * ROOT_FONT_SIZE;
+export const DOCK_MIN_REM = CHAT_COLUMN_REM + CARD_REM + GUTTER_REM * 2;
 
 // Tailwind scans literals, so the rem values below can't interpolate the constants — keep in sync.
 export const chatColumnClass = '[--chat-column:44rem]';
