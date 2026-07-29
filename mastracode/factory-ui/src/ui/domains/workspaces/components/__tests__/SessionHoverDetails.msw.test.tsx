@@ -96,6 +96,17 @@ describe('Workspace session hover details', () => {
       expect(workRow).not.toHaveAttribute('title');
     });
 
+    it('names the icon-only rows for screen readers', async () => {
+      const { user, workRow } = await setupSessionRows();
+
+      await user.hover(workRow);
+
+      const card = await screen.findByLabelText(`${workName} session details`);
+      expect(within(card).getByText('Work item')).toBeInTheDocument();
+      expect(within(card).getByText('Branch')).toBeInTheDocument();
+      expect(within(card).getByText('Base branch')).toBeInTheDocument();
+    });
+
     it('closes the details when the pointer leaves', async () => {
       const { user, workRow } = await setupSessionRows();
       await user.hover(workRow);
