@@ -537,8 +537,8 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
 
     await thread.post(
       Card({
-        title: 'New Mastra Code session started.',
-        children: [CardText('A new session has been created.'), Actions([LinkButton({ url, label: 'View Session' })])],
+        title: 'New session started',
+        children: [Actions([LinkButton({ url, label: 'View session' })])],
       }),
     );
   };
