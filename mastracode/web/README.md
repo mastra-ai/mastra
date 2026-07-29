@@ -102,7 +102,7 @@ local restarts instead of being updated for every new Quick Tunnel hostname.
 Generate a manifest for the tunnel URL:
 
 ```shell
-pnpm --dir mastracode/web slack:manifest \
+pnpm slack:manifest \
   --url https://your-tunnel-hostname \
   --name "Mastra Factory (dev)" \
   --copy
