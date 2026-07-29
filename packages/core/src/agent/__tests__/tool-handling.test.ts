@@ -630,21 +630,38 @@ describe('webSearchTool agent resolution', () => {
     expect(tools.searchTheWeb.execute).toBeUndefined();
   });
 
-  it('resolves router-string providers from the active model override', async () => {
+  it('resolves the sentinel when listing tools for serialization', async () => {
     const agent = new Agent({
       id: 'web-search-agent',
       name: 'web-search-agent',
       instructions: 'Search the web.',
-      model: 'openai/gpt-5-mini',
+      model: 'google/gemini-3.5-flash',
       tools: {
         searchTheWeb: webSearchTool,
       },
     });
 
-    const tools = await agent.getToolsForExecution({
-      requestContext: new RequestContext(),
-      activeModel: await agent.getModel({ modelConfig: 'anthropic/claude-sonnet-4-20250514', requestContext: new RequestContext() }),
+    const tools = await agent.listTools({ requestContext: new RequestContext() });
+
+    expect(tools.searchTheWeb).toMatchObject({
+      type: 'provider-defined',
+      id: 'google.google_search',
+      name: 'google_search',
     });
+  });
+
+  it('resolves router-string providers from the configured model', async () => {
+    const agent = new Agent({
+      id: 'web-search-agent',
+      name: 'web-search-agent',
+      instructions: 'Search the web.',
+      model: 'anthropic/claude-sonnet-4-20250514',
+      tools: {
+        searchTheWeb: webSearchTool,
+      },
+    });
+
+    const tools = await agent.getToolsForExecution({ requestContext: new RequestContext() });
 
     expect(tools.searchTheWeb).toMatchObject({
       type: 'provider-defined',
@@ -672,7 +689,7 @@ describe('webSearchTool agent resolution', () => {
       id: 'web-search-agent',
       name: 'web-search-agent',
       instructions: 'Search the web.',
-      model: 'unsupported/default-model',
+      model: 'openai/gpt-5-mini',
       tools: {
         searchTheWeb: webSearchTool,
       },

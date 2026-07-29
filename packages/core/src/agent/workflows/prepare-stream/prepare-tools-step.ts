@@ -62,7 +62,7 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
         backgroundTaskEnabled,
         inputProcessors: options.inputProcessors,
         hooks: options.hooks,
-        activeModel: capabilities.llm.getModel(),
+        model: capabilities.llm.getModel(),
       });
 
       // Update the agent span with available tool names for observability
