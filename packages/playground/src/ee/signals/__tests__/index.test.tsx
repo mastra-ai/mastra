@@ -13,6 +13,7 @@ import {
   firstThemeExamplesResponse,
   themeDetailResponse,
   themeHistoryResponse,
+  traceInsightResponse,
 } from './fixtures/theme-drilldown';
 import {
   billingThemeSnapshotsResponse,
@@ -308,6 +309,40 @@ describe('Signals page', () => {
       fireEvent.click(await screen.findByText('Last 24 hours'));
 
       await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add transcript' })).toBeNull());
+    });
+  });
+
+  describe('when a theme example is opened from the page', () => {
+    it('reaches the trace insight view with a link to the full trace', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(drilldownThemeFlowResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/:themeId`, () =>
+          HttpResponse.json(themeDetailResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/:themeId/examples`, () =>
+          HttpResponse.json(firstThemeExamplesResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/:themeId/history`, () =>
+          HttpResponse.json(themeHistoryResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/traces/trace-1/summary`, () => HttpResponse.json(traceInsightResponse)),
+      );
+      renderSignalsPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
+      await screen.findByRole('dialog', { name: 'Add transcript' });
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'View trace insight for Add this transcript to my workspace.' }),
+      );
+
+      expect(await screen.findByText('Add a transcript to the workspace.')).not.toBeNull();
+      expect(screen.getByRole('link', { name: 'Open full trace' }).getAttribute('href')).toBe('/traces/trace-1');
     });
   });
 

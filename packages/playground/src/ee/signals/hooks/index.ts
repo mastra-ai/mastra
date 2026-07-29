@@ -7,3 +7,4 @@ export { useThemeFlow } from './use-theme-flow';
 export { useThemeHistory } from './use-theme-history';
 export { useThemePaths } from './use-theme-paths';
 export { useThemeSnapshots } from './use-theme-snapshots';
+export { useTraceInsight } from './use-trace-insight';

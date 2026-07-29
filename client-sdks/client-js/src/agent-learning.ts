@@ -164,3 +164,21 @@ export interface NoiseResponse {
     coverage: number;
   };
 }
+
+export interface TraceInsightSummary {
+  version: string;
+  summary: string;
+  observations: string[];
+  currentTask?: string;
+  degenerate?: boolean;
+  createdAt: string;
+}
+
+export interface TraceInsightResponse {
+  traceId: string;
+  summary?: TraceInsightSummary;
+  signals: Array<{
+    signalName: TraceSignalName;
+    signalText: string;
+  }>;
+}
