@@ -53,10 +53,15 @@ function ThreadPageMain() {
   useGlobalShortcuts();
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden">
-      <ChatMessageBoundary>
-        <ThreadPageContent />
-      </ChatMessageBoundary>
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto_auto] overflow-hidden">
+      <FactorySessionHeader />
+      {/* Flex, not block — ChatMessageBoundary's loading state sizes itself with flex-1. */}
+      <div className="relative flex min-h-0 flex-col overflow-hidden">
+        <ChatMessageBoundary>
+          <ThreadPageContent />
+        </ChatMessageBoundary>
+        <WorkspaceFilesSurface />
+      </div>
       <TaskPanel />
       <ThreadComposer />
     </div>
@@ -79,13 +84,5 @@ function ThreadPageContent() {
   useRouteThreadSync();
   useThreadPageKickoffs();
 
-  return (
-    <div className="flex min-h-0 flex-col">
-      <FactorySessionHeader />
-      <div className="relative min-h-0 flex-1 overflow-hidden">
-        <ChatMessageList />
-        <WorkspaceFilesSurface />
-      </div>
-    </div>
-  );
+  return <ChatMessageList />;
 }
