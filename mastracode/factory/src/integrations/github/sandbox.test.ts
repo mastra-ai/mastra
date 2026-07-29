@@ -10,6 +10,7 @@ import type {
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
 import {
+  checkoutSessionBranch,
   computeWorktreePath,
   configureGitIdentity,
   createPullRequest,
@@ -546,6 +547,78 @@ describe('materializeRepo', () => {
     expect(err).toBeInstanceOf(MaterializeError);
     expect(err.code).toBe('pull-failed');
     expect(String(err.message)).toContain('scrub');
+  });
+});
+
+describe('checkoutSessionBranch', () => {
+  const opts = { branch: 'factory/pr-1', baseBranch: 'main', token: 'tok-secret', repoFullName: 'octocat/hello' };
+
+  it('keeps the current branch when uncommitted work blocks the switch', async () => {
+    // The session's agent switched branches itself (e.g. `gh pr checkout`)
+    // and left uncommitted edits; git refuses to switch back over them.
+    // That work must win — no error, no stash/reset to force the switch.
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) {
+        return { exitCode: 0, stdout: 'pr-1\n', stderr: '' };
+      }
+      if (script.includes('show-ref')) return OK;
+      if (script.includes('checkout')) {
+        return {
+          exitCode: 1,
+          stdout: '',
+          stderr:
+            'error: Your local changes to the following files would be overwritten by checkout:\n\tsrc/app.ts\nPlease commit your changes or stash them before you switch branches.\nAborting\n',
+        };
+      }
+      return OK;
+    });
+
+    await expect(checkoutSessionBranch(sandbox, '/workspace/repo', opts)).resolves.toBeUndefined();
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).not.toMatch(/stash|reset --hard|checkout --|clean -/);
+  });
+
+  it('keeps the current branch when local work blocks creating the session branch', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) {
+        return { exitCode: 0, stdout: 'pr-1\n', stderr: '' };
+      }
+      if (script.includes('show-ref')) return { exitCode: 1, stdout: '', stderr: '' };
+      if (script.includes('checkout -b')) {
+        return {
+          exitCode: 1,
+          stdout: '',
+          stderr:
+            'error: The following untracked working tree files would be overwritten by checkout:\n\tnotes.md\nPlease move or remove them before you switch branches.\nAborting\n',
+        };
+      }
+      return OK;
+    });
+
+    await expect(checkoutSessionBranch(sandbox, '/workspace/repo', opts)).resolves.toBeUndefined();
+
+    // Token still scrubbed back to the clean URL in the finally.
+    const scrub = sandbox.calls.filter(c => c.includes('remote set-url origin')).at(-1);
+    expect(scrub).toContain('https://github.com/octocat/hello.git');
+    expect(scrub).not.toContain('tok-secret');
+  });
+
+  it('still surfaces real checkout failures', async () => {
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('branch --show-current')) {
+        return { exitCode: 0, stdout: 'main\n', stderr: '' };
+      }
+      if (script.includes('show-ref')) return OK;
+      if (script.includes('checkout')) {
+        return { exitCode: 1, stdout: '', stderr: 'fatal: index file corrupt' };
+      }
+      return OK;
+    });
+
+    const err = await checkoutSessionBranch(sandbox, '/workspace/repo', opts).catch(e => e);
+    expect(err).toBeInstanceOf(MaterializeError);
+    expect(err.code).toBe('clone-failed');
   });
 });
 

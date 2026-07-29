@@ -352,7 +352,16 @@ export async function checkoutSessionBranch(
   );
   if (local.exitCode === 0) {
     const checkout = await sh(sandbox, `git -C ${shellQuote(workdir)} checkout ${shellQuote(branch)}`);
-    if (checkout.exitCode !== 0) throw classifyGitFailure(checkout, 'clone-failed');
+    if (checkout.exitCode !== 0) {
+      // The session's agent may have switched branches itself (e.g. `gh pr
+      // checkout`) and left uncommitted work in the tree. Git refuses to
+      // switch back over those files — that work must win. The checkout is
+      // intact and usable on its current branch; keep it as-is rather than
+      // fail the workspace open, and never reset or stash to force the
+      // switch through.
+      if (isBlockedByLocalWork(checkout)) return;
+      throw classifyGitFailure(checkout, 'clone-failed');
+    }
     return;
   }
 
@@ -365,10 +374,28 @@ export async function checkoutSessionBranch(
       `git -C ${shellQuote(workdir)} fetch origin ${shellQuote(baseBranch)} && git -C ${shellQuote(workdir)} checkout -b ${shellQuote(branch)} FETCH_HEAD`,
       { timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS, phase: 'branch checkout' },
     );
-    if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'clone-failed');
+    if (fetch.exitCode !== 0) {
+      // Same rule as above: uncommitted work in the tree blocks the switch
+      // to the new branch. Leave the checkout on its current branch.
+      if (isBlockedByLocalWork(fetch)) return;
+      throw classifyGitFailure(fetch, 'clone-failed');
+    }
   } finally {
     await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`);
   }
+}
+
+/**
+ * True when a failed `git checkout` just means uncommitted or untracked files
+ * in the working tree would be clobbered by the branch switch. Those files are
+ * a session's work in progress — the switch must yield to them, never the
+ * other way around.
+ */
+function isBlockedByLocalWork(result: SandboxCommandResult): boolean {
+  const output = `${result.stderr || ''}\n${result.stdout || ''}`;
+  return /Your local changes to the following files would be overwritten by checkout|untracked working tree files would be overwritten by checkout/i.test(
+    output,
+  );
 }
 
 /**
