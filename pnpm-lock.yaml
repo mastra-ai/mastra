@@ -4967,8 +4967,8 @@ importers:
         specifier: ^0.28.0
         version: 0.28.1
       isolated-vm:
-        specifier: ^7.0.0
-        version: 7.0.0
+        specifier: ^6.1.2
+        version: 6.1.2
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -25258,9 +25258,9 @@ packages:
     resolution: {integrity: sha512-WhB9zCku7EGTj/HQQRz5aUQEUeoQZH2bWcltRErOpymJ4boYE6wL9Tbr23krRPSZ+C5zqNSrSw+Cc7sZZ4b7vg==}
     engines: {node: '>=0.10.0'}
 
-  isolated-vm@7.0.0:
-    resolution: {integrity: sha512-TXlJp9kiSf4AEpkCgB4VIf2M+6MRW3SEzlZUXFmQ6QcRypOnENRvK6RoZuQt/dlLOnqyFGUoZELUfH4ucsG4iw==}
-    engines: {node: '>=26.0.0'}
+  isolated-vm@6.1.2:
+    resolution: {integrity: sha512-GGfsHqtlZiiurZaxB/3kY7LLAXR3sgzDul0fom4cSyBjx6ZbjpTrFWiH3z/nUfLJGJ8PIq9LQmQFiAxu24+I7A==}
+    engines: {node: '>=22.0.0'}
 
   isomorphic-ws@5.0.0:
     resolution: {integrity: sha512-muId7Zzn9ywDsyXgTIafTry2sV3nySZeUDe6YedVd1Hvuuep5AsIlqK+XefWpYTyJG5e503F2xIuT2lcU6rCSw==}
@@ -49589,7 +49589,7 @@ snapshots:
 
   isobject@3.0.1: {}
 
-  isolated-vm@7.0.0:
+  isolated-vm@6.1.2:
     dependencies:
       node-gyp-build: 4.8.4
 

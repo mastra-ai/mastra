@@ -16,13 +16,15 @@
  * run plain JavaScript).
  *
  * Requirements:
- * - `isolated-vm` is a native addon (compiled at install time).
+ * - `isolated-vm` is a native addon (prebuilt binaries for common platforms,
+ *   compiled from source elsewhere).
  * - On Node 20+ the host process must be started with `--no-node-snapshot`
  *   (e.g. `node --no-node-snapshot server.js` or
  *   `NODE_OPTIONS=--no-node-snapshot`). The constructor fails fast with an
  *   actionable error when the flag is missing.
  */
 
+import { sanitizeToolId } from '@mastra/core/tools';
 import type { CodeModeToolResult, CodeModeTransport } from '@mastra/core/tools';
 import { transformSync } from 'esbuild';
 import ivm from 'isolated-vm';
@@ -36,12 +38,6 @@ export interface IsolatedVmCodeModeTransportOptions {
    * Default: 128.
    */
   memoryLimitMb?: number;
-}
-
-/** Mirrors the external-name sanitizer used by the core Code Mode runner. */
-function sanitize(id: string): string {
-  const cleaned = id.replace(/[^A-Za-z0-9_$]/g, '_');
-  return /^[A-Za-z_$]/.test(cleaned) ? cleaned : `_${cleaned}`;
 }
 
 /**
@@ -105,7 +101,7 @@ export class IsolatedVmCodeModeTransport implements CodeModeTransport {
   async run(opts: Parameters<CodeModeTransport['run']>[0]): Promise<CodeModeToolResult> {
     const { program, toolIds, dispatch, timeout, abortSignal, onExternalCall, onExternalResult } = opts;
 
-    const externals = toolIds.map(toolId => ({ toolId, externalName: sanitize(toolId) }));
+    const externals = toolIds.map(toolId => ({ toolId, externalName: sanitizeToolId(toolId) }));
     const allowList = new Set(toolIds);
     const logs: string[] = [];
 

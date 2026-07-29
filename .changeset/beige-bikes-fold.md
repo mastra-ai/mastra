@@ -12,4 +12,4 @@ import { IsolatedVmCodeModeTransport } from '@mastra/isolated-vm';
 const { tool, instructions } = createCodeMode({ tools }, new IsolatedVmCodeModeTransport());
 ```
 
-Also fixed the generated Code Mode instructions to describe isolation accurately instead of always claiming the program runs fully sandboxed, since the actual boundary depends on the configured sandbox and transport.
+Also fixed the generated Code Mode instructions to describe isolation accurately instead of always claiming the program runs fully sandboxed, since the actual boundary depends on the configured sandbox and transport. The `sanitizeToolId` helper used for `external_*` naming is now exported from `@mastra/core/tools` so transports can reuse it instead of duplicating it.
