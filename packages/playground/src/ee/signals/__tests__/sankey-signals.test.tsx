@@ -83,7 +83,7 @@ function rectangle(left: number, width: number, height: number) {
 }
 
 async function reorderOutcomeAfterBehavior(beforeDrop?: () => void) {
-  const distributionCards = within(screen.getByRole('region', { name: 'Signal distributions' })).getAllByRole(
+  const distributionCards = within(screen.getByRole('region', { name: 'Trace signal distributions' })).getAllByRole(
     'article',
   );
   distributionCards.forEach((card, index) => {
@@ -91,7 +91,7 @@ async function reorderOutcomeAfterBehavior(beforeDrop?: () => void) {
     if (!draggable) throw new Error('Signal distribution draggable was not rendered');
     vi.spyOn(draggable, 'getBoundingClientRect').mockReturnValue(rectangle(index * 250, 240, 300));
   });
-  vi.spyOn(screen.getByRole('region', { name: 'Signal distributions' }), 'getBoundingClientRect').mockReturnValue(
+  vi.spyOn(screen.getByRole('region', { name: 'Trace signal distributions' }), 'getBoundingClientRect').mockReturnValue(
     rectangle(0, 990, 300),
   );
   const outcomeCard = screen.getByRole('article', { name: 'Outcome distribution' });
@@ -189,7 +189,7 @@ describe('SankeySignals', () => {
 
       renderSankeySignals();
 
-      expect(await screen.findByRole('status', { name: 'Loading signal analysis' })).not.toBeNull();
+      expect(await screen.findByRole('status', { name: 'Loading trace intelligence' })).not.toBeNull();
     });
   });
 
@@ -207,7 +207,7 @@ describe('SankeySignals', () => {
 
       renderSankeySignals();
 
-      expect(await screen.findByRole('status', { name: 'Loading signal analysis' })).not.toBeNull();
+      expect(await screen.findByRole('status', { name: 'Loading trace intelligence' })).not.toBeNull();
       expect(screen.getByTestId('signals-loading-skeleton')).not.toBeNull();
     });
   });
@@ -229,10 +229,10 @@ describe('SankeySignals', () => {
 
       renderSankeySignals();
 
-      expect(await screen.findByText('Unable to load signal flow.')).not.toBeNull();
+      expect(await screen.findByText('Unable to load trace signal flow.')).not.toBeNull();
       fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
-      expect(await screen.findByRole('region', { name: 'Signal theme flow' })).not.toBeNull();
+      expect(await screen.findByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
       expect(attempts).toBe(2);
     });
   });
@@ -247,7 +247,7 @@ describe('SankeySignals', () => {
 
       renderSankeySignals();
 
-      expect(await screen.findByText('Unable to load signal flow.')).not.toBeNull();
+      expect(await screen.findByText('Unable to load trace signal flow.')).not.toBeNull();
     });
   });
 
@@ -301,10 +301,10 @@ describe('SankeySignals', () => {
     it('renders the page identity without duplicating the shell documentation action', async () => {
       renderSankeySignals();
 
-      expect(await screen.findByText('SIGNALS')).not.toBeNull();
+      expect(await screen.findByText('TRACE INTELLIGENCE')).not.toBeNull();
       expect(screen.getByRole('heading', { name: 'Understand what drives every agent interaction' })).not.toBeNull();
-      expect(screen.getByText(/Signals group recurring patterns across traces/)).not.toBeNull();
-      expect(screen.queryByRole('link', { name: 'Signals documentation' })).toBeNull();
+      expect(screen.getByText(/Trace intelligence groups recurring patterns across traces/)).not.toBeNull();
+      expect(screen.queryByRole('link', { name: 'Trace intelligence documentation' })).toBeNull();
     });
 
     it('shows entity, snapshot ordinal, and window in the analysis header', async () => {
@@ -317,11 +317,11 @@ describe('SankeySignals', () => {
     it('shows exactly three metrics derived from the loaded flow', async () => {
       renderSankeySignals();
 
-      const metrics = await screen.findByRole('list', { name: 'Signal analysis metrics' });
+      const metrics = await screen.findByRole('list', { name: 'Trace intelligence metrics' });
       expect(within(metrics).getAllByRole('listitem')).toHaveLength(3);
       expect(within(metrics).getByText('50 traces analyzed')).not.toBeNull();
       expect(within(metrics).getByText('9 themes')).not.toBeNull();
-      expect(within(metrics).getByText('4 signal types')).not.toBeNull();
+      expect(within(metrics).getByText('4 trace signal types')).not.toBeNull();
     });
 
     it('shows the selected snapshot context without controls for a single snapshot', async () => {
@@ -348,7 +348,7 @@ describe('SankeySignals', () => {
     it('delegates the signal column headings to the Sankey chart', async () => {
       renderSankeySignals();
 
-      const chart = await screen.findByRole('region', { name: 'Signal theme flow' });
+      const chart = await screen.findByRole('region', { name: 'Trace signal theme flow' });
       expect(within(chart).queryByTestId('signal-column-heading')).toBeNull();
       expect(within(chart).getByText('GOAL')).not.toBeNull();
       expect(within(chart).queryByText(/GOAL \d+ themes?/)).toBeNull();
@@ -359,7 +359,7 @@ describe('SankeySignals', () => {
     it('places a compact square-swatch legend at the right of the chart footer', async () => {
       renderSankeySignals();
 
-      const legend = await screen.findByRole('list', { name: 'Signal stage legend' });
+      const legend = await screen.findByRole('list', { name: 'Trace signal stage legend' });
       expect(legend.getAttribute('data-alignment')).toBe('right');
       const swatches = within(legend).getAllByTestId('signal-legend-swatch');
       expect(swatches).toHaveLength(4);
@@ -374,9 +374,9 @@ describe('SankeySignals', () => {
     it('renders the flow before the timeline and distributions', async () => {
       renderSankeySignals();
 
-      const flow = await screen.findByRole('region', { name: 'Signal theme flow' });
+      const flow = await screen.findByRole('region', { name: 'Trace signal theme flow' });
       const timeline = screen.getByRole('region', { name: 'Snapshot timeline' });
-      const distributions = screen.getByRole('region', { name: 'Signal distributions' });
+      const distributions = screen.getByRole('region', { name: 'Trace signal distributions' });
 
       expect(flow.compareDocumentPosition(timeline) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
       expect(timeline.compareDocumentPosition(distributions) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
@@ -385,8 +385,8 @@ describe('SankeySignals', () => {
     it('summarizes each signal with one stacked bar and compact theme rows', async () => {
       renderSankeySignals();
 
-      const distributions = await screen.findByRole('region', { name: 'Signal distributions' });
-      const chart = screen.getByRole('region', { name: 'Signal theme flow' });
+      const distributions = await screen.findByRole('region', { name: 'Trace signal distributions' });
+      const chart = screen.getByRole('region', { name: 'Trace signal theme flow' });
       const goal = within(distributions).getByRole('article', { name: 'Goal distribution' });
       const outcome = within(distributions).getByRole('article', { name: 'Outcome distribution' });
       const behavior = within(distributions).getByRole('article', { name: 'Behavior distribution' });
@@ -507,12 +507,12 @@ describe('SankeySignals', () => {
       );
       await waitFor(() =>
         expect(
-          within(screen.getByRole('region', { name: 'Signal distributions' }))
+          within(screen.getByRole('region', { name: 'Trace signal distributions' }))
             .getAllByRole('article')
             .map(card => card.getAttribute('aria-label')),
         ).toEqual(['Goal distribution', 'Behavior distribution', 'Outcome distribution', 'Sentiment distribution']),
       );
-      const chart = within(screen.getByRole('region', { name: 'Signal theme flow' }));
+      const chart = within(screen.getByRole('region', { name: 'Trace signal theme flow' }));
       expect(chart.getByText('GOAL')).not.toBeNull();
       expect(chart.getByText('BEHAVIOR')).not.toBeNull();
       expect(chart.getByText('OUTCOME')).not.toBeNull();
@@ -557,7 +557,7 @@ describe('SankeySignals', () => {
       expect(await screen.findByText('Reloading snapshots for new signal perspective…')).not.toBeNull();
       expect(screen.queryByTestId('signals-loading-skeleton')).toBeNull();
       expect(
-        within(screen.getByRole('region', { name: 'Signal distributions' }))
+        within(screen.getByRole('region', { name: 'Trace signal distributions' }))
           .getAllByRole('article')
           .map(card => card.getAttribute('aria-label')),
       ).toEqual(['Goal distribution', 'Behavior distribution', 'Outcome distribution', 'Sentiment distribution']);
@@ -565,7 +565,7 @@ describe('SankeySignals', () => {
       releaseReorderedSnapshots();
       await waitFor(() =>
         expect(
-          within(screen.getByRole('region', { name: 'Signal distributions' }))
+          within(screen.getByRole('region', { name: 'Trace signal distributions' }))
             .getAllByRole('article')
             .map(card => card.getAttribute('aria-label')),
         ).toEqual(['Goal distribution', 'Behavior distribution', 'Outcome distribution', 'Sentiment distribution']),
@@ -652,7 +652,7 @@ describe('SankeySignals', () => {
     it('keeps themes from every timeline snapshot visible in the latest Sankey frame', async () => {
       renderSankeySignals();
 
-      const chart = await screen.findByRole('region', { name: 'Signal theme flow' });
+      const chart = await screen.findByRole('region', { name: 'Trace signal theme flow' });
       expect(within(chart).getByLabelText('Legacy support request: 0 traces (0%)')).not.toBeNull();
     });
 
@@ -671,7 +671,7 @@ describe('SankeySignals', () => {
 
       await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces', undefined, { timeout: 2000 });
       expect(screen.queryByRole('status', { name: 'Loading snapshot flow' })).toBeNull();
-      expect(screen.getByRole('region', { name: 'Signal theme flow' })).not.toBeNull();
+      expect(screen.getByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
     });
 
     it('selects the latest ordinal and labels it without parsing its cursor', async () => {
@@ -740,7 +740,7 @@ describe('SankeySignals', () => {
       );
       renderSankeySignals();
 
-      expect(await screen.findByRole('status', { name: 'Loading signal analysis' })).not.toBeNull();
+      expect(await screen.findByRole('status', { name: 'Loading trace intelligence' })).not.toBeNull();
       expect(screen.queryByRole('button', { name: 'Play snapshots' })).toBeNull();
       releasePendingFlow?.();
       expect(await screen.findByRole('button', { name: 'Play snapshots' })).not.toBeNull();
@@ -762,7 +762,7 @@ describe('SankeySignals', () => {
     it('uses the authoritative snapshot total in the header badge', async () => {
       renderSankeySignals();
 
-      const metrics = await screen.findByRole('list', { name: 'Signal analysis metrics' });
+      const metrics = await screen.findByRole('list', { name: 'Trace intelligence metrics' });
       expect(within(metrics).getByText('80 traces analyzed')).not.toBeNull();
       expect(within(metrics).queryByText('50 traces analyzed')).toBeNull();
     });
@@ -770,7 +770,7 @@ describe('SankeySignals', () => {
     it('uses authoritative stage totals for every distribution', async () => {
       renderSankeySignals();
 
-      const distributions = await screen.findByRole('region', { name: 'Signal distributions' });
+      const distributions = await screen.findByRole('region', { name: 'Trace signal distributions' });
       const expectedTotals = { Goal: 70, Outcome: 80, Behavior: 90, Sentiment: 100 };
       for (const [signalName, traceCount] of Object.entries(expectedTotals)) {
         const distribution = within(distributions).getByRole('article', { name: `${signalName} distribution` });
@@ -781,7 +781,7 @@ describe('SankeySignals', () => {
     it('uses authoritative API node counts and shares in every distribution row', async () => {
       renderSankeySignals();
 
-      const distributions = await screen.findByRole('region', { name: 'Signal distributions' });
+      const distributions = await screen.findByRole('region', { name: 'Trace signal distributions' });
       const expectedRows = {
         Goal: ['42 · 90%', '38 · 80%', '33 · 70%', '99 · 99%'],
         Outcome: ['51 · 90%', '40 · 80%'],
@@ -799,7 +799,7 @@ describe('SankeySignals', () => {
     it('shows authoritative node counts on chart nodes independently of layout weights', async () => {
       renderSankeySignals();
 
-      const chart = await screen.findByRole('region', { name: 'Signal theme flow' });
+      const chart = await screen.findByRole('region', { name: 'Trace signal theme flow' });
       for (const label of [
         '42 (37%)',
         '38 (34%)',
@@ -832,7 +832,7 @@ describe('SankeySignals', () => {
     it('renders each API node with its own trace count', async () => {
       renderSankeySignals();
 
-      const chart = await screen.findByRole('region', { name: 'Signal theme flow' });
+      const chart = await screen.findByRole('region', { name: 'Trace signal theme flow' });
       expect(within(chart).getAllByText('Shared theme label', { selector: 'text' })).toHaveLength(2);
       expect(within(chart).getByText('20 (40%)')).not.toBeNull();
       expect(within(chart).getByText('30 (60%)')).not.toBeNull();
@@ -854,13 +854,13 @@ describe('SankeySignals', () => {
     it('renders the flow with the signal and theme labels', async () => {
       renderSankeySignals();
 
-      expect(await screen.findByRole('region', { name: 'Signal theme flow' })).not.toBeNull();
+      expect(await screen.findByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
     });
 
     it('limits the legend to stages returned by the flow', async () => {
       renderSankeySignals();
 
-      const legend = await screen.findByRole('list', { name: 'Signal stage legend' });
+      const legend = await screen.findByRole('list', { name: 'Trace signal stage legend' });
       expect(
         within(legend)
           .getAllByRole('listitem')

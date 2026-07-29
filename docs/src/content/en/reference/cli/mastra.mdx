@@ -37,7 +37,7 @@ Comma-separated list of custom arguments to pass to the Node.js process, e.g. `-
 
 #### `--request-context-presets`
 
-Path to a JSON file containing named [request context](/docs/server/request-context) presets. When provided, a dropdown displays in Studio's request context editor, letting you quickly switch between preset configurations.
+Path to a JSON file containing [request context](/docs/server/request-context) presets. When provided, a dropdown displays in Studio's request context editor, letting you quickly switch between preset configurations.
 
 ```bash
 mastra dev --request-context-presets ./presets.json
@@ -54,7 +54,7 @@ The file must be a JSON object where each key is a preset name and each value is
 
 ### Configs
 
-You can set certain environment variables to modify the behavior of `mastra dev`.
+You can set environment variables to modify the behavior of `mastra dev`.
 
 #### Skip peer dependency check
 
@@ -127,7 +127,7 @@ Under the hood Mastra's Rollup server locates your Mastra entry file and bundles
 
 The output in `.mastra` can be deployed to any cloud server using [`mastra start`](#mastra-start).
 
-If you're deploying to a [serverless platform](/docs/deployment/cloud-providers) you need to install the correct deployer in order to receive the correct output in `.mastra`.
+If you're deploying to a [serverless platform](/docs/deployment/cloud-providers) you need to install the correct deployer to receive the correct output in `.mastra`.
 
 It accepts [common flags][common-flags].
 
@@ -139,7 +139,7 @@ Bundle the Studio UI with the build.
 
 ### Configs
 
-You can set certain environment variables to modify the behavior of `mastra build`.
+You can set environment variables to modify the behavior of `mastra build`.
 
 #### Skip peer dependency check
 
@@ -209,7 +209,7 @@ The API route prefix of the Mastra API server. Defaults to `/api`.
 
 #### `--request-context-presets`
 
-Path to a JSON file containing named [request context](/docs/server/request-context) presets. Works the same as the [`mastra dev` flag](#--request-context-presets).
+Path to a JSON file containing [request context](/docs/server/request-context) presets. Works the same as the [`mastra dev` flag](#--request-context-presets).
 
 ```bash
 mastra studio --request-context-presets ./presets.json
@@ -217,7 +217,7 @@ mastra studio --request-context-presets ./presets.json
 
 ## `mastra deploy`
 
-Builds and deploys your project to a named environment on Mastra platform. This is the recommended command for all new deploys and replaces both [`mastra studio deploy`](#mastra-studio-deploy) and [`mastra server deploy`](#mastra-server-deploy), which continue to work but should no longer be used for new setups.
+Builds and deploys your project to the Mastra platform environment selected by `--env`. This is the recommended command for all new deploys and replaces both [`mastra studio deploy`](#mastra-studio-deploy) and [`mastra server deploy`](#mastra-server-deploy), which continue to work but should no longer be used for new setups.
 
 Requires authentication via [`mastra auth login`](#mastra-auth-login) or a `MASTRA_API_TOKEN` environment variable.
 
@@ -227,7 +227,7 @@ mastra deploy --env staging
 mastra deploy --env production --region eu
 ```
 
-The command runs `mastra build`, zips the output, uploads it to the selected environment, and then polls the deploy status while streaming build logs until the deploy reaches a terminal state.
+The command runs `mastra build` and zips the output before uploading it to the selected environment. It then polls the deploy status while streaming build logs until the deploy reaches a terminal state.
 
 Organization, project, and environment are resolved in order from: environment variable (`MASTRA_ORG_ID`, `MASTRA_PROJECT_ID`), CLI flag (`--org`, `--project`, `--env`), `.mastra-project.json` config file, current org from credentials, and lastly interactive prompt. On first deploy, the CLI saves the resolved org and project IDs to `.mastra-project.json` so subsequent deploys skip the prompts.
 
@@ -304,9 +304,9 @@ mastra deploy --env staging --yes
 
 ## `mastra env`
 
-Manages environments on Mastra platform. Environments are named deploy targets (for example `production`, `staging`, `preview-42`) that belong to a project. The current organization is resolved from stored credentials.
+Manages environments on Mastra platform. Environments are deploy targets (for example `production`, `staging`, `preview-42`) that belong to a project. The current organization is resolved from stored credentials.
 
-Every subcommand resolves its project from, in order: the `MASTRA_PROJECT_ID` environment variable, the `--project <name|slug|id>` flag, or the `.mastra-project.json` file written by [`mastra deploy`](#mastra-deploy) in the current directory. Run from your project directory and you never need to name the project.
+Every subcommand resolves its project in a fixed order. It first checks the `MASTRA_PROJECT_ID` environment variable and the `--project <name|slug|id>` flag. It then reads the `.mastra-project.json` file written by [`mastra deploy`](#mastra-deploy) in the current directory. Run from your project directory and you never need to name the project.
 
 ### `mastra env list`
 
@@ -366,7 +366,7 @@ mastra env restart <env>
 
 ### `mastra env vars pull`
 
-Pulls an environment's env vars into a local env file (default: `.env`). The file contains the merged set a deploy actually runs with: vars stored on the environment (for example, added in the dashboard's environment editor) plus project-level vars, with project values winning on conflict. Managed vars injected by attached databases are listed as comments (names only) since their values are platform-managed secrets.
+Pulls an environment's env vars into a local env file (default: `.env`). The file contains the merged set used by a deploy. It combines vars stored on the environment (for example, added in the dashboard's environment editor) with project-level vars. Project values win on conflict. Managed vars injected by attached databases are listed as comments (names only) since their values are platform-managed secrets.
 
 ```bash
 mastra env vars pull
@@ -383,7 +383,7 @@ File to write. Defaults to `.env`.
 
 Manages databases attached to a project on Mastra platform. Databases are provisioned from a managed provider (for example Turso or Neon) and inject their connection env vars into deploys automatically.
 
-A database is either **environment-scoped** (its env vars only go to one environment) or **shared** (project-scoped: its env vars go to all environments). Environment-scoped is the default for `mastra env db create` — pass an environment argument, or let the CLI pick or prompt for one. Pass `--shared` on create to attach a shared database instead. For other subcommands (`list`, `delete`, `keys`), pass the environment argument to work with environment-scoped databases and omit it for shared databases.
+A database is either **environment-scoped** (its env vars only go to one environment) or **shared** (project-scoped: its env vars go to all environments). Environment-scoped is the default for `mastra env db create`: pass an environment argument, or let the CLI pick or prompt for one. Pass `--shared` on create to attach a shared database instead. For other subcommands (`list`, `delete`, `keys`), pass the environment argument to work with environment-scoped databases and omit it for shared databases.
 
 Creating and deleting databases requires the `admin` role in the organization.
 
@@ -402,7 +402,7 @@ Emit machine-readable JSON.
 
 ### `mastra env db create`
 
-Provisions a managed database, attaches it, and polls until it's ready. Provisioning errors are printed with the provider's error detail.
+Provisions and attaches a managed database, then polls until it's ready. Provisioning errors are printed with the provider's error detail.
 
 By default the database is scoped to a single environment: pass an environment argument to pick it, or omit the argument to have the CLI pick for you. When the project has one environment, that environment is used. When it has several, the CLI prompts you to select one interactively; in non-interactive contexts (CI, `--json`) an environment argument is required. Pass `--shared` to attach a project-scoped database that's shared by every environment instead.
 
@@ -429,7 +429,7 @@ Provider region ID for shared databases. Ignored for environment-scoped database
 
 #### `--shared`
 
-Attach as a project-scoped database that's shared by every environment. Cannot be combined with an environment argument.
+Attach as a project-scoped database that's shared by every environment. Can't be combined with an environment argument.
 
 #### `--no-wait`
 
@@ -487,7 +487,7 @@ Emit machine-readable JSON.
 
 :::info
 
-`mastra studio deploy` continues to work but is superseded by [`mastra deploy`](#mastra-deploy), which supports named environments (`--env staging`, `--env production`) on a single project. New setups should use `mastra deploy`.
+`mastra studio deploy` continues to work but is superseded by [`mastra deploy`](#mastra-deploy), which supports environments (`--env staging`, `--env production`) on a single project. New setups should use `mastra deploy`.
 
 :::
 
@@ -497,11 +497,11 @@ Builds and deploys your project to Mastra platform. Requires authentication via 
 mastra studio deploy
 ```
 
-The command runs `mastra build`, zips the output, reads an env file from the project directory, and uploads everything to the platform. After uploading, it polls the deploy status and streams build logs until the deploy reaches a terminal state.
+The command runs `mastra build` and zips the output. It reads an env file from the project directory before uploading everything to the platform. After uploading, it polls the deploy status and streams build logs until the deploy reaches a terminal state.
 
 The deploy command auto-loads the project's `.env` file. If `MASTRA_PROJECT_ID` points to a project that was provisioned for Observability, the deploy links to that project instead of creating a new one. Deploying Studio to an observability-only project converts it into a Studio project on the platform side.
 
-The CLI requires at least one `.env` or `.env.*` file (excluding `.env.example`) in the project directory and fails with `Error: No env file found for deploy.` if none exists. When multiple env files are present, the CLI prompts you to pick one (defaulting to `.env.production`); pass `--env-file` to choose explicitly. With `--yes` and multiple env files, you must pass `--env-file` or the deploy errors.
+The CLI requires at least one `.env` or `.env.*` file (excluding `.env.example`) in the project directory and fails with `Error: No env file found for deploy.` if none exists. When multiple env files are present, the CLI prompts you to pick one (defaulting to `.env.production`). Pass `--env-file` to choose explicitly. With `--yes` and multiple env files, you must pass `--env-file` or the deploy errors.
 
 Organization and project are resolved in order from: Environment variable flag, `.mastra-project.json` config file, current org from credentials, and lastly interactive prompt. On first deploy, the CLI saves the resolved IDs to `.mastra-project.json` so subsequent deploys skip the prompts.
 
@@ -595,7 +595,7 @@ Shows diagnosis results and suggested fixes for a failed Studio deploy.
 mastra studio deploy suggestions [deploy-id]
 ```
 
-If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis doesn't exist yet, the command starts one and polls until results are ready. If the deploy is healthy, no suggestions are shown.
+If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis doesn't exist yet, the command starts one and polls until results are ready. Suggestions appear only when the diagnosis finds a problem.
 
 ### `mastra studio projects`
 
@@ -609,7 +609,7 @@ Creates a new project through an interactive prompt. This command doesn't accept
 
 :::info
 
-`mastra server deploy` continues to work but is superseded by [`mastra deploy`](#mastra-deploy), which deploys a single project to multiple named environments instead of separate Studio and Server commands. New setups should use `mastra deploy`.
+`mastra server deploy` continues to work but is superseded by [`mastra deploy`](#mastra-deploy), which deploys a single project to multiple environments instead of separate Studio and Server commands. New setups should use `mastra deploy`.
 
 :::
 
@@ -629,7 +629,7 @@ Shows diagnosis results and suggested fixes for a failed Server deploy.
 mastra server deploy suggestions [deploy-id]
 ```
 
-If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis doesn't exist yet, the command starts one and polls until results are ready. If the deploy is healthy, no suggestions are shown.
+If you omit `deploy-id`, the command uses the latest deploy for the linked project. If a diagnosis doesn't exist yet, the command starts one and polls until results are ready. Suggestions appear only when the diagnosis finds a problem.
 
 ## `mastra server pause`
 
@@ -667,7 +667,7 @@ Same flags as [`mastra server pause`](#mastra-server-pause): **`--org`**, **`--p
 mastra server restart
 ```
 
-Fails if a deployment is still active for this project (running, building, deploying, etc.); that's a platform restriction so you can't restart while another deploy is in progress.
+Fails if a deployment is still active for this project (running, building, deploying, etc.). That's a platform restriction so you can't restart while another deploy is in progress.
 
 ## `mastra server env`
 
@@ -890,7 +890,7 @@ Configure your code editor with Mastra's MCP server. Choose from: `"cursor" | "c
 
 #### `--observability`
 
-Enable Observability on the Mastra platform. The CLI prompts you to select an existing platform project or create a new one, writes the required environment variables, and configures the observability exporters.
+Enable Observability on the Mastra platform. The CLI prompts you to select an existing platform project or create a new one. It then writes the required environment variables and configures the observability exporters.
 
 #### `--no-observability`
 
@@ -904,7 +904,7 @@ Set the platform project name to use when Mastra Observability is enabled.
 
 Runs database migrations to update your storage schema. This command is useful when upgrading Mastra versions that include storage schema changes.
 
-The command bundles your project, connects to your configured storage backend, and executes any pending migrations. Currently supports:
+The command bundles your project and connects to your configured storage backend. It then executes any pending migrations. Currently supports:
 
 - **Duplicate spans migration**: Removes duplicate `(traceId, spanId)` entries and adds a unique constraint to ensure data integrity.
 - **ClickHouse legacy-to-vNext span migration**: Copies historical spans from the legacy `mastra_ai_spans` table to the vNext `mastra_span_events` schema. Runs in batches to stay within memory limits. See the [ClickHouse storage reference](/reference/storage/clickhouse#migrating-from-legacy-to-vnext) for details.
@@ -1415,7 +1415,7 @@ curl -sS "https://observability.mastra.ai/api/observability/traces/<trace-id>/sp
 
 #### `mastra api score create`
 
-Creates an observability score. The input uses the server score body shape; inspect it with `--schema`.
+Creates an observability score. The input uses the server score body shape. Inspect it with `--schema`.
 
 ```bash
 mastra api score create <input>

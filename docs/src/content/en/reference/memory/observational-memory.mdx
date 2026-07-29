@@ -1,6 +1,6 @@
 ---
 title: "Reference: Observational Memory | Memory"
-description: "API reference for Observational Memory in Mastra — a three-tier memory system that uses Observer and Reflector agents to maintain long-term memory across conversations."
+description: "API reference for Observational Memory in Mastra: a three-tier memory system that uses Observer and Reflector agents to maintain long-term memory across conversations."
 packages:
   - "@mastra/core"
   - "@mastra/memory"
@@ -10,7 +10,7 @@ packages:
 
 **Added in:** `@mastra/memory@1.1.0`
 
-Observational Memory (OM) is Mastra's memory system for long-context agentic memory. Two background agents — an **Observer** that watches conversations and creates observations, and a **Reflector** that restructures observations by combining related items, reflecting on overarching patterns, and condensing where possible — maintain an observation log that replaces raw message history as it grows.
+Observational Memory (OM) is Mastra's memory system for long-context agentic memory. An **Observer** watches conversations and creates observations. A **Reflector** restructures those observations by combining related items and condensing overarching patterns. Together, they maintain an observation log that replaces raw message history as it grows.
 
 ## Usage
 
@@ -33,7 +33,7 @@ export const agent = new Agent({
 
 ## Configuration
 
-The `observationalMemory` option accepts `true`, a configuration object, or `false`. Setting `true` enables OM with `google/gemini-2.5-flash` as the default model. When passing a config object, a `model` must be explicitly set — either at the top level, or on `observation.model` and/or `reflection.model`.
+The `observationalMemory` option accepts `true`, a configuration object, or `false`. Setting `true` enables OM with `google/gemini-2.5-flash` as the default model. When passing a config object, a `model` must be explicitly set: either at the top level or on `observation.model` and/or `reflection.model`.
 
 Observer input is multimodal-aware. OM keeps text placeholders like `[Image #1: screenshot.png]` in the transcript it builds for the Observer, and also sends the underlying image parts when possible. This applies to both single-thread observation and batched multi-thread observation. Non-image files appear as placeholders only.
 
@@ -450,7 +450,7 @@ const memory = new Memory({
 - Schema-less extractors are inline string extractors emitted directly in the Observer or Reflector output.
 - Dynamic extractor functions receive runtime context, including `source`, `threadId`, `resourceId`, `mainAgent`, `memory`, and `requestContext` when available.
 - `WorkingMemoryExtractor` uses the normal extractor pipeline to update working memory through the active `Memory` instance. It uses structured extraction when working memory has a JSON schema and skips OM metadata persistence, so the working memory payload isn't duplicated under OM extracted metadata.
-- `observationalMemory.observation.manageWorkingMemory` adds `WorkingMemoryExtractor`, defaults `workingMemory.agentManaged` to `false`, and defaults `workingMemory.useStateSignals` to `true` when working memory is enabled.
+- `observationalMemory.observation.manageWorkingMemory` adds `WorkingMemoryExtractor` and defaults `workingMemory.agentManaged` to `false`. It defaults `workingMemory.useStateSignals` to `true` when working memory is enabled.
 - Extraction failures are reported in OM marker data and don't discard other successful extracted values.
 
 ## Examples
@@ -624,16 +624,16 @@ export const agent = new Agent({
 
 ### Async buffering
 
-Async buffering is **enabled by default**. It pre-computes observations in the background as the conversation grows — when the `messageTokens` threshold is reached, buffered observations activate instantly with no blocking LLM call.
+Async buffering is **enabled by default**. It pre-computes observations in the background as the conversation grows: when the `messageTokens` threshold is reached, buffered observations activate instantly with no blocking LLM call.
 
-The lifecycle is: **buffer → activate → remove messages → repeat**. Background Observer calls run at `bufferTokens` intervals, each producing a chunk of observations. At threshold, chunks activate: observations move into the log, raw messages are removed from context. The `blockAfter` threshold forces a synchronous fallback if buffering can't keep up.
+The lifecycle follows **buffer → activate → remove messages → repeat**. Background Observer calls run at `bufferTokens` intervals, each producing a chunk of observations. At threshold, chunks activate: observations move into the log, raw messages are removed from context. The `blockAfter` threshold forces a synchronous fallback if buffering can't keep up.
 
 Default settings:
 
-- `observation.bufferTokens: 0.2` — buffer every 20% of `messageTokens` (e.g. every \~6k tokens with a 30k threshold)
-- `observation.bufferActivation: 0.8` — on activation, remove enough messages to keep only 20% of the threshold remaining
+- `observation.bufferTokens: 0.2`: Buffer every 20% of `messageTokens` (e.g. every \~6k tokens with a 30k threshold)
+- `observation.bufferActivation: 0.8`: On activation, remove enough messages to keep only 20% of the threshold remaining
 - Buffered observations include continuation hints (`suggestedResponse`, `currentTask`) that survive activation to maintain conversational continuity
-- `reflection.bufferActivation: 0.5` — start background reflection at 50% of observation threshold
+- `reflection.bufferActivation: 0.5`: start background reflection at 50% of observation threshold
 
 To customize:
 
@@ -763,7 +763,7 @@ interface DataOmStatusPart {
 }
 ```
 
-`buffered.reflection.inputObservationTokens` is the size of the observations that were sent to the Reflector. `buffered.reflection.observationTokens` is the compressed result — the size of what will replace those observations when the reflection activates. A client can use these two values to show a compression ratio.
+`buffered.reflection.inputObservationTokens` is the size of the observations that were sent to the Reflector. `buffered.reflection.observationTokens` is the compressed result: the size of what will replace those observations when the reflection activates. A client can use these two values to show a compression ratio.
 
 Clients can derive percentages and post-activation estimates from the raw values:
 
@@ -947,7 +947,7 @@ Emitted when async buffering fails. The system falls back to synchronous process
 
 ### `data-om-activation`
 
-Emitted when buffered observations or reflections are activated (moved into the active context window). This is an instant operation — no LLM call is involved.
+Emitted when buffered observations or reflections are activated (moved into the active context window). This is an instant operation: no LLM call is involved.
 
 <PropertiesTable
   content={[
@@ -1040,7 +1040,7 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
 
 ## Recall tool
 
-When `retrieval` is set (any truthy value), a `recall` tool is registered so the agent can page through raw messages behind observation group ranges. By default (scope `'resource'`), the tool supports listing threads (`mode: "threads"`), browsing other threads (`threadId`), and cross-thread search. With `retrieval: { vector: true }`, semantic search is available (`mode: "search"`). Set `scope: 'thread'` to restrict the tool to the current thread only. The tool is automatically added to the agent's tool list — no manual registration is needed.
+When `retrieval` is set (any truthy value), a `recall` tool is registered so the agent can page through raw messages behind observation group ranges. By default (scope `'resource'`), the tool supports listing threads (`mode: "threads"`), browsing other threads (`threadId`), and cross-thread search. With `retrieval: { vector: true }`, semantic search is available (`mode: "search"`). Set `scope: 'thread'` to restrict the tool to the current thread only. The tool is automatically added to the agent's tool list.
 
 ### Parameters
 
