@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ChevronRight, Slack } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
 import { SkeletonRows } from '../../../ui/SkeletonRows';
@@ -8,6 +8,7 @@ import { useApiConfig } from '../../../../api/config';
 import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
 import { connectSlackUrl } from '../services/channelAccounts';
 import { SettingsCard, SettingsRow } from './SettingsCard';
+import { SlackLogo } from './SlackLogo';
 
 /** Connected-account overview for the active factory settings surface. */
 export function ConnectedAccountsSection() {
@@ -38,18 +39,20 @@ export function ConnectedAccountsSection() {
       <SettingsRow
         label={
           <span className="flex items-center gap-3">
-            <Slack className="text-icon5 size-5 shrink-0" aria-hidden="true" />
-            <span>Slack</span>
+            <SlackLogo className="size-7 shrink-0" />
+            <span className="flex flex-col gap-0.5">
+              <Txt as="span" variant="ui-md">
+                Slack
+              </Txt>
+              <Txt as="span" variant="ui-sm" className={slackAccounts.length > 0 ? 'text-positive1' : 'text-icon3'}>
+                {slackAccounts.length > 1
+                  ? `${slackAccounts.length} connected`
+                  : slackAccounts.length === 1
+                    ? 'Connected'
+                    : 'Not connected'}
+              </Txt>
+            </span>
           </span>
-        }
-        hint={
-          <Txt as="span" variant="ui-sm" className={slackAccounts.length > 0 ? 'text-positive1' : 'text-icon3'}>
-            {slackAccounts.length > 1
-              ? `${slackAccounts.length} connected`
-              : slackAccounts.length === 1
-                ? 'Connected'
-                : 'Not connected'}
-          </Txt>
         }
       >
         {slackAccounts.length > 0 && factoryId ? (

@@ -3,7 +3,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playgr
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Slack } from 'lucide-react';
 import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../api/config';
@@ -17,6 +16,7 @@ import { useFactoriesQuery } from '../../hooks/useFactories';
 import { ConnectionSettingsShell } from '../domains/settings/components/ConnectionSettingsShell';
 import { SettingsCard, SettingsRow } from '../domains/settings/components/SettingsCard';
 import { SettingsSubsection } from '../domains/settings/components/SettingsSubsection';
+import { SlackLogo } from '../domains/settings/components/SlackLogo';
 import { connectSlackUrl, type ConnectedChannelAccount } from '../domains/settings/services/channelAccounts';
 import { SettingsPageLayout } from './SettingsPage';
 
@@ -92,11 +92,11 @@ export function SlackConnectionSettings() {
       backTo={factoryId ? `/factories/${factoryId}/settings/connections` : '/'}
       title={
         <span className="flex items-center gap-3">
-          <Slack className="text-icon5 size-6" aria-hidden="true" />
+          <SlackLogo className="size-6" />
           Slack
         </span>
       }
-      description="Message your Factory from Slack to start and continue sessions."
+      description="Start and continue Factory sessions from Slack."
     >
       {accountsQuery.isPending ? (
         <Txt as="p" variant="ui-sm" role="status" className="text-icon3">
@@ -157,20 +157,6 @@ export function SlackConnectionSettings() {
                       </SelectContent>
                     </Select>
                   </SettingsRow>
-                  <SettingsRow
-                    label="Disconnect Slack"
-                    hint="Slack messages will no longer run as your Mastra account."
-                  >
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      aria-label={`Disconnect ${account.externalUserName ?? account.externalUserId}`}
-                      disabled={disconnectMutation.isPending}
-                      onClick={() => disconnect(account)}
-                    >
-                      {disconnectMutation.isPending ? 'Disconnecting…' : 'Disconnect'}
-                    </Button>
-                  </SettingsRow>
                 </SettingsCard>
               ))}
             </div>
@@ -195,6 +181,28 @@ export function SlackConnectionSettings() {
                   }
                 />
               </SettingsRow>
+            </SettingsCard>
+          </SettingsSubsection>
+
+          <SettingsSubsection title="Danger zone">
+            <SettingsCard>
+              {accounts.map(account => (
+                <SettingsRow
+                  key={`${account.externalTeamId}:${account.externalUserId}`}
+                  label="Disconnect Slack"
+                  hint="Slack messages will no longer run as your Mastra account."
+                >
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label={`Disconnect ${account.externalUserName ?? account.externalUserId}`}
+                    disabled={disconnectMutation.isPending}
+                    onClick={() => disconnect(account)}
+                  >
+                    {disconnectMutation.isPending ? 'Disconnecting…' : 'Disconnect'}
+                  </Button>
+                </SettingsRow>
+              ))}
             </SettingsCard>
           </SettingsSubsection>
         </div>

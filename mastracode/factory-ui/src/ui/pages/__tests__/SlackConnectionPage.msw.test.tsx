@@ -59,7 +59,13 @@ describe('SlackConnectionPage', () => {
     expect(await screen.findByText('Mastra (T06CB4A5FT9)')).toBeInTheDocument();
     expect(screen.getByText('Caleb Barnes (U095PUH0FKL)')).toBeInTheDocument();
     expect(screen.getByText(/July 29, 2026/)).toBeInTheDocument();
+    expect(screen.getByText('Start and continue Factory sessions from Slack.')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Default factory for Caleb Barnes' })).toHaveTextContent('OM Game');
+    expect(screen.getAllByRole('heading', { level: 2 }).map(heading => heading.textContent)).toEqual([
+      'Connection',
+      'Session behavior',
+      'Danger zone',
+    ]);
   });
 
   it('given multiple linked accounts, when rendered, then it keeps every account configurable', async () => {
