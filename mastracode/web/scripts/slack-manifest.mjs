@@ -62,7 +62,7 @@ const manifest = {
     },
   },
   oauth_config: {
-    redirect_urls: [`${baseUrl}/slack/oauth/callback`, `${baseUrl}/connect/slack/oidc/callback`],
+    redirect_urls: [`${baseUrl}/connect/slack/oidc/callback`],
     scopes: {
       bot: [
         'chat:write',

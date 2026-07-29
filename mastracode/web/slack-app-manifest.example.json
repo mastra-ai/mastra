@@ -19,10 +19,7 @@
     }
   },
   "oauth_config": {
-    "redirect_urls": [
-      "https://YOUR-TUNNEL-HOSTNAME/slack/oauth/callback",
-      "https://YOUR-TUNNEL-HOSTNAME/connect/slack/oidc/callback"
-    ],
+    "redirect_urls": ["https://YOUR-TUNNEL-HOSTNAME/connect/slack/oidc/callback"],
     "scopes": {
       "bot": [
         "chat:write",
