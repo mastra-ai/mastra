@@ -318,6 +318,35 @@ describe('WorkspaceViewerPanel', () => {
     expect(newFile).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('preserves added and deleted content that resembles diff headers', async () => {
+    server.use(
+      http.get(CHANGES_URL, () => HttpResponse.json(workspaceChangesFixture)),
+      http.get(DIFF_URL, () =>
+        HttpResponse.json({
+          ...workspaceDiffFixture,
+          patch: [
+            'diff --git a/src/edited.ts b/src/edited.ts',
+            '--- a/src/edited.ts',
+            '+++ b/src/edited.ts',
+            '@@ -1 +1 @@',
+            '--- removed content',
+            '+++ added content',
+          ].join('\n'),
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} renderedPaths={renderedPaths} />);
+
+    await user.click(screen.getByRole('tab', { name: 'Changes' }));
+    await user.click(await screen.findByRole('treeitem', { name: /^edited\.ts.*Modified/ }));
+
+    expect(await screen.findByText('--- removed content')).toBeInTheDocument();
+    expect(screen.getByText('+++ added content')).toBeInTheDocument();
+    expect(screen.queryByText('--- a/src/edited.ts')).not.toBeInTheDocument();
+    expect(screen.queryByText('+++ b/src/edited.ts')).not.toBeInTheDocument();
+  });
+
   it('refreshes pending changes when an agent run completes', async () => {
     let requests = 0;
     server.use(

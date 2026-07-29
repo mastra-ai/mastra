@@ -59,40 +59,45 @@ interface ParsedDiffLine {
 function parseDiff(patch: string): ParsedDiffLine[] {
   let oldNumber: number | undefined;
   let newNumber: number | undefined;
+  let inHunk = false;
+  const parsedLines: ParsedDiffLine[] = [];
 
-  return patch
-    .split('\n')
-    .filter(
-      line =>
-        !line.startsWith('diff --git') &&
-        !line.startsWith('index ') &&
-        !line.startsWith('--- ') &&
-        !line.startsWith('+++ '),
-    )
-    .map(line => {
-      const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
-      if (hunk) {
-        oldNumber = Number(hunk[1]);
-        newNumber = Number(hunk[2]);
-        return { line };
-      }
-      if (line.startsWith('+')) {
-        const parsed = { line, newNumber };
-        if (newNumber !== undefined) newNumber += 1;
-        return parsed;
-      }
-      if (line.startsWith('-')) {
-        const parsed = { line, oldNumber };
-        if (oldNumber !== undefined) oldNumber += 1;
-        return parsed;
-      }
-      if (line.startsWith('\\')) return { line };
-
-      const parsed = { line, oldNumber, newNumber };
-      if (oldNumber !== undefined) oldNumber += 1;
+  for (const line of patch.split('\n')) {
+    const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+    if (hunk) {
+      inHunk = true;
+      oldNumber = Number(hunk[1]);
+      newNumber = Number(hunk[2]);
+      parsedLines.push({ line });
+      continue;
+    }
+    if (
+      !inHunk &&
+      (line.startsWith('diff --git') || line.startsWith('index ') || line.startsWith('--- ') || line.startsWith('+++ '))
+    ) {
+      continue;
+    }
+    if (line.startsWith('+')) {
+      parsedLines.push({ line, newNumber });
       if (newNumber !== undefined) newNumber += 1;
-      return parsed;
-    });
+      continue;
+    }
+    if (line.startsWith('-')) {
+      parsedLines.push({ line, oldNumber });
+      if (oldNumber !== undefined) oldNumber += 1;
+      continue;
+    }
+    if (line.startsWith('\\')) {
+      parsedLines.push({ line });
+      continue;
+    }
+
+    parsedLines.push({ line, oldNumber, newNumber });
+    if (oldNumber !== undefined) oldNumber += 1;
+    if (newNumber !== undefined) newNumber += 1;
+  }
+
+  return parsedLines;
 }
 
 function DiffLine({ line, oldNumber, newNumber }: ParsedDiffLine) {
