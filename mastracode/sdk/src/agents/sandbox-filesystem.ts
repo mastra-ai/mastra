@@ -27,6 +27,14 @@ import type {
   WorkspaceFilesystem,
   WriteOptions,
 } from '@mastra/core/workspace';
+import { FileExistsError, FileNotFoundError, IsDirectoryError } from '@mastra/core/workspace';
+
+/**
+ * Sentinel exit codes used by guard clauses that run before the real command,
+ * so shell failures can be mapped to typed filesystem errors.
+ */
+const EXIT_NOT_FOUND = 20;
+const EXIT_IS_DIRECTORY = 21;
 
 /** Minimal command result shape we depend on. */
 export interface SandboxCommandResult {
@@ -79,7 +87,9 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   constructor(options: SandboxFilesystemOptions) {
     this.sandbox = options.sandbox;
     this.basePath = options.workdir;
-    this.id = options.id ?? `sandbox-fs:${options.sandbox.id}`;
+    // Include the workdir: one sandbox can back several filesystems rooted at
+    // different worktrees, and each needs a distinct id.
+    this.id = options.id ?? `sandbox-fs:${options.sandbox.id}:${options.workdir}`;
   }
 
   // ── Path handling ──────────────────────────────────────────────────────
@@ -169,9 +179,14 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
     const abs = this.resolve(path);
     await this.assertContainedRealpath(abs, path);
-    const result = await this.exec(`base64 < ${shellQuote(abs)}`);
+    // Guard clauses first: redirecting from a directory "succeeds" with empty
+    // output on some shells, so classify before reading.
+    const result = await this.exec(
+      `if [ -d ${shellQuote(abs)} ]; then exit ${EXIT_IS_DIRECTORY}; elif [ ! -e ${shellQuote(abs)} ]; then exit ${EXIT_NOT_FOUND}; fi; base64 < ${shellQuote(abs)}`,
+    );
+    if (result.exitCode === EXIT_IS_DIRECTORY) throw new IsDirectoryError(path);
     if (result.exitCode !== 0) {
-      throw new Error(`File not found: ${path}`);
+      throw new FileNotFoundError(path);
     }
     const buffer = Buffer.from(result.stdout.replace(/\s/g, ''), 'base64');
     if (options?.encoding) {
@@ -188,7 +203,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     const mkdir = options?.recursive === false ? '' : `mkdir -p ${shellQuote(dir)} && `;
     if (options?.overwrite === false) {
       const exists = await this.exists(path);
-      if (exists) throw new Error(`File already exists: ${path}`);
+      if (exists) throw new FileExistsError(path);
     }
     await this.execOk(`${mkdir}printf %s ${shellQuote(b64)} | base64 -d > ${shellQuote(abs)}`, `writeFile ${path}`);
   }
@@ -205,10 +220,16 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
 
   async deleteFile(path: string, options?: RemoveOptions): Promise<void> {
     const abs = this.resolve(path);
-    const force = options?.force ? '-f ' : '';
-    const result = await this.exec(`rm ${force}${shellQuote(abs)}`);
-    if (result.exitCode !== 0 && !options?.force) {
-      throw new Error(`File not found: ${path}`);
+    if (options?.force) {
+      await this.exec(`rm -f ${shellQuote(abs)}`);
+      return;
+    }
+    const result = await this.exec(
+      `if [ ! -e ${shellQuote(abs)} ]; then exit ${EXIT_NOT_FOUND}; fi; rm ${shellQuote(abs)}`,
+    );
+    if (result.exitCode === EXIT_NOT_FOUND) throw new FileNotFoundError(path);
+    if (result.exitCode !== 0) {
+      throw new Error(`deleteFile ${path} failed (exit ${result.exitCode}): ${result.stderr.trim()}`);
     }
   }
 
@@ -220,9 +241,15 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     const recursive = options?.recursive ? '-r ' : '';
     if (options?.overwrite === false) {
       const exists = await this.exists(dest);
-      if (exists) throw new Error(`Destination exists: ${dest}`);
+      if (exists) throw new FileExistsError(dest);
     }
-    await this.execOk(`cp ${recursive}${shellQuote(srcAbs)} ${shellQuote(destAbs)}`, `copyFile ${src} -> ${dest}`);
+    const result = await this.exec(
+      `if [ ! -e ${shellQuote(srcAbs)} ]; then exit ${EXIT_NOT_FOUND}; fi; mkdir -p ${shellQuote(posixPath.dirname(destAbs))} && cp ${recursive}${shellQuote(srcAbs)} ${shellQuote(destAbs)}`,
+    );
+    if (result.exitCode === EXIT_NOT_FOUND) throw new FileNotFoundError(src);
+    if (result.exitCode !== 0) {
+      throw new Error(`copyFile ${src} -> ${dest} failed (exit ${result.exitCode}): ${result.stderr.trim()}`);
+    }
   }
 
   async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
@@ -232,9 +259,15 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     await this.assertContainedDest(destAbs, dest);
     if (options?.overwrite === false) {
       const exists = await this.exists(dest);
-      if (exists) throw new Error(`Destination exists: ${dest}`);
+      if (exists) throw new FileExistsError(dest);
     }
-    await this.execOk(`mv ${shellQuote(srcAbs)} ${shellQuote(destAbs)}`, `moveFile ${src} -> ${dest}`);
+    const result = await this.exec(
+      `if [ ! -e ${shellQuote(srcAbs)} ]; then exit ${EXIT_NOT_FOUND}; fi; mkdir -p ${shellQuote(posixPath.dirname(destAbs))} && mv ${shellQuote(srcAbs)} ${shellQuote(destAbs)}`,
+    );
+    if (result.exitCode === EXIT_NOT_FOUND) throw new FileNotFoundError(src);
+    if (result.exitCode !== 0) {
+      throw new Error(`moveFile ${src} -> ${dest} failed (exit ${result.exitCode}): ${result.stderr.trim()}`);
+    }
   }
 
   // ── Directory operations ───────────────────────────────────────────────
@@ -339,7 +372,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       `stat -c '%F|%s|%Y|%W' ${shellQuote(abs)} 2>/dev/null || stat -f '%HT|%z|%m|%B' ${shellQuote(abs)}`,
     );
     if (result.exitCode !== 0) {
-      throw new Error(`Path not found: ${path}`);
+      throw new FileNotFoundError(path);
     }
     const [kind, sizeStr, mtimeStr, ctimeStr] = result.stdout.trim().split('|');
     const type = kind && kind.toLowerCase().includes('directory') ? 'directory' : 'file';
@@ -376,6 +409,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       id: this.id,
       name: this.name,
       provider: this.provider,
+      status: this.status,
       metadata: { basePath: this.basePath, sandboxId: this.sandbox.id },
     };
   }

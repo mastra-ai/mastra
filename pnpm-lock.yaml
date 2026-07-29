@@ -2473,6 +2473,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
+      '@internal/workspace-test-utils':
+        specifier: workspace:*
+        version: link:../../workspaces/_test-utils
       '@libsql/client':
         specifier: ^0.17.4
         version: 0.17.4(bufferutil@4.1.0)
