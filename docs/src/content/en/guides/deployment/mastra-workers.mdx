@@ -1,5 +1,5 @@
 ---
-title: "Deploy Mastra Workers | Deployment"
+title: "Deploy Mastra workers | Deployment"
 description: "Learn how to deploy Mastra workers as separate processes for independent scaling, event durability, and process isolation."
 ---
 
@@ -8,12 +8,12 @@ import StepItem from "@site/src/components/StepItem";
 import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 
-# Deploy Mastra Workers
+# Deploy Mastra workers
 
 Run [Mastra workers](/docs/deployment/workers) as separate processes so you can scale orchestration, scheduling, and background tasks independently from the API. This guide walks through a fully split deployment using Docker Compose.
 
 :::info
-This guide covers splitting workers into their own containers. If you only need workers to run in-process alongside the API, see [Workers](/docs/deployment/workers) — no extra setup is required.
+This guide covers splitting workers into their own containers. If you only need workers to run in-process alongside the API, see [Workers](/docs/deployment/workers). No extra setup is required.
 :::
 
 ## Before you begin
@@ -26,7 +26,7 @@ You'll need:
 - A shared database reachable from every container. See [supported storage backends](/reference/workers/overview#supported-storage-backends) for the full list.
 
 :::warning
-The default in-memory PubSub cannot deliver events across processes. You must configure a distributed PubSub backend before splitting workers into separate containers.
+The default in-memory PubSub can't deliver events across processes. You must configure a distributed PubSub backend before splitting workers into separate containers.
 :::
 
 ## Configure shared infrastructure
@@ -69,7 +69,7 @@ Point the `Mastra` instance at a distributed PubSub backend and a shared databas
   </TabItem>
 </Tabs>
 
-Any [supported storage backend](/reference/workers/overview#supported-storage-backends) works — swap the storage adapter for your preferred database.
+Any [supported storage backend](/reference/workers/overview#supported-storage-backends) works. Swap the storage adapter for your preferred database.
 
 ## Deploy
 
@@ -236,7 +236,7 @@ docker compose up -d --scale background-task-worker=2
 
 The API can also scale horizontally behind a load balancer.
 
-**Do not scale the scheduler worker.** Run exactly one instance. Multiple schedulers polling the same storage fire duplicate events for the same schedule.
+**Don't scale the scheduler worker.** Run exactly one instance. Multiple schedulers polling the same storage fire duplicate events for the same schedule.
 
 ## Crash recovery
 
@@ -253,8 +253,8 @@ If the API crashes while a step is already executing (e.g., mid-sleep), that ste
 ## Related
 
 - [Workers](/docs/deployment/workers): What workers are and when to use them
-- [Worker authentication](/docs/deployment/worker-auth): Secure worker-to-API communication
-- [Workers reference](/reference/workers/overview): Environment variables, worker types, and storage backends
+- [Worker authentication](/docs/server/auth/workers): Secure worker-to-API communication
+- [Workers reference](/reference/workers/overview): Configuration details for all worker types
 - [CLI reference](/reference/cli/mastra#mastra-worker-build): `mastra worker build` and `mastra worker start`
 - [PubSub](/docs/server/pubsub): Event delivery backends
 - [Deploy a Mastra server](/docs/deployment/mastra-server): Build output and server configuration

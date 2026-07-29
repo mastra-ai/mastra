@@ -44,7 +44,7 @@ ${MASTRA_STEP_EXECUTION_URL}/workflows/:workflowId/runs/:runId/steps/execute
 
 ### `MASTRA_WORKER_AUTH_TOKEN`
 
-A bearer token sent by the orchestration worker when calling the API's step execution endpoint. The API's configured auth provider must recognize this token. See [Worker authentication](/docs/deployment/worker-auth).
+A bearer token sent by the orchestration worker when calling the API's step execution endpoint. The API's configured auth provider must recognize this token. See [Worker authentication](/docs/server/auth/workers).
 
 ```
 MASTRA_WORKER_AUTH_TOKEN=sk-worker-secret-token
@@ -65,7 +65,7 @@ Processes workflow events from the PubSub `workflows` topic. Requires a pull-cap
 Polls storage for due cron schedules and publishes `workflow.start` events.
 
 - **Name**: `scheduler`
-- **Not horizontally scalable**: Run exactly one instance to avoid duplicate fires
+- **Single instance only**: Run exactly one instance to avoid duplicate fires
 
 ### BackgroundTaskWorker
 
@@ -74,11 +74,11 @@ Executes background tool calls dispatched by agents.
 - **Name**: `backgroundTasks`
 - **PubSub topic**: `background-tasks`
 - **Consumer group**: `background-task-workers`
-- **Horizontally scalable**: Multiple instances share the consumer group
+- **Supports multiple replicas**: Instances share the consumer group
 
 ## Supported storage backends
 
-A deployment running all worker types requires a storage backend that implements the `workflows`, `backgroundTasks`, and `schedules` domains. The `schedules` domain is specifically required by the SchedulerWorker — if you don't use scheduled workflows, backends without it can still support orchestration and background tasks. The following backends support all three:
+A deployment running all worker types requires a storage backend that implements the `workflows`, `backgroundTasks`, and `schedules` domains. The `schedules` domain is specifically required by the SchedulerWorker. If you don't use scheduled workflows, backends without it can still support orchestration and background tasks. The following backends support all three:
 
 | Backend | Package |
 | - | - |

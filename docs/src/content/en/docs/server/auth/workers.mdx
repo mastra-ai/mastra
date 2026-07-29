@@ -1,26 +1,24 @@
 ---
-title: "Worker authentication | Deployment"
+title: "Workers | Auth"
 description: "Secure communication between standalone workers and the Mastra API server."
 packages:
   - "@mastra/core"
 ---
 
-# Worker authentication
+# Workers
 
-When workers run in separate processes from the API, they communicate over HTTP. The orchestration worker calls the API's step execution endpoint to run workflow steps on the API server. Separately, push-mode PubSub brokers (like Google Cloud Pub/Sub in push mode) can deliver events directly to the API's event endpoint — this is a distinct integration path from the pull-mode worker flow where workers pull events from the broker themselves. Both HTTP endpoints require authentication when an auth provider is configured.
+When workers run in separate processes from the API, they communicate over HTTP. The orchestration worker calls the API's step execution endpoint to run workflow steps on the API server. Push-mode PubSub brokers (like Google Cloud Pub/Sub in push mode) can also deliver events directly to the API's event endpoint. This is a distinct integration path from pull-mode workers, which pull events from the broker themselves. Both HTTP endpoints require authentication when an auth provider is configured.
 
 ## How it works
 
-Worker authentication uses the same auth pipeline as the rest of your Mastra server. There is no separate "worker auth" system. The orchestration worker sends credentials with each HTTP request, and the server's configured `authenticateToken` provider validates them.
-
-Two internal endpoints are involved:
+Worker authentication uses the same auth pipeline as the rest of your Mastra server. The orchestration worker sends credentials with each HTTP request, and the server's configured `authenticateToken` provider validates them.
 
 | Endpoint | Used by | Purpose |
 | - | - | - |
 | `POST /api/workflows/:workflowId/runs/:runId/steps/execute` | Orchestration worker via `HttpRemoteStrategy` | Execute a workflow step on the API |
 | `POST /api/workflows/events` | Push-mode brokers (GCP Pub/Sub, SNS) | Deliver workflow events to the API |
 
-Both routes have `requiresAuth: true`. When no auth provider is configured, they are publicly accessible.
+Both routes have `requiresAuth: true`. When no auth provider is configured, they're publicly accessible.
 
 :::warning
 
@@ -30,7 +28,7 @@ When deploying workers as separate processes, always configure an auth provider 
 
 ## Setting up worker auth
 
-### 1. Configure an auth provider on the server
+### Configure an auth provider on the server
 
 Use any Mastra auth provider. `SimpleAuth` works well for worker tokens:
 
@@ -54,7 +52,7 @@ export const mastra = new Mastra({
 })
 ```
 
-### 2. Set the worker token
+### Set the worker token
 
 On each worker container, set `MASTRA_WORKER_AUTH_TOKEN` to a token that the server's auth provider recognizes:
 
@@ -82,7 +80,7 @@ The orchestration worker reads `MASTRA_WORKER_AUTH_TOKEN` and sends it as a `Bea
 
 The `HttpRemoteStrategy` supports three credential formats. The default (`bearer`) covers most setups.
 
-### Bearer token (default)
+### Bearer token
 
 Set `MASTRA_WORKER_AUTH_TOKEN` and the strategy sends `Authorization: Bearer <token>`:
 
@@ -122,23 +120,23 @@ const strategy = new HttpRemoteStrategy({
 })
 ```
 
-## Push-mode broker auth
+## Push-mode broker authentication
 
-When using a push-mode PubSub (like Google Cloud Pub/Sub), the broker POSTs events directly to the `/api/workflows/events` endpoint. The broker attaches its own credentials — for example, Google Cloud Pub/Sub sends a Google-signed OIDC token.
+When using a push-mode PubSub (like Google Cloud Pub/Sub), the broker POSTs events directly to the `/api/workflows/events` endpoint. The broker attaches its own credentials. For example, Google Cloud Pub/Sub sends a Google-signed OIDC token.
 
 Your auth provider's `authenticateToken` callback must recognize whatever credential the broker sends. See your broker's documentation for the authentication scheme it uses.
 
 ## Security recommendations
 
 - **Use different tokens for different worker types.** This lets you revoke access to one worker without affecting others.
-- **Rotate tokens regularly.** Update the `WORKER_TOKEN` environment variable and restart the affected containers.
+- **Rotate tokens on a schedule.** Update the `WORKER_TOKEN` environment variable and restart the affected containers.
 - **Use TLS in production.** Worker-to-API communication should go over HTTPS to protect tokens in transit. Within a private network (Docker bridge, Kubernetes cluster), plain HTTP is acceptable.
 - **Restrict network access.** The step execution and event endpoints are internal. If possible, keep them off the public internet using network policies or firewall rules.
 
 ## Related
 
 - [Auth overview](/docs/server/auth): Available auth providers and how they work
-- [Simple Auth](/docs/server/auth/simple-auth): Token-to-user mapping authentication
+- [Token-based auth](/docs/server/auth/simple-auth): Token-to-user mapping authentication
 - [Worker deployment](/guides/deployment/mastra-workers): Set up split worker processes
-- [Workers reference](/reference/workers/overview): Environment variables, worker types, and storage backends
+- [Workers reference](/reference/workers/overview): Configuration details for all worker types
 - [CLI reference](/reference/cli/mastra#mastra-worker-build): `mastra worker build` and `mastra worker start`
