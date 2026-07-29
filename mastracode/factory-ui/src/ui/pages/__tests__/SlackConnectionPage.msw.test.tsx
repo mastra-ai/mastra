@@ -1,6 +1,6 @@
 import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
 import userEvent from '@testing-library/user-event';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -57,20 +57,41 @@ describe('SlackConnectionPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    const workspaceName = await screen.findByText('Mastra');
+    const connectionSection = (await screen.findByRole('heading', { level: 2, name: 'Connection' })).closest('section');
+    if (!connectionSection) throw new Error('Connection section not found');
+
+    const workspaceName = within(connectionSection).getByText('Mastra');
     expect(screen.queryByText('Mastra (T06CB4A5FT9)')).not.toBeInTheDocument();
     await user.hover(workspaceName);
     expect(await screen.findByText('Workspace ID: T06CB4A5FT9')).toBeInTheDocument();
 
-    const accountName = screen.getByText('Caleb Barnes');
+    const accountName = within(connectionSection).getByText('Caleb Barnes');
     expect(screen.queryByText('Caleb Barnes (U095PUH0FKL)')).not.toBeInTheDocument();
     await user.hover(accountName);
     expect(await screen.findByText('Slack user ID: U095PUH0FKL')).toBeInTheDocument();
 
-    expect(screen.getByText(/Connected July 29, 2026/)).toBeInTheDocument();
-    expect(screen.queryByText('Connected', { selector: 'span' })).not.toBeInTheDocument();
+    expect(within(connectionSection).queryByText('Connected account')).not.toBeInTheDocument();
+    expect(within(connectionSection).getByText(/Connected July 29, 2026/)).toBeInTheDocument();
     expect(screen.getByText('Start and continue Factory sessions from Slack.')).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Default factory for Caleb Barnes' })).toHaveTextContent('OM Game');
+
+    const sessionBehaviorSection = screen
+      .getByRole('heading', { level: 2, name: 'Session behavior' })
+      .closest('section');
+    if (!sessionBehaviorSection) throw new Error('Session behavior section not found');
+    expect(
+      within(sessionBehaviorSection).getByRole('combobox', { name: 'Default factory for Caleb Barnes' }),
+    ).toHaveTextContent('OM Game');
+    expect(
+      within(sessionBehaviorSection).getByRole('switch', { name: 'Create work items for new Slack threads' }),
+    ).toBeInTheDocument();
+
+    const dangerZoneSection = screen.getByRole('heading', { level: 2, name: 'Danger zone' }).closest('section');
+    if (!dangerZoneSection) throw new Error('Danger zone section not found');
+    expect(dangerZoneSection).toHaveTextContent(
+      'Slack messages from Caleb Barnes will no longer start or continue Factory sessions.',
+    );
+    expect(within(dangerZoneSection).getByText('Caleb Barnes').closest('strong')).not.toBeNull();
+
     expect(screen.getAllByRole('heading', { level: 2 }).map(heading => heading.textContent)).toEqual([
       'Connection',
       'Session behavior',
@@ -105,7 +126,9 @@ describe('SlackConnectionPage', () => {
     renderPage();
 
     expect(await screen.findByText('Not connected')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Connect Slack' })).toBeEnabled();
+    const slackRow = screen.getByRole('button', { name: /Slack.*Not connected.*Connect Slack/ });
+    expect(slackRow).toBeEnabled();
+    expect(slackRow).toHaveTextContent(/Slack.*Not connected.*Connect Slack/);
   });
 
   it('given a linked account, when work-item creation is enabled, then it updates the active Factory', async () => {
@@ -153,7 +176,7 @@ describe('SlackConnectionPage', () => {
         externalUserId: 'U095PUH0FKL',
       }),
     );
-    expect(await screen.findByRole('button', { name: 'Connect Slack' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: /Slack.*Not connected.*Connect Slack/ })).toBeEnabled();
   });
 
   it('given a linked account, when its default factory changes, then the sender routing is updated', async () => {

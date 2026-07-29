@@ -42,10 +42,9 @@ describe('ConnectedAccountsSection', () => {
     renderSection();
 
     expect(await screen.findByText('Connected')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Configure/ })).toHaveAttribute(
-      'href',
-      '/factories/fp-1/settings/connections/slack',
-    );
+    const slackRow = screen.getByRole('link', { name: /Slack.*Connected.*Configure/ });
+    expect(slackRow).toHaveAttribute('href', '/factories/fp-1/settings/connections/slack');
+    expect(slackRow).toHaveTextContent(/Slack.*Connected.*Configure/);
     expect(screen.queryByRole('button', { name: /Connect/ })).not.toBeInTheDocument();
   });
 
@@ -63,7 +62,9 @@ describe('ConnectedAccountsSection', () => {
     renderSection();
 
     expect(await screen.findByText('Not connected')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Connect/ })).toBeEnabled();
+    const slackRow = screen.getByRole('button', { name: /Slack.*Not connected.*Connect/ });
+    expect(slackRow).toBeEnabled();
+    expect(slackRow).toHaveTextContent(/Slack.*Not connected.*Connect/);
   });
 
   it('given no link and no OIDC config, when rendered, then the connect action is unavailable', async () => {
@@ -72,6 +73,6 @@ describe('ConnectedAccountsSection', () => {
     renderSection();
 
     expect(await screen.findByText('Not connected')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Connect/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Slack.*Not connected.*Connect/ })).toBeDisabled();
   });
 });

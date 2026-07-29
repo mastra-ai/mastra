@@ -3,6 +3,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playgr
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ChevronRight } from 'lucide-react';
 import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../api/config';
@@ -110,11 +111,19 @@ export function SlackConnectionSettings() {
       ) : accounts.length === 0 ? (
         <SettingsSubsection title="Connection">
           <SettingsCard>
-            <SettingsRow label="Slack" hint={canConnect ? 'Not connected' : 'Slack connection is not configured'}>
-              <Button variant="outline" size="sm" disabled={!canConnect} onClick={connectSlack}>
-                Connect Slack
-              </Button>
-            </SettingsRow>
+            <button
+              type="button"
+              disabled={!canConnect}
+              onClick={connectSlack}
+              className="group hover:bg-surface4 focus-visible:ring-accent1 block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <SettingsRow label="Slack" hint={canConnect ? 'Not connected' : 'Slack connection is not configured'}>
+                <span className="text-ui-sm text-icon4 group-hover:text-icon5 flex items-center gap-2">
+                  Connect Slack
+                  <ChevronRight aria-hidden="true" />
+                </span>
+              </SettingsRow>
+            </button>
           </SettingsCard>
         </SettingsSubsection>
       ) : (
@@ -124,56 +133,27 @@ export function SlackConnectionSettings() {
               {accounts.map(account => (
                 <SettingsCard key={`${account.externalTeamId}:${account.externalUserId}`}>
                   <SettingsRow
-                    label="Workspace"
-                    hint={
-                      <IdentityWithTooltip
-                        label={account.externalTeamName ?? 'Slack workspace'}
-                        idLabel="Workspace ID"
-                        id={account.externalTeamId}
-                      />
-                    }
-                  />
-                  <SettingsRow
-                    label="Slack account"
-                    hint={
-                      <>
+                    label={
+                      <span className="flex items-center gap-1.5">
+                        <IdentityWithTooltip
+                          label={account.externalTeamName ?? 'Slack workspace'}
+                          idLabel="Workspace ID"
+                          id={account.externalTeamId}
+                        />
+                        <span aria-hidden="true">·</span>
                         <IdentityWithTooltip
                           label={account.externalUserName ?? account.externalUserId}
                           idLabel="Slack user ID"
                           id={account.externalUserId}
                         />
-                        <Txt as="span" variant="ui-xs" className="text-icon2">
-                          Connected {linkedDateFormatter.format(new Date(account.linkedAt))}
-                        </Txt>
-                      </>
+                      </span>
+                    }
+                    hint={
+                      <Txt as="span" variant="ui-xs" className="text-icon2">
+                        Connected {linkedDateFormatter.format(new Date(account.linkedAt))}
+                      </Txt>
                     }
                   />
-                  <SettingsRow label="Default factory" hint="New Slack sessions are routed to this Factory.">
-                    <Select
-                      value={account.defaultFactoryProjectId ?? ''}
-                      disabled={factories.length === 0 || setDefaultFactoryMutation.isPending}
-                      onValueChange={factoryProjectId => setDefaultFactory(account, factoryProjectId)}
-                    >
-                      <SelectTrigger
-                        variant="outline"
-                        size="sm"
-                        aria-label={`Default factory for ${account.externalUserName ?? account.externalUserId}`}
-                        className="w-auto"
-                      >
-                        <Txt as="span" variant="ui-sm">
-                          {factories.find(factory => factory.id === account.defaultFactoryProjectId)?.name ??
-                            'Set default factory'}
-                        </Txt>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {factories.map(factory => (
-                          <SelectItem key={factory.id} value={factory.id}>
-                            {factory.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </SettingsRow>
                 </SettingsCard>
               ))}
             </div>
@@ -181,6 +161,42 @@ export function SlackConnectionSettings() {
 
           <SettingsSubsection title="Session behavior">
             <SettingsCard>
+              {accounts.map(account => (
+                <SettingsRow
+                  key={`${account.externalTeamId}:${account.externalUserId}`}
+                  label={
+                    accounts.length > 1
+                      ? `Default factory for ${account.externalUserName ?? account.externalUserId}`
+                      : 'Default factory'
+                  }
+                  hint="New Slack sessions are routed to this Factory."
+                >
+                  <Select
+                    value={account.defaultFactoryProjectId ?? ''}
+                    disabled={factories.length === 0 || setDefaultFactoryMutation.isPending}
+                    onValueChange={factoryProjectId => setDefaultFactory(account, factoryProjectId)}
+                  >
+                    <SelectTrigger
+                      variant="outline"
+                      size="sm"
+                      aria-label={`Default factory for ${account.externalUserName ?? account.externalUserId}`}
+                      className="w-auto"
+                    >
+                      <Txt as="span" variant="ui-sm">
+                        {factories.find(factory => factory.id === account.defaultFactoryProjectId)?.name ??
+                          'Set default factory'}
+                      </Txt>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {factories.map(factory => (
+                        <SelectItem key={factory.id} value={factory.id}>
+                          {factory.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </SettingsRow>
+              ))}
               <SettingsRow
                 label="Create work items for new Slack threads"
                 hint="Add new Slack thread sessions to this Factory's Work board in Building."
@@ -207,7 +223,19 @@ export function SlackConnectionSettings() {
                 <SettingsRow
                   key={`${account.externalTeamId}:${account.externalUserId}`}
                   label="Disconnect Slack"
-                  hint="Slack messages will no longer run as your Mastra account."
+                  hint={
+                    <span>
+                      Slack messages from{' '}
+                      <strong className="font-medium">
+                        <IdentityWithTooltip
+                          label={account.externalUserName ?? account.externalUserId}
+                          idLabel="Slack user ID"
+                          id={account.externalUserId}
+                        />
+                      </strong>{' '}
+                      will no longer start or continue Factory sessions.
+                    </span>
+                  }
                 >
                   <Button
                     variant="outline"

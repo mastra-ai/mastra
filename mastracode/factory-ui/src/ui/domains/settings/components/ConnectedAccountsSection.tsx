@@ -1,4 +1,3 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronRight } from 'lucide-react';
 import { Link, useParams } from 'react-router';
@@ -34,39 +33,53 @@ export function ConnectedAccountsSection() {
     );
   }
 
+  const slackLabel = (
+    <span className="flex items-center gap-3">
+      <SlackLogo className="size-7 shrink-0" />
+      <span className="flex flex-col gap-0.5">
+        <Txt as="span" variant="ui-md">
+          Slack
+        </Txt>
+        <Txt as="span" variant="ui-sm" className={slackAccounts.length > 0 ? 'text-positive1' : 'text-icon3'}>
+          {slackAccounts.length > 1
+            ? `${slackAccounts.length} connected`
+            : slackAccounts.length === 1
+              ? 'Connected'
+              : 'Not connected'}
+        </Txt>
+      </span>
+    </span>
+  );
+
   return (
     <SettingsCard>
-      <SettingsRow
-        label={
-          <span className="flex items-center gap-3">
-            <SlackLogo className="size-7 shrink-0" />
-            <span className="flex flex-col gap-0.5">
-              <Txt as="span" variant="ui-md">
-                Slack
-              </Txt>
-              <Txt as="span" variant="ui-sm" className={slackAccounts.length > 0 ? 'text-positive1' : 'text-icon3'}>
-                {slackAccounts.length > 1
-                  ? `${slackAccounts.length} connected`
-                  : slackAccounts.length === 1
-                    ? 'Connected'
-                    : 'Not connected'}
-              </Txt>
+      {slackAccounts.length > 0 && factoryId ? (
+        <Link
+          to={`/factories/${factoryId}/settings/connections/slack`}
+          className="group hover:bg-surface4 focus-visible:ring-accent1 block cursor-pointer rounded-xl outline-hidden transition-colors focus-visible:ring-2"
+        >
+          <SettingsRow label={slackLabel}>
+            <span className="text-ui-sm text-icon4 group-hover:text-icon5 flex items-center gap-2">
+              Configure
+              <ChevronRight aria-hidden="true" />
             </span>
-          </span>
-        }
-      >
-        {slackAccounts.length > 0 && factoryId ? (
-          <Button as={Link} to={`/factories/${factoryId}/settings/connections/slack`} variant="ghost" size="sm">
-            Configure
-            <ChevronRight aria-hidden="true" />
-          </Button>
-        ) : (
-          <Button variant="outline" size="sm" disabled={!canConnect} onClick={connectSlack}>
-            Connect
-            <ChevronRight aria-hidden="true" />
-          </Button>
-        )}
-      </SettingsRow>
+          </SettingsRow>
+        </Link>
+      ) : (
+        <button
+          type="button"
+          disabled={!canConnect}
+          onClick={connectSlack}
+          className="group hover:bg-surface4 focus-visible:ring-accent1 block w-full cursor-pointer rounded-xl text-left outline-hidden transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <SettingsRow label={slackLabel}>
+            <span className="text-ui-sm text-icon4 group-hover:text-icon5 flex items-center gap-2">
+              Connect
+              <ChevronRight aria-hidden="true" />
+            </span>
+          </SettingsRow>
+        </button>
+      )}
     </SettingsCard>
   );
 }
