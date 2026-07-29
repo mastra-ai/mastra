@@ -38,7 +38,7 @@ import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 const EMPTY_MESSAGES: MastraDBMessage[] = [];
-const WORKFLOW_BUILDER_ROUTE = '/workflow-builder';
+const WORKFLOWS_ROUTE = '/workflows';
 
 export default function WorkflowBuilderEditorPage({ create = false }: { create?: boolean }) {
   const params = useParams();
@@ -93,9 +93,9 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
   const deleteWorkflow = useDeleteStoredWorkflow();
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  if (create && !access.canWrite) return <Navigate to={WORKFLOW_BUILDER_ROUTE} replace />;
+  if (create && !access.canWrite) return <Navigate to={WORKFLOWS_ROUTE} replace />;
   if (agentsQuery.isPending || toolsQuery.isPending || workflowsQuery.isPending) {
-    return <div className="grid h-full place-items-center text-ui-sm text-neutral3">Loading workflow catalogs…</div>;
+    return <div className="text-ui-sm text-neutral3 grid h-full place-items-center">Loading workflow catalogs…</div>;
   }
   const catalogError =
     agentsQuery.error ?? toolsQuery.error ?? (!workflowCatalogUnavailable ? workflowsQuery.error : null);
@@ -107,7 +107,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
     );
   }
   if ((!create && workflowQuery.isLoading) || conversationQuery.isPending) {
-    return <div className="grid h-full place-items-center text-ui-sm text-neutral3">Loading workflow…</div>;
+    return <div className="text-ui-sm text-neutral3 grid h-full place-items-center">Loading workflow…</div>;
   }
   if (!create && workflowQuery.error) {
     return (
@@ -148,7 +148,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
     try {
       await deleteWorkflow.mutateAsync(workflowDraft.draft.id);
       toast.success('Workflow deleted');
-      await navigate(WORKFLOW_BUILDER_ROUTE, { replace: true });
+      await navigate(WORKFLOWS_ROUTE, { replace: true });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to delete workflow');
     }
@@ -172,8 +172,8 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
               <Button
                 size="icon-sm"
                 variant="ghost"
-                onClick={() => navigate(WORKFLOW_BUILDER_ROUTE)}
-                tooltip="Workflow builder list"
+                onClick={() => navigate(WORKFLOWS_ROUTE)}
+                tooltip="Back to workflows"
               >
                 <ArrowLeftIcon />
               </Button>
@@ -213,11 +213,11 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
         </PageLayout.TopArea>
 
         <div className="grid min-h-0 flex-1 gap-4 pb-6 lg:grid-cols-[minmax(20rem,0.8fr)_minmax(0,1.2fr)]">
-          <section className="min-h-96 overflow-hidden rounded-lg border border-border1 bg-surface1">
+          <section className="border-border1 bg-surface1 min-h-96 overflow-hidden rounded-lg border">
             {access.canUseBuilder ? (
               <WorkflowConversationPanel />
             ) : (
-              <div className="grid h-full place-items-center px-8 text-center text-ui-sm text-neutral3">
+              <div className="text-ui-sm text-neutral3 grid h-full place-items-center px-8 text-center">
                 {access.canWrite
                   ? 'The workflow builder is not configured. You can still inspect saved definitions.'
                   : 'You have read-only access to this workflow.'}
@@ -225,9 +225,9 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
             )}
           </section>
 
-          <section className="min-w-0 space-y-4 overflow-y-auto rounded-lg border border-border1 bg-surface1 p-4">
+          <section className="border-border1 bg-surface1 min-w-0 space-y-4 overflow-y-auto rounded-lg border p-4">
             <div className="grid gap-3 md:grid-cols-2">
-              <label className="space-y-1 text-ui-xs text-neutral3">
+              <label className="text-ui-xs text-neutral3 space-y-1">
                 Workflow ID
                 <Input
                   value={workflowDraft.draft.id}
@@ -235,7 +235,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
                   onChange={event => workflowDraft.setDraft({ ...workflowDraft.draft, id: event.target.value })}
                 />
               </label>
-              <label className="space-y-1 text-ui-xs text-neutral3">
+              <label className="text-ui-xs text-neutral3 space-y-1">
                 Description
                 <Input
                   value={workflowDraft.draft.description ?? ''}
@@ -267,7 +267,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
               <span className="text-ui-xs text-neutral3">{workflowDraft.draft.graph.length} top-level entries</span>
             </div>
             {generationCandidate?.hasUncheckpointedChanges ? (
-              <div className="space-y-2 rounded-lg border border-border1 bg-surface2 p-3 text-ui-xs text-neutral3">
+              <div className="border-border1 bg-surface2 text-ui-xs text-neutral3 space-y-2 rounded-lg border p-3">
                 <div className="flex items-center justify-between gap-3">
                   <span>Generation candidate has uncheckpointed changes</span>
                   <span>Candidate revision {generationCandidate.revision}</span>
@@ -288,7 +288,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
               <ErrorState title="Workflow save failed" message={workflowDraft.saveError.message} />
             ) : null}
             {workflowDraft.lifecycle !== 'untouched' && !workflowDraft.validation.ok ? (
-              <ul className="list-disc space-y-1 pl-5 text-ui-xs text-red-400">
+              <ul className="text-ui-xs list-disc space-y-1 pl-5 text-red-400">
                 {workflowDraft.validation.issues.map(issue => (
                   <li key={`${issue.path}-${issue.message}`}>{issue.message}</li>
                 ))}

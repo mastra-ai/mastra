@@ -1,8 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
+import { CircleSlashIcon, ExternalLinkIcon, PlusIcon } from 'lucide-react';
+import { Link } from 'react-router';
 
-export const NoWorkflowsInfo = () => (
+export const NoWorkflowsInfo = ({ canCreate = false }: { canCreate?: boolean }) => (
   <div className="flex h-full items-center justify-center">
     <EmptyState
       iconSlot={<CircleSlashIcon />}
@@ -10,19 +11,26 @@ export const NoWorkflowsInfo = () => (
       descriptionSlot={
         <>
           Mastra workflows are not configured yet. <br />
-          More information in the documentation.
+          Create one with the builder, or read the documentation.
         </>
       }
       actionSlot={
-        <Button
-          variant="ghost"
-          as="a"
-          href="https://mastra.ai/docs/workflows/overview"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Workflows Documentation <ExternalLinkIcon />
-        </Button>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {canCreate ? (
+            <Button variant="primary" as={Link} to="/workflow-builder/create">
+              <PlusIcon /> Create workflow
+            </Button>
+          ) : null}
+          <Button
+            variant="ghost"
+            as="a"
+            href="https://mastra.ai/docs/workflows/overview"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Workflows Documentation <ExternalLinkIcon />
+          </Button>
+        </div>
       }
     />
   </div>

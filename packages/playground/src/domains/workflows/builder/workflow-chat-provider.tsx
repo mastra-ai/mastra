@@ -62,6 +62,7 @@ function WorkflowChatSession({
     rejected: 0,
     rejectionSignature: '',
     stopped: false,
+    submissionAttempted: false,
   });
 
   const updateCandidate = useCallback(
@@ -95,6 +96,7 @@ function WorkflowChatSession({
       rejected: 0,
       rejectionSignature: '',
       stopped: false,
+      submissionAttempted: false,
     };
     onGenerationFailure?.(null);
     updateCandidate(candidate);
@@ -102,6 +104,7 @@ function WorkflowChatSession({
     const onResult = ({ toolId, result }: WorkflowDraftToolResult) => {
       if (generation !== generationRef.current || generationStateRef.current.stopped) return;
       if (toolId !== 'submit-workflow-draft') return;
+      generationStateRef.current.submissionAttempted = true;
       if (result.success) {
         generationStateRef.current.accepted = true;
         generationStateRef.current.finalized = result.finalizedRevision === result.revision;
@@ -111,6 +114,7 @@ function WorkflowChatSession({
       }
       if (
         result.reason === 'superseded' ||
+        result.reason === 'already-ready' ||
         result.error === 'Draft changed before this operation completed.' ||
         result.error === 'Submission was superseded.'
       )
@@ -149,6 +153,10 @@ function WorkflowChatSession({
   const handleSendComplete = useCallback(() => {
     const state = generationStateRef.current;
     if (state.stopped || state.finalized) return;
+    // Follow-up chat turns never call submit-workflow-draft. Only classify a
+    // turn as a failed generation when the model actually attempted a
+    // submission this turn, or when we have never accepted a draft at all.
+    if (!state.submissionAttempted && state.accepted) return;
     failGeneration({
       code: state.accepted ? 'generation-failed' : 'no-accepted-draft',
       message: state.accepted

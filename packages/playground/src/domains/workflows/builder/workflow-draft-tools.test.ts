@@ -246,4 +246,41 @@ describe('workflow draft client tools', () => {
       expect(result.message).toContain('no-op');
     });
   });
+
+  describe('when a superseded submission arrives while the workflow is already ready', () => {
+    it('returns a short already-ready response that names the accepted revision and tells the model to stop', async () => {
+      // Accept a definition through a live store so the workflow is Ready.
+      const live = createStore({ context: validationContext });
+      const first = await executeTool(live.tools['submit-workflow-draft'], validDefinition);
+      expect(first).toMatchObject({ success: true, lifecycle: 'ready', finalizedRevision: 1 });
+
+      // Now a later, structurally-different submission arrives after generation moved on.
+      const supersededTools = createWorkflowDraftTools({
+        getState: () => live.state,
+        checkpoint: () => ({ ok: false, state: live.state, error: 'unexpected checkpoint' }),
+        finalize: () => ({ ok: false, state: live.state, error: 'unexpected finalize' }),
+        validationContext,
+        isCurrentGeneration: () => false,
+      });
+      const result = await executeTool(supersededTools['submit-workflow-draft'], {
+        ...validDefinition,
+        graph: [
+          { type: 'tool', id: 'lookup', toolId: 'lookupCustomer' },
+          { type: 'mapping', id: 'extra', mapConfig: { customerId: { step: 'lookup', path: 'customerId' } } },
+        ],
+      });
+
+      expect(result).toMatchObject({
+        success: false,
+        reason: 'already-ready',
+        lifecycle: 'ready',
+        finalizedRevision: live.state.finalizedRevision,
+      });
+      expect(result.error).toContain('already');
+      // Short, actionable, no long apology block.
+      expect(result.message ?? '').toMatch(/already Ready/i);
+      expect(result.message ?? '').toMatch(/wait for the user/i);
+      expect((result.message ?? '').length).toBeLessThan(400);
+    });
+  });
 });

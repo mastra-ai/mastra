@@ -47,8 +47,9 @@ export type RoutePermission = {
 export const ROUTE_PERMISSIONS: RoutePermission[] = [
   // Primary routes (highest priority for redirects)
   { route: '/agents', permission: 'agents:read', name: 'Agents' },
-  { route: '/workflow-builder', permission: 'stored-workflows:read', name: 'Workflow Builder' },
   { route: '/workflows', permission: 'workflows:read', name: 'Workflows' },
+  // Not a nav route: gates the workflow builder editor routes (/workflow-builder/create, /workflow-builder/:workflowId)
+  { route: '/workflow-builder', permission: 'stored-workflows:read', name: 'Workflow Builder' },
 
   // Observability - uses 'observability' resource for traces/metrics, 'logs' for logs
   { route: '/metrics', permission: 'observability:read', name: 'Metrics' },

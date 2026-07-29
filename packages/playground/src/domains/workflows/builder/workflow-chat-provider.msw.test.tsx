@@ -8,6 +8,7 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { WorkflowChatProvider } from './workflow-chat-provider';
+import type { WorkflowGenerationFailure } from './workflow-chat-provider';
 import { createWorkflowDraftAuthoringState } from './workflow-draft';
 import type { WorkflowDraftToolResult } from './workflow-draft-tools';
 import { createWorkflowDraftTools } from './workflow-draft-tools';
@@ -193,6 +194,52 @@ describe('WorkflowChatProvider', () => {
       });
 
       expect(failureCode).toBe('repair-budget-exhausted');
+    });
+  });
+
+  describe('when a follow-up chat turn completes after a draft is already accepted', () => {
+    it('does not report a generation failure', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+        http.post(`${BASE_URL}/api/editor/workflow-builder/stream`, async () => {
+          return new HttpResponse(
+            new ReadableStream({
+              start(controller) {
+                controller.close();
+              },
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          );
+        }),
+      );
+
+      const acceptedState = {
+        ...createWorkflowDraftAuthoringState('followup-workflow'),
+        lifecycle: 'ready' as const,
+        revision: 1,
+        finalizedRevision: 1,
+      };
+
+      let failure: WorkflowGenerationFailure | null | undefined;
+      render(
+        <Providers>
+          <WorkflowChatProvider
+            threadId="workflow-builder-followup-workflow"
+            authoringState={acceptedState}
+            initialMessages={[]}
+            createTools={() => ({})}
+            onGenerationFailure={next => (failure = next)}
+          >
+            <Composer message="thanks — what did you build?" />
+          </WorkflowChatProvider>
+        </Providers>,
+      );
+
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 60));
+      });
+
+      expect(failure ?? null).toBeNull();
     });
   });
 

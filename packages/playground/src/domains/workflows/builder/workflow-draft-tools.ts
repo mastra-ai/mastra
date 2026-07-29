@@ -19,7 +19,7 @@ import { validateWorkflowDraft } from './workflow-draft';
 const inspectionResultSchema = z.record(z.string(), z.unknown());
 const resultSchema = z.object({
   success: z.boolean(),
-  reason: z.enum(['superseded']).optional(),
+  reason: z.enum(['superseded', 'already-ready']).optional(),
   error: z.string().optional(),
   message: z.string().optional(),
   issues: z.array(z.object({ code: z.string(), path: z.string(), message: z.string() })).optional(),
@@ -93,6 +93,10 @@ const SUPERSEDED_MESSAGE =
 const SUPERSEDED_NOOP_MESSAGE =
   'This submission structurally matched the earlier accepted revision for this workflow; treating it as a no-op confirmation. The workflow is Ready and awaiting the user’s explicit Save. Do NOT resubmit, apologize, or claim the workflow is broken.';
 
+function alreadyReadyMessage(revision: number): string {
+  return `The workflow is already Ready as revision ${revision}. Stop and wait for the user; do NOT resubmit.`;
+}
+
 const EMPTY_ARGUMENTS_ERROR = 'No workflow definition arguments were received.';
 const EMPTY_ARGUMENTS_MESSAGE =
   'submit-workflow-draft was invoked without any arguments. The provider may have truncated or dropped the tool call payload. Retry once by sending a single complete WorkflowDefinition object as the tool arguments (id, description, inputSchema, outputSchema, graph). Do NOT retry with the same empty payload, do NOT apologize, and do NOT claim the workflow is broken.';
@@ -123,22 +127,33 @@ function draftsStructurallyEqual(a: WorkflowDraft, b: WorkflowDraft): boolean {
 
 function makeSupersededResult(store: WorkflowDraftToolStore, input?: unknown) {
   const state = store.getState();
-  if (state.lifecycle === 'ready' && input !== undefined) {
-    try {
-      const submitted = parseWorkflowDraftInput(input);
-      if (draftsStructurallyEqual(submitted, state.draft)) {
-        return {
-          success: true as const,
-          lifecycle: state.lifecycle,
-          revision: state.revision,
-          finalizedRevision: state.finalizedRevision,
-          baseAcceptedRevision: state.revision,
-          message: SUPERSEDED_NOOP_MESSAGE,
-        };
+  if (state.lifecycle === 'ready') {
+    if (input !== undefined) {
+      try {
+        const submitted = parseWorkflowDraftInput(input);
+        if (draftsStructurallyEqual(submitted, state.draft)) {
+          return {
+            success: true as const,
+            lifecycle: state.lifecycle,
+            revision: state.revision,
+            finalizedRevision: state.finalizedRevision,
+            baseAcceptedRevision: state.revision,
+            message: SUPERSEDED_NOOP_MESSAGE,
+          };
+        }
+      } catch {
+        // Fall through to the already-ready rejection path below.
       }
-    } catch {
-      // Fall through to the superseded rejection path.
     }
+    return {
+      success: false as const,
+      reason: 'already-ready' as const,
+      error: `Workflow is already Ready as revision ${state.finalizedRevision ?? state.revision}.`,
+      message: alreadyReadyMessage(state.finalizedRevision ?? state.revision),
+      lifecycle: state.lifecycle,
+      finalizedRevision: state.finalizedRevision,
+      baseAcceptedRevision: state.revision,
+    };
   }
   return {
     success: false as const,
