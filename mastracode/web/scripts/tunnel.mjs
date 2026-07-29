@@ -93,9 +93,9 @@ function printSlackConfig(publicUrl, { synced = false } = {}) {
  * to .env — otherwise the next run would fail with an invalid refresh token.
  */
 async function syncManifest(publicUrl) {
-  const appId = process.env.SLACK_APP_ID?.trim();
+  const appId = process.env.SLACK_APP_MANIFEST_APP_ID?.trim();
   const token = process.env.SLACK_APP_CONFIG_TOKEN?.trim();
-  const refreshToken = process.env.SLACK_APP_CONFIG_REFRESH_TOKEN?.trim();
+  const refreshToken = process.env.SLACK_APP_REFRESH_TOKEN?.trim();
   if (!appId || !refreshToken) return false;
 
   const { SlackManifestClient, buildManifest } = await import('@mastra/slack');
@@ -106,13 +106,13 @@ async function syncManifest(publicUrl) {
     onTokenRotation: async tokens => {
       persistEnv({
         SLACK_APP_CONFIG_TOKEN: tokens.token,
-        SLACK_APP_CONFIG_REFRESH_TOKEN: tokens.refreshToken,
+        SLACK_APP_REFRESH_TOKEN: tokens.refreshToken,
       });
     },
   });
 
-  // Access tokens expire after 12h; rotating up front avoids a failed update.
-  await client.rotateToken();
+  // No explicit rotateToken() here: updateApp() rotates first thing, and
+  // refresh tokens are single-use, so rotating twice burns one for nothing.
   await client.updateApp(
     appId,
     buildManifest({
@@ -151,7 +151,7 @@ async function announce(publicUrl) {
     if (!synced) {
       console.log(
         [
-          'Tip: set SLACK_APP_ID + SLACK_APP_CONFIG_REFRESH_TOKEN in .env and this',
+          'Tip: set SLACK_APP_MANIFEST_APP_ID + SLACK_APP_REFRESH_TOKEN in .env and this',
           'script will update the Slack app for you on every start.',
           'Tokens: https://api.slack.com/apps > "Your App Configuration Tokens"',
           '',

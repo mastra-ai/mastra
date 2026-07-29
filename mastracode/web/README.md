@@ -97,10 +97,13 @@ time, add app configuration tokens from
 [Your App Configuration Tokens](https://api.slack.com/apps) to `.env`:
 
 ```dotenv
-SLACK_APP_ID=
 SLACK_APP_CONFIG_TOKEN=
-SLACK_APP_CONFIG_REFRESH_TOKEN=
+SLACK_APP_REFRESH_TOKEN=
+SLACK_APP_MANIFEST_APP_ID=
 ```
+
+`SLACK_APP_MANIFEST_APP_ID` is the app's own id (`A0…`) from its Basic
+Information page, which is not the same value as `SLACK_APP_CLIENT_ID`.
 
 The tunnel then rewrites the app's webhook and OAuth URLs itself on each start,
 rotating the tokens and writing the new pair back to `.env`.
