@@ -14,9 +14,8 @@ import type { BoardKind } from '../boardStages';
  * behind it, and the candidates left once anything already on the board is
  * dropped.
  *
- * Intake sources mirror the old Intake page gating: issues sync only once
- * picked in Settings › General. Open PRs always feed the board; they start in
- * Intake and only move once the Factory acts on them.
+ * Work Intake gates issues per account; the Review pull-request feed is always
+ * enabled.
  */
 export function useBoardIntake({
   factoryProjectId,
