@@ -337,7 +337,14 @@ export function generateTimestampTriggerSQL(tableName: string, schemaName?: stri
   const quotedSchemaName = getSchemaName(schemaName);
   const fullTableName = getTableName({ indexName: tableName, schemaName: quotedSchemaName });
   const functionName = `${quotedSchemaName}.trigger_set_timestamps`;
-  const triggerName = `"${parseSqlIdentifier(`${tableName}_timestamps`, 'trigger name')}"`;
+  const parsedTriggerName = parseSqlIdentifier(`${tableName}_timestamps`, 'trigger name');
+  const triggerName = `"${parsedTriggerName}"`;
+
+  // Literals for the pg_trigger guard below. The identifiers are already
+  // validated by parseSqlIdentifier, so they cannot carry a quote.
+  const triggerNameLiteral = `'${parsedTriggerName}'`;
+  const tableNameLiteral = `'${parseSqlIdentifier(tableName, 'table name')}'`;
+  const schemaNameLiteral = schemaName ? `'${parseSqlIdentifier(schemaName, 'schema name')}'` : `'public'`;
 
   return `CREATE OR REPLACE FUNCTION ${functionName}()
 RETURNS TRIGGER AS $$
@@ -357,12 +364,38 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS ${triggerName} ON ${fullTableName};
+DO $mastra_timestamps_trigger$
+BEGIN
+    -- Recreating the trigger unconditionally would take an ACCESS EXCLUSIVE
+    -- lock on the table (DROP TRIGGER does, even when nothing changes), and
+    -- init runs on every process start. Skip when the trigger is already
+    -- exactly what the CREATE below would produce.
+    --
+    -- tgtype 23 = ROW (1) | BEFORE (2) | INSERT (4) | UPDATE (16), so a trigger
+    -- whose timing or events differ still falls through and gets rebuilt. The
+    -- behaviour itself lives in the function, which is replaced above on every
+    -- init, so an upgraded function body lands without touching the trigger.
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_trigger tg
+        JOIN pg_catalog.pg_class c ON c.oid = tg.tgrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE tg.tgname = ${triggerNameLiteral}
+          AND c.relname = ${tableNameLiteral}
+          AND n.nspname = ${schemaNameLiteral}
+          AND NOT tg.tgisinternal
+          AND tg.tgtype = 23
+          AND tg.tgfoid = '${functionName}()'::regprocedure
+    ) THEN
+        DROP TRIGGER IF EXISTS ${triggerName} ON ${fullTableName};
 
-CREATE TRIGGER ${triggerName}
-    BEFORE INSERT OR UPDATE ON ${fullTableName}
-    FOR EACH ROW
-    EXECUTE FUNCTION ${functionName}();`;
+        CREATE TRIGGER ${triggerName}
+            BEFORE INSERT OR UPDATE ON ${fullTableName}
+            FOR EACH ROW
+            EXECUTE FUNCTION ${functionName}();
+    END IF;
+END
+$mastra_timestamps_trigger$;`;
 }
 
 /**

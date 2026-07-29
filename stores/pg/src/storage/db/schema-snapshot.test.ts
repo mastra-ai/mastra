@@ -234,6 +234,56 @@ describe('init catalog snapshot', () => {
     expect(await tablesIn(fresh)).toEqual(await tablesIn(converged));
   }, 90000);
 
+  it('ignores unrelated tables, columns, and indexes sharing the schema', async () => {
+    // A plugin (or anything else) is free to put its own objects in the schema
+    // Mastra was pointed at. The snapshot is read for the whole schema, so this
+    // pins that it stays a lookup table: unknown objects are never enumerated,
+    // never touched, and never satisfy a Mastra object's existence check.
+    const schema = uniqueSchema('snapshot_coexist');
+    await admin(`CREATE SCHEMA "${schema}"`);
+
+    const cold = await newStore(schema);
+    await cold.init();
+    await cold.close();
+
+    await admin(`CREATE TABLE "${schema}".plugin_widgets (id text PRIMARY KEY, payload jsonb)`);
+    await admin(`CREATE INDEX plugin_widgets_payload_idx ON "${schema}".plugin_widgets USING gin (payload)`);
+    await admin(`ALTER TABLE "${schema}".mastra_threads ADD COLUMN plugin_tenant_id text`);
+    await admin(`CREATE INDEX plugin_threads_tenant_idx ON "${schema}".mastra_threads (plugin_tenant_id)`);
+
+    const mastraTablesBefore = (await tablesIn(schema)).filter(t => t !== 'plugin_widgets');
+
+    const warm = await newStore(schema);
+    const statements = await captureStatements(() => warm.init());
+
+    // Same capture-hook guard as the warm-init test above.
+    expect(count(statements, /pg_catalog\.pg_tables/i)).toBe(1);
+
+    // The extra objects neither reintroduce probes nor provoke DDL.
+    expect(count(statements, INFORMATION_SCHEMA_COLUMN_PROBE)).toBe(0);
+    expect(count(statements, INDEX_PROBE)).toBe(0);
+    expect(count(statements, CREATE_TABLE)).toBe(0);
+    expect(count(statements, CREATE_INDEX)).toBe(0);
+    expect(count(statements, NO_OP_ALTER)).toBe(0);
+
+    // Nothing of the plugin's was dropped, altered, or recreated.
+    expect(await tablesIn(schema)).toContain('plugin_widgets');
+    expect(await indexesIn(schema)).toEqual(
+      expect.arrayContaining(['plugin_widgets_payload_idx', 'plugin_threads_tenant_idx']),
+    );
+    expect((await columnsIn(schema, 'mastra_threads')).has('plugin_tenant_id')).toBe(true);
+    expect((await tablesIn(schema)).filter(t => t !== 'plugin_widgets')).toEqual(mastraTablesBefore);
+
+    // And drift in a Mastra table still heals with the plugin's column present.
+    await admin(`ALTER TABLE "${schema}".mastra_threads DROP COLUMN "createdAtZ"`);
+    const healer = await newStore(schema);
+    await healer.init();
+
+    const columns = await columnsIn(schema, 'mastra_threads');
+    expect(columns.has('createdAtZ')).toBe(true);
+    expect(columns.has('plugin_tenant_id')).toBe(true);
+  }, 90000);
+
   it('stops using the snapshot once init has returned', async () => {
     const schema = uniqueSchema('snapshot_cleared');
     await admin(`CREATE SCHEMA "${schema}"`);
