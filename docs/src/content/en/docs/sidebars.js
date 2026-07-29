@@ -280,9 +280,6 @@ const sidebars = {
             {
               type: 'category',
               label: 'Agent Builder',
-              customProps: {
-                tags: ['new'],
-              },
               items: [
                 { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
                 { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
@@ -1073,9 +1070,6 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/github',
           label: 'GitHub integration',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',

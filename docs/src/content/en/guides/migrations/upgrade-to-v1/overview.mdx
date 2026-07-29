@@ -11,14 +11,14 @@ Before upgrading to v1, make sure you've updated to the latest 0.x version of Ma
 
 Mastra v1 was released in January 2026. We recommend starting any new projects with Mastra v1, or upgrading your existing project to continue receiving updates and support.
 
-This guide provides a comprehensive overview of breaking changes when upgrading from Mastra 0.x to v1.0. The migration is organized by package and feature area to help you systematically update your codebase.
+This guide covers the breaking changes when upgrading from Mastra 0.x to v1.0. The migration is organized by package and feature area to help you systematically update your codebase.
 
 :::tip[Need help?]
 Need help with the migration? Join our [Discord community](https://discord.gg/BTYqqHKUrf) to ask questions.
 :::
 
 :::warning[Coming from Mastra Cloud?]
-The legacy Mastra Cloud product has been replaced by the [Mastra platform](/docs/mastra-platform/overview), which splits hosting into two separate products: **Studio** (visual environment, observability) and **Server** (production API). Old Mastra Cloud access tokens don't work with Mastra platform — you must create new ones with `mastra auth tokens create`.
+The legacy Mastra Cloud product has been replaced by the [Mastra platform](/docs/mastra-platform/overview), which splits hosting into two separate products: **Studio** (visual environment, observability) and **Server** (production API). Old Mastra Cloud access tokens don't work with Mastra platform. Create new ones with `mastra auth tokens create`.
 
 If you upgrade to v1 packages without also migrating your `telemetry:` config to `observability:` and creating a Studio project, observability data will stop flowing. Follow the [Mastra Cloud migration guide](/guides/migrations/mastra-cloud) end to end.
 :::
@@ -27,7 +27,7 @@ If you upgrade to v1 packages without also migrating your `telemetry:` config to
 
 ### Update all Mastra packages to `latest` tag
 
-Use your package manager to update your project's versions. Be sure to update **all** Mastra packages at the same time to ensure compatibility (all `@mastra/*` packages and `mastra`).
+Use your package manager to update your project's versions. Update **all** Mastra packages together to ensure compatibility (all `@mastra/*` packages and `mastra`).
 
 Here's how you update the most commonly used packages:
 

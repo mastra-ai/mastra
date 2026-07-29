@@ -1,12 +1,13 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, expectTypeOf, beforeEach, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { SpanType } from '../observability';
 import { StreamErrorRetryProcessor } from '../processors';
 import { createMockModel } from '../test-utils/llm-mock';
 import { createScorer } from './base';
+import type { ScorerJudgeExecutionSuccess } from './base';
 import {
   AsyncFunctionBasedScorerBuilders,
   FunctionBasedScorerBuilders,
@@ -271,7 +272,9 @@ describe('createScorer', () => {
       expect(Object.keys(result.judge ?? {})).toEqual(['preprocess', 'analyze', 'generateReason']);
 
       const preprocessExecution = result.judge?.preprocess?.executions[0];
+      expectTypeOf(preprocessExecution).toEqualTypeOf<ScorerJudgeExecutionSuccess | undefined>();
       expect(preprocessExecution).toMatchObject({
+        status: 'success',
         prompt: 'Test Preprocess prompt',
         output: {
           reformattedInput: 'TEST INPUT',
@@ -765,6 +768,7 @@ describe('createScorer', () => {
 
         expect(generateLegacySpy).toHaveBeenCalledTimes(1);
         expect(result.judge?.generateScore?.executions[0]).toMatchObject({
+          status: 'success',
           prompt: 'score this output',
           output: 0.75,
           judgeModelId: 'mock-model-id',
@@ -909,6 +913,7 @@ describe('createScorer', () => {
         expect(onStepFinish).toHaveBeenCalledTimes(2);
         expect(onFinish).toHaveBeenCalledTimes(2);
         expect(execution).toMatchObject({
+          status: 'success',
           prompt: 'score this output',
           output: 1,
           judgeModelId: 'mock-model-id',
@@ -1023,6 +1028,7 @@ describe('createScorer', () => {
         const result = await scorer.run(testData.scoringInput);
 
         expect(result.judge?.generateScore?.executions[0]).toMatchObject({
+          status: 'success',
           attemptCount: 1,
           modelCallCount: 2,
           usage: { inputTokens: 15, outputTokens: 25, totalTokens: 40 },
@@ -1041,6 +1047,7 @@ describe('createScorer', () => {
       expect(runId).toBeDefined();
       expect(Object.keys(result.judge ?? {})).toEqual(['analyze']);
       expect(result.judge?.analyze?.executions).toHaveLength(1);
+      expect(result.judge?.analyze?.executions[0]?.status).toBe('success');
       expect(withoutJudge(result)).toMatchSnapshot();
     });
 

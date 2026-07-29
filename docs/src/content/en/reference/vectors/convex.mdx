@@ -480,7 +480,7 @@ interface QueryResult {
 
 ## Metadata filtering
 
-`ConvexVector` supports metadata filtering with various operators. These filters are applied by the adapter after vectors are loaded from Convex.
+`ConvexVector` supports metadata filtering with operators. These filters are applied by the adapter after vectors are loaded from Convex.
 
 ```typescript
 // Simple equality
@@ -544,7 +544,7 @@ Vector similarity search is performed with cosine similarity in the Mastra adapt
 - Filters must target fields listed in the Convex vector index `filterFields`.
 - Use one dedicated table per Mastra vector index to avoid cross-index results.
 
-Use an external vector database when you need dynamic index creation at runtime, metadata-only queries, complex filter operators, filter-based bulk updates or deletes, or result limits above Convex's native vector search cap.
+Use an external vector database when you need runtime-defined index creation at runtime, metadata-only queries, complex filter operators, filter-based bulk updates or deletes, or result limits above Convex's native vector search cap.
 
 ## Related
 
