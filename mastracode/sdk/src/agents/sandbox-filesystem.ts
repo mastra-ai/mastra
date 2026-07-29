@@ -35,6 +35,7 @@ import { FileExistsError, FileNotFoundError, IsDirectoryError } from '@mastra/co
  */
 const EXIT_NOT_FOUND = 20;
 const EXIT_IS_DIRECTORY = 21;
+const EXIT_EXISTS = 22;
 
 /** Minimal command result shape we depend on. */
 export interface SandboxCommandResult {
@@ -136,13 +137,33 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
    * Lexical guard catches `..` traversal, but a symlink inside the workdir can
    * still point outside it. After resolving a path that refers to an existing
    * entry, verify its realpath is still contained in the workdir.
+   *
+   * Canonicalization tries `realpath`, then `readlink -f` (GNU/busybox), then
+   * `cd && pwd -P` for directories — covering GNU hosts, macOS/BSD, and
+   * busybox. If the path exists but cannot be canonicalized we fail CLOSED:
+   * returning without a check would let a symlink bypass containment.
    */
   private async assertContainedRealpath(abs: string, inputPath: string): Promise<void> {
-    const result = await this.exec(`readlink -f -- ${shellQuote(abs)} 2>/dev/null`);
-    const real = result.stdout.trim();
-    // If readlink couldn't resolve (path doesn't exist yet), nothing to check.
-    if (result.exitCode !== 0 || !real) return;
-    const root = posixPath.normalize(this.basePath);
+    const result = await this.exec(
+      [
+        `p=${shellQuote(abs)}`,
+        `if [ ! -e "$p" ] && [ ! -L "$p" ]; then exit ${EXIT_NOT_FOUND}; fi`,
+        // The workdir itself may contain symlinked components (/tmp on macOS),
+        // so canonicalize it as the comparison root.
+        `root=$(cd ${shellQuote(this.basePath)} 2>/dev/null && pwd -P)`,
+        `[ -n "$root" ] || exit 1`,
+        `rp=$(realpath "$p" 2>/dev/null) || rp=$(readlink -f "$p" 2>/dev/null) || { [ -d "$p" ] && rp=$(cd "$p" 2>/dev/null && pwd -P); }`,
+        `[ -n "$rp" ] || exit 1`,
+        `printf '%s\\n%s' "$root" "$rp"`,
+      ].join('\n'),
+    );
+    // Path doesn't exist yet: nothing to canonicalize (writes to a fresh leaf
+    // are covered by assertContainedDest checking the parent directory).
+    if (result.exitCode === EXIT_NOT_FOUND) return;
+    const [root, real] = result.stdout.split('\n').map(s => s.trim());
+    if (result.exitCode !== 0 || !root || !real) {
+      throw new Error(`Unable to verify path stays within workspace root: ${inputPath}`);
+    }
     if (real !== root && !real.startsWith(`${root}/`)) {
       throw new Error(`Path escapes workspace root (symlink): ${inputPath}`);
     }
@@ -185,8 +206,9 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       `if [ -d ${shellQuote(abs)} ]; then exit ${EXIT_IS_DIRECTORY}; elif [ ! -e ${shellQuote(abs)} ]; then exit ${EXIT_NOT_FOUND}; fi; base64 < ${shellQuote(abs)}`,
     );
     if (result.exitCode === EXIT_IS_DIRECTORY) throw new IsDirectoryError(path);
+    if (result.exitCode === EXIT_NOT_FOUND) throw new FileNotFoundError(path);
     if (result.exitCode !== 0) {
-      throw new FileNotFoundError(path);
+      throw new Error(`readFile ${path} failed (exit ${result.exitCode}): ${result.stderr.trim()}`);
     }
     const buffer = Buffer.from(result.stdout.replace(/\s/g, ''), 'base64');
     if (options?.encoding) {
@@ -202,8 +224,16 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     const dir = posixPath.dirname(abs);
     const mkdir = options?.recursive === false ? '' : `mkdir -p ${shellQuote(dir)} && `;
     if (options?.overwrite === false) {
-      const exists = await this.exists(path);
-      if (exists) throw new FileExistsError(path);
+      // `set -C` (noclobber) makes the redirect itself the exclusivity check —
+      // no exists() pre-check that could race with a concurrent writer.
+      const result = await this.exec(
+        `${mkdir}{ (set -C; printf %s ${shellQuote(b64)} | base64 -d > ${shellQuote(abs)}) 2>/dev/null || { [ -e ${shellQuote(abs)} ] && exit ${EXIT_EXISTS} || exit 1; }; }`,
+      );
+      if (result.exitCode === EXIT_EXISTS) throw new FileExistsError(path);
+      if (result.exitCode !== 0) {
+        throw new Error(`writeFile ${path} failed (exit ${result.exitCode}): ${result.stderr.trim()}`);
+      }
+      return;
     }
     await this.execOk(`${mkdir}printf %s ${shellQuote(b64)} | base64 -d > ${shellQuote(abs)}`, `writeFile ${path}`);
   }
@@ -221,7 +251,9 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
   async deleteFile(path: string, options?: RemoveOptions): Promise<void> {
     const abs = this.resolve(path);
     if (options?.force) {
-      await this.exec(`rm -f ${shellQuote(abs)}`);
+      // `rm -f` already succeeds for a missing file, but still fails for
+      // directories and permission errors — surface those.
+      await this.execOk(`rm -f ${shellQuote(abs)}`, `deleteFile ${path}`);
       return;
     }
     const result = await this.exec(
@@ -240,8 +272,32 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     await this.assertContainedDest(destAbs, dest);
     const recursive = options?.recursive ? '-r ' : '';
     if (options?.overwrite === false) {
-      const exists = await this.exists(dest);
-      if (exists) throw new FileExistsError(dest);
+      // Atomic no-clobber: directories claim the destination with an exclusive
+      // mkdir; files copy to a temp name then hardlink into place (link(2)
+      // fails if the destination exists). No racy exists() pre-check.
+      const result = await this.exec(
+        [
+          `src=${shellQuote(srcAbs)}`,
+          `dest=${shellQuote(destAbs)}`,
+          `if [ ! -e "$src" ] && [ ! -L "$src" ]; then exit ${EXIT_NOT_FOUND}; fi`,
+          `mkdir -p ${shellQuote(posixPath.dirname(destAbs))} || exit 1`,
+          `if [ -d "$src" ]; then`,
+          `  mkdir "$dest" 2>/dev/null || exit ${EXIT_EXISTS}`,
+          `  cp -R "$src"/. "$dest"/`,
+          `else`,
+          `  tmp="$dest.__cptmp$$"`,
+          `  cp "$src" "$tmp" || exit 1`,
+          `  ln "$tmp" "$dest" 2>/dev/null || { rm -f "$tmp"; [ -e "$dest" ] && exit ${EXIT_EXISTS} || exit 1; }`,
+          `  rm -f "$tmp"`,
+          `fi`,
+        ].join('\n'),
+      );
+      if (result.exitCode === EXIT_NOT_FOUND) throw new FileNotFoundError(src);
+      if (result.exitCode === EXIT_EXISTS) throw new FileExistsError(dest);
+      if (result.exitCode !== 0) {
+        throw new Error(`copyFile ${src} -> ${dest} failed (exit ${result.exitCode}): ${result.stderr.trim()}`);
+      }
+      return;
     }
     const result = await this.exec(
       `if [ ! -e ${shellQuote(srcAbs)} ]; then exit ${EXIT_NOT_FOUND}; fi; mkdir -p ${shellQuote(posixPath.dirname(destAbs))} && cp ${recursive}${shellQuote(srcAbs)} ${shellQuote(destAbs)}`,
@@ -258,8 +314,25 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     await this.assertContainedRealpath(srcAbs, src);
     await this.assertContainedDest(destAbs, dest);
     if (options?.overwrite === false) {
-      const exists = await this.exists(dest);
-      if (exists) throw new FileExistsError(dest);
+      // `mv -n` exits 0 even when it skips, so detect a skipped move by the
+      // source surviving. The no-clobber rename itself is atomic; no racy
+      // exists() pre-check.
+      const result = await this.exec(
+        [
+          `src=${shellQuote(srcAbs)}`,
+          `dest=${shellQuote(destAbs)}`,
+          `if [ ! -e "$src" ] && [ ! -L "$src" ]; then exit ${EXIT_NOT_FOUND}; fi`,
+          `mkdir -p ${shellQuote(posixPath.dirname(destAbs))} || exit 1`,
+          `mv -n "$src" "$dest" 2>/dev/null || exit 1`,
+          `if [ -e "$src" ] || [ -L "$src" ]; then exit ${EXIT_EXISTS}; fi`,
+        ].join('\n'),
+      );
+      if (result.exitCode === EXIT_NOT_FOUND) throw new FileNotFoundError(src);
+      if (result.exitCode === EXIT_EXISTS) throw new FileExistsError(dest);
+      if (result.exitCode !== 0) {
+        throw new Error(`moveFile ${src} -> ${dest} failed (exit ${result.exitCode}): ${result.stderr.trim()}`);
+      }
+      return;
     }
     const result = await this.exec(
       `if [ ! -e ${shellQuote(srcAbs)} ]; then exit ${EXIT_NOT_FOUND}; fi; mkdir -p ${shellQuote(posixPath.dirname(destAbs))} && mv ${shellQuote(srcAbs)} ${shellQuote(destAbs)}`,

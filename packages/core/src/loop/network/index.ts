@@ -215,7 +215,8 @@ export async function getRoutingAgent({
     .map(([name, tool]) => {
       // Use 'in' check for type narrowing, then nullish coalescing for undefined values
       const inputSchema = 'inputSchema' in tool ? (tool.inputSchema ?? z.object({})) : z.object({});
-      return ` - **${name}**: ${tool.description}, input schema: ${JSON.stringify(schemaToJsonSchema(inputSchema))}`;
+      const description = 'description' in tool ? (tool.description ?? '') : '';
+      return ` - **${name}**: ${description}, input schema: ${JSON.stringify(schemaToJsonSchema(inputSchema))}`;
     })
     .join('\n');
 
@@ -1522,7 +1523,7 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
-      if (!tool.execute) {
+      if (!('execute' in tool) || typeof tool.execute !== 'function') {
         const mastraError = new MastraError({
           id: 'AGENT_NETWORK_TOOL_EXECUTION_STEP_INVALID_TASK_INPUT',
           domain: ErrorDomain.AGENT_NETWORK,
@@ -1532,6 +1533,7 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
+      const executeTool = tool.execute;
       const toolId = 'id' in tool && typeof tool.id === 'string' ? tool.id : inputData.primitiveId;
       // Use safeParseLLMJson to handle malformed JSON from LLM (truncated, unescaped chars, etc.)
       const inputDataToUse = await safeParseLLMJson(inputData.prompt);
@@ -1760,7 +1762,7 @@ export async function createNetworkLoop({
 
       let toolSuspendPayload: any;
 
-      const finalResult = await tool.execute(
+      const finalResult = await executeTool(
         inputDataToUse,
         {
           abortSignal,

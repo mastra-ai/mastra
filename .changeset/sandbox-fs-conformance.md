@@ -2,4 +2,4 @@
 '@mastra/code-sdk': patch
 ---
 
-Run the shared workspace filesystem conformance suite against SandboxFilesystem and fix the gaps it found: typed FileNotFoundError/FileExistsError/IsDirectoryError errors, reading a directory as a file now rejects, moveFile/copyFile create the destination parent directory, filesystem ids are unique per workdir when one sandbox backs multiple worktrees, and getInfo reports status.
+Sandbox filesystem operations now behave like local ones: missing files, existing destinations, and directory misuse raise typed errors instead of generic ones, reading a directory as a file fails instead of returning empty content, moving or copying a file into a new directory works, overwrite protection can no longer be raced by concurrent writers, and each filesystem reports a unique id and status.
