@@ -86,7 +86,7 @@ export function WorkspacesSection() {
       }
       if (replaceIndex >= 0) visible[replaceIndex] = pinned;
     }
-    return visible.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return { visible: visible.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), all: sorted };
   };
   const workRows = latestRows(false);
   const reviewRows = latestRows(true);
@@ -109,23 +109,27 @@ export function WorkspacesSection() {
     deleteWorkspace.mutate(confirmDelete, { onSuccess: () => setConfirmDelete(null) });
   };
 
-  if (workRows.length === 0 && reviewRows.length === 0) return null;
+  if (workRows.all.length === 0 && reviewRows.all.length === 0) return null;
 
   return (
     <section className="flex flex-col gap-4" aria-label="Factory sessions">
-      {workRows.length > 0 && (
+      {workRows.all.length > 0 && (
         <WorkspaceGroup
+          key="work"
           title="Work Sessions"
-          rows={workRows}
+          rows={workRows.visible}
+          allRows={workRows.all}
           pending={pending}
           onSelect={openWorkspaceThread}
           onDelete={setConfirmDelete}
         />
       )}
-      {reviewRows.length > 0 && (
+      {reviewRows.all.length > 0 && (
         <WorkspaceGroup
+          key="review"
           title="Review Sessions"
-          rows={reviewRows}
+          rows={reviewRows.visible}
+          allRows={reviewRows.all}
           pending={pending}
           onSelect={openWorkspaceThread}
           onDelete={setConfirmDelete}
@@ -178,16 +182,21 @@ interface FactoryWorkspaceRow {
 function WorkspaceGroup({
   title,
   rows,
+  allRows,
   pending,
   onSelect,
   onDelete,
 }: {
   title: 'Work Sessions' | 'Review Sessions';
   rows: FactoryWorkspaceRow[];
+  allRows: FactoryWorkspaceRow[];
   pending: boolean;
   onSelect: (workspace: FactoryUserSession) => void;
   onDelete: (workspace: FactoryUserSession) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const visibleRows = expanded ? allRows : rows;
+  const hiddenCount = allRows.length - rows.length;
   return (
     <section className="flex flex-col gap-2" aria-label={title}>
       <div className="flex items-center px-1">
@@ -196,7 +205,7 @@ function WorkspaceGroup({
         </Txt>
       </div>
       <MainSidebar.NavList>
-        {rows.map(row => (
+        {visibleRows.map(row => (
           <SessionNavRow
             key={row.workspace.sessionId}
             name={row.label ?? row.workspace.branch}
@@ -210,6 +219,15 @@ function WorkspaceGroup({
           />
         ))}
       </MainSidebar.NavList>
+      {hiddenCount > 0 && (
+        <button
+          type="button"
+          className="text-icon3 hover:text-icon5 px-1 text-left text-xs"
+          onClick={() => setExpanded(value => !value)}
+        >
+          {expanded ? 'Show less' : `Show ${hiddenCount} more`}
+        </button>
+      )}
     </section>
   );
 }

@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.20.3-alpha.1",
+  "version": "1.20.3",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -78,6 +78,7 @@
   },
   "devDependencies": {
     "@commander-js/extra-typings": "^14.0.0",
+    "@internal/factory-ui": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/playground": "workspace:*",
     "@internal/types-builder": "workspace:*",

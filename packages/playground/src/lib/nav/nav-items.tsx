@@ -37,20 +37,20 @@ export interface NavSection {
   items: NavItem[];
 }
 
-// The Signals sidebar link is gated behind the dedicated MASTRA_SIGNALS_UI flag
+// The Intelligence sidebar link is gated behind the dedicated MASTRA_SIGNALS_UI flag
 // so the feature can be toggled independently of the platform config that the
-// Signals route itself consumes.
+// Intelligence route itself consumes.
 const isSignalsEnabled =
   typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).MASTRA_SIGNALS_UI === 'true';
 
 const signalsNavItem: NavItem = {
-  name: 'Signals',
-  url: '/signals',
-  activePaths: ['/signals'],
+  name: 'Intelligence',
+  url: '/intelligence',
+  activePaths: ['/intelligence'],
   Icon: LayoutGrid,
-  docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Signals documentation' },
+  docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Trace intelligence documentation' },
   isOnMastraPlatform: true,
-  // Kept in the registry so /signals routes and breadcrumbs always resolve, but
+  // Kept in the registry so /intelligence routes and breadcrumbs always resolve, but
   // only surfaced in the sidebar/command palette when the flag is enabled.
   hidden: !isSignalsEnabled,
 };

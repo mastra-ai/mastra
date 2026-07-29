@@ -1,6 +1,6 @@
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
-import { getAvailableModePacks } from '@mastra/code-sdk/onboarding/packs';
+import { getAvailableModePacks, resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
 import { getCustomProviderId, THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
@@ -68,6 +68,12 @@ export interface ProviderInfo {
   envVar?: string;
   /** Where the active credential comes from. */
   source: ProviderCredentialSource;
+  /**
+   * Tenant mode: whether an org-wide API key exists for this provider, even
+   * when the caller's personal credential shadows it. Lets the UI tell
+   * "shared with the org" apart from "only works for me".
+   */
+  orgKey?: boolean;
   /** Web OAuth sign-in capability, when the provider supports it. */
   oauth?: { supported: true; modes: LoginSessionKind[] };
 }
@@ -148,9 +154,11 @@ export async function listProviders({
 
     const authProviderId = getAuthProviderId(model.provider);
     let source: ProviderInfo['source'] = 'none';
+    let orgKey: boolean | undefined;
     if (tenantCredentials) {
       const userRec = tenantCredentials.find(r => r.scope === 'user' && r.provider === authProviderId);
       const orgRec = tenantCredentials.find(r => r.scope === 'org' && r.provider === authProviderId);
+      orgKey = orgRec?.credential.type === 'api_key';
       if (userRec?.credential.type === 'oauth') {
         source = 'oauth-user';
       } else if (userRec?.credential.type === 'api_key') {
@@ -173,6 +181,7 @@ export async function listProviders({
       provider: model.provider,
       envVar: model.apiKeyEnvVar,
       source,
+      ...(orgKey !== undefined ? { orgKey } : {}),
       ...(flowKind ? { oauth: { supported: true as const, modes: [flowKind] } } : {}),
     });
   }
@@ -490,17 +499,6 @@ export interface ProviderOMDefaultsResponse {
   config: OMConfigInfo;
 }
 
-function providerOMModelId(providerId: string, factoryModelId: string): string {
-  switch (providerId) {
-    case 'anthropic':
-      return 'anthropic/claude-haiku-4-5';
-    case 'openai':
-      return 'openai/gpt-5.4-mini';
-    default:
-      return factoryModelId || DEFAULT_OM_MODEL_ID;
-  }
-}
-
 export function readOMConfig(session: OMSession): OMConfigInfo {
   const state = session.state.get() ?? {};
   const observeAttachments = state.observeAttachments;
@@ -662,12 +660,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               auth,
               credentials: options.modelCredentials,
             });
+            // Tenant mode also reports whether the caller may write org-wide
+            // keys, so the settings UI can gate the "Everyone in org" option.
+            const tenant = auth.tenant(loose(c));
+            const orgKeyAdmin = tenant ? await auth.isOrganizationAdmin(loose(c), tenantOrgId(tenant)) : undefined;
             return c.json({
               providers: await listProviders({
                 controller,
                 authStorage: tenantCredentials ? undefined : authStorage,
                 tenantCredentials,
               }),
+              ...(orgKeyAdmin !== undefined ? { orgKeyAdmin } : {}),
             });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -1064,7 +1067,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             });
             if (!access[providerId]) return c.json({ error: `Provider "${providerId}" is not configured` }, 400);
 
-            const modelId = providerOMModelId(providerId, factoryModelId);
+            const modelId = resolveProviderOMDefault(providerId, factoryModelId).modelId;
             const record = await context.storage.patch({
               orgId: context.orgId,
               userId: context.userId,

@@ -80,7 +80,7 @@ npx @mastra/codemod@latest v1/workflow-create-run-async .
 
 ### `runCount` to `retryCount` (deprecated)
 
-The `runCount` parameter has been deprecated in favor of `retryCount` in workflow step execution. This change provides clearer naming that better describes retry behavior. The old `runCount` still works but shows deprecation warnings.
+The `runCount` parameter has been deprecated in favor of `retryCount` in workflow step execution. The new name identifies the value as the number of retries. The old `runCount` still works but shows deprecation warnings.
 
 To migrate, rename `runCount` to `retryCount` in step execution functions.
 

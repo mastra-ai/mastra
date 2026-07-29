@@ -26,7 +26,7 @@ const SOURCE_LABEL: Record<ProviderInfo['source'], string> = {
   oauth: 'Signed in',
   'oauth-user': 'Signed in',
   stored: 'Key saved',
-  'stored-user': 'Key saved',
+  'stored-user': 'Personal key',
   'stored-org': 'Org key',
   env: 'From env',
   none: 'Not set',
@@ -52,6 +52,27 @@ const PROVIDER_LIST_COLUMNS = '1fr auto auto';
 
 function mutationErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
+}
+
+/**
+ * Credential source badge(s). When a personal credential shadows an org-wide
+ * key, both badges render so it's clear a shared key also exists.
+ */
+function SourceBadges({ provider }: { provider: ProviderInfo }) {
+  const shadowedOrgKey =
+    provider.orgKey === true && (provider.source === 'stored-user' || provider.source === 'oauth-user');
+  return (
+    <span className="flex items-center gap-1">
+      <Badge size="sm" variant={SOURCE_VARIANT[provider.source]}>
+        {SOURCE_LABEL[provider.source]}
+      </Badge>
+      {shadowedOrgKey && (
+        <Badge size="sm" variant="info">
+          Org key
+        </Badge>
+      )}
+    </span>
+  );
 }
 
 /**
@@ -166,9 +187,7 @@ export function ProviderAccessSection() {
                   <DataList.RowStatic key={provider.provider}>
                     <DataList.NameCell>{displayName}</DataList.NameCell>
                     <DataList.Cell>
-                      <Badge size="sm" variant={SOURCE_VARIANT[provider.source]}>
-                        {SOURCE_LABEL[provider.source]}
-                      </Badge>
+                      <SourceBadges provider={provider} />
                     </DataList.Cell>
                     <DataList.Cell className="justify-end">
                       {signedIn ? (
@@ -235,9 +254,7 @@ export function ProviderAccessSection() {
                   <DataList.RowStatic key={provider.provider}>
                     <DataList.NameCell>{displayName}</DataList.NameCell>
                     <DataList.Cell>
-                      <Badge size="sm" variant={SOURCE_VARIANT[provider.source]}>
-                        {SOURCE_LABEL[provider.source]}
-                      </Badge>
+                      <SourceBadges provider={provider} />
                     </DataList.Cell>
                     <DataList.Cell className="justify-end">
                       <span className="flex items-center gap-2">
