@@ -26,6 +26,9 @@ export class StdioCodeModeTransport implements CodeModeTransport {
   async run(opts: Parameters<CodeModeTransport['run']>[0]): Promise<CodeModeToolResult> {
     const { sandbox, program, toolIds, dispatch, timeout, abortSignal, onExternalCall, onExternalResult } = opts;
 
+    if (!sandbox) {
+      throw new Error('StdioCodeModeTransport requires a sandbox');
+    }
     if (!sandbox.processes) {
       throw new SandboxFeatureNotSupportedError('processes');
     }

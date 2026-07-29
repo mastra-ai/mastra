@@ -192,8 +192,10 @@ Rules:
 - Batch independent calls with \`Promise.all\`. Do arithmetic and data shaping in
   JavaScript, not in your head.
 - End the program by \`return\`-ing the final value (objects/arrays are fine).
-- The program runs in a sandbox: no access to the host filesystem, network, or
-  process. The only capabilities are the \`external_*\` functions.
+- The only supported capabilities are the \`external_*\` functions. Do not rely
+  on filesystem, network, or process access — depending on the configured
+  sandbox and transport, the program may run fully isolated with none of those
+  available.
 - Use \`console.log\` for debugging; logs are captured and returned.
 
 Available functions:`;
