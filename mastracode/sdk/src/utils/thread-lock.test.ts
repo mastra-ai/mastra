@@ -35,6 +35,14 @@ describe('thread locks', () => {
     expect(readFileSync(lockPath, 'utf-8')).toBe(String(process.ppid));
   });
 
+  it('does not delete stale locks while checking their owner', () => {
+    const stalePid = 2_147_483_647;
+    const lockPath = writeOwner('thread-stale-query', stalePid);
+
+    expect(getThreadLockOwner('thread-stale-query')).toBeNull();
+    expect(readFileSync(lockPath, 'utf-8')).toBe(String(stalePid));
+  });
+
   it('reclaims a lock owned by a dead process', () => {
     const lockPath = writeOwner('thread-stale', 2_147_483_647);
 

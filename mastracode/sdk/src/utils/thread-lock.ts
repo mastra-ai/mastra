@@ -47,6 +47,10 @@ function getErrorCode(error: unknown): string | undefined {
   return typeof error.code === 'string' ? error.code : undefined;
 }
 
+function readLockContent(lockPath: string): string {
+  return fs.readFileSync(lockPath, 'utf-8').trim();
+}
+
 function writeNewLock(lockPath: string, pid: number): void {
   const file = fs.openSync(lockPath, 'wx', 0o644);
   try {
@@ -68,26 +72,33 @@ export function acquireThreadLock(threadId: string): void {
   while (true) {
     try {
       writeNewLock(lockPath, myPid);
-      return;
+      try {
+        if (readLockContent(lockPath) === String(myPid)) return;
+      } catch (error) {
+        if (getErrorCode(error) === 'ENOENT') continue;
+        throw error;
+      }
+      continue;
     } catch (error) {
       if (getErrorCode(error) !== 'EEXIST') throw error;
     }
 
-    let ownerPid: number;
+    let ownerContent: string;
     try {
-      const content = fs.readFileSync(lockPath, 'utf-8').trim();
-      ownerPid = parseInt(content, 10);
+      ownerContent = readLockContent(lockPath);
     } catch (error) {
       if (getErrorCode(error) === 'ENOENT') continue;
       throw error;
     }
 
+    const ownerPid = parseInt(ownerContent, 10);
     if (ownerPid === myPid) return;
     if (!isNaN(ownerPid) && isProcessAlive(ownerPid)) {
       throw new ThreadLockError(threadId, ownerPid);
     }
 
     try {
+      if (readLockContent(lockPath) !== ownerContent) continue;
       fs.unlinkSync(lockPath);
     } catch (error) {
       if (getErrorCode(error) !== 'ENOENT') throw error;
@@ -141,14 +152,8 @@ export function getThreadLockOwner(threadId: string): number | null {
     const ownerPid = parseInt(content, 10);
 
     if (isNaN(ownerPid)) return null;
-    if (ownerPid === process.pid) return null; // Our own lock
-    if (!isProcessAlive(ownerPid)) {
-      // Stale lock — clean it up
-      try {
-        fs.unlinkSync(lockPath);
-      } catch {}
-      return null;
-    }
+    if (ownerPid === process.pid) return null;
+    if (!isProcessAlive(ownerPid)) return null;
 
     return ownerPid;
   } catch {
