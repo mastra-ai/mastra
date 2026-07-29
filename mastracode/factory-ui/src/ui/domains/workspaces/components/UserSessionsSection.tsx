@@ -13,7 +13,7 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 import { useApiConfig } from '../../../../api/config';
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
+import { removeCachedSession, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { USER_SESSION_BRANCH_PREFIX, createUserSession, deleteUserSession } from '../services/github';
@@ -100,6 +100,7 @@ export function UserSessionsSection() {
     },
     onSuccess: session => {
       setConfirmDelete(null);
+      removeCachedSession(queryClient, repository?.projectRepositoryId, session.sessionId);
       invalidate();
       toast('Session deleted');
       if (location.pathname === `/factories/${factoryId}/user/threads/${session.sessionId}`) {
