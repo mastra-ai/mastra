@@ -4,13 +4,13 @@
  * Drives the real component through the shared provider stack; no network is
  * involved (the chart is fed a `QueueHealth` aggregate directly), so these
  * specs focus on proportional rendering, empty/active states, selection, and
- * reduced-motion. The `.msw` suffix routes this file into the component-test
- * harness (the default vitest config only collects `.test.ts`).
+ * cross-highlighting. The `.msw` suffix routes this file into the
+ * component-test harness (the default vitest config only collects `.test.ts`).
  */
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../e2e/ui/render';
 import type { QueueHealth, QueueHealthStage } from '../queue-health';
@@ -44,13 +44,13 @@ function Harness({ health }: { health: QueueHealth }) {
   return (
     <div>
       <QueueHealthChart health={health} thresholdsSeconds={THRESHOLDS} selected={selected} onSelect={setSelected} />
-      <output data-testid="selection">{selected ? `${selected.stage}:${selected.bucket ?? 'none'}` : 'cleared'}</output>
+      <output data-testid="selection">{selected ? `${selected.stage ?? 'all'}:${selected.bucket}` : 'cleared'}</output>
     </div>
   );
 }
 
 describe('QueueHealthChart', () => {
-  it('renders one bar per non-done stage with segment labels carrying bucket + count', () => {
+  it('renders one bar per stage with segment labels carrying bucket + count', () => {
     const health = makeHealth(
       defaultStages({
         intake: { buckets: { green: 2, amber: 1, orange: 0, red: 3 }, total: 6 },
@@ -63,12 +63,36 @@ describe('QueueHealthChart', () => {
     expect(screen.getByRole('button', { name: 'Intake Aging: 1' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Intake Critical: 3' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Intake Stale/ })).not.toBeInTheDocument();
-    // Legend pairs every bucket label with its threshold window.
+  });
+
+  it('totals every stage into the headline bar', () => {
+    const health = makeHealth(
+      defaultStages({
+        triage: { buckets: { green: 2, amber: 0, orange: 0, red: 0 }, total: 2 },
+        execute: { buckets: { green: 3, amber: 1, orange: 0, red: 0 }, total: 4 },
+      }),
+    );
+    renderWithProviders(<Harness health={health} />);
+
+    expect(screen.getByRole('button', { name: 'Fresh: 5' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Aging: 1' })).toBeInTheDocument();
+  });
+
+  it('pairs every legend bucket with its threshold window, count and share', () => {
+    const health = makeHealth(
+      defaultStages({
+        intake: { buckets: { green: 3, amber: 0, orange: 0, red: 1 }, total: 4 },
+      }),
+    );
+    renderWithProviders(<Harness health={health} />);
+
     const legend = screen.getByTestId('queue-health-legend');
-    expect(within(legend).getByText(/Fresh/)).toBeInTheDocument();
-    expect(within(legend).getByText(/\(< 4h\)/)).toBeInTheDocument();
-    expect(within(legend).getByText(/Critical/)).toBeInTheDocument();
-    expect(within(legend).getByText(/\(≥ 3d\)/)).toBeInTheDocument();
+    expect(within(legend).getByText('Fresh (< 4h)')).toBeInTheDocument();
+    expect(within(legend).getByText('Critical (≥ 3d)')).toBeInTheDocument();
+    expect(within(legend).getByText('75%')).toBeInTheDocument();
+    expect(within(legend).getByText('25%')).toBeInTheDocument();
+    // Empty buckets stay listed (thresholds are part of the reading) but are not selectable.
+    expect(within(legend).getByRole('button', { name: /Stale/ })).toBeDisabled();
   });
 
   it('sizes segments proportionally to their counts via flex-grow', () => {
@@ -85,19 +109,28 @@ describe('QueueHealthChart', () => {
     expect(red).toHaveStyle({ flexGrow: '4' });
   });
 
-  it('renders an empty-state bar for a stage with zero items and no NaN widths', () => {
-    const health = makeHealth(defaultStages()); // all zero
+  it('shows an empty state when nothing is in flight', () => {
+    renderWithProviders(<Harness health={makeHealth(defaultStages())} />);
+
+    expect(screen.getByText(/Nothing in flight/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Fresh|Aging|Stale|Critical/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps a row for stages with zero items once the queue is non-empty', () => {
+    const health = makeHealth(
+      defaultStages({
+        review: { buckets: { green: 1, amber: 0, orange: 0, red: 0 }, total: 1 },
+      }),
+    );
     renderWithProviders(<Harness health={health} />);
 
     for (const label of ['Intake', 'Triage', 'Planning', 'Building', 'Review']) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
-    // Empty stages show the "0" empty-state, never a NaN-proportioned segment.
-    expect(screen.getAllByText('0').length).toBeGreaterThanOrEqual(5);
-    expect(screen.queryByRole('button', { name: /Fresh|Aging|Stale|Critical/ })).not.toBeInTheDocument();
+    expect(screen.getAllByText('0').length).toBeGreaterThanOrEqual(4);
   });
 
-  it('shows the active-stripe overlay only when the stage has active work', () => {
+  it('marks only stages with active work, and never animates under reduced motion', () => {
     const health = makeHealth(
       defaultStages({
         intake: { buckets: { green: 2, amber: 0, orange: 0, red: 0 }, total: 2, activeCount: 0 },
@@ -106,13 +139,14 @@ describe('QueueHealthChart', () => {
     );
     renderWithProviders(<Harness health={health} />);
 
-    expect(screen.getByRole('img', { name: 'Building: 2 active' })).toBeInTheDocument();
+    const pulse = screen.getByRole('img', { name: 'Building: 2 active' });
+    expect(pulse).toBeInTheDocument();
     expect(screen.queryByRole('img', { name: /Intake: .* active/ })).not.toBeInTheDocument();
-    // The summary text carries the active count too (not pattern-alone).
-    expect(screen.getByText(/2 active/)).toBeInTheDocument();
+    // The pulse animation is opt-in via `motion-safe`, so reduced motion drops it.
+    expect(pulse.querySelector('.motion-safe\\:animate-ping')).not.toBeNull();
   });
 
-  it('selects a cohort on click and clears it on clicking the selected segment again', async () => {
+  it('selects a stage cohort on click and clears it on clicking the same segment again', async () => {
     const user = userEvent.setup();
     const health = makeHealth(
       defaultStages({
@@ -130,7 +164,22 @@ describe('QueueHealthChart', () => {
     expect(screen.getByTestId('selection')).toHaveTextContent('cleared');
   });
 
-  it('clears the selection when the bar background is clicked', async () => {
+  it('selects a bucket across every stage from the legend', async () => {
+    const user = userEvent.setup();
+    const health = makeHealth(
+      defaultStages({
+        triage: { buckets: { green: 1, amber: 0, orange: 0, red: 2 }, total: 3 },
+        execute: { buckets: { green: 0, amber: 0, orange: 0, red: 1 }, total: 1 },
+      }),
+    );
+    renderWithProviders(<Harness health={health} />);
+
+    const legend = screen.getByTestId('queue-health-legend');
+    await user.click(within(legend).getByRole('button', { name: /Critical/ }));
+    expect(screen.getByTestId('selection')).toHaveTextContent('all:red');
+  });
+
+  it('clears the selection on Escape', async () => {
     const user = userEvent.setup();
     const health = makeHealth(
       defaultStages({
@@ -142,39 +191,22 @@ describe('QueueHealthChart', () => {
     await user.click(screen.getByRole('button', { name: 'Triage Fresh: 1' }));
     expect(screen.getByTestId('selection')).toHaveTextContent('triage:green');
 
-    // The bar background is the segment's parent container.
-    const background = screen.getByRole('button', { name: 'Triage Fresh: 1' }).parentElement!;
-    await user.click(background);
+    await user.keyboard('{Escape}');
     expect(screen.getByTestId('selection')).toHaveTextContent('cleared');
     expect(container.querySelectorAll('[aria-pressed="true"]')).toHaveLength(0);
   });
 
-  it('omits the stripe animation class under prefers-reduced-motion', () => {
-    const matchMediaSpy = vi.spyOn(window, 'matchMedia').mockImplementation(
-      (query: string) =>
-        ({
-          matches: query.includes('prefers-reduced-motion'),
-          media: query,
-          addEventListener: () => {},
-          removeEventListener: () => {},
-          addListener: () => {},
-          removeListener: () => {},
-          onchange: null,
-          dispatchEvent: () => false,
-        }) as MediaQueryList,
+  it('dims the other cohorts while one is hovered', async () => {
+    const user = userEvent.setup();
+    const health = makeHealth(
+      defaultStages({
+        triage: { buckets: { green: 2, amber: 0, orange: 0, red: 1 }, total: 3 },
+      }),
     );
-    try {
-      const health = makeHealth(
-        defaultStages({
-          execute: { buckets: { green: 2, amber: 0, orange: 0, red: 0 }, total: 2, activeCount: 1 },
-        }),
-      );
-      renderWithProviders(<Harness health={health} />);
-      const overlay = screen.getByRole('img', { name: 'Building: 1 active' });
-      // With `prefers-reduced-motion` matched, the animation class is omitted.
-      expect(overlay.className).not.toContain('animate-queue-health-stripes');
-    } finally {
-      matchMediaSpy.mockRestore();
-    }
+    renderWithProviders(<Harness health={health} />);
+
+    await user.hover(screen.getByRole('button', { name: 'Fresh: 2' }));
+    expect(screen.getByRole('button', { name: 'Triage Fresh: 2' }).className).toContain('opacity-100');
+    expect(screen.getByRole('button', { name: 'Triage Critical: 1' }).className).toContain('opacity-25');
   });
 });

@@ -21,6 +21,20 @@ describe.each([
     });
   });
 
+  describe('given page content raises its own stacking order', () => {
+    // jsdom has no layout, so paint order can only be asserted through the
+    // class: without it the DS pill tabs (z-10) scroll over the sticky header.
+    it('isolates the content surface into its own stacking context', () => {
+      render(
+        <Layout sidebar={<div>sidebar-slot</div>} header={<div>header-slot</div>}>
+          <div>content-slot</div>
+        </Layout>,
+      );
+
+      expect(screen.getByRole('main').className).toContain('isolate');
+    });
+  });
+
   describe('given the header slot is omitted', () => {
     it('renders an unlabelled full-height content surface', () => {
       render(
