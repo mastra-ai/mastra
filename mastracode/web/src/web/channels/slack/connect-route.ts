@@ -6,7 +6,7 @@ import type { ChannelIdentityStorage, FactoryProjectsStorage, RouteAuth, StateSi
  * Payload shape for the connected-accounts list: the platform sender key +
  * link time, without the tenant ids (the caller IS the tenant).
  */
-export interface ConnectedChannelAccountPayload {
+interface ConnectedChannelAccountPayload {
   platform: string;
   externalTeamId: string;
   externalUserId: string;
@@ -24,7 +24,7 @@ export interface ConnectedChannelAccountPayload {
  * respond with an error redirect and the list endpoint reports
  * `canConnect: false` so the UI hides its Connect button.
  */
-export interface SlackOidcConfig {
+interface SlackOidcConfig {
   clientId: string;
   clientSecret: string;
   /**

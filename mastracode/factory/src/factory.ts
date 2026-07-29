@@ -745,10 +745,10 @@ export class MastraFactory {
 
     // Chat-platform channels (Slack, Discord, …) contributed by integrations,
     // attached to the mounted controller so inbound platform messages reach
-    // the same agents the web UI drives. READY integrations only — an
-    // integration whose `channel-identity` domain isn't migrated can't resolve
-    // a sender's tenant, and attaching it anyway would dispatch runs on
-    // default credentials.
+    // the same agents the web UI drives. READY integrations only — readiness
+    // means the `channel-identity` domain's `init()` succeeded, so its link
+    // table is queryable. Without it a sender can't be resolved to a tenant,
+    // and attaching anyway would dispatch runs on default credentials.
     const channelRegistrations = integrationRegistrations.filter(
       ({ integration, ready }) => ready && integration.channels,
     );

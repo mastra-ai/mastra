@@ -184,7 +184,7 @@ function webPublicUrl(): string | undefined {
 }
 
 /** Outcome of the sender-link gate for one inbound message. */
-export type LinkedSenderResult =
+type LinkedSenderResult =
   /** Gating not configured — dispatch as before account linking existed. */
   | { status: 'ungated' }
   /** Sender unlinked — Connect card posted (when possible), do not dispatch. */
@@ -247,7 +247,7 @@ function buildConnectCard(publicUrl: string) {
 }
 
 /** Outcome of factory routing for one linked sender's inbound message. */
-export type FactoryRouteResult =
+type FactoryRouteResult =
   /** Factory routing not configured — dispatch without a factory. */
   | { status: 'ungated' }
   /** No factory resolved — prompt card posted (when possible), do not dispatch. */
@@ -329,7 +329,7 @@ export async function resolveFactoryForLink({
  * readability) mapped to `-`. `thread.id` is `{channelId}:{threadTs}`
  * (platform-prefixed on handler threads) — the trailing segment is the ts.
  */
-export function threadBranch(threadId: string): string {
+function threadBranch(threadId: string): string {
   const ts = threadId.split(':').at(-1) ?? threadId;
   return `slack/${ts.replace(/[^A-Za-z0-9_/-]/g, '-')}`;
 }
@@ -566,7 +566,7 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
 };
 
 /** Slack app credentials, passed in explicitly rather than read from env here. */
-export interface SlackCredentials {
+interface SlackCredentials {
   clientId?: string;
   clientSecret?: string;
   signingSecret: string;
