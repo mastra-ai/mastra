@@ -115,7 +115,7 @@ function DiffLine({ line, oldNumber, newNumber }: ParsedDiffLine) {
       <span className="border-border1 text-icon2 inline-block w-11 shrink-0 border-r px-2 text-right select-none">
         {newNumber}
       </span>
-      <span className="min-w-0 flex-1 px-3 whitespace-pre-wrap break-words">{line || ' '}</span>
+      <span className="min-w-0 flex-1 px-3 break-words whitespace-pre-wrap">{line || ' '}</span>
     </div>
   );
 }
