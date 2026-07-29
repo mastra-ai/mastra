@@ -580,16 +580,21 @@ export class AgentController<TState = {}> {
             })
           : threads;
 
-      const sortedCandidates = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+      const byRecency = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+      const threadLock = this.config.threadLock;
       let selectedThread: AgentControllerThread | undefined;
-      for (const candidate of sortedCandidates) {
-        if (this.config.threadLock?.tryAcquire) {
-          if (!(await this.config.threadLock.tryAcquire(candidate.id))) continue;
-        } else {
-          await this.config.threadLock?.acquire(candidate.id);
+
+      if (threadLock?.tryAcquire) {
+        for (const candidate of byRecency) {
+          if (await threadLock.tryAcquire(candidate.id)) {
+            selectedThread = candidate;
+            break;
+          }
         }
-        selectedThread = candidate;
-        break;
+      } else if (byRecency[0]) {
+        // no non-throwing probe available — contention stays fatal, as before tryAcquire existed
+        await threadLock?.acquire(byRecency[0].id);
+        selectedThread = byRecency[0];
       }
 
       if (selectedThread) {

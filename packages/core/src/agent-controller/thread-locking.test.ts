@@ -285,6 +285,29 @@ describe('AgentController thread locking', () => {
       expect(acquire).toHaveBeenCalledWith(sessionB.thread.getId());
     });
 
+    it('surfaces contention when the lock has no non-throwing probe', async () => {
+      const store = new InMemoryStore();
+      const controllerA = freshController(store);
+      await controllerA.init();
+      const sessionA = await controllerA.createSession({
+        id: 'session-a',
+        ownerId: 'test-owner',
+        resourceId: 'user-1',
+      });
+      const lockedThreadId = sessionA.thread.getId()!;
+
+      acquire.mockClear();
+      acquire.mockImplementation((id: string) => {
+        if (id === lockedThreadId) throw new Error('locked by another process');
+      });
+      const controllerB = freshController(store);
+      await controllerB.init();
+
+      await expect(
+        controllerB.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-1' }),
+      ).rejects.toThrow('locked by another process');
+    });
+
     it('creates a fresh thread for a different resourceId', async () => {
       const store = new InMemoryStore();
 
