@@ -1026,6 +1026,8 @@ For observability commands (`trace`, `log`, `score`, and `metric`), the CLI targ
 1. Project metadata from `.mastra-project.json` for the project ID.
 1. Your Mastra CLI login token as an auth fallback.
 
+Learning commands also send `X-Mastra-Organization-Id`, resolved from an explicit `--header`, `MASTRA_ORGANIZATION_ID` in your environment, or `.mastra-project.json`, in that order.
+
 Use `--url` and `--header` when you need to override the default hosted observability target or credentials.
 
 ### Flags
