@@ -178,7 +178,7 @@ export const agent = new Agent({
 
 ### As a per-step input processor (limit multi-step token growth)
 
-When an agent uses tools across multiple steps (e.g. `maxSteps > 1`), each step accumulates conversation history from all previous steps. Use `inputProcessors` to also limit tokens at each step of the agentic loop — the `TokenLimiterProcessor` automatically applies to both the initial input and every subsequent step:
+When an agent uses tools across multiple steps (e.g. `maxSteps > 1`), each step accumulates conversation history from all previous steps. Use `inputProcessors` to also limit tokens at each step of the agentic loop. The `TokenLimiterProcessor` automatically applies to both the initial input and every subsequent step:
 
 ```typescript title="src/mastra/agents/multi-step-agent.ts"
 import { Agent } from '@mastra/core/agent'

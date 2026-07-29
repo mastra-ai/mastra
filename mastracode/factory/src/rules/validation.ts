@@ -220,12 +220,28 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       };
     }
     case 'transition': {
-      assertExactKeys(value, ['type', 'idempotencyKey', 'board', 'stage'], 'Factory transition decision');
+      assertExactKeys(value, ['type', 'idempotencyKey', 'board', 'stage', 'message'], 'Factory transition decision');
+      let message: { text: string; role?: string } | undefined;
+      if (value.message !== undefined) {
+        if (!isPlainObject(value.message)) {
+          throw new FactoryRuleValidationError('Factory transition message must be an object.');
+        }
+        assertExactKeys(value.message, ['text', 'role'], 'Factory transition message');
+        const role =
+          value.message.role === undefined
+            ? undefined
+            : boundedString(value.message.role, 'Factory transition message role', MAX_ROLE_LENGTH, IDENTIFIER_RE);
+        message = {
+          text: boundedString(value.message.text, 'Factory transition message text', MAX_MESSAGE_LENGTH),
+          ...(role ? { role } : {}),
+        };
+      }
       return {
         type,
         ...commonCommitFields(value),
         board: enumValue(value.board, FACTORY_RULE_BOARDS, 'Factory transition board'),
         stage: enumValue(value.stage, FACTORY_RULE_STAGES, 'Factory transition stage'),
+        ...(message ? { message } : {}),
       };
     }
     case 'upsertLinkedWorkItem': {

@@ -1,5 +1,35 @@
 # @mastra/platform
 
+## 0.2.2
+
+### Patch Changes
+
+- **Added:** Direct exec data plane for `PlatformSandbox`. ([#20326](https://github.com/mastra-ai/mastra/pull/20326))
+
+  Commands now execute against Railway's WebSocket endpoint directly using a short-lived JWT lease minted by the workspace proxy, instead of proxying every exec through the HTTP proxy. This removes the workspace proxy from the exec hot path — cutting latency for large-payload commands (e.g. `pnpm install`) and eliminating duplicated observability spans.
+
+  The change is transparent: `executeCommand` still returns the same `CommandResult` shape. If the proxy's `/exec-lease` endpoint is unavailable (older deployments), the client automatically falls back to the legacy `POST /sandbox/:id/exec` route for the lifetime of the sandbox.
+
+- Fixed platform sandbox reattach and made provisioning resilient to transient proxy failures: ([#20294](https://github.com/mastra-ai/mastra/pull/20294))
+
+  - The workspace proxy assigns its own sandbox id on create (the advisory id in the request body is not honored), but `getInfo()` never exposed it, so callers persisting a reattach id (e.g. the Factory sandbox fleet, which reads `metadata.sandboxId`) stored the locally generated construction id instead. Every reattach then 404'd and each session open provisioned a brand-new sandbox and re-cloned the repository. `getInfo()` now reports the platform-assigned id in `metadata.sandboxId`, and `start()` treats a sandbox record with `destroyedAt` set as gone (falls through to a fresh provision) instead of pointing exec at a dead resource.
+  - Sandbox creation retries transient workspace-proxy 5xx responses with a short backoff. Provisioning intermittently fails with proxy 500s while the provider is under load; a retry keeps a single flaky window from failing the caller's whole workflow (e.g. Factory kickoff runs). Non-transient errors (4xx) still fail immediately.
+
+- Updated dependencies [[`ce93a3c`](https://github.com/mastra-ai/mastra/commit/ce93a3c114ea1cbfbd576f3db41d7c26c9844f5b), [`5718a22`](https://github.com/mastra-ai/mastra/commit/5718a229281dcfd36bcd1f42a242e3717e510a33), [`a211d09`](https://github.com/mastra-ai/mastra/commit/a211d09185dc65a746534914cf38b67f21ee9bac), [`0dca9d0`](https://github.com/mastra-ai/mastra/commit/0dca9d0b1356024a53b72ea6f040db528b126caa), [`6218217`](https://github.com/mastra-ai/mastra/commit/62182171b6cfca0b099f1c6a77a2e65e7639ab86), [`5807d3a`](https://github.com/mastra-ai/mastra/commit/5807d3ae1d259b8b7d6df7e5bf2b485c694af9c8), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`05db566`](https://github.com/mastra-ai/mastra/commit/05db566fcbdcbf33d0bffca0c72ec30129e2e3ca), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`5718a22`](https://github.com/mastra-ai/mastra/commit/5718a229281dcfd36bcd1f42a242e3717e510a33), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`d1b7e3a`](https://github.com/mastra-ai/mastra/commit/d1b7e3a978a309a5653eeaa490d2d6c7c53bd093), [`29c584a`](https://github.com/mastra-ai/mastra/commit/29c584a13a88831e5ed1fdeb0ff8e82eae180433), [`c093146`](https://github.com/mastra-ai/mastra/commit/c0931466404d3c521308ea119cb165bb7e695155), [`8124754`](https://github.com/mastra-ai/mastra/commit/8124754ae89fbc69f8136d1df4a91904d0f84c4e), [`d12b2e4`](https://github.com/mastra-ai/mastra/commit/d12b2e4023fd9e3d3e93a9169f5088bcee2a849c)]:
+  - @mastra/core@1.54.0
+
+## 0.2.2-alpha.0
+
+### Patch Changes
+
+- Fixed platform sandbox reattach and made provisioning resilient to transient proxy failures: ([#20294](https://github.com/mastra-ai/mastra/pull/20294))
+
+  - The workspace proxy assigns its own sandbox id on create (the advisory id in the request body is not honored), but `getInfo()` never exposed it, so callers persisting a reattach id (e.g. the Factory sandbox fleet, which reads `metadata.sandboxId`) stored the locally generated construction id instead. Every reattach then 404'd and each session open provisioned a brand-new sandbox and re-cloned the repository. `getInfo()` now reports the platform-assigned id in `metadata.sandboxId`, and `start()` treats a sandbox record with `destroyedAt` set as gone (falls through to a fresh provision) instead of pointing exec at a dead resource.
+  - Sandbox creation retries transient workspace-proxy 5xx responses with a short backoff. Provisioning intermittently fails with proxy 500s while the provider is under load; a retry keeps a single flaky window from failing the caller's whole workflow (e.g. Factory kickoff runs). Non-transient errors (4xx) still fail immediately.
+
+- Updated dependencies [[`6218217`](https://github.com/mastra-ai/mastra/commit/62182171b6cfca0b099f1c6a77a2e65e7639ab86), [`d12b2e4`](https://github.com/mastra-ai/mastra/commit/d12b2e4023fd9e3d3e93a9169f5088bcee2a849c)]:
+  - @mastra/core@1.54.0-alpha.4
+
 ## 0.2.1
 
 ### Patch Changes

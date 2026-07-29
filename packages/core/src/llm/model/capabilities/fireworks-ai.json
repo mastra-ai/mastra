@@ -2,11 +2,13 @@
   "attachment": [
     "accounts/fireworks/models/kimi-k2p6",
     "accounts/fireworks/models/kimi-k2p7-code",
+    "accounts/fireworks/models/kimi-k3",
     "accounts/fireworks/models/minimax-m3",
     "accounts/fireworks/models/qwen3p7-plus",
     "accounts/fireworks/routers/kimi-k2p6-fast",
     "accounts/fireworks/routers/kimi-k2p6-turbo",
-    "accounts/fireworks/routers/kimi-k2p7-code-fast"
+    "accounts/fireworks/routers/kimi-k2p7-code-fast",
+    "accounts/fireworks/routers/kimi-k3-fast"
   ],
   "temperature": [
     "accounts/fireworks/models/deepseek-v4-flash",
@@ -24,5 +26,10 @@
     "accounts/fireworks/routers/kimi-k2p6-turbo",
     "accounts/fireworks/routers/kimi-k2p7-code-fast"
   ],
-  "structuredOutput": ["accounts/fireworks/models/deepseek-v4-flash", "accounts/fireworks/models/deepseek-v4-pro"]
+  "structuredOutput": [
+    "accounts/fireworks/models/deepseek-v4-flash",
+    "accounts/fireworks/models/deepseek-v4-pro",
+    "accounts/fireworks/models/kimi-k3",
+    "accounts/fireworks/routers/kimi-k3-fast"
+  ]
 }
