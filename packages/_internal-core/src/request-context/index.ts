@@ -119,6 +119,26 @@ const _toJSONInProgress = new WeakSet<RequestContext<any>>();
  */
 let _toJSONDepth = 0;
 
+/**
+ * Maximum number of nodes the `isSerializable` probe lets `JSON.stringify`
+ * visit for a single stored value.
+ *
+ * `JSON.stringify` expands shared (non-circular) references once per path,
+ * not once per object: an acyclic graph where every level shares one child
+ * (`{ a: n, b: n }` nested `d` times) holds `d + 1` heap objects but expands
+ * to `2^d` visited nodes. Around `2^26` the output also exceeds V8's string
+ * length cap and stringify throws `RangeError` — but only after doing the
+ * traversal work, which keeps doubling past the cap. Unbounded, a ~30-object
+ * value can block the event loop for minutes and then be silently filtered.
+ *
+ * The budget counts node *visits* (shared references count once per path)
+ * because that is exactly the work any real downstream serialization of the
+ * value would do — a value that fails the budget would also be pathological
+ * to persist. 1M visits keeps the worst-case probe in the tens of
+ * milliseconds while remaining far above any reasonable context value.
+ */
+const SERIALIZATION_PROBE_BUDGET = 1_000_000;
+
 export class RequestContext<Values extends Record<string, any> | unknown = unknown> {
   private registry = new Map<string, unknown>();
 
@@ -265,6 +285,12 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   /**
    * Check if a value can be safely serialized to JSON.
    *
+   * The probe is budgeted (see `SERIALIZATION_PROBE_BUDGET`): a value whose
+   * serialization would visit an unbounded number of nodes — an acyclic
+   * graph with layered shared references expands as 2^depth — is treated as
+   * non-serializable and filtered instead of blocking the event loop for
+   * the full expansion.
+   *
    * Re-throws `CyclicRequestContextToJSONError` when called from a nested
    * `toJSON()` (`_toJSONDepth > 1`), so the marker propagates up to the
    * outermost `toJSON()`'s `isSerializable`, which then swallows it and
@@ -278,7 +304,25 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
     if (typeof value !== 'object') return true;
 
     try {
-      JSON.stringify(value);
+      let budget = SERIALIZATION_PROBE_BUDGET;
+      JSON.stringify(value, (_key, probed) => {
+        if (--budget < 0) {
+          throw new RangeError('RequestContext.isSerializable: value expands past the serialization probe budget');
+        }
+        // Typed arrays serialize one element per index; charge them against
+        // the budget arithmetically and skip them so the probe doesn't
+        // materialize every element through the replacer. BigInt64Array /
+        // BigUint64Array fall through so the engine still throws TypeError
+        // on their BigInt elements, matching the unbudgeted probe's verdict.
+        if (ArrayBuffer.isView(probed) && !(probed instanceof BigInt64Array) && !(probed instanceof BigUint64Array)) {
+          budget -= (probed as { length?: number }).length ?? 0;
+          if (budget < 0) {
+            throw new RangeError('RequestContext.isSerializable: value expands past the serialization probe budget');
+          }
+          return undefined;
+        }
+        return probed;
+      });
       return true;
     } catch (e) {
       if (e instanceof CyclicRequestContextToJSONError && _toJSONDepth > 1) {

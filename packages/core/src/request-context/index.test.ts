@@ -244,6 +244,70 @@ describe('RequestContext', () => {
       const parsed = JSON.parse(serialized);
       expect(parsed).toEqual({ serializable: 'value' });
     });
+
+    it('should skip acyclic shared-reference values that expand past the serialization budget, in bounded time', () => {
+      // JSON.stringify expands shared references once per path: this value
+      // holds 31 heap objects but expands to 2^30 visited nodes. Without the
+      // probe budget the stringify probe burns 60-100s of synchronous CPU,
+      // throws RangeError past V8's string cap, and the key is filtered
+      // anyway — after blocking the event loop for the full expansion.
+      let node: unknown = { leaf: true };
+      for (let i = 0; i < 30; i++) node = { a: node, b: node };
+
+      const ctx = new RequestContext();
+      ctx.set('sharedDag', node);
+      ctx.set('serializable', 'value');
+
+      const start = Date.now();
+      const json = ctx.toJSON();
+      const elapsed = Date.now() - start;
+
+      // The unbudgeted probe takes minutes here; the budgeted one bails in
+      // tens of milliseconds. Loose threshold to assert "bounded", not "fast".
+      expect(elapsed).toBeLessThan(2000);
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('sharedDag');
+    });
+
+    it('should keep acyclic shared-reference values that stay within the serialization budget', () => {
+      // Same shape, but 2^10 expanded nodes — far under the budget.
+      let node: unknown = { leaf: true };
+      for (let i = 0; i < 10; i++) node = { a: node, b: node };
+
+      const ctx = new RequestContext();
+      ctx.set('smallDag', node);
+
+      const json = ctx.toJSON();
+
+      expect(json).toHaveProperty('smallDag');
+    });
+
+    it('should skip oversized typed arrays without materializing their elements, and keep small ones', () => {
+      const ctx = new RequestContext();
+      ctx.set('bigTyped', new Float64Array(8 * 1024 * 1024));
+      ctx.set('smallTyped', new Uint8Array(16));
+      ctx.set('smallBuffer', Buffer.alloc(64));
+
+      const start = Date.now();
+      const json = ctx.toJSON();
+      const elapsed = Date.now() - start;
+
+      expect(elapsed).toBeLessThan(2000);
+      expect(json).not.toHaveProperty('bigTyped');
+      expect(json).toHaveProperty('smallTyped');
+      expect(json).toHaveProperty('smallBuffer');
+    });
+
+    it('should still skip BigInt-element typed arrays like the unbudgeted probe did', () => {
+      const ctx = new RequestContext();
+      ctx.set('bigIntArray', new BigInt64Array([1n]));
+      ctx.set('serializable', 'value');
+
+      const json = ctx.toJSON();
+
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('bigIntArray');
+    });
   });
 
   describe('serializeForSpan', () => {
