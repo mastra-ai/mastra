@@ -14,7 +14,7 @@ export function ConnectedAccountsSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const { baseUrl } = useApiConfig();
   const accountsQuery = useChannelAccountsQuery();
-  const slackAccount = accountsQuery.data?.accounts.find(account => account.platform === 'slack');
+  const slackAccounts = accountsQuery.data?.accounts.filter(account => account.platform === 'slack') ?? [];
   const canConnect = accountsQuery.data?.canConnect ?? false;
 
   const connectSlack = () => {
@@ -43,13 +43,17 @@ export function ConnectedAccountsSection() {
           </span>
         }
         hint={
-          <Txt as="span" variant="ui-sm" className={slackAccount ? 'text-positive1' : 'text-icon3'}>
-            {slackAccount ? 'Connected' : 'Not connected'}
+          <Txt as="span" variant="ui-sm" className={slackAccounts.length > 0 ? 'text-positive1' : 'text-icon3'}>
+            {slackAccounts.length > 1
+              ? `${slackAccounts.length} connected`
+              : slackAccounts.length === 1
+                ? 'Connected'
+                : 'Not connected'}
           </Txt>
         }
       >
-        {slackAccount && factoryId ? (
-          <Button as={Link} to={`/factories/${factoryId}/settings/connected-accounts/slack`} variant="ghost" size="sm">
+        {slackAccounts.length > 0 && factoryId ? (
+          <Button as={Link} to={`/factories/${factoryId}/settings/connections/slack`} variant="ghost" size="sm">
             Configure
             <ChevronRight aria-hidden="true" />
           </Button>

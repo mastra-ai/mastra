@@ -111,14 +111,14 @@ pnpm slack:manifest \
 At [api.slack.com/apps](https://api.slack.com/apps), choose **Create New App →
 From a manifest** and paste the manifest from your clipboard.
 
-Install it to your workspace, then copy these from **Basic Information → App
-Credentials** into `.env`:
+Install it to your workspace. Copy the app credentials from **Basic Information → App Credentials** and the bot token from **OAuth & Permissions** into `.env`:
 
 ```dotenv
 MASTRACODE_CHANNELS_PUBLIC_URL=https://your-tunnel-hostname
 SLACK_APP_SIGNING_SECRET=
 SLACK_APP_CLIENT_ID=
 SLACK_APP_CLIENT_SECRET=
+SLACK_APP_BOT_TOKEN=
 ```
 
 Restart the dev server — varlock reads `.env` at startup.
@@ -130,7 +130,7 @@ to your Mastra user, and messages then run as you.
 
 A quick tunnel gets a new hostname each run. When it changes, replace the
 hostname in `MASTRACODE_CHANNELS_PUBLIC_URL` and in the Slack app's **Event
-Subscriptions** and **OAuth & Permissions** settings.
+Subscriptions**, **Interactivity & Shortcuts**, and **OAuth & Permissions** settings.
 
 ### Optional local services
 

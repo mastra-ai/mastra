@@ -29,6 +29,6 @@ describe('Connected accounts deep link (/settings/connected-accounts)', () => {
 
     const router = renderAt('/settings/connected-accounts');
 
-    await waitFor(() => expect(router.state.location.pathname).toBe('/factories/fp-1/settings/connected-accounts'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/factories/fp-1/settings/connections'));
   });
 });

@@ -597,8 +597,8 @@ describe('View Session card link', () => {
   });
 });
 
-describe('Slack thread work-item intake', () => {
-  function makeIntakeDeps({
+describe('Slack thread work-item creation', () => {
+  function makeWorkItemDeps({
     link = { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' } as {
       orgId?: string;
       userId: string;
@@ -620,7 +620,7 @@ describe('Slack thread work-item intake', () => {
     return { accountLinks, projects, mastra, workItems, upsert };
   }
 
-  function makeIntakeThread() {
+  function makeWorkItemThread() {
     const thread = makeThread();
     thread.id = 'slack:C-1:1700.42';
     thread.isSubscribed = vi.fn().mockResolvedValue(false);
@@ -630,9 +630,9 @@ describe('Slack thread work-item intake', () => {
 
   it('a routed DM creates an execute-stage work item bound to the Factory session', async () => {
     process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-    const deps = makeIntakeDeps();
+    const deps = makeWorkItemDeps();
     const handlers = createHandlers(deps as any);
-    const thread = makeIntakeThread();
+    const thread = makeWorkItemThread();
 
     await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
 
@@ -658,9 +658,9 @@ describe('Slack thread work-item intake', () => {
 
   it('a routed @-mention also creates an execute-stage work item (no per-origin split)', async () => {
     process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-    const deps = makeIntakeDeps();
+    const deps = makeWorkItemDeps();
     const handlers = createHandlers(deps as any);
-    const thread = makeIntakeThread();
+    const thread = makeWorkItemThread();
 
     await handlers.onMention!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
 
@@ -672,20 +672,20 @@ describe('Slack thread work-item intake', () => {
 
   it('upserts in preserve mode so a repeat message never resurrects a moved card', async () => {
     process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-    const deps = makeIntakeDeps();
+    const deps = makeWorkItemDeps();
     const handlers = createHandlers(deps as any);
-    const thread = makeIntakeThread();
+    const thread = makeWorkItemThread();
 
     await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
 
     expect(deps.upsert.mock.calls[0][0].reuseMode).toBe('preserve');
   });
 
-  it('a Factory with Slack intake disabled starts the session without creating a work item', async () => {
+  it('a Factory with Slack work-item creation disabled starts the session without creating a work item', async () => {
     process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-    const deps = makeIntakeDeps({ projects: makeProjects([{ id: 'fp-1', slackWorkItemsEnabled: false }]) });
+    const deps = makeWorkItemDeps({ projects: makeProjects([{ id: 'fp-1', slackWorkItemsEnabled: false }]) });
     const handlers = createHandlers(deps as any);
-    const thread = makeIntakeThread();
+    const thread = makeWorkItemThread();
     const defaultHandler = vi.fn();
 
     await handlers.onDirectMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(deps.mastra));
@@ -697,9 +697,9 @@ describe('Slack thread work-item intake', () => {
   it('an unrouted sender creates no work item', async () => {
     process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
     // No projects domain → gate passes without routing (gate.routed absent).
-    const { projects: _unused, ...deps } = makeIntakeDeps();
+    const deps = makeWorkItemDeps({ projects: null as any });
     const handlers = createHandlers(deps as any);
-    const thread = makeIntakeThread();
+    const thread = makeWorkItemThread();
 
     await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
 
@@ -708,9 +708,9 @@ describe('Slack thread work-item intake', () => {
 
   it('a routed follow-up (already subscribed) creates no work item', async () => {
     process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-    const deps = makeIntakeDeps();
+    const deps = makeWorkItemDeps();
     const handlers = createHandlers(deps as any);
-    const thread = makeIntakeThread();
+    const thread = makeWorkItemThread();
     thread.isSubscribed = vi.fn().mockResolvedValue(true);
 
     await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
@@ -720,9 +720,9 @@ describe('Slack thread work-item intake', () => {
 
   it('a chat-only (channel:) resourceId creates the item with no session binding', async () => {
     process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
-    const deps = makeIntakeDeps({ internalThread: { id: 'uuid-thread-1', resourceId: 'channel:slack:C-1:1700.42' } });
+    const deps = makeWorkItemDeps({ internalThread: { id: 'uuid-thread-1', resourceId: 'channel:slack:C-1:1700.42' } });
     const handlers = createHandlers(deps as any);
-    const thread = makeIntakeThread();
+    const thread = makeWorkItemThread();
 
     await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
 
@@ -736,9 +736,9 @@ describe('Slack thread work-item intake', () => {
     process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const upsert = vi.fn().mockRejectedValue(new Error('db down'));
-    const deps = makeIntakeDeps({ upsert });
+    const deps = makeWorkItemDeps({ upsert });
     const handlers = createHandlers(deps as any);
-    const thread = makeIntakeThread();
+    const thread = makeWorkItemThread();
 
     await expect(
       handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra)),

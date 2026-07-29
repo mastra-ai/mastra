@@ -41,21 +41,15 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
     ],
   },
   {
-    id: 'account',
-    label: 'Account',
-    items: [
-      {
-        id: 'connected-accounts',
-        label: SETTINGS_SECTION_LABELS['connected-accounts'],
-        icon: Cable,
-        searchText: 'connections connected accounts slack communication integrations',
-      },
-    ],
-  },
-  {
     id: 'sources',
     label: 'Sources',
     items: [
+      {
+        id: 'connections',
+        label: SETTINGS_SECTION_LABELS.connections,
+        icon: Cable,
+        searchText: 'connections connected accounts slack communication integrations',
+      },
       {
         id: 'repositories',
         label: SETTINGS_SECTION_LABELS.repositories,

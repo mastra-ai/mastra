@@ -33,7 +33,7 @@ if (!values.url || !values.name) {
 let baseUrl;
 try {
   const parsed = new URL(values.url);
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') throw new Error('unsupported protocol');
+  if (parsed.protocol !== 'https:') throw new Error('unsupported protocol');
   baseUrl = parsed.toString().replace(/\/$/, '');
 } catch {
   console.error(`Invalid --url: ${values.url}`);
@@ -64,6 +64,7 @@ const manifest = {
   oauth_config: {
     redirect_urls: [`${baseUrl}/connect/slack/oidc/callback`],
     scopes: {
+      user: ['openid', 'profile'],
       bot: [
         'chat:write',
         'chat:write.public',

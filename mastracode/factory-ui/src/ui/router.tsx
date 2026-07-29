@@ -103,7 +103,7 @@ function ConnectedAccountsRedirect() {
   // Empty list is bounced to /onboarding by OnboardingGuard before we render.
   if (!firstFactory) return null;
 
-  return <Navigate to={`/factories/${firstFactory.id}/settings/connected-accounts`} replace />;
+  return <Navigate to={`/factories/${firstFactory.id}/settings/connections`} replace />;
 }
 
 export function createAppRoutes(): RouteObject[] {
@@ -154,7 +154,7 @@ export function createAppRoutes(): RouteObject[] {
                   path: 'settings',
                   children: [
                     { index: true, element: <Navigate to="preferences" replace /> },
-                    { path: 'connected-accounts/slack', element: <SlackConnectionPage /> },
+                    { path: 'connections/slack', element: <SlackConnectionPage /> },
                     { path: ':section', element: <SettingsPage /> },
                   ],
                 },

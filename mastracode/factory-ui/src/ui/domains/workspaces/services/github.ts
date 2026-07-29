@@ -347,7 +347,10 @@ export async function updateFactorySlackWorkItems(
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ slackWorkItemsEnabled }),
   });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update Slack intake');
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
+    res,
+    'Failed to update Slack work-item setting',
+  );
   return project;
 }
 

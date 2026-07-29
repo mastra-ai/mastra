@@ -40,10 +40,10 @@ function mockFactories(slackWorkItemsEnabled = false) {
 function renderPage(slackWorkItemsEnabled = false) {
   mockFactories(slackWorkItemsEnabled);
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/factories/fp-1/settings/connected-accounts/slack']}>
+    <MemoryRouter initialEntries={['/factories/fp-1/settings/connections/slack']}>
       <MainSidebarProvider storageKey="slack-connection-page-test" mobileBreakpoint={0}>
         <Routes>
-          <Route path="/factories/:factoryId/settings/connected-accounts/slack" element={<SlackConnectionPage />} />
+          <Route path="/factories/:factoryId/settings/connections/slack" element={<SlackConnectionPage />} />
         </Routes>
       </MainSidebarProvider>
     </MemoryRouter>,
@@ -59,7 +59,28 @@ describe('SlackConnectionPage', () => {
     expect(await screen.findByText('Mastra (T06CB4A5FT9)')).toBeInTheDocument();
     expect(screen.getByText('Caleb Barnes (U095PUH0FKL)')).toBeInTheDocument();
     expect(screen.getByText(/July 29, 2026/)).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Default factory' })).toHaveTextContent('OM Game');
+    expect(screen.getByRole('combobox', { name: 'Default factory for Caleb Barnes' })).toHaveTextContent('OM Game');
+  });
+
+  it('given multiple linked accounts, when rendered, then it keeps every account configurable', async () => {
+    mockAccounts([
+      slackLink,
+      {
+        ...slackLink,
+        externalTeamId: 'T02SECOND',
+        externalUserId: 'U02SECOND',
+        externalTeamName: 'Second workspace',
+        externalUserName: 'Second user',
+        defaultFactoryProjectId: 'fp-2',
+      },
+    ]);
+
+    renderPage();
+
+    expect(await screen.findByRole('combobox', { name: 'Default factory for Caleb Barnes' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Default factory for Second user' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Disconnect Caleb Barnes' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Disconnect Second user' })).toBeInTheDocument();
   });
 
   it('given no linked account, when rendered, then it offers Slack authentication', async () => {
@@ -82,7 +103,7 @@ describe('SlackConnectionPage', () => {
     );
     const { client } = renderPage();
     const user = userEvent.setup();
-    const workItemSwitch = await screen.findByRole('switch', { name: 'Create work item for new Slack threads' });
+    const workItemSwitch = await screen.findByRole('switch', { name: 'Create work items for new Slack threads' });
     expect(workItemSwitch).not.toBeChecked();
 
     await user.click(workItemSwitch);
@@ -107,7 +128,7 @@ describe('SlackConnectionPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole('button', { name: 'Disconnect' }));
+    await user.click(await screen.findByRole('button', { name: 'Disconnect Caleb Barnes' }));
 
     await waitFor(() =>
       expect(deleteBody).toEqual({
@@ -133,7 +154,7 @@ describe('SlackConnectionPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole('combobox', { name: 'Default factory' }));
+    await user.click(await screen.findByRole('combobox', { name: 'Default factory for Caleb Barnes' }));
     await user.click(await screen.findByRole('option', { name: 'Mastra OSS' }));
 
     await waitFor(() =>

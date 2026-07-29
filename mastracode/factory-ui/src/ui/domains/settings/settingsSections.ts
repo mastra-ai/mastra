@@ -1,7 +1,7 @@
 export type SettingsSection =
   | 'preferences'
   | 'factory'
-  | 'connected-accounts'
+  | 'connections'
   | 'repositories'
   | 'intake'
   | 'models'
@@ -10,7 +10,7 @@ export type SettingsSection =
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   preferences: 'Preferences',
   factory: 'Factory',
-  'connected-accounts': 'Connections',
+  connections: 'Connections',
   repositories: 'Repositories',
   intake: 'Work Intake',
   models: 'Models',

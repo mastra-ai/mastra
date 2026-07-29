@@ -1,5 +1,5 @@
 /**
- * BDD coverage for the factory-scoped connected-accounts overview.
+ * BDD coverage for the factory-scoped connections overview.
  * Drives the real channel-accounts service and React Query stack through MSW.
  */
 import { screen } from '@testing-library/react';
@@ -27,9 +27,9 @@ function mockAccounts(accounts: ConnectedChannelAccount[], canConnect = false) {
 
 function renderSection() {
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/factories/fp-1/settings/connected-accounts']}>
+    <MemoryRouter initialEntries={['/factories/fp-1/settings/connections']}>
       <Routes>
-        <Route path="/factories/:factoryId/settings/connected-accounts" element={<ConnectedAccountsSection />} />
+        <Route path="/factories/:factoryId/settings/connections" element={<ConnectedAccountsSection />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -44,9 +44,17 @@ describe('ConnectedAccountsSection', () => {
     expect(await screen.findByText('Connected')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Configure/ })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/connected-accounts/slack',
+      '/factories/fp-1/settings/connections/slack',
     );
     expect(screen.queryByRole('button', { name: /Connect/ })).not.toBeInTheDocument();
+  });
+
+  it('given multiple linked Slack accounts, when rendered, then it shows the connected account count', async () => {
+    mockAccounts([slackLink, { ...slackLink, externalTeamId: 'T02SECOND', externalUserId: 'U02SECOND' }]);
+
+    renderSection();
+
+    expect(await screen.findByText('2 connected')).toBeInTheDocument();
   });
 
   it('given no link and OIDC configured, when rendered, then it offers Slack connection', async () => {

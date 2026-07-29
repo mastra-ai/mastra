@@ -514,7 +514,7 @@ async function gateDispatch(
  * The session id / branch / threadId and the workspace deep-link are resolved
  * by the caller (which already looked up the internal thread), so this helper
  * just shapes and writes. Best-effort: the run is already dispatched, so a
- * failure logs instead of throwing — intake must never abort a Slack run.
+ * failure logs instead of throwing — work-item creation must never abort a Slack run.
  */
 export async function upsertThreadWorkItem({
   workItems,
@@ -562,7 +562,7 @@ export async function upsertThreadWorkItem({
       },
     });
   } catch (error) {
-    console.warn('[slack] work-item intake failed for thread', thread.id, error);
+    console.warn('[slack] work-item creation failed for thread', thread.id, error);
   }
 }
 
@@ -589,7 +589,7 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
     if (!isNewSession) return;
 
     // The internal-thread lookup and deep-link are needed by BOTH the
-    // announcement card AND work-item intake, so they run BEFORE the
+    // announcement card AND work-item creation, so they run BEFORE the
     // card-only `MASTRACODE_PUBLIC_URL` gate — a deployment without a public
     // origin should still create board cards, just without a clickable link.
     const internalThread = await findInternalThread(ctx.mastra, thread);

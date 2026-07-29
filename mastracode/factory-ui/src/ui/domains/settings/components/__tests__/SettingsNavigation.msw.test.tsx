@@ -28,13 +28,11 @@ describe('SettingsNavigation', () => {
     renderNavigation();
     expect(screen.getByRole('link', { name: 'Factory' })).toHaveAttribute('href', '/factories/fp-1/settings/factory');
 
-    const account = screen.getByRole('region', { name: 'Account' });
-    expect(within(account).getByRole('link', { name: 'Connections' })).toHaveAttribute(
-      'href',
-      '/factories/fp-1/settings/connected-accounts',
-    );
-
     const sources = screen.getByRole('region', { name: 'Sources' });
+    expect(within(sources).getByRole('link', { name: 'Connections' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/connections',
+    );
     expect(within(sources).getByRole('link', { name: 'Repositories' })).toHaveAttribute(
       'href',
       '/factories/fp-1/settings/repositories',
