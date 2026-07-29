@@ -362,6 +362,25 @@ describe('RequestContext', () => {
       expect(json).toEqual({ serializable: 'value' });
       expect(json).not.toHaveProperty('cyclicTyped');
     });
+
+    it('should skip typed arrays whose own enumerable __proto__ property leads back into a cycle', () => {
+      // An own enumerable `__proto__` data property is serialized by
+      // JSON.stringify; a plain-object surrogate would swallow it through
+      // the inherited setter and let the probe pass a value that a real
+      // serialization rejects.
+      const typed = new Uint8Array([1]);
+      const holder: Record<string, unknown> = { typed };
+      Object.defineProperty(typed, '__proto__', { enumerable: true, value: holder });
+
+      const ctx = new RequestContext();
+      ctx.set('protoCyclicTyped', typed);
+      ctx.set('serializable', 'value');
+
+      const json = ctx.toJSON();
+
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('protoCyclicTyped');
+    });
   });
 
   describe('serializeForSpan', () => {

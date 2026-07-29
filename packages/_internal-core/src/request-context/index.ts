@@ -330,8 +330,10 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
           // must still fail the probe the way it fails a real serialization):
           // stand in a surrogate carrying only those properties. Reading a
           // throwing getter here propagates into the catch below, exactly as
-          // the engine's own property read would have.
-          const surrogate: Record<string, unknown> = {};
+          // the engine's own property read would have. Null prototype so an
+          // own enumerable `__proto__` key copies as data instead of hitting
+          // the inherited setter.
+          const surrogate: Record<string, unknown> = Object.create(null);
           for (const key of Object.keys(probed)) {
             const index = Number(key);
             if (!(Number.isInteger(index) && index >= 0 && String(index) === key)) {
