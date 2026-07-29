@@ -16,7 +16,9 @@ import {
   GitCompareArrows,
   GitPullRequest,
   Link2,
+  MessageSquare,
   MessagesSquare,
+  Play,
   Plus,
   Stethoscope,
   Trash2,
@@ -647,6 +649,32 @@ function BoardContent({
     [workspaces.data],
   );
 
+  // A card click refetches worktrees and items before it can decide whether to
+  // open an existing thread or mint a new session. That wait is several round
+  // trips long and the run mutation isn't pending yet, so without this the card
+  // sits completely silent after the click.
+  const [preparingItems, setPreparingItems] = useState<Record<string, string>>({});
+  // Guarded by a ref, not by preparingItems: two clicks landing in the same
+  // render both read the pre-click state, so the state value can't reject the
+  // second one. Preparing is several round trips long and each pass mints its
+  // own kickoffKey, so the server's start lock keys differently per click and
+  // won't collapse them either.
+  const preparingRef = useRef<Set<string>>(new Set());
+  const beginPreparingItem = (itemId: string, label: string) => {
+    if (preparingRef.current.has(itemId)) return false;
+    preparingRef.current.add(itemId);
+    setPreparingItems(current => ({ ...current, [itemId]: label }));
+    return true;
+  };
+  const clearPreparingItem = (itemId: string) => {
+    preparingRef.current.delete(itemId);
+    setPreparingItems(current => {
+      if (!(itemId in current)) return current;
+      const { [itemId]: _cleared, ...rest } = current;
+      return rest;
+    });
+  };
+
   const openThread = async (session: WorkItemSessionRef) => {
     navigate(`/factories/${factory.id}/workspaces/${session.sessionId}/threads/${session.threadId}`);
   };
@@ -663,32 +691,46 @@ function BoardContent({
   };
 
   const openOrCreateSession = async (item: WorkItem, destinationStage: string) => {
-    const refreshed = await refreshItemAndWorktrees(item.id);
-    if (!refreshed) return;
-    const liveSessions = Object.fromEntries(
-      Object.entries(refreshed.item.sessions).filter(([, session]) => refreshed.paths.has(session.sessionId)),
-    );
-    const existingSession = itemThreadSession(liveSessions);
-    if (existingSession) {
-      await openThread(existingSession);
-      return;
+    if (!beginPreparingItem(item.id, 'Preparing session…')) return;
+    try {
+      const refreshed = await refreshItemAndWorktrees(item.id);
+      if (!refreshed) return;
+      const liveSessions = Object.fromEntries(
+        Object.entries(refreshed.item.sessions).filter(([, session]) => refreshed.paths.has(session.sessionId)),
+      );
+      const existingSession = itemThreadSession(liveSessions);
+      if (existingSession) {
+        await openThread(existingSession);
+        return;
+      }
+      const spec = itemSessionSpec(refreshed.item);
+      start.mutate({
+        branch: spec.branch,
+        threadTitle: spec.threadTitle,
+        workItem: {
+          id: refreshed.item.id,
+          role: 'chat',
+          stages: [destinationStage],
+          source: refreshed.item.source,
+          sourceKey: refreshed.item.sourceKey,
+          title: refreshed.item.title,
+        },
+      });
+    } finally {
+      clearPreparingItem(item.id);
     }
-    const spec = itemSessionSpec(refreshed.item);
-    start.mutate({
-      branch: spec.branch,
-      threadTitle: spec.threadTitle,
-      workItem: {
-        id: refreshed.item.id,
-        role: 'chat',
-        stages: [destinationStage],
-        source: refreshed.item.source,
-        sourceKey: refreshed.item.sourceKey,
-        title: refreshed.item.title,
-      },
-    });
   };
 
   const openOrStartRun = async (item: WorkItem, role: RunAction['role']) => {
+    if (!beginPreparingItem(item.id, 'Preparing run…')) return;
+    try {
+      await startRunForItem(item, role);
+    } finally {
+      clearPreparingItem(item.id);
+    }
+  };
+
+  const startRunForItem = async (item: WorkItem, role: RunAction['role']) => {
     const refreshed = await refreshItemAndWorktrees(item.id);
     if (!refreshed) return;
     const existingSession = refreshed.item.sessions[role];
@@ -983,6 +1025,7 @@ function BoardContent({
                     // for a perfectly live thread. Hold run/create actions until
                     // liveness is known.
                     runDisabled={!runEnabled || !workspaces.isSuccess}
+                    preparing={preparingItems[item.id]}
                     evaluatingStage={evaluatingStages.get(item.id)}
                     transitionReason={transitionReasons[item.id]}
                     decision={decisionByItem.get(item.id)}
@@ -1448,6 +1491,7 @@ function WorkItemCard({
   allItems,
   liveWorktreePaths,
   runDisabled,
+  preparing,
   evaluatingStage,
   transitionReason,
   decision,
@@ -1465,6 +1509,8 @@ function WorkItemCard({
   /** Worktrees that still exist; session refs outside this set are stale. */
   liveWorktreePaths: ReadonlySet<string>;
   runDisabled: boolean;
+  /** Status text while the click is resolving, before the run mutation starts. */
+  preparing?: string;
   /** Destination stage of an in-flight transition; undefined = not moving. */
   evaluatingStage?: string;
   transitionReason?: string;
@@ -1484,7 +1530,7 @@ function WorkItemCard({
     className: 'text-icon3',
   };
   const evaluating = evaluatingStage !== undefined;
-  const runPending = pendingRunRoles.size > 0;
+  const runPending = pendingRunRoles.size > 0 || preparing !== undefined;
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const runSpec = itemRunSpec(item);
   // Session refs whose worktree was deleted are stale: their threads went with
@@ -1519,7 +1565,7 @@ function WorkItemCard({
           <Link
             to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
             draggable={false}
-            aria-label={`Open thread for ${item.title}`}
+            aria-label={`Open session for ${item.title}`}
             className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
           />
         ) : (
@@ -1529,12 +1575,12 @@ function WorkItemCard({
           <button
             type="button"
             draggable={false}
-            disabled={runDisabled}
-            aria-busy={pendingRunRoles.size > 0 || undefined}
+            disabled={runDisabled || runPending}
+            aria-busy={runPending || undefined}
             aria-label={
               runSpec !== null && runActions[0] !== undefined
                 ? `${runActions[0].label} ${item.title}`
-                : `Create thread for ${item.title}`
+                : `Start session for ${item.title}`
             }
             className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
             onClick={() =>
@@ -1648,6 +1694,12 @@ function WorkItemCard({
             {evaluatingStage === 'done' ? 'Marking done…' : `Moving to ${itemStageLabel(item, evaluatingStage)}…`}
           </span>
         )}
+        {pendingRunRoles.size === 0 && preparing !== undefined && (
+          <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
+            <Spinner size="sm" aria-hidden className="size-3" />
+            {preparing}
+          </span>
+        )}
         {[...pendingRunRoles].map(([role, phase]) => (
           <span key={role} role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
             <Spinner size="sm" aria-hidden className="size-3" />
@@ -1655,6 +1707,24 @@ function WorkItemCard({
             {phase !== undefined ? RUN_PHASE_LABELS[phase] : 'starting…'}
           </span>
         ))}
+        {!evaluating && !runPending && (
+          <span
+            aria-hidden
+            className="text-ui-xs text-icon3 group-hover:text-icon5 group-focus-within:text-icon5 flex items-center gap-1.5 transition-colors motion-reduce:transition-none"
+          >
+            {threadSession !== null ? (
+              <>
+                <MessageSquare size={11} aria-hidden />
+                Open session
+              </>
+            ) : (
+              <>
+                <Play size={11} aria-hidden />
+                {runSpec !== null && runActions[0] !== undefined ? runActions[0].label : 'Start session'}
+              </>
+            )}
+          </span>
+        )}
         {!evaluating && decision !== undefined && (
           <div className="flex items-center justify-between gap-2">
             <span
