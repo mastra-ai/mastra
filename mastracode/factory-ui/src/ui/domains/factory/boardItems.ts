@@ -1,0 +1,76 @@
+import { relativeTime } from '../../../lib/date/relativeTime';
+import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
+
+export const AUTO_TRIAGED_LABEL = 'auto-triaged';
+export const NEEDS_APPROVAL_LABEL = 'needs-approval';
+export const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
+
+export const SOURCE_LABELS: Record<WorkItemSource, string> = {
+  'github-issue': 'Issue',
+  'github-pr': 'PR Review',
+  'linear-issue': 'Linear',
+  manual: 'Manual',
+};
+
+export function hasLabel(labels: readonly string[], label: string): boolean {
+  return labels.some(item => item.toLowerCase() === label);
+}
+
+export function metadataLabels(metadata: Record<string, unknown>): string[] {
+  return Array.isArray(metadata.labels)
+    ? metadata.labels.filter((label): label is string => typeof label === 'string')
+    : [];
+}
+
+export function githubNumberForItem(item: WorkItem): number | undefined {
+  const metadataKey = item.source === 'github-issue' ? 'githubIssueNumber' : 'githubPullRequestNumber';
+  const itemNumber = item.metadata[metadataKey] ?? item.metadata.number;
+  if (typeof itemNumber !== 'number' || !Number.isInteger(itemNumber) || itemNumber <= 0) return;
+  return itemNumber;
+}
+
+export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
+  const itemNumber = githubNumberForItem(item);
+  if (itemNumber === undefined) return;
+  if (item.source === 'github-issue') return `github-issue:${itemNumber}`;
+  if (item.source === 'github-pr') return `github-pr:${itemNumber}`;
+  return;
+}
+
+/** Aria label for the icon-only external link next to a card title. */
+export function externalLinkLabel(source: WorkItemSource): string {
+  if (source === 'linear-issue') return 'Open in Linear';
+  if (source === 'manual') return 'Open link';
+  return 'Open in GitHub';
+}
+
+export function workItemMeta(item: WorkItem): string {
+  const author = typeof item.metadata.author === 'string' ? item.metadata.author : undefined;
+  const age = `added ${relativeTime(item.createdAt)}`;
+  const githubNumber = githubNumberForItem(item);
+  if (githubNumber !== undefined) return `#${githubNumber}${author ? ` · ${author}` : ''} · ${age}`;
+  if (item.source === 'linear-issue' && typeof item.metadata.identifier === 'string') {
+    return `${item.metadata.identifier}${author ? ` · ${author}` : ''} · ${age}`;
+  }
+  return `${SOURCE_LABELS[item.source]} · ${age}`;
+}
+
+/**
+ * The card's single conversation. A work item keeps one threadId for its whole
+ * lifecycle — every run reuses the worktree's thread — so the card title links
+ * to exactly one thread. Items filed while session scoping was broken may
+ * still carry divergent role refs; the last-filed ref wins (runs converge them
+ * back onto one thread the next time they file).
+ */
+export function itemThreadSession(sessions: Record<string, WorkItemSessionRef>): WorkItemSessionRef | null {
+  const refs = Object.values(sessions);
+  return refs.at(-1) ?? null;
+}
+
+/** Session refs whose worktree was deleted are stale: their thread went with it. */
+export function liveSessions(
+  sessions: Record<string, WorkItemSessionRef>,
+  liveWorktreePaths: ReadonlySet<string>,
+): Record<string, WorkItemSessionRef> {
+  return Object.fromEntries(Object.entries(sessions).filter(([, session]) => liveWorktreePaths.has(session.sessionId)));
+}
