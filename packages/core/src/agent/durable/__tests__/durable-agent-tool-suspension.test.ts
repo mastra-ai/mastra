@@ -376,7 +376,7 @@ describe('DurableAgent tool suspension', () => {
       expect(result.workflowInput.state.resourceId).toBe('user-456');
     });
 
-    it('does not flush messages or create a thread when suspending a readOnly run', async () => {
+    it('does not flush messages when suspending a readOnly run', async () => {
       const mockModel = createToolCallModel('askForConfirmation', { question: 'Proceed?' });
       const memory = new MockMemory();
 
