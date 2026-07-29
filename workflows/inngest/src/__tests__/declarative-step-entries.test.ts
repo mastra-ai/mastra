@@ -8,7 +8,7 @@
  * `.then(createStep(agent|tool))` path) without requiring a running Inngest dev
  * server.
  */
-import { Agent } from '@mastra/core/agent';
+import { Agent, TripWire } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { Inngest } from 'inngest';
@@ -101,5 +101,62 @@ describe('inngest declarative step entries', () => {
     parent.__setPubsubFactory(factory);
     expect(loopBody.__getPubsubFactory()).toBe(factory);
     expect(foreachBody.__getPubsubFactory()).toBe(factory);
+  });
+});
+
+describe('inngest step factories delegate to core entry executors', () => {
+  it('createStep(agent|tool) preserves __agentRef/__toolRef metadata for declarative conversion', () => {
+    // The builders (`then`/`parallel`/`branch`/`dowhile`/`dountil`/`foreach`)
+    // rely on this metadata to convert factory steps into declarative entries;
+    // losing it would silently fall back to opaque `type: 'step'` entries.
+    const agentStep = createStep(writer) as any;
+    expect(agentStep.component).toBe('AGENT');
+    expect(agentStep.__agentRef).toBe(writer);
+
+    const toolStep = createStep(doubleTool) as any;
+    expect(toolStep.component).toBe('TOOL');
+    expect(toolStep.__toolRef).toBe(doubleTool);
+  });
+
+  it('createStep(agent).execute aborts with TripWire on tripwire chunks (core executor semantics)', async () => {
+    // Pre-delegation, the inngest-local execute body had no tripwire handling:
+    // a tripwire chunk was forwarded and the step returned success. This pins
+    // that direct execution now shares core's `runAgentEntry`.
+    const trippingAgent = {
+      id: 'tripping-agent',
+      name: 'tripping-agent',
+      getDescription: () => 'always trips',
+      getModel: async () => ({ specificationVersion: 'v2' }),
+      generate: async () => ({ text: 'unused' }),
+      stream: async () => ({
+        text: Promise.resolve(''),
+        fullStream: (async function* () {
+          yield { type: 'text-delta', textDelta: 'partial' };
+          yield { type: 'tripwire', payload: { reason: 'output processor tripped' } };
+        })(),
+      }),
+    };
+
+    const step = createStep(trippingAgent as any);
+    const written: unknown[] = [];
+    const ctx = {
+      inputData: { prompt: 'hello' },
+      runId: 'run-1',
+      requestContext: {},
+      abortSignal: new AbortController().signal,
+      abort: () => {
+        throw new Error('abort() should not be called for tripwire');
+      },
+      writer: {
+        write: async (chunk: unknown) => {
+          written.push(chunk);
+        },
+      },
+    };
+
+    await expect((step as any).execute(ctx)).rejects.toThrowError(TripWire);
+    await expect((step as any).execute(ctx)).rejects.toThrow('output processor tripped');
+    // Chunks up to the tripwire are still forwarded to the step writer.
+    expect(written.some(c => (c as any).type === 'text-delta')).toBe(true);
   });
 });
