@@ -181,12 +181,26 @@ describe('mountFactoryAuth gate (enabled)', () => {
     mockAuthenticate.mockResolvedValue(null);
     const { app } = buildApp();
 
-    const res = await app.request('/api/agent-controllers/some-other-controller/channels/discord/webhook', {
+    const res = await app.request('/api/agent-controllers/some-other-controller/channels/slack/webhook', {
       method: 'POST',
       headers: { Accept: 'application/json' },
     });
     expect(res.status).toBe(200);
     expect(mockAuthenticate).not.toHaveBeenCalled();
+  });
+
+  it('does not extend the webhook pass to platforms that are not allowlisted', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    // The pass exists because the Slack adapter verifies request signatures. A
+    // platform that has not been vetted for that must not inherit it.
+    const res = await app.request('/api/agent-controllers/mastra-code/channels/discord/webhook', {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+    });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'unauthorized' });
   });
 
   it('does not bypass auth for non-POST channel webhook requests', async () => {

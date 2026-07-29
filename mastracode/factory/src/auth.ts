@@ -674,6 +674,13 @@ export function buildAuthRoutes(provider: IMastraAuthProvider, options: { public
 }
 
 /**
+ * Channel webhook paths whose adapter verifies the platform's request signature,
+ * making the delivery self-authenticating. Add a platform here only once its
+ * adapter rejects unsigned or mis-signed requests.
+ */
+const SIGNATURE_VERIFYING_CHANNEL_WEBHOOK = /^\/api\/agent-controllers\/[^/]+\/channels\/slack\/webhook$/;
+
+/**
  * Build the auth gate as a plain Hono middleware handler `(c, next)`. Protects
  * everything that is not a public `/auth/*` route: authenticated requests stash
  * the user on the context and continue; unauthenticated navigations redirect to
@@ -689,13 +696,17 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     if (c.req.method === 'POST' && path === '/web/github/webhook') {
       return next();
     }
-    // Inbound chat-channel webhooks (Slack events, slash commands) carry no user
-    // session: they authenticate by platform signature (the adapter verifies the
-    // request against its signing secret) and the routes themselves declare
-    // `requiresAuth: false`. This gate matches on paths rather than reading that
-    // route metadata, so the channel webhook path needs an explicit pass — the
-    // controller id is whatever the host registered, so match the shape.
-    if (c.req.method === 'POST' && /^\/api\/agent-controllers\/[^/]+\/channels\/[^/]+\/webhook$/.test(path)) {
+    // Inbound chat-channel webhooks (Slack events) carry no user session: they
+    // authenticate by platform signature, the adapter verifying the request
+    // against its signing secret. The routes declare `requiresAuth: false`, but
+    // this gate is `use()` middleware — it runs before route matching, so that
+    // metadata is not readable here and the path needs an explicit pass.
+    //
+    // The platform is allowlisted rather than matched as a wildcard: a pass
+    // keyed on path shape alone would silently extend to any future adapter,
+    // including one that does not verify signatures. Controller id stays a
+    // wildcard because it is whatever the host registered.
+    if (c.req.method === 'POST' && SIGNATURE_VERIFYING_CHANNEL_WEBHOOK.test(path)) {
       return next();
     }
     // The Slack account-linking deep link and the Sign-in-with-Slack OIDC

@@ -41,6 +41,8 @@ const SLACK_AUTHORIZE_URL = 'https://slack.com/openid/connect/authorize';
 const SLACK_TOKEN_URL = 'https://slack.com/api/openid.connect.token';
 const OIDC_CALLBACK_PATH = '/connect/slack/oidc/callback';
 const SLACK_TOKEN_TIMEOUT_MS = 10_000;
+/** Matches the signer's own `state` lifetime — past it, `verify` rejects anyway. */
+const STATE_REPLAY_WINDOW_MS = 10 * 60 * 1000;
 
 /**
  * Decode a JWT's payload WITHOUT signature verification. Safe here because the
@@ -83,6 +85,24 @@ export function createSlackConnectRoutes(deps: {
   const { auth, accountLinks, tenantStateSigner, oidc, projects } = deps;
   const oidcEnabled = Boolean(oidc && tenantStateSigner);
   const uiOrigin = oidc?.uiOrigin?.replace(/\/$/, '') ?? '';
+
+  // A signed `state` stays valid for its whole 10-minute window, so on its own
+  // it authorizes the binding repeatedly: anyone who captures a callback URL
+  // can re-run the exchange with their own fresh Slack `code` and bind their
+  // Slack account to the tenant that started the flow. Burning the nonce makes
+  // the state single-use. Scope note: this is per-process, so it does not stop
+  // a replay routed to a different replica — narrowing that further needs
+  // shared storage, which is out of proportion to a 10-minute window here.
+  const consumedNonces = new Map<string, number>();
+  const consumeNonce = (nonce: string): boolean => {
+    const now = Date.now();
+    for (const [seen, expiresAt] of consumedNonces) {
+      if (expiresAt <= now) consumedNonces.delete(seen);
+    }
+    if (consumedNonces.has(nonce)) return false;
+    consumedNonces.set(nonce, now + STATE_REPLAY_WINDOW_MS);
+    return true;
+  };
 
   // mc-web can resolve a different hono version than @mastra/factory, so the
   // registerApiRoute handler `Context` and the factory `RouteAuth` `Context`
@@ -143,6 +163,9 @@ export function createSlackConnectRoutes(deps: {
         const tenant = tenantStateSigner!.verify(c.req.query('state'));
         const code = c.req.query('code');
         if (!tenant || !code) return c.redirect(`${uiOrigin}/?slack=error`);
+        // Burn the state before spending the code, not after saving: a replay
+        // must be refused even if the first attempt fails partway through.
+        if (!consumeNonce(tenant.nonce)) return c.redirect(`${uiOrigin}/?slack=error`);
 
         // Bound the exchange: without a deadline a slow token endpoint parks the
         // request until the platform's own timeout, and this route is reachable

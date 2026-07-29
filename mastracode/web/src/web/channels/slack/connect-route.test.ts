@@ -325,10 +325,12 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     expect(target.searchParams.get('scope')).toBe('openid profile');
     expect(target.searchParams.get('client_id')).toBe('client-1');
     expect(target.searchParams.get('redirect_uri')).toBe('https://tunnel.example/connect/slack/oidc/callback');
-    // The state round-trips the initiating tenant.
+    // The state round-trips the initiating tenant, plus the nonce the callback
+    // burns to keep the binding single-use.
     expect(tenantSigner.verify(target.searchParams.get('state') ?? undefined)).toEqual({
       orgId: 'org-9',
       userId: 'user-9',
+      nonce: expect.stringMatching(/^[0-9a-f]{16}$/),
     });
   });
 
@@ -456,6 +458,26 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
 
     expect(saveAccountLink).not.toHaveBeenCalled();
     expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=error');
+  });
+
+  it('callback refuses to bind twice off one signed state', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, id_token: makeIdToken(validClaims) }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { routes, saveAccountLink } = oidcRoutes();
+    const handler = getHandler(routes, 'GET', '/connect/slack/oidc/callback');
+    // One state, captured and replayed — the second run carries an attacker's
+    // own fresh code and must not bind anything to the initiating tenant.
+    const state = tenantSigner.sign('org-9', 'user-9');
+
+    await handler(fakeCtx(state, undefined, { code: 'code-1' }));
+    const replay = fakeCtx(state, undefined, { code: 'code-2' });
+    await handler(replay);
+
+    expect(saveAccountLink).toHaveBeenCalledTimes(1);
+    expect(replay.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=error');
   });
 
   it('callback gives the token exchange a deadline and fails closed when it is missed', async () => {
