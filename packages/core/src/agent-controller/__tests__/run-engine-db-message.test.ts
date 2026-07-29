@@ -310,6 +310,59 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     expect(callPart.toolInvocation).not.toHaveProperty('result');
   });
 
+  it('Given an emitted snapshot, When later chunks mutate reasoning and metadata in place, Then the snapshot is unchanged', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'reasoning-start', payload: { id: 'r1' } }), ctx);
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'reasoning-delta', payload: { id: 'r1', text: 'first' } }),
+      ctx,
+    );
+    const snapshot = lastMessageEvent(events);
+
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'reasoning-delta', payload: { id: 'r1', text: ' second' } }),
+      ctx,
+    );
+    await engine.processStreamChunk(state, chunk({ type: 'data-user-message', data: { id: 'sig-1' } }), ctx);
+
+    expect(snapshot.content.parts).toEqual([
+      { type: 'reasoning', reasoning: 'first', details: [{ type: 'text', text: 'first' }] },
+    ]);
+    expect(snapshot.content.metadata?.stopReason).toBeUndefined();
+  });
+
+  it('Given consecutive snapshots, When emitted, Then they share unmutated payloads instead of deep-cloning them', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+    const args = { path: 'a.ts' };
+
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'read', args } }),
+      ctx,
+    );
+    const first = lastMessageEvent(events);
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'hi' } }), ctx);
+    const second = lastMessageEvent(events);
+
+    const firstTool = first.content.parts.find(part => part.type === 'tool-invocation');
+    const secondTool = second.content.parts.find(part => part.type === 'tool-invocation');
+    if (firstTool?.type !== 'tool-invocation' || secondTool?.type !== 'tool-invocation') {
+      throw new Error('missing tool invocation parts');
+    }
+    expect(secondTool).not.toBe(firstTool);
+    expect(secondTool.toolInvocation).not.toBe(firstTool.toolInvocation);
+    expect(secondTool.toolInvocation.args).toBe(firstTool.toolInvocation.args);
+    expect(secondTool.toolInvocation.args).toBe(args);
+  });
+
   it('Given a step-start carrying the response message id, When the turn streams, Then emitted messages adopt that id', async () => {
     const { engine, events } = createHarness();
     const state = engine.createStreamState();

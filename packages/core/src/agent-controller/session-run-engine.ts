@@ -297,19 +297,33 @@ export class SessionRunEngine {
   }
 
   /**
-   * Snapshot a message for emission. The engine mutates parts in place
-   * (text/reasoning deltas, tool-invocation upgrades) and `setStopReason` /
-   * `setErrorMessage` mutate `content.metadata`, so emitted snapshots must
-   * deep-clone the content or later mutations rewrite earlier snapshots.
+   * Snapshot a message for emission. The engine mutates the current message in
+   * place, but only at three depths: `content.parts` (push), part properties
+   * (text/reasoning deltas, `providerMetadata`, `Object.assign` on
+   * `toolInvocation`), and `content.metadata` keys (`setStopReason` /
+   * `setErrorMessage`). Everything deeper — part text, tool args/results,
+   * provider metadata values — is only ever *replaced* by reference, never
+   * mutated, so copying those three levels isolates earlier snapshots from
+   * later mutations while sharing the underlying immutable payloads.
    *
-   * With no subscribers there is no earlier snapshot to protect, and the only
-   * remaining consumer is the display state, which already aliases the live
-   * message on `message_end`. Skipping the clone there drops a full
-   * `structuredClone` of the message per streamed delta.
+   * Do NOT deep-clone here (e.g. `structuredClone`): this runs on every stream
+   * delta, so cloning the full accumulated content — including embedded tool
+   * results — makes allocation quadratic in message size. With megabyte tool
+   * results that exhausts the V8 heap when subscribers retain snapshots.
    */
   private cloneMessage(message: MastraDBMessage): MastraDBMessage {
     if (!this.#session.hasListeners()) return message;
-    return { ...message, content: structuredClone(message.content) };
+    const content = message.content;
+    return {
+      ...message,
+      content: {
+        ...content,
+        ...(content.metadata ? { metadata: { ...content.metadata } } : {}),
+        parts: content.parts.map(part =>
+          part.type === 'tool-invocation' ? { ...part, toolInvocation: { ...part.toolInvocation } } : { ...part },
+        ),
+      },
+    };
   }
 
   private setStopReason(message: MastraDBMessage, stopReason: string, force = false): void {
