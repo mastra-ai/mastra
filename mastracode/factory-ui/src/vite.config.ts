@@ -26,12 +26,6 @@ const fsAllow = [searchForWorkspaceRoot(here), monaSansPackageRoot];
  */
 const apiTarget = process.env.MASTRACODE_API_TARGET ?? 'http://localhost:4111';
 const uiPort = Number(process.env.MASTRACODE_UI_PORT ?? 5173);
-// Bind the dev server to IPv4 loopback explicitly. Vite's default `localhost`
-// bind resolves to `::1` (IPv6) only on modern macOS/Node, which leaves the UI
-// unreachable over `127.0.0.1` — a cloudflared tunnel pointed at
-// `http://127.0.0.1:5173` gets connection-refused. Overridable so the dev
-// runner can expose the server on all interfaces when needed.
-const uiHost = process.env.MASTRACODE_UI_HOST ?? '127.0.0.1';
 
 /**
  * Dev-only injection of `window.__MASTRACODE_CONFIG__` into index.html.
@@ -79,6 +73,13 @@ export default defineConfig(({ mode }) => {
   const channelsPublicUrl = env.MASTRACODE_CHANNELS_PUBLIC_URL;
   const allowedHosts = publicUrl ? [new URL(publicUrl).host] : [];
   if (channelsPublicUrl) allowedHosts.push(new URL(channelsPublicUrl).host);
+  // Bind the dev server to IPv4 loopback explicitly. Vite's default `localhost`
+  // bind resolves to `::1` (IPv6) only on modern macOS/Node, which leaves the UI
+  // unreachable over `127.0.0.1` — a cloudflared tunnel pointed at
+  // `http://127.0.0.1:5173` gets connection-refused. Read from the loaded env
+  // (not bare `process.env`) so a `.env` override is honoured like the URLs
+  // above; the dev runner can point it at all interfaces when needed.
+  const uiHost = env.MASTRACODE_UI_HOST || '127.0.0.1';
 
   return {
     root: resolve(here, 'ui'),

@@ -39,8 +39,9 @@ export interface SlackIntegrationConfig {
   /** Bot token used to post replies and ephemeral cards. */
   botToken?: string;
   /**
-   * OAuth client credentials. Present → the web-initiated "Sign in with Slack"
-   * (OIDC) connect flow is enabled; absent → linking is deep-link only.
+   * OAuth client credentials. Required for account linking: "Sign in with
+   * Slack" (OIDC) is the only flow that writes a link, so without these the
+   * settings surface reports `canConnect: false` and no sender can link.
    */
   clientId?: string;
   clientSecret?: string;
@@ -62,8 +63,9 @@ export interface SlackIntegrationConfig {
 export class SlackIntegration implements FactoryIntegration {
   readonly id = 'slack';
   /**
-   * The account-link deep link carries a signed `state`, so a replica that
-   * didn't sign it must still be able to verify it.
+   * The OIDC connect flow round-trips a signed `state` through Slack, so the
+   * replica handling the callback must be able to verify a state a different
+   * replica signed.
    */
   readonly requiresStableStateSigner = true;
 

@@ -99,10 +99,10 @@ export function createSlackConnectRoutes(deps: {
       requiresAuth: false,
       handler: async c => c.redirect(`${uiOrigin}/settings/connected-accounts`),
     }),
-    // Web-initiated connect: "Sign in with Slack" (OIDC). Unlike the deep-link
-    // route above (which trusts the bot-signed Slack identity), this proves the
-    // signed-in web user actually CONTROLS the Slack account: Slack itself
-    // asserts the (team, user) pair in the id_token.
+    // Web-initiated connect: "Sign in with Slack" (OIDC). The only route that
+    // writes a link, because it is the only one that proves the signed-in web
+    // user actually CONTROLS the Slack account: Slack itself asserts the
+    // (team, user) pair in the id_token.
     registerApiRoute('/connect/slack/oidc/start', {
       method: 'GET',
       requiresAuth: false,

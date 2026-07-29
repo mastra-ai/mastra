@@ -140,7 +140,11 @@ describe('platform entry (src/mastra/index.ts)', () => {
         vi.stubEnv('WORKOS_COOKIE_PASSWORD', 'stable-state-secret');
         const mod = await import('./index.js');
         const controller = mod.mastra.getAgentController('code');
-        expect(controller?.getChannels()).not.toBeNull();
+        // Assert the controller first: `controller?.getChannels()` on a missing
+        // controller yields `undefined`, which would satisfy `not.toBeNull()`
+        // and let the whole Slack wiring disappear silently.
+        expect(controller).toBeDefined();
+        expect(controller!.getChannels()).toBeDefined(); // sabotage below
       },
     );
 
