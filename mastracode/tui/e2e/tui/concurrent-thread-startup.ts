@@ -48,8 +48,8 @@ VALUES (${quoteSql(LOCKED_THREAD_ID)}, ${quoteSql(RESOURCE_ID)}, ${quoteSql('Act
     }
   },
   async run({ terminal, runtime }) {
-    runtime.startLiveOutput(terminal);
     try {
+      runtime.startLiveOutput(terminal);
       await runtime.waitForScreenText(/Resource ID:/i, terminal);
       terminal.submit('/threads');
       await runtime.waitForScreenText(/Active in another terminal/i, terminal);
