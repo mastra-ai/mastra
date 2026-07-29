@@ -287,6 +287,12 @@ describe('getFactoryWorkspace', () => {
     expect(review).toContain('Existing review disposition');
     expect(review).toContain('confirmed major finding from an existing reviewer that remains unaddressed');
     expect(review).toContain('Approval is earned, not the default');
+    // Verdict calibration: severity rubric, the actionable-change test, borderline
+    // tie-break toward request changes, and no laundering findings into assumptions.
+    expect(review).toContain('What counts as blocking');
+    expect(review).toContain('any concrete change the author should make before merge, the verdict is request changes');
+    expect(review).toContain('When genuinely borderline, request changes');
+    expect(review).toContain('A confirmed finding may never be resolved by recording an assumption');
   });
 
   it('adds read-only Web Factory skills and keeps them authoritative over project shadows', async () => {
