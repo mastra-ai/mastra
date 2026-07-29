@@ -2,6 +2,7 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -13,6 +14,8 @@ import { IntakeSection } from '../IntakeSection';
 const CONFIG_URL = `${TEST_BASE_URL}/web/intake/config`;
 const LINEAR_STATUS_URL = `${TEST_BASE_URL}/web/linear/status`;
 const LINEAR_PROJECTS_URL = `${TEST_BASE_URL}/web/linear/projects`;
+const CHANNEL_ACCOUNTS_URL = `${TEST_BASE_URL}/web/channel-accounts`;
+const FACTORY_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
 
 function baseConfig(): IntakeConfig {
   return {
@@ -40,7 +43,7 @@ const linearProjects: LinearProject[] = [
 function seedGithubProject() {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'mastra' }] }),
+      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'mastra', slackWorkItemsEnabled: false }] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
       HttpResponse.json({
@@ -76,20 +79,79 @@ function useIntakeHandlers({
     }),
     http.get(LINEAR_STATUS_URL, () => HttpResponse.json(status)),
     http.get(LINEAR_PROJECTS_URL, () => HttpResponse.json({ projects: linearProjects })),
+    http.get(CHANNEL_ACCOUNTS_URL, () => HttpResponse.json({ accounts: [], canConnect: true })),
   );
   return saved;
 }
 
 function renderIntakeSection() {
   return renderWithProviders(
-    <>
-      <IntakeSection />
-      <Toaster position="bottom-right" />
-    </>,
+    <MemoryRouter initialEntries={['/factories/fp-1/settings/intake']}>
+      <Routes>
+        <Route
+          path="/factories/:factoryId/settings/intake"
+          element={
+            <>
+              <IntakeSection />
+              <Toaster position="bottom-right" />
+            </>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
   );
 }
 
 describe('IntakeSection', () => {
+  it('enables Slack work-item creation for the active Factory', async () => {
+    useIntakeHandlers();
+    let slackWorkItemsEnabled = false;
+    const patches: boolean[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'mastra', slackWorkItemsEnabled, repositories: [] }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+        HttpResponse.json({ connections: [] }),
+      ),
+      http.patch(FACTORY_URL, async ({ request }) => {
+        const input = (await request.json()) as { slackWorkItemsEnabled: boolean };
+        slackWorkItemsEnabled = input.slackWorkItemsEnabled;
+        patches.push(slackWorkItemsEnabled);
+        return HttpResponse.json({ project: { id: 'fp-1', name: 'mastra', slackWorkItemsEnabled } });
+      }),
+    );
+
+    const { client } = renderIntakeSection();
+    const slackSwitch = await screen.findByRole('switch', { name: 'Create work items for Slack sessions' });
+    expect(slackSwitch).not.toBeChecked();
+
+    await userEvent.click(slackSwitch);
+
+    await waitFor(() => expect(patches).toEqual([true]));
+    await waitFor(() => expect(client.isMutating()).toBe(0));
+  });
+
+  it('disables Slack intake when Slack is not configured on the server', async () => {
+    useIntakeHandlers();
+    server.use(
+      http.get(CHANNEL_ACCOUNTS_URL, () => HttpResponse.json({ accounts: [], canConnect: false })),
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({
+          projects: [{ id: 'fp-1', name: 'mastra', slackWorkItemsEnabled: false, repositories: [] }],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+        HttpResponse.json({ connections: [] }),
+      ),
+    );
+
+    renderIntakeSection();
+
+    expect(await screen.findByText('Slack is not configured on this server.')).toBeInTheDocument();
+    expect(await screen.findByRole('switch', { name: 'Create work items for Slack sessions' })).toBeDisabled();
+  });
+
   describe('given a config with both sources enabled', () => {
     it('renders the GitHub repository and Linear project pickers behind collapsible sections', async () => {
       seedGithubProject();

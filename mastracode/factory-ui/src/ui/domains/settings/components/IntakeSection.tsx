@@ -9,15 +9,18 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
+import { useSetFactorySlackWorkItemsMutation } from '../../../../hooks/useFactoryDefaultModel';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
 import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { connectLinear, isLinearReauthError } from '../../factory/services/linear';
 import type { LinearProject } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
-import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import { useFactoriesQuery, useFactoryQuery } from '../../../../hooks/useFactories';
 import { SettingsCard, SettingsRow } from './SettingsCard';
 import { SettingsSubsection } from './SettingsSubsection';
 
@@ -143,10 +146,14 @@ const INTAKE_INTRO =
   'Which sources feed issues into Intake, for your whole account. Code access is set under Repositories.';
 
 export function IntakeSection() {
+  const { factoryId } = useParams<{ factoryId: string }>();
   const { baseUrl } = useApiConfig();
   const configQuery = useIntakeConfigQuery();
   const saveMutation = useSaveIntakeConfigMutation();
   const factoriesQuery = useFactoriesQuery();
+  const factoryQuery = useFactoryQuery(factoryId);
+  const slackAccountsQuery = useChannelAccountsQuery();
+  const slackMutation = useSetFactorySlackWorkItemsMutation(factoryId);
   const linearStatusQuery = useLinearStatusQuery();
 
   const linearStatus = linearStatusQuery.data;
@@ -155,6 +162,10 @@ export function IntakeSection() {
 
   const config = configQuery.data;
   const linkedRepositories = (factoriesQuery.data ?? []).flatMap(factory => factory.repositories);
+  const slackConfigured = Boolean(
+    slackAccountsQuery.data?.canConnect ||
+    slackAccountsQuery.data?.accounts.some(account => account.platform === 'slack'),
+  );
 
   if (configQuery.isPending) {
     return (
@@ -182,117 +193,143 @@ export function IntakeSection() {
   const busy = saveMutation.isPending;
 
   return (
-    <SettingsSubsection title="Issue sources" description={INTAKE_INTRO}>
-      <SettingsCard>
-        <SettingsRow
-          label="GitHub issues"
-          hint="Open issues from the selected repositories. Pull requests always appear in Review."
-        >
-          <Switch
-            aria-label="Sync GitHub issues"
-            checked={config.github.enabled}
-            disabled={busy}
-            onCheckedChange={enabled => update({ ...config, github: { ...config.github, enabled } })}
-          />
-        </SettingsRow>
+    <>
+      <SettingsSubsection title="Issue sources" description={INTAKE_INTRO}>
+        <SettingsCard>
+          <SettingsRow
+            label="GitHub issues"
+            hint="Open issues from the selected repositories. Pull requests always appear in Review."
+          >
+            <Switch
+              aria-label="Sync GitHub issues"
+              checked={config.github.enabled}
+              disabled={busy}
+              onCheckedChange={enabled => update({ ...config, github: { ...config.github, enabled } })}
+            />
+          </SettingsRow>
 
-        {config.github.enabled && (
-          <div className="px-4">
-            {linkedRepositories.length === 0 ? (
-              <Txt as="p" variant="ui-sm" className="text-icon3 py-3">
-                No linked repositories yet — link a repository to a factory to add one.
-              </Txt>
-            ) : (
-              <SourcePickerGroup>
-                <SourcePickerSection
-                  label="Repositories"
-                  items={linkedRepositories.map(repository => ({ id: repository.slug, label: repository.slug }))}
-                  selectedIds={config.github.sourceIds}
-                  disabled={busy}
-                  pending={busy}
-                  onToggleItem={slug =>
-                    update({
-                      ...config,
-                      github: {
-                        ...config.github,
-                        sourceIds: toggleId(config.github.sourceIds, slug),
-                      },
-                    })
-                  }
-                />
-              </SourcePickerGroup>
-            )}
-          </div>
-        )}
-
-        <SettingsRow label="Linear issues" hint="Active issues from the selected projects.">
-          <Switch
-            aria-label="Sync Linear issues"
-            checked={config.linear.enabled}
-            disabled={busy || !linearConnected}
-            onCheckedChange={enabled => update({ ...config, linear: { ...config.linear, enabled } })}
-          />
-        </SettingsRow>
-
-        {!linearConnected ? (
-          <div className="flex items-center gap-3 px-4 py-3">
-            <Txt as="span" variant="ui-sm" className="text-icon3">
-              {linearStatus?.enabled === false
-                ? 'Linear is not configured on this server.'
-                : 'Connect a Linear workspace to sync its issues.'}
-            </Txt>
-            {linearStatus?.enabled !== false && (
-              <Button size="xs" onClick={() => connectLinear(baseUrl)}>
-                Connect Linear
-              </Button>
-            )}
-          </div>
-        ) : config.linear.enabled && isLinearReauthError(linearProjectsQuery.error) ? (
-          // Expired token still reports connected; offer OAuth again.
-          <div className="flex items-center gap-3 px-4 py-3">
-            <Txt as="span" variant="ui-sm" className="text-icon3">
-              Linear authorization expired. Reconnect to keep syncing issues.
-            </Txt>
-            <Button size="xs" onClick={() => connectLinear(baseUrl)}>
-              Reconnect Linear
-            </Button>
-          </div>
-        ) : (
-          config.linear.enabled && (
-            <div className="flex flex-col gap-2.5 px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Txt as="span" variant="ui-sm" className="text-icon3">
-                  Connected to {linearStatus?.workspace?.name ?? 'a Linear workspace'}
+          {config.github.enabled && (
+            <div className="px-4">
+              {linkedRepositories.length === 0 ? (
+                <Txt as="p" variant="ui-sm" className="text-icon3 py-3">
+                  No linked repositories yet — link a repository to a factory to add one.
                 </Txt>
-                <Button size="xs" variant="ghost" onClick={() => connectLinear(baseUrl)}>
-                  Reconnect
-                </Button>
-              </div>
-              {(linearProjectsQuery.data ?? []).length > 0 && (
+              ) : (
                 <SourcePickerGroup>
-                  {groupLinearProjectsByTeam(linearProjectsQuery.data ?? []).map(group => (
-                    <SourcePickerSection
-                      key={group.id}
-                      label={group.label}
-                      items={group.projects.map(project => ({ id: project.id, label: project.name }))}
-                      selectedIds={config.linear.sourceIds}
-                      disabled={busy}
-                      pending={busy}
-                      onToggleItem={projectId =>
-                        update({
-                          ...config,
-                          linear: { ...config.linear, sourceIds: toggleId(config.linear.sourceIds, projectId) },
-                        })
-                      }
-                    />
-                  ))}
+                  <SourcePickerSection
+                    label="Repositories"
+                    items={linkedRepositories.map(repository => ({ id: repository.slug, label: repository.slug }))}
+                    selectedIds={config.github.sourceIds}
+                    disabled={busy}
+                    pending={busy}
+                    onToggleItem={slug =>
+                      update({
+                        ...config,
+                        github: {
+                          ...config.github,
+                          sourceIds: toggleId(config.github.sourceIds, slug),
+                        },
+                      })
+                    }
+                  />
                 </SourcePickerGroup>
               )}
             </div>
-          )
-        )}
-      </SettingsCard>
-    </SettingsSubsection>
+          )}
+
+          <SettingsRow label="Linear issues" hint="Active issues from the selected projects.">
+            <Switch
+              aria-label="Sync Linear issues"
+              checked={config.linear.enabled}
+              disabled={busy || !linearConnected}
+              onCheckedChange={enabled => update({ ...config, linear: { ...config.linear, enabled } })}
+            />
+          </SettingsRow>
+
+          {!linearConnected ? (
+            <div className="flex items-center gap-3 px-4 py-3">
+              <Txt as="span" variant="ui-sm" className="text-icon3">
+                {linearStatus?.enabled === false
+                  ? 'Linear is not configured on this server.'
+                  : 'Connect a Linear workspace to sync its issues.'}
+              </Txt>
+              {linearStatus?.enabled !== false && (
+                <Button size="xs" onClick={() => connectLinear(baseUrl)}>
+                  Connect Linear
+                </Button>
+              )}
+            </div>
+          ) : config.linear.enabled && isLinearReauthError(linearProjectsQuery.error) ? (
+            // Expired token still reports connected; offer OAuth again.
+            <div className="flex items-center gap-3 px-4 py-3">
+              <Txt as="span" variant="ui-sm" className="text-icon3">
+                Linear authorization expired. Reconnect to keep syncing issues.
+              </Txt>
+              <Button size="xs" onClick={() => connectLinear(baseUrl)}>
+                Reconnect Linear
+              </Button>
+            </div>
+          ) : (
+            config.linear.enabled && (
+              <div className="flex flex-col gap-2.5 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Txt as="span" variant="ui-sm" className="text-icon3">
+                    Connected to {linearStatus?.workspace?.name ?? 'a Linear workspace'}
+                  </Txt>
+                  <Button size="xs" variant="ghost" onClick={() => connectLinear(baseUrl)}>
+                    Reconnect
+                  </Button>
+                </div>
+                {(linearProjectsQuery.data ?? []).length > 0 && (
+                  <SourcePickerGroup>
+                    {groupLinearProjectsByTeam(linearProjectsQuery.data ?? []).map(group => (
+                      <SourcePickerSection
+                        key={group.id}
+                        label={group.label}
+                        items={group.projects.map(project => ({ id: project.id, label: project.name }))}
+                        selectedIds={config.linear.sourceIds}
+                        disabled={busy}
+                        pending={busy}
+                        onToggleItem={projectId =>
+                          update({
+                            ...config,
+                            linear: { ...config.linear, sourceIds: toggleId(config.linear.sourceIds, projectId) },
+                          })
+                        }
+                      />
+                    ))}
+                  </SourcePickerGroup>
+                )}
+              </div>
+            )
+          )}
+        </SettingsCard>
+      </SettingsSubsection>
+
+      <SettingsSubsection
+        title="Slack sessions"
+        description="Choose whether new Slack sessions create cards in this Factory's Work board."
+      >
+        <SettingsCard>
+          <SettingsRow
+            label="Create work items"
+            hint={slackConfigured ? 'New Slack threads start in Building.' : 'Slack is not configured on this server.'}
+          >
+            <Switch
+              aria-label="Create work items for Slack sessions"
+              checked={factoryQuery.data?.slackWorkItemsEnabled ?? false}
+              disabled={!factoryId || !slackConfigured || factoryQuery.isPending || slackMutation.isPending}
+              onCheckedChange={enabled =>
+                slackMutation.mutate(enabled, {
+                  onSuccess: () => toast.success('Slack intake updated'),
+                  onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save Slack intake'),
+                })
+              }
+            />
+          </SettingsRow>
+        </SettingsCard>
+      </SettingsSubsection>
+    </>
   );
 }
 

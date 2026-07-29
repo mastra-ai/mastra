@@ -119,10 +119,11 @@ describe('resolveLinkedSender', () => {
 
 const linkKey = { platform: 'slack', externalTeamId: 'T-1', externalUserId: 'U-sender' };
 
-function makeProjects(factories: Array<{ id: string; name?: string }>) {
+function makeProjects(factories: Array<{ id: string; name?: string; slackWorkItemsEnabled?: boolean }>) {
+  const projects = factories.map(factory => ({ slackWorkItemsEnabled: false, ...factory }));
   return {
-    get: vi.fn(async ({ id }: { id: string }) => factories.find(f => f.id === id) ?? null),
-    list: vi.fn(async () => factories),
+    get: vi.fn(async ({ id }: { id: string }) => projects.find(f => f.id === id) ?? null),
+    list: vi.fn(async () => projects),
   } as any;
 }
 
@@ -158,7 +159,7 @@ describe('resolveFactoryForLink', () => {
       projects,
     });
 
-    expect(result).toEqual({ status: 'resolved', factoryProjectId: 'fp-2' });
+    expect(result).toEqual({ status: 'resolved', factoryProjectId: 'fp-2', slackWorkItemsEnabled: false });
     expect(projects.get).toHaveBeenCalledWith({ orgId: 'org-1', id: 'fp-2' });
     // Existing default: nothing re-stamped, no card.
     expect(accountLinks.setDefaultFactory).not.toHaveBeenCalled();
@@ -179,7 +180,7 @@ describe('resolveFactoryForLink', () => {
       projects,
     });
 
-    expect(result).toEqual({ status: 'resolved', factoryProjectId: 'fp-only' });
+    expect(result).toEqual({ status: 'resolved', factoryProjectId: 'fp-only', slackWorkItemsEnabled: false });
     expect(accountLinks.setDefaultFactory).toHaveBeenCalledWith({
       ...linkKey,
       userId: 'user-1',
@@ -604,7 +605,7 @@ describe('Slack thread work-item intake', () => {
       defaultFactoryProjectId?: string;
     } | null,
     internalThread = { id: 'uuid-thread-1', resourceId: 'us-42' } as { id: string; resourceId: string } | null,
-    projects = makeProjects([{ id: 'fp-1' }]) as any,
+    projects = makeProjects([{ id: 'fp-1', slackWorkItemsEnabled: true }]) as any,
     upsert = vi.fn().mockResolvedValue({ created: true }),
   } = {}) {
     const accountLinks = {
@@ -678,6 +679,19 @@ describe('Slack thread work-item intake', () => {
     await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
 
     expect(deps.upsert.mock.calls[0][0].reuseMode).toBe('preserve');
+  });
+
+  it('a Factory with Slack intake disabled starts the session without creating a work item', async () => {
+    process.env.MASTRACODE_PUBLIC_URL = 'https://mc.example.com';
+    const deps = makeIntakeDeps({ projects: makeProjects([{ id: 'fp-1', slackWorkItemsEnabled: false }]) });
+    const handlers = createHandlers(deps as any);
+    const thread = makeIntakeThread();
+    const defaultHandler = vi.fn();
+
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx(deps.mastra));
+
+    expect(defaultHandler).toHaveBeenCalledTimes(1);
+    expect(deps.upsert).not.toHaveBeenCalled();
   });
 
   it('an unrouted sender creates no work item', async () => {

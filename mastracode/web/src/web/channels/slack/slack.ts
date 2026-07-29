@@ -261,7 +261,7 @@ type FactoryRouteResult =
   /** No factory resolved — prompt card posted (when possible), do not dispatch. */
   | { status: 'blocked' }
   /** The Factory project this sender's runs route to. */
-  | { status: 'resolved'; factoryProjectId: string };
+  | { status: 'resolved'; factoryProjectId: string; slackWorkItemsEnabled: boolean };
 
 /**
  * Decide which Factory project a linked sender's run belongs to:
@@ -295,14 +295,24 @@ export async function resolveFactoryForLink({
 
   if (link.defaultFactoryProjectId) {
     const existing = await projects.get({ orgId, id: link.defaultFactoryProjectId });
-    if (existing) return { status: 'resolved', factoryProjectId: existing.id };
+    if (existing) {
+      return {
+        status: 'resolved',
+        factoryProjectId: existing.id,
+        slackWorkItemsEnabled: existing.slackWorkItemsEnabled,
+      };
+    }
   }
 
   const factories = orgId ? await projects.list({ orgId }) : [];
   if (factories.length === 1) {
     const only = factories[0]!;
     await accountLinks.setDefaultFactory({ ...key, userId: link.userId, factoryProjectId: only.id });
-    return { status: 'resolved', factoryProjectId: only.id };
+    return {
+      status: 'resolved',
+      factoryProjectId: only.id,
+      slackWorkItemsEnabled: only.slackWorkItemsEnabled,
+    };
   }
 
   const publicUrl = webPublicUrl();
@@ -462,7 +472,9 @@ async function gateDispatch(
   message: HandlerMessage,
   { accountLinks, projects }: SlackChannelDeps,
   ctx: ChannelHandlerContext,
-): Promise<{ routed?: { link: ChannelAccountLink; factoryProjectId: string } } | null> {
+): Promise<{
+  routed?: { link: ChannelAccountLink; factoryProjectId: string; slackWorkItemsEnabled: boolean };
+} | null> {
   const sender = await resolveLinkedSender({ thread, message, accountLinks });
   if (sender.status === 'blocked') return null;
   // Linked senders must also route to a Factory project before a run starts.
@@ -478,7 +490,13 @@ async function gateDispatch(
     const route = await resolveFactoryForLink({ thread, message, ...sender, accountLinks, projects });
     if (route.status === 'blocked') return null;
     if (route.status === 'resolved') {
-      return { routed: { link: sender.link, factoryProjectId: route.factoryProjectId } };
+      return {
+        routed: {
+          link: sender.link,
+          factoryProjectId: route.factoryProjectId,
+          slackWorkItemsEnabled: route.slackWorkItemsEnabled,
+        },
+      };
     }
   }
   return {};
@@ -616,7 +634,7 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
     // a work item needs. Bind the repo-backed Factory session under the `chat`
     // role; a chat-only `channel:` resourceId is NOT a session id, so bind
     // nothing rather than a bad id. Best-effort (the helper swallows failures).
-    if (workItems && gate.routed) {
+    if (workItems && gate.routed?.slackWorkItemsEnabled) {
       const session = isChatOnly
         ? undefined
         : { sessionId: internalThread.resourceId, branch: threadBranch(thread.id), threadId: internalThread.id };
