@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ExternalLink, Link2 } from 'lucide-react';
+import { CircleDot, ExternalLink, Link2 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router';
 
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
@@ -65,6 +65,7 @@ export function FactorySessionHeader() {
   const sectionPath = isReview ? `/factories/${factoryId}/review` : `/factories/${factoryId}/work`;
   const externalItemUrl = genericExternalWorkItemUrl(currentItem);
   const externalItemLabel = externalWorkItemLabel(currentItem);
+  const ExternalItemIcon = currentItem.source === 'github-issue' ? CircleDot : ExternalLink;
   const hasHeaderActions = Boolean(externalItemUrl) || destinations.length > 0;
 
   const openSession = (session: WorkItemSessionRef) => {
@@ -95,7 +96,7 @@ export function FactorySessionHeader() {
                 rel="noreferrer"
                 aria-label={`Open ${externalItemLabel}`}
               >
-                <ExternalLink size={13} aria-hidden />
+                <ExternalItemIcon size={13} aria-hidden />
                 {externalItemLabel}
               </Button>
             ) : null}
