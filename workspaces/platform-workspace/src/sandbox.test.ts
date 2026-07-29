@@ -574,36 +574,32 @@ describe('PlatformSandbox', () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
-    it('drops the cached lease and falls through to /exec when the WS closes without an exit frame', async () => {
+    it('falls back to /exec permanently after a WS transport failure', async () => {
       // Simulates a mid-handshake drop / expired token / provider hiccup:
       // lease mint succeeds but the direct-exec socket closes before an exit
-      // frame arrives. We should discard the (possibly stale) lease, fall
-      // through to the proxy /exec path for THIS call, and re-mint on the
-      // next call so we don't fall through forever on a transient blip.
+      // frame arrives. We fall through to /exec for THIS call AND stay on
+      // /exec for every subsequent call on this sandbox — we don't want to
+      // pay a fresh mint + failed handshake on every exec when the transport
+      // is broken (see direct-exec production incident 2026-07-29).
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
         .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.first' }))
         .mockResolvedValueOnce(
-          json({ exitCode: 0, stdout: 'via-proxy', stderr: '', timedOut: false, truncated: false }),
+          json({ exitCode: 0, stdout: 'via-proxy-1', stderr: '', timedOut: false, truncated: false }),
         )
-        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.second' }));
+        .mockResolvedValueOnce(
+          json({ exitCode: 0, stdout: 'via-proxy-2', stderr: '', timedOut: false, truncated: false }),
+        );
       const sockets: FakeSocket[] = [];
-      let call = 0;
       const factory: DirectExecWebSocketFactory = (endpoint, subprotocols) => {
         const socket = new FakeSocket(endpoint, subprotocols);
         sockets.push(socket);
-        const isFirst = ++call === 1;
         queueMicrotask(() => {
           socket.onopen?.({});
-          if (isFirst) {
-            // First exec: close without an exit frame — transport failure.
-            socket.onclose?.({ code: 1006, reason: 'abnormal' });
-          } else {
-            // Second exec: normal exit.
-            socket.onmessage?.({ data: JSON.stringify({ type: 'exit', data: { exit_code: 0 } }) });
-          }
+          // Close without an exit frame — transport failure.
+          socket.onclose?.({ code: 1006, reason: 'abnormal' });
         });
         return socket;
       };
@@ -620,19 +616,17 @@ describe('PlatformSandbox', () => {
       const first = await sandbox.executeCommand('echo one');
       const second = await sandbox.executeCommand('echo two');
 
-      // First call fell through to /exec after the WS drop.
-      expect(first).toMatchObject({ exitCode: 0, stdout: 'via-proxy' });
-      // Second call re-minted a fresh lease (jwt.second) and succeeded direct.
-      expect(second).toMatchObject({ exitCode: 0 });
-      // Fetch sequence: provision, first lease, /exec fallback, second lease.
+      expect(first).toMatchObject({ exitCode: 0, stdout: 'via-proxy-1' });
+      expect(second).toMatchObject({ exitCode: 0, stdout: 'via-proxy-2' });
+      // Fetch sequence: provision, first lease, /exec fallback, /exec fallback (no re-mint).
       expect(fetchMock).toHaveBeenCalledTimes(4);
-      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec');
-      expect(String(fetchMock.mock.calls[3]![0])).toBe(
+      expect(String(fetchMock.mock.calls[1]![0])).toBe(
         'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
       );
-      // Two sockets opened (both direct-exec attempts); the second used the fresh JWT.
-      expect(sockets).toHaveLength(2);
-      expect(sockets[1]!.subprotocols[1]).toBe('jwt.second');
+      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec');
+      expect(String(fetchMock.mock.calls[3]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec');
+      // Only one WS attempt — kill switch prevents the second exec from retrying direct.
+      expect(sockets).toHaveLength(1);
     });
 
     it('coalesces concurrent lease mints on a cold cache into a single POST /exec-lease', async () => {
