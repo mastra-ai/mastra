@@ -283,7 +283,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     name: 'workers',
     type: 'MastraWorker[] | false',
     description:
-      'Configure which [workers](/docs/deployment/workers) run in this Mastra instance. Set to `false` to disable all event processing. Pass an array of `MastraWorker` instances to use specific workers. When omitted, Mastra auto-creates workers based on PubSub and config.',
+      'Configure which [workers](/docs/deployment/workers) run in this Mastra instance. When omitted, Mastra auto-creates default workers based on your PubSub and config. Pass `false` to disable all event processing (useful when running standalone workers separately). Pass a `MastraWorker[]` to add custom workers — they are merged with the auto-created defaults, and a custom worker with the same `name` as a default replaces it.',
     isOptional: true,
   },
   {
