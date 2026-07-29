@@ -338,6 +338,33 @@ describe('MastraTUI hook wiring', () => {
     expect(runPermissionRequest).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['ask_user', 'ask_question', { question: 'Continue?' }, 'Continue?'],
+    ['submit_plan', 'plan_approval', { path: '.mastracode/plans/change.md' }, 'Plan requires your approval'],
+  ] as const)('notifies immediately when %s requests user input', async (toolName, reason, suspendPayload, message) => {
+    let releaseDispatch!: () => void;
+    mocks.dispatchEvent.mockImplementation(
+      () =>
+        new Promise<void>(resolve => {
+          releaseDispatch = resolve;
+        }),
+    );
+    const tui = createBareTui();
+
+    const handling = tui.handleEvent({
+      type: 'tool_suspended',
+      toolCallId: 'call-input',
+      toolName,
+      args: suspendPayload,
+      suspendPayload,
+    });
+
+    expect(mocks.notify).toHaveBeenCalledWith(tui.state, reason, message);
+
+    releaseDispatch();
+    await handling;
+  });
+
   it('does not fire PostToolUse from TUI tool_end events', async () => {
     const runPostToolUse = vi.fn().mockResolvedValue(createHookResult());
     const tui = createBareTui({ runPostToolUse });

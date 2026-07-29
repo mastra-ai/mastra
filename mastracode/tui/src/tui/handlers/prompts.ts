@@ -212,8 +212,6 @@ export async function handleAskQuestion(
       showModalOverlay(state.ui, dialog, { widthPercent: 0.7 });
       dialog.focused = true;
     }
-
-    ctx.notify('ask_question', question);
   });
 }
 
@@ -482,7 +480,5 @@ export async function handlePlanApproval(
     state.ui.requestRender();
     state.chatContainer.invalidate();
     state.ui.setFocus(approvalComponent);
-
-    ctx.notify('plan_approval', `Plan "${resolvedTitle}" requires approval`);
   });
 }

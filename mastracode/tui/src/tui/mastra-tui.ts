@@ -799,6 +799,14 @@ export class MastraTUI {
 
     try {
       this.fireLifecycleHooksForEvent(event);
+      if (event.type === 'tool_suspended') {
+        if (event.toolName === 'ask_user') {
+          const payload = (event.suspendPayload ?? {}) as { question?: string };
+          notify(this.state, 'ask_question', payload.question);
+        } else if (event.toolName === 'submit_plan') {
+          notify(this.state, 'plan_approval', 'Plan requires your approval');
+        }
+      }
       await dispatchEvent(event, this.getEventContext(), this.state);
       this.captureAgentControllerAnalytics(event);
 
