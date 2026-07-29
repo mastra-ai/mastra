@@ -245,6 +245,20 @@ describe('deployWorkerToSandbox', () => {
     expect(sandbox.writtenFiles.flat().some(file => file.path.endsWith('/attempt-b/launch.sh'))).toBe(true);
   });
 
+  it('tracks scripted worker statuses independently per execution', async () => {
+    const sandbox = new FakeSandbox({
+      withNetworking: false,
+      workerStatuses: ['starting', 'running'],
+    });
+    const status = (executionId: string) =>
+      sandbox.executeCommand('sh', ['-c', `read worker status .mastra/executions/${executionId}/status`]);
+
+    await expect(status('attempt-a')).resolves.toMatchObject({ stdout: 'starting' });
+    await expect(status('attempt-b')).resolves.toMatchObject({ stdout: 'starting' });
+    await expect(status('attempt-a')).resolves.toMatchObject({ stdout: 'running' });
+    await expect(status('attempt-b')).resolves.toMatchObject({ stdout: 'running' });
+  });
+
   it('relaunches under a new execution ID and rejects identity reuse', async () => {
     const sandbox = new FakeSandbox({ withNetworking: false });
     const deployment = await deploy(sandbox);

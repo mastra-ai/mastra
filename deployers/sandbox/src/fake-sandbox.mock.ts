@@ -59,7 +59,7 @@ export class FakeSandbox implements WorkspaceSandbox {
   readonly processes?: SandboxProcessManager;
 
   private readonly opts: FakeSandboxOptions;
-  private workerStatusIndex = 0;
+  private readonly workerStatusIndexes = new Map<string, number>();
 
   constructor(opts: FakeSandboxOptions = {}) {
     this.opts = opts;
@@ -140,17 +140,22 @@ export class FakeSandbox implements WorkspaceSandbox {
   private nextWorkerStatus(script: string): string {
     const statuses = this.opts.workerStatuses;
     if (statuses?.length) {
-      const status = statuses[Math.min(this.workerStatusIndex, statuses.length - 1)]!;
-      this.workerStatusIndex++;
+      const executionId = workerExecutionIdFromScript(script);
+      const index = this.workerStatusIndexes.get(executionId) ?? 0;
+      const status = statuses[Math.min(index, statuses.length - 1)]!;
+      this.workerStatusIndexes.set(executionId, index + 1);
       return status;
     }
     return this.opts.workerStatus ?? workerStatusFromScript(script);
   }
 }
 
+function workerExecutionIdFromScript(script: string): string {
+  return /\.mastra\/executions\/([A-Za-z0-9._-]+)/.exec(script)?.[1] ?? 'unknown';
+}
+
 function workerStatusFromScript(script: string): string {
-  const executionId = /\.mastra\/executions\/([A-Za-z0-9._-]+)/.exec(script)?.[1] ?? 'unknown';
-  return `running|${executionId}`;
+  return `running|${workerExecutionIdFromScript(script)}`;
 }
 
 function fakeWorkerOutput(script: string, output: string): string {
