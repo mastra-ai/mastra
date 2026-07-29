@@ -48,6 +48,21 @@ export interface ToolResultReminderOptions {
    * review), where AGENTS.md content is attacker-controlled.
    */
   isEnabled?: (args: ProcessInputStepArgs) => boolean;
+  /**
+   * Per-request override for how instruction files are located and read.
+   * When it returns a reader, that reader replaces the instance-level
+   * pathExists/isDirectory/readFile for this request — e.g. serving content
+   * from a trusted git ref instead of an untrusted working tree. Returning
+   * undefined keeps the instance defaults.
+   */
+  getReader?: (args: ProcessInputStepArgs) => ReminderFileReader | undefined;
+}
+
+/** Filesystem-shaped read access used to locate and read instruction files. */
+export interface ReminderFileReader {
+  pathExists: (path: string) => boolean;
+  isDirectory: (path: string) => boolean;
+  readFile: (path: string) => string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -250,6 +265,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
   private readonly readFile: (path: string) => string;
   private readonly getIgnoredInstructionPaths?: (args: ProcessInputStepArgs) => string[];
   private readonly isEnabled?: (args: ProcessInputStepArgs) => boolean;
+  private readonly getReader?: (args: ProcessInputStepArgs) => ReminderFileReader | undefined;
 
   constructor(options: ToolResultReminderOptions) {
     this.reminderText = options.reminderText;
@@ -267,6 +283,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     this.readFile = options.readFile ?? (path => readFileSync(path, 'utf-8'));
     this.getIgnoredInstructionPaths = options.getIgnoredInstructionPaths;
     this.isEnabled = options.isEnabled;
+    this.getReader = options.getReader;
   }
 
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
@@ -274,16 +291,21 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     if (this.isEnabled && !this.isEnabled(args)) {
       return messageList;
     }
+    const reader: ReminderFileReader = this.getReader?.(args) ?? {
+      pathExists: this.pathExists,
+      isDirectory: this.isDirectory,
+      readFile: this.readFile,
+    };
     const messages = messageList.get.all.db();
     const responseMessages = getCurrentStepResponseMessages(messageList);
     const completedToolCalls = getCompletedToolCalls(responseMessages);
-    const instructionPath = this.findReferencedInstructionPath(completedToolCalls);
+    const instructionPath = this.findReferencedInstructionPath(completedToolCalls, reader);
 
     if (!instructionPath || this.isIgnoredInstructionPath(args, instructionPath)) {
       return messageList;
     }
 
-    const reminderText = this.getReminderText(instructionPath);
+    const reminderText = this.getReminderText(instructionPath, reader);
     if (!reminderText) {
       return messageList;
     }
@@ -304,9 +326,9 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     return messageList;
   }
 
-  private getReminderText(instructionPath: string): string | undefined {
+  private getReminderText(instructionPath: string, reader: ReminderFileReader): string | undefined {
     try {
-      const content = this.readFile(instructionPath).trim();
+      const content = reader.readFile(instructionPath).trim();
       if (content.length > 0) {
         return truncateToTokenLimit(content, this.maxTokens);
       }
@@ -323,13 +345,16 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     return ignoredPaths.some(path => toAbsolutePath(path) === normalizedInstructionPath);
   }
 
-  private findReferencedInstructionPath(toolCalls?: CompletedToolCall[]): string | undefined {
+  private findReferencedInstructionPath(
+    toolCalls: CompletedToolCall[] | undefined,
+    reader: ReminderFileReader,
+  ): string | undefined {
     if (!Array.isArray(toolCalls)) {
       return undefined;
     }
 
     for (const toolCall of toolCalls) {
-      const path = this.findInstructionPathInInvocation(toolCall);
+      const path = this.findInstructionPathInInvocation(toolCall, reader);
       if (path) {
         return path;
       }
@@ -338,7 +363,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     return undefined;
   }
 
-  private findInstructionPathInInvocation(invocation: unknown): string | undefined {
+  private findInstructionPathInInvocation(invocation: unknown, reader: ReminderFileReader): string | undefined {
     if (!isRecord(invocation)) {
       return undefined;
     }
@@ -354,7 +379,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
         continue;
       }
 
-      const instructionPath = findInstructionFileForPath(value, this.pathExists, this.isDirectory);
+      const instructionPath = findInstructionFileForPath(value, reader.pathExists, reader.isDirectory);
       if (instructionPath) {
         return instructionPath;
       }

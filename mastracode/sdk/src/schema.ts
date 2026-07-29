@@ -35,6 +35,12 @@ export interface MastraCodeState {
    * prompt or injected as reminders.
    */
   untrustedCheckout?: boolean;
+  /**
+   * Trusted git ref (typically the PR's base branch) to serve project
+   * instruction files from when the checkout is untrusted. Without it,
+   * project-scope instruction files are skipped entirely.
+   */
+  baseRef?: string;
   configDir: string;
   homeDir?: string;
   gitBranch?: string;
@@ -104,6 +110,8 @@ export const stateSchema = z.object({
   branch: z.string().optional(),
   // Session operates on an untrusted checkout — suppress AGENTS.md ingestion.
   untrustedCheckout: z.boolean().optional(),
+  // Trusted ref to serve instruction files from on untrusted checkouts.
+  baseRef: z.string().optional(),
   configDir: z.string().default(DEFAULT_CONFIG_DIR),
   homeDir: z.string().optional(),
   gitBranch: z.string().optional(),

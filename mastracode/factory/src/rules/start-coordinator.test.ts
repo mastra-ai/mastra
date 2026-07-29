@@ -316,10 +316,13 @@ describe('FactoryStartCoordinator', () => {
 
     // The PR checkout is attacker-writable third-party content — the SDK
     // reads this flag to skip AGENTS.md/CLAUDE.md ingestion for the session.
+    // `baseRef` carries the trusted ref (the session's base branch) that the
+    // SDK may serve instruction files from instead.
     expect(session.state.set).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
       projectRepositoryId: 'project-repository-1',
       untrustedCheckout: true,
+      baseRef: 'main',
     });
   });
 
@@ -347,6 +350,28 @@ describe('FactoryStartCoordinator', () => {
       factoryProjectId: PROJECT_ID,
       projectRepositoryId: 'project-repository-1',
       untrustedCheckout: true,
+      baseRef: 'main',
+    });
+  });
+
+  it('falls back to intake metadata for baseRef when the session record has no base branch', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller, session } = makeController();
+    const sourceControl = makeSourceControl();
+    const record = await sourceControl.sessions.getBySessionId('session-1');
+    record!.baseBranch = '';
+    const coordinator = new FactoryStartCoordinator(controller as never, storage, undefined, sourceControl as never);
+
+    const request = startRequest({ role: 'review', kickoffMessage: null });
+    request.workItem.input.externalSource.type = 'pull-request' as never;
+    request.workItem.input.metadata = { baseBranch: 'release-1.x' };
+    await coordinator.prepare(request);
+
+    expect(session.state.set).toHaveBeenCalledWith({
+      factoryProjectId: PROJECT_ID,
+      projectRepositoryId: 'project-repository-1',
+      untrustedCheckout: true,
+      baseRef: 'release-1.x',
     });
   });
 
