@@ -37,8 +37,7 @@ describe('parseSkillActivation', () => {
   });
 
   it('unescapes &lt;/skill&gt; boundary sentinel in the body', () => {
-    const text =
-      '<skill name="test-skill">\nDo not use &lt;/skill&gt; as a closing tag.\n</skill>';
+    const text = '<skill name="test-skill">\nDo not use &lt;/skill&gt; as a closing tag.\n</skill>';
     const result = parseSkillActivation(text);
     expect(result).toEqual({
       name: 'test-skill',
@@ -86,9 +85,7 @@ describe('parseSkillActivation', () => {
   });
 
   it('returns undefined for text with trailing prose after </skill>', () => {
-    expect(
-      parseSkillActivation('<skill name="bad">\nBody\n</skill>\nExtra text after'),
-    ).toBeUndefined();
+    expect(parseSkillActivation('<skill name="bad">\nBody\n</skill>\nExtra text after')).toBeUndefined();
   });
 
   it('returns undefined for empty body', () => {
@@ -104,8 +101,7 @@ describe('parseSkillActivation', () => {
   });
 
   it('uses lastIndexOf for ARGUMENTS so earlier occurrences stay in instructions', () => {
-    const text =
-      '<skill name="multi">\nSee ARGUMENTS: note above.\n\nARGUMENTS: real-args\n</skill>';
+    const text = '<skill name="multi">\nSee ARGUMENTS: note above.\n\nARGUMENTS: real-args\n</skill>';
     const result = parseSkillActivation(text);
     expect(result).toEqual({
       name: 'multi',
@@ -115,8 +111,7 @@ describe('parseSkillActivation', () => {
   });
 
   it('handles multiple escaped boundary sentinels', () => {
-    const text =
-      '<skill name="multi-escape">\nFirst &lt;/skill&gt; and second &lt;/skill&gt; sentinel.\n</skill>';
+    const text = '<skill name="multi-escape">\nFirst &lt;/skill&gt; and second &lt;/skill&gt; sentinel.\n</skill>';
     const result = parseSkillActivation(text);
     expect(result).toEqual({
       name: 'multi-escape',

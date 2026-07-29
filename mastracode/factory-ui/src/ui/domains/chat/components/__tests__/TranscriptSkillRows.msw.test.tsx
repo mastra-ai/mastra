@@ -80,9 +80,7 @@ function userMessageEntry(id: string, text: string): TimelineEntry {
 }
 
 function renderEntries(entries: TimelineEntry[]) {
-  return renderWithProviders(
-    <TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />,
-  );
+  return renderWithProviders(<TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />);
 }
 
 // ---------------------------------------------------------------------------
@@ -93,11 +91,9 @@ const SKILL_BODY = '## Overview\n\nInvestigate the issue.\n\n## References\n- re
 const SKILL_ENVELOPE = `<skill name="understand-issue">\n${SKILL_BODY}\n</skill>`;
 
 const SKILL_WITH_ARGS =
-  `<skill name="triage-issue">\nLook at the issue.` +
-  `\n\nARGUMENTS: https://github.com/org/repo/issues/42\n</skill>`;
+  '<skill name="triage-issue">\nLook at the issue.\n\nARGUMENTS: https://github.com/org/repo/issues/42\n</skill>';
 
-const SKILL_WITH_ESCAPED_BOUNDARY =
-  '<skill name="test-skill">\nDo not use &lt;/skill&gt; as a closing tag.\n</skill>';
+const SKILL_WITH_ESCAPED_BOUNDARY = '<skill name="test-skill">\nDo not use &lt;/skill&gt; as a closing tag.\n</skill>';
 
 // ---------------------------------------------------------------------------
 // Tests
