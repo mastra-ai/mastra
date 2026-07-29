@@ -31,11 +31,15 @@ export function ThreadPage() {
   return (
     <ChatLayout
       sidebar={<Sidebar />}
-      header={<ChatHeader />}
       main={
         resolvingSession ? (
-          <div className="grid h-full min-h-0 place-items-center">
-            <Spinner aria-label="Loading session" className="text-icon3" />
+          // The session header owns the sidebar toggle but needs the workspace
+          // provider, so the bare bar stands in until the session resolves.
+          <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden">
+            <ChatHeader />
+            <div className="grid min-h-0 place-items-center">
+              <Spinner aria-label="Loading session" className="text-icon3" />
+            </div>
           </div>
         ) : (
           <ChatSessionBoundary threadId={threadId}>
@@ -53,7 +57,8 @@ function ThreadPageMain() {
   useGlobalShortcuts();
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto_auto] overflow-hidden">
+    // minmax(0,1fr) col — implicit auto col sizes to max-content, long breadcrumb widens the column
+    <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)_auto_auto] overflow-hidden">
       <FactorySessionHeader />
       {/* Flex, not block — ChatMessageBoundary's loading state sizes itself with flex-1. */}
       <div className="relative flex min-h-0 flex-col overflow-hidden">
