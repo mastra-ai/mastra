@@ -1533,6 +1533,7 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
+      const executeTool = tool.execute;
       const toolId = 'id' in tool && typeof tool.id === 'string' ? tool.id : inputData.primitiveId;
       // Use safeParseLLMJson to handle malformed JSON from LLM (truncated, unescaped chars, etc.)
       const inputDataToUse = await safeParseLLMJson(inputData.prompt);
@@ -1761,7 +1762,7 @@ export async function createNetworkLoop({
 
       let toolSuspendPayload: any;
 
-      const finalResult = await tool.execute(
+      const finalResult = await executeTool(
         inputDataToUse,
         {
           abortSignal,
