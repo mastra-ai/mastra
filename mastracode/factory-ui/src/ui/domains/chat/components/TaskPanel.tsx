@@ -1,6 +1,6 @@
 import { TaskList } from '@mastra/playground-ui/components/ai/task-list';
 
-import { workspaceFilesInsetClass } from '../../workspace-viewer/components/WorkspaceFilesPanel';
+import { workspaceFilesInsetClass } from '../../workspace-viewer/layout';
 import { useChatTranscript } from '../context/useChatTranscript';
 
 export function TaskPanel() {

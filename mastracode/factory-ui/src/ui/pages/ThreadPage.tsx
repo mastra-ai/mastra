@@ -3,11 +3,9 @@ import { useParams } from 'react-router';
 import { Sidebar } from '../Sidebar';
 import { ChatLayout } from '../layouts/ChatLayout';
 import { useThreadWorkspacePath } from '../domains/workspace-viewer/hooks/useThreadWorkspacePath';
-import {
-  WorkspaceFilesPanelProvider,
-  WorkspaceFilesSurface,
-  workspaceFilesInsetClass,
-} from '../domains/workspace-viewer/components/WorkspaceFilesPanel';
+import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
+import { WorkspaceFilesSurface } from '../domains/workspace-viewer/components/WorkspaceFilesSurface';
+import { workspaceFilesInsetClass } from '../domains/workspace-viewer/layout';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { FactorySessionHeader } from '../domains/factory/components/RelatedFactorySessions';
 import { ChatMessageList } from '../domains/chat/components/ChatMessageList';
@@ -41,9 +39,9 @@ export function ThreadPage() {
           </div>
         ) : (
           <ChatSessionBoundary threadId={threadId}>
-            <WorkspaceFilesPanelProvider>
+            <WorkspaceFilesProvider>
               <ThreadPageMain />
-            </WorkspaceFilesPanelProvider>
+            </WorkspaceFilesProvider>
           </ChatSessionBoundary>
         )
       }

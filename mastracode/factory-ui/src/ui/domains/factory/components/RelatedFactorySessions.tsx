@@ -4,7 +4,8 @@ import { Link, useNavigate, useParams } from 'react-router';
 
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
-import { WorkspaceFilesToggle, useWorkspaceFilesPanel } from '../../workspace-viewer/components/WorkspaceFilesPanel';
+import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
+import { useWorkspaceFiles } from '../../workspace-viewer/context/useWorkspaceFiles';
 import { relatedWorkItems, relationshipLabel, relationshipPath } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
@@ -57,7 +58,7 @@ export function FactorySessionHeader() {
   const projectRepositoryId = sessionQuery.data?.projectRepositoryId;
   const items = useWorkItemsQuery(factoryId);
   const workspaces = useWorkspacesQuery(projectRepositoryId);
-  const { workspacePath } = useWorkspaceFilesPanel();
+  const { workspacePath } = useWorkspaceFiles();
 
   const allItems = items.data ?? [];
   const currentItem = activeWorkItem(allItems, factoryId, sessionId, threadId);

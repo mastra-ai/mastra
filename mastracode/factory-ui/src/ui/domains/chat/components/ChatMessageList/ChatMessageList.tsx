@@ -1,4 +1,4 @@
-import { workspaceFilesInsetClass } from '../../../workspace-viewer/components/WorkspaceFilesPanel';
+import { workspaceFilesInsetClass } from '../../../workspace-viewer/layout';
 import { GoalPanel } from '../GoalPanel';
 import { ConnectionNotice } from './ConnectionNotice';
 import { TranscriptPanel } from './TranscriptPanel';

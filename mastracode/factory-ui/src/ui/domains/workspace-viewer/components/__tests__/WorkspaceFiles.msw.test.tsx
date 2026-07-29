@@ -6,7 +6,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
-import { WorkspaceFilesPanelProvider, WorkspaceFilesSurface, WorkspaceFilesToggle } from '../WorkspaceFilesPanel';
+import { WorkspaceFilesProvider } from '../../context/WorkspaceFilesProvider';
+import { WorkspaceFilesSurface } from '../WorkspaceFilesSurface';
+import { WorkspaceFilesToggle } from '../WorkspaceFilesToggle';
 
 const LIST_URL = `${TEST_BASE_URL}/web/workspace/rendered/list`;
 const WORKSPACE = 'session-1';
@@ -50,10 +52,10 @@ function renderPanel() {
         <Route
           path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
           element={
-            <WorkspaceFilesPanelProvider>
+            <WorkspaceFilesProvider>
               <WorkspaceFilesToggle />
               <WorkspaceFilesSurface />
-            </WorkspaceFilesPanelProvider>
+            </WorkspaceFilesProvider>
           }
         />
       </Routes>
@@ -61,7 +63,7 @@ function renderPanel() {
   );
 }
 
-describe('WorkspaceFilesPanel', () => {
+describe('WorkspaceFiles', () => {
   describe('given a chat wide enough for the card beside the transcript', () => {
     it('docks the card without interaction, and the header toggle hides it', async () => {
       stubContainerWidth(1200);
