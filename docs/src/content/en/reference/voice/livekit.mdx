@@ -13,9 +13,9 @@ See [Realtime voice](/docs/voice/realtime-voice) for setup and concepts.
 
 The package has three entry points:
 
-- `@mastra/livekit`: server-side APIs — [`liveKitConnectionRoute()`](#livekitconnectionroute), [`dispatchVoiceSession()`](#dispatchvoicesession), [`pipeAgentReplyToWriter()`](#pipeagentreplytowriter), [`serializeSessionMetadata()`](#livekitsessionmetadata), and [`createEndCallTool()`](#createendcalltool). Import these from Mastra server code. This entry never loads the LiveKit agents runtime.
-- `@mastra/livekit/worker`: the worker runtime — [`createLiveKitWorker()`](#createlivekitworker), [`runLiveKitWorker()`](#runlivekitworker), [`chatContextToMessages()`](#chatcontexttomessages), and the session helpers [`speakGreeting()`](#speakgreeting), [`waitForAgentDoneSpeaking()`](#waitforagentdonespeaking), and [`runEndCall()`](#runendcall). Import it only from the worker entry file.
-- `@mastra/livekit/plugin`: the LLM-component plugin — [`MastraLLM`](#mastrallm) and [`createRemoteAgentReplyGenerator()`](#createremoteagentreplygenerator). Import it in workers that build their own `voice.AgentSession`. `createRemoteAgentReplyGenerator()` is also exported from `@mastra/livekit/worker` because it plugs into `createLiveKitWorker()`'s `generate` option; `MastraLLM` is plugin-only.
+- `@mastra/livekit`: server-side APIs, [`liveKitConnectionRoute()`](#livekitconnectionroute), [`dispatchVoiceSession()`](#dispatchvoicesession), [`pipeAgentReplyToWriter()`](#pipeagentreplytowriter), [`serializeSessionMetadata()`](#livekitsessionmetadata), and [`createEndCallTool()`](#createendcalltool). Import these from Mastra server code. This entry never loads the LiveKit agents runtime.
+- `@mastra/livekit/worker`: the worker runtime, [`createLiveKitWorker()`](#createlivekitworker), [`runLiveKitWorker()`](#runlivekitworker), [`chatContextToMessages()`](#chatcontexttomessages), and the session helpers [`speakGreeting()`](#speakgreeting), [`waitForAgentDoneSpeaking()`](#waitforagentdonespeaking), and [`runEndCall()`](#runendcall). Import it only from the worker entry file.
+- `@mastra/livekit/plugin`: the LLM-component plugin, [`MastraLLM`](#mastrallm) and [`createRemoteAgentReplyGenerator()`](#createremoteagentreplygenerator). Import it in workers that build their own `voice.AgentSession`. `createRemoteAgentReplyGenerator()` is also exported from `@mastra/livekit/worker` because it plugs into `createLiveKitWorker()`'s `generate` option. `MastraLLM` is plugin-only.
 
 ## `createLiveKitWorker()`
 
@@ -328,7 +328,7 @@ Returns: `VoiceTurnMessage[]`, where each entry is `{ role: 'system' | 'user' | 
 
 ## `MastraLLM`
 
-A standard LiveKit LLM plugin (`llm.LLM`) backed by a Mastra agent. Use it when you build the `voice.AgentSession` yourself and want Mastra in the `llm` slot; [`createLiveKitWorker()`](#createlivekitworker) is the managed alternative. See [Use Mastra as the LLM component](/docs/voice/realtime-voice#use-mastra-as-the-llm-component) for how to choose.
+A standard LiveKit LLM plugin (`llm.LLM`) backed by a Mastra agent. Use it when you build the `voice.AgentSession` yourself and want Mastra in the `llm` slot. [`createLiveKitWorker()`](#createlivekitworker) is the managed alternative. See [Use Mastra as the LLM component](/docs/voice/realtime-voice#use-mastra-as-the-llm-component) for how to choose.
 
 With `remote`, the plugin streams each turn from your Mastra server over HTTP using Server-Sent Events (SSE). The agent loop, tools, and memory run server-side, and interrupting the agent aborts the server-side generation.
 
@@ -419,13 +419,13 @@ Don't combine `memory` with the session's `preemptiveGeneration` option, which L
 
 ### Tools run on the Mastra agent
 
-Tools are defined and executed server-side on the Mastra agent. The plugin never forwards LiveKit tool definitions: if the session passes a non-empty `toolCtx`, it logs a one-time warning naming the ignored tools. Every tool must complete server-side — a tool that requires approval or client-side execution fails the turn with a descriptive error instead of hanging the call.
+Tools are defined and executed server-side on the Mastra agent. The plugin never forwards LiveKit tool definitions: if the session passes a non-empty `toolCtx`, it logs a one-time warning naming the ignored tools. Every tool must complete server-side: a tool that requires approval or client-side execution fails the turn with a descriptive error instead of hanging the call.
 
 Tool activity reaches the worker through `toolFeedback`, `onToolCall`, and `onTurnComplete`.
 
 ### Instructions
 
-LiveKit injects your `voice.Agent`'s `instructions` into the chat context of every request. The plugin drops them: the server-side Mastra agent's own instructions are authoritative. To change the prompt, change the Mastra agent.
+LiveKit injects your `voice.Agent`'s `instructions` into the chat context of every request. The plugin drops them because the server-side Mastra agent's own instructions are authoritative. To change the prompt, change the Mastra agent.
 
 ### Interrupted turns
 
@@ -468,7 +468,7 @@ When the server reports token usage for a turn, the plugin feeds it to LiveKit, 
 
 ### Errors and timeouts
 
-The transport throws LiveKit's `APIError` types (`APIStatusError`, `APIConnectionError`, `APITimeoutError`), so the session's retry policy (`connOptions.maxRetry`) and `FallbackAdapter` failover work unchanged. A turn is never retried after its first token — a voice reply is better failed fast than replayed half-heard.
+The transport throws LiveKit's `APIError` types (`APIStatusError`, `APIConnectionError`, `APITimeoutError`), so the session's retry policy (`connOptions.maxRetry`) and `FallbackAdapter` failover work unchanged. A turn is never retried after its first token: a voice reply is better failed fast than replayed half-heard.
 
 A connect and first-token watchdog uses the session's `connOptions.timeoutMs` (10 seconds by default), so a server that accepts the connection but never streams can't cause indefinite dead air.
 
@@ -500,7 +500,7 @@ export default createLiveKitWorker({
 
 On the `generate` path the worker-level `toolFeedback` and `onTurnComplete` options don't apply, and the worker's end-call detection doesn't fire; pass the hooks to the generator instead.
 
-Cancelling a turn (barge-in) tears down the HTTP request, which aborts generation on the server. Errors are thrown as LiveKit `APIError` types; `retries` applies to the initial connection only — a turn is never retried after its first chunk.
+Cancelling a turn (barge-in) tears down the HTTP request, which aborts generation on the server. Errors are thrown as LiveKit `APIError` types. The `retries` option applies only to initial connection attempts. A turn is never retried after its first chunk.
 
 Returns: `VoiceReplyGenerator`.
 
@@ -615,7 +615,7 @@ await speakGreeting(session, {
 
 ## `waitForAgentDoneSpeaking()`
 
-Resolves once the agent is no longer producing or playing a reply — its state has left `thinking` and `speaking`. Resolves immediately when the agent is already idle, and always resolves within `maxWaitMs` (30 seconds by default) as a safety cap. Use it before tearing a session down so closing words play out instead of being cut off.
+Resolves once the agent is no longer producing or playing a reply: its state has left `thinking` and `speaking`. Resolves immediately when the agent is already idle, and always resolves within `maxWaitMs` (30 seconds by default) as a safety cap. Use it before tearing a session down so closing words play out instead of being cut off.
 
 ```typescript
 import { waitForAgentDoneSpeaking } from '@mastra/livekit/worker'
@@ -625,7 +625,7 @@ await waitForAgentDoneSpeaking(session)
 
 ## `runEndCall()`
 
-Ends the call after the agent asked to: waits for the agent's closing words to finish, speaks an optional final `message` non-interruptibly, then deletes the room (hanging up the caller, SIP included) and shuts the job down, which runs registered shutdown callbacks.
+Ends the call after the agent asks to hang up. It waits for the agent's closing words and speaks an optional final `message` without interruption. It then deletes the room and hangs up the caller, including SIP callers. The job shuts down with its registered callbacks.
 
 Pair it with [`MastraLLM`](#mastrallm)'s `onToolCall` and an [end-call tool](#createendcalltool) on the server-side agent to rebuild agent-initiated hang-up on a session you own:
 
@@ -677,7 +677,7 @@ The exported constants `DEFAULT_END_CALL_TOOL` (`'endCall'`), `DEFAULT_END_CALL_
 
 ## `createEndCallTool()`
 
-Builds the Mastra tool an agent calls to end the call itself: say goodbye, then hang up. The tool only signals intent (and runs optional bookkeeping) — the worker owns the actual hang-up. It lives on the server-safe root entry, so add it to agents defined in server code.
+Builds the Mastra tool an agent calls when it wants to end the call. The tool signals intent and can run optional bookkeeping. The worker performs the actual hang-up. The tool lives on the server-safe root entry. Add it to agents defined in server code.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -817,7 +817,7 @@ The route accepts a JSON body with optional `agentId`, `threadId`, and `resource
 
 ## `dispatchVoiceSession()`
 
-Dispatches a Mastra voice agent into a LiveKit room programmatically — for server-initiated sessions such as outbound calls.
+Dispatches a Mastra voice agent into a LiveKit room programmatically: for server-initiated sessions such as outbound calls.
 
 ```typescript
 import { dispatchVoiceSession } from '@mastra/livekit'
@@ -908,7 +908,7 @@ The metadata passed from the Mastra server to the worker through LiveKit job dis
 ]}
 />
 
-The metadata travels as a JSON string. `liveKitConnectionRoute()` and `dispatchVoiceSession()` serialize it for you; use `serializeSessionMetadata(metadata)` when dispatching through your own code, or write the JSON directly in LiveKit-side configuration such as a SIP dispatch rule. Entries in `requestContext` reach the agent's dynamic instructions, tools, and input processors on every turn of the call.
+The metadata travels as a JSON string. `liveKitConnectionRoute()` and `dispatchVoiceSession()` serialize it for you; use `serializeSessionMetadata(metadata)` when dispatching through your own code, or write the JSON directly in LiveKit-side configuration such as a SIP dispatch rule. Entries in `requestContext` reach the agent's runtime-defined instructions, tools, and input processors on every turn of the call.
 
 ## Related
 

@@ -360,20 +360,59 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       const installationId = parsePositiveInteger(installation.externalId);
       if (installationId === null) throw new Error('GitHub installation id is invalid.');
       const repositoryName = splitRepository(repository.slug).repo;
-      const token = await this.#client.request<{ token: string }>(
-        'POST',
-        `${API_PREFIX}/github-app/installations/${installationId}/token`,
-        { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
-      );
-      const access: RepositoryAccess = {
-        cloneUrl,
-        authorization: { scheme: 'bearer', token: token.token },
-      };
-      setBounded(this.#repositoryAccessCache, cacheKey, {
-        access,
-        expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
-      });
-      return access;
+
+      try {
+        const token = await this.#client.request<{ token: string }>(
+          'POST',
+          `${API_PREFIX}/github-app/installations/${installationId}/token`,
+          { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+        );
+        const access: RepositoryAccess = {
+          cloneUrl,
+          authorization: { scheme: 'bearer', token: token.token },
+        };
+        setBounded(this.#repositoryAccessCache, cacheKey, {
+          access,
+          expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
+        });
+        return access;
+      } catch (err) {
+        // Recover from stale installation: when a GitHub App is uninstalled and reinstalled,
+        // GitHub assigns a new installation ID. Platform creates a new installation row,
+        // and Factory's intake.listSources creates a new local installation row with the
+        // new externalId. Try to find the new installation by accountName.
+        if (!isNotFound(err) || !installation.accountName) throw err;
+        const installations = await this.storage.installations.list({ orgId });
+        const newInstallation = installations.find(
+          inst => inst.accountName === installation.accountName && inst.id !== installation.id,
+        );
+        if (!newInstallation) throw err;
+        const newInstallationId = parsePositiveInteger(newInstallation.externalId);
+        if (newInstallationId === null) throw err;
+
+        // Persist the migration so we don't hit the 404 path on every call.
+        // This updates the repository's installation_id to the new installation.
+        await this.storage.repositories.migrateInstallation({
+          orgId,
+          id: repositoryId,
+          newInstallationId: newInstallation.id,
+        });
+
+        const token = await this.#client.request<{ token: string }>(
+          'POST',
+          `${API_PREFIX}/github-app/installations/${newInstallationId}/token`,
+          { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+        );
+        const access: RepositoryAccess = {
+          cloneUrl,
+          authorization: { scheme: 'bearer', token: token.token },
+        };
+        setBounded(this.#repositoryAccessCache, cacheKey, {
+          access,
+          expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
+        });
+        return access;
+      }
     },
     listPullRequests: input => this.#listPullRequests(input),
     getPullRequest: input => this.#getPullRequest(input),
