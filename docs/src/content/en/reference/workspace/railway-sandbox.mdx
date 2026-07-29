@@ -93,7 +93,7 @@ The default `ISOLATED` mode allows outbound internet access only, with no privat
 
 ### Custom base image (templates)
 
-Pre-install packages and run setup steps so every sandbox starts ready. Pass a builder callback over the Railway template builder — the template is built once on the first `start()`:
+Pre-install packages and run setup steps so every sandbox starts ready. Pass a builder callback over the Railway template builder: the template is built once on the first `start()`:
 
 ```typescript
 const workspace = new Workspace({
@@ -107,7 +107,7 @@ You can also pass a pre-built `SandboxTemplate` to reuse it across sandboxes wit
 
 ### Forking a running sandbox
 
-Clone a running sandbox's filesystem into a new, independent sandbox — a fresh boot, not live processes. The returned `RailwaySandbox` is already started:
+Clone a running sandbox's filesystem into a new, independent sandbox: a fresh boot, not live processes. The returned `RailwaySandbox` is already started:
 
 ```typescript
 const child = await sandbox.fork({ idleTimeoutMinutes: 15 })
@@ -120,7 +120,7 @@ The forked sandbox inherits the parent's credentials and defaults unless overrid
 
 ### Checkpoint recovery
 
-Set `checkpointName` to preserve a sandbox filesystem across Railway sandbox replacement. On `start()`, `RailwaySandbox` first tries to create the sandbox from the named checkpoint. If the checkpoint is missing, it creates a sandbox from the configured template or default image, then captures the checkpoint.
+Set `checkpointName` to preserve a sandbox filesystem across Railway sandbox replacement. On `start()`, `RailwaySandbox` first tries to create the sandbox from the checkpoint. If the checkpoint is missing, it creates a sandbox from the configured template or default image, then captures the checkpoint.
 
 ```typescript
 const sandbox = new RailwaySandbox({
@@ -131,7 +131,7 @@ const sandbox = new RailwaySandbox({
 
 `RailwaySandbox` refreshes the checkpoint shortly before the idle timeout. Recovery restores the latest successful checkpoint. It doesn't restore running processes or filesystem writes made after the last checkpoint.
 
-Use one stable checkpoint name for each independent filesystem. Do not share a checkpoint name across unrelated sessions or projects.
+Use one stable checkpoint name for each independent filesystem. Don't share a checkpoint name across unrelated sessions or projects.
 
 ### Derived sandbox checkpoints
 

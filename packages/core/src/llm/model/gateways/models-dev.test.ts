@@ -18,6 +18,7 @@ const {
   createTogetherAIMock,
   createXaiMock,
   openAIResponsesMock,
+  xAIResponsesMock,
 } = vi.hoisted(() => ({
   callableModelMock: vi.fn(),
   chatModelMock: vi.fn(),
@@ -35,6 +36,7 @@ const {
   createTogetherAIMock: vi.fn(),
   createXaiMock: vi.fn(),
   openAIResponsesMock: vi.fn(),
+  xAIResponsesMock: vi.fn(),
 }));
 
 vi.mock('@ai-sdk/anthropic-v6', () => ({ createAnthropic: createAnthropicMock }));
@@ -75,8 +77,9 @@ describe('ModelsDevGateway', () => {
     createOpenRouterMock.mockReturnValue(callableModelMock);
     createPerplexityMock.mockReturnValue(callableModelMock);
     createTogetherAIMock.mockReturnValue(callableModelMock);
-    createXaiMock.mockReturnValue(callableModelMock);
+    createXaiMock.mockReturnValue({ responses: xAIResponsesMock });
     openAIResponsesMock.mockReturnValue({ provider: 'openai' });
+    xAIResponsesMock.mockReturnValue({ provider: 'xai' });
   });
 
   afterEach(() => {
@@ -514,7 +517,7 @@ describe('ModelsDevGateway', () => {
         modelInvoker: callableModelMock,
         model: { provider: 'callable' },
       },
-      { providerId: 'xai', factory: createXaiMock, modelInvoker: callableModelMock, model: { provider: 'callable' } },
+      { providerId: 'xai', factory: createXaiMock, modelInvoker: xAIResponsesMock, model: { provider: 'xai' } },
       {
         providerId: 'deepseek',
         factory: createDeepSeekMock,
@@ -584,6 +587,34 @@ describe('ModelsDevGateway', () => {
         expect(modelInvoker).toHaveBeenCalledWith('test-model');
       },
     );
+
+    it('routes xAI models through the Responses API', async () => {
+      gateway = new ModelsDevGateway({
+        xai: {
+          apiKeyEnvVar: 'XAI_API_KEY',
+          name: 'xAI',
+          models: ['grok-4.3'],
+          gateway: 'models.dev',
+          url: 'https://api.x.ai/v1',
+        },
+      });
+
+      const result = await gateway.resolveLanguageModel({
+        providerId: 'xai',
+        modelId: 'grok-4.3',
+        apiKey: 'xai-test',
+        headers: { 'x-test': 'true' },
+      });
+
+      expect(result).toEqual({ provider: 'xai' });
+      expect(createXaiMock).toHaveBeenCalledWith({
+        apiKey: 'xai-test',
+        baseURL: 'https://api.x.ai/v1',
+        headers: expect.objectContaining({ 'x-test': 'true' }),
+      });
+      expect(xAIResponsesMock).toHaveBeenCalledWith('grok-4.3');
+      expect(callableModelMock).not.toHaveBeenCalledWith('grok-4.3');
+    });
   });
 
   describe('per-model provider overrides', () => {

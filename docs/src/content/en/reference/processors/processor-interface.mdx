@@ -11,7 +11,7 @@ The `Processor` interface defines the contract for all processors in Mastra. Pro
 
 ## When processor methods run
 
-The eight processor methods run at different points in the agent execution lifecycle:
+Processor methods run at different points in the agent execution lifecycle:
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
@@ -205,16 +205,16 @@ Use `messages` when you only need to read, map over, or lightly edit fields on t
 
 ### Persistence
 
-When memory is enabled, only what ends up in `messageList` after all processors finish is persisted to storage. The two return styles are equivalent for persistence:
+When memory is enabled, only what ends up in `messageList` after all processors finish is persisted to storage. Both return styles are equivalent for persistence:
 
-- Mutating `messageList` directly (or returning the same `MessageList` instance) — recorded mutations are applied in place, so the saved conversation reflects your changes.
-- Returning a `MastraDBMessage[]` or `{ messages, systemMessages }` — Mastra reconciles the returned array against `messageList` for the current stage, removing missing messages and replacing system messages.
+- When you mutate `messageList` directly (or return the same `MessageList` instance), recorded mutations are applied in place, so the saved conversation reflects your changes.
+- When you return a `MastraDBMessage[]` or `{ messages, systemMessages }`, Mastra reconciles the returned array against `messageList` for the current stage, removing missing messages and replacing system messages.
 
-Returning a different `MessageList` instance is an error; always mutate the one passed to your processor.
+Returning a different `MessageList` instance is an error. Always mutate the one passed to your processor.
 
 ### Reading text from a message
 
-`MastraDBMessage.content` is a structured object, not a string. The canonical way to read user or assistant text is `content.parts`:
+`MastraDBMessage.content` uses a structured object. Strings aren't supported. The canonical way to read user or assistant text is `content.parts`:
 
 ```typescript
 import type { MastraDBMessage } from '@mastra/core/memory'
@@ -471,10 +471,10 @@ processInputStep?<TTripwireMetadata = unknown>(
 
 `processInputStep` can return several shapes:
 
-- **`ProcessInputStepResult` object** — override any combination of the properties below for this step (described next).
-- **`MessageList`** — return the same `messageList` instance to signal you mutated messages in place.
-- **`MastraDBMessage[]`** — return a transformed messages array; replaces the step's messages.
-- **`void` or `undefined`** — return nothing to leave the step unchanged.
+- **`ProcessInputStepResult` object**: Override any combination of the properties below for this step (described next).
+- **`MessageList`**: Return the same `messageList` instance to signal you mutated messages in place.
+- **`MastraDBMessage[]`**: Return a transformed messages array. Replaces the step's messages.
+- **`void` or `undefined`**: Return nothing to leave the step unchanged.
 
 The object form can return any combination of these properties:
 
@@ -803,7 +803,7 @@ Handles LLM API rejection errors before they surface as final errors. This runs 
 
 Add processors that implement `processAPIError` to an agent's `errorProcessors` array.
 
-Processors can inspect the error, modify the request (for example, by appending messages to the `messageList`), and return `{ retry: true }` to signal a retry with the modified state.
+Processors can inspect the error and modify the request, for example by appending messages to the `messageList`. Return `{ retry: true }` to retry with the modified state.
 
 ```typescript prettier:false
 processAPIError?(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> | ProcessAPIErrorResult | void;
@@ -1437,7 +1437,7 @@ export class WordCounter implements Processor {
 
 Every processor receives a `state` object in `processLLMRequest`, `processLLMResponse`, `processOutputStream`, `processOutputStep`, `processOutputResult`, and `processAPIError`. State has three important properties:
 
-- **Per-processor**: Each processor gets its own `state` object, keyed by the processor's `id`. Two processors with different ids can't read or overwrite each other's state.
+- **Per-processor**: Each processor gets its own `state` object, keyed by the processor's `id`. Processors with different ids can't read or overwrite each other's state.
 - **Per-request**: A fresh state object is created at the start of every `agent.generate()` or `agent.stream()` call. State doesn't leak between requests or between users.
 - **Shared across methods**: Within one request, the same `state` object is passed to `processLLMRequest` (before the provider call), `processLLMResponse` (after the step completes), `processOutputStream` (for every chunk), `processOutputStep` (after every LLM step), `processOutputResult` (once at the end), and `processAPIError` (when an LLM call fails). For example, `processLLMRequest` can stash a cache key and `processLLMResponse` can read it back to write the response.
 

@@ -726,6 +726,7 @@ describe('PlatformGithubIntegration', () => {
       mode: 'platform',
       endpointHost: 'platform.example.com',
       polling: { enabled: true },
+      reconcile: { enabled: true },
     });
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
   });
@@ -1008,6 +1009,7 @@ describe('PlatformGithubIntegration', () => {
   it('can disable polling and resolves collaborator permissions through the platform API', async () => {
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
     vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS', '9000');
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED', 'false');
     const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
       json({
         permission: 'maintain',
@@ -1026,6 +1028,19 @@ describe('PlatformGithubIntegration', () => {
       mode: 'platform',
       endpointHost: 'platform.example.com',
       polling: { enabled: false, intervalMs: 9_000 },
+      reconcile: { enabled: false },
+    });
+  });
+
+  it('keeps the reconcile worker alive when polling is disabled but reconcile stays enabled', () => {
+    vi.stubEnv('MASTRA_PLATFORM_GITHUB_POLLING_ENABLED', 'false');
+    const integration = createIntegration();
+
+    const workers = integration.workers({ controller: {}, storage: { generic: {} } } as unknown as IntegrationContext);
+    expect(workers).toHaveLength(1);
+    expect(integration.diagnostics()).toMatchObject({
+      polling: { enabled: false },
+      reconcile: { enabled: true },
     });
   });
 
@@ -1076,6 +1091,77 @@ describe('PlatformGithubIntegration', () => {
           externalSource: { type: 'issue', externalId: 'github-issue:7' },
         }),
       ).resolves.toBeNull();
+    });
+  });
+
+  describe('installation recovery', () => {
+    it('recovers when a GitHub App installation is reinstalled with a new installation ID', async () => {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const storage = sourceControl.forIntegration('github');
+
+      // Create an OLD installation (simulating before reinstall)
+      const oldInstallation = await storage.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '7', // OLD GitHub installation ID
+        accountName: 'acme',
+        accountType: 'Organization',
+      });
+
+      // Create an OLD repository for the OLD installation
+      const oldRepository = await storage.repositories.upsert({
+        orgId: 'org-1',
+        input: {
+          installationId: oldInstallation.id,
+          externalId: '101',
+          slug: 'acme/app',
+          defaultBranch: 'main',
+        },
+      });
+
+      // Create a NEW installation (simulating after reinstall)
+      // This would be created by intake.listSources after the reinstall
+      const newInstallation = await storage.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '456', // NEW GitHub installation ID
+        accountName: 'acme', // Same account name
+        accountType: 'Organization',
+      });
+
+      // NOTE: We don't create a new repository row here.
+      // In a real scenario, intake.listSources creates the installation row,
+      // but repositories are registered lazily. The recovery flow will
+      // migrate the old repository's installation_id to the new installation.
+
+      // Mock Platform API:
+      // - Returns 404 for OLD installation token request
+      // - Returns token for NEW installation token request
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ error: 'Installation not found' }), {
+            status: 404,
+            headers: { 'content-type': 'application/json' },
+          }),
+        )
+        .mockResolvedValueOnce(json({ token: 'ghs_recovered', expiresAt: '2026-07-21T18:00:00Z' }));
+
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage });
+
+      // Try to get repository access using OLD repository
+      // This should recover and succeed using the NEW installation
+      await expect(
+        integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: oldRepository.id }),
+      ).resolves.toEqual({
+        cloneUrl: 'https://github.com/acme/app.git',
+        authorization: { scheme: 'bearer', token: 'ghs_recovered' },
+      });
+
+      // Verify the repository's installation_id was migrated to the new installation
+      const migratedRepository = await storage.repositories.get({ orgId: 'org-1', id: oldRepository.id });
+      expect(migratedRepository?.installationId).toBe(newInstallation.id);
     });
   });
 });

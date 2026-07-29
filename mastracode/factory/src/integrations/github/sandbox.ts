@@ -112,11 +112,54 @@ interface ShOptions {
   phase?: string;
 }
 
-/** Run a shell script in the sandbox via `sh -c`, bounded by a hang guard. */
+/**
+ * A thrown transport-level failure that is worth retrying: remote sandbox
+ * providers (e.g. the platform workspace proxy) surface transient 5xx errors
+ * as exceptions carrying an HTTP `status` — typically while a freshly
+ * provisioned VM is still coming up. Command failures are NOT exceptions
+ * (they resolve with a non-zero exit code), so retrying here never re-runs a
+ * command that the sandbox already executed and rejected.
+ */
+function isTransientTransportError(error: unknown): boolean {
+  const status = (error as { status?: unknown })?.status;
+  return typeof status === 'number' && status >= 500;
+}
+
+const SH_RETRIES = 2;
+const SH_RETRY_DELAY_MS = 2000;
+
+/**
+ * Run a shell script in the sandbox via `sh -c`, bounded by a hang guard.
+ * Transient transport-level 5xx failures (proxy hiccups while the VM boots)
+ * are retried with a short backoff; every script routed through here is safe
+ * to re-run. Hang-guard timeouts are NOT retried — the budget applies to the
+ * command as a whole.
+ */
 async function sh(
   sandbox: MaterializationSandbox,
   script: string,
   options: ShOptions = {},
+): Promise<SandboxCommandResult> {
+  // One budget for the command as a whole: each attempt only gets the time
+  // remaining, so transport retries can never multiply the hang guard.
+  const deadlineMs = Date.now() + (options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await shOnce(sandbox, script, { ...options, timeoutMs: Math.max(deadlineMs - Date.now(), 1) });
+    } catch (error) {
+      if (attempt >= SH_RETRIES || !isTransientTransportError(error)) throw error;
+      const delayMs = SH_RETRY_DELAY_MS * (attempt + 1);
+      if (deadlineMs - Date.now() <= delayMs) throw error;
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
+/** Single `sh -c` execution attempt, bounded by the hang guard. */
+async function shOnce(
+  sandbox: MaterializationSandbox,
+  script: string,
+  options: ShOptions,
 ): Promise<SandboxCommandResult> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -256,7 +299,18 @@ export async function materializeRepo(options: {
       }
       const pull = await sh(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`, { phase: 'repository pull' });
       if (pull.exitCode !== 0) {
-        throw classifyGitFailure(pull, 'pull-failed');
+        if (!isBenignNonFastForward(pull)) {
+          throw classifyGitFailure(pull, 'pull-failed');
+        }
+        // The workdir was left on a session's working branch that can't be
+        // fast-forwarded (diverged from upstream, no upstream, or detached
+        // HEAD). That branch holds the session's local work — never rebase or
+        // reset it here. The checkout is still perfectly usable; leave it
+        // as-is and let the session reconcile with the remote itself.
+        reportProgress(onProgress, {
+          phase: 'pulling',
+          message: 'Workspace has local changes that diverge from the remote — keeping them as-is.',
+        });
       }
     }
     succeeded = true;
@@ -357,6 +411,22 @@ async function scrubRemote(
       'pull-failed',
     );
   }
+}
+
+/**
+ * True when a failed `git pull --ff-only` on re-open just means the current
+ * branch can't be fast-forwarded — not that anything is broken. The shared
+ * workdir is routinely left on a session's working branch, which may have
+ * local commits diverging from upstream, no upstream at all (session branches
+ * are created from `FETCH_HEAD`), or a detached HEAD. In all of those cases
+ * the checkout is intact and holds the session's work; materialization must
+ * keep it rather than fail the workspace open.
+ */
+function isBenignNonFastForward(result: SandboxCommandResult): boolean {
+  const output = `${result.stderr || ''}\n${result.stdout || ''}`;
+  return /Not possible to fast-forward|Diverging branches can't be fast-forwarded|no tracking information for the current branch|You are not currently on a branch/i.test(
+    output,
+  );
 }
 
 /**

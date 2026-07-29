@@ -83,7 +83,12 @@ export function SignalsOverviewPage() {
   }
 
   if (entitiesQuery.isError) {
-    return <SignalsErrorState message="Unable to load signal entities." onRetry={() => void entitiesQuery.refetch()} />;
+    return (
+      <SignalsErrorState
+        message="Unable to load trace intelligence entities."
+        onRetry={() => void entitiesQuery.refetch()}
+      />
+    );
   }
 
   const entities = entitiesQuery.data?.entities ?? [];
@@ -125,13 +130,13 @@ export function SignalsOverviewPage() {
           aria-labelledby="signals-data-heading"
         >
           <h1 className="text-neutral6 text-lg font-semibold" id="signals-data-heading">
-            Not enough signal data yet
+            Not enough trace signal data yet
           </h1>
           <p className="text-neutral3 mt-2 text-sm">
-            At least two signal types are needed to show how themes connect across traces.
+            At least two trace signal types are needed to show how themes connect across traces.
           </p>
           <p className="text-neutral4 mt-4 text-xs">
-            Available signals: {signalNames.length > 0 ? signalNames.map(formatSignalName).join(', ') : 'None'}
+            Available trace signals: {signalNames.length > 0 ? signalNames.map(formatSignalName).join(', ') : 'None'}
           </p>
         </section>
       )}

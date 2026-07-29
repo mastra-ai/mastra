@@ -8,8 +8,8 @@ import { SignalsOverviewPage } from '../signals-overview-page';
 afterEach(() => cleanup());
 
 describe('SignalsOverviewPage', () => {
-  describe('when Signals has not launched yet', () => {
-    it('explains the purpose of signal analysis', () => {
+  describe('when trace intelligence has not launched yet', () => {
+    it('explains the purpose of trace intelligence', () => {
       render(<SignalsOverviewPage />);
 
       expect(screen.getByRole('heading', { name: 'Understand what drives every agent interaction' })).not.toBeNull();
@@ -18,18 +18,18 @@ describe('SignalsOverviewPage', () => {
     it('shows the ordered trace analysis pipeline', () => {
       render(<SignalsOverviewPage />);
 
-      const pipeline = screen.getByRole('list', { name: 'Signals analysis pipeline' });
+      const pipeline = screen.getByRole('list', { name: 'Trace intelligence pipeline' });
       const stageHeadings = within(pipeline)
         .getAllByRole('heading')
         .map(heading => heading.textContent);
 
-      expect(stageHeadings).toEqual(['Traces', 'Mastra Engine', 'Signal analysis']);
+      expect(stageHeadings).toEqual(['Traces', 'Mastra Engine', 'Trace signals']);
     });
 
     it('shows representative trace inputs', () => {
       render(<SignalsOverviewPage />);
 
-      const pipeline = screen.getByRole('list', { name: 'Signals analysis pipeline' });
+      const pipeline = screen.getByRole('list', { name: 'Trace intelligence pipeline' });
       expect(within(pipeline).getByText('chat.completion')).not.toBeNull();
       expect(within(pipeline).getByText('tool.search_docs')).not.toBeNull();
       expect(within(pipeline).getByText('workflow.support')).not.toBeNull();
@@ -38,7 +38,7 @@ describe('SignalsOverviewPage', () => {
     it('shows the four supported signal dimensions', () => {
       render(<SignalsOverviewPage />);
 
-      const pipeline = screen.getByRole('list', { name: 'Signals analysis pipeline' });
+      const pipeline = screen.getByRole('list', { name: 'Trace intelligence pipeline' });
       for (const signal of ['Outcome', 'Goal', 'Behavior', 'Sentiment']) {
         expect(within(pipeline).getByText(signal)).not.toBeNull();
       }
@@ -47,7 +47,7 @@ describe('SignalsOverviewPage', () => {
     it('defines each supported signal in plain language', () => {
       render(<SignalsOverviewPage />);
 
-      const definitions = screen.getByRole('list', { name: 'Signal definitions' });
+      const definitions = screen.getByRole('list', { name: 'Trace signal definitions' });
       expect(within(definitions).getByText(/what the user is trying to achieve or have completed/i)).not.toBeNull();
       expect(within(definitions).getByText(/the user's emotional state or attitude/i)).not.toBeNull();
       expect(
@@ -62,7 +62,9 @@ describe('SignalsOverviewPage', () => {
       render(<SignalsOverviewPage />);
 
       expect(
-        screen.getByText(/grouped trace relationships will appear after traces contain at least two signal types/i),
+        screen.getByText(
+          /grouped trace relationships will appear after traces contain at least two trace signal types/i,
+        ),
       ).not.toBeNull();
     });
 

@@ -824,13 +824,16 @@ export class StoreMemoryUpstash extends MemoryStorage {
       // This is critical when `include` parameter brings in messages from semantic recall
       finalMessages = this._sortMessages(finalMessages, field, direction);
 
+      const threadIdSet = new Set(threadIds);
       const returnedThreadMessageIds = new Set(
-        finalMessages.filter(message => message.threadId === threadId).map(message => message.id),
+        finalMessages
+          .filter(message => message.threadId && threadIdSet.has(message.threadId))
+          .map(message => message.id),
       );
-      const hasMore =
-        perPageInput !== false &&
-        (metadataFilter || returnedThreadMessageIds.size < total) &&
-        offset + paginatedMessages.length < total;
+      const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
+      const hasMore = metadataFilter
+        ? perPageInput !== false && offset + paginatedMessages.length < total
+        : perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,
