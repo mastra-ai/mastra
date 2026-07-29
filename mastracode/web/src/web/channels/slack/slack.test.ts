@@ -6,7 +6,7 @@ import {
   createChannelResourceIdResolver,
   resolveChannelThreadId,
   createHandlers,
-  promptIfUnlinked,
+  resolveLinkedSender,
   resolveFactoryForLink,
 } from './slack.js';
 
@@ -45,19 +45,21 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('promptIfUnlinked', () => {
-  it('returns false (dispatch) when no account-link store is configured', async () => {
+describe('resolveLinkedSender', () => {
+  it('is ungated (dispatch) when no account-link store is configured', async () => {
     const thread = makeThread();
-    const result = await promptIfUnlinked({ thread, message: makeMessage('T-1') });
-    expect(result).toBe(false);
+    const result = await resolveLinkedSender({ thread, message: makeMessage('T-1') });
+    expect(result).toEqual({ status: 'ungated' });
     expect(thread.postEphemeral).not.toHaveBeenCalled();
   });
 
-  it('returns false (dispatch) for a linked sender, no card posted', async () => {
+  it('resolves the tenant for a linked sender, no card posted', async () => {
     const thread = makeThread();
     const accountLinks = makeStore({ orgId: 'org-1', userId: 'user-1' });
-    const result = await promptIfUnlinked({ thread, message: makeMessage('T-1'), accountLinks });
-    expect(result).toBe(false);
+    const result = await resolveLinkedSender({ thread, message: makeMessage('T-1'), accountLinks });
+    expect(result.status).toBe('linked');
+    // The resolved link is what the handler stamps onto the request context.
+    expect(result).toMatchObject({ link: { orgId: 'org-1', userId: 'user-1' } });
     expect(accountLinks.getAccountLink).toHaveBeenCalledWith({
       platform: 'slack',
       externalTeamId: 'T-1',
@@ -66,20 +68,20 @@ describe('promptIfUnlinked', () => {
     expect(thread.postEphemeral).not.toHaveBeenCalled();
   });
 
-  it('returns true (skip run) and posts an ephemeral signed Connect card for an unlinked sender', async () => {
+  it('blocks the run and posts an ephemeral signed Connect card for an unlinked sender', async () => {
     process.env.MASTRACODE_CHANNELS_PUBLIC_URL = 'https://mc.example.com';
     const thread = makeThread();
     const accountLinks = makeStore(null);
     const channelLinkStateSigner = createChannelLinkStateSigner('secret');
 
-    const result = await promptIfUnlinked({
+    const result = await resolveLinkedSender({
       thread,
       message: makeMessage('T-1'),
       accountLinks,
       channelLinkStateSigner,
     });
 
-    expect(result).toBe(true);
+    expect(result).toEqual({ status: 'blocked' });
     expect(thread.postEphemeral).toHaveBeenCalledTimes(1);
 
     // Ephemeral (visible only to the sender), with fallbackToDM.
@@ -108,7 +110,7 @@ describe('promptIfUnlinked', () => {
     const accountLinks = makeStore({ orgId: 'org-1', userId: 'user-1' });
     const channelLinkStateSigner = createChannelLinkStateSigner('secret');
 
-    const result = await promptIfUnlinked({
+    const result = await resolveLinkedSender({
       thread,
       message: makeMessage(undefined),
       accountLinks,
@@ -116,7 +118,7 @@ describe('promptIfUnlinked', () => {
     });
 
     // No team id → never even looks up the (workspace-scoped) link, blocks run.
-    expect(result).toBe(true);
+    expect(result).toEqual({ status: 'blocked' });
     expect(accountLinks.getAccountLink).not.toHaveBeenCalled();
     // Without a team id there's nothing safe to sign into the deep link.
     expect(thread.postEphemeral).not.toHaveBeenCalled();
@@ -129,14 +131,14 @@ describe('promptIfUnlinked', () => {
     const accountLinks = makeStore(null);
     const channelLinkStateSigner = createChannelLinkStateSigner('secret');
 
-    const result = await promptIfUnlinked({
+    const result = await resolveLinkedSender({
       thread,
       message: makeMessage('T-1'),
       accountLinks,
       channelLinkStateSigner,
     });
 
-    expect(result).toBe(true);
+    expect(result).toEqual({ status: 'blocked' });
     expect(thread.postEphemeral).not.toHaveBeenCalled();
   });
 });

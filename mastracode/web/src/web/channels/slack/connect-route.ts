@@ -69,7 +69,7 @@ function decodeJwtPayload(jwt: string): Record<string, unknown> | null {
  * signed deep-link `state` to the currently signed-in Mastra tenant.
  *
  * The `state` is HMAC-signed by the bot when it prompts an unlinked sender
- * (see `slack.ts` `promptIfUnlinked`), so the Slack identity it carries is
+ * (see `slack.ts` `resolveLinkedSender`), so the Slack identity it carries is
  * trustworthy and a forged `?teamId=&userId=` is rejected. Auth supplies the
  * tenant `(orgId, userId)`; the write is the reverse-index row that lets a
  * later Slack message from that sender resolve this tenant's model credentials.

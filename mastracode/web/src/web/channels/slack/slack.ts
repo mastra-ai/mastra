@@ -283,20 +283,6 @@ function buildConnectCard({
   });
 }
 
-/**
- * Boolean view of {@link resolveLinkedSender}: `true` when the sender is
- * unlinked (caller must not dispatch a run), `false` when they're linked or
- * when the check is not configured (dispatch as usual).
- */
-export async function promptIfUnlinked(args: {
-  thread: HandlerThread;
-  message: HandlerMessage;
-  accountLinks?: ChannelIdentityStorage;
-  channelLinkStateSigner?: ChannelLinkStateSigner;
-}): Promise<boolean> {
-  return (await resolveLinkedSender(args)).status === 'blocked';
-}
-
 /** Outcome of factory routing for one linked sender's inbound message. */
 export type FactoryRouteResult =
   /** Factory routing not configured — dispatch without a factory. */
