@@ -52,25 +52,56 @@ const promptSuiteFixture = (definition: Record<string, unknown>) => [
 
 const stringSchema = { type: 'string' };
 const numberSchema = { type: 'number' };
+const arraySchema = (items: Record<string, unknown>) => ({ type: 'array', items });
+
+const customerSchema = objectSchema({ customerId: stringSchema, email: stringSchema, plan: stringSchema }, [
+  'customerId',
+  'email',
+  'plan',
+]);
+const ticketSchema = objectSchema({ ticketId: stringSchema, status: stringSchema }, ['ticketId', 'status']);
+
+const fromStep = (step: string | string[], path: string) => ({ step, path });
+const fromInput = (path: string) => ({ initData: true, path });
 
 export const workflowBuilderPromptFixtures = {
   'workflow-builder-prompt-addition': promptSuiteFixture({
     id: 'addition-workflow',
     description: 'Adds two numbers.',
     inputSchema: objectSchema({ a: numberSchema, b: numberSchema }, ['a', 'b']),
-    outputSchema: {},
-    graph: [{ type: 'mapping', id: 'add-numbers-result', mapConfig: { result: { value: 5 } } }],
+    outputSchema: objectSchema({ result: numberSchema }, ['result']),
+    graph: [
+      { type: 'tool', id: 'add-numbers-step', toolId: 'addNumbers' },
+      {
+        type: 'mapping',
+        id: 'add-numbers-result',
+        mapConfig: { result: fromStep('add-numbers-step', 'result') },
+      },
+    ],
   }),
   'workflow-builder-prompt-customer-ticket': promptSuiteFixture({
     id: 'customer-ticket-workflow',
     description: 'Looks up a customer and creates a support ticket.',
     inputSchema: objectSchema({ email: stringSchema, summary: stringSchema }, ['email', 'summary']),
-    outputSchema: {},
+    outputSchema: ticketSchema,
     graph: [
+      { type: 'tool', id: 'lookup-customer-step', toolId: 'lookupCustomer' },
+      {
+        type: 'mapping',
+        id: 'ticket-input',
+        mapConfig: {
+          customerId: fromStep('lookup-customer-step', 'customerId'),
+          summary: fromInput('summary'),
+        },
+      },
+      { type: 'tool', id: 'create-ticket-step', toolId: 'createSupportTicket' },
       {
         type: 'mapping',
         id: 'ticket-result',
-        mapConfig: { ticketId: { value: 'ticket-456' }, status: { value: 'open' } },
+        mapConfig: {
+          ticketId: fromStep('create-ticket-step', 'ticketId'),
+          status: fromStep('create-ticket-step', 'status'),
+        },
       },
     ],
   }),
@@ -78,18 +109,28 @@ export const workflowBuilderPromptFixtures = {
     id: 'parallel-customer-lookup-workflow',
     description: 'Looks up two customers in parallel.',
     inputSchema: objectSchema({ firstEmail: stringSchema, secondEmail: stringSchema }, ['firstEmail', 'secondEmail']),
-    outputSchema: {},
+    outputSchema: objectSchema({ firstCustomer: customerSchema, secondCustomer: customerSchema }, [
+      'firstCustomer',
+      'secondCustomer',
+    ]),
+    // NOTE: parallel children all receive the SAME preceding input, and inner
+    // steps cannot declare an inputMapping. Looking up two DIFFERENT emails in
+    // parallel is therefore not expressible today — this fixture encodes what
+    // the prompt asks for and is expected to fail until that gap is addressed.
     graph: [
+      {
+        type: 'parallel',
+        steps: [
+          { type: 'tool', id: 'lookup-first', toolId: 'lookupCustomer' },
+          { type: 'tool', id: 'lookup-second', toolId: 'lookupCustomer' },
+        ],
+      },
       {
         type: 'mapping',
         id: 'parallel-customer-results',
         mapConfig: {
-          firstCustomer: {
-            value: { customerId: 'customer-123', email: 'ada@example.com', plan: 'pro' },
-          },
-          secondCustomer: {
-            value: { customerId: 'customer-123', email: 'grace@example.com', plan: 'pro' },
-          },
+          firstCustomer: fromStep('lookup-first', ''),
+          secondCustomer: fromStep('lookup-second', ''),
         },
       },
     ],
@@ -98,12 +139,13 @@ export const workflowBuilderPromptFixtures = {
     id: 'support-answer-workflow',
     description: 'Returns a support answer.',
     inputSchema: objectSchema({ prompt: stringSchema }, ['prompt']),
-    outputSchema: {},
+    outputSchema: objectSchema({ response: stringSchema }, ['response']),
     graph: [
+      { type: 'agent', id: 'support-agent-step', agentId: 'support-agent' },
       {
         type: 'mapping',
         id: 'support-answer-result',
-        mapConfig: { response: { value: 'Reset your password from account settings.' } },
+        mapConfig: { response: fromStep('support-agent-step', 'text') },
       },
     ],
   }),
@@ -111,20 +153,25 @@ export const workflowBuilderPromptFixtures = {
     id: 'nested-greeting-workflow',
     description: 'Returns a nested greeting.',
     inputSchema: objectSchema({ name: stringSchema }, ['name']),
-    outputSchema: {},
+    outputSchema: objectSchema({ message: stringSchema }, ['message']),
+    // The nested step declares its own id (`invoke-greeting`) and the final
+    // mapping reads from that declared id. Runtime currently keys nested
+    // results by the intrinsic workflow id instead, so this stays red until
+    // rehydration preserves the declared entry id.
     graph: [
+      { type: 'workflow', id: 'invoke-greeting', workflowId: 'greetingWorkflow' },
       {
         type: 'mapping',
         id: 'nested-greeting-result',
-        mapConfig: { message: { value: 'Hello, Ada!' } },
+        mapConfig: { message: fromStep('invoke-greeting', 'message') },
       },
     ],
   }),
   'workflow-builder-prompt-foreach-customer-lookup': promptSuiteFixture({
     id: 'foreach-customer-lookup-workflow',
     description: 'Looks up each customer in an input array.',
-    inputSchema: { type: 'array', items: objectSchema({ email: stringSchema }, ['email']) },
-    outputSchema: {},
+    inputSchema: arraySchema(objectSchema({ email: stringSchema }, ['email'])),
+    outputSchema: arraySchema(customerSchema),
     graph: [
       {
         type: 'foreach',
@@ -141,12 +188,29 @@ export const workflowBuilderPromptFixtures = {
     id: 'priority-support-router',
     description: 'Routes support requests by priority.',
     inputSchema: objectSchema({ prompt: stringSchema, priority: stringSchema }, ['prompt', 'priority']),
-    outputSchema: {},
+    outputSchema: objectSchema({ response: stringSchema }, ['response']),
     graph: [
       {
         type: 'mapping',
+        id: 'route-input',
+        mapConfig: { prompt: fromInput('prompt') },
+      },
+      {
+        type: 'conditional',
+        steps: [
+          { type: 'agent', id: 'urgent-support', agentId: 'support-agent' },
+          { type: 'agent', id: 'normal-support', agentId: 'support-agent' },
+        ],
+        predicates: [
+          { op: 'eq', left: { path: 'initData.priority' }, right: { literal: 'urgent' } },
+          { op: 'ne', left: { path: 'initData.priority' }, right: { literal: 'urgent' } },
+        ],
+      },
+      {
+        type: 'mapping',
         id: 'priority-support-result',
-        mapConfig: { response: { value: 'Urgent support response for Production is down' } },
+        // Array form selects whichever branch actually ran.
+        mapConfig: { response: fromStep(['urgent-support', 'normal-support'], 'text') },
       },
     ],
   }),
@@ -154,14 +218,32 @@ export const workflowBuilderPromptFixtures = {
     id: 'mixed-support-pipeline',
     description: 'Returns a support answer and ticket.',
     inputSchema: objectSchema({ email: stringSchema, summary: stringSchema }, ['email', 'summary']),
-    outputSchema: {},
+    outputSchema: objectSchema({ response: stringSchema, ticket: ticketSchema }, ['response', 'ticket']),
     graph: [
+      { type: 'tool', id: 'lookup-customer-step', toolId: 'lookupCustomer' },
+      {
+        type: 'mapping',
+        id: 'agent-input',
+        mapConfig: {
+          prompt: { template: 'Prepare a support answer for ${initData.summary}' },
+        },
+      },
+      { type: 'agent', id: 'support-agent-step', agentId: 'support-agent' },
+      {
+        type: 'mapping',
+        id: 'ticket-input',
+        mapConfig: {
+          customerId: fromStep('lookup-customer-step', 'customerId'),
+          summary: fromInput('summary'),
+        },
+      },
+      { type: 'tool', id: 'create-ticket-step', toolId: 'createSupportTicket' },
       {
         type: 'mapping',
         id: 'mixed-support-result',
         mapConfig: {
-          response: { value: 'Prepared support answer for Cannot sign in' },
-          ticket: { value: { ticketId: 'ticket-456', status: 'open' } },
+          response: fromStep('support-agent-step', 'text'),
+          ticket: fromStep('create-ticket-step', ''),
         },
       },
     ],

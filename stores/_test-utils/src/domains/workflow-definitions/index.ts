@@ -24,7 +24,10 @@ function baseInput(id = 'wf-1') {
 }
 
 export function createWorkflowDefinitionsTests({ storage }: WorkflowDefinitionsTestOptions) {
-  describe('workflowDefinitions', () => {
+  // Optional domain: stores that have not implemented it skip rather than fail.
+  const describeWorkflowDefinitions = storage.stores?.workflowDefinitions ? describe : describe.skip;
+
+  describeWorkflowDefinitions('workflowDefinitions', () => {
     let store: WorkflowDefinitionsStorage;
 
     beforeAll(async () => {

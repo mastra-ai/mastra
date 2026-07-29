@@ -39,7 +39,7 @@ const AGENT_ENTRY_DESCRIPTION =
   'Agent step. Default agents consume { prompt: string } and return { text: string }; insert a mapping step producing { prompt } before the agent when shapes differ, and map its result from the `text` field afterwards — never invent output fields such as `response`. When `outputSchema` is set the output IS that schema shape instead. Use an agent ID returned by resource discovery; never invent IDs.';
 
 export const workflowBuilderAgentEntrySchema = z
-  .object({
+  .strictObject({
     type: z.literal('agent'),
     id: z.string().min(1).describe('Step id — kebab-case, unique within the workflow.'),
     agentId: z.string().min(1).describe('Id of an agent registered on this Mastra instance (from resource discovery).'),
@@ -49,7 +49,7 @@ export const workflowBuilderAgentEntrySchema = z
   .describe(AGENT_ENTRY_DESCRIPTION);
 
 export const workflowBuilderAgentEntryInputSchema = z
-  .object({
+  .strictObject({
     type: z.literal('agent'),
     id: z.string().min(1).describe('Step id — kebab-case, unique within the workflow.'),
     agentId: z
@@ -64,7 +64,7 @@ export const workflowBuilderAgentEntryInputSchema = z
   .describe(AGENT_ENTRY_DESCRIPTION);
 
 export const workflowBuilderToolEntrySchema = z
-  .object({
+  .strictObject({
     type: z.literal('tool'),
     id: z.string().min(1).describe('Step id — kebab-case, unique within the workflow.'),
     toolId: z.string().min(1).describe('Id of a tool registered on this Mastra instance (from resource discovery).'),
@@ -126,19 +126,24 @@ export const workflowBuilderMappingEntryInputSchema = z
   .describe('Mapping step. Its output is an object whose top-level keys are exactly the keys of mapConfig.');
 
 export const workflowBuilderNestedWorkflowEntrySchema = z
-  .object({
+  .strictObject({
     type: z.literal('workflow'),
-    id: z.string().min(1).describe('Must be the authoritative nested workflow ID; id must exactly equal workflowId.'),
+    id: z
+      .string()
+      .min(1)
+      .describe(
+        'Call-site step id — kebab-case, unique within the workflow. This is the id that addresses this step result (stepResults.<id>); it does not need to equal workflowId.',
+      ),
     workflowId: z
       .string()
       .min(1)
       .describe(
-        'Authoritative ID of another workflow registered on this Mastra instance, exactly as returned by resource discovery; id must exactly equal workflowId. Never invent workflow IDs, self-reference, or create cycles.',
+        'Authoritative ID of another workflow registered on this Mastra instance, exactly as returned by resource discovery. Never invent workflow IDs, self-reference, or create cycles.',
       ),
     options: stepOptionsSchema,
   })
   .describe(
-    'Nested workflow step; id must exactly equal workflowId. The referenced workflow runs as a single step: its input is the current step input (a first top-level nested workflow receives the parent input directly when schemas match) and its output becomes this step output. Map its output through stepResults.<workflowId> when a different final shape is required.',
+    'Nested workflow step. The referenced workflow runs as a single step: its input is the current step input (a first top-level nested workflow receives the parent input directly when schemas match) and its output becomes this step output. Map its output through stepResults.<id> — this step own id — when a different final shape is required.',
   );
 
 const executableInnerStepSchema = z.union([
@@ -187,19 +192,19 @@ const PARALLEL_DESCRIPTION =
 const FOREACH_DESCRIPTION =
   'Foreach container. The preceding output MUST be a raw array (not an object with an array field). Each item is passed directly to the child step — no child inputMapping — and the output is an array of child outputs, order preserved. Give the inner step its own unique id.';
 const CONDITIONAL_DESCRIPTION =
-  'Conditional container. Predicates align by index with steps and use declarative initData, inputData, stepResults, or state paths; every branch whose predicate is truthy runs on the same preceding input. The result is an object keyed by each branch step id (undefined for branches that did not fire). Add a final mapping after the conditional when the keyed branch result does not match outputSchema.';
+  'Conditional container. Predicates align by index with steps and use declarative initData, inputData, stepResults, or state paths; every branch whose predicate is truthy runs on the same preceding input. Branch results are keyed by the BRANCH step ids — map from those, never from the container id, which is not a readable step result. To collapse mutually exclusive branches into one field, give the mapping source a step ARRAY: { "step": ["urgent-support", "normal-support"], "path": "text" } selects whichever branch actually ran. Add a final mapping after the conditional whenever the branch result does not already match outputSchema.';
 const LOOP_DESCRIPTION =
   '`dowhile` keeps looping while the predicate is TRUE; `dountil` keeps looping until the predicate is TRUE (exit condition). The inner step runs at least once and receives its own previous output on later iterations.';
 
 export const workflowBuilderParallelEntrySchema = z
-  .object({ type: z.literal('parallel'), steps: z.array(executableInnerStepSchema).min(1) })
+  .strictObject({ type: z.literal('parallel'), steps: z.array(executableInnerStepSchema).min(1) })
   .describe(PARALLEL_DESCRIPTION);
 export const workflowBuilderParallelEntryInputSchema = z
-  .object({ type: z.literal('parallel'), steps: z.array(executableInnerStepInputSchema).min(1) })
+  .strictObject({ type: z.literal('parallel'), steps: z.array(executableInnerStepInputSchema).min(1) })
   .describe(PARALLEL_DESCRIPTION);
 
 export const workflowBuilderForeachEntrySchema = z
-  .object({
+  .strictObject({
     type: z.literal('foreach'),
     step: executableInnerStepSchema,
     opts: z
@@ -209,7 +214,7 @@ export const workflowBuilderForeachEntrySchema = z
   })
   .describe(FOREACH_DESCRIPTION);
 export const workflowBuilderForeachEntryInputSchema = z
-  .object({
+  .strictObject({
     type: z.literal('foreach'),
     step: executableInnerStepInputSchema,
     opts: z
@@ -231,14 +236,14 @@ export const workflowBuilderSleepUntilEntrySchema = z.object({
 });
 
 export const workflowBuilderConditionalEntrySchema = z
-  .object({
+  .strictObject({
     type: z.literal('conditional'),
     steps: z.array(executableInnerStepSchema).min(1),
     predicates: z.array(workflowBuilderPredicateSchema).min(1),
   })
   .describe(CONDITIONAL_DESCRIPTION);
 export const workflowBuilderConditionalEntryInputSchema = z
-  .object({
+  .strictObject({
     type: z.literal('conditional'),
     steps: z.array(executableInnerStepInputSchema).min(1),
     predicates: z
@@ -249,7 +254,7 @@ export const workflowBuilderConditionalEntryInputSchema = z
   .describe(CONDITIONAL_DESCRIPTION);
 
 export const workflowBuilderLoopEntrySchema = z
-  .object({
+  .strictObject({
     type: z.literal('loop'),
     step: executableInnerStepSchema,
     loopType: z.enum(['dowhile', 'dountil']),
@@ -257,7 +262,7 @@ export const workflowBuilderLoopEntrySchema = z
   })
   .describe(LOOP_DESCRIPTION);
 export const workflowBuilderLoopEntryInputSchema = z
-  .object({
+  .strictObject({
     type: z.literal('loop'),
     step: executableInnerStepInputSchema,
     loopType: z.enum(['dowhile', 'dountil']),

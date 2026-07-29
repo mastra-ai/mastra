@@ -55,17 +55,15 @@ describe('validateStoredWorkflow', () => {
       expect(issues).toEqual([expect.objectContaining({ code: 'invalid-map-placement', path: 'graph.0.steps.0' })]);
     });
 
-    it('rejects nested workflow call-site ids that differ from the workflowId', () => {
+    it('accepts nested workflow call-site ids that differ from the workflowId', () => {
+      // A registry key or intrinsic workflow id may differ from the call-site id;
+      // rehydration runs the nested workflow under the declared id, so this is a
+      // legal (and unavoidable) shape rather than a validation error.
       const issues = validateStoredWorkflow(
         def({ graph: [{ type: 'workflow', id: 'local-child', workflowId: 'shared-child' }] }),
+        { workflows: { 'shared-child': {} } },
       );
-      expect(issues).toEqual([
-        expect.objectContaining({
-          code: 'invalid-nested-workflow-id',
-          path: 'graph.0.id',
-          message: expect.stringContaining('must match workflowId "shared-child"'),
-        }),
-      ]);
+      expect(issues).toEqual([]);
     });
 
     it('rejects self-referencing nested workflows even when the registry contains the id', () => {
@@ -444,9 +442,19 @@ describe('validateStoredWorkflow', () => {
         expect.objectContaining({
           code: 'incompatible-schema',
           path: 'graph.0',
-          message: 'Foreach input must be an array.',
+          // The old message just said "must be an array", and the repair advertised
+          // inserting a mapping step — which can never satisfy foreach, because
+          // mappings always emit an object.
+          message: expect.stringContaining('A mapping step cannot produce one'),
         }),
       ]);
+      // The expected schema must describe the iterable foreach input, not the
+      // workflow's final outputSchema.
+      expect((nonArray[0] as any).repair.expectedSchema).toEqual({
+        type: 'array',
+        items: expect.objectContaining({ type: 'object' }),
+      });
+      expect((nonArray[0] as any).repair.action).not.toBe('insert-workflow-mapping-before');
     });
 
     it('allows mappings to reference parallel and conditional child results', () => {
@@ -690,7 +698,7 @@ describe('assertValidStoredWorkflow', () => {
         { agents: {}, workflows: {} },
       ),
     ).toThrow(
-      /Stored workflow "wf-bad" failed validation with 3 issue\(s\):[\s\S]*\[invalid-nested-workflow-id\][\s\S]*\[missing-reference\] graph\.0\.agentId[\s\S]*\[missing-reference\] graph\.1\.workflowId/,
+      /Stored workflow "wf-bad" failed validation with 2 issue\(s\):[\s\S]*\[missing-reference\] graph\.0\.agentId[\s\S]*\[missing-reference\] graph\.1\.workflowId/,
     );
   });
 });

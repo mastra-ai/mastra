@@ -28,6 +28,7 @@ const resultSchema = z.object({
   finalizedRevision: z.number().int().nonnegative().optional(),
   candidateRevision: z.number().int().nonnegative().optional(),
   baseAcceptedRevision: z.number().int().nonnegative().optional(),
+  definition: z.unknown().optional(),
 });
 
 export const workflowDefinitionInputSchema = workflowBuilderDefinitionInputSchema.describe(
@@ -139,6 +140,7 @@ function makeSupersededResult(store: WorkflowDraftToolStore, input?: unknown) {
             finalizedRevision: state.finalizedRevision,
             baseAcceptedRevision: state.revision,
             message: SUPERSEDED_NOOP_MESSAGE,
+            definition: structuredClone(state.draft),
           };
         }
       } catch {
@@ -153,6 +155,7 @@ function makeSupersededResult(store: WorkflowDraftToolStore, input?: unknown) {
       lifecycle: state.lifecycle,
       finalizedRevision: state.finalizedRevision,
       baseAcceptedRevision: state.revision,
+      definition: structuredClone(state.draft),
     };
   }
   return {
@@ -313,6 +316,7 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
           finalizedRevision: finalize.state.finalizedRevision,
           candidateRevision: 0,
           baseAcceptedRevision: candidate.baseAcceptedRevision,
+          definition: structuredClone(finalize.state.draft),
         });
       },
     }),

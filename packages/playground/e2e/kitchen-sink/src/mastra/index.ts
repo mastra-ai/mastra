@@ -10,24 +10,34 @@ import {
   codeOverrideLockedAgent,
   omAdaptiveAgent,
   omAgent,
+  supportAgent,
   weatherAgent,
 } from './agents';
 import { simpleMcpServer } from './mcps';
 import { loggingProcessor, contentFilterProcessor } from './processors';
 import { responseQualityScorer, responseTimeScorer } from './scorers';
 import { initE2EStorage, storage } from './storage';
-import { lookupCustomer, urgentSupport } from './tools';
+import { addNumbers, createSupportTicket, lookupCustomer, urgentSupport } from './tools';
 import { complexWorkflow, enumWorkflow, lessComplexWorkflow } from './workflows/complex-workflow';
+import { greetingWorkflow } from './workflows/greeting-workflow';
 import { scheduledWorkflow, multiScheduledWorkflow } from './workflows/scheduled-workflow';
 import { E2EEditor } from './workflow-builder-editor';
 
 await initE2EStorage();
 
 export const mastra = new Mastra({
-  workflows: { complexWorkflow, lessComplexWorkflow, enumWorkflow, scheduledWorkflow, multiScheduledWorkflow },
-  tools: { lookupCustomer, urgentSupport },
+  workflows: {
+    complexWorkflow,
+    lessComplexWorkflow,
+    enumWorkflow,
+    scheduledWorkflow,
+    multiScheduledWorkflow,
+    greetingWorkflow,
+  },
+  tools: { lookupCustomer, urgentSupport, addNumbers, createSupportTicket },
   agents: {
     weatherAgent,
+    supportAgent,
     omAgent,
     omAdaptiveAgent,
     codeOverrideEditableAgent,

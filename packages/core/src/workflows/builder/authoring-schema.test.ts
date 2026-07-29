@@ -46,7 +46,9 @@ describe('shared workflow builder authoring schema', () => {
     expect(workflowBuilderAgentEntryInputSchema.description).toContain(
       'Default agents consume { prompt: string } and return { text: string }',
     );
-    expect(workflowBuilderNestedWorkflowEntrySchema.description).toContain('id must exactly equal workflowId');
+    // The call-site id addresses the nested workflow's result; it is independent
+    // of the referenced workflowId (registry keys and intrinsic ids can differ).
+    expect(workflowBuilderNestedWorkflowEntrySchema.description).toContain('stepResults.<id>');
     expect(workflowBuilderParallelEntryInputSchema.description).toContain(
       'Each child receives the same preceding input',
     );
@@ -87,6 +89,41 @@ describe('shared workflow builder authoring schema', () => {
             id: 'ambiguous',
             mapConfig: { a: { value: 1 } },
             output: { b: { value: 2 } },
+          },
+        ],
+      });
+      expect(result.success).toBe(false);
+    });
+  });
+
+  describe('when a container entry carries fields the contract does not support', () => {
+    // Regression: these were silently stripped, so a model that invented an input
+    // selector got a definition that validated and then behaved nothing like what
+    // it submitted. Unsupported fields must fail loudly instead.
+    it.each([
+      ['an invented foreach input selector', { type: 'foreach', input: { step: 'lookup', path: 'customers' } }],
+      ['an invented foreach items selector', { type: 'foreach', items: { initData: true, path: 'customers' } }],
+      ['a container id', { type: 'foreach', id: 'lookup-each' }],
+    ])('rejects %s', (_label, extra) => {
+      const result = workflowBuilderDefinitionInputSchema.safeParse({
+        ...aliasedDefinition,
+        graph: [{ step: { type: 'tool', id: 'lookup', toolId: 'lookupCustomer' }, ...extra }],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a bogus inputMapping descriptor on a container child', () => {
+      const result = workflowBuilderDefinitionInputSchema.safeParse({
+        ...aliasedDefinition,
+        graph: [
+          {
+            type: 'foreach',
+            step: {
+              type: 'tool',
+              id: 'lookup',
+              toolId: 'lookupCustomer',
+              inputMapping: { foreach: true, path: 'email' },
+            },
           },
         ],
       });

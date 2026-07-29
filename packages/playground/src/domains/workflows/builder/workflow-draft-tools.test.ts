@@ -155,6 +155,23 @@ describe('workflow draft client tools', () => {
     });
   });
 
+  describe('when a valid complete definition becomes the accepted revision', () => {
+    it('echoes the authoritative accepted definition so the model can verify it without another inspection', async () => {
+      const store = createStore({ context: validationContext });
+      const result = (await executeTool(store.tools['submit-workflow-draft'], validDefinition)) as {
+        success: boolean;
+        definition?: unknown;
+      };
+
+      expect(result.success).toBe(true);
+      expect(result.definition).toEqual(store.state.draft);
+      expect(result.definition).toMatchObject({
+        id: 'new-workflow',
+        graph: [expect.objectContaining({ id: 'lookup', toolId: 'lookupCustomer' })],
+      });
+    });
+  });
+
   describe('when an invalid complete definition is submitted', () => {
     it('preserves it for display and returns all validation diagnostics', async () => {
       let candidate: WorkflowDraftCandidate | undefined;
@@ -244,6 +261,7 @@ describe('workflow draft client tools', () => {
       });
       expect(result.message).toContain('earlier');
       expect(result.message).toContain('no-op');
+      expect(result.definition).toEqual(live.state.draft);
     });
   });
 
@@ -281,6 +299,9 @@ describe('workflow draft client tools', () => {
       expect(result.message ?? '').toMatch(/already Ready/i);
       expect(result.message ?? '').toMatch(/wait for the user/i);
       expect((result.message ?? '').length).toBeLessThan(400);
+      // The rejected submission must not become the reported definition.
+      expect(result.definition).toEqual(live.state.draft);
+      expect((result.definition as { graph: unknown[] }).graph).toHaveLength(1);
     });
   });
 });

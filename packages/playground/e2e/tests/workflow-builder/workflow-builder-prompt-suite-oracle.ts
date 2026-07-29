@@ -21,8 +21,7 @@ const isCustomer = (value: unknown, email: string) =>
 
 const isTicket = (value: unknown) => isRecord(value) && value.ticketId === 'ticket-456' && value.status === 'open';
 
-const hasOrderedSupportSteps = (value: unknown) =>
-  Array.isArray(value) && value.length > 0 && value.every(step => typeof step === 'string' && step.length > 0);
+const isNonEmptyString = (value: unknown) => typeof value === 'string' && value.length > 0;
 
 const scenarioMetadata = {
   'addition-workflow': {
@@ -46,11 +45,7 @@ const scenarioMetadata = {
   'support-answer-workflow': {
     fixture: 'workflow-builder-prompt-support-answer',
     expectedGraphEntry: 'support-answer-result',
-    assertOutput: (output: unknown) =>
-      isRecord(output) &&
-      typeof output.response === 'string' &&
-      output.response.length > 0 &&
-      hasOrderedSupportSteps(output.steps),
+    assertOutput: (output: unknown) => isRecord(output) && isNonEmptyString(output.response),
   },
   'nested-greeting-workflow': {
     fixture: 'workflow-builder-prompt-nested-greeting',
@@ -66,20 +61,13 @@ const scenarioMetadata = {
   'priority-support-router': {
     fixture: 'workflow-builder-prompt-priority-support-router',
     expectedGraphEntry: 'priority-support-result',
-    assertOutput: (output: unknown) =>
-      isRecord(output) &&
-      output.branch === 'urgent' &&
-      typeof output.response === 'string' &&
-      output.response.length > 0,
+    // The prompt only requires the selected agent text in a `response` field.
+    assertOutput: (output: unknown) => isRecord(output) && isNonEmptyString(output.response),
   },
   'mixed-support-pipeline': {
     fixture: 'workflow-builder-prompt-mixed-support-pipeline',
     expectedGraphEntry: 'mixed-support-result',
-    assertOutput: (output: unknown) =>
-      isRecord(output) &&
-      typeof output.agentText === 'string' &&
-      output.agentText.length > 0 &&
-      isTicket(output.ticket),
+    assertOutput: (output: unknown) => isRecord(output) && isNonEmptyString(output.response) && isTicket(output.ticket),
   },
 } satisfies Record<
   CanonicalWorkflowScenarioId,

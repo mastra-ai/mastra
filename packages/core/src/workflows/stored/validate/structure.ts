@@ -34,13 +34,6 @@ export function validateWorkflowStructure(def: WorkflowValidationInput): Workflo
     }
 
     if (entry.type === 'workflow') {
-      if (entry.id !== entry.workflowId) {
-        issues.push({
-          code: 'invalid-nested-workflow-id',
-          path: `${path}.id`,
-          message: `Nested workflow step id "${entry.id}" must match workflowId "${entry.workflowId}". Use "${entry.workflowId}" for both fields.`,
-        });
-      }
       if (entry.workflowId === def.id) {
         issues.push({
           code: 'self-reference',

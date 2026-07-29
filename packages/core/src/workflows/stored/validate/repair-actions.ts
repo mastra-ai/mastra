@@ -63,6 +63,12 @@ function precedingSourceIds(def: WorkflowValidationInput, targetIndex: number): 
       const childId = leafEntryId(entry.step);
       if (childId) ids.push(childId);
     }
+    // Container entries (parallel/conditional/foreach/loop) never produce a
+    // result keyed by their own id — only their executed children do. Advertising
+    // the container id here previously sent authors toward mappings that pass
+    // draft validation and then fail at run time.
+    if (entry.type === 'parallel' || entry.type === 'conditional' || entry.type === 'foreach' || entry.type === 'loop')
+      return;
     const id = 'id' in entry && entry.id ? entry.id : entry.type === 'step' ? entry.step.id : undefined;
     if (id) ids.push(id);
   });
@@ -109,7 +115,18 @@ export function addWorkflowValidationRepairActions(
     let repair: WorkflowValidationRepairAction | undefined;
 
     if (issue.code === 'incompatible-schema') {
-      const expectedSchema = entry ? inputSchemaOf(entry, index) : def.outputSchema;
+      // A foreach consumes a RAW ARRAY of its child's input, so the useful
+      // "expected" shape is the iterable — not the child input, and definitely
+      // not the workflow output schema the container path used to fall back to.
+      const containerEntry = graphMatch ? def.graph[targetIndex] : undefined;
+      const foreachChildInput =
+        containerEntry?.type === 'foreach' ? inputSchemaOf(containerEntry.step, index) : undefined;
+      const expectedSchema =
+        containerEntry?.type === 'foreach'
+          ? ({ type: 'array', ...(foreachChildInput ? { items: foreachChildInput } : {}) } as JsonSchema)
+          : entry
+            ? inputSchemaOf(entry, index)
+            : def.outputSchema;
       const actualSchema =
         issue.path === 'outputSchema'
           ? finalOutput

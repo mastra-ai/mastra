@@ -326,7 +326,7 @@ describe('storage round-trip', () => {
     expect((result as any).result).toEqual({ response: 'resolved' });
   });
 
-  it('rejects nested workflow call-site ids that cannot be preserved by live rehydration', async () => {
+  it('runs a nested workflow inside a container under its declared call-site id', async () => {
     const inner = makeInnerWorkflow('inner-wf');
     const mastra = new Mastra({
       logger: false,
@@ -334,21 +334,31 @@ describe('storage round-trip', () => {
       storage: new InMemoryStore({ id: 'nested-call-site-identity' }),
     });
 
-    // The rule is enforced by validation on the strict save path (rehydration
-    // itself no longer re-validates).
-    await expect(
-      mastra.addStoredWorkflow({
-        id: 'outer-wf',
-        inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
-        outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
-        graph: [
-          {
-            type: 'parallel',
-            steps: [{ type: 'workflow', id: 'local-inner', workflowId: 'inner-wf' }],
-          },
-        ],
-      }),
-    ).rejects.toThrow(/id "local-inner" must match workflowId "inner-wf"/);
+    // The declared call-site id is what the portable definition addresses, so
+    // it must survive rehydration even when it differs from the nested
+    // workflow's own intrinsic id.
+    await mastra.addStoredWorkflow({
+      id: 'outer-wf',
+      inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      graph: [
+        {
+          type: 'parallel',
+          steps: [{ type: 'workflow', id: 'local-inner', workflowId: 'inner-wf' }],
+        },
+        {
+          type: 'mapping',
+          id: 'map-out',
+          mapConfig: JSON.stringify({ value: { step: 'local-inner', path: 'value' } }),
+        },
+      ],
+    });
+
+    const run = await mastra.getWorkflow('outer-wf').createRun();
+    const result = await run.start({ inputData: { value: 2 } });
+
+    expect(result.status).toBe('success');
+    expect((result as any).result).toEqual({ value: 3 });
   });
 
   it('addStoredWorkflow persists + live-registers; loadStoredWorkflows brings it back on a fresh boot', async () => {
@@ -1159,22 +1169,37 @@ describe('nested-workflow round-trip', () => {
     ).rejects.toThrow(/ghost-wf/);
   });
 
-  it('addStoredWorkflow rejects a nested workflow call-site id that differs from workflowId', async () => {
-    const inner = makeInnerWorkflow('shared-child');
+  it('accepts and runs a nested workflow whose registry key differs from its intrinsic id', async () => {
+    // Mirrors the real registry shape: the workflow is registered under key
+    // "greetingWorkflow" but its intrinsic id is "greeting-workflow". Mapping
+    // from the declared call-site id must resolve rather than falling back to
+    // initData.
+    const inner = makeInnerWorkflow('greeting-workflow');
     const mastra = new Mastra({
       storage: new InMemoryStore(),
-      workflows: { 'shared-child': inner },
+      workflows: { greetingWorkflow: inner },
       tools: { 'plus-one': plusOneTool as any },
     });
 
-    await expect(
-      mastra.addStoredWorkflow({
-        id: 'outer-mismatched-child',
-        inputSchema: { type: 'object', properties: { value: { type: 'number' } } },
-        outputSchema: { type: 'object', properties: { value: { type: 'number' } } },
-        graph: [{ type: 'workflow', id: 'local-child', workflowId: 'shared-child' }],
-      }),
-    ).rejects.toThrow('Nested workflow step id "local-child" must match workflowId "shared-child"');
+    await mastra.addStoredWorkflow({
+      id: 'outer-nested-child',
+      inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      outputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+      graph: [
+        { type: 'workflow', id: 'invoke-greeting', workflowId: 'greetingWorkflow' },
+        {
+          type: 'mapping',
+          id: 'map-out',
+          mapConfig: JSON.stringify({ value: { step: 'invoke-greeting', path: 'value' } }),
+        },
+      ],
+    });
+
+    const run = await mastra.getWorkflow('outer-nested-child').createRun();
+    const result = await run.start({ inputData: { value: 5 } });
+
+    expect(result.status).toBe('success');
+    expect((result as any).result).toEqual({ value: 6 });
   });
 
   it('addStoredWorkflow rejects self-referencing (cycle)', async () => {

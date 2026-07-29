@@ -70,3 +70,19 @@ export const urgentSupport = createTool({
   outputSchema: z.object({ response: z.string() }),
   execute: async () => ({ response: 'Production incident response started.' }),
 });
+
+export const addNumbers = createTool({
+  id: 'add-numbers',
+  description: 'Add two numbers for Workflow Builder comparison tests',
+  inputSchema: z.object({ a: z.number(), b: z.number() }),
+  outputSchema: z.object({ result: z.number() }),
+  execute: async ({ a, b }) => ({ result: a + b }),
+});
+
+export const createSupportTicket = createTool({
+  id: 'create-support-ticket',
+  description: 'Create a support ticket for Workflow Builder comparison tests',
+  inputSchema: z.object({ customerId: z.string(), summary: z.string() }),
+  outputSchema: z.object({ ticketId: z.string(), status: z.string() }),
+  execute: async () => ({ ticketId: 'ticket-456', status: 'open' }),
+});

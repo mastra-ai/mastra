@@ -234,6 +234,34 @@ export const codeOverrideLockedAgent = new Agent({
   editor: false,
 });
 
+/**
+ * Deterministic agent referenced by the Workflow Builder prompt suite.
+ * Declarative agent steps return `{ text }`, so the fixed reply is what the
+ * generated workflows must map their final output from.
+ */
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Answer support questions for Workflow Builder comparison tests.',
+  model: new aiTest.MockLanguageModelV2({
+    doGenerate: async () => ({
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      finishReason: 'stop',
+      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      content: [{ type: 'text', text: 'Support answer for the customer.' }],
+      warnings: [],
+    }),
+    doStream: async () => ({
+      stream: createDelayedStream(
+        [{ type: 'text-delta', delta: 'Support answer for the customer.' }, { type: 'finish' }],
+        0,
+      ),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+  }),
+});
+
 let builderFixtureCount = 0;
 let builderFixture: Fixtures | undefined;
 

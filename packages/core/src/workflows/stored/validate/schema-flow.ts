@@ -254,7 +254,12 @@ export function inferGraphSchemas(def: WorkflowValidationInput, index: WorkflowR
       case 'foreach': {
         const incoming = current;
         if (isRecord(incoming) && typeof incoming.type === 'string' && incoming.type !== 'array') {
-          issues.push({ code: 'incompatible-schema', path, message: 'Foreach input must be an array.' });
+          issues.push({
+            code: 'incompatible-schema',
+            path,
+            message:
+              'Foreach input must be a raw array. A mapping step cannot produce one — mappings always build an object — so the preceding step (or the workflow inputSchema itself) must already be an array of the child input.',
+          });
         }
         const items = isRecord(incoming?.items) ? (incoming.items as JsonSchema) : undefined;
         const output = evalLeaf(entry.step, `${path}.step`, items, true);

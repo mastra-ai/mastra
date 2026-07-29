@@ -5,7 +5,7 @@
  * missing — better to surface the failure at load time than at run time.
  */
 import type { Mastra } from '../../mastra';
-import { createWorkflow } from '../create';
+import { cloneWorkflow, createWorkflow } from '../create';
 import { derivePredicateLabel } from '../predicate';
 import type { Step } from '../step';
 import type {
@@ -143,7 +143,12 @@ function applyGraphEntry(
     }
     case 'workflow': {
       const nested = assertWorkflowExists(mastra, entry.workflowId);
-      wf.then(nested);
+      // A nested workflow executes as its own `Workflow`, so the engine keys its
+      // result by the workflow's intrinsic id. The portable definition addresses
+      // it by the declared call-site id, which is what mappings, predicates and
+      // `${stepResults...}` templates reference. Clone it under the declared id so
+      // every reference resolves instead of silently falling back to `initData`.
+      wf.then(entry.id && entry.id !== nested.id ? cloneWorkflow(nested as any, { id: entry.id }) : nested);
       return;
     }
     case 'conditional': {
@@ -280,8 +285,14 @@ function rehydrateSingleEntry(
       }
       return { type: 'step', step: resolved as unknown as Step };
     }
-    case 'workflow':
-      return { type: 'step', step: assertWorkflowExists(mastra, entry.workflowId) as unknown as Step };
+    case 'workflow': {
+      const nested = assertWorkflowExists(mastra, entry.workflowId);
+      // Same call-site identity rule as top-level nested workflows: run the
+      // clone under the declared id so results are keyed the way the portable
+      // definition addresses them.
+      const step = entry.id && entry.id !== nested.id ? cloneWorkflow(nested as any, { id: entry.id }) : nested;
+      return { type: 'step', step: step as unknown as Step };
+    }
     case 'mapping':
       throw new Error(
         `mapping entries cannot appear inside .parallel(), .branch(), or .foreach(); they must be top-level.`,

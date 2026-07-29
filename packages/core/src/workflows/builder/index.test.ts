@@ -79,8 +79,7 @@ describe('workflow builder authoring contract', () => {
     expect(normalizeWorkflowBuilderDefinition(normalized)).toEqual(expected);
   });
 
-  it('rejects nested workflow call-site ids that differ from the referenced workflow id', () => {
-    // Normalization only coerces shape; the rule lives in validation.
+  it('preserves nested workflow call-site ids that differ from the referenced workflow id', () => {
     const definition = normalizeWorkflowBuilderDefinition({
       id: 'outer-flow',
       inputSchema: {},
@@ -92,25 +91,15 @@ describe('workflow builder authoring contract', () => {
         },
       ],
     });
-    // Normalization must preserve the mismatched call-site id verbatim —
-    // never coerce it to workflowId — so validation can report the mismatch.
+    // The call-site id is how the definition addresses this step's result, so it
+    // must survive verbatim — never coerced to workflowId. A registry key or an
+    // intrinsic workflow id may legitimately differ from the call-site id.
     expect((definition.graph[0] as any).steps[0]).toEqual({
       type: 'workflow',
       id: 'local-child',
       workflowId: 'shared-child',
     });
-    expect(preflightWorkflowDefinition(definition)).toEqual({
-      ok: false,
-      issues: [
-        expect.objectContaining({
-          code: 'invalid-nested-workflow-id',
-          path: 'graph.0.steps.0.id',
-          message: expect.stringContaining(
-            'Nested workflow step id "local-child" must match workflowId "shared-child"',
-          ),
-        }),
-      ],
-    });
+    expect(preflightWorkflowDefinition(definition)).toEqual({ ok: true });
   });
 
   it('rejects function-bearing definitions', () => {
