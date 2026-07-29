@@ -1,16 +1,18 @@
-import { EntityType } from '@mastra/core/observability';
+import type { EntityType } from '@mastra/core/observability';
 import type { ListTracesArgs } from '@mastra/core/storage';
 import type { TraceDatePreset } from './types';
 import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
-export type EntityOptions = { label: string; entityType: EntityType };
+type EntityTypeValue = `${EntityType}`;
+
+export type EntityOptions = { label: string; entityType: EntityTypeValue };
 
 export const ROOT_ENTITY_TYPES = {
-  AGENT: EntityType.AGENT,
-  WORKFLOW: EntityType.WORKFLOW_RUN,
-  SCORER: EntityType.SCORER,
-  INGEST: EntityType.RAG_INGESTION,
-} as const;
+  AGENT: 'agent',
+  WORKFLOW: 'workflow_run',
+  SCORER: 'scorer',
+  INGEST: 'rag_ingestion',
+} as const satisfies Record<string, EntityTypeValue>;
 
 export const ROOT_ENTITY_TYPE_OPTIONS = [
   { label: 'Agent', entityType: ROOT_ENTITY_TYPES.AGENT },

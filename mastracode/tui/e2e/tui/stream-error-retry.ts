@@ -25,7 +25,7 @@ export const streamErrorRetryScenario = {
     const originalFetch = globalThis.fetch.bind(globalThis);
     let failedOnce = false;
     patches.setProperty(globalThis, 'fetch', async (input, init) => {
-      if (!failedOnce && requestUrl(input).includes('/chat/completions')) {
+      if (!failedOnce && requestUrl(input).includes('/responses')) {
         failedOnce = true;
         throw Object.assign(new Error('Cannot connect to API: write EPIPE'), { code: 'EPIPE' });
       }
@@ -51,6 +51,7 @@ export const streamErrorRetryScenario = {
     await runtime.waitForScreenText(/Resource ID:/i, terminal);
 
     terminal.submit(PROMPT);
+    await runtime.waitForScreenText(/write EPIPE.*retry 1\/10 in 0\.5s/i, terminal);
     await runtime.waitForScreenText(new RegExp(RESPONSE), terminal, 30_000);
 
     terminal.keyCtrlC();

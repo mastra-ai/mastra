@@ -3,7 +3,8 @@ name: Sync Software Factory Template
 # Mirrors the templates/* process (sync-templates.yml): a one-way overwrite
 # push to the external template repo whenever its monorepo source changes.
 # The only difference is a generation step — the Software Factory template is
-# derived from mastracode/web by sync-template.mjs rather than checked in.
+# derived from the mastracode/web server scaffold by sync-template.mjs rather
+# than checked in. Its Factory UI is bundled by the Mastra CLI.
 on:
   push:
     branches:

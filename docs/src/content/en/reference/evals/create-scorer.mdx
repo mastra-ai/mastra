@@ -186,7 +186,7 @@ export const responseQuality = createScorer({
 
 With this configuration, a failed request has at most three provider attempts: the initial request plus two processor retries. If `generateScore` completes and `generateReason` receives a retryable failure, only `generateReason` retries.
 
-`StreamErrorRetryProcessor` honors retryable provider metadata and narrow custom matchers. It keeps `retryUnknownErrors` disabled by default, so authentication, invalid-request, and context-length errors fail immediately unless you explicitly match them. It bounds `Retry-After` values to `30_000` milliseconds by default; use `maxRetryAfterMs` to change that cap.
+`StreamErrorRetryProcessor` honors retryable provider metadata and narrow custom matchers. It keeps `retryUnknownErrors` disabled by default, so authentication, invalid-request, and context-length errors fail immediately unless you explicitly match them. It bounds `Retry-After` values to `30_000` milliseconds by default. Use `maxRetryAfterMs` to change that cap.
 
 Avoid adding outer scorer or workflow retries. Avoid combining a nonzero model retry setting with this processor unless you intentionally accept additional attempts.
 

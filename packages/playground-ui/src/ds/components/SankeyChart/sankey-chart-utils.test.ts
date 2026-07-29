@@ -6,7 +6,9 @@ import {
   getSankeyChartCurveSelection,
   getSankeyChartNodeWeights,
   getSankeyChartValue,
+  getSankeyLabelWidths,
   reorderSankeyChartColumns,
+  truncateSankeyLabel,
 } from './sankey-chart-utils';
 
 const columns = [
@@ -300,6 +302,101 @@ describe('SankeyChart utilities', () => {
 
       expect(reordered.map(column => column.id)).toEqual(['model', 'status', 'source']);
       expect(columns.map(column => column.id)).toEqual(['source', 'model', 'status']);
+    });
+  });
+
+  describe('when budgeting horizontal space for labels', () => {
+    const nodeWidth = 7;
+    const layout = { chartWidth: 800, columnCount: 4, marginLeft: 32, marginRight: 32 };
+    const columnPitch = (layout.chartWidth - layout.marginLeft - layout.marginRight - nodeWidth) / 3;
+
+    it('keeps two centered neighbours apart', () => {
+      const { centered } = getSankeyLabelWidths(layout);
+
+      expect(centered / 2 + centered / 2).toBeLessThan(columnPitch);
+    });
+
+    it('keeps an edge label clear of its centered neighbour', () => {
+      const { centered, edge } = getSankeyLabelWidths(layout);
+
+      expect(edge + centered / 2).toBeLessThan(columnPitch + nodeWidth / 2);
+    });
+
+    it('shrinks the budget as the chart narrows', () => {
+      const wide = getSankeyLabelWidths(layout);
+      const narrow = getSankeyLabelWidths({ ...layout, chartWidth: 400 });
+
+      expect(narrow.centered).toBeLessThan(wide.centered);
+      expect(narrow.edge).toBeLessThan(wide.edge);
+    });
+
+    it('never budgets negative space', () => {
+      const { centered, edge } = getSankeyLabelWidths({ ...layout, chartWidth: 40 });
+
+      expect(centered).toBe(0);
+      expect(edge).toBe(0);
+    });
+
+    it('leaves labels unbounded before the chart is measured', () => {
+      expect(getSankeyLabelWidths({ ...layout, chartWidth: 0 })).toEqual({
+        centered: Number.POSITIVE_INFINITY,
+        edge: Number.POSITIVE_INFINITY,
+      });
+    });
+
+    it('leaves labels unbounded when a single column has no neighbour', () => {
+      expect(getSankeyLabelWidths({ ...layout, columnCount: 1 })).toEqual({
+        centered: Number.POSITIVE_INFINITY,
+        edge: Number.POSITIVE_INFINITY,
+      });
+    });
+  });
+
+  describe('when a label fits its budget', () => {
+    it('leaves it untouched', () => {
+      expect(truncateSankeyLabel('Success', { fontSize: 11, maxWidth: 220 })).toBe('Success');
+    });
+
+    it('leaves it untouched when the width is unbounded', () => {
+      const label = 'Repeated command calls without confirmation';
+
+      expect(truncateSankeyLabel(label, { fontSize: 11, maxWidth: Number.POSITIVE_INFINITY })).toBe(label);
+    });
+  });
+
+  describe('when a label overflows its budget', () => {
+    it('clips it to an ellipsis that fits', () => {
+      const label = 'Repeated command calls without confirmation';
+      const truncated = truncateSankeyLabel(label, { fontSize: 11, maxWidth: 80 });
+
+      expect(truncated.endsWith('…')).toBe(true);
+      expect(truncated.length).toBeLessThan(label.length);
+    });
+
+    it('drops the trailing space before the ellipsis', () => {
+      expect(truncateSankeyLabel('Repeated command calls', { fontSize: 11, maxWidth: 70 })).toBe('Repeated…');
+    });
+
+    it('collapses to a lone ellipsis when there is no room at all', () => {
+      expect(truncateSankeyLabel('Anything', { fontSize: 11, maxWidth: 0 })).toBe('…');
+    });
+  });
+
+  describe('when a character cap is set alongside the width budget', () => {
+    it('applies the cap on an unbounded width', () => {
+      const truncated = truncateSankeyLabel('a'.repeat(40), {
+        fontSize: 11,
+        maxWidth: Number.POSITIVE_INFINITY,
+        maxCharacters: 23,
+      });
+
+      expect(truncated).toBe(`${'a'.repeat(22)}…`);
+    });
+
+    it('applies the width budget when it is tighter than the cap', () => {
+      const truncated = truncateSankeyLabel('a'.repeat(40), { fontSize: 11, maxWidth: 80, maxCharacters: 23 });
+
+      expect(truncated.length).toBeLessThan(23);
     });
   });
 });

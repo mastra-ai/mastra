@@ -4,6 +4,7 @@
     "Qwen/Qwen3.5-9B",
     "google/gemma-4-31B-it",
     "moonshotai/Kimi-K2.6",
+    "moonshotai/Kimi-K3",
     "thinkingmachines/Inkling"
   ],
   "temperature": [
@@ -51,6 +52,7 @@
     "google/gemma-4-31B-it",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
+    "moonshotai/Kimi-K3",
     "nvidia/nemotron-3-ultra-550b-a55b",
     "openai/gpt-oss-20b",
     "thinkingmachines/Inkling",

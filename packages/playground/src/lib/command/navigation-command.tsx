@@ -654,7 +654,7 @@ export const NavigationCommand = () => {
     { id: 'workflows', label: 'Workflows', icon: <WorkflowIcon />, count: workflowEntries.length },
     { id: 'tooling', label: 'Tooling', icon: <Layers3Icon />, count: toolingCount },
     { id: 'evaluation', label: 'Evaluation', icon: <GaugeIcon />, count: evaluationCount },
-    { id: 'observability', label: 'Signals', icon: <EyeIcon />, count: observabilityCount },
+    { id: 'observability', label: 'Intelligence', icon: <EyeIcon />, count: observabilityCount },
     { id: 'settings', label: 'Studio', icon: <SlidersHorizontalIcon />, count: settingsCount },
   ];
 

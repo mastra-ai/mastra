@@ -18,7 +18,7 @@ It's especially useful for these use cases:
 Best for evaluating context quality in:
 
 - Chat systems where context usage matters
-- RAG pipelines needing nuanced relevance assessment
+- RAG pipelines needing detailed relevance assessment
 - Systems where missing context affects quality
 
 ## Context selection optimization
@@ -117,7 +117,7 @@ Note: Either `context` or `contextExtractor` must be provided. If both are provi
 
 ### Weighted Relevance Scoring
 
-Context Relevance uses a sophisticated scoring algorithm that considers:
+Context Relevance uses a advanced scoring algorithm that considers:
 
 1. **Relevance Levels**: Each context piece is classified with weighted values:
    - `high` = 1.0 (directly addresses the query)
@@ -152,7 +152,7 @@ Final Score = max(0, Base Score - Usage Penalty - Missing Penalty) × scale
 
 - **0.9-1.0**: Excellent - all context highly relevant and used
 - **0.7-0.8**: Good - mostly relevant with minor gaps
-- **0.4-0.6**: Mixed - significant irrelevant or unused context
+- **0.4-0.6**: Mixed - substantial irrelevant or unused context
 - **0.2-0.3**: Poor - mostly irrelevant context
 - **0.0-0.1**: Very poor - no relevant context found
 
@@ -503,7 +503,7 @@ console.log(result)
 
 ### Dynamic context extraction
 
-Extract context dynamically based on the run input:
+Extract context at runtime based on the run input:
 
 ```typescript
 import { createContextRelevanceScorerLLM } from '@mastra/evals'

@@ -32,8 +32,8 @@ interface DispatcherSession extends SkillSession {
   };
   sendSignal(
     input: { id: string; type: 'user'; tagName: 'user'; contents: string },
-    options: { requestContext: RequestContext },
-  ): { accepted: Promise<unknown> };
+    options: { requestContext: RequestContext; requireDelivery?: boolean },
+  ): { accepted: Promise<{ accepted: true; runId?: string; action?: string }> };
 }
 
 type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource'>;
@@ -237,6 +237,38 @@ export class FactoryDecisionDispatcher {
           causalChain: nextChain,
         });
         if (result.status === 'rejected') throw new Error(`${result.code}: ${result.reason}`);
+        if (!decision.message) return;
+        // Best-effort recipient lookup: no active binding (or no authenticated
+        // session owner) means nobody is engaged with this item, so the
+        // transition itself is the whole effect. A retry after a delivery
+        // failure is safe because the transition replays by ingress identity.
+        const binding = await this.#findBinding(record, decision.message.role);
+        if (!binding) return;
+        const startedBy = item.sessions[binding.role]?.startedBy;
+        if (!startedBy) return;
+        await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+        const requestContext = new RequestContext();
+        requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
+        const session = await this.#requireSession(binding);
+        await awaitNotification(
+          await session.sendNotificationSignal(
+            {
+              source: 'factory',
+              kind: 'rule-message',
+              summary: decision.message.text,
+              priority: 'high',
+              payload: { message: decision.message.text },
+              sourceId: record.id,
+              dedupeKey: record.idempotencyKey,
+            },
+            {
+              ifActive: { behavior: 'deliver' },
+              ifIdle: { behavior: 'wake' },
+              requestContext,
+            },
+          ),
+          true,
+        );
         return;
       }
       case 'upsertLinkedWorkItem': {
@@ -287,9 +319,19 @@ export class FactoryDecisionDispatcher {
             tagName: 'user',
             contents: resolved.message,
           },
-          { requestContext },
+          // Without `requireDelivery` the session resolves `accepted` on the
+          // next tick and swallows wake failures, so a kickoff that never
+          // reached the agent would be marked succeeded and the thread would
+          // stay empty forever.
+          { requestContext, requireDelivery: true },
         );
-        await result.accepted;
+        const settled = await result.accepted;
+        if (settled.action !== 'wake' && settled.action !== 'deliver') {
+          // An undefined action means the session did not verify delivery at
+          // all — with `requireDelivery` set that is a contract violation, not
+          // a success.
+          throw new Error(`Factory skill invocation signal did not reach the agent (${String(settled.action)}).`);
+        }
         return;
       }
       case 'sendMessage': {
@@ -500,6 +542,14 @@ export class FactoryDecisionDispatcher {
             candidate => candidate.id === record.bindingId && candidate.status === 'active',
           );
           if (!binding) throw new Error('Prepared Factory binding is unavailable or revoked.');
+          // Wake runs build the Factory workspace, which requires the
+          // authenticated session owner on the request context.
+          const item = await this.#storage.get({ orgId: record.orgId, id: binding.workItemId });
+          const startedBy = item?.sessions[binding.role]?.startedBy;
+          if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
+          await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+          const requestContext = new RequestContext();
+          requestContext.set('user', { workosId: startedBy, organizationId: record.orgId });
           const session = await this.#requireSession(binding);
           await awaitNotification(
             await session.sendNotificationSignal(
@@ -512,7 +562,7 @@ export class FactoryDecisionDispatcher {
                 sourceId: record.id,
                 dedupeKey: `factory-kickoff:${record.kickoffKey}`,
               },
-              { ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'wake' } },
+              { ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'wake' }, requestContext },
             ),
             true,
           );
