@@ -1484,7 +1484,7 @@ function WorkItemCard({
           <Link
             to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
             draggable={false}
-            aria-label={`Open thread for ${item.title}`}
+            aria-label={`Open session for ${item.title}`}
             className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
           />
         ) : (
@@ -1499,7 +1499,7 @@ function WorkItemCard({
             aria-label={
               runSpec !== null && runActions[0] !== undefined
                 ? `${runActions[0].label} ${item.title}`
-                : `Create thread for ${item.title}`
+                : `Start session for ${item.title}`
             }
             className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
             onClick={() =>
@@ -1629,7 +1629,7 @@ function WorkItemCard({
         {!evaluating && !runPending && (
           <span
             aria-hidden
-            className="text-ui-xs text-icon3 flex items-center gap-1.5 transition-opacity motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-focus-within:opacity-100 pointer-fine:group-hover:opacity-100"
+            className="text-ui-xs text-icon3 group-hover:text-icon5 group-focus-within:text-icon5 flex items-center gap-1.5 transition-colors motion-reduce:transition-none"
           >
             {threadSession !== null ? (
               <>

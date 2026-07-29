@@ -195,8 +195,8 @@ describe('Board card pending states', () => {
     if (!card) throw new Error('Expected the title inside its work item card');
     expect(titleText.closest('a, button')).toBeNull();
 
-    const threadLink = within(card).getByRole('link', { name: 'Open thread for Fix login bug' });
-    expect(within(card).queryByText('Open thread')).not.toBeInTheDocument();
+    const threadLink = within(card).getByRole('link', { name: 'Open session for Fix login bug' });
+    expect(within(card).getByText('Open session')).toBeInTheDocument();
     // The link itself is an invisible overlay — a visible indicator must tell
     // the user this card already has a work session.
     expect(within(card).getByText('Session · fix-login')).toBeInTheDocument();
@@ -257,8 +257,8 @@ describe('Board card pending states', () => {
     renderWorkBoard();
 
     const card = await screen.findByTestId('work-item-card');
-    await waitFor(() => expect(within(card).getByRole('button', { name: /Create thread/ })).toBeEnabled());
-    await user.click(within(card).getByRole('button', { name: 'Create thread for Fix login bug' }));
+    await waitFor(() => expect(within(card).getByRole('button', { name: /Start session/ })).toBeEnabled());
+    await user.click(within(card).getByRole('button', { name: 'Start session for Fix login bug' }));
 
     // No run mutation exists yet, so this row is the only feedback the click can produce.
     const status = await screen.findByText('Preparing session…');
@@ -298,8 +298,8 @@ describe('Board card pending states', () => {
     const { router } = renderWorkBoard();
 
     const card = await screen.findByTestId('work-item-card');
-    await waitFor(() => expect(within(card).getByRole('button', { name: /Create thread/ })).toBeEnabled());
-    const trigger = within(card).getByRole('button', { name: 'Create thread for Fix login bug' });
+    await waitFor(() => expect(within(card).getByRole('button', { name: /Start session/ })).toBeEnabled());
+    const trigger = within(card).getByRole('button', { name: 'Start session for Fix login bug' });
 
     await user.click(trigger);
     await screen.findByText('Preparing session…');
