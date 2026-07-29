@@ -67,8 +67,8 @@ export function QueueHealthPanel({ factoryProjectId }: { factoryProjectId: strin
 
   return (
     <div className="flex flex-col gap-5">
-      {!workItemsQuery.data ? (
-        <div className="flex flex-col gap-5" aria-label="Loading queue health">
+      {!workItemsQuery.data || !thresholdsQuery.data ? (
+        <div role="status" aria-label="Loading queue health" className="flex flex-col gap-5">
           <Skeleton className="h-10 w-full rounded-lg" />
           <Skeleton className="h-24 w-full" />
         </div>
