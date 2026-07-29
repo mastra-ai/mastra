@@ -1,27 +1,27 @@
 ---
-title: "What is Mastra?"
-description: "Learn what Mastra is: an open-source TypeScript framework for building everything from AI-powered applications to autonomous AI systems."
+title: 'What is Mastra?'
+description: 'Learn what Mastra is: an open-source TypeScript framework for building everything from AI-powered applications to autonomous AI systems.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # What is Mastra?
 
 Mastra is an open-source TypeScript framework for building AI applications and autonomous AI systems. Use it for anything from an AI feature inside an existing product to long-running agents that run entire processes on their own, such as a software factory that plans, builds, reviews, and ships code.
 
-Mastra gives you everything you need to build an agent harness out of the box. It's built on established patterns, so you make fewer integration decisions and spend more time on your product. And, as you'd expect from an AI framework, it includes a [skill](/docs/getting-started/build-with-ai) that helps your coding agent write accurate, up-to-date Mastra code.
+Mastra gives you everything you need to build an agent harness out of the box. It's built on established patterns, so you make fewer integration decisions and spend more time on your product. And, as you'd expect from an AI framework, it includes a [skill and CLI](/docs/getting-started/build-with-ai) that help your coding agent write accurate, up-to-date Mastra code.
 
-Run Mastra standalone or inside your existing web server, and call your agents from your own code, over HTTP using the [Mastra client](/docs/server/mastra-client), or from the channels where your team already works.
+Run Mastra standalone or inside your existing web server, and call your agents from your own code, over HTTP using the [Mastra client](/docs/server/mastra-client), or from channels (for example, Slack).
 
-:::tip[📹 Watch]
+:::tip[📹 Video]
 
-Watch [a quick introduction to Mastra](https://www.youtube.com/watch?v=NosES9aJxCc) for an overview of the framework and what you can build with it.
+[A quick tour of the Mastra platform](https://www.youtube.com/watch?v=NosES9aJxCc) shows how the pieces fit together.
 
 :::
 
-## Start with one agent
+## Framework
 
-Mastra is batteries-included, but not all-or-nothing. Start with a single agent:
+Mastra is batteries-included, but not all-or-nothing. A single agent can start small:
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -36,63 +36,54 @@ export const supportAgent = new Agent({
 })
 ```
 
-Add the other pieces when you need them. Mastra is a harness, not just a loop that calls a model:
+Then add the capabilities your agent needs:
 
-- **Act in a real environment**: Read and write files and run commands in a sandbox through a [workspace](/docs/workspace/overview).
-- **Load the right context**: Bring in [memory](/docs/memory/overview), [skills](/docs/agents/skills), and domain knowledge at the moment the agent needs them.
-- **Manage growing context**: Compress old messages into dense observations so long runs stay within the context window.
-- **Coordinate multi-step work**: Run agents inside typed [workflows](/docs/workflows/overview) or on a [schedule](/docs/long-running-agents/schedules).
-- **Plan and parallelize**: Track [tasks](/docs/agents/using-tools#task-tracking) and delegate to specialized [subagents](/docs/agents/supervisor-agents) that run with isolated context and report back.
-- **Stay in the loop**: Pause for [human approval](/docs/agents/agent-approval) at critical decision points and resume after a decision.
-- **Steer the loop**: Send [signals](/docs/long-running-agents/signals) into a live thread to wake an agent, add context mid-run, or queue input for the next turn.
-- **Meet users where they are**: Connect agents to Slack, Discord, and other [channels](/docs/capabilities/channels/overview).
-- **Improve over time**: Turn real traces into datasets, experiments, and measurable improvements with [evals](/docs/evals/overview).
+- **Act in real environments**: Use [workspaces](/docs/workspace/overview) so agents can read and write files, run commands, and work inside a sandbox.
+- **Bring the right context**: Use tools, [memory](/docs/memory/observational-memory), [skills](/docs/agents/skills), and domain knowledge so agents remember what matters and stay within the context window.
+- **Coordinate complex work**: Run typed [workflows](/docs/workflows/overview), [tasks](/docs/agents/using-tools#task-tracking), and [subagents](/docs/agents/supervisor-agents) when work needs multiple steps or parallel execution.
+- **Control the agent loop**: [Suspend](/docs/agents/agent-approval) for human approval, steer an in-flight loop with [signals](/docs/long-running-agents/signals), or queue input for the next turn.
+- **Meet users where they work**: Connect agents to Slack, Discord, GitHub, and other [channels](/docs/capabilities/channels/overview).
+- **Manage risk and cost**: Configure authentication, multi-tenant isolation, and [guardrails](/docs/agents/guardrails), including [`CostGuardProcessor`](/reference/processors/cost-guard-processor).
+
+See the left-hand sidebar for the full menu of features.
 
 ## Studio
 
 ![Agents page in Mastra Studio. A sidebar lists primitives like agents, workflows, and tools, a middle panel lists recent chats, and a chat panel shows the agent responding to a prompt with collapsible tool calls and a task list tracking progress. Below the chat is a message box with a model picker.](/img/studio-agent-chat.png)
 
-[Studio](/docs/studio/overview) is an interactive development environment where you test your agents and iterate quickly.
+[Studio](/docs/studio/overview) is usually the first place you go after creating a Mastra app. It gives you a live environment for testing agents, inspecting runs, and iterating quickly.
 
-Studio isn't just for engineers. Deploy it and share it with your team, so teammates can try an agent before it ships. With the [Editor](/docs/editor/overview) and [Agent Builder](/docs/agent-builder/overview), non-technical teammates can create and iterate on agents themselves, with every change versioned in code.
+Studio isn't just for engineers. Deploy it and share it with your team, so collaborators can try an agent before it ships. With the [Editor](/docs/editor/overview) and [Agent Builder](/docs/agent-builder/overview), non-technical teammates can create and iterate on agents themselves, with every change versioned in code.
 
 ## Observability and evals
 
 ![Traces page in Mastra Studio. A table lists recent agent runs with timestamps and inputs. A details panel shows the selected trace as an expandable tree of model, tool, and workspace spans with per-span timings, plus actions to evaluate the trace or save it as a dataset item.](/img/studio-traces.png)
 
-Mastra has built-in logs, traces, and metrics, so you can understand every run in development and production. Every agent run, workflow step, tool call, and model interaction produces a span you can inspect. See [Observability](/docs/observability/overview).
+Mastra has built-in logs, traces, and metrics, so you can understand every run in development and production. See [Observability](/docs/observability/overview).
 
 Evals close the loop. Score outputs with rule-based or LLM-as-judge [scorers](/docs/evals/overview), live in production or offline in CI. Create datasets from real traces, run experiments, and compare versions. Because you own the code and the observability layer, you get a closed loop from trace to prompt edit to measurable improvement.
 
-## Memory
+## Long-running agents
 
-Memory is the difference between an agent that can build on prior work and one that starts over every message. Mastra has built-in [memory](/docs/memory/overview) for message history, structured facts about users, semantic recall, and long-running context.
+Some agents finish in a single request. Others run for hours or days, like a sales agent that watches for signups or an SRE agent that handles incidents. Mastra supports [long-running agents](/docs/long-running-agents/durable-agents) with these capabilities:
 
-[Observational Memory](/docs/memory/observational-memory) turns older conversation history into compact text observations. An observer agent extracts the durable facts, decisions, and preferences from raw messages, while recent messages stay available in full. This keeps the context window predictable and debuggable without wiring up a separate memory system.
+- **Survive restarts and disconnects**: [Durable agents](/docs/long-running-agents/durable-agents) persist run state so work resumes and clients reconnect.
+- **Wake and steer agents mid-run**: Send [messages and signals](/docs/long-running-agents/signals) to wake an agent, add context, or queue input.
+- **Keep working toward a goal**: [Goals](/docs/long-running-agents/goals) persist an objective until it's met or the run budget is spent.
+- **Run work outside the request**: Use [schedules](/docs/long-running-agents/schedules) and [background tasks](/docs/long-running-agents/background-tasks) for recurring jobs, slow tools, and work that shouldn't block the agent loop.
 
-## Sandboxes and durable execution
+For long-running interactive applications, [AgentController](/docs/agent-controller/overview) manages threads, modes, tool approvals, and model switching. It powers [Mastra Code](https://code.mastra.ai/) and lets you build a Claude Code-style experience for your own domain.
 
-Agents often need two things once they move beyond chat:
+## Deployment
 
-- **A workspace to act in**: A Mastra [workspace](/docs/workspace/overview) gives an agent a filesystem and sandbox where it can read and write files, run shell commands, install packages, and load skills from disk. Use local providers in development, then switch to a cloud [sandbox provider](/docs/workspace/sandbox) when you need isolation or scale.
-- **A durable runtime for long work**: [Durable agents](/docs/long-running-agents/durable-agents) run the agentic loop inside a workflow with persisted state. Interrupted runs survive process restarts, clients can reconnect to the same live stream, and background work can continue after the original request ends.
+Mastra is open source and infrastructure-neutral. The framework fits your stack instead of requiring your stack to fit one vendor. Choose from an ecosystem of model providers, databases, sandboxes, and observability platforms, and change providers without rewriting your application around proprietary infrastructure.
 
-## Deploy anywhere
+When you're ready to deploy:
 
-Mastra is open by default. It supports many model providers through a single [model router](/models), and works with your preferred databases, sandboxes, and observability platforms.
+- **[Mastra Server](/docs/mastra-platform/server)**: The quickest path to production. Mastra builds and hosts your application as an API server with a stable endpoint, environment variables, custom domains, and deploy history.
+- **Your infrastructure**: Use Mastra's [deployers for major platforms](/docs/deployment/overview), deploy a standard server to your preferred virtual machine, container, or platform as a service, or run Mastra inside an existing TypeScript application with a [server adapter](/docs/server/server-adapters).
 
-Choose the deployment path that fits your project:
-
-- **[Mastra platform](/docs/mastra-platform/overview)**: The fastest path to production, with automatic deployments, managed infrastructure, and hosted observability and Studio.
-- **Other deployment targets**: Mastra is open source, with [deployers](/docs/deployment/overview) for targets like Vercel, Netlify, and Cloudflare. It also self-hosts anywhere Node.js runs, either as a dedicated server or inside an existing TypeScript application with a [server adapter](/docs/server/server-adapters).
-
-## Security
-
-Production means many end users, and each one needs isolation. Mastra handles this directly: authentication is built in, and request context flows user identity through to memory, tools, and storage so you can scope threads and run history per user. See [middleware and user isolation](/docs/server/middleware).
-
-[Guardrails](/docs/agents/guardrails) and processors keep agents on track and compliant, with built-in detection for prompt injection, PII, and moderation.
-
-## What you can build
+## Use cases
 
 Here are some of the ways you can use Mastra:
 
