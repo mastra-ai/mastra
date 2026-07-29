@@ -6,6 +6,7 @@ import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWo
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { relatedWorkItems, relationshipLabel, relationshipPath } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
+import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
 import { FactoryReviewPullRequestLinks } from './FactoryReviewPullRequestLinks';
 
 function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): WorkItemSessionRef | undefined {
@@ -62,7 +63,7 @@ export function FactorySessionHeader() {
   const isReview = currentItem.source === 'github-pr';
   const section = isReview ? 'Review' : 'Work';
   const sectionPath = isReview ? `/factories/${factoryId}/review` : `/factories/${factoryId}/work`;
-  const externalItemUrl = isReview ? undefined : (currentItem.url ?? undefined);
+  const externalItemUrl = genericExternalWorkItemUrl(currentItem);
   const externalItemLabel = externalWorkItemLabel(currentItem);
   const hasHeaderActions = Boolean(externalItemUrl) || destinations.length > 0;
 
