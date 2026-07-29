@@ -37,10 +37,17 @@ export interface SchemaSnapshot {
   tables: Set<string>;
   /** table name -> column names present on that table. */
   columns: Map<string, Set<string>>;
-  /** Lowercased index names present in the schema. */
+  /** Index names present in the schema, exactly as the catalog stores them. */
   indexes: Set<string>;
-  /** Lowercased names of indexes that are the replica identity of their table. */
+  /** Names of indexes that are the replica identity of their table. */
   replicaIdentityIndexes: Set<string>;
+  /**
+   * Lowercased names of PRIMARY KEY indexes. A primary key is always backed by
+   * an index of the same name, so this answers "does constraint X exist?" for
+   * primary keys without a `pg_constraint` probe. Lowercased because the
+   * queries it replaces compare `conname = lower($1)`.
+   */
+  primaryKeyIndexes: Set<string>;
 }
 
 /**
@@ -88,9 +95,10 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
     ),
     // pg_index rather than the pg_indexes view: same names, but it also carries
     // indisreplident, which createTable needs to know whether the
-    // workflow_snapshot unique index is already the table's replica identity.
-    client.manyOrNone<{ indexname: string; is_replica_identity: boolean }>(
-      `SELECT c.relname AS indexname, i.indisreplident AS is_replica_identity
+    // workflow_snapshot unique index is already the table's replica identity,
+    // and indisprimary, which answers primary-key constraint existence.
+    client.manyOrNone<{ indexname: string; is_replica_identity: boolean; is_primary: boolean }>(
+      `SELECT c.relname AS indexname, i.indisreplident AS is_replica_identity, i.indisprimary AS is_primary
          FROM pg_catalog.pg_index i
          JOIN pg_catalog.pg_class c ON c.oid = i.indexrelid
          JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -111,11 +119,14 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
 
   const indexes = new Set<string>();
   const replicaIdentityIndexes = new Set<string>();
+  const primaryKeyIndexes = new Set<string>();
   for (const row of indexRows) {
-    const name = row.indexname.toLowerCase();
-    indexes.add(name);
+    indexes.add(row.indexname);
     if (row.is_replica_identity) {
-      replicaIdentityIndexes.add(name);
+      replicaIdentityIndexes.add(row.indexname);
+    }
+    if (row.is_primary) {
+      primaryKeyIndexes.add(row.indexname.toLowerCase());
     }
   }
 
@@ -125,5 +136,6 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
     columns,
     indexes,
     replicaIdentityIndexes,
+    primaryKeyIndexes,
   };
 }

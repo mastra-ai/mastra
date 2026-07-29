@@ -1073,6 +1073,11 @@ export class PgDB extends MastraBase {
     });
     const schemaFilter = this.schemaName || 'public';
 
+    // A primary key is always backed by an index of the same name, so the init
+    // snapshot already answers this without a round trip.
+    const snapshot = this.schemaSnapshot;
+    if (snapshot) return snapshot.primaryKeyIndexes.has(constraintName.toLowerCase());
+
     const result = await this.client.oneOrNone<{ exists: boolean }>(
       `SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = lower($1) AND connamespace = (SELECT oid FROM pg_namespace WHERE nspname = $2)) as exists`,
       [constraintName, schemaFilter],
@@ -1116,6 +1121,7 @@ export class PgDB extends MastraBase {
         ADD CONSTRAINT ${constraintName}
         PRIMARY KEY ("traceId", "spanId")
       `);
+      this.schemaSnapshot?.primaryKeyIndexes.add(constraintName.toLowerCase());
 
       this.logger?.info?.(`Added PRIMARY KEY constraint ${constraintName} to ${fullTableName}`);
     } catch (error) {
@@ -1410,15 +1416,20 @@ export class PgDB extends MastraBase {
         schemaName: getSchemaName(this.schemaName),
       });
 
-      const indexExists = await this.client.oneOrNone(
-        `SELECT 1 FROM pg_indexes
+      const snapshot = this.schemaSnapshot;
+      if (snapshot) {
+        if (snapshot.indexes.has(name)) return;
+      } else {
+        const indexExists = await this.client.oneOrNone(
+          `SELECT 1 FROM pg_indexes
          WHERE indexname = $1
          AND schemaname = $2`,
-        [name, schemaName],
-      );
+          [name, schemaName],
+        );
 
-      if (indexExists) {
-        return;
+        if (indexExists) {
+          return;
+        }
       }
 
       const uniqueStr = unique ? 'UNIQUE ' : '';
@@ -1455,6 +1466,7 @@ export class PgDB extends MastraBase {
       const sql = `CREATE ${uniqueStr}INDEX ${concurrentStr}${quotedIndexName} ON ${fullTableName} ${methodStr}(${columnsStr})${withStr}${tablespaceStr}${whereStr}`;
 
       await this.client.none(sql);
+      snapshot?.indexes.add(name);
     } catch (error) {
       if (error instanceof Error && error.message.includes('CONCURRENTLY')) {
         const retryOptions = { ...options, concurrent: false };
@@ -1476,23 +1488,46 @@ export class PgDB extends MastraBase {
     }
   }
 
+  /**
+   * Runs a caller-built `CREATE INDEX IF NOT EXISTS` statement, unless the init
+   * snapshot already proves `indexName` exists.
+   *
+   * `createIndex` covers the indexes described by {@link CreateIndexOptions};
+   * this is for the two init paths that hand-write their statement (a partial
+   * or otherwise non-standard index) and would otherwise send a no-op DDL on
+   * every warm init.
+   */
+  async createIndexFromStatement(indexName: string, sql: string): Promise<void> {
+    const snapshot = this.schemaSnapshot;
+    if (snapshot?.indexes.has(indexName)) return;
+
+    await this.client.none(sql);
+    snapshot?.indexes.add(indexName);
+  }
+
   async dropIndex(indexName: string): Promise<void> {
     try {
       const schemaName = this.schemaName || 'public';
-      const indexExists = await this.client.oneOrNone(
-        `SELECT 1 FROM pg_indexes
+      const snapshot = this.schemaSnapshot;
+      if (snapshot) {
+        if (!snapshot.indexes.has(indexName)) return;
+      } else {
+        const indexExists = await this.client.oneOrNone(
+          `SELECT 1 FROM pg_indexes
          WHERE indexname = $1
          AND schemaname = $2`,
-        [indexName, schemaName],
-      );
+          [indexName, schemaName],
+        );
 
-      if (!indexExists) {
-        return;
+        if (!indexExists) {
+          return;
+        }
       }
 
       const quotedIndexName = `"${parseSqlIdentifier(indexName, 'index name')}"`;
       const sql = `DROP INDEX IF EXISTS ${getSchemaName(this.schemaName)}.${quotedIndexName}`;
       await this.client.none(sql);
+      snapshot?.indexes.delete(indexName);
     } catch (error) {
       throw new MastraError(
         {

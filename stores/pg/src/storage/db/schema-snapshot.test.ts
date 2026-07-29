@@ -61,6 +61,16 @@ function count(statements: string[], pattern: RegExp): number {
 const INFORMATION_SCHEMA_COLUMN_PROBE = /information_schema\.columns/i;
 const NO_OP_ALTER = /ALTER TABLE[\s\S]*ADD COLUMN IF NOT EXISTS/i;
 const CREATE_TABLE = /CREATE TABLE IF NOT EXISTS/i;
+const INDEX_PROBE = /FROM pg_indexes\b[\s\S]*indexname\s*=/i;
+const CREATE_INDEX = /CREATE (UNIQUE )?INDEX/i;
+const CONSTRAINT_PROBE = /FROM pg_constraint\b[\s\S]*conname\s*=/i;
+
+async function indexesIn(schemaName: string): Promise<string[]> {
+  const rows = await admin(`SELECT indexname FROM pg_catalog.pg_indexes WHERE schemaname = $1 ORDER BY indexname`, [
+    schemaName,
+  ]);
+  return rows.map(r => r.indexname);
+}
 
 async function tablesIn(schemaName: string): Promise<string[]> {
   const rows = await admin(`SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = $1 ORDER BY tablename`, [
@@ -114,6 +124,10 @@ describe('init catalog snapshot', () => {
     expect(count(statements, INFORMATION_SCHEMA_COLUMN_PROBE)).toBe(0);
     expect(count(statements, NO_OP_ALTER)).toBe(0);
     expect(count(statements, CREATE_TABLE)).toBe(0);
+    expect(count(statements, INDEX_PROBE)).toBe(0);
+    expect(count(statements, CREATE_INDEX)).toBe(0);
+    // The spans PRIMARY KEY is index-backed, so the snapshot answers it too.
+    expect(count(statements, CONSTRAINT_PROBE)).toBe(0);
   }, 60000);
 
   it('converges a cold schema to the same tables and columns as another cold init', async () => {
@@ -170,6 +184,39 @@ describe('init catalog snapshot', () => {
 
     expect((await columnsIn(schema, 'mastra_threads')).has('createdAtZ')).toBe(true);
     expect(await tablesIn(schema)).toContain(droppedTable);
+  }, 90000);
+
+  it('recreates indexes dropped out of band on the next init', async () => {
+    // Deliberately short: default index names are schema-prefixed, and a long
+    // schema pushes them past Postgres' 63-byte identifier limit, at which
+    // point the domain logs and skips them.
+    const schema = `sidx_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    schemasToDrop.push(schema);
+    await admin(`CREATE SCHEMA "${schema}"`);
+
+    const first = await newStore(schema);
+    await first.init();
+    await first.close();
+
+    const before = await indexesIn(schema);
+    // One index from the createIndex() path and one from the hand-written
+    // CREATE INDEX path, so both snapshot readers are covered. The default
+    // index's name is schema-prefixed and then truncated to 63 bytes by
+    // Postgres, so it is located by definition rather than by name.
+    const viaCreateIndex = `${schema}_mastra_threads_resourceid_createdat_idx`;
+    expect(before).toContain(viaCreateIndex);
+    expect(before).toContain('idx_favorites_entity');
+
+    await admin(`DROP INDEX "${schema}"."${viaCreateIndex}"`);
+    await admin(`DROP INDEX "${schema}".idx_favorites_entity`);
+
+    const second = await newStore(schema);
+    await second.init();
+
+    const after = await indexesIn(schema);
+    expect(after).toContain(viaCreateIndex);
+    expect(after).toContain('idx_favorites_entity');
+    expect(after).toEqual(before);
   }, 90000);
 
   it('does not let one schema\u2019s snapshot satisfy another schema\u2019s init', async () => {
