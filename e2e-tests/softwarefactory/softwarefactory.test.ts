@@ -13,8 +13,9 @@ const cliRoot = join(rootDir, 'mastracode', 'mastra-factory');
 /**
  * Validates the artifacts users receive from `npm create factory`
  * against the monorepo's local package set (served by the E2E registry):
- * generate the template from mastracode/web, scaffold with the CLI's
- * --default path, then typecheck, build, boot, and probe the scaffold.
+ * generate the server scaffold from mastracode/web, scaffold with the CLI's
+ * --default path, then typecheck, build the CLI-bundled UI and server, boot,
+ * and probe the scaffold.
  *
  * Published-npm compatibility is intentionally NOT checked here — sources
  * may legitimately be ahead of npm between release trains. The
@@ -96,7 +97,7 @@ describe('softwarefactory template', () => {
     });
   });
 
-  it('builds the UI and server', async () => {
+  it('builds the server and CLI-bundled UI', async () => {
     await execa('npm', ['run', 'build'], {
       cwd: scaffoldDir,
       stdio: 'inherit',

@@ -1530,12 +1530,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         });
         return { item, binding: toBinding(bindingRow), pendingStart: toPendingStart(pendingRow), replayed: false };
       });
-    try {
-      return await prepare();
-    } catch (error) {
-      if (!(error instanceof UniqueViolationError)) throw error;
-      return prepare();
+    // A losing preparer can hit two distinct unique violations back to back:
+    // first on the work item's `source_key`, then on the pending start's
+    // `kickoff_key` (when the winner commits its pending row between our
+    // attempts). Each retry re-reads, so one extra attempt converges on replay.
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await prepare();
+      } catch (error) {
+        if (!(error instanceof UniqueViolationError)) throw error;
+        lastError = error;
+      }
     }
+    throw lastError;
   }
 
   async markPendingStart(

@@ -245,6 +245,12 @@ export interface ExternalRepositoryProjectTarget {
   projectRepository: ProjectRepository;
 }
 
+/** External id pair identifying a repository linked to a factory project. */
+export interface ConfiguredExternalRepositoryKey {
+  installationExternalId: string;
+  repositoryExternalId: string;
+}
+
 export interface LinkProjectRepositoryInput {
   orgId: string;
   connectionId: string;
@@ -343,6 +349,12 @@ export interface SourceControlStorageHandle {
       installationExternalId: string;
       repositoryExternalId: string;
     }): Promise<ExternalRepositoryProjectTarget[]>;
+    /**
+     * Distinct external (installation, repository) id pairs linked to any
+     * factory project. Lets sweeps scope work to configured repositories
+     * without probing every repository an installation can see.
+     */
+    listConfiguredExternalKeys(): Promise<ConfiguredExternalRepositoryKey[]>;
     get(args: { orgId: string; id: string }): Promise<ProjectRepository | null>;
     link(args: LinkProjectRepositoryInput): Promise<ProjectRepository>;
     update(args: { orgId: string; id: string; input: UpdateProjectRepositoryInput }): Promise<ProjectRepository | null>;
@@ -809,6 +821,29 @@ export class SourceControlStorage extends FactoryStorageDomain {
           return (
             await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, { connection_id: connectionId })
           ).map(toProjectRepository);
+        },
+        listConfiguredExternalKeys: async () => {
+          const keys = new Map<string, ConfiguredExternalRepositoryKey>();
+          const connections = await db().findMany<ConnectionDbRow>(CONNECTIONS, { integration_id: integrationId });
+          for (const connection of connections) {
+            const installation = await db().findOne<InstallationDbRow>(INSTALLATIONS, {
+              id: connection.installation_id,
+              integration_id: integrationId,
+            });
+            if (!installation) continue;
+            const links = await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
+              connection_id: connection.id,
+            });
+            for (const link of links) {
+              const repository = await db().findOne<RepositoryDbRow>(REPOSITORIES, { id: link.repository_id });
+              if (!repository) continue;
+              keys.set(`${installation.external_id}\u0000${repository.external_id}`, {
+                installationExternalId: installation.external_id,
+                repositoryExternalId: repository.external_id,
+              });
+            }
+          }
+          return [...keys.values()];
         },
         listByExternalRepository: async ({ installationExternalId, repositoryExternalId }) => {
           const targets: ExternalRepositoryProjectTarget[] = [];

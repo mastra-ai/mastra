@@ -17,6 +17,7 @@
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
+    "moonshotai/Kimi-K3",
     "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning"
   ],
   "temperature": [
@@ -84,6 +85,7 @@
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
+    "moonshotai/Kimi-K3",
     "nvidia/Llama-3.3-Nemotron-Super-49B-v1.5",
     "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning",
     "openai/gpt-oss-120b",

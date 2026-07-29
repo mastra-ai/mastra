@@ -37,12 +37,12 @@ export function SignalsFrameLoadingSkeleton() {
 export function SignalsLoadingSkeleton() {
   return (
     <div
-      aria-label="Loading signal analysis"
+      aria-label="Loading trace intelligence"
       className="space-y-5 p-4 lg:p-6"
       data-testid="signals-loading-skeleton"
       role="status"
     >
-      <span className="sr-only">Loading signal analysis</span>
+      <span className="sr-only">Loading trace intelligence</span>
       <div className="space-y-3">
         <Skeleton className="h-5 w-24" />
         <Skeleton className="h-7 w-96 max-w-full" />
