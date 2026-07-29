@@ -2,4 +2,4 @@
 '@mastra/otel-exporter': patch
 ---
 
-Bump OpenTelemetry dependencies to versions that include the fix for GHSA-8988-4f7v-96qf.
+Fixed a security vulnerability in OpenTelemetry support by upgrading to patched dependency versions.
