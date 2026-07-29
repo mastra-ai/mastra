@@ -80,6 +80,7 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@internal/workspace-test-utils": "workspace:*",
     "@libsql/client": "^0.17.4",
     "@types/node": "22.20.1",
     "eslint": "^10.7.0",

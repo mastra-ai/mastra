@@ -212,7 +212,7 @@ describe('SandboxFilesystem', () => {
   it('exposes basePath and a sandbox-derived id', () => {
     const { fs } = makeFs();
     expect(fs.basePath).toBe(WORKDIR);
-    expect(fs.id).toBe('sandbox-fs:fake-sandbox');
+    expect(fs.id).toBe(`sandbox-fs:fake-sandbox:${WORKDIR}`);
     expect(fs.getInfo().metadata).toMatchObject({ basePath: WORKDIR, sandboxId: 'fake-sandbox' });
   });
 });
