@@ -1,11 +1,11 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { ConnectRepositoriesPanel } from '../../workspaces';
 import { GithubPatBlock } from './GithubPatBlock';
 import { FactorySetupSection } from './FactorySetupSection';
+import { SettingsSubsection } from './SettingsSubsection';
 import { UserGithubConnectionRow } from './UserGithubConnectionRow';
 
 export function RepositoriesSection() {
@@ -18,13 +18,16 @@ export function RepositoriesSection() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <Txt variant="ui-sm">
-        {`Connect the code repositories ${activeFactory.name} can edit. This controls code access; sources that create work in Intake are configured separately under Work Intake.`}
-      </Txt>
+    <div className="flex flex-col gap-8">
+      <SettingsSubsection
+        title="Repositories"
+        description={`Repositories ${activeFactory.name} can edit. What feeds the board is set under Work Intake.`}
+      >
+        <ConnectRepositoriesPanel factory={activeFactory} />
+      </SettingsSubsection>
 
-      <ConnectRepositoriesPanel factory={activeFactory} />
       <FactorySetupSection factory={activeFactory} />
+
       <UserGithubConnectionRow />
 
       <GithubPatBlock />

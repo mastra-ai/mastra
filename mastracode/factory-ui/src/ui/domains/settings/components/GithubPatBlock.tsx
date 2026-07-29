@@ -10,6 +10,7 @@ import {
   useSaveGithubPatMutation,
 } from '../../../../hooks/useGithubPat';
 import type { GithubPatKind } from '../../workspaces/services/github';
+import { SettingsSubsection } from './SettingsSubsection';
 
 /**
  * Org-wide GitHub Personal Access Tokens used only for `gh` CLI auth inside
@@ -25,31 +26,25 @@ export function GithubPatBlock() {
   const statusQuery = useGithubPatStatusQuery();
 
   return (
-    <div className="border-border1 flex flex-col gap-4 border-t pt-4">
-      <div className="flex flex-col">
-        <Txt variant="ui-md" className="font-medium">
-          GitHub CLI tokens
-        </Txt>
-        <Txt variant="ui-xs">
-          Personal Access Tokens agents use for `gh` CLI commands in sandboxes. Tokens must be classic PATs, and the
-          token&apos;s account must have access to the linked repositories. Git and API access keep using the GitHub App
-          connection.
-        </Txt>
+    <SettingsSubsection
+      title="GitHub CLI tokens"
+      description="Classic PATs agents use for gh CLI commands in sandboxes. The token's account needs access to the linked repositories."
+    >
+      <div className="flex flex-col gap-4">
+        <TokenRow
+          kind="default"
+          title="Worker token"
+          description="Used by every sandbox."
+          configured={statusQuery.data?.configured === true}
+        />
+        <TokenRow
+          kind="reviewer"
+          title="Reviewer token (optional)"
+          description="Used by review sessions so PR reviews come from a different account. Falls back to the worker token."
+          configured={statusQuery.data?.reviewerConfigured === true}
+        />
       </div>
-
-      <TokenRow
-        kind="default"
-        title="Worker token"
-        description="Used by every sandbox for gh CLI commands (issues, PRs, comments)."
-        configured={statusQuery.data?.configured === true}
-      />
-      <TokenRow
-        kind="reviewer"
-        title="Reviewer token (optional)"
-        description="Used by review-board sessions so PR reviews come from a different account. Falls back to the worker token when not set."
-        configured={statusQuery.data?.reviewerConfigured === true}
-      />
-    </div>
+    </SettingsSubsection>
   );
 }
 

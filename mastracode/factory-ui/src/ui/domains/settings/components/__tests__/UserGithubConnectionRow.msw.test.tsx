@@ -30,7 +30,7 @@ describe('UserGithubConnectionRow', () => {
     renderRow({ ...connectedStatus, userConnected: false, userGithubUsername: null });
 
     expect(
-      await screen.findByText('Connect your GitHub account so issues and PRs you create are authored as you.'),
+      await screen.findByText('Connect it so issues and PRs you create are authored as you.'),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Connect GitHub/ })).toBeInTheDocument();
   });
@@ -56,7 +56,7 @@ describe('UserGithubConnectionRow', () => {
     await waitFor(() => expect(statusRequested).toBe(true));
     expect(screen.queryByRole('button', { name: /Connect GitHub/ })).not.toBeInTheDocument();
     expect(
-      screen.queryByText('Connect your GitHub account so issues and PRs you create are authored as you.'),
+      screen.queryByText('Connect it so issues and PRs you create are authored as you.'),
     ).not.toBeInTheDocument();
   });
 });

@@ -10,6 +10,7 @@ import { useState } from 'react';
 
 import { useRepositorySettingsQuery, useSaveRepositorySettingsMutation } from '../../../../hooks/useRepositorySettings';
 import type { FactoryProject } from '../../workspaces/services/github';
+import { SettingsSubsection } from './SettingsSubsection';
 
 function RepositorySetupRow({ projectRepositoryId, label }: { projectRepositoryId: string; label: string }) {
   const settingsQuery = useRepositorySettingsQuery(projectRepositoryId);
@@ -72,22 +73,16 @@ export function FactorySetupSection({ factory }: { factory: FactoryProject }) {
   if (rows.length === 0) return null;
 
   return (
-    <div className="border-border1/40 flex flex-col gap-4 border-t pt-6">
-      <div className="flex flex-col">
-        <Txt variant="ui-lg" className="text-icon6 font-medium">
-          Worktree setup
-        </Txt>
-        <Txt as="span" variant="ui-xs" className="text-icon3">
-          Runs in every new worktree before any agent starts. Leave blank to skip setup.
-        </Txt>
+    <SettingsSubsection title="Worktree setup" description="Runs in every new worktree before any agent starts.">
+      <div className="flex flex-col gap-4">
+        {rows.map(row => (
+          <RepositorySetupRow
+            key={row.projectRepositoryId}
+            projectRepositoryId={row.projectRepositoryId}
+            label={row.label}
+          />
+        ))}
       </div>
-      {rows.map(row => (
-        <RepositorySetupRow
-          key={row.projectRepositoryId}
-          projectRepositoryId={row.projectRepositoryId}
-          label={row.label}
-        />
-      ))}
-    </div>
+    </SettingsSubsection>
   );
 }

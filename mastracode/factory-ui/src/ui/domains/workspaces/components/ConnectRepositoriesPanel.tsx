@@ -58,12 +58,12 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
       )}
 
       {linked.length > 0 && (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1">
           <Txt as="h3" variant="ui-sm" className="text-icon5 font-medium">
-            Linked repositories
+            Linked
           </Txt>
           {linked.map(repo => (
-            <div key={repo.projectRepositoryId} className="bg-surface3 flex items-center gap-3 rounded-xl px-3 py-2">
+            <div key={repo.projectRepositoryId} className="flex items-center gap-3 px-3 py-2">
               <GithubIcon size={16} className="text-icon3 shrink-0" />
               <span className="min-w-0 flex-1">
                 <span className="text-ui-sm text-icon6 block truncate font-medium">{repo.slug}</span>
@@ -134,7 +134,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                 <button
                   type="button"
                   key={repo.id}
-                  className="bg-surface3 hover:bg-surface4 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left disabled:cursor-not-allowed disabled:opacity-50"
+                  className="hover:bg-surface3 flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left disabled:cursor-not-allowed disabled:opacity-50"
                   title={repo.fullName}
                   disabled={busyRepoId !== null}
                   onClick={() => linkRepository.mutate({ factoryProjectId, repo })}

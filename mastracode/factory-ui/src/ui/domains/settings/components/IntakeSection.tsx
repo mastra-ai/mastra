@@ -18,6 +18,7 @@ import { connectLinear, isLinearReauthError } from '../../factory/services/linea
 import type { LinearProject } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import { SettingsSubsection } from './SettingsSubsection';
 
 /**
  * Toggle `id` in the selection list. `null` means "nothing selected" (nothing
@@ -28,34 +29,6 @@ function toggleId(ids: string[] | null, id: string): string[] | null {
   const current = ids ?? [];
   const next = current.includes(id) ? current.filter(v => v !== id) : [...current, id];
   return next.length ? next : null;
-}
-
-function SourceHeader({
-  title,
-  hint,
-  enabled,
-  onToggle,
-  disabled,
-}: {
-  title: string;
-  hint: string;
-  enabled: boolean;
-  onToggle: (value: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="flex flex-col">
-        <Txt as="span" variant="ui-sm" className="text-icon5">
-          {title}
-        </Txt>
-        <Txt as="span" variant="ui-xs" className="text-icon3">
-          {hint}
-        </Txt>
-      </div>
-      <Switch aria-label={`Sync ${title}`} checked={enabled} disabled={disabled} onCheckedChange={onToggle} />
-    </div>
-  );
 }
 
 interface SourcePickerItem {
@@ -167,8 +140,7 @@ function SourcePickerSection({
 
 const INTAKE_INTRO = (
   <Txt as="p" variant="ui-sm" className="text-icon3 max-w-3xl">
-    Choose which connected GitHub repositories and Linear projects feed issues into Intake. Pull requests appear
-    automatically in Review. These settings apply across your account and do not control code access.
+    Which sources feed issues into Intake, for your whole account. Code access is set under Repositories.
   </Txt>
 );
 
@@ -217,14 +189,18 @@ export function IntakeSection() {
   return (
     <div className="flex flex-col gap-6">
       {INTAKE_INTRO}
-      <section className="flex flex-col gap-2" aria-label="GitHub intake">
-        <SourceHeader
-          title="GitHub issues"
-          hint="Sync open issues from the selected repositories. Pull requests always appear in Review."
-          enabled={config.github.enabled}
-          disabled={busy}
-          onToggle={enabled => update({ ...config, github: { ...config.github, enabled } })}
-        />
+      <SettingsSubsection
+        title="GitHub issues"
+        description="Open issues from the selected repositories. Pull requests always appear in Review."
+        action={
+          <Switch
+            aria-label="Sync GitHub issues"
+            checked={config.github.enabled}
+            disabled={busy}
+            onCheckedChange={enabled => update({ ...config, github: { ...config.github, enabled } })}
+          />
+        }
+      >
         {config.github.enabled &&
           (linkedRepositories.length === 0 ? (
             <Txt as="span" variant="ui-xs" className="text-icon3">
@@ -250,16 +226,20 @@ export function IntakeSection() {
               />
             </SourcePickerGroup>
           ))}
-      </section>
+      </SettingsSubsection>
 
-      <section className="flex flex-col gap-2" aria-label="Linear intake">
-        <SourceHeader
-          title="Linear issues"
-          hint="Sync active issues from the selected Linear projects."
-          enabled={config.linear.enabled}
-          disabled={busy || !linearConnected}
-          onToggle={enabled => update({ ...config, linear: { ...config.linear, enabled } })}
-        />
+      <SettingsSubsection
+        title="Linear issues"
+        description="Active issues from the selected projects."
+        action={
+          <Switch
+            aria-label="Sync Linear issues"
+            checked={config.linear.enabled}
+            disabled={busy || !linearConnected}
+            onCheckedChange={enabled => update({ ...config, linear: { ...config.linear, enabled } })}
+          />
+        }
+      >
         {!linearConnected ? (
           <div className="flex items-center gap-3 pl-1">
             <Txt as="span" variant="ui-xs" className="text-icon3">
@@ -317,7 +297,7 @@ export function IntakeSection() {
             </div>
           )
         )}
-      </section>
+      </SettingsSubsection>
     </div>
   );
 }

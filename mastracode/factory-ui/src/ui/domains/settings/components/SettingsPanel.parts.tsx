@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { DONE_SOUND_OPTIONS, loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
 import type { DoneSound } from '../services/doneSound';
+import { SettingsSubsection } from './SettingsSubsection';
 
 type ThinkingLevel = AgentControllerSessionSettings['thinkingLevel'];
 type NotificationMode = AgentControllerSessionSettings['notifications'];
@@ -176,14 +177,10 @@ function PermissionsSection({
   };
 
   return (
-    <div className="mt-6 pt-4">
-      <Txt variant="ui-lg" className="text-icon6 font-medium">
-        Tool permissions
-      </Txt>
-      <Txt variant="ui-sm" as="p" className="text-icon3 mt-1 mb-2">
-        Choose how each tool category is approved. “Allow” runs without asking, “Ask” prompts you, “Deny” blocks it.
-        Turning on “Auto-approve tools” above sets every category to Allow.
-      </Txt>
+    <SettingsSubsection
+      title="Tool permissions"
+      description="“Allow” runs without asking, “Ask” prompts you, “Deny” blocks it. Auto-approve above sets every category to Allow."
+    >
       <FieldRowGroup>
         {TOOL_CATEGORIES.map(({ value, label, hint }) => (
           <FieldRow key={value} label={label} hint={hint}>
@@ -197,7 +194,7 @@ function PermissionsSection({
           </FieldRow>
         ))}
       </FieldRowGroup>
-    </div>
+    </SettingsSubsection>
   );
 }
 
