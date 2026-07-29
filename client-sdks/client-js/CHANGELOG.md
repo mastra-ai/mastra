@@ -1,5 +1,36 @@
 # @mastra/client-js
 
+## 1.36.0-alpha.2
+
+### Minor Changes
+
+- Added the `autoPublish` option to `createStoredAgent()` so SDK users can create an unpublished initial draft. ([#20381](https://github.com/mastra-ai/mastra/pull/20381))
+
+  ```typescript
+  await mastraClient.createStoredAgent({
+    id: 'support-agent',
+    name: 'Support agent',
+    instructions: 'Help customers with support questions.',
+    model: { provider: 'openai', name: 'gpt-5' },
+    autoPublish: false,
+  });
+  ```
+
+### Patch Changes
+
+- Added `TraceInsightResponse` for typed entity-learning trace summaries. ([#20405](https://github.com/mastra-ai/mastra/pull/20405))
+
+  ```ts
+  import type { TraceInsightResponse } from '@mastra/client-js';
+
+  const traceId = (insight: TraceInsightResponse) => insight.traceId;
+  ```
+
+- Added Trace Intelligence progress types and improved the onboarding state with processing progress, clearer copy, accessible markup, mobile polish, and the dedicated documentation link. ([#20401](https://github.com/mastra-ai/mastra/pull/20401))
+
+- Updated dependencies [[`55c9e24`](https://github.com/mastra-ai/mastra/commit/55c9e248c27c1d72b5bb7e94ea6b8a3999eee49f), [`07f5b4b`](https://github.com/mastra-ai/mastra/commit/07f5b4ba9d608d88865030732e580298296adf99)]:
+  - @mastra/core@1.55.0-alpha.2
+
 ## 1.35.1-alpha.1
 
 ### Patch Changes
