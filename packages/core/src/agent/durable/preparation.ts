@@ -466,15 +466,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     }
   }
 
-  // 7. Get model (and model list if configured)
-  const model = await typedAgent.getModel({ requestContext });
-  if (!model) {
-    throw new Error('Agent model not available');
-  }
-
-  const modelList = await typedAgent.getModelList(requestContext);
-
-  // 8. Convert tools to CoreTool format for execution
+  // 7. Convert tools to CoreTool format for execution
   let tools: Record<string, CoreTool> = {};
   try {
     tools = await typedAgent.getToolsForExecution({
@@ -493,6 +485,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error converting tools: ${error}`);
   }
+
+  // 8. Get model (and model list if configured)
+  const model = await typedAgent.getModel({ requestContext });
+  if (!model) {
+    throw new Error('Agent model not available');
+  }
+
+  const modelList = await typedAgent.getModelList(requestContext);
 
   // 8b. Get scorers configuration
   const overrideScorers = (execOptions as any)?.scorers;
