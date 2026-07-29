@@ -36,13 +36,12 @@ export function SlackNotConfigured() {
                 Not configured
               </Txt>
             </span>
+            <Txt as="span" variant="ui-xs" className="text-icon3 max-w-80 pl-3">
+              Missing required environment variables: {SLACK_ENV_VARS.join(', ')}
+            </Txt>
           </span>
         }
-      >
-        <Txt as="span" variant="ui-xs" className="text-icon3 max-w-80 text-left">
-          Missing required environment variables: {SLACK_ENV_VARS.join(', ')}
-        </Txt>
-      </SettingsRow>
+      />
     </SettingsCard>
   );
 }
