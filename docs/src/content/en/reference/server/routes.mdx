@@ -33,7 +33,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 | Parameter | Type | Default | Description |
 | - | - | - | - |
 | `status` | `'draft' \| 'published'` | `'draft'` | Which stored version to resolve. `draft` returns the latest version, `published` returns the active published version. |
-| `versionId` | `string` | — | A specific version ID to resolve. Takes precedence over `status`. |
+| `versionId` | `string` | None | A specific version ID to resolve. Takes precedence over `status`. |
 
 ```bash
 # Get agent with latest draft overrides (default)

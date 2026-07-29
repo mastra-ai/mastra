@@ -197,7 +197,9 @@ export const Thread = ({
                 </div>
               )}
             </MessageScrollerViewport>
-            <MessageScrollerButton className="z-30" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 mx-auto flex w-full max-w-3xl px-4">
+              <MessageScrollerButton className="pointer-events-auto static ms-auto translate-x-0 rtl:translate-x-0" />
+            </div>
           </MessageScroller>
 
           {showThumbnailInChat && agentId && threadId && (

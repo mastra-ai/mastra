@@ -29,7 +29,7 @@ new Observability({
 })
 ```
 
-If a config already includes a `SensitiveDataFilter` in `spanOutputProcessors`, the auto-applied filter is skipped to avoid double redaction. Pre-instantiated `ObservabilityInstance` values aren't modified — add a `SensitiveDataFilter` to their processors yourself if needed.
+If a config already includes a `SensitiveDataFilter` in `spanOutputProcessors`, the auto-applied filter is skipped to avoid double redaction. Pre-instantiated `ObservabilityInstance` values aren't modified. Add a `SensitiveDataFilter` to their processors yourself if needed.
 
 ## Constructor
 

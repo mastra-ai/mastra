@@ -11,7 +11,7 @@ packages:
 
 ## Usage example
 
-Register the provider on the `Mastra` constructor. The refresh token is single-use and rotates on startup; the resulting access tokens are persisted to `Mastra.storage`.
+Register the provider on the `Mastra` constructor. The refresh token is single-use and rotates on startup. The resulting access tokens are persisted to `Mastra.storage`.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
@@ -306,7 +306,7 @@ slack.setBaseUrl('https://abc123.trycloudflare.com')
 
 #### `initialize()`
 
-Recreates a `SlackAdapter` for each active installation in storage and injects `AgentChannels` into the corresponding agent so it receives Slack events on startup. Doesn't auto-provision new apps; use `connect()` to create one. Mastra calls this automatically, so you rarely call it directly.
+Recreates a `SlackAdapter` for each active installation in storage and injects `AgentChannels` into the corresponding agent so it receives Slack events on startup. Doesn't auto-provision new apps. Use `connect()` to create one. Mastra calls this automatically, so you rarely call it directly.
 
 ```typescript
 await slack.initialize()
