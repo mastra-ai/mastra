@@ -7,6 +7,7 @@ import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
 import type { ObservabilityContext, Span, SpanType, TracingPolicy } from '../observability';
 import { createObservabilityContext } from '../observability';
+import { deepEqual } from '../utils/deep-equal';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type {
@@ -581,10 +582,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         if (hasPreviousOutput) {
           try {
             payloadMatchesPrevious =
-              optimizedStep.payload === previousOutput ||
-              JSON.stringify(optimizedStep.payload) === JSON.stringify(previousOutput);
+              optimizedStep.payload === previousOutput || deepEqual(optimizedStep.payload, previousOutput);
           } catch {
-            // non-serializable payload — treat as not matching
+            // Values that cannot be structurally compared are treated as not matching.
           }
         }
         if (payloadMatchesPrevious) {

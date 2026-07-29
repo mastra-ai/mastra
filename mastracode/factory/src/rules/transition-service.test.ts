@@ -74,6 +74,71 @@ describe('FactoryTransitionService', () => {
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.revision).toBe(item.revision + 1);
   });
 
+  it('invokes onTerminalStage only after a transition commits into a terminal stage', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const onTerminalStage = vi.fn();
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      onTerminalStage,
+    });
+
+    const nonTerminal = await service.transition(request(item, { stage: 'execute' }));
+    expect(nonTerminal.status).toBe('accepted');
+    expect(onTerminalStage).not.toHaveBeenCalled();
+
+    const rejected = await service.transition(
+      request(item, { stage: 'done', identity: 'request-2', expectedRevision: 999 }),
+    );
+    expect(rejected.status).toBe('rejected');
+    expect(onTerminalStage).not.toHaveBeenCalled();
+
+    const updated = await storage.get({ orgId: 'org-1', id: item.id });
+    const terminal = await service.transition(request(updated!, { stage: 'done', identity: 'request-3' }));
+    expect(terminal.status).toBe('accepted');
+    expect(onTerminalStage).toHaveBeenCalledExactlyOnceWith({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      stage: 'done',
+    });
+  });
+
+  it('never fails a committed terminal transition when onTerminalStage throws', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    const onTerminalStage = vi.fn().mockRejectedValue(new Error('release failed'));
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      onTerminalStage,
+    });
+
+    const result = await service.transition(request(item, { stage: 'canceled' }));
+
+    expect(result.status).toBe('accepted');
+    expect(onTerminalStage).toHaveBeenCalledOnce();
+  });
+
+  it('returns a committed terminal transition when onTerminalStage hangs past the cleanup bound', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    // Never settles — models a hung sandbox-provider call during cleanup.
+    const onTerminalStage = vi.fn(() => new Promise<void>(() => {}));
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      onTerminalStage,
+      terminalCleanupTimeoutMs: 20,
+    });
+
+    const result = await service.transition(request(item, { stage: 'done' }));
+
+    expect(result.status).toBe('accepted');
+    expect(onTerminalStage).toHaveBeenCalledOnce();
+  });
+
   it('queues an urgent wake-up when a board drag has no skill follow-up', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['triage'] });

@@ -11,6 +11,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 
 import { fetchThemeFlow, fetchThemePaths, fetchThemeSnapshots } from './entity-learning-api';
+import { useEntityLearningProgress } from './hooks/use-entity-learning-progress';
 import { useSnapshotPlayback } from './hooks/use-snapshot-playback';
 import { useThemeFlows } from './hooks/use-theme-flows';
 import { useThemePaths } from './hooks/use-theme-paths';
@@ -172,6 +173,12 @@ export function SankeySignals({
     return stabilizeThemeFlow(drilledFlow, [stableUnfilteredFlow, drilledFlow]);
   }, [drillIn, pathsQuery.data, stableUnfilteredFlow]);
   const graphSummary = useMemo(() => (flow ? buildSignalGraphSummary(flow) : undefined), [flow]);
+  const populatedStageCount = currentFlow?.stages.filter(stage => stage.nodes.length > 0).length ?? 0;
+  const shouldLoadProgress =
+    snapshotsQuery.isSuccess &&
+    !snapshotsQuery.isError &&
+    (!snapshot || Boolean(currentFlow && (!flow || !graphSummary || populatedStageCount < 2)));
+  const progressQuery = useEntityLearningProgress(entityId, entityType, shouldLoadProgress);
   const isPlaybackBlockedByDrillIn = drillIn !== undefined && (pathsQuery.isFetching || pathsQuery.isError);
   const hasActivePathsError = drillIn !== undefined && pathsQuery.isError;
 
@@ -236,7 +243,7 @@ export function SankeySignals({
     );
   }
 
-  if (!snapshot) return <SignalsEmptyState LinkComponent={Link} />;
+  if (!snapshot) return <SignalsEmptyState LinkComponent={Link} progress={progressQuery.data} isRangeEmpty />;
 
   if (isFlowPending) {
     return (
@@ -253,10 +260,8 @@ export function SankeySignals({
     );
   }
 
-  const populatedStageCount = currentFlow?.stages.filter(stage => stage.nodes.length > 0).length ?? 0;
-
   if (!currentFlow || !flow || !graphSummary || populatedStageCount < 2) {
-    return <SignalsEmptyState LinkComponent={Link} />;
+    return <SignalsEmptyState LinkComponent={Link} progress={progressQuery.data} />;
   }
 
   const stages = flow.stages;
@@ -296,22 +301,11 @@ export function SankeySignals({
   return (
     <main className="min-w-0 space-y-5 p-4 lg:p-6">
       <header className="max-w-3xl" data-testid="signals-page-header">
-        <div className="text-neutral4 flex items-center gap-2 font-mono text-xs font-semibold tracking-widest">
-          <span aria-hidden="true" className="bg-accent1 size-2 rounded-full" />
-          TRACE INTELLIGENCE
-        </div>
-        <h1 className="text-neutral6 mt-2 text-xl font-semibold sm:text-2xl">
-          Understand what drives every agent interaction
-        </h1>
-        <p className="text-neutral3 mt-1.5 text-sm leading-5">
-          Trace intelligence groups recurring patterns across traces so you can see how goal, outcome, behavior, and
-          sentiment trace signals connect.
-        </p>
-        <p className="text-neutral4 mt-2 font-mono text-xs">
+        <p className="text-neutral4 font-mono text-xs">
           {entityId} · Snapshot {flow.snapshot.ordinal} of {flow.snapshot.total} ·{' '}
           {formatSnapshotWindow(flow.snapshot.startedAt, flow.snapshot.endedAt)}
         </p>
-        <ul aria-label="Trace intelligence metrics" className="mt-3 flex flex-wrap gap-2">
+        <ul aria-label="Trace signal metrics" className="mt-3 flex flex-wrap gap-2">
           <li className="border-border1 bg-surface2 text-neutral4 rounded-md border px-3 py-1.5 text-xs">
             {traceLabel(flow.snapshot.traceCount)} analyzed
           </li>
@@ -377,12 +371,12 @@ export function SankeySignals({
         <>
           {perspectiveMutation.isPending ? (
             <p className="text-neutral3 font-mono text-xs" role="status">
-              Reloading snapshots for new signal perspective…
+              Reloading snapshots for new trace signal perspective…
             </p>
           ) : null}
           {perspectiveMutation.isError ? (
             <p className="text-xs text-red-500" role="alert">
-              Unable to load that signal perspective. Try reordering the columns again.
+              Unable to load that trace signal perspective. Try reordering the columns again.
             </p>
           ) : null}
           <SignalDistributions

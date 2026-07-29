@@ -108,9 +108,9 @@ import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const CODE_AGENT_ID = 'code-agent';
 
-// Global retry policy for transient connection failures (e.g. provider sockets dropping mid-stream).
+// Global retry policy for transient provider failures (e.g. dropped sockets and server errors).
 // Applied centrally to every model call via StreamErrorRetryProcessor, independent of model-pack
-// settings, so all modes/subagents benefit from a short wait before retrying a dropped connection.
+// settings, so all modes/subagents benefit from a short wait before retrying a transient failure.
 // Delay uses exponential backoff: initialDelay * 2^retryCount, capped at maxDelay.
 const MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES = 10;
 const MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS = 500;
@@ -118,6 +118,8 @@ const MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS = 30000;
 
 const TRANSIENT_CONNECTION_ERROR_CODES = new Set(['ECONNRESET', 'EPIPE']);
 const TRANSIENT_CONNECTION_MESSAGE_PATTERN = /econnreset|socket hang up|write epipe|other side closed/i;
+const TRANSIENT_SERVER_ERROR_STATUSES = new Set([500, 502, 503]);
+const TRANSIENT_SERVER_ERROR_MESSAGE_PATTERN = /internal server|server error|api may be experiencing issues/i;
 
 /**
  * Matcher for transient connection failures. Cause-chain traversal is handled
@@ -136,7 +138,29 @@ function isTransientConnectionError(error: unknown): boolean {
   return false;
 }
 
-function emitTransientConnectionRetry(
+function isTransientServerError(error: unknown): boolean {
+  if (!error) return false;
+
+  const errorObj = typeof error === 'object' ? (error as { status?: unknown; statusCode?: unknown }) : undefined;
+  if (
+    (typeof errorObj?.status === 'number' && TRANSIENT_SERVER_ERROR_STATUSES.has(errorObj.status)) ||
+    (typeof errorObj?.statusCode === 'number' && TRANSIENT_SERVER_ERROR_STATUSES.has(errorObj.statusCode))
+  ) {
+    return true;
+  }
+
+  const message = error instanceof Error ? error.message : undefined;
+  return typeof message === 'string' && TRANSIENT_SERVER_ERROR_MESSAGE_PATTERN.test(message);
+}
+
+function getTransientRetryDelay(retryCount: number): number {
+  return Math.min(
+    MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount),
+    MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS,
+  );
+}
+
+function emitTransientRetry(
   error: unknown,
   retryCount: number,
   delayMs: number,
@@ -738,13 +762,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           {
             match: isTransientConnectionError,
             maxRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES,
-            delayMs: ({ retryCount }) =>
-              Math.min(
-                MASTRACODE_TRANSIENT_CONNECTION_RETRY_INITIAL_DELAY_MS * Math.pow(2, retryCount),
-                MASTRACODE_TRANSIENT_CONNECTION_RETRY_MAX_DELAY_MS,
-              ),
+            delayMs: ({ retryCount }) => getTransientRetryDelay(retryCount),
             onRetry: ({ error, retryCount, delayMs, requestContext }) =>
-              emitTransientConnectionRetry(error, retryCount, delayMs, requestContext),
+              emitTransientRetry(error, retryCount, delayMs, requestContext),
+          },
+          {
+            match: isTransientServerError,
+            maxRetries: MASTRACODE_TRANSIENT_CONNECTION_MAX_RETRIES,
+            delayMs: ({ retryCount }) => getTransientRetryDelay(retryCount),
+            onRetry: ({ error, retryCount, delayMs, requestContext }) =>
+              emitTransientRetry(error, retryCount, delayMs, requestContext),
           },
         ],
       }),
