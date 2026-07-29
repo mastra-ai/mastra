@@ -1,5 +1,14 @@
 # @mastra/platform
 
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- Fix direct-exec fallback loop: when the WebSocket transport fails on a sandbox (Railway rejects the handshake, mid-stream drop, etc.), disable direct-exec permanently for that sandbox instead of re-minting a fresh lease on every subsequent exec. Also surface WebSocket close code, reason, and `opened` state in `DirectExecResult` and emit a diagnostic warning on transport failure so we can see why Railway is refusing the upgrade in production. ([#20412](https://github.com/mastra-ai/mastra/pull/20412))
+
+- Updated dependencies [[`55c9e24`](https://github.com/mastra-ai/mastra/commit/55c9e248c27c1d72b5bb7e94ea6b8a3999eee49f), [`07f5b4b`](https://github.com/mastra-ai/mastra/commit/07f5b4ba9d608d88865030732e580298296adf99)]:
+  - @mastra/core@1.55.0-alpha.2
+
 ## 0.2.2
 
 ### Patch Changes

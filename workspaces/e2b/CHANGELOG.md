@@ -1,5 +1,16 @@
 # @mastra/e2b
 
+## 0.8.0-alpha.0
+
+### Minor Changes
+
+- Raised the `@mastra/core` peer dependency floor to `>=1.55.0-0`. The previous floor (`>=1.12.0-0`) was stale: `E2BCodeModeTransport` already relies on Code Mode runtime exports that only exist in much newer cores, so older pairings crashed at import time. `E2BCodeModeTransport` now also reuses the `sanitizeToolId` helper exported from `@mastra/core/tools` for `external_*` naming instead of a local copy, guaranteeing it stays identical to the names in the generated stubs. ([#20359](https://github.com/mastra-ai/mastra/pull/20359))
+
+### Patch Changes
+
+- Updated dependencies [[`ba369f2`](https://github.com/mastra-ai/mastra/commit/ba369f2a0aaf998da0d6aa033d26f64f96bef8ac), [`dcfed93`](https://github.com/mastra-ai/mastra/commit/dcfed93e1e256c6abfa792cbb7ca836f5d0e8638), [`2876e15`](https://github.com/mastra-ai/mastra/commit/2876e15b4d2f616a3bc1ed3af57d546c268384ce), [`598080f`](https://github.com/mastra-ai/mastra/commit/598080f224edb3f0f5b801035b067fac50a56a03)]:
+  - @mastra/core@1.55.0-alpha.1
+
 ## 0.7.0
 
 ### Minor Changes

@@ -5,8 +5,10 @@ import { RequestContext } from '../di';
 import { MastraError, MastraNonRetryableError, ErrorDomain, ErrorCategory } from '../error';
 import type { PubSub } from '../events';
 import { EventEmitterPubSub } from '../events/event-emitter';
+import { createWorkflow } from './create';
 import { DefaultExecutionEngine } from './default';
 import type { FormattedWorkflowResult, StepResult } from './types';
+import { createStep } from './workflow';
 
 class TestableExecutionEngine extends DefaultExecutionEngine {
   async fmtReturnValuePublic(
@@ -1228,8 +1230,13 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
     expect(result.stepExecutionPath).toEqual(['step1']);
   });
 
-  it('should remove payload when it matches the previous step output', async () => {
+  it('should remove an identity-equal payload without serializing it', async () => {
     const sharedData = { value: 1 };
+    const toJSON = vi.fn(() => {
+      throw new Error('workflow payload must not be serialized for comparison');
+    });
+    Object.defineProperty(sharedData, 'toJSON', { value: toJSON });
+
     const stepResults: Record<string, StepResult<any, any, any, any>> = {
       input: sharedData as any,
       step1: { status: 'success', output: { value: 2 }, payload: sharedData, startedAt: 1, endedAt: 2 },
@@ -1241,6 +1248,7 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
 
     expect(result.steps.step1.payload).toBeUndefined();
     expect(result.steps.step2.payload).toBeUndefined();
+    expect(toJSON).not.toHaveBeenCalled();
   });
 
   it('should preserve payload when it does not match the previous step output', async () => {
@@ -1253,6 +1261,22 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
     const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
 
     expect(result.steps.step1.payload).toEqual({ different: true });
+  });
+
+  it('should preserve a circular payload when structural comparison cannot complete', async () => {
+    const input: Record<string, unknown> = { value: 1 };
+    input.self = input;
+    const payload: Record<string, unknown> = { value: 1 };
+    payload.self = payload;
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: input as any,
+      step1: { status: 'success', output: { value: 2 }, payload, startedAt: 1, endedAt: 2 },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+    expect(result.steps.step1.payload).toBe(payload);
   });
 
   it('should handle structural equality after deserialization', async () => {
@@ -1271,6 +1295,74 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
     const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
 
     expect(result.steps.step1.payload).toBeUndefined();
+  });
+
+  it('should ignore object key order when comparing deserialized payloads', async () => {
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: JSON.parse('{"first":1,"second":2}'),
+      step1: {
+        status: 'success',
+        output: { value: 2 },
+        payload: JSON.parse('{"second":2,"first":1}'),
+        startedAt: 1,
+        endedAt: 2,
+      },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+    expect(result.steps.step1.payload).toBeUndefined();
+  });
+
+  it('should fully compare and remove a structurally equal 4 MiB payload without serializing it', async () => {
+    const input = { data: 'x'.repeat(4 * 1024 * 1024) };
+    const payload = { data: 'x'.repeat(4 * 1024 * 1024) };
+    const inputToJSON = vi.fn(() => {
+      throw new Error('workflow input must not be serialized for comparison');
+    });
+    const payloadToJSON = vi.fn(() => {
+      throw new Error('workflow payload must not be serialized for comparison');
+    });
+    Object.defineProperty(input, 'toJSON', { value: inputToJSON });
+    Object.defineProperty(payload, 'toJSON', { value: payloadToJSON });
+
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: input as any,
+      step1: { status: 'success', output: { value: 2 }, payload, startedAt: 1, endedAt: 2 },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+    expect(result.steps.step1.payload).toBeUndefined();
+    expect(inputToJSON).not.toHaveBeenCalled();
+    expect(payloadToJSON).not.toHaveBeenCalled();
+  });
+
+  it('should fully compare and preserve a distinct 4 MiB payload without serializing it', async () => {
+    const input = { data: `${'x'.repeat(4 * 1024 * 1024 - 1)}a` };
+    const payload = { data: `${'x'.repeat(4 * 1024 * 1024 - 1)}b` };
+    const inputToJSON = vi.fn(() => {
+      throw new Error('workflow input must not be serialized for comparison');
+    });
+    const payloadToJSON = vi.fn(() => {
+      throw new Error('workflow payload must not be serialized for comparison');
+    });
+    Object.defineProperty(input, 'toJSON', { value: inputToJSON });
+    Object.defineProperty(payload, 'toJSON', { value: payloadToJSON });
+
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: input as any,
+      step1: { status: 'success', output: { value: 2 }, payload, startedAt: 1, endedAt: 2 },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+    expect(result.steps.step1.payload).toBe(payload);
+    expect(inputToJSON).not.toHaveBeenCalled();
+    expect(payloadToJSON).not.toHaveBeenCalled();
   });
 
   it('should not deduplicate when there is no input in stepResults', async () => {
@@ -1543,6 +1635,81 @@ describe('DefaultExecutionEngine.executeStepWithRetry', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.nonRetryable).toBeUndefined();
+    }
+  });
+});
+
+describe('DefaultExecutionEngine — requestContext serialization gating', () => {
+  const ioSchema = z.object({ n: z.number() });
+  const buildStep = (id: string) =>
+    createStep({
+      id,
+      inputSchema: ioSchema,
+      outputSchema: ioSchema,
+      execute: async ({ inputData }) => ({ n: inputData.n + 1 }),
+    });
+
+  it('does not serialize the requestContext during execution on the default engine', async () => {
+    const spy = vi.spyOn(DefaultExecutionEngine.prototype, 'serializeRequestContext');
+    try {
+      const workflow = createWorkflow({
+        id: 'no-context-serialize-wf',
+        inputSchema: ioSchema,
+        outputSchema: ioSchema,
+        // Keep snapshot persistence (which legitimately serializes the
+        // context) out of the count — this test pins the execution path only.
+        options: { shouldPersistSnapshot: () => false },
+      })
+        .then(buildStep('step-1'))
+        .then(buildStep('step-2'))
+        .commit();
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: { n: 0 }, requestContext });
+
+      expect(result.status).toBe('success');
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('serializes the requestContext for engines that require durable context serialization', async () => {
+    class DurableContextEngine extends DefaultExecutionEngine {
+      requiresDurableContextSerialization(): boolean {
+        return true;
+      }
+    }
+    const engine = new DurableContextEngine({
+      mastra: undefined,
+      options: { validateInputs: false, shouldPersistSnapshot: () => false },
+    });
+    const spy = vi.spyOn(engine, 'serializeRequestContext');
+
+    const workflow = createWorkflow({
+      id: 'durable-context-serialize-wf',
+      inputSchema: ioSchema,
+      outputSchema: ioSchema,
+      executionEngine: engine,
+      options: { shouldPersistSnapshot: () => false },
+    })
+      .then(buildStep('step-1'))
+      .then(buildStep('step-2'))
+      .commit();
+
+    const requestContext = new RequestContext();
+    requestContext.set('userId', 'user-123');
+
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: { n: 0 }, requestContext });
+
+    expect(result.status).toBe('success');
+    expect(spy).toHaveBeenCalled();
+    for (const call of spy.mock.results) {
+      expect(call.value).toMatchObject({ userId: 'user-123' });
     }
   });
 });

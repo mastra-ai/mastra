@@ -15,5 +15,5 @@ export function useSettingsSection(): SettingsSection {
   const section =
     matchPath('/factories/:factoryId/settings/:section', pathname)?.params.section ??
     matchPath('/settings/:section', pathname)?.params.section;
-  return isSettingsSection(section) ? section : 'general';
+  return isSettingsSection(section) ? section : 'preferences';
 }

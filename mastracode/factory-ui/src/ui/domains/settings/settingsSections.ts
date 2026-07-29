@@ -1,11 +1,12 @@
-export type SettingsSection = 'general' | 'source-control' | 'model' | 'behavior' | 'custom-providers';
+export type SettingsSection = 'preferences' | 'factory' | 'repositories' | 'intake' | 'models' | 'behavior';
 
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
-  general: 'General',
-  'source-control': 'Source Control',
-  model: 'Model',
+  preferences: 'Preferences',
+  factory: 'Factory',
+  repositories: 'Repositories',
+  intake: 'Work Intake',
+  models: 'Models',
   behavior: 'Behavior',
-  'custom-providers': 'Custom',
 };
 
 export function isSettingsSection(value: unknown): value is SettingsSection {

@@ -39,7 +39,7 @@ afterEach(() => {
 function renderMobileHeader() {
   mockMobileViewport(true);
   render(
-    <MemoryRouter initialEntries={['/settings/general']}>
+    <MemoryRouter initialEntries={['/settings/preferences']}>
       <MainSidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
         <ChatHeader mobileContent={<SettingsHeader autoFocus placement="mobile" />} />
         <SidebarStateProbe />
@@ -53,7 +53,7 @@ describe('ChatHeader', () => {
     renderMobileHeader();
 
     const mobileHeader = screen.getByRole('banner');
-    expect(within(mobileHeader).getByRole('heading', { name: 'General' })).toHaveFocus();
+    expect(within(mobileHeader).getByRole('heading', { name: 'Preferences' })).toHaveFocus();
     expect(within(mobileHeader).getByRole('button', { name: 'Close settings' })).toBeInTheDocument();
   });
 

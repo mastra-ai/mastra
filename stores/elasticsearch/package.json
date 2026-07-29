@@ -32,7 +32,7 @@
     "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "dependencies": {
-    "@elastic/elasticsearch": "^8.19.1"
+    "@elastic/elasticsearch": "^8.19.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

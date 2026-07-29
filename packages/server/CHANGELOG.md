@@ -1,5 +1,40 @@
 # @mastra/server
 
+## 1.55.0-alpha.2
+
+### Minor Changes
+
+- Added `autoPublish` to stored agent creation so callers can review an initial draft before publishing it. Existing calls continue to publish immediately. ([#20381](https://github.com/mastra-ai/mastra/pull/20381))
+
+  ```typescript
+  await client.createStoredAgent({
+    id: 'support-agent',
+    name: 'Support agent',
+    instructions: 'Help customers with support questions.',
+    model: { provider: 'openai', name: 'gpt-5' },
+    autoPublish: false,
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`55c9e24`](https://github.com/mastra-ai/mastra/commit/55c9e248c27c1d72b5bb7e94ea6b8a3999eee49f), [`07f5b4b`](https://github.com/mastra-ai/mastra/commit/07f5b4ba9d608d88865030732e580298296adf99)]:
+  - @mastra/core@1.55.0-alpha.2
+
+## 1.55.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`ba369f2`](https://github.com/mastra-ai/mastra/commit/ba369f2a0aaf998da0d6aa033d26f64f96bef8ac), [`dcfed93`](https://github.com/mastra-ai/mastra/commit/dcfed93e1e256c6abfa792cbb7ca836f5d0e8638), [`2876e15`](https://github.com/mastra-ai/mastra/commit/2876e15b4d2f616a3bc1ed3af57d546c268384ce), [`598080f`](https://github.com/mastra-ai/mastra/commit/598080f224edb3f0f5b801035b067fac50a56a03)]:
+  - @mastra/core@1.55.0-alpha.1
+
+## 1.55.0-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`3f472b4`](https://github.com/mastra-ai/mastra/commit/3f472b468892a1ff14ccb43cc0343b86f7d8fd7d), [`35b929b`](https://github.com/mastra-ai/mastra/commit/35b929b7abc3d20d85c7985880960ac2d04a6c86), [`9b3626a`](https://github.com/mastra-ai/mastra/commit/9b3626aeb1d16fcd34b0a8e94c114ddb80a3b240)]:
+  - @mastra/core@1.55.0-alpha.0
+
 ## 1.54.0
 
 ### Minor Changes

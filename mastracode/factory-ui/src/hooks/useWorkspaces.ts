@@ -39,6 +39,32 @@ function splitSessions(sessions: FactoryUserSession[]): WorkspacesData {
   };
 }
 
+/**
+ * Drop a deleted session from the cached list right away. Invalidation alone
+ * leaves every consumer rendering the session until the refetch lands — a
+ * window in which the board still offers to open a thread that died with its
+ * workspace. The refetch still runs behind this to reconcile.
+ *
+ * In-flight list fetches are cancelled first: one issued before the delete
+ * committed still carries the deleted session, and letting it settle would
+ * write it straight back over this removal.
+ */
+export function removeCachedSession(
+  queryClient: ReturnType<typeof useQueryClient>,
+  projectRepositoryId: string | undefined,
+  sessionId: string,
+) {
+  void queryClient.cancelQueries({ queryKey: queryKeys.sessions(projectRepositoryId) });
+  queryClient.setQueryData<WorkspacesData>(queryKeys.sessions(projectRepositoryId), current =>
+    current
+      ? {
+          workspaces: current.workspaces.filter(session => session.sessionId !== sessionId),
+          userSessions: current.userSessions.filter(session => session.sessionId !== sessionId),
+        }
+      : current,
+  );
+}
+
 function invalidateSessionQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   projectRepositoryId: string | undefined,
@@ -131,6 +157,7 @@ export function useDeleteWorkspaceMutation(
       return workspace;
     },
     onSuccess: workspace => {
+      removeCachedSession(queryClient, projectRepositoryId, workspace.sessionId);
       invalidateSessionQueries(queryClient, projectRepositoryId, scope, workspace.sessionId);
       void queryClient.invalidateQueries({ queryKey: queryKeys.userSession(workspace.sessionId) });
       void queryClient.invalidateQueries({
