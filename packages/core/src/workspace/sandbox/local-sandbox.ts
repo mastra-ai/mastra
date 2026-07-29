@@ -167,6 +167,7 @@ export class LocalSandbox extends MastraSandbox {
   private _seatbeltProfilePath?: string;
   private _sandboxFolderPath?: string;
   private _userProvidedProfilePath = false;
+  private _isCustomProfileLoaded = false;
   private readonly _createdAt: Date;
   private readonly _instructionsOverride?: InstructionsOption;
   private _activeMountPaths: Set<string> = new Set();
@@ -263,6 +264,7 @@ export class LocalSandbox extends MastraSandbox {
         // Check if file exists at user's path
         try {
           this._seatbeltProfile = await fs.readFile(userProvidedPath, 'utf-8');
+          this._isCustomProfileLoaded = true;
         } catch (err: unknown) {
           if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code !== 'ENOENT') {
             throw err;
@@ -350,6 +352,7 @@ export class LocalSandbox extends MastraSandbox {
     this._seatbeltProfilePath = undefined;
     this._seatbeltProfile = undefined;
     this._userProvidedProfilePath = false;
+    this._isCustomProfileLoaded = false;
 
     // Try to remove .sandbox folder if empty
     if (this._sandboxFolderPath) {
@@ -735,7 +738,7 @@ export class LocalSandbox extends MastraSandbox {
     this._mountPathToIsolationPath.set(normMount, isolationPath);
 
     // Seatbelt: regenerate the inline profile so the next executeCommand() picks it up
-    if (this.isolation === 'seatbelt' && !this._userProvidedProfilePath) {
+    if (this.isolation === 'seatbelt' && !this._isCustomProfileLoaded) {
       this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
     }
     // Bwrap: buildBwrapCommand reads config.readWritePaths each call, so no extra work needed
@@ -770,7 +773,7 @@ export class LocalSandbox extends MastraSandbox {
           paths.splice(idx, 1);
         }
       }
-      if (this.isolation === 'seatbelt' && !this._userProvidedProfilePath) {
+      if (this.isolation === 'seatbelt' && !this._isCustomProfileLoaded) {
         this._seatbeltProfile = generateSeatbeltProfile(this.workingDirectory, this._nativeSandboxConfig);
       }
     } else {
