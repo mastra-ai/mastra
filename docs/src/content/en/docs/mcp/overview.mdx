@@ -1,6 +1,6 @@
 ---
 title: "MCP overview | MCP"
-description: Learn about the Model Context Protocol (MCP), how to use third-party tools via MCPClient, connect to registries, and share your own tools using MCPServer.
+description: Learn about the Model Context Protocol (MCP), how to use third-party tools via MCPClient and connect to registries, plus share your own tools using MCPServer.
 packages:
   - "@mastra/mcp"
 ---
@@ -10,7 +10,7 @@ import TabItem from "@theme/TabItem";
 
 # MCP overview
 
-Mastra supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction), an open standard for connecting AI agents to external tools and resources. It serves as a universal plugin system, enabling agents to call tools regardless of language or hosting environment.
+Mastra supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/introduction), an open standard for connecting AI agents to external tools and resources. It's a universal plugin system, enabling agents to call tools regardless of language or hosting environment.
 
 Mastra can also be used to author MCP servers, exposing agents, tools, and other structured resources via the MCP interface. These can then be accessed by any system or agent that supports the protocol.
 
@@ -54,7 +54,7 @@ Visit [MCPClient](/reference/tools/mcp-client) for a full list of configuration 
 
 :::tip Authentication
 
-For connecting to OAuth-protected MCP servers — including completing the browser-based authorization flow with `authenticate()` — see the [OAuth Authentication](/reference/tools/mcp-client#oauth-authentication) section.
+For connecting to OAuth-protected MCP servers, including completing the browser-based authorization flow with `authenticate()`, see the [OAuth Authentication](/reference/tools/mcp-client#oauth-authentication) section.
 
 :::
 
@@ -98,7 +98,7 @@ export const mcp = new MCPClient({
 })
 ```
 
-You can also pass a function to decide dynamically per-call. See the [MCPClient reference](/reference/tools/mcp-client#tool-approval) for the full API.
+You can also pass a function to decide per runtime-call. See the [MCPClient reference](/reference/tools/mcp-client#tool-approval) for the full API.
 
 ## Configuring `MCPServer`
 
@@ -143,14 +143,14 @@ export const mastra = new Mastra({
 })
 ```
 
-## Static and dynamic tools
+## Static and runtime tools
 
 `MCPClient` offers two approaches to retrieving tools from connected servers, suitable for different application architectures:
 
 | Feature | Static Configuration (`await mcp.listTools()`) | Dynamic Configuration (`await mcp.listToolsets()`) |
 | :- | :- | :- |
-| **Use Case** | Single-user, static config (e.g., CLI tool) | Multi-user, dynamic config (e.g., SaaS app) |
-| **Configuration** | Fixed at agent initialization | Per-request, dynamic |
+| **Use Case** | Single-user, static config (e.g., CLI tool) | Multi-user, runtime config (e.g., SaaS app) |
+| **Configuration** | Fixed at agent initialization | Per-request, runtime |
 | **Credentials** | Shared across all uses | Can vary per user/request |
 | **Agent Setup** | Tools added in `Agent` constructor | Tools passed in `.generate()` or `.stream()` options |
 
@@ -253,7 +253,7 @@ MCP servers can be discovered through registries. Here's how to connect to some 
     })
     ```
 
-    > **Important:** Treat the mcp.run SSE URL like a password. Store it securely, for example, in an environment variable.
+    > **Requirement:** Treat the mcp.run SSE URL like a password. Store it securely, for example, in an environment variable.
     >
     > ```bash title=".env"
     > MCP_RUN_SSE_URL=https://www.mcp.run/api/mcp/sse?nonce=...
@@ -408,7 +408,7 @@ MCP servers can be discovered through registries. Here's how to connect to some 
 
 ## MCP Apps
 
-MCP servers can serve interactive HTML UIs via the MCP Apps extension. Tools with associated `ui://` resources render sandboxed iframes in Studio — both on tool detail pages and inline in agent chat. The app iframe can call server tools and inject messages into the conversation. Visit [MCP Apps](/docs/mcp/mcp-apps) for setup instructions and the app bridge API.
+MCP servers can serve interactive HTML UIs via the MCP Apps extension. Tools with associated `ui://` resources render sandboxed iframes in Studio, both on tool detail pages and inline in agent chat. The app iframe can call server tools and inject messages into the conversation. Visit [MCP Apps](/docs/mcp/mcp-apps) for setup instructions and the app bridge API.
 
 ## Related
 
