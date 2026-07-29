@@ -14,7 +14,7 @@ export function WorkflowDefinitionGraphView({ draft }: WorkflowDefinitionGraphVi
 
   if (topLevelNodes.length === 0) {
     return (
-      <div className="grid min-h-48 place-items-center rounded-lg border border-dashed border-border1 bg-surface2 text-ui-sm text-neutral3">
+      <div className="border-border1 bg-surface2 text-ui-sm text-neutral3 grid min-h-48 place-items-center rounded-lg border border-dashed">
         Describe your workflow to add its first step.
       </div>
     );
@@ -26,29 +26,29 @@ export function WorkflowDefinitionGraphView({ draft }: WorkflowDefinitionGraphVi
         const children = graph.nodes.filter(candidate => candidate.parentId === node.id);
         return (
           <div key={node.id} className="flex items-center gap-8">
-            <Card className="w-56 bg-surface3">
+            <Card className="bg-surface3 w-56">
               <CardContent className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="truncate text-ui-sm font-medium text-neutral6">{node.label}</span>
+                  <span className="text-ui-sm text-neutral6 truncate font-medium">{node.label}</span>
                   <Badge size="xs">{node.type}</Badge>
                 </div>
-                {node.detail ? <p className="truncate text-ui-xs text-neutral3">{node.detail}</p> : null}
+                {node.detail ? <p className="text-ui-xs text-neutral3 truncate">{node.detail}</p> : null}
                 {children.length > 0 ? (
-                  <div className="space-y-2 border-l border-border2 pl-3">
+                  <div className="border-border2 space-y-2 border-l pl-3">
                     {children.map(child => (
-                      <div key={child.id} className="rounded-md border border-border1 bg-surface2 p-2">
+                      <div key={child.id} className="border-border1 bg-surface2 rounded-md border p-2">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="truncate text-ui-xs font-medium text-neutral5">{child.label}</span>
+                          <span className="text-ui-xs text-neutral5 truncate font-medium">{child.label}</span>
                           <Badge size="xs">{child.type}</Badge>
                         </div>
-                        {child.detail ? <p className="mt-1 truncate text-ui-xs text-neutral3">{child.detail}</p> : null}
+                        {child.detail ? <p className="text-ui-xs text-neutral3 mt-1 truncate">{child.detail}</p> : null}
                       </div>
                     ))}
                   </div>
                 ) : null}
               </CardContent>
             </Card>
-            {index < topLevelNodes.length - 1 ? <div className="h-px w-8 bg-border2" aria-hidden="true" /> : null}
+            {index < topLevelNodes.length - 1 ? <div className="bg-border2 h-px w-8" aria-hidden="true" /> : null}
           </div>
         );
       })}

@@ -19,7 +19,8 @@ export type WorkflowDefinitionDependencySchema = WorkflowRegistrySchemas;
 export type WorkflowDefinitionPreflightContext = WorkflowRegistryIndex;
 
 export type WorkflowDefinitionPreflightResult =
-  { ok: true } | { ok: false; issues: WorkflowDefinitionPreflightIssue[] };
+  | { ok: true }
+  | { ok: false; issues: WorkflowDefinitionPreflightIssue[] };
 
 /**
  * Collect-mode validation of an authoring definition. Context gates the

@@ -83,7 +83,8 @@ export interface WorkflowDraftValidationIssue {
 export type WorkflowDraftValidationResult = { ok: true } | { ok: false; issues: WorkflowDraftValidationIssue[] };
 
 export type WorkflowDraftMutationResult =
-  { ok: true; draft: WorkflowDraft } | { ok: false; draft: WorkflowDraft; issues: WorkflowDraftValidationIssue[] };
+  | { ok: true; draft: WorkflowDraft }
+  | { ok: false; draft: WorkflowDraft; issues: WorkflowDraftValidationIssue[] };
 
 const emptyObjectSchema = {
   type: 'object',

@@ -31,7 +31,7 @@ function WorkflowConversationMessages() {
       messages={messages}
       isRunning={isRunning}
       emptyState={
-        <div className="grid h-full place-items-center px-8 text-center text-ui-sm text-neutral3">
+        <div className="text-ui-sm text-neutral3 grid h-full place-items-center px-8 text-center">
           Describe the workflow you want to build. The builder will update the typed draft as it works.
         </div>
       }
