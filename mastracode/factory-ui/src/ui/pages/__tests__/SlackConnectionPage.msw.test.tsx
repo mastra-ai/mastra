@@ -179,6 +179,20 @@ describe('SlackConnectionPage', () => {
     expect(await screen.findByRole('button', { name: /Slack.*Not connected.*Connect Slack/ })).toBeEnabled();
   });
 
+  it('given a disconnect that fails, when retried, then the account stays configurable', async () => {
+    mockAccounts([slackLink]);
+    server.use(
+      http.delete(`${TEST_BASE_URL}/web/channel-accounts`, () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
+    );
+    renderPage();
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole('button', { name: 'Disconnect Test User' }));
+
+    expect(await screen.findByRole('button', { name: 'Disconnect Test User' })).toBeInTheDocument();
+    expect(screen.getByText('Example Workspace')).toBeInTheDocument();
+  });
+
   it('given a linked account, when its default factory changes, then the sender routing is updated', async () => {
     let patchBody: unknown;
     server.use(

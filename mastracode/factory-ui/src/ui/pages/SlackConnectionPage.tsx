@@ -18,8 +18,8 @@ import { ConnectionSettingsShell } from '../domains/settings/components/Connecti
 import { IdentityWithTooltip } from '../domains/settings/components/IdentityWithTooltip';
 import { SettingsCard, SettingsRow } from '../domains/settings/components/SettingsCard';
 import { SettingsSubsection } from '../domains/settings/components/SettingsSubsection';
-import { SlackLogo } from '../domains/settings/components/SlackLogo';
 import { connectSlackUrl, type ConnectedChannelAccount } from '../domains/settings/services/channelAccounts';
+import { SlackLogo } from '../ui/SlackLogo';
 import { SettingsPageLayout } from './SettingsPage';
 
 const linkedDateFormatter = new Intl.DateTimeFormat(undefined, {

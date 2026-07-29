@@ -2,12 +2,12 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ChevronRight } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
+import { SlackLogo } from '../../../ui/SlackLogo';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useApiConfig } from '../../../../api/config';
 import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
 import { connectSlackUrl } from '../services/channelAccounts';
 import { SettingsCard, SettingsRow } from './SettingsCard';
-import { SlackLogo } from './SlackLogo';
 
 /** Connected-account overview for the active factory settings surface. */
 export function ConnectedAccountsSection() {
