@@ -389,6 +389,15 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         if (!newInstallation) throw err;
         const newInstallationId = parsePositiveInteger(newInstallation.externalId);
         if (newInstallationId === null) throw err;
+
+        // Persist the migration so we don't hit the 404 path on every call.
+        // This updates the repository's installation_id to the new installation.
+        await this.storage.repositories.migrateInstallation({
+          orgId,
+          id: repositoryId,
+          newInstallationId: newInstallation.id,
+        });
+
         const token = await this.#client.request<{ token: string }>(
           'POST',
           `${API_PREFIX}/github-app/installations/${newInstallationId}/token`,

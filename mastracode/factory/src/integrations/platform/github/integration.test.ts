@@ -1129,16 +1129,10 @@ describe('PlatformGithubIntegration', () => {
         accountType: 'Organization',
       });
 
-      // Create a NEW repository for the NEW installation
-      await storage.repositories.upsert({
-        orgId: 'org-1',
-        input: {
-          installationId: newInstallation.id,
-          externalId: '101', // Same repository external ID
-          slug: 'acme/app', // Same slug
-          defaultBranch: 'main',
-        },
-      });
+      // NOTE: We don't create a new repository row here.
+      // In a real scenario, intake.listSources creates the installation row,
+      // but repositories are registered lazily. The recovery flow will
+      // migrate the old repository's installation_id to the new installation.
 
       // Mock Platform API:
       // - Returns 404 for OLD installation token request
@@ -1164,6 +1158,10 @@ describe('PlatformGithubIntegration', () => {
         cloneUrl: 'https://github.com/acme/app.git',
         authorization: { scheme: 'bearer', token: 'ghs_recovered' },
       });
+
+      // Verify the repository's installation_id was migrated to the new installation
+      const migratedRepository = await storage.repositories.get({ orgId: 'org-1', id: oldRepository.id });
+      expect(migratedRepository?.installationId).toBe(newInstallation.id);
     });
   });
 });

@@ -336,6 +336,13 @@ export interface SourceControlStorageHandle {
     findByExternalId(args: { orgId: string; externalId: string }): Promise<SourceControlRepository | null>;
     findBySlug(args: { orgId: string; installationId: string; slug: string }): Promise<SourceControlRepository | null>;
     upsert(args: { orgId: string; input: UpsertSourceControlRepositoryInput }): Promise<SourceControlRepository>;
+    /**
+     * Update the installation_id of a repository row. Used to migrate repositories
+     * when a GitHub App is reinstalled with a new installation ID on the same account.
+     * Returns true if the update succeeded, false if a unique constraint violation
+     * occurred (repository already exists under the new installation).
+     */
+    migrateInstallation(args: { orgId: string; id: string; newInstallationId: string }): Promise<boolean>;
   };
   readonly connections: {
     list(args: { orgId: string; factoryProjectId: string }): Promise<ProjectSourceControlConnection[]>;
@@ -755,6 +762,19 @@ export class SourceControlStorage extends FactoryStorageDomain {
             updated_at: now,
           });
           return toRepository(row);
+        },
+        migrateInstallation: async ({ orgId, id, newInstallationId }) => {
+          const existing = await getRepository({ orgId, id });
+          if (!existing) return false;
+          await requireInstallation({ orgId, id: newInstallationId });
+          try {
+            await db().updateMany(REPOSITORIES, { id }, { installation_id: newInstallationId, updated_at: new Date() });
+            return true;
+          } catch (error) {
+            // Unique constraint violation: repository already exists under the new installation
+            if (!(error instanceof UniqueViolationError)) throw error;
+            return false;
+          }
         },
       },
       connections: {
