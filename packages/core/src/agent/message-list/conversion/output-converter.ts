@@ -373,7 +373,14 @@ function applyMcpContentToolResultOutputs(
       if (part.type !== 'tool-result' || !rawOutputs.has(part.toolCallId)) return part;
       if (part.output?.type !== 'json') return part;
       const rawOutput = rawOutputs.get(part.toolCallId);
-      const converted = convertMcpContentToolResultOutput(rawOutput);
+      let converted: ReturnType<typeof convertMcpContentToolResultOutput>;
+      try {
+        converted = convertMcpContentToolResultOutput(rawOutput);
+      } catch {
+        // MCP content may contain values that JSON.stringify cannot serialize.
+        // Preserve the original JSON output when the optional conversion fails.
+        return part;
+      }
       if (!converted) return part;
       if (!isDefaultToolResultOutput(part.output, rawOutput)) return part;
       modified = true;

@@ -1261,6 +1261,22 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
     expect(result.steps.step1.payload).toEqual({ different: true });
   });
 
+  it('should preserve a circular payload when structural comparison cannot complete', async () => {
+    const input: Record<string, unknown> = { value: 1 };
+    input.self = input;
+    const payload: Record<string, unknown> = { value: 1 };
+    payload.self = payload;
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: input as any,
+      step1: { status: 'success', output: { value: 2 }, payload, startedAt: 1, endedAt: 2 },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+    expect(result.steps.step1.payload).toBe(payload);
+  });
+
   it('should handle structural equality after deserialization', async () => {
     const stepResults: Record<string, StepResult<any, any, any, any>> = {
       input: { value: 1 } as any,
