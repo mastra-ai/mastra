@@ -85,20 +85,12 @@ tunnel. Install [`cloudflared`](https://developers.cloudflare.com/cloudflare-one
 #### 1. Start a tunnel
 
 ```shell
-pnpm --dir mastracode/web tunnel
+cloudflared tunnel --url http://127.0.0.1:5873
 ```
 
-This needs no Cloudflare account and writes no config file. It prints the
-tunnel URL and the values that depend on it. Keep it running; the hostname is
-valid until you stop it.
-
-For a hostname that survives restarts, use a domain on your own Cloudflare
-account:
-
-```shell
-TUNNEL_HOSTNAME=mc-you.example.com pnpm --dir mastracode/web tunnel:setup
-TUNNEL_HOSTNAME=mc-you.example.com pnpm --dir mastracode/web tunnel:run
-```
+This needs no Cloudflare account or config file. Keep it running and copy the
+`trycloudflare.com` hostname it prints. The hostname is valid until you stop
+the command.
 
 #### 2. Create the Slack app
 
@@ -124,9 +116,9 @@ Restart the dev server — varlock reads `.env` at startup.
 DM the bot. It replies with a Connect card; that flow binds your Slack identity
 to your Mastra user, and messages then run as you.
 
-A quick tunnel gets a new hostname each run. When it changes, update
-`MASTRACODE_CHANNELS_PUBLIC_URL` and the two request URLs in the Slack app
-(**Event Subscriptions** and **OAuth & Permissions**) — the tunnel prints both.
+A quick tunnel gets a new hostname each run. When it changes, replace the
+hostname in `MASTRACODE_CHANNELS_PUBLIC_URL` and in the Slack app's **Event
+Subscriptions** and **OAuth & Permissions** settings.
 
 ### Optional local services
 
