@@ -403,7 +403,36 @@ describe('LangfuseExporter', () => {
       expect(attrs['mastra.completion_start_time']).toBeUndefined();
     });
 
-    it('maps provider-reported generation cost to Langfuse cost details', async () => {
+    it.each([
+      {
+        name: 'maps a provider-reported USD total',
+        source: 'provider_reported',
+        cost: 0.0123,
+        unit: 'USD',
+        expected: JSON.stringify({ total: 0.0123 }),
+      },
+      {
+        name: 'does not map a registry estimate',
+        source: 'pricing_registry',
+        cost: 0.0099,
+        unit: 'USD',
+        expected: undefined,
+      },
+      {
+        name: 'does not map a negative total',
+        source: 'provider_reported',
+        cost: -0.0123,
+        unit: 'USD',
+        expected: undefined,
+      },
+      {
+        name: 'does not map a non-USD total',
+        source: 'provider_reported',
+        cost: 0.0123,
+        unit: 'EUR',
+        expected: undefined,
+      },
+    ])('$name', async ({ source, cost, unit, expected }) => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       await exportSpan(
         exporter,
@@ -414,15 +443,15 @@ describe('LangfuseExporter', () => {
             usage: { inputTokens: 10, outputTokens: 5 },
             costContext: {
               provider: 'openrouter',
-              estimatedCost: 0.0123,
-              costUnit: 'USD',
-              costMetadata: { source: 'provider_reported', providerCostField: 'usage.cost' },
+              estimatedCost: cost,
+              costUnit: unit,
+              costMetadata: { source, providerCostField: 'usage.cost' },
             },
           },
         }),
       );
 
-      expect(processedSpans[0].attributes['langfuse.observation.cost_details']).toBe(JSON.stringify({ total: 0.0123 }));
+      expect(processedSpans[0].attributes['langfuse.observation.cost_details']).toBe(expected);
     });
 
     it('maps the OpenRouter cost extracted by ModelSpanTracker', async () => {
@@ -463,53 +492,6 @@ describe('LangfuseExporter', () => {
         await tracing.shutdown();
         exporter = undefined;
       }
-    });
-
-    it('does not override Langfuse cost inference with an estimated cost', async () => {
-      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
-      await exportSpan(
-        exporter,
-        makeSpan({
-          attributes: {
-            model: 'anthropic/claude-sonnet-4',
-            provider: 'openrouter',
-            usage: { inputTokens: 10, outputTokens: 5 },
-            costContext: {
-              provider: 'openrouter',
-              estimatedCost: 0.0099,
-              costUnit: 'USD',
-              costMetadata: { source: 'pricing_registry' },
-            },
-          },
-        }),
-      );
-
-      expect(processedSpans[0].attributes['langfuse.observation.cost_details']).toBeUndefined();
-    });
-
-    it.each([
-      { cost: -0.0123, unit: 'USD' },
-      { cost: 0.0123, unit: 'EUR' },
-    ])('does not map an invalid provider-reported cost ($cost $unit)', async ({ cost, unit }) => {
-      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
-      await exportSpan(
-        exporter,
-        makeSpan({
-          attributes: {
-            model: 'anthropic/claude-sonnet-4',
-            provider: 'openrouter',
-            usage: { inputTokens: 10, outputTokens: 5 },
-            costContext: {
-              provider: 'openrouter',
-              estimatedCost: cost,
-              costUnit: unit,
-              costMetadata: { source: 'provider_reported', providerCostField: 'usage.cost' },
-            },
-          },
-        }),
-      );
-
-      expect(processedSpans[0].attributes['langfuse.observation.cost_details']).toBeUndefined();
     });
 
     it('maps userId to user.id', async () => {
