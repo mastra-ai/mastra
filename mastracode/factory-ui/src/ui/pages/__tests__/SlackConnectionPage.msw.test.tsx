@@ -12,12 +12,12 @@ import { SlackConnectionPage } from '../SlackConnectionPage';
 
 const slackLink: ConnectedChannelAccount = {
   platform: 'slack',
-  externalTeamId: 'T06CB4A5FT9',
-  externalUserId: 'U095PUH0FKL',
-  externalTeamName: 'Mastra',
-  externalUserName: 'Caleb Barnes',
+  externalTeamId: 'T00000001',
+  externalUserId: 'U00000001',
+  externalTeamName: 'Example Workspace',
+  externalUserName: 'Test User',
   defaultFactoryProjectId: 'fp-1',
-  linkedAt: '2026-07-29T15:14:00.000Z',
+  linkedAt: '2026-01-15T12:00:00.000Z',
 };
 
 function mockAccounts(accounts: ConnectedChannelAccount[], canConnect = true) {
@@ -29,8 +29,8 @@ function mockFactories(slackWorkItemsEnabled = false) {
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
         projects: [
-          { id: 'fp-1', name: 'OM Game', slackWorkItemsEnabled },
-          { id: 'fp-2', name: 'Mastra OSS', slackWorkItemsEnabled: false },
+          { id: 'fp-1', name: 'Primary Factory', slackWorkItemsEnabled },
+          { id: 'fp-2', name: 'Secondary Factory', slackWorkItemsEnabled: false },
         ],
       }),
     ),
@@ -60,18 +60,18 @@ describe('SlackConnectionPage', () => {
     const connectionSection = (await screen.findByRole('heading', { level: 2, name: 'Connection' })).closest('section');
     if (!connectionSection) throw new Error('Connection section not found');
 
-    const workspaceName = within(connectionSection).getByText('Mastra');
-    expect(screen.queryByText('Mastra (T06CB4A5FT9)')).not.toBeInTheDocument();
+    const workspaceName = within(connectionSection).getByText('Example Workspace');
+    expect(screen.queryByText('Example Workspace (T00000001)')).not.toBeInTheDocument();
     await user.hover(workspaceName);
-    expect(await screen.findByText('Workspace ID: T06CB4A5FT9')).toBeInTheDocument();
+    expect(await screen.findByText('Workspace ID: T00000001')).toBeInTheDocument();
 
-    const accountName = within(connectionSection).getByText('Caleb Barnes');
-    expect(screen.queryByText('Caleb Barnes (U095PUH0FKL)')).not.toBeInTheDocument();
+    const accountName = within(connectionSection).getByText('Test User');
+    expect(screen.queryByText('Test User (U00000001)')).not.toBeInTheDocument();
     await user.hover(accountName);
-    expect(await screen.findByText('Slack user ID: U095PUH0FKL')).toBeInTheDocument();
+    expect(await screen.findByText('Slack user ID: U00000001')).toBeInTheDocument();
 
     expect(within(connectionSection).queryByText('Connected account')).not.toBeInTheDocument();
-    expect(within(connectionSection).getByText(/Connected July 29, 2026/)).toBeInTheDocument();
+    expect(within(connectionSection).getByText(/Connected January 15, 2026/)).toBeInTheDocument();
     expect(screen.getByText('Start and continue Factory sessions from Slack.')).toBeInTheDocument();
 
     const sessionBehaviorSection = screen
@@ -79,8 +79,8 @@ describe('SlackConnectionPage', () => {
       .closest('section');
     if (!sessionBehaviorSection) throw new Error('Session behavior section not found');
     expect(
-      within(sessionBehaviorSection).getByRole('combobox', { name: 'Default factory for Caleb Barnes' }),
-    ).toHaveTextContent('OM Game');
+      within(sessionBehaviorSection).getByRole('combobox', { name: 'Default factory for Test User' }),
+    ).toHaveTextContent('Primary Factory');
     expect(
       within(sessionBehaviorSection).getByRole('switch', { name: 'Create work items for new Slack threads' }),
     ).toBeInTheDocument();
@@ -88,9 +88,9 @@ describe('SlackConnectionPage', () => {
     const dangerZoneSection = screen.getByRole('heading', { level: 2, name: 'Danger zone' }).closest('section');
     if (!dangerZoneSection) throw new Error('Danger zone section not found');
     expect(dangerZoneSection).toHaveTextContent(
-      'Slack messages from Caleb Barnes will no longer start or continue Factory sessions.',
+      'Slack messages from Test User will no longer start or continue Factory sessions.',
     );
-    expect(within(dangerZoneSection).getByText('Caleb Barnes').closest('strong')).not.toBeNull();
+    expect(within(dangerZoneSection).getByText('Test User').closest('strong')).not.toBeNull();
 
     expect(screen.getAllByRole('heading', { level: 2 }).map(heading => heading.textContent)).toEqual([
       'Connection',
@@ -104,20 +104,20 @@ describe('SlackConnectionPage', () => {
       slackLink,
       {
         ...slackLink,
-        externalTeamId: 'T02SECOND',
-        externalUserId: 'U02SECOND',
-        externalTeamName: 'Second workspace',
-        externalUserName: 'Second user',
+        externalTeamId: 'T00000002',
+        externalUserId: 'U00000002',
+        externalTeamName: 'Example Workspace 2',
+        externalUserName: 'Test User 2',
         defaultFactoryProjectId: 'fp-2',
       },
     ]);
 
     renderPage();
 
-    expect(await screen.findByRole('combobox', { name: 'Default factory for Caleb Barnes' })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Default factory for Second user' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Disconnect Caleb Barnes' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Disconnect Second user' })).toBeInTheDocument();
+    expect(await screen.findByRole('combobox', { name: 'Default factory for Test User' })).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Default factory for Test User 2' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Disconnect Test User' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Disconnect Test User 2' })).toBeInTheDocument();
   });
 
   it('given no linked account, when rendered, then it offers Slack authentication', async () => {
@@ -137,7 +137,7 @@ describe('SlackConnectionPage', () => {
     server.use(
       http.patch(`${TEST_BASE_URL}/web/factory/projects/fp-1`, async ({ request }) => {
         patchBody = await request.json();
-        return HttpResponse.json({ project: { id: 'fp-1', name: 'OM Game', slackWorkItemsEnabled: true } });
+        return HttpResponse.json({ project: { id: 'fp-1', name: 'Primary Factory', slackWorkItemsEnabled: true } });
       }),
     );
     const { client } = renderPage();
@@ -167,13 +167,13 @@ describe('SlackConnectionPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole('button', { name: 'Disconnect Caleb Barnes' }));
+    await user.click(await screen.findByRole('button', { name: 'Disconnect Test User' }));
 
     await waitFor(() =>
       expect(deleteBody).toEqual({
         platform: 'slack',
-        externalTeamId: 'T06CB4A5FT9',
-        externalUserId: 'U095PUH0FKL',
+        externalTeamId: 'T00000001',
+        externalUserId: 'U00000001',
       }),
     );
     expect(await screen.findByRole('button', { name: /Slack.*Not connected.*Connect Slack/ })).toBeEnabled();
@@ -193,14 +193,14 @@ describe('SlackConnectionPage', () => {
     renderPage();
     const user = userEvent.setup();
 
-    await user.click(await screen.findByRole('combobox', { name: 'Default factory for Caleb Barnes' }));
-    await user.click(await screen.findByRole('option', { name: 'Mastra OSS' }));
+    await user.click(await screen.findByRole('combobox', { name: 'Default factory for Test User' }));
+    await user.click(await screen.findByRole('option', { name: 'Secondary Factory' }));
 
     await waitFor(() =>
       expect(patchBody).toEqual({
         platform: 'slack',
-        externalTeamId: 'T06CB4A5FT9',
-        externalUserId: 'U095PUH0FKL',
+        externalTeamId: 'T00000001',
+        externalUserId: 'U00000001',
         factoryProjectId: 'fp-2',
       }),
     );

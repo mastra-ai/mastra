@@ -14,11 +14,11 @@ import { ConnectedAccountsSection } from '../ConnectedAccountsSection';
 
 const slackLink: ConnectedChannelAccount = {
   platform: 'slack',
-  externalTeamId: 'T06CB4A5FT9',
-  externalUserId: 'U095PUH0FKL',
-  externalTeamName: 'Mastra',
-  externalUserName: 'Caleb Barnes',
-  linkedAt: '2026-07-23T17:57:43.368Z',
+  externalTeamId: 'T00000001',
+  externalUserId: 'U00000001',
+  externalTeamName: 'Example Workspace',
+  externalUserName: 'Test User',
+  linkedAt: '2026-01-15T12:00:00.000Z',
 };
 
 function mockAccounts(accounts: ConnectedChannelAccount[], canConnect = false) {
@@ -49,7 +49,7 @@ describe('ConnectedAccountsSection', () => {
   });
 
   it('given multiple linked Slack accounts, when rendered, then it shows the connected account count', async () => {
-    mockAccounts([slackLink, { ...slackLink, externalTeamId: 'T02SECOND', externalUserId: 'U02SECOND' }]);
+    mockAccounts([slackLink, { ...slackLink, externalTeamId: 'T00000002', externalUserId: 'U00000002' }]);
 
     renderSection();
 
