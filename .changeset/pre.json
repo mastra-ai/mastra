@@ -173,5 +173,16 @@
     "@mastra/s3": "0.6.0",
     "@mastra/vercel": "1.3.0"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20260729-005018",
+    "breezy-eagles-speak",
+    "green-birds-knock",
+    "loose-papers-spend",
+    "mighty-tools-fetch",
+    "nine-feet-smoke",
+    "perky-steaks-look",
+    "ready-tires-design",
+    "silly-adults-enter",
+    "solid-suits-smoke"
+  ]
 }
