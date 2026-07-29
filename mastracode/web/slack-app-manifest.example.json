@@ -1,6 +1,6 @@
 {
   "display_information": {
-    "name": "Mastra Code (dev)",
+    "name": "Mastra Factory (dev)",
     "description": "AI assistant powered by Mastra",
     "background_color": "#000000"
   },
@@ -11,17 +11,30 @@
       "messages_tab_read_only_enabled": false
     },
     "bot_user": {
-      "display_name": "Mastra Code (dev)",
+      "display_name": "Mastra Factory (dev)",
       "always_online": true
     },
+    "slash_commands": [
+      {
+        "command": "/factory",
+        "url": "https://YOUR-TUNNEL-HOSTNAME/api/agent-controllers/mastra-code/channels/slack/webhook",
+        "description": "List or set your default factory for Slack sessions",
+        "usage_hint": "[factory name]",
+        "should_escape": false
+      }
+    ],
     "assistant_view": {
       "assistant_description": "AI assistant powered by Mastra"
     }
   },
   "oauth_config": {
-    "redirect_urls": ["https://YOUR-TUNNEL-HOSTNAME/connect/slack/oidc/callback"],
+    "redirect_urls": [
+      "https://YOUR-TUNNEL-HOSTNAME/slack/oauth/callback",
+      "https://YOUR-TUNNEL-HOSTNAME/connect/slack/oidc/callback"
+    ],
     "scopes": {
       "bot": [
+        "commands",
         "chat:write",
         "chat:write.public",
         "im:write",
