@@ -1,4 +1,4 @@
-import type { Chat, Adapter, ChatConfig, Message, StateAdapter, Thread } from 'chat';
+import type { Chat, Adapter, Author, ChatConfig, Message, StateAdapter, Thread } from 'chat';
 import { z } from 'zod';
 
 import type { Agent } from '../agent/agent';
@@ -230,20 +230,23 @@ export class AgentChannels {
   }
 
   /**
-   * The memory resourceId (owner) used when `processChatMessage` creates a new
-   * channel-backed thread. Returns a thunk when a `resolveResourceId` hook is
-   * configured so the hook only runs when a new thread is actually created,
-   * never when reusing an existing one (which keeps its stored owner).
+   * The memory resourceId (owner) used when a new channel-backed thread is
+   * created, whether from an incoming message or a tool-approval click
+   * (`message` is absent on the click path). Returns a thunk when a
+   * `resolveResourceId` hook is configured so the hook only runs when a new
+   * thread is actually created, never when reusing an existing one (which
+   * keeps its stored owner).
    */
   protected resolveChannelResourceId(args: {
     platform: string;
     chatThread: Thread;
-    message: Message;
+    actor: Author;
+    message?: Message;
     defaultResourceId: string;
   }): string | (() => string | Promise<string>) {
-    const { platform, chatThread, message, defaultResourceId } = args;
+    const { platform, chatThread, actor, message, defaultResourceId } = args;
     return this.resolveResourceId
-      ? () => this.resolveResourceId!({ platform, thread: chatThread, message, defaultResourceId })
+      ? () => this.resolveResourceId!({ platform, thread: chatThread, actor, message, defaultResourceId })
       : defaultResourceId;
   }
 
@@ -474,11 +477,13 @@ export class AgentChannels {
           if (!adapter) throw new Error(`No adapter for platform "${platform}"`);
 
           const externalThreadId = this.resolveExternalThreadId({ platform, chatThread, messageId });
+          // A click can be the event that creates the thread (storage miss, or
+          // racing thread creation) — resolve identity like the message path.
           const mastraThread = await this.getOrCreateThread({
             externalThreadId,
             channelId: chatThread.channelId,
             platform,
-            resourceId: `${platform}:${event.user.userId}`,
+            ...this.threadCreationResolvers({ platform, chatThread, actor: event.user }),
             mastra,
           });
 
@@ -1011,20 +1016,11 @@ export class AgentChannels {
     // each Slack thread (including top-level DM, DM thread reply, channel mention, and
     // channel thread reply) gets its own mastra thread.
     const externalThreadId = chatThread.id;
-    const defaultResourceId = `${platform}:${message.author.userId}`;
     const mastraThread = await this.getOrCreateThread({
       externalThreadId,
       channelId: chatThread.channelId,
       platform,
-      // Lazily resolved: the hook only runs when we're actually creating a new
-      // thread, never when reusing an existing one (which keeps its stored owner).
-      resourceId: this.resolveChannelResourceId({ platform, chatThread, message, defaultResourceId }),
-      // Same laziness for the thread id hook; it runs after the resourceId
-      // resolves so hosts can align the two (e.g. thread id = session id).
-      threadId: this.resolveThreadId
-        ? (resourceId: string, defaultThreadId: string) =>
-            this.resolveThreadId!({ platform, thread: chatThread, message, resourceId, defaultThreadId })
-        : undefined,
+      ...this.threadCreationResolvers({ platform, chatThread, actor: message.author, message }),
       mastra,
     });
 
@@ -1436,6 +1432,39 @@ export class AgentChannels {
       }
       yield chunk;
     }
+  }
+
+  /**
+   * Build the lazy `resourceId`/`threadId` arguments for {@link getOrCreateThread},
+   * shared by every path that can create a channel thread (incoming messages and
+   * tool-approval clicks; `message` is absent on the click path). The owner half
+   * goes through {@link resolveChannelResourceId} so subclass overrides apply to
+   * every creation path.
+   */
+  private threadCreationResolvers({
+    platform,
+    chatThread,
+    actor,
+    message,
+  }: {
+    platform: string;
+    chatThread: Thread;
+    actor: Author;
+    message?: Message;
+  }): {
+    resourceId: string | (() => string | Promise<string>);
+    threadId?: (resolvedResourceId: string, defaultThreadId: string) => string | Promise<string>;
+  } {
+    const defaultResourceId = `${platform}:${actor.userId}`;
+    return {
+      resourceId: this.resolveChannelResourceId({ platform, chatThread, actor, message, defaultResourceId }),
+      // The thread id hook runs after the resourceId resolves so hosts can
+      // align the two (e.g. thread id = session id).
+      threadId: this.resolveThreadId
+        ? (resourceId: string, defaultThreadId: string) =>
+            this.resolveThreadId!({ platform, thread: chatThread, actor, message, resourceId, defaultThreadId })
+        : undefined,
+    };
   }
 
   /**

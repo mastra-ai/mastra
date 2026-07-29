@@ -1,4 +1,4 @@
-import type { Message, Thread } from 'chat';
+import type { Author, Message, Thread } from 'chat';
 
 import type { Agent } from '../agent/agent';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
@@ -87,7 +87,8 @@ export class AgentControllerChannels extends AgentChannels {
   protected override resolveChannelResourceId(args: {
     platform: string;
     chatThread: Thread;
-    message: Message;
+    actor: Author;
+    message?: Message;
     defaultResourceId: string;
   }): string | (() => string | Promise<string>) {
     const base = super.resolveChannelResourceId(args);
