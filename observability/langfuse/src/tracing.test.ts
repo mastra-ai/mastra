@@ -1,5 +1,6 @@
-import { SpanType, TracingEventType } from '@mastra/core/observability';
+import { SamplingStrategyType, SpanType, TracingEventType } from '@mastra/core/observability';
 import type { AnyExportedSpan } from '@mastra/core/observability';
+import { DefaultObservabilityInstance, ModelSpanTracker } from '@mastra/observability';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { LangfuseExporter } from './tracing';
 
@@ -422,6 +423,46 @@ describe('LangfuseExporter', () => {
       );
 
       expect(processedSpans[0].attributes['langfuse.observation.cost_details']).toBe(JSON.stringify({ total: 0.0123 }));
+    });
+
+    it('maps the OpenRouter cost extracted by ModelSpanTracker', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [exporter],
+      });
+
+      try {
+        const modelSpan = tracing.startSpan({
+          type: SpanType.MODEL_GENERATION,
+          name: 'test-generation',
+          attributes: { model: 'anthropic/claude-sonnet-4', provider: 'openrouter' },
+        });
+        const tracker = new ModelSpanTracker(modelSpan);
+
+        tracker.endGeneration({
+          attributes: {},
+          providerMetadata: {
+            openrouter: {
+              usage: {
+                cost: 0.0123,
+                costDetails: { upstreamInferenceCost: 0.01 },
+              },
+            },
+          },
+        });
+
+        await vi.waitFor(() => {
+          expect(processedSpans[0]?.attributes['langfuse.observation.cost_details']).toBe(
+            JSON.stringify({ total: 0.0123 }),
+          );
+        });
+      } finally {
+        await tracing.shutdown();
+        exporter = undefined;
+      }
     });
 
     it('does not override Langfuse cost inference with an estimated cost', async () => {
