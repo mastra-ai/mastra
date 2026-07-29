@@ -232,9 +232,10 @@ describe('GithubRules', () => {
       controller: controller as never,
       transitionService,
       storage: workItems,
+      projectsStorage: projects,
       ownerId: 'worker-1',
       primeCredentials,
-      prepareBinding: async ({ record, item, role, invocation }) => {
+      prepareBinding: async ({ record, item, role, invocation, defaultModelId }) => {
         await coordinator.prepare({
           orgId: record.orgId,
           userId: 'user-1',
@@ -245,6 +246,7 @@ describe('GithubRules', () => {
           destinationStage: 'triage',
           workItem: { id: item.id, role, input: item },
           ...(invocation ? { invocation } : {}),
+          ...(defaultModelId ? { defaultModelId } : {}),
         });
       },
     });

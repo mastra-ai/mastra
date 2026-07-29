@@ -6,6 +6,7 @@ import { RequestContext } from '@mastra/core/request-context';
 
 import { resolveSkillInvocation } from '../skills/service.js';
 import type { SkillSession } from '../skills/service.js';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryPendingStartRecord,
@@ -47,12 +48,14 @@ export interface FactoryBindingPreparationInput {
   item: WorkItemRow;
   role: string;
   invocation?: { type: 'skill'; skillName: string; arguments: string };
+  defaultModelId?: string;
 }
 
 export interface FactoryDecisionDispatcherOptions {
   controller: FactoryController;
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   storage: WorkItemsStorage;
+  projectsStorage?: FactoryProjectsStorage;
   ownerId?: string;
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
@@ -132,6 +135,7 @@ export class FactoryDecisionDispatcher {
   readonly #controller: FactoryController;
   readonly #transitionService: Pick<FactoryTransitionService, 'transition'>;
   readonly #storage: WorkItemsStorage;
+  readonly #projectsStorage?: FactoryProjectsStorage;
   readonly #ownerId: string;
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
@@ -145,6 +149,7 @@ export class FactoryDecisionDispatcher {
     this.#controller = options.controller;
     this.#transitionService = options.transitionService;
     this.#storage = options.storage;
+    this.#projectsStorage = options.projectsStorage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${randomUUID()}`;
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
@@ -570,7 +575,18 @@ export class FactoryDecisionDispatcher {
       throw new Error(binding ? 'Bound Factory session not found.' : `No active Factory binding for role ${role}.`);
     }
     const item = await this.#requireItem(record);
-    await this.#prepareBinding({ record, item, role, ...(invocation ? { invocation } : {}) });
+    let defaultModelId: string | undefined;
+    if (this.#projectsStorage) {
+      const project = await this.#projectsStorage.get({ orgId: record.orgId, id: record.factoryProjectId });
+      defaultModelId = project?.defaultModelId ?? undefined;
+    }
+    await this.#prepareBinding({
+      record,
+      item,
+      role,
+      ...(invocation ? { invocation } : {}),
+      ...(defaultModelId ? { defaultModelId } : {}),
+    });
     const newBinding = await this.#requireBinding(record, role);
     return { binding: newBinding, prepared: true };
   }
