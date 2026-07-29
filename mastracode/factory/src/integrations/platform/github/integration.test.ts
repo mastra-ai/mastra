@@ -1078,4 +1078,77 @@ describe('PlatformGithubIntegration', () => {
       ).resolves.toBeNull();
     });
   });
+
+  describe('installation recovery', () => {
+    it('recovers when a GitHub App installation is reinstalled with a new installation ID', async () => {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const storage = sourceControl.forIntegration('github');
+
+      // Create an OLD installation (simulating before reinstall)
+      const oldInstallation = await storage.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '7', // OLD GitHub installation ID
+        accountName: 'acme',
+        accountType: 'Organization',
+      });
+
+      // Create an OLD repository for the OLD installation
+      const oldRepository = await storage.repositories.upsert({
+        orgId: 'org-1',
+        input: {
+          installationId: oldInstallation.id,
+          externalId: '101',
+          slug: 'acme/app',
+          defaultBranch: 'main',
+        },
+      });
+
+      // Create a NEW installation (simulating after reinstall)
+      // This would be created by intake.listSources after the reinstall
+      const newInstallation = await storage.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '456', // NEW GitHub installation ID
+        accountName: 'acme', // Same account name
+        accountType: 'Organization',
+      });
+
+      // Create a NEW repository for the NEW installation
+      await storage.repositories.upsert({
+        orgId: 'org-1',
+        input: {
+          installationId: newInstallation.id,
+          externalId: '101', // Same repository external ID
+          slug: 'acme/app', // Same slug
+          defaultBranch: 'main',
+        },
+      });
+
+      // Mock Platform API:
+      // - Returns 404 for OLD installation token request
+      // - Returns token for NEW installation token request
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ error: 'Installation not found' }), {
+            status: 404,
+            headers: { 'content-type': 'application/json' },
+          }),
+        )
+        .mockResolvedValueOnce(json({ token: 'ghs_recovered', expiresAt: '2026-07-21T18:00:00Z' }));
+
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage });
+
+      // Try to get repository access using OLD repository
+      // This should recover and succeed using the NEW installation
+      await expect(
+        integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: oldRepository.id }),
+      ).resolves.toEqual({
+        cloneUrl: 'https://github.com/acme/app.git',
+        authorization: { scheme: 'bearer', token: 'ghs_recovered' },
+      });
+    });
+  });
 });
