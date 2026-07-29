@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import { useStartIssueTriageMutation } from '../../../../hooks/useFactoryData';
@@ -43,6 +43,32 @@ export function useBoardRuns({
     [workspaces.data],
   );
 
+  // A card click refetches worktrees and items before it can decide whether to
+  // open an existing thread or mint a new session. That wait is several round
+  // trips long and the run mutation isn't pending yet, so without this the card
+  // sits completely silent after the click.
+  const [preparingItems, setPreparingItems] = useState<Record<string, string>>({});
+  // Guarded by a ref, not by preparingItems: two clicks landing in the same
+  // render both read the pre-click state, so the state value can't reject the
+  // second one. Preparing is several round trips long and each pass mints its
+  // own kickoffKey, so the server's start lock keys differently per click and
+  // won't collapse them either.
+  const preparingRef = useRef<Set<string>>(new Set());
+  const beginPreparingItem = (itemId: string, label: string) => {
+    if (preparingRef.current.has(itemId)) return false;
+    preparingRef.current.add(itemId);
+    setPreparingItems(current => ({ ...current, [itemId]: label }));
+    return true;
+  };
+  const clearPreparingItem = (itemId: string) => {
+    preparingRef.current.delete(itemId);
+    setPreparingItems(current => {
+      if (!(itemId in current)) return current;
+      const { [itemId]: _cleared, ...rest } = current;
+      return rest;
+    });
+  };
+
   const openThread = async (session: WorkItemSessionRef) => {
     navigate(`/factories/${factoryProjectId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
   };
@@ -59,29 +85,43 @@ export function useBoardRuns({
   };
 
   const openOrCreateSession = async (item: WorkItem, destinationStage: string) => {
-    const refreshed = await refreshItemAndWorktrees(item.id);
-    if (!refreshed) return;
-    const existingSession = itemThreadSession(liveSessions(refreshed.item.sessions, refreshed.paths));
-    if (existingSession) {
-      await openThread(existingSession);
-      return;
+    if (!beginPreparingItem(item.id, 'Preparing session…')) return;
+    try {
+      const refreshed = await refreshItemAndWorktrees(item.id);
+      if (!refreshed) return;
+      const existingSession = itemThreadSession(liveSessions(refreshed.item.sessions, refreshed.paths));
+      if (existingSession) {
+        await openThread(existingSession);
+        return;
+      }
+      const spec = itemSessionSpec(refreshed.item);
+      start.mutate({
+        branch: spec.branch,
+        threadTitle: spec.threadTitle,
+        workItem: {
+          id: refreshed.item.id,
+          role: 'chat',
+          stages: [destinationStage],
+          source: refreshed.item.source,
+          sourceKey: refreshed.item.sourceKey,
+          title: refreshed.item.title,
+        },
+      });
+    } finally {
+      clearPreparingItem(item.id);
     }
-    const spec = itemSessionSpec(refreshed.item);
-    start.mutate({
-      branch: spec.branch,
-      threadTitle: spec.threadTitle,
-      workItem: {
-        id: refreshed.item.id,
-        role: 'chat',
-        stages: [destinationStage],
-        source: refreshed.item.source,
-        sourceKey: refreshed.item.sourceKey,
-        title: refreshed.item.title,
-      },
-    });
   };
 
   const openOrStartRun = async (item: WorkItem, role: RunAction['role']) => {
+    if (!beginPreparingItem(item.id, 'Preparing run…')) return;
+    try {
+      await startRunForItem(item, role);
+    } finally {
+      clearPreparingItem(item.id);
+    }
+  };
+
+  const startRunForItem = async (item: WorkItem, role: RunAction['role']) => {
     const refreshed = await refreshItemAndWorktrees(item.id);
     if (!refreshed) return;
     const existingSession = refreshed.item.sessions[role];
@@ -146,6 +186,7 @@ export function useBoardRuns({
     error: [start, triage].find(mutation => mutation.isError)?.error,
     triagingIssueNumbers: new Set(pendingIssueNumbers),
     pendingRolesFor: (itemId: string): PendingRoles => pendingByItem.get(itemId) ?? EMPTY_PENDING_ROLES,
+    preparingFor: (itemId: string): string | undefined => preparingItems[itemId],
     pendingRolesForSource: (sourceKey: string): PendingRoles => pendingBySource.get(sourceKey) ?? EMPTY_PENDING_ROLES,
     openOrCreateSession,
     openOrStartRun,

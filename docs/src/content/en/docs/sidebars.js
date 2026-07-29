@@ -31,6 +31,11 @@ const sidebars = {
       items: [
         {
           type: 'doc',
+          id: 'what-is-mastra',
+          label: 'What is Mastra?',
+        },
+        {
+          type: 'doc',
           id: 'getting-started/manual-install',
           label: 'Manual Install',
         },
@@ -735,6 +740,14 @@ const sidebars = {
                   id: 'server/auth/workos',
                   label: 'WorkOS',
                 },
+                {
+                  type: 'doc',
+                  id: 'server/auth/workers',
+                  label: 'Workers',
+                  customProps: {
+                    tags: ['beta'],
+                  },
+                },
               ],
             },
           ],
@@ -1003,6 +1016,14 @@ const sidebars = {
               type: 'doc',
               id: 'deployment/workflow-runners',
               label: 'Workflow Runners',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/workers',
+              label: 'Workers',
+              customProps: {
+                tags: ['beta'],
+              },
             },
           ],
         },

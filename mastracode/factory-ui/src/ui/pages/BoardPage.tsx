@@ -201,6 +201,7 @@ function BoardContent({
                       allItems={items.all}
                       liveWorktreePaths={runs.liveWorktreePaths}
                       runDisabled={runs.disabled}
+                      preparing={runs.preparingFor(item.id)}
                       evaluatingStage={items.evaluatingStages.get(item.id)}
                       transitionReason={items.transitionReasons[item.id]}
                       decision={decisions.byItem.get(item.id)}

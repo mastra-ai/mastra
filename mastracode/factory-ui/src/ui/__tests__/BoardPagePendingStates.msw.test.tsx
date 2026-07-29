@@ -179,7 +179,7 @@ function stubBoardEndpoints() {
 
 function renderWorkBoard() {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
-  return renderWithProviders(<RouterProvider router={router} />);
+  return { ...renderWithProviders(<RouterProvider router={router} />), router };
 }
 
 describe('Board card pending states', () => {
@@ -212,8 +212,8 @@ describe('Board card pending states', () => {
     if (!card) throw new Error('Expected the title inside its work item card');
     expect(titleText.closest('a, button')).toBeNull();
 
-    const threadLink = within(card).getByRole('link', { name: 'Open thread for Fix login bug' });
-    expect(within(card).queryByText('Open thread')).not.toBeInTheDocument();
+    const threadLink = within(card).getByRole('link', { name: 'Open session for Fix login bug' });
+    expect(within(card).getByText('Open session')).toBeInTheDocument();
     // The link itself is an invisible overlay — a visible indicator must tell
     // the user this card already has a work session.
     expect(within(card).getByText('Session · fix-login')).toBeInTheDocument();
@@ -223,6 +223,119 @@ describe('Board card pending states', () => {
     );
     const matches = matchRoutes(createAppRoutes(), threadLink.getAttribute('href') ?? '');
     expect(matches?.at(-1)?.route.path).toBe('threads/:threadId');
+  });
+
+  it('names the click outcome differently for cards that have a session and cards that do not', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [workItem, { ...workItem, id: 'fresh-item', title: 'Unstarted work', sessions: {} }],
+        }),
+      ),
+    );
+    renderWorkBoard();
+
+    const started = (await screen.findByText('Fix login bug')).closest<HTMLElement>('[data-testid="work-item-card"]');
+    const unstarted = (await screen.findByText('Unstarted work')).closest<HTMLElement>(
+      '[data-testid="work-item-card"]',
+    );
+    if (!started || !unstarted) throw new Error('Expected both work item cards');
+
+    // The consequence of the click differs per card, so the card has to say which one it is.
+    expect(within(started).getByText('Open session')).toBeInTheDocument();
+    expect(within(started).queryByText('Start session')).not.toBeInTheDocument();
+    expect(within(unstarted).getByText('Start session')).toBeInTheDocument();
+    expect(within(unstarted).queryByText('Open session')).not.toBeInTheDocument();
+  });
+
+  it('acknowledges a session-starting card click while it is still resolving the session', async () => {
+    stubBoardEndpoints();
+    const refreshGate = deferred();
+    let workItemRequests = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async () => {
+        workItemRequests += 1;
+        // The click refetches before it can decide to open or create; hold that
+        // refetch open so the pre-mutation window is observable.
+        if (workItemRequests > 1) await refreshGate.promise;
+        return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
+      }),
+      http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+        HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, () =>
+        HttpResponse.json({
+          prepared: { workItemId: ITEM_ID, threadId: THREAD_ID, sessionId: SESSION_ID, kickoffStatus: 'sent' },
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(within(card).getByRole('button', { name: /Start session/ })).toBeEnabled());
+    await user.click(within(card).getByRole('button', { name: 'Start session for Fix login bug' }));
+
+    // No run mutation exists yet, so this row is the only feedback the click can produce.
+    const status = await screen.findByText('Preparing session…');
+    expect(status.closest('[role="status"]')).not.toBeNull();
+    expect(await screen.findByTestId('work-item-card')).toHaveAttribute('aria-busy', 'true');
+
+    refreshGate.resolve();
+    await waitFor(() => expect(screen.queryByText('Preparing session…')).not.toBeInTheDocument());
+  });
+
+  it('starts one run when a session-starting card is clicked twice before it resolves', async () => {
+    stubBoardEndpoints();
+    const refreshGate = deferred();
+    let workItemRequests = 0;
+    const runStarts: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async () => {
+        workItemRequests += 1;
+        if (workItemRequests > 1) await refreshGate.promise;
+        return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
+      }),
+      http.post(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+        HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, async ({ request }) => {
+        const body = (await request.json()) as { kickoffKey?: string };
+        runStarts.push(body.kickoffKey ?? '');
+        return HttpResponse.json({
+          prepared: { workItemId: ITEM_ID, threadId: THREAD_ID, sessionId: SESSION_ID, kickoffStatus: 'sent' },
+        });
+      }),
+    );
+    // pointerEventsCheck is off so the second click still reaches the handler
+    // once the button goes disabled: the handler itself has to refuse it, since
+    // the disabled attribute alone wouldn't stop a programmatic re-dispatch.
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const { router } = renderWorkBoard();
+
+    const card = await screen.findByTestId('work-item-card');
+    await waitFor(() => expect(within(card).getByRole('button', { name: /Start session/ })).toBeEnabled());
+    const trigger = within(card).getByRole('button', { name: 'Start session for Fix login bug' });
+
+    await user.click(trigger);
+    await screen.findByText('Preparing session…');
+    await user.click(trigger);
+
+    refreshGate.resolve();
+    await waitFor(() => expect(screen.queryByText('Preparing session…')).not.toBeInTheDocument());
+    await waitFor(() => expect(runStarts).toHaveLength(1));
+
+    // Both clicks would unblock on the same gate release, so a duplicate start
+    // is already in flight by the time the first one navigates. Waiting on that
+    // navigation is deterministic, unlike a fixed sleep that a slower duplicate
+    // can outrun.
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
+      ),
+    );
+    expect(runStarts).toHaveLength(1);
   });
 
   it('offers "Open in GitHub" on review-board PR cards past intake', async () => {

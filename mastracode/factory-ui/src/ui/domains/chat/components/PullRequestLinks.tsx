@@ -3,8 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { CircleDot, CircleX, GitMerge } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
-import { useWorkItemsQuery } from '../../../../../hooks/useWorkItems';
-import type { TranscriptState } from '../../services/transcript';
+import type { WorkItem } from '../../factory/services/workItems';
+import type { TranscriptState } from '../services/transcript';
 
 interface PullRequestSubscription {
   id: string;
@@ -35,11 +35,12 @@ interface PullRequestLinksProps {
   resourceId: string;
   projectPath: string | undefined;
   projectRepositoryId: unknown;
-  factoryProjectId: unknown;
+  reviewItem?: WorkItem;
   repositorySlug: string | undefined;
   threadId: string | undefined;
   transcriptEntries: TranscriptState['entries'];
   busy: boolean;
+  size?: 'xs' | 'sm';
 }
 
 /** Pull requests subscribed to the active GitHub-backed thread. */
@@ -48,22 +49,14 @@ export function PullRequestLinks({
   resourceId,
   projectPath,
   projectRepositoryId,
-  factoryProjectId,
+  reviewItem,
   repositorySlug,
   threadId,
   transcriptEntries,
   busy,
+  size = 'xs',
 }: PullRequestLinksProps) {
   const wasBusy = useRef(busy);
-  const factoryProjectKey = typeof factoryProjectId === 'string' ? factoryProjectId : undefined;
-  const workItems = useWorkItemsQuery(factoryProjectKey);
-  const reviewItem = workItems.data?.find(
-    item =>
-      item.source === 'github-pr' &&
-      Object.values(item.sessions).some(
-        session => session.threadId === threadId && (!projectPath || session.sessionId === projectPath),
-      ),
-  );
   const reviewNumber = reviewItem?.metadata.githubPullRequestNumber ?? reviewItem?.metadata.number;
   const normalizedReviewNumber = Number(reviewNumber);
   const factorySubscription: PullRequestSubscription | undefined =
@@ -136,7 +129,7 @@ export function PullRequestLinks({
           key={subscription.id}
           as="a"
           variant="ghost"
-          size="xs"
+          size={size}
           href={subscription.url}
           target="_blank"
           rel="noreferrer"

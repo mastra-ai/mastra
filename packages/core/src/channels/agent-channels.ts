@@ -474,13 +474,19 @@ export class AgentChannels {
           if (!adapter) throw new Error(`No adapter for platform "${platform}"`);
 
           const externalThreadId = this.resolveExternalThreadId({ platform, chatThread, messageId });
-          const mastraThread = await this.getOrCreateThread({
+          const { thread: mastraThread } = await this.findThreadMapping({
             externalThreadId,
             channelId: chatThread.channelId,
             platform,
-            resourceId: `${platform}:${event.user.userId}`,
             mastra,
           });
+          if (!mastraThread) {
+            // Approval cards can only continue runs on threads created by an
+            // earlier message. Do not mint a replacement from the clicker's
+            // identity when that durable mapping is missing.
+            this.log('warn', `No mapped channel thread found for tool approval action toolCallId=${toolCallId}`);
+            return;
+          }
 
           // Look up the runId for this toolCallId. Prefer the in-memory
           // `pendingApprovalCards` map (set when the approval card was posted)
@@ -1439,6 +1445,47 @@ export class AgentChannels {
   }
 
   /**
+   * Look up a channel-backed Mastra thread and retain the store/metadata needed
+   * by the create path when no mapping exists.
+   */
+  private async findThreadMapping({
+    externalThreadId,
+    channelId,
+    platform,
+    mastra,
+  }: {
+    externalThreadId: string;
+    channelId: string;
+    platform: string;
+    mastra: Mastra;
+  }) {
+    const storage = mastra.getStorage();
+    if (!storage) {
+      throw new Error('Storage is required for channel thread mapping. Configure storage in your Mastra instance.');
+    }
+
+    const memoryStore = await storage.getStore('memory');
+    if (!memoryStore) {
+      throw new Error(
+        'Memory store is required for channel thread mapping. Configure storage in your Mastra instance.',
+      );
+    }
+
+    const metadata = {
+      channel_platform: platform,
+      channel_externalThreadId: externalThreadId,
+      channel_externalChannelId: channelId,
+    };
+
+    const { threads } = await memoryStore.listThreads({
+      filter: { metadata },
+      perPage: 1,
+    });
+
+    return { thread: threads[0], memoryStore, metadata };
+  }
+
+  /**
    * Resolves an existing Mastra thread for the given external IDs, or creates one.
    */
   private async getOrCreateThread({
@@ -1466,32 +1513,17 @@ export class AgentChannels {
     threadId?: (resolvedResourceId: string, defaultThreadId: string) => string | Promise<string>;
     mastra: Mastra;
   }): Promise<StorageThreadType> {
-    const storage = mastra.getStorage();
-    if (!storage) {
-      throw new Error('Storage is required for channel thread mapping. Configure storage in your Mastra instance.');
-    }
-
-    const memoryStore = await storage.getStore('memory');
-    if (!memoryStore) {
-      throw new Error(
-        'Memory store is required for channel thread mapping. Configure storage in your Mastra instance.',
-      );
-    }
-
-    const metadata = {
-      channel_platform: platform,
-      channel_externalThreadId: externalThreadId,
-      channel_externalChannelId: channelId,
-    };
-
-    const { threads } = await memoryStore.listThreads({
-      filter: { metadata },
-      perPage: 1,
+    const {
+      thread: existingThread,
+      memoryStore,
+      metadata,
+    } = await this.findThreadMapping({
+      externalThreadId,
+      channelId,
+      platform,
+      mastra,
     });
-
-    if (threads.length > 0) {
-      return threads[0]!;
-    }
+    if (existingThread) return existingThread;
 
     const resolvedResourceId = typeof resourceId === 'function' ? await resourceId() : resourceId;
     const defaultThreadId = crypto.randomUUID();

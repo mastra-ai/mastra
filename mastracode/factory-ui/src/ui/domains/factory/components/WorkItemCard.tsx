@@ -2,7 +2,16 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowUpRight, CircleDot, EllipsisVertical, Link2, MessagesSquare, Trash2 } from 'lucide-react';
+import {
+  ArrowUpRight,
+  CircleDot,
+  EllipsisVertical,
+  Link2,
+  MessageSquare,
+  MessagesSquare,
+  Play,
+  Trash2,
+} from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
 import type { FactoryRunPhase } from '../../../../hooks/useStartFactoryRun';
@@ -32,6 +41,7 @@ export function WorkItemCard({
   allItems,
   liveWorktreePaths,
   runDisabled,
+  preparing,
   evaluatingStage,
   transitionReason,
   decision,
@@ -49,6 +59,8 @@ export function WorkItemCard({
   /** Worktrees that still exist; session refs outside this set are stale. */
   liveWorktreePaths: ReadonlySet<string>;
   runDisabled: boolean;
+  /** Status text while the click is resolving, before the run mutation starts. */
+  preparing?: string;
   /** Destination stage of an in-flight transition; undefined = not moving. */
   evaluatingStage?: string;
   transitionReason?: string;
@@ -68,7 +80,7 @@ export function WorkItemCard({
     className: 'text-icon3',
   };
   const evaluating = evaluatingStage !== undefined;
-  const runPending = pendingRunRoles.size > 0;
+  const runPending = pendingRunRoles.size > 0 || preparing !== undefined;
   const otherStages = item.stages.filter(stage => stage !== columnStage);
   const runSpec = itemRunSpec(item);
   const sessions = liveSessions(item.sessions, liveWorktreePaths);
@@ -100,7 +112,7 @@ export function WorkItemCard({
           <Link
             to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
             draggable={false}
-            aria-label={`Open thread for ${item.title}`}
+            aria-label={`Open session for ${item.title}`}
             className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2"
           />
         ) : (
@@ -110,12 +122,12 @@ export function WorkItemCard({
           <button
             type="button"
             draggable={false}
-            disabled={runDisabled}
+            disabled={runDisabled || runPending}
             aria-busy={runPending || undefined}
             aria-label={
               runSpec !== undefined && defaultRunAction !== undefined
                 ? `${defaultRunAction.label} ${item.title}`
-                : `Create thread for ${item.title}`
+                : `Start session for ${item.title}`
             }
             className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
             onClick={() =>
@@ -226,6 +238,12 @@ export function WorkItemCard({
             {evaluatingStage === 'done' ? 'Marking done…' : `Moving to ${itemStageLabel(item, evaluatingStage)}…`}
           </span>
         )}
+        {pendingRunRoles.size === 0 && preparing !== undefined && (
+          <span role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
+            <Spinner size="sm" aria-hidden className="size-3" />
+            {preparing}
+          </span>
+        )}
         {[...pendingRunRoles].map(([role, phase]) => (
           <span key={role} role="status" aria-live="polite" className="text-ui-xs text-icon4 flex items-center gap-1.5">
             <Spinner size="sm" aria-hidden className="size-3" />
@@ -233,6 +251,24 @@ export function WorkItemCard({
             {phase !== undefined ? RUN_PHASE_LABELS[phase] : 'starting…'}
           </span>
         ))}
+        {!evaluating && !runPending && (
+          <span
+            aria-hidden
+            className="text-ui-xs text-icon3 group-hover:text-icon5 group-focus-within:text-icon5 flex items-center gap-1.5 transition-colors motion-reduce:transition-none"
+          >
+            {threadSession !== undefined ? (
+              <>
+                <MessageSquare size={11} aria-hidden />
+                Open session
+              </>
+            ) : (
+              <>
+                <Play size={11} aria-hidden />
+                {runSpec !== undefined && defaultRunAction !== undefined ? defaultRunAction.label : 'Start session'}
+              </>
+            )}
+          </span>
+        )}
         {!evaluating && decision !== undefined && (
           <div className="flex items-center justify-between gap-2">
             <span
