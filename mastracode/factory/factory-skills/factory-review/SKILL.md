@@ -28,7 +28,11 @@ Parse the PR reference from `$ARGUMENTS`. Then:
 
 ## Phase 2: Existing Review Signal
 
-The PR may already carry reviews — from bots (CodeRabbit, linters, security scanners) and from humans. Collect them before forming your own opinion:
+The PR may already carry reviews — from bots (CodeRabbit, linters, security scanners) and from humans. Collect them before forming your own opinion.
+
+**Wait for pending bot reviews first.** Bots review every push, but not instantly — a verdict formed before they finish reads a PR that hasn't been fully reviewed yet. Detect a pending bot two ways: `gh pr checks <number>` shows queued or in-progress review checks, or a bot that reviewed this PR before has no review or comment on the head commit (compare the head commit's pushed date against the bot's latest activity timestamps). If a bot is pending, poll every 60 seconds for up to 10 minutes (`sleep 60` between checks). If it still hasn't posted when the wait is exhausted, proceed — but name the missing bot signal in the handoff and weigh it in the approval gates; never present the collected signal as complete when it isn't.
+
+Then collect:
 
 1. `gh pr view <number> --json reviews --jq '.reviews[] | {author: .author.login, state, body}'` for submitted reviews and their verdicts.
 2. Unresolved inline threads, which need GraphQL:
@@ -83,6 +87,16 @@ Approval is earned, not the default — the burden of proof is on the PR, and yo
 
 **Adversarial check — required before every approve.** Before committing to approve, argue the strongest case for request changes: take the most damaging reading of your findings, and name the consumer, platform, or configuration most likely to break. If the argument survives contact with the evidence, switch the verdict. If it doesn't, record in one line why it fails — that line goes in the handoff. An approve without a surviving adversarial check is not an approve.
 
+**Approval gates.** Approve only when every gate below is affirmatively demonstrated, with evidence in the handoff — absence of counter-evidence clears nothing, and a gate you could not evaluate is a gate that failed. Missing evidence is itself a finding:
+
+1. **Verification executed** — the changed packages' tests and typecheck ran in the sandbox and passed (or, for a conflicting PR, ran on the head branch with the qualification recorded).
+2. **Existing signal dispositioned** — every substantive prior finding is confirmed, addressed, or refuted; none remains confirmed-unaddressed.
+3. **No pending bot** — no review bot is still working on the head commit (Phase 2 wait exhausted counts as a failed gate only if the bot's history on this PR shows major findings).
+4. **Behavior is tested** — the change's behavior is covered by meaningful assertions, or the handoff records the affirmative reason none are needed.
+5. **Adversarial check survived** — with its one-line record.
+
+If any gate fails, the verdict is request changes. This is the concrete meaning of "the PR earns the approval": the reviewer never grants what the evidence didn't establish.
+
 Do not hedge between the two — pick the verdict the evidence supports. When genuinely borderline, request changes: a wrong request-changes costs the author one re-review cycle; a wrong approve ships the defect with a green checkmark.
 
 ## Phase 6: Handoff & Transition
@@ -103,6 +117,15 @@ Next, publish the review on the PR itself — this is part of every pass, not so
 - request changes → `gh pr review <number> --request-changes --body-file <file>`
 
 If GitHub rejects the review submission (e.g. the token authored the PR and cannot approve or request changes on it), fall back to `gh pr comment <number> --body-file <file>` so the verdict still lands on the PR, and report the fallback under **Verification** — how the verdict was published is an operational outcome, not an assumption.
+
+**Non-blocking follow-ups become a PR, not homework.** After publishing the review, if it produced non-blocking findings with concrete mechanical fixes — typos, small hardening, a missing test case, doc touch-ups — implement them yourself instead of leaving them as a burden on the author:
+
+1. Branch from the reviewed PR's head: `git fetch origin pull/<number>/head && git checkout -b factory/review-followups-pr-<number> FETCH_HEAD`.
+2. Apply the fixes, run the narrowest tests covering them, and commit.
+3. Push the branch and open a follow-up PR with `gh pr create`: target the reviewed PR's head branch when it lives in this repository, so the author can merge the follow-ups into their PR with one click; when the reviewed PR comes from a fork, target its base branch instead and state in the body that it lands after PR <number>.
+4. The follow-up PR body links the review and lists each finding it addresses; the handoff links the follow-up PR.
+
+Keep it strictly non-blocking and low-risk. A fix that demands design judgment, changes behavior, or grows beyond the mechanical stays a recorded finding — don't ship your own guess. **Never mix blocking findings into a follow-up PR**: those are requested changes on the reviewed PR, and implementing them yourself would review your own code. If tests fail on a follow-up fix, drop that fix and keep it a finding. If there are no such findings, skip this step entirely.
 
 Then make your terminal `factory_transition_work_item` call. Take the current stage and `expectedRevision` from the `factory-phase` signal. Request `stage: "done"` (review board) **for both verdicts** — the transition marks the review pass complete; what to do about requested changes is the human's call from the handoff.
 

@@ -310,6 +310,16 @@ describe('getFactoryWorkspace', () => {
     // Terminal ordering: publish the verdict and transition before the final
     // conversation message, so the pass can't stop early with an unpublished review.
     expect(review).toContain('post the handoff as your final conversation message');
+    // Rigor: approval requires every gate affirmatively demonstrated, and the
+    // reviewer waits for pending bot reviews before forming a verdict.
+    expect(review).toContain('Approval gates');
+    expect(review).toContain('If any gate fails, the verdict is request changes');
+    expect(review).toContain('Wait for pending bot reviews');
+    // Non-blocking findings ship as a follow-up PR instead of author homework,
+    // and blocking findings never do.
+    expect(review).toContain('Non-blocking follow-ups become a PR, not homework');
+    expect(review).toContain('factory/review-followups-pr-<number>');
+    expect(review).toContain('Never mix blocking findings into a follow-up PR');
   });
 
   it('adds read-only Web Factory skills and keeps them authoritative over project shadows', async () => {
