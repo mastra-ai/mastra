@@ -186,7 +186,7 @@ function DrillDownList({
                 <span
                   role="img"
                   aria-label="Agent running"
-                  className="inline-flex size-1.5 shrink-0 rounded-full bg-accent1"
+                  className="bg-accent1 inline-flex size-1.5 shrink-0 rounded-full"
                 />
               ) : null}
               {selected.stage === null ? <Badge size="xs">{stageLabel(entry.stage)}</Badge> : null}

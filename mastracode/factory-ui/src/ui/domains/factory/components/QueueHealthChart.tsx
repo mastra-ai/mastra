@@ -323,8 +323,8 @@ function ActivePulse({ stage, activeCount }: { stage: string; activeCount: numbe
             className="bg-surface4 focus-visible:outline-accent1 inline-flex items-center gap-1.5 rounded-full px-1.5 py-0.5 focus-visible:outline-2"
           >
             <span className="relative flex size-1.5" aria-hidden="true">
-              <span className="absolute inline-flex size-full rounded-full bg-accent1 opacity-75 motion-safe:animate-ping" />
-              <span className="relative inline-flex size-1.5 rounded-full bg-accent1" />
+              <span className="bg-accent1 absolute inline-flex size-full rounded-full opacity-75 motion-safe:animate-ping" />
+              <span className="bg-accent1 relative inline-flex size-1.5 rounded-full" />
             </span>
             <span className="text-ui-xs text-icon4 tabular-nums">{activeCount}</span>
           </span>

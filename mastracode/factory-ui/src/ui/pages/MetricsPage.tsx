@@ -364,7 +364,7 @@ function ThroughputCard({
       {expanded ? (
         <div
           id={chartId}
-          className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 motion-safe:duration-300 mt-5"
+          className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 mt-5 motion-safe:duration-300"
         >
           <Txt as="p" variant="ui-xs" className="text-icon3 m-0 mb-2">
             Daily completions over {windowDays} days
