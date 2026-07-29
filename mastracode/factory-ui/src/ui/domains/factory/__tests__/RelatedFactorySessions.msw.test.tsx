@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
+import { WorkspaceFilesPanelProvider } from '../../workspace-viewer/components/WorkspaceFilesPanel';
 import { FactorySessionHeader } from '../components/RelatedFactorySessions';
 
 const FACTORY_ID = 'factory-1';
@@ -91,7 +92,11 @@ function renderHeader() {
       <Routes>
         <Route
           path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
-          element={<FactorySessionHeader />}
+          element={
+            <WorkspaceFilesPanelProvider>
+              <FactorySessionHeader />
+            </WorkspaceFilesPanelProvider>
+          }
         />
       </Routes>
     </MemoryRouter>,
