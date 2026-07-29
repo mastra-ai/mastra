@@ -1,0 +1,175 @@
+---
+title: "What is Mastra?"
+description: "Learn what Mastra is: an open-source TypeScript framework for building everything from AI-powered applications to autonomous AI systems."
+packages:
+  - "@mastra/core"
+---
+
+# What is Mastra?
+
+Mastra is an open-source TypeScript framework for building AI applications and autonomous AI systems. Use it for anything from an AI feature inside an existing product to long-running agents that run entire processes on their own, such as a software factory that plans, builds, reviews, and ships code.
+
+Mastra gives you everything you need to build an agent harness out of the box. It's built on established patterns, so you make fewer integration decisions and spend more time on your product. And, as you'd expect from an AI framework, it's built for AI to use too: your [coding agent](/docs/getting-started/build-with-ai) will feel right at home.
+
+Mastra is open and portable. Run it standalone or inside your existing web server, and call your agents from your own code, over HTTP, or from the channels where your team already works.
+
+:::tip[📹 Watch]
+
+Watch [a quick introduction to Mastra](https://www.youtube.com/watch?v=NosES9aJxCc) for an overview of the framework and what you can build with it.
+
+:::
+
+## Start with one agent
+
+Mastra is batteries-included, but not all-or-nothing. Start with a single agent:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { searchDocs } from '../tools/search-docs'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Answer customer support questions clearly.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { searchDocs },
+})
+```
+
+Add the other pieces when you need them. Mastra is a harness, not just a loop that calls a model:
+
+- **Act in a real environment**: Read and write files and run commands in a sandbox through a [workspace](/docs/workspace/overview).
+- **Load the right context**: Bring in [memories](/docs/memory/overview), [skills](/docs/agents/skills), and domain knowledge at the moment the agent needs them.
+- **Manage growing context**: Compress old messages into dense observations so long runs stay within the context window.
+- **Coordinate multi-step work**: Run agents inside typed [workflows](/docs/workflows/overview) or on a [schedule](/docs/long-running-agents/schedules).
+- **Plan and parallelize**: Track [tasks](/docs/agents/using-tools#task-tracking) and delegate to specialized [subagents](/docs/agents/supervisor-agents) that run with isolated context and report back.
+- **Stay in the loop**: Pause for [human approval](/docs/agents/agent-approval) at critical decision points and resume after a decision.
+- **Meet users where they are**: Connect agents to Slack, Discord, and other [channels](/docs/capabilities/channels/overview).
+- **Improve over time**: Turn real traces into datasets, experiments, and measurable improvements with [evals](/docs/evals/overview).
+
+## Studio
+
+![Experiment results in Studio showing per-item scores for an agent](/img/studio-experiments-results.png)
+
+[Studio](/docs/studio/overview) is an interactive development environment where you test your agents and iterate quickly.
+
+Studio isn't just for engineers. Deploy it and share it with your team, so a product manager can try an agent before it ships. With the [Editor](/docs/editor/overview) and [Agent Builder](/docs/agent-builder/overview), non-technical teammates can create and iterate on agents themselves, with every change versioned.
+
+## Observability and evals
+
+![Metrics dashboard in Studio showing latency, token usage, and cost](/img/studio-metrics.png)
+
+Mastra has built-in logs, traces, and metrics, so you can understand every run in development and production. Every agent run, workflow step, tool call, and model interaction produces a span you can inspect. See [Observability](/docs/observability/overview).
+
+Evals close the loop. Score outputs with rule-based or LLM-as-judge [scorers](/docs/evals/overview), live in production or offline in CI. Create datasets from real traces, run experiments, and compare versions. Because you own the code and the observability layer, you get a closed loop from trace to prompt edit to measurable improvement.
+
+## Memory
+
+Memory is the difference between a smart agent and one that forgets everything between messages. Mastra has built-in [memory](/docs/memory/overview) that gives your agents human-like recall: message history, structured facts about users, and semantic recall of relevant past interactions. No separate memory system to integrate.
+
+For long-running conversations, [Observational Memory](/docs/memory/observational-memory) runs background agents that compress old messages into dense observations. The context window stays small without manual compaction, and the agent keeps its long-term memory.
+
+## Sandboxes and durable execution
+
+For a harness to do anything beyond generating text, the agent needs a real environment to work in. A Mastra [workspace](/docs/workspace/overview) provides it: a filesystem and a sandbox where agents read and write files, run shell commands, install packages, and load skills from disk. Start with the local providers, then connect a cloud [sandbox provider](/docs/workspace/sandbox) behind the same API when you need isolation or scale.
+
+Long-running agents can't die when the server does. [Durable agents](/docs/long-running-agents/durable-agents) run the agentic loop inside a workflow with persisted state:
+
+- Interrupted runs survive process restarts.
+- Clients reconnect to a live stream without starting over.
+- Work continues in the background after the original request ends.
+
+## Deploy anywhere
+
+Mastra is open by default. It supports many model providers through a single [model router](/models), and works with your preferred databases, sandboxes, and observability platforms.
+
+The fastest path to production is deploying to [Mastra platform](https://mastra.ai/ai-agent-deployment), which gives you automatic deployments, managed infrastructure, and hosted observability and Studio.
+
+You're never locked in. Mastra is 100% open source, with [deployers](/docs/deployment/overview) for targets like Vercel, Netlify, and Cloudflare, and it self-hosts anywhere Node.js runs. Run it as a dedicated server, or import it into an existing TypeScript application with a [server adapter](/docs/server/server-adapters).
+
+## Security
+
+Production means many end users, and each one needs isolation. Mastra handles this directly: authentication is built in, and request context flows user identity through to memory, tools, and storage so you can scope threads and run history per user. See [middleware and user isolation](/docs/server/middleware).
+
+[Guardrails](/docs/agents/guardrails) and processors keep agents on track and compliant, with built-in detection for prompt injection, PII, and moderation.
+
+## What you can build
+
+Here are some of the ways you can use Mastra:
+
+<div class="accordion-group">
+  <details>
+    <summary>Embed agents in your product</summary>
+
+    Add AI capabilities to your platform so your users can build or interact with agents.
+
+    Used by [Replit](https://mastra.ai/blog/replitagent3), [Fireworks](https://mastra.ai/blog/fireworks-xml-prompting), [Medusa](https://mastra.ai/blog/medusa-ecommerce)
+  </details>
+
+  <details>
+    <summary>Customer-facing assistants</summary>
+
+    Build agents that handle inquiries, schedule appointments, send reminders, and answer questions via chat, WhatsApp, or voice.
+
+    Used by [Vetnio](https://mastra.ai/blog/vetnio), [Lua](https://mastra.ai/blog/lua-scaling)
+
+    Templates: [Docs Chatbot](https://mastra.ai/templates/docs-chatbot), [Slack Agent](https://mastra.ai/templates/slack-agent)
+  </details>
+
+  <details>
+    <summary>Internal copilots</summary>
+
+    Help employees work faster with AI that understands your domain—HR queries, clinical documentation, sales prep, or document generation.
+
+    Used by [Factorial](https://mastra.ai/blog/factorial-case-study), [Counsel Health](https://mastra.ai/blog/counsel-health), [Cedar](https://mastra.ai/blog/cedar-case-study), [SoftBank](https://mastra.ai/blog/softbank-productivity-mastra-2025-08-20)
+
+    Templates: [Chat with PDF](https://mastra.ai/templates/chat-with-pdf), [Google Sheet Analysis](https://mastra.ai/templates/google-sheets-analysis)
+  </details>
+
+  <details>
+    <summary>Data analysis agents</summary>
+
+    Let users query databases and dashboards in natural language. Connect to your data sources and return answers, charts, or reports.
+
+    Used by [Index](https://mastra.ai/blog/index-case-study), [PLAID Japan](https://mastra.ai/blog/plaid-jpn-gcp-agents)
+
+    Templates: [Chat with Database](https://mastra.ai/templates/text-to-sql), [CSV to Questions](https://mastra.ai/templates/csv-to-questions)
+  </details>
+
+  <details>
+    <summary>Content automation</summary>
+
+    Generate, transform, and manage structured content at scale—whether for a CMS, knowledge base, or documentation system.
+
+    Used by [Sanity](https://mastra.ai/blog/sanity)
+
+    Templates: [Chat with YouTube](https://mastra.ai/templates/chat-with-youtube), [Flash Cards from PDF](https://mastra.ai/templates/flash-cards-from-pdf)
+  </details>
+
+  <details>
+    <summary>DevOps & engineering automation</summary>
+
+    Automate deployments, debug production issues, manage infrastructure, and handle on-call workflows.
+
+    Used by [StarSling](https://mastra.ai/blog/starsling)
+
+    Templates: [GitHub PR Code Review](https://mastra.ai/templates/github-pr-code-review-agent), [Browser Agent](https://mastra.ai/templates/browsing-agent)
+  </details>
+
+  <details>
+    <summary>Sales & GTM workflows</summary>
+
+    Turn customer conversations into structured tasks, generate investment memos, or automate outreach sequences.
+
+    Used by [Kestral](https://mastra.ai/blog/kestral), [Orange Collective](https://mastra.ai/blog/orange-collective-vc-operating-system), [WorkOS](https://mastra.ai/blog/workos-teaching-mastra)
+
+    Templates: [Customer Feedback Summarization](https://mastra.ai/templates/customer-feedback-summarization)
+  </details>
+</div>
+
+Browse [templates](https://mastra.ai/templates) for working examples.
+
+## Next steps
+
+- [Get started](/docs)
+- [Agents overview](/docs/agents/overview)
