@@ -80,8 +80,8 @@ export const weatherAgent = new Agent({
 Import `webSearchTool` from `@mastra/core/tools` when you want the model provider to run its native web search tool. The tool has no local `execute` function. Mastra resolves it at run time from the active model, then passes the provider-managed tool to the model.
 
 ```typescript {2,14} title="src/mastra/agents/research-agent.ts"
-import { Agent } from '@mastra/core/agent';
-import { webSearchTool } from '@mastra/core/tools';
+import { Agent } from '@mastra/core/agent'
+import { webSearchTool } from '@mastra/core/tools'
 
 export const researchAgent = new Agent({
   id: 'research-agent',
@@ -93,7 +93,7 @@ export const researchAgent = new Agent({
   tools: {
     webSearch: webSearchTool,
   },
-});
+})
 ```
 
 `webSearchTool` supports OpenAI, Anthropic, Google Gemini, and xAI models. If Mastra can't infer one of those providers from the active model, the agent run fails with a `MastraError`.

@@ -31,9 +31,9 @@ describe('webSearchTool', () => {
 
   it('normalizes openai-compatible models with supported router-style model ids', () => {
     expect(normalizeWebSearchProvider({ provider: 'openai-compatible', modelId: 'openai/gpt-5-mini' })).toBe('openai');
-    expect(normalizeWebSearchProvider({ provider: 'openai-compatible', id: 'anthropic/claude-sonnet-4-20250514' })).toBe(
-      'anthropic',
-    );
+    expect(
+      normalizeWebSearchProvider({ provider: 'openai-compatible', id: 'anthropic/claude-sonnet-4-20250514' }),
+    ).toBe('anthropic');
   });
 
   it('throws for unsupported or ambiguous providers', () => {
