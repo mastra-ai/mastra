@@ -15,7 +15,10 @@
     "build": "node scripts/monorepo-deps.mjs run -- mastra build --dir src/mastra",
     "deploy": "pnpm run build && node scripts/validate-output.mjs && mastra deploy --skip-build",
     "start": "varlock run -- mastra start",
-    "test": "vitest run"
+    "test": "vitest run",
+    "tunnel": "varlock run -- node scripts/tunnel.mjs",
+    "tunnel:run": "varlock run -- node scripts/tunnel.mjs --named",
+    "tunnel:setup": "varlock run -- node scripts/tunnel.mjs setup"
   },
   "keywords": [],
   "author": "",

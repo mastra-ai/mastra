@@ -76,6 +76,43 @@ pnpm --filter ./mastracode/factory-ui web
 
 Open `http://localhost:5173`.
 
+### Slack channels (optional)
+
+Slack only calls public HTTPS origins, so a local server needs a tunnel. This
+requires [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+(`brew install cloudflared`).
+
+Run the dev server, then in a second terminal:
+
+```shell
+pnpm --dir mastracode/web tunnel
+```
+
+This needs no Cloudflare account and writes no config file. It prints the
+tunnel URL along with the exact Slack app settings and the
+`MASTRACODE_CHANNELS_PUBLIC_URL` value to add to `.env`.
+
+The hostname changes on every run. To avoid re-editing the Slack app each
+time, add app configuration tokens from
+[Your App Configuration Tokens](https://api.slack.com/apps) to `.env`:
+
+```dotenv
+SLACK_APP_ID=
+SLACK_APP_CONFIG_TOKEN=
+SLACK_APP_CONFIG_REFRESH_TOKEN=
+```
+
+The tunnel then rewrites the app's webhook and OAuth URLs itself on each start,
+rotating the tokens and writing the new pair back to `.env`.
+
+For a hostname that survives restarts, use a domain on your own Cloudflare
+account:
+
+```shell
+TUNNEL_HOSTNAME=mc-you.example.com pnpm --dir mastracode/web tunnel:setup
+TUNNEL_HOSTNAME=mc-you.example.com pnpm --dir mastracode/web tunnel:run
+```
+
 ### Optional local services
 
 To test PostgreSQL and Redis:
