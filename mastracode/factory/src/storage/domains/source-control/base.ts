@@ -134,7 +134,6 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       user_id: { type: 'text' },
       sandbox_id: { type: 'text' },
       sandbox_workdir: { type: 'text' },
-      materialized_at: { type: 'timestamp', nullable: true },
       released_at: { type: 'timestamp' },
     },
     uniqueIndexes: [
@@ -321,7 +320,6 @@ export interface PooledSandbox {
   userId: string;
   sandboxId: string;
   sandboxWorkdir: string;
-  materializedAt: Date | null;
   releasedAt: Date;
 }
 
@@ -331,7 +329,6 @@ export interface ReleasePooledSandboxInput {
   userId: string;
   sandboxId: string;
   sandboxWorkdir: string;
-  materializedAt: Date | null;
 }
 
 export interface SourceControlWorktree {
@@ -530,7 +527,6 @@ interface SandboxPoolDbRow extends Record<string, unknown> {
   user_id: string;
   sandbox_id: string;
   sandbox_workdir: string;
-  materialized_at: Date | null;
   released_at: Date;
 }
 
@@ -632,7 +628,6 @@ function toPooledSandbox(row: SandboxPoolDbRow): PooledSandbox {
     userId: row.user_id,
     sandboxId: row.sandbox_id,
     sandboxWorkdir: row.sandbox_workdir,
-    materializedAt: row.materialized_at,
     releasedAt: row.released_at,
   };
 }
@@ -1076,7 +1071,6 @@ export class SourceControlStorage extends FactoryStorageDomain {
               user_id: input.userId,
               sandbox_id: input.sandboxId,
               sandbox_workdir: input.sandboxWorkdir,
-              materialized_at: input.materializedAt,
               released_at: new Date(),
             });
           } catch (error) {

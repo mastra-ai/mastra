@@ -120,11 +120,10 @@ async function seedSession(
 describe('releaseWorkItemSandboxes', () => {
   it('pools the sandboxes of every item session and clears their bindings', async () => {
     const storage = new SourceControlStorageInMemory();
-    const materializedAt = new Date('2026-07-01T00:00:00Z');
+    seedRepositoryLink(storage);
     const session = await seedSession(storage, {
       sandboxId: 'sandbox-1',
       sandboxWorkdir: '/workspace/mastra',
-      materializedAt,
     });
     const item = workItem({
       triage: { sessionId: session.sessionId },
@@ -146,7 +145,6 @@ describe('releaseWorkItemSandboxes', () => {
         userId: 'user-1',
         sandboxId: 'sandbox-1',
         sandboxWorkdir: '/workspace/mastra',
-        materializedAt,
       }),
     ]);
     expect((await storage.sessions.getBySessionId(session.sessionId))?.sandboxId).toBeNull();

@@ -1378,7 +1378,6 @@ function buildProjectGitRoutes({
             userId: session.userId,
             sandboxId: session.sandboxId,
             sandboxWorkdir: session.sandboxWorkdir,
-            materializedAt: session.materializedAt,
           });
         } else if (session.sandboxId) {
           let sandbox: MaterializationSandbox | undefined;

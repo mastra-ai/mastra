@@ -342,6 +342,9 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
 
   readonly sandboxPool = {
     release: async (input: ReleasePooledSandboxInput): Promise<void> => {
+      // Mirror the SQL implementation: a missing project-repository link
+      // makes the release a silent no-op.
+      if (!this.projectRepositoriesRows.some(row => row.id === input.projectRepositoryId)) return;
       if (this.sandboxPoolRows.some(row => row.sandboxId === input.sandboxId)) return;
       this.sandboxPoolRows.push({ id: randomUUID(), releasedAt: new Date(), ...input });
     },

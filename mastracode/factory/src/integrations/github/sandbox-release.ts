@@ -78,7 +78,6 @@ export async function releaseWorkItemSandboxes(options: {
       userId: session.userId,
       sandboxId: session.sandboxId,
       sandboxWorkdir: session.sandboxWorkdir,
-      materializedAt: session.materializedAt,
     });
     await sourceControl.sessions.setSandbox({
       id: session.id,

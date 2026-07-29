@@ -261,14 +261,12 @@ describe('SourceControlStorage', () => {
 
     expect(await github.sandboxPool.claim({ projectRepositoryId: link.id })).toBeNull();
 
-    const materializedAt = new Date('2026-07-01T00:00:00Z');
     await github.sandboxPool.release({
       orgId: 'org-1',
       projectRepositoryId: link.id,
       userId: 'user-1',
       sandboxId: 'sandbox-a',
       sandboxWorkdir: '/workspace/mastra',
-      materializedAt,
     });
     await github.sandboxPool.release({
       orgId: 'org-1',
@@ -276,7 +274,6 @@ describe('SourceControlStorage', () => {
       userId: 'user-1',
       sandboxId: 'sandbox-b',
       sandboxWorkdir: '/workspace/mastra',
-      materializedAt: null,
     });
     // Releasing the same provider sandbox twice keeps one pool row.
     await github.sandboxPool.release({
@@ -285,7 +282,6 @@ describe('SourceControlStorage', () => {
       userId: 'user-1',
       sandboxId: 'sandbox-a',
       sandboxWorkdir: '/workspace/mastra',
-      materializedAt,
     });
 
     expect(await github.sandboxPool.claim({ projectRepositoryId: 'missing' })).toBeNull();
@@ -300,7 +296,6 @@ describe('SourceControlStorage', () => {
       projectRepositoryId: link.id,
       userId: 'user-1',
       sandboxWorkdir: '/workspace/mastra',
-      materializedAt,
     });
     expect(await github.sandboxPool.claim({ projectRepositoryId: link.id })).toBeNull();
   });
@@ -314,7 +309,6 @@ describe('SourceControlStorage', () => {
       userId: 'user-1',
       sandboxId: 'sandbox-a',
       sandboxWorkdir: '/workspace/mastra',
-      materializedAt: null,
     });
 
     const claims = await Promise.all([
@@ -334,7 +328,6 @@ describe('SourceControlStorage', () => {
         userId: 'user-1',
         sandboxId: 'sandbox-a',
         sandboxWorkdir: '/workspace/mastra',
-        materializedAt: null,
       }),
     ).resolves.toBeUndefined();
     expect(await github.sandboxPool.claim({ projectRepositoryId: 'missing' })).toBeNull();
@@ -349,7 +342,6 @@ describe('SourceControlStorage', () => {
       userId: 'user-1',
       sandboxId: 'sandbox-a',
       sandboxWorkdir: '/workspace/mastra',
-      materializedAt: null,
     });
 
     await github.projectRepositories.unlink({ orgId: 'org-1', id: link.id });
