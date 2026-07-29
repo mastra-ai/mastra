@@ -55,12 +55,13 @@ describe('CustomProvidersSection', () => {
   });
 
   describe('when the list is empty', () => {
-    it('shows the empty state', async () => {
+    it('renders no provider rows and keeps the add affordance', async () => {
       server.use(http.get(LIST_URL, () => listResponse([])));
 
       renderWithProviders(<CustomProvidersSection />);
 
-      expect(await screen.findByText(/No custom providers yet/)).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Add provider' })).toBeInTheDocument();
+      expect(screen.queryByRole('list')).not.toBeInTheDocument();
     });
   });
 

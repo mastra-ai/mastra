@@ -28,30 +28,25 @@ import { BehaviorSettings, GeneralSettings, ModelSettings } from './SettingsPane
 function SettingsSubsection({
   title,
   description,
-  action,
   children,
 }: {
   title: string;
   description?: string;
-  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between gap-3">
-          <Txt variant="ui-md" className="text-icon6 font-medium">
-            {title}
-          </Txt>
-          {action}
-        </div>
+        <Txt variant="ui-lg" className="text-icon6 font-medium">
+          {title}
+        </Txt>
         {description && (
           <Txt variant="ui-sm" className="text-icon3">
             {description}
           </Txt>
         )}
       </div>
-      <div className="border-border1 rounded-lg border p-4">{children}</div>
+      {children}
     </div>
   );
 }
@@ -104,7 +99,7 @@ export function SettingsPanel() {
         {section === 'models' && (
           <div className="flex flex-col gap-8">
             <SettingsSubsection title="Defaults">
-              <div className="divide-border1/40 -my-3 divide-y">
+              <div className="divide-border1/40 divide-y">
                 <FactoryDefaultModelSection models={models} />
                 <ModelSettings
                   settings={settings}

@@ -63,12 +63,8 @@ interface SourcePickerItem {
   label: string;
 }
 
-/**
- * Card container for a stack of picker sections: one shared border, dividers
- * between sections, and rounding only on the group's outer edges.
- */
 function SourcePickerGroup({ children }: { children: ReactNode }) {
-  return <div className="border-border1 divide-border1 divide-y overflow-hidden rounded-lg border">{children}</div>;
+  return <div className="divide-border1 divide-y">{children}</div>;
 }
 
 /**
@@ -107,8 +103,6 @@ function SourcePickerSection({
   };
 
   return (
-    // Border/rounding live on the parent SourcePickerGroup so stacked cards
-    // share dividers and only the group's first/last edges are rounded.
     <div role="group" aria-label={label}>
       <Collapsible
         open={open}
@@ -117,7 +111,7 @@ function SourcePickerSection({
           if (!next) setQuery('');
         }}
       >
-        <CollapsibleTrigger className="text-icon4 flex w-full items-center gap-1.5 px-3 py-2">
+        <CollapsibleTrigger className="text-icon4 flex w-full items-center gap-1.5 py-2">
           <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
           <Txt as="span" variant="ui-sm">
             {label}
@@ -135,7 +129,7 @@ function SourcePickerSection({
             </span>
           )}
         </CollapsibleTrigger>
-        <CollapsibleContent className="flex flex-col gap-2 px-3 pb-3">
+        <CollapsibleContent className="flex flex-col gap-2 pb-3">
           <ListSearch label={`Search ${label}`} placeholder="Search…" size="sm" value={query} onSearch={setQuery} />
           <DataList columns="auto minmax(0,1fr)" variant="lined" className="max-h-64">
             {visibleItems.length === 0 ? (
