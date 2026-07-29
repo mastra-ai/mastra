@@ -7,7 +7,7 @@ packages:
 
 # Built-in scorers
 
-Mastra provides a comprehensive set of built-in scorers for evaluating AI outputs. These scorers are optimized for common evaluation scenarios and are ready to use in your agents and workflows.
+Mastra provides a complete set of built-in scorers for evaluating AI outputs. These scorers are optimized for common evaluation scenarios and are ready to use in your agents and workflows.
 
 To create your own scorers, see the [Custom Scorers](/docs/evals/custom-scorers) guide.
 
@@ -25,15 +25,15 @@ These scorers evaluate how correct, truthful, and complete your agent's answers 
 - [`content-similarity`](/reference/evals/content-similarity): Measures textual similarity using character-level matching (`0-1`, higher is better)
 - [`textual-difference`](/reference/evals/textual-difference): Measures textual differences between strings (`0-1`, higher means more similar)
 - [`tool-call-accuracy`](/reference/evals/tool-call-accuracy): Evaluates whether the LLM selects the correct tool from available options (`0-1`, higher is better)
-- [`trajectory-accuracy`](/reference/evals/trajectory-accuracy): Evaluates whether an agent follows the expected sequence of actions (tool calls, model generations, workflow steps, and other span types) (`0-1`, higher is better)
+- [`trajectory-accuracy`](/reference/evals/trajectory-accuracy): Evaluates the expected action sequence for all span types. Covered spans include tool and model activity plus workflow steps (`0-1`, higher is better)
 - [`prompt-alignment`](/reference/evals/prompt-alignment): Measures how well agent responses align with user prompt intent, requirements, completeness, and format (`0-1`, higher is better)
 
 ### Context quality
 
 These scorers evaluate the quality and relevance of context used in generating responses:
 
-- [`context-precision`](/reference/evals/context-precision): Evaluates context relevance and ranking using Mean Average Precision, rewarding early placement of relevant context (`0-1`, higher is better)
-- [`context-relevance`](/reference/evals/context-relevance): Measures context utility with nuanced relevance levels, usage tracking, and missing context detection (`0-1`, higher is better)
+- [`context-precision`](/reference/evals/context-precision): Uses Mean Average Precision to evaluate context ranking. Relevant context receives a higher score when it occurs early (`0-1`, higher is better)
+- [`context-relevance`](/reference/evals/context-relevance): Measures context utility through relevance levels and usage tracking. It also detects missing context (`0-1`, higher is better)
 
 :::tip[Context Scorer Selection]
 

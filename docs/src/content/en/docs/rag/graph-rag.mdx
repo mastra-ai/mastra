@@ -55,7 +55,7 @@ const graphQueryTool = createGraphRAGTool({
 
 The `graphOptions` parameter controls how the knowledge graph is built and traversed:
 
-- `threshold`: Similarity threshold (0-1) for determining which chunks are related. Higher values create sparser graphs with stronger connections; lower values create denser graphs with more potential relationships.
+- `threshold`: Similarity threshold (0-1) for determining which chunks are related. Higher values create sparser graphs with stronger connections. Lower values create denser graphs with more potential relationships.
 - `dimension`: Vector embedding dimension. Must match the embedding model's output dimension (e.g., 1536 for OpenAI's text-embedding-3-small).
 
 ```ts
@@ -144,15 +144,15 @@ The agent uses the graph query tool to:
 1. Find semantically similar chunks in the vector store
 1. Build a knowledge graph from related chunks
 1. Traverse the graph to find connected information
-1. Return comprehensive context for generating the response
+1. Return complete context for generating the response
 
 ## Choosing the right threshold
 
-The threshold parameter significantly impacts retrieval quality:
+The threshold parameter substantially impacts retrieval quality:
 
-- **High threshold (0.8-0.9)**: Strict connections, fewer relationships, more precise but potentially incomplete results
+- **High threshold (0.8-0.9)**: Strict connections and fewer relationships, plus more precise but potentially incomplete results
 - **Medium threshold (0.6-0.8)**: Balanced approach, good for most use cases
-- **Low threshold (0.4-0.6)**: More connections, broader context, risk of including less relevant information
+- **Low threshold (0.4-0.6)**: More connections and broader context, plus risk of including less relevant information
 
 Start with 0.7 and adjust based on your specific use case:
 
