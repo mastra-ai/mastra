@@ -1138,6 +1138,18 @@ describe('LocalSandbox', () => {
       expect(regeneratedProfile).not.toBe(initialProfile);
       expect(regeneratedProfile).toContain(expectedWriteRule);
 
+      // Also verify sandbox.clone() preserves configuration and allows regeneration
+      const clonedSandbox1 = sandbox2.clone();
+      await clonedSandbox1._start();
+      expect((clonedSandbox1 as any)._isCustomProfileLoaded).toBe(false);
+
+      const cloneInitialProfile = (clonedSandbox1 as any)._seatbeltProfile;
+      await clonedSandbox1.mount(mockFs, '/my-mount-clone-1');
+      const cloneRegeneratedProfile = (clonedSandbox1 as any)._seatbeltProfile;
+      expect(cloneRegeneratedProfile).not.toBe(cloneInitialProfile);
+      expect(cloneRegeneratedProfile).toContain(expectedWriteRule);
+      await clonedSandbox1._destroy();
+
       await sandbox2._destroy();
 
       // Case 2: True user-authored profile (exists on disk and has no Mastra header)
@@ -1159,6 +1171,14 @@ describe('LocalSandbox', () => {
       // Mount should NOT trigger regeneration
       await sandbox3.mount(mockFs, '/my-mount-user');
       expect((sandbox3 as any)._seatbeltProfile).toBe(customContent);
+
+      // Also verify sandbox.clone() preserves user-authored configuration and skips regeneration
+      const clonedSandbox2 = sandbox3.clone();
+      await clonedSandbox2._start();
+      expect((clonedSandbox2 as any)._isCustomProfileLoaded).toBe(true);
+      await clonedSandbox2.mount(mockFs, '/my-mount-clone-2');
+      expect((clonedSandbox2 as any)._seatbeltProfile).toBe(customContent);
+      await clonedSandbox2._destroy();
 
       await sandbox3._destroy();
     });
