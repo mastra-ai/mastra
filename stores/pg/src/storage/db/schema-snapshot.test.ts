@@ -339,4 +339,85 @@ describe('init catalog snapshot', () => {
     // A snapshot that outlived init() would still report the column present.
     expect(await db.hasColumn('mastra_threads', 'createdAtZ')).toBe(false);
   }, 60000);
+
+  it('migrates a legacy flat agents schema with the snapshot live', async () => {
+    const schema = uniqueSchema('snapshot_legacy');
+    await admin(`CREATE SCHEMA "${schema}"`);
+
+    // A database last touched by a pre-versioning release: agent config fields
+    // live directly on mastra_agents. The legacy migration renames this table
+    // and recreates it in the new shape via raw DDL — every step of which must
+    // keep the init snapshot honest, or later createTable/alterTable calls
+    // skip work the rename just un-did.
+    await admin(`
+      CREATE TABLE "${schema}".mastra_agents (
+        id TEXT PRIMARY KEY,
+        name TEXT,
+        description TEXT,
+        instructions TEXT,
+        model JSONB,
+        metadata JSONB,
+        "createdAt" TIMESTAMP DEFAULT NOW(),
+        "updatedAt" TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await admin(`INSERT INTO "${schema}".mastra_agents (id, name, instructions, model) VALUES ($1, $2, $3, $4)`, [
+      'legacy-agent-1',
+      'Legacy Agent',
+      'be legacy',
+      JSON.stringify({ provider: 'openai', name: 'gpt-4o' }),
+    ]);
+
+    const store = await newStore(schema);
+    await store.init();
+
+    const tables = await tablesIn(schema);
+    expect(tables).toContain('mastra_agents');
+    expect(tables).toContain('mastra_agent_versions');
+    expect(tables).not.toContain('mastra_agents_legacy');
+
+    // The table was rebuilt in the new thin shape…
+    const agentColumns = await columnsIn(schema, 'mastra_agents');
+    expect(agentColumns.has('activeVersionId')).toBe(true);
+    expect(agentColumns.has('name')).toBe(false);
+
+    // …and the legacy row's data survived the trip into the versions table.
+    const agents = await admin(`SELECT id, "activeVersionId" FROM "${schema}".mastra_agents`);
+    expect(agents).toHaveLength(1);
+    expect(agents[0].id).toBe('legacy-agent-1');
+    const versions = await admin(`SELECT "agentId", name FROM "${schema}".mastra_agent_versions`);
+    expect(versions).toHaveLength(1);
+    expect(versions[0].agentId).toBe('legacy-agent-1');
+    expect(versions[0].name).toBe('Legacy Agent');
+  }, 60000);
+
+  it('migrates a snapshot-column agent_versions schema with the snapshot live', async () => {
+    const schema = uniqueSchema('snapshot_versions');
+    await admin(`CREATE SCHEMA "${schema}"`);
+
+    const first = await newStore(schema);
+    await first.init();
+    await first.close();
+
+    // A database from the intermediate era: agents already thin, but versions
+    // still store one opaque snapshot blob per row. The migration drops the
+    // table outright and relies on init() to recreate it — which only happens
+    // if the drop is reflected in the init snapshot.
+    await admin(`DROP TABLE "${schema}".mastra_agent_versions`);
+    await admin(`
+      CREATE TABLE "${schema}".mastra_agent_versions (
+        id TEXT PRIMARY KEY,
+        "agentId" TEXT,
+        snapshot JSONB
+      )
+    `);
+
+    const store = await newStore(schema);
+    await store.init();
+
+    const versionColumns = await columnsIn(schema, 'mastra_agent_versions');
+    expect(versionColumns.has('snapshot')).toBe(false);
+    expect(versionColumns.has('name')).toBe(true);
+    expect(versionColumns.has('instructions')).toBe(true);
+  }, 60000);
 });

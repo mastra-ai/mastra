@@ -489,6 +489,61 @@ export class PgDB extends MastraBase {
   }
 
   /**
+   * Records an out-of-band `ALTER TABLE … RENAME TO` in the init snapshot.
+   *
+   * Init-time migrations that issue raw DDL on `this.client` (instead of going
+   * through createTable/alterTable/createIndex, which maintain the snapshot
+   * themselves) MUST report it through these `note*` methods. A snapshot that
+   * still lists a renamed-away table makes a later createTable() in the same
+   * init skip the rebuild the migration depends on — stranding data. No-op
+   * outside the init window.
+   *
+   * Indexes riding along with a rename keep their names, so the snapshot's
+   * index set stays accurate without changes here.
+   */
+  noteTableRenamed(oldName: string, newName: string): void {
+    const snapshot = this.schemaSnapshot;
+    if (snapshot) {
+      if (snapshot.tables.delete(oldName)) snapshot.tables.add(newName);
+      const columns = snapshot.columns.get(oldName);
+      if (columns) {
+        snapshot.columns.delete(oldName);
+        snapshot.columns.set(newName, columns);
+      }
+    }
+    this.tableColumnsCache.delete(oldName);
+    this.tableColumnsCache.delete(newName);
+  }
+
+  /**
+   * Records an out-of-band `DROP TABLE` in the init snapshot. See
+   * {@link noteTableRenamed} for why raw-DDL migrations must call this.
+   *
+   * The dropped table's indexes vanish with it, but the snapshot's flat index
+   * set cannot map names back to tables. Stale entries only make a later
+   * createIndex() skip a recreate until the next init re-reads the catalog —
+   * the same self-healing bound the rest of the snapshot design accepts.
+   */
+  noteTableDropped(tableName: string): void {
+    const snapshot = this.schemaSnapshot;
+    if (snapshot) {
+      snapshot.tables.delete(tableName);
+      snapshot.columns.delete(tableName);
+    }
+    this.tableColumnsCache.delete(tableName);
+  }
+
+  /**
+   * Records an out-of-band `ALTER TABLE … ADD COLUMN` in the init snapshot.
+   * See {@link noteTableRenamed} for why raw-DDL migrations must call this.
+   */
+  noteColumnAdded(tableName: string, column: string): void {
+    const snapshot = this.schemaSnapshot;
+    if (snapshot) this.snapshotColumns(snapshot, tableName).add(column);
+    this.tableColumnsCache.delete(tableName);
+  }
+
+  /**
    * Gets the set of column names that actually exist in the database table.
    * Results are cached; the cache is invalidated when alterTable() adds new columns.
    */
@@ -946,6 +1001,7 @@ export class PgDB extends MastraBase {
           const alterSql =
             `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
           await this.client.none(alterSql);
+          this.noteColumnAdded(TABLE_SPANS, columnName);
           this.logger?.debug?.(`Added column '${columnName}' to ${fullTableName}`);
 
           // For timestamp columns, also add the timezone-aware version
@@ -954,6 +1010,7 @@ export class PgDB extends MastraBase {
             const timestampZSql =
               `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}Z" TIMESTAMPTZ DEFAULT NOW()`.trim();
             await this.client.none(timestampZSql);
+            this.noteColumnAdded(TABLE_SPANS, `${columnName}Z`);
             this.logger?.debug?.(`Added timezone column '${columnName}Z' to ${fullTableName}`);
           }
         }
@@ -970,6 +1027,7 @@ export class PgDB extends MastraBase {
             const timestampZSql =
               `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedTzColumnName}" TIMESTAMPTZ DEFAULT NOW()`.trim();
             await this.client.none(timestampZSql);
+            this.noteColumnAdded(TABLE_SPANS, tzColumnName);
             this.logger?.debug?.(`Added timezone column '${tzColumnName}' to ${fullTableName}`);
           }
         }
@@ -1122,6 +1180,11 @@ export class PgDB extends MastraBase {
     const snapshot = this.schemaSnapshot;
     if (snapshot) return snapshot.primaryKeyIndexes.has(constraintName.toLowerCase());
 
+    return this.spansPrimaryKeyExistsLive(constraintName, schemaFilter);
+  }
+
+  /** Live-catalog variant of {@link spansPrimaryKeyExists}, bypassing the snapshot. */
+  private async spansPrimaryKeyExistsLive(constraintName: string, schemaFilter: string): Promise<boolean> {
     const result = await this.client.oneOrNone<{ exists: boolean }>(
       `SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = lower($1) AND connamespace = (SELECT oid FROM pg_namespace WHERE nspname = $2)) as exists`,
       [constraintName, schemaFilter],
@@ -1176,9 +1239,15 @@ export class PgDB extends MastraBase {
       // isDuplicateRelationError can also match on unrelated name collisions
       // (e.g. a stale index with the same name), so the post-check prevents
       // silently swallowing errors when the constraint is still missing.
+      //
+      // The confirm must hit the live catalog: in this path the init snapshot
+      // (if live) just said the constraint was ABSENT — that is why the ALTER
+      // ran — so re-asking it would deterministically contradict the
+      // concurrent creator and turn a benign race into a thrown error.
       if (isDuplicateRelationError(error)) {
-        const confirmed = await this.spansPrimaryKeyExists();
+        const confirmed = await this.spansPrimaryKeyExistsLive(constraintName, schemaFilter);
         if (confirmed) {
+          this.schemaSnapshot?.primaryKeyIndexes.add(constraintName.toLowerCase());
           this.logger?.debug?.(`PRIMARY KEY constraint ${constraintName} was created by another process`);
           return;
         }
