@@ -9,9 +9,9 @@
     "web": "MASTRACODE_ENV_DIR=../web MASTRACODE_API_TARGET=${MASTRACODE_API_TARGET:-http://localhost:4111} MASTRACODE_UI_PORT=${MASTRACODE_UI_PORT:-5173} vite --config src/vite.config.ts",
     "build": "vite --config src/vite.config.ts build",
     "typecheck": "tsc --noEmit -p src/ui/tsconfig.json",
-    "test": "vitest run && vitest run --config e2e/ui/vitest.config.ts",
-    "test:unit": "vitest run",
-    "test:msw": "vitest run --config e2e/ui/vitest.config.ts"
+    "test": "vitest run",
+    "test:unit": "vitest run --project unit:factory-ui",
+    "test:msw": "vitest run --project msw:factory-ui"
   },
   "dependencies": {
     "@fontsource-variable/mona-sans": "5.3.0",
