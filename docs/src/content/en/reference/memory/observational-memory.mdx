@@ -1,9 +1,9 @@
 ---
-title: "Reference: Observational Memory | Memory"
-description: "API reference for Observational Memory in Mastra: a three-tier memory system that uses Observer and Reflector agents to maintain long-term memory across conversations."
+title: 'Reference: Observational Memory | Memory'
+description: 'API reference for Observational Memory in Mastra: a three-tier memory system that uses Observer and Reflector agents to maintain long-term memory across conversations.'
 packages:
-  - "@mastra/core"
-  - "@mastra/memory"
+  - '@mastra/core'
+  - '@mastra/memory'
 ---
 
 # Observational Memory
@@ -870,7 +870,12 @@ Emitted when observation or reflection fails. The system falls back to synchrono
   { name: 'durationMs', type: 'number', description: 'Duration until failure in milliseconds.' },
   { name: 'tokensAttempted', type: 'number', description: 'Message tokens (input) that were attempted.' },
   { name: 'error', type: 'string', description: 'Error message.' },
-  { name: 'observations', type: 'string', description: 'Any partial content available for display.', isOptional: true },
+  {
+    name: 'observations',
+    type: 'string',
+    description: 'Any partial content available for display.',
+    isOptional: true,
+  },
   { name: 'recordId', type: 'string', description: 'The OM record ID.' },
   { name: 'threadId', type: 'string', description: "This thread's ID." },
 ]}
@@ -900,7 +905,11 @@ Emitted when async buffering completes. The content is stored but not yet activa
 <PropertiesTable
   content={[
   { name: 'cycleId', type: 'string', description: 'Matches the corresponding `buffering-start` marker.' },
-  { name: 'operationType', type: "'observation' | 'reflection'", description: 'Type of operation that was buffered.' },
+  {
+    name: 'operationType',
+    type: "'observation' | 'reflection'",
+    description: 'Type of operation that was buffered.',
+  },
   { name: 'completedAt', type: 'string', description: 'ISO timestamp when buffering completed.' },
   { name: 'durationMs', type: 'number', description: 'Duration in milliseconds.' },
   { name: 'tokensBuffered', type: 'number', description: 'Message tokens (input) that were buffered.' },
