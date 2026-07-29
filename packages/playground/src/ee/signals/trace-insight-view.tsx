@@ -54,8 +54,8 @@ function TraceInsightBody({ insight }: { insight: TraceInsightResponse }) {
             <>
               <h3 className="text-neutral3 mt-4 font-mono text-xs tracking-wider uppercase">Observations</h3>
               <ul className="mt-3 space-y-2">
-                {insight.summary.observations.map(observation => (
-                  <li key={observation} className="border-border2 text-neutral5 border-l pl-3 text-sm">
+                {insight.summary.observations.map((observation, index) => (
+                  <li key={`${observation}:${index}`} className="border-border2 text-neutral5 border-l pl-3 text-sm">
                     {observation}
                   </li>
                 ))}

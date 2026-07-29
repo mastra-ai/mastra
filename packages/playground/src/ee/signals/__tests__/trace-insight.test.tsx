@@ -54,7 +54,7 @@ function renderSignals() {
   );
 }
 
-function useThemeDrilldownHandlers() {
+function registerThemeDrilldownHandlers() {
   server.use(
     http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
       HttpResponse.json(drilldownThemeSnapshotsResponse),
@@ -100,7 +100,7 @@ afterEach(() => {
 describe('Trace signals trace insight', () => {
   describe('when a theme example is opened', () => {
     it('requests the trace insight and shows the summary, observations, and trace signal texts', async () => {
-      useThemeDrilldownHandlers();
+      registerThemeDrilldownHandlers();
       server.use(
         http.get(`${BASE_URL}/api/learning/traces/trace-1/summary`, () => HttpResponse.json(traceInsightResponse)),
       );
@@ -120,7 +120,7 @@ describe('Trace signals trace insight', () => {
     });
 
     it('links to the full trace page', async () => {
-      useThemeDrilldownHandlers();
+      registerThemeDrilldownHandlers();
       server.use(
         http.get(`${BASE_URL}/api/learning/traces/trace-1/summary`, () => HttpResponse.json(traceInsightResponse)),
       );
@@ -136,7 +136,7 @@ describe('Trace signals trace insight', () => {
   describe('when no example has been opened', () => {
     it('does not request a trace insight', async () => {
       const onInsightRequest = vi.fn<() => void>();
-      useThemeDrilldownHandlers();
+      registerThemeDrilldownHandlers();
       server.use(
         http.get(`${BASE_URL}/api/learning/traces/trace-1/summary`, () => {
           onInsightRequest();
@@ -155,7 +155,7 @@ describe('Trace signals trace insight', () => {
 
   describe('when the insight back control is used', () => {
     it('restores the example list at the current pagination offset', async () => {
-      useThemeDrilldownHandlers();
+      registerThemeDrilldownHandlers();
       server.use(
         http.get(`${BASE_URL}/api/learning/traces/trace-2/summary`, () =>
           HttpResponse.json(noSummaryTraceInsightResponse),
@@ -182,7 +182,7 @@ describe('Trace signals trace insight', () => {
 
   describe('when the trace has no summary yet', () => {
     it('shows the no-insight message', async () => {
-      useThemeDrilldownHandlers();
+      registerThemeDrilldownHandlers();
       server.use(
         http.get(`${BASE_URL}/api/learning/traces/trace-1/summary`, () =>
           HttpResponse.json({ ...noSummaryTraceInsightResponse, traceId: 'trace-1' }),
@@ -198,7 +198,7 @@ describe('Trace signals trace insight', () => {
 
   describe('when the insight request fails', () => {
     it('shows the insight error state', async () => {
-      useThemeDrilldownHandlers();
+      registerThemeDrilldownHandlers();
       server.use(
         http.get(`${BASE_URL}/api/learning/traces/trace-1/summary`, () =>
           HttpResponse.json({ error: 'boom' }, { status: 500 }),
@@ -214,7 +214,7 @@ describe('Trace signals trace insight', () => {
 
   describe('when the drawer closes after viewing an insight', () => {
     it('reopens on the example list instead of the insight', async () => {
-      useThemeDrilldownHandlers();
+      registerThemeDrilldownHandlers();
       server.use(
         http.get(`${BASE_URL}/api/learning/traces/trace-1/summary`, () => HttpResponse.json(traceInsightResponse)),
       );
@@ -237,7 +237,7 @@ describe('Trace signals trace insight', () => {
 
   describe('when a noise example is opened', () => {
     it('shows the trace insight for the noise trace', async () => {
-      useThemeDrilldownHandlers();
+      registerThemeDrilldownHandlers();
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/noise`, () => HttpResponse.json(noiseResponse)),
         http.get(`${BASE_URL}/api/learning/entities/support-agent/noise/examples`, () =>
