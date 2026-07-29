@@ -73,11 +73,15 @@ function linearWorkItem(url: string) {
 
 function stubHeader(item: ReturnType<typeof workItem> | ReturnType<typeof linearWorkItem>) {
   server.use(
-    http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () => HttpResponse.json({ session: workspaceSession })),
+    http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () =>
+      HttpResponse.json({ session: workspaceSession }),
+    ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPOSITORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [workspaceSession] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => HttpResponse.json({ workItems: [item] })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+      HttpResponse.json({ workItems: [item] }),
+    ),
   );
 }
 
@@ -85,7 +89,10 @@ function renderHeader() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`]}>
       <Routes>
-        <Route path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId" element={<FactorySessionHeader />} />
+        <Route
+          path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
+          element={<FactorySessionHeader />}
+        />
       </Routes>
     </MemoryRouter>,
   );

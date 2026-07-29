@@ -171,18 +171,31 @@
     "@mastra/platform-workspace": "0.2.2",
     "@mastra/railway": "0.4.0",
     "@mastra/s3": "0.6.0",
-    "@mastra/vercel": "1.3.0"
+    "@mastra/vercel": "1.3.0",
+    "@mastra/isolated-vm": "0.0.1"
   },
   "changesets": [
     "automated-provider-registry-20260729-005018",
+    "beige-bikes-fold",
     "breezy-eagles-speak",
+    "clever-oranges-occur",
+    "deep-olives-relax",
+    "dispatcher-nonblocking-loop",
+    "gentle-insects-read",
     "green-birds-knock",
+    "light-vans-rush",
+    "long-turtles-fold",
     "loose-papers-spend",
     "mighty-tools-fetch",
     "nine-feet-smoke",
+    "olive-frogs-attend",
     "perky-steaks-look",
+    "ready-bars-search",
     "ready-tires-design",
+    "sandbox-fs-absolute-paths",
+    "sandbox-fs-conformance",
     "silly-adults-enter",
-    "solid-suits-smoke"
+    "solid-suits-smoke",
+    "wise-donkeys-refuse"
   ]
 }

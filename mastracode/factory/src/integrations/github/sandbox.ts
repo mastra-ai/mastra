@@ -328,6 +328,40 @@ export async function materializeRepo(options: {
   await storage.markMaterialized({ id: sandboxRow.id });
 }
 
+/**
+ * Reset a pooled workdir that a new session just claimed: the previous
+ * session's branch and dirty state must not leak into the new session, so
+ * force-checkout the default branch and drop all local modifications. When
+ * the claimed VM was reaped and re-provisioned there is no checkout yet and
+ * this is a no-op (the clone path handles it). A wedged checkout falls back
+ * to wiping the workdir so `materializeRepo` re-clones inside the same VM
+ * instead of permanently failing the session.
+ */
+export async function recycleClaimedWorkdir(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  defaultBranch: string,
+): Promise<void> {
+  if (!/^[A-Za-z0-9_./-]+$/.test(defaultBranch)) {
+    throw new MaterializeError(`Refusing to recycle: invalid default branch '${defaultBranch}'.`, 'clone-failed');
+  }
+  const w = shellQuote(workdir);
+  const inspect = await sh(sandbox, `git -C ${w} rev-parse --is-inside-work-tree`);
+  if (inspect.exitCode !== 0) return;
+  const recycle = await sh(
+    sandbox,
+    // `-x` also drops gitignored files (.env, build caches) so no session
+    // state survives into the next claim.
+    `git -C ${w} checkout -f ${shellQuote(defaultBranch)} && git -C ${w} reset --hard && git -C ${w} clean -fdx`,
+    { phase: 'claimed workdir recycle' },
+  );
+  if (recycle.exitCode === 0) return;
+  const wipe = await sh(sandbox, `rm -rf ${w}`);
+  if (wipe.exitCode !== 0) {
+    throw new MaterializeError(`Failed to recycle claimed sandbox workdir: ${recycle.stderr}`, 'clone-failed');
+  }
+}
+
 /** Check out a session's branch inside its isolated repository clone. */
 export async function checkoutSessionBranch(
   sandbox: MaterializationSandbox,

@@ -202,48 +202,50 @@ Version management is available through the server Studio, REST API, the Client 
 
 ### Version lifecycle
 
-Each version has one of three statuses:
+Version snapshots don't store a lifecycle status. Instead, the agent or prompt block stores an `activeVersionId` that identifies its published version.
 
-| Status | Description |
+| Term | Description |
 | - | - |
-| Draft | The latest working copy. Every save creates a new draft version. |
-| Published | The active version used in production. Only one version can be published at a time. |
-| Archived | A previous version that's no longer active. You can restore any archived version. |
+| Latest | The most recently saved version snapshot. |
+| Published | The version whose ID matches `activeVersionId`. Only one version can be active at a time. |
+| Draft | The latest version when it differs from the active version. If `activeVersionId` isn't set, the latest version remains unpublished. |
+| Historical | Any other saved version. Historical versions remain available for comparison, direct selection, and restoration. |
 
-The typical flow is: Edit the draft and test it, plus then activate it to make it the published version.
+Saving a database-backed resource creates a new latest version. If an active version already exists, it continues to handle requests until you publish the new version. Publishing sets `activeVersionId` to the selected version without deleting or changing the previous active version.
 
-The previously published version becomes archived so you can restore it if needed. You can do this through Studio or programmatically through the API.
-
-This lifecycle makes it safe to experiment. Non-technical team members can iterate on a draft without affecting production traffic, then publish when ready. If something goes wrong, restoring a previous version is a single API call.
+Restoring a historical version copies its configuration into a new draft that remains inactive until you publish it.
 
 ### Version targeting and experimentation
 
-Because every version has a unique ID, you can route different requests to different agent configurations. This opens up several patterns:
+Because every version has a unique ID, you can route different requests to different agent configurations. This supports several patterns:
 
-- **A/B testing**: Split traffic between two published versions and compare performance metrics.
-- **Canary rollouts**: Send a small percentage of requests to a new version before promoting it.
-- **Per-user targeting**: Pin specific users or accounts to a version while others use the default.
-- **Environment separation**: Use the draft version in staging and the published version in production.
+- **A/B testing**: Split traffic between specific version IDs and compare performance metrics.
+- **Canary rollouts**: Send a small percentage of requests to a draft or historical version before publishing it.
+- **Per-user targeting**: Pin specific users or accounts to a version while others use the active version.
+- **Environment separation**: Use the latest version in staging and the active version in production.
 
-Pass a `versionId` or `status` when calling the agent through the Client SDK, server query parameters, or React SDK `requestContext`, and the correct version is loaded automatically.
+Pass a `versionId` or `status` when calling the agent through the Client SDK, server query parameters, or React SDK `requestContext`. A `versionId` selects that exact snapshot, `status: 'draft'` selects the latest snapshot, and `status: 'published'` selects the active snapshot.
 
 ### Version selection
 
-By default, [`mastra.getAgentById()`](/reference/core/getAgentById) loads the published (active) version of the stored override.
-
-Use a specific version to test a draft before publishing or run an A/B experiment. You can also pin a user to a known-good configuration:
+Calling [`mastra.getAgentById()`](/reference/core/getAgentById) without a version selector returns the registered code-defined agent. Pass a selector to apply a published, draft, or specific stored override:
 
 ```typescript title="Version selection"
-// Load the published version (default)
-const agent = mastra.getAgentById('support-agent')
+// Load the registered code-defined agent without stored overrides
+const codeAgent = mastra.getAgentById('support-agent')
 
-// Load the latest draft
-const agent = mastra.getAgentById('support-agent', {
+// Load the active published override
+const publishedAgent = await mastra.getAgentById('support-agent', {
+  status: 'published',
+})
+
+// Load the latest override
+const draftAgent = await mastra.getAgentById('support-agent', {
   status: 'draft',
 })
 
 // Load a specific version
-const agent = mastra.getAgentById('support-agent', {
+const versionedAgent = await mastra.getAgentById('support-agent', {
   versionId: 'abc-123',
 })
 ```

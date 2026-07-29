@@ -61,9 +61,9 @@ export function showFormattedError(
     errorText += theme.fg('muted', ` [url: ${parsed.requestUrl}]`);
   }
 
-  // Add retry info if applicable
-  const retryable = 'retryable' in event ? event.retryable : parsed.retryable;
-  const retryDelay = 'retryDelay' in event ? event.retryDelay : parsed.retryDelay;
+  // Retry timing is only shown when the controller explicitly scheduled a retry.
+  const retryable = 'error' in event && event.retryable === true;
+  const retryDelay = 'error' in event ? event.retryDelay : undefined;
   if (retryable && retryDelay) {
     const seconds = retryDelay / 1000;
     const retryAttempt = 'retryAttempt' in event ? event.retryAttempt : undefined;

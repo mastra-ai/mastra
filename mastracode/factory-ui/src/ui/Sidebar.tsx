@@ -104,7 +104,7 @@ function SidebarFooter() {
       return;
     }
     if (factoryId) {
-      void navigate(settingsSectionPath(factoryId, 'general'), { state: { from: location } });
+      void navigate(settingsSectionPath(factoryId, 'preferences'), { state: { from: location } });
     }
   };
 
