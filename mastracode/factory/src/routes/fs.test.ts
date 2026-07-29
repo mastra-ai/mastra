@@ -508,6 +508,16 @@ describe('workspace changes', () => {
     expect(executeCommand).toHaveBeenCalledTimes(1);
   });
 
+  it('marks and limits a diff that exceeds the output boundary', async () => {
+    const maxDiffBytes = 512 * 1024;
+    const { fleet } = makeFleet(() => ({ exitCode: 0, stdout: 'a'.repeat(maxDiffBytes + 1) }));
+
+    const result = await readSessionWorkspaceDiff(fleet, makeSession(), 'src/large.ts');
+
+    expect(result.truncated).toBe(true);
+    expect(Buffer.byteLength(result.patch)).toBe(maxDiffBytes);
+  });
+
   it('includes both paths when reading a renamed file diff', async () => {
     const { fleet } = makeFleet((_script, command, args) => {
       expect(command).toBe('sh');
