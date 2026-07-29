@@ -28,7 +28,7 @@
     "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "dependencies": {
-    "@lancedb/lancedb": "^0.22.3",
+    "@lancedb/lancedb": "^0.31.0",
     "apache-arrow": "^18.1.0"
   },
   "devDependencies": {

@@ -791,4 +791,109 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.ensureSandbox).not.toHaveBeenCalled();
     expect(mocks.materializeRepo).not.toHaveBeenCalled();
   });
+
+  // The factory used to construct a Workspace and return it without ever
+  // adding it to the Mastra registry, so any HTTP handler that resolved the
+  // workspace synchronously via `mastra.getWorkspaceById(id)` (file tree,
+  // permissions probe, MCP/tool routes) threw `MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND`.
+  // Register the workspace before returning so those sync lookups succeed.
+  describe('registers the freshly materialized workspace with Mastra', () => {
+    // Minimal Mastra stub that mirrors addWorkspace's key-dedupe behavior and
+    // exposes the exact shape the factory reuse path expects.
+    function createMastraStub() {
+      const workspaces = new Map<string, unknown>();
+      const addWorkspace = vi.fn((workspace: { id: string }, key?: string, _metadata?: unknown) => {
+        const workspaceKey = key || workspace.id;
+        if (workspaces.has(workspaceKey)) return;
+        workspaces.set(workspaceKey, workspace);
+      });
+      const getWorkspaceById = vi.fn((id: string) => {
+        const workspace = workspaces.get(id);
+        if (!workspace) throw new Error(`Workspace with id ${id} not found`);
+        return workspace;
+      });
+      return { addWorkspace, getWorkspaceById, workspaces };
+    }
+
+    it('calls mastra.addWorkspace exactly once with the expected id shape and agent metadata', async () => {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const mastra = createMastraStub();
+
+      const built = await workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: mastra as any,
+      });
+
+      expect(built.id).toBe('mfw-project-1-session-a-web-factory');
+      expect(mastra.addWorkspace).toHaveBeenCalledTimes(1);
+      expect(mastra.addWorkspace).toHaveBeenCalledWith(
+        built,
+        'mfw-project-1-session-a-web-factory',
+        expect.objectContaining({ source: 'mastra' }),
+      );
+    });
+
+    it('makes mastra.getWorkspaceById return the same instance the factory returned', async () => {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const mastra = createMastraStub();
+
+      const built = await workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: mastra as any,
+      });
+
+      expect(mastra.getWorkspaceById('mfw-project-1-session-a-web-factory')).toBe(built);
+    });
+
+    it('short-circuits on the second call for the same session without re-registering', async () => {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const mastra = createMastraStub();
+
+      const first = await workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: mastra as any,
+      });
+      const second = await workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: mastra as any,
+      });
+
+      expect(second).toBe(first);
+      expect(mastra.addWorkspace).toHaveBeenCalledTimes(1);
+      // Reuse path found the existing workspace instead of re-provisioning.
+      expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+      expect(mocks.materializeRepo).toHaveBeenCalledTimes(1);
+    });
+
+    it('registers exactly one workspace under inflight materialization coalescing', async () => {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      addSession({ id: 'session-a' });
+      const mastra = createMastraStub();
+      // Hold materialization open so the follower arrives before the leader
+      // registers, matching the race the fix targets.
+      mocks.materializeRepo.mockImplementationOnce(() => new Promise(resolve => setTimeout(resolve, 20)));
+
+      const [first, second] = await Promise.all([
+        workspace({
+          requestContext: createGithubRequestContext('project-1', 'session-a'),
+          mastra: mastra as any,
+        }),
+        workspace({
+          requestContext: createGithubRequestContext('project-1', 'session-a'),
+          mastra: mastra as any,
+        }),
+      ]);
+
+      expect(second).toBe(first);
+      expect(mastra.addWorkspace).toHaveBeenCalledTimes(1);
+      expect(mastra.workspaces.size).toBe(1);
+    });
+  });
 });

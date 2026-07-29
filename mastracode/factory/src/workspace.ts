@@ -351,7 +351,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const filesystem = new SandboxFilesystem({ sandbox, workdir });
       const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
       const skillPaths = [...(effectiveSkillExtension?.paths ?? []), ...projectSkillPaths];
-      return new Workspace({
+      const workspace = new Workspace({
         id: workspaceId,
         name: 'Mastra Code Factory Session Workspace',
         filesystem,
@@ -360,6 +360,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         skills: skillPaths,
         skillSource: effectiveSkillExtension?.createSource(filesystem, projectSkillPaths) ?? filesystem,
       });
+      // Register with the Mastra instance so sync HTTP handlers that resolve
+      // the workspace via `mastra.getWorkspaceById(id)` (file tree, permissions
+      // probe, MCP/tool routes) find it instead of throwing
+      // `MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND`. `addWorkspace` is idempotent on
+      // key collision, so the inflight coalescing and reuse paths above stay
+      // race-safe. Registration happens synchronously with the return so a
+      // concurrent lookup on another request cannot observe an unregistered
+      // workspace.
+      mastra?.addWorkspace(workspace, workspaceId, { source: 'mastra' });
+      return workspace;
     };
 
     // Dedupe concurrent materializations of the same workspace: followers
