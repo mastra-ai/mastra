@@ -32,7 +32,7 @@ Backends deliver events in one of two modes, defined by the [`PubSub`](/referenc
 - **Pull**: Consumers read from the backend on their own, which Mastra does with a long-lived worker loop. Distributed backends such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) use this mode.
 - **Push**: Events arrive without the consumer asking, either in process or over HTTP. The default [`EventEmitterPubSub`](/reference/pubsub/event-emitter) delivers this way in process.
 
-Subscribers can also opt into work distribution. A group of subscribers that share a consumer group split the events between them, so each event is handled once. Subscribers without a group each receive every event, which fans the stream out to all of them.
+Subscribers can also distribute work through consumer groups. Members of the same group split the events so each event is handled once. A subscriber without a group receives every event, which fans the stream out to all ungrouped subscribers.
 
 ## Default backend
 

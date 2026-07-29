@@ -212,7 +212,7 @@ await writer.generate('Write a summary from the research notes.', {
 })
 ```
 
-Because both calls use `resource: 'project-42'`, the writer can access the researcher's observations and working memory, plus semantic embeddings. Each agent still has its own thread, so message histories stay separate.
+Because both calls use `resource: 'project-42'`, the writer can access the researcher's observations and working memory. Semantic embeddings are also shared through the resource. Each agent still has its own thread, so message histories stay separate.
 
 **Thread-scoped sharing** gives tighter coupling. [Observational Memory](../memory/observational-memory) uses `scope: 'thread'` by default. If two agents use the same `resource` and `thread`, they share the full message history. Each agent sees every message the other has written. This is useful when agents need to build on each other's exact outputs.
 
