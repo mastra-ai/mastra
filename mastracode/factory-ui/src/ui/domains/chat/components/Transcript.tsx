@@ -14,7 +14,6 @@ import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 import {
   Bell,
-  BookOpen,
   ChevronDown,
   CircleDot,
   CircleX,
@@ -86,65 +85,7 @@ function lastSegment(id: string): string {
   return parts[parts.length - 1] ?? id;
 }
 
-interface SkillActivation {
-  name: string;
-  content: string;
-  arguments?: string;
-}
-
-const skillActivationPattern = /^<skill name="([a-z0-9]+(?:-[a-z0-9]+)*)">\n([\s\S]+)\n<\/skill>$/;
-const skillArgumentsMarker = '\n\nARGUMENTS: ';
-
-function parseSkillActivation(text: string): SkillActivation | undefined {
-  const match = skillActivationPattern.exec(text.trim());
-  if (!match) return undefined;
-
-  const content = match[2];
-  const argumentsIndex = content.lastIndexOf(skillArgumentsMarker);
-  return {
-    name: match[1],
-    content,
-    arguments: argumentsIndex >= 0 ? content.slice(argumentsIndex + skillArgumentsMarker.length).trim() : undefined,
-  };
-}
-
-function SkillActivationCard({ activation }: { activation: SkillActivation }) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <Collapsible open={expanded} onOpenChange={setExpanded} className="max-w-full min-w-64">
-      <CollapsibleTrigger
-        className="focus-visible:ring-accent1 w-full rounded-md text-left focus-visible:ring-2 focus-visible:outline-none"
-        aria-label={`${expanded ? 'Hide' : 'Show'} ${activation.name} skill contents`}
-      >
-        <span className="flex items-center gap-2">
-          <span className="text-icon3 flex items-center gap-1.5">
-            <BookOpen size={14} aria-hidden="true" />
-            <Txt as="span" variant="ui-xs" className="tracking-wide uppercase">
-              Skill
-            </Txt>
-          </span>
-          <Txt as="span" variant="ui-sm" font="mono" className="text-icon6">
-            {activation.name}
-          </Txt>
-          <ChevronDown
-            size={13}
-            aria-hidden="true"
-            className={`text-icon3 ml-auto shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
-          />
-        </span>
-        {activation.arguments && (
-          <span className="text-ui-xs text-icon3 mt-1 block truncate">{activation.arguments}</span>
-        )}
-      </CollapsibleTrigger>
-      <CollapsibleContent className="border-border1 mt-2 max-h-96 overflow-y-auto border-t pt-2">
-        <div className="prose text-ui-sm">
-          <Markdown>{activation.content}</Markdown>
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
+import { parseSkillActivation, SkillMessage } from './SkillMessage';
 
 // ---------------------------------------------------------------------------
 // Tool card (collapsible)
@@ -934,7 +875,7 @@ function MessageBubble({
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
         return activation ? (
-          <SkillActivationCard activation={activation} />
+          <SkillMessage activation={activation} />
         ) : (
           <div className="prose">
             <Markdown>{part.text}</Markdown>
@@ -982,6 +923,13 @@ function MessageBubble({
     },
     File: (part: FilePart) => <FileAttachment part={part} />,
   };
+
+  const skillActivation =
+    entry.message.role === 'user' && parts.length === 1 && parts[0].type === 'text'
+      ? parseSkillActivation(parts[0].text)
+      : undefined;
+  if (skillActivation) return <SkillMessage activation={skillActivation} />;
+  if (isSkillNotificationSignal(entry)) return null;
 
   const notifications = notificationMetadata(entry);
   if (notifications.length > 0) {
@@ -1103,9 +1051,16 @@ function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | No
  * `signalToDBMessage` in @mastra/core). Rebuild notification cards from it so
  * they survive transcript hydration.
  */
+function isSkillNotificationSignal(entry: MessageEntry): boolean {
+  if (entry.message.role !== 'signal') return false;
+  const signal = entry.message.content.metadata?.signal;
+  return isRecord(signal) && signal.type === 'notification' && Boolean(parseSkillActivation(signalPartsText(entry)));
+}
+
 function signalNotifications(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {
   const signal = entry.message.content.metadata?.signal;
   if (!isRecord(signal) || signal.type !== 'notification') return [];
+  if (isSkillNotificationSignal(entry)) return [];
 
   const text = signalPartsText(entry);
   const attributes = isRecord(signal.attributes) ? signal.attributes : {};

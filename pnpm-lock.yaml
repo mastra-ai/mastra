@@ -2112,8 +2112,8 @@ importers:
         specifier: 1.14.48
         version: 1.14.48
       '@opencode-ai/sdk':
-        specifier: ^1.17.4
-        version: 1.17.6
+        specifier: ^1.18.5
+        version: 1.18.9
       tsdown:
         specifier: 0.22.9
         version: 0.22.9(@volar/typescript@2.4.23)(oxc-resolver@11.20.0)(tsx@4.23.1)(typescript@6.0.3)
@@ -2272,9 +2272,6 @@ importers:
       react-dom:
         specifier: 'catalog:'
         version: 19.2.7(react@19.2.7)
-      react-resizable-panels:
-        specifier: ^4.11.0
-        version: 4.11.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       react-router:
         specifier: ^7.13.1
         version: 7.18.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -15799,8 +15796,8 @@ packages:
   '@opencode-ai/sdk@1.14.48':
     resolution: {integrity: sha512-wKM86jCzV/ZApyWrdm3uP8XdWcS0LMbu3FV+OWz1ChiGGg1wiIWNGMJs5CY8/QX2/rUuZrd1Q1DqvdamZ0zLeg==}
 
-  '@opencode-ai/sdk@1.17.6':
-    resolution: {integrity: sha512-kCzdd9Git2sjDjXSHj4mMWuU1RXZ38d7gFEcq2rzlVz7XV6PPwNw8pelWsk99La2CtDkpfoW5lfHnpCaK6/oBQ==}
+  '@opencode-ai/sdk@1.18.9':
+    resolution: {integrity: sha512-oDJSmsmiGW+3lNLmZYj3EpUkpiT3ITZBKffH3mrmu2KMJXlkxQ/Nvv7jqPffSM7o8lCdBZS/aCE+2GkA3/92gQ==}
 
   '@openfeature/core@1.9.1':
     resolution: {integrity: sha512-YySPtH4s/rKKnHRU0xyFGrqMU8XA+OIPNWDrlEFxE6DCVWCIrxE5YpiB94YD2jMFn6SSdA0cwQ8vLkCkl8lm8A==}
@@ -39471,7 +39468,7 @@ snapshots:
     dependencies:
       cross-spawn: 7.0.6
 
-  '@opencode-ai/sdk@1.17.6':
+  '@opencode-ai/sdk@1.18.9':
     dependencies:
       cross-spawn: 7.0.6
 

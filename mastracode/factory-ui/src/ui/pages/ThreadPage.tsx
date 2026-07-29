@@ -1,11 +1,11 @@
-import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
-import { useState } from 'react';
-import { useMatch, useParams } from 'react-router';
+import { useParams } from 'react-router';
 
 import { Sidebar } from '../Sidebar';
 import { ChatLayout } from '../layouts/ChatLayout';
-import { renderedPaths } from '../domains/workspace-viewer/config';
-import { WorkspaceViewerPanel } from '../domains/workspace-viewer/components/WorkspaceViewerPanel';
+import { useThreadWorkspacePath } from '../domains/workspace-viewer/hooks/useThreadWorkspacePath';
+import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
+import { WorkspaceFilesSurface } from '../domains/workspace-viewer/components/WorkspaceFilesSurface';
+import { workspaceFilesInsetClass } from '../domains/workspace-viewer/layout';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { FactorySessionHeader } from '../domains/factory/components/RelatedFactorySessions';
 import { ChatMessageList } from '../domains/chat/components/ChatMessageList';
@@ -16,45 +16,22 @@ import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
 import { useRouteThreadSync } from '../../hooks/useRouteThreadSync';
 import { useThreadPageKickoffs } from '../domains/chat/hooks/useThreadPageKickoffs';
 import { useFactoryQuery } from '../../hooks/useFactories';
-import { useUserSessionQuery } from '../../hooks/useWorkspaces';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 const threadComposerContainerClass = 'w-full p-3 md:p-5';
-const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
+const threadComposerInnerClass = 'mx-auto w-full max-w-[var(--chat-column,80ch)]';
 
 export function ThreadPage() {
-  const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId?: string; threadId?: string }>();
-  const userThreadMatch = useMatch('/factories/:factoryId/user/threads/:threadId');
-  const isMobile = useIsMobile();
-  const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
-  const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
+  const { factoryId, threadId } = useParams<{ factoryId: string; threadId?: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
-  const userSessionQuery = useUserSessionQuery(userThreadMatch ? threadId : undefined);
-  const isUserThreadRoute = Boolean(userThreadMatch);
-  const workspaceFactory = factoryQuery.data;
-  const workspacePath = isUserThreadRoute ? userSessionQuery.data?.sessionId : sessionId;
+  const workspace = useThreadWorkspacePath();
 
-  const resolvingSession = factoryQuery.isPending || (isUserThreadRoute && userSessionQuery.isPending);
+  const resolvingSession = factoryQuery.isPending || workspace.isPending;
 
   return (
     <ChatLayout
       sidebar={<Sidebar />}
       header={<ChatHeader />}
-      rightPanelExpanded={workspaceViewerExpanded}
-      rightPanelAvailable={Boolean(workspacePath)}
-      onRightPanelOpen={() => setWorkspaceViewerVisible(true)}
-      onRightPanelClose={() => setWorkspaceViewerVisible(false)}
-      rightPanel={
-        workspacePath && (workspaceViewerVisible || isMobile) ? (
-          <WorkspaceViewerPanel
-            workspacePath={workspacePath}
-            renderedPaths={renderedPaths}
-            title="Workspace files"
-            context={workspaceFactory?.name}
-            onExpandedChange={setWorkspaceViewerExpanded}
-          />
-        ) : undefined
-      }
       main={
         resolvingSession ? (
           <div className="grid h-full min-h-0 place-items-center">
@@ -62,7 +39,9 @@ export function ThreadPage() {
           </div>
         ) : (
           <ChatSessionBoundary threadId={threadId}>
-            <ThreadPageMain />
+            <WorkspaceFilesProvider>
+              <ThreadPageMain />
+            </WorkspaceFilesProvider>
           </ChatSessionBoundary>
         )
       }
@@ -74,10 +53,15 @@ function ThreadPageMain() {
   useGlobalShortcuts();
 
   return (
-    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden">
-      <ChatMessageBoundary>
-        <ThreadPageContent />
-      </ChatMessageBoundary>
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)_auto_auto] overflow-hidden">
+      <FactorySessionHeader />
+      {/* Flex, not block — ChatMessageBoundary's loading state sizes itself with flex-1. */}
+      <div className="relative flex min-h-0 flex-col overflow-hidden">
+        <ChatMessageBoundary>
+          <ThreadPageContent />
+        </ChatMessageBoundary>
+        <WorkspaceFilesSurface />
+      </div>
       <TaskPanel />
       <ThreadComposer />
     </div>
@@ -87,8 +71,10 @@ function ThreadPageMain() {
 function ThreadComposer() {
   return (
     <div className={threadComposerContainerClass}>
-      <div className={threadComposerInnerClass} role="region" aria-label="Thread composer">
-        <ComposerPanel />
+      <div className={workspaceFilesInsetClass}>
+        <div className={threadComposerInnerClass} role="region" aria-label="Thread composer">
+          <ComposerPanel />
+        </div>
       </div>
     </div>
   );
@@ -98,12 +84,5 @@ function ThreadPageContent() {
   useRouteThreadSync();
   useThreadPageKickoffs();
 
-  return (
-    <div className="flex min-h-0 flex-col">
-      <FactorySessionHeader />
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <ChatMessageList />
-      </div>
-    </div>
-  );
+  return <ChatMessageList />;
 }
