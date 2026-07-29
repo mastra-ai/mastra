@@ -41,6 +41,11 @@ describe('SettingsNavigation', () => {
       'href',
       '/factories/fp-1/settings/intake',
     );
+    expect(
+      within(sources)
+        .getAllByRole('link')
+        .map(link => link.textContent),
+    ).toEqual(['Repositories', 'Work Intake', 'Connections']);
 
     const agent = screen.getByRole('region', { name: 'Agent' });
     expect(within(agent).getByRole('link', { name: 'Models' })).toHaveAttribute(

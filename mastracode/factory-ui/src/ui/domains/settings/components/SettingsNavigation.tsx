@@ -45,12 +45,6 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
     label: 'Sources',
     items: [
       {
-        id: 'connections',
-        label: SETTINGS_SECTION_LABELS.connections,
-        icon: Cable,
-        searchText: 'connections connected accounts slack communication integrations',
-      },
-      {
         id: 'repositories',
         label: SETTINGS_SECTION_LABELS.repositories,
         icon: GitBranch,
@@ -61,6 +55,12 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.intake,
         icon: Inbox,
         searchText: 'work intake sources tasks issues pull requests github linear feed sync',
+      },
+      {
+        id: 'connections',
+        label: SETTINGS_SECTION_LABELS.connections,
+        icon: Cable,
+        searchText: 'connections connected accounts slack communication integrations',
       },
     ],
   },
