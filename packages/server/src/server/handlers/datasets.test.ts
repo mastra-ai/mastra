@@ -518,5 +518,26 @@ describe('Datasets Handlers', () => {
 
       expect(replaced.unmockedToolPolicy).toBe('allow');
     });
+
+    it('forwards unmockedToolPolicy through batch insertion', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Batch Policy DS' });
+
+      const batch = (await BATCH_INSERT_ITEMS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        items: [{ input: { q: 'strict' }, unmockedToolPolicy: 'deny' }, { input: { q: 'default' } }],
+      } as any)) as any;
+
+      expect(batch.items[0]?.unmockedToolPolicy).toBe('deny');
+      expect(batch.items[1]?.unmockedToolPolicy).toBeUndefined();
+
+      const fetched = (await GET_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        itemId: batch.items[0].id,
+      } as any)) as any;
+
+      expect(fetched.unmockedToolPolicy).toBe('deny');
+    });
   });
 });
