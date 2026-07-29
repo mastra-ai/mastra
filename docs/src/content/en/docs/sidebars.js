@@ -1020,7 +1020,6 @@ const sidebars = {
                 tags: ['beta'],
               },
             },
-
           ],
         },
       ],
