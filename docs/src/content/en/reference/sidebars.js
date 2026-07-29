@@ -671,6 +671,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'streaming/ChunkType', label: 'ChunkType' },
+        { type: 'doc', id: 'streaming/smoothStream', label: 'smoothStream()' },
         {
           type: 'category',
           label: 'Agents',
@@ -791,6 +792,12 @@ const sidebars = {
         { type: 'doc', id: 'voice/voice.speak', label: '.speak()' },
         { type: 'doc', id: 'voice/voice.updateConfig', label: '.updateConfig()' },
       ],
+    },
+    {
+      type: 'category',
+      label: 'Workers',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'workers/overview', label: 'Overview' }],
     },
     {
       type: 'category',

@@ -66,6 +66,7 @@ type ConsumedDuringPreparation =
   | 'onFinish'
   | 'onError'
   | 'onAbort'
+  | 'experimentalTransform'
   // AbortSignal is managed via the registry's abortController/abortSignal
   | 'abortSignal'
   // Toolsets and clientTools are resolved into the `tools` record during

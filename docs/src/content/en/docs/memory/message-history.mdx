@@ -178,7 +178,7 @@ const agent = mastra.getAgentById('test-agent')
 const memory = await agent.getMemory()
 ```
 
-The `Memory` instance gives you access to functions for listing threads, recalling messages, cloning conversations, and more.
+The `Memory` instance gives you access to functions for listing threads and recalling messages, plus cloning conversations, and more.
 
 ## Querying
 
@@ -283,7 +283,13 @@ const { messages } = await memory.recall({
 })
 ```
 
-Metadata filters match shallow scalar values only: `string`, finite `number`, `boolean`, and `null`. All specified metadata keys must match with AND semantics, and `null` matches an explicit `null` value, not a missing metadata key. Metadata keys must start with a letter or underscore, may contain only alphanumeric characters and underscores, must be 128 characters or fewer, and can't use reserved prototype keys such as `__proto__`, `constructor`, or `prototype`. Performance depends on the storage backend. Some backends can push parts of the filter into the database, while others scan candidate messages after thread, resource, and date constraints are applied but before pagination.
+Metadata filters match shallow scalar values only: `string`, finite `number`, `boolean`, and `null`.
+
+All specified metadata keys use AND semantics. A `null` filter matches only an explicit `null` value. A missing metadata key doesn't match.
+
+Metadata keys must start with a letter or underscore and contain only alphanumeric characters. They must be 128 characters or fewer and can't use reserved prototype keys such as `__proto__`, `constructor`, or `prototype`.
+
+Performance depends on the storage backend. Some backends can push parts of the filter into the database, while others scan candidate messages after thread, resource, and date constraints are applied but before pagination.
 
 Fetch a single message by ID:
 
@@ -328,7 +334,7 @@ Message queries return `MastraDBMessage[]` format. To display messages in a fron
 
 ## Thread cloning
 
-Thread cloning creates a copy of an existing thread with its messages. This is useful for branching conversations, creating checkpoints before a potentially destructive operation, or testing variations of a conversation.
+Thread cloning creates a copy of an existing thread with its messages. This is useful for branching conversations or creating checkpoints before a potentially destructive operation, or alternatively testing variations of a conversation.
 
 ```typescript
 const { thread, clonedMessages } = await memory.cloneThread({

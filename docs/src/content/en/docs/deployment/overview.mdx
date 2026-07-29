@@ -37,7 +37,7 @@ Read about [monorepo deployment](/docs/deployment/monorepo).
 The [Mastra platform](/docs/mastra-platform/overview) provides three products for deploying, monitoring, and managing AI applications built with the Mastra framework:
 
 - [**Observability**](/docs/mastra-platform/observability): A standalone hosted product for searchable traces, logs, and metrics across Mastra projects and deploys
-- [**Studio**](/docs/mastra-platform/studio): A hosted visual environment for testing agents, running workflows, and inspecting traces
+- [**Studio**](/docs/mastra-platform/studio): A hosted visual environment for testing agents and running workflows, plus inspecting traces
 - [**Server**](/docs/mastra-platform/server): A production deployment target that runs your Mastra application as an API server
 
 Learn more in the [Mastra platform overview](/docs/mastra-platform/overview).
@@ -78,3 +78,7 @@ Use these guides when adding Mastra to an existing Next.js or Astro application.
 Mastra workflows run using the built-in execution engine by default. For production workloads requiring managed infrastructure, workflows can also be deployed to specialized platforms like [Inngest](https://www.inngest.com) that provide step memoization, automatic retries, and real-time monitoring.
 
 Visit the [Workflow Runners guide](/docs/deployment/workflow-runners) for execution options and the [Inngest deployment guide](/guides/deployment/inngest) for setup instructions.
+
+## Workers
+
+For production deployments, Mastra can run workflow orchestration, cron scheduling, and background tool execution in dedicated worker processes separate from the API server. This lets you scale each concern independently and isolate failures. See [Workers](/docs/deployment/workers) for details.

@@ -22,6 +22,7 @@ import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { AddApiKeyDialog } from '../../settings/components/AddApiKeyDialog';
 import { ModelCombobox } from '../../settings/components/ModelCombobox';
+import { SharedCredentialNotice } from '../../settings/components/SharedCredentialNotice';
 import { providerDisplayName } from '../../settings/components/provider-display-name';
 import { ProviderOAuthDialog } from '../../settings/components/ProviderOAuthDialog';
 
@@ -200,6 +201,7 @@ export function ModelProviderFactoryStep({ factoryId, completionError, onComplet
                 disabled={saving}
               />
             </label>
+            <SharedCredentialNotice modelId={modelId || undefined} />
             <Button variant="primary" className="w-full" disabled={!modelId || saving} onClick={() => void finish()}>
               {saving && <Spinner size="sm" aria-label="Saving model defaults" />}
               Finish setup
@@ -288,6 +290,9 @@ export function ModelProviderFactoryStep({ factoryId, completionError, onComplet
         <AddApiKeyDialog
           provider={keyDialogProvider}
           authEnabled={authQuery.data?.authEnabled === true}
+          // Factory setup configures the shared default model, so the key
+          // should default to org-wide — otherwise teammates can't run it.
+          defaultScope="org"
           onClose={() => setKeyDialogProvider(undefined)}
         />
       )}

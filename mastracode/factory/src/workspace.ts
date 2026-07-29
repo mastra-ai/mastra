@@ -16,7 +16,12 @@ import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import { getGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
-import { checkoutSessionBranch, materializeRepo, runWorktreeSetup } from './integrations/github/sandbox.js';
+import {
+  checkoutSessionBranch,
+  MaterializeError,
+  materializeRepo,
+  runWorktreeSetup,
+} from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
 import type { SandboxBindingStore, SandboxFleet } from './sandbox/fleet.js';
@@ -171,8 +176,22 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const workdir = isLocalSandbox
       ? fleet.computeLocalSessionWorkdir(repoFullName, session.id)
       : (session.sandboxWorkdir ?? projectRepository.sandboxWorkdir);
+    // The system prompt derives its working directory from `state.projectPath`
+    // and falls back to the server's own process.cwd() when unset — which
+    // points the agent at the host checkout (and lets it run `git checkout`
+    // there instead of in its session workdir). Pin it to the session workdir.
+    // During createSession this seeds the session's initial state (the
+    // workspace resolves before the session is built); on later requests it
+    // self-heals live state.
+    if (ctx && workdir && ctx.getState()?.projectPath !== workdir) {
+      await ctx.setState({ projectPath: workdir, projectName: repoFullName });
+    }
     const binding: SandboxBindingStore = {
-      sandboxId: session.sandboxId,
+      // Read through to the session row so teardown after a fresh provision
+      // sees the just-persisted id instead of a stale snapshot.
+      get sandboxId() {
+        return session.sandboxId;
+      },
       checkpointName: checkpointNameForSession(session.id),
       setSandboxId: async id => {
         await storage.sessions.setSandbox({ id: session.id, sandboxId: id, sandboxWorkdir: workdir });
@@ -241,19 +260,44 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       }
       const ghCliToken = (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? token;
 
-      const sandbox = await fleet.ensureSandbox(
-        binding,
-        { GH_TOKEN: ghCliToken },
-        undefined,
-        isLocalSandbox ? { workingDirectory: workdir } : {},
-      );
-      await materializeRepo({
-        row: { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },
-        repoInfo: { repoFullName: repoFullName, defaultBranch: repository.defaultBranch },
-        sandbox,
-        token,
-        storage: storage.sessions,
-      });
+      const ensureSandbox = () =>
+        fleet.ensureSandbox(
+          binding,
+          { GH_TOKEN: ghCliToken },
+          undefined,
+          isLocalSandbox ? { workingDirectory: workdir } : {},
+        );
+      const runMaterialize = (target: Awaited<ReturnType<typeof ensureSandbox>>) =>
+        materializeRepo({
+          row: { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },
+          repoInfo: { repoFullName: repoFullName, defaultBranch: repository.defaultBranch },
+          sandbox: target,
+          token,
+          storage: storage.sessions,
+        });
+      const isGitMissing = (error: unknown) => error instanceof MaterializeError && error.code === 'git-missing';
+
+      let sandbox = await ensureSandbox();
+      try {
+        await runMaterialize(sandbox);
+      } catch (error) {
+        if (!isGitMissing(error)) throw error;
+        // A sandbox without git was booted from a bare base image (e.g. the
+        // platform proxy falls back to a clean Debian base when its template
+        // build fails). That VM can never materialize a repo, and its id is
+        // already persisted on the binding — tear it down so re-opens stop
+        // reattaching to the poisoned sandbox, then retry once on a fresh VM.
+        await fleet.teardownSandbox(binding, sandbox);
+        sandbox = await ensureSandbox();
+        try {
+          await runMaterialize(sandbox);
+        } catch (retryError) {
+          // Still bare — the provider's template is persistently broken.
+          // Clear the binding so a later manual retry provisions fresh.
+          if (isGitMissing(retryError)) await fleet.teardownSandbox(binding, sandbox);
+          throw retryError;
+        }
+      }
       await checkoutSessionBranch(sandbox, workdir, {
         branch: session.branch,
         baseBranch: session.baseBranch || projectRepository.branch || repository.defaultBranch,

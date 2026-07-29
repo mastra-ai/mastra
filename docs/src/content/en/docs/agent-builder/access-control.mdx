@@ -1,6 +1,6 @@
 ---
 title: "Access control | Agent Builder"
-description: Gate the Agent Builder with two roles — admin and member — using Mastra RBAC.
+description: Gate the Agent Builder with two roles, admin and member, using Mastra RBAC.
 packages:
   - "@mastra/core"
   - "@mastra/editor"
@@ -13,7 +13,7 @@ packages:
 The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
 :::
 
-The Agent Builder ships with two supported roles: `admin` and `member`. Wire them through `Mastra.server.rbac`. Without an RBAC provider, every authenticated user has full Builder access; without authentication, the Builder is open to anyone who can reach the server.
+The Agent Builder includes with two supported roles: `admin` and `member`. Wire them through `Mastra.server.rbac`. Without an RBAC provider, every authenticated user has full Builder access; without authentication, the Builder is open to anyone who can reach the server.
 
 ## Roles
 
@@ -24,11 +24,11 @@ The Agent Builder ships with two supported roles: `admin` and `member`. Wire the
 
 ## Minimum permissions
 
-The Builder UI calls several resources on load, so a usable `member` role needs explicit grants on each. The Builder action layer (`/agent-builder/*`) is one resource; the data it reads and writes lives under separate resources.
+The Builder UI calls several resources on load, so a usable `member` role needs explicit grants on each. The Builder action layer (`/agent-builder/*`) is one resource. The data it reads and writes lives under separate resources.
 
 | Permission | Used for |
 | - | - |
-| `agent-builder:*` | Load Builder actions and run Builder workflows. The derived Builder actions are `agent-builder:read` and `agent-builder:execute`; the wildcard grants both. |
+| `agent-builder:*` | Load Builder actions and run Builder workflows. The derived Builder actions are `agent-builder:read` and `agent-builder:execute`. The wildcard grants both. |
 | `agents:read`, `agents:execute` | List registered agents and chat with the Builder agent |
 | `stored-agents:*` | List, view, create, and edit agents |
 | `stored-skills:*` | List, view, create, and edit stored skills |

@@ -245,6 +245,12 @@ export interface ExternalRepositoryProjectTarget {
   projectRepository: ProjectRepository;
 }
 
+/** External id pair identifying a repository linked to a factory project. */
+export interface ConfiguredExternalRepositoryKey {
+  installationExternalId: string;
+  repositoryExternalId: string;
+}
+
 export interface LinkProjectRepositoryInput {
   orgId: string;
   connectionId: string;
@@ -330,6 +336,16 @@ export interface SourceControlStorageHandle {
     findByExternalId(args: { orgId: string; externalId: string }): Promise<SourceControlRepository | null>;
     findBySlug(args: { orgId: string; installationId: string; slug: string }): Promise<SourceControlRepository | null>;
     upsert(args: { orgId: string; input: UpsertSourceControlRepositoryInput }): Promise<SourceControlRepository>;
+    /**
+     * Migrate a repository and its dependent connections to a new installation.
+     * Used when a GitHub App is reinstalled with a new installation ID on the same account.
+     * Returns the repository under the new installation (either migrated or existing).
+     */
+    migrateInstallation(args: {
+      orgId: string;
+      id: string;
+      newInstallationId: string;
+    }): Promise<SourceControlRepository>;
   };
   readonly connections: {
     list(args: { orgId: string; factoryProjectId: string }): Promise<ProjectSourceControlConnection[]>;
@@ -343,6 +359,12 @@ export interface SourceControlStorageHandle {
       installationExternalId: string;
       repositoryExternalId: string;
     }): Promise<ExternalRepositoryProjectTarget[]>;
+    /**
+     * Distinct external (installation, repository) id pairs linked to any
+     * factory project. Lets sweeps scope work to configured repositories
+     * without probing every repository an installation can see.
+     */
+    listConfiguredExternalKeys(): Promise<ConfiguredExternalRepositoryKey[]>;
     get(args: { orgId: string; id: string }): Promise<ProjectRepository | null>;
     link(args: LinkProjectRepositoryInput): Promise<ProjectRepository>;
     update(args: { orgId: string; id: string; input: UpdateProjectRepositoryInput }): Promise<ProjectRepository | null>;
@@ -744,6 +766,36 @@ export class SourceControlStorage extends FactoryStorageDomain {
           });
           return toRepository(row);
         },
+        migrateInstallation: async ({ orgId, id, newInstallationId }) => {
+          const existing = await getRepository({ orgId, id });
+          if (!existing) {
+            throw new Error(`Repository ${id} not found in organization ${orgId}`);
+          }
+          await requireInstallation({ orgId, id: newInstallationId });
+          try {
+            await db().updateMany(REPOSITORIES, { id }, { installation_id: newInstallationId, updated_at: new Date() });
+            // Migrate dependent connections to the new installation
+            await db().updateMany(
+              CONNECTIONS,
+              { installation_id: existing.installationId },
+              { installation_id: newInstallationId },
+            );
+            // Return the updated repository
+            const updated = await getRepository({ orgId, id });
+            if (!updated) throw new Error('Repository disappeared after update');
+            return updated;
+          } catch (error) {
+            // Unique constraint violation: repository already exists under the new installation
+            if (!(error instanceof UniqueViolationError)) throw error;
+            // Find and return the existing repository under the new installation
+            const conflictRow = await db().findOne<RepositoryDbRow>(REPOSITORIES, {
+              installation_id: newInstallationId,
+              external_id: existing.externalId,
+            });
+            if (!conflictRow) throw error; // Should never happen if we got a unique violation
+            return toRepository(conflictRow);
+          }
+        },
       },
       connections: {
         list: async ({ orgId, factoryProjectId }) => {
@@ -809,6 +861,29 @@ export class SourceControlStorage extends FactoryStorageDomain {
           return (
             await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, { connection_id: connectionId })
           ).map(toProjectRepository);
+        },
+        listConfiguredExternalKeys: async () => {
+          const keys = new Map<string, ConfiguredExternalRepositoryKey>();
+          const connections = await db().findMany<ConnectionDbRow>(CONNECTIONS, { integration_id: integrationId });
+          for (const connection of connections) {
+            const installation = await db().findOne<InstallationDbRow>(INSTALLATIONS, {
+              id: connection.installation_id,
+              integration_id: integrationId,
+            });
+            if (!installation) continue;
+            const links = await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
+              connection_id: connection.id,
+            });
+            for (const link of links) {
+              const repository = await db().findOne<RepositoryDbRow>(REPOSITORIES, { id: link.repository_id });
+              if (!repository) continue;
+              keys.set(`${installation.external_id}\u0000${repository.external_id}`, {
+                installationExternalId: installation.external_id,
+                repositoryExternalId: repository.external_id,
+              });
+            }
+          }
+          return [...keys.values()];
         },
         listByExternalRepository: async ({ installationExternalId, repositoryExternalId }) => {
           const targets: ExternalRepositoryProjectTarget[] = [];
