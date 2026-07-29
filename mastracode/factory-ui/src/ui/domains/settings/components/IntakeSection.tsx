@@ -203,7 +203,7 @@ export function IntakeSection() {
       >
         {config.github.enabled &&
           (linkedRepositories.length === 0 ? (
-            <Txt as="span" variant="ui-xs" className="text-icon3">
+            <Txt as="span" variant="ui-sm" className="text-icon3">
               No linked repositories yet — link a repository to a factory to add one.
             </Txt>
           ) : (
@@ -242,7 +242,7 @@ export function IntakeSection() {
       >
         {!linearConnected ? (
           <div className="flex items-center gap-3 pl-1">
-            <Txt as="span" variant="ui-xs" className="text-icon3">
+            <Txt as="span" variant="ui-sm" className="text-icon3">
               {linearStatus?.enabled === false
                 ? 'Linear is not configured on this server.'
                 : 'Connect a Linear workspace to sync its issues.'}
@@ -256,7 +256,7 @@ export function IntakeSection() {
         ) : config.linear.enabled && isLinearReauthError(linearProjectsQuery.error) ? (
           // Expired token still reports connected; offer OAuth again.
           <div className="flex items-center gap-3 pl-1">
-            <Txt as="span" variant="ui-xs" className="text-icon3">
+            <Txt as="span" variant="ui-sm" className="text-icon3">
               Linear authorization expired. Reconnect to keep syncing issues.
             </Txt>
             <Button size="xs" onClick={() => connectLinear(baseUrl)}>
@@ -267,7 +267,7 @@ export function IntakeSection() {
           config.linear.enabled && (
             <div className="flex flex-col gap-2.5">
               <div className="flex items-center gap-2">
-                <Txt as="span" variant="ui-xs" className="text-icon3">
+                <Txt as="span" variant="ui-sm" className="text-icon3">
                   Connected to {linearStatus?.workspace?.name ?? 'a Linear workspace'}
                 </Txt>
                 <Button size="xs" variant="ghost" onClick={() => connectLinear(baseUrl)}>

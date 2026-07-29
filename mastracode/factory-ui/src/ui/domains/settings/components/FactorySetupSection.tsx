@@ -35,7 +35,7 @@ function RepositorySetupRow({ projectRepositoryId, label }: { projectRepositoryI
 
   return (
     <div className="flex flex-col gap-1.5">
-      <Txt as="span" variant="ui-sm" className="text-icon5">
+      <Txt as="span" variant="ui-md" className="text-icon5">
         {label}
       </Txt>
       <InputGroup size="sm">

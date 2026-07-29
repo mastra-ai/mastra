@@ -66,8 +66,8 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
             <div key={repo.projectRepositoryId} className="flex items-center gap-3 px-3 py-2">
               <GithubIcon size={16} className="text-icon3 shrink-0" />
               <span className="min-w-0 flex-1">
-                <span className="text-ui-sm text-icon6 block truncate font-medium">{repo.slug}</span>
-                {repo.gitBranch && <span className="text-ui-xs text-icon3 block truncate">{repo.gitBranch}</span>}
+                <span className="text-ui-md text-icon5 block truncate">{repo.slug}</span>
+                {repo.gitBranch && <span className="text-ui-sm text-icon3 block truncate">{repo.gitBranch}</span>}
               </span>
               <Button
                 variant="ghost"
@@ -140,11 +140,11 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                   onClick={() => linkRepository.mutate({ factoryProjectId, repo })}
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="text-ui-sm text-icon6 flex items-center gap-1.5 font-medium">
+                    <span className="text-ui-md text-icon5 flex items-center gap-1.5">
                       <FolderIcon size={14} className="text-icon3 shrink-0" />
                       <span className="truncate">{repo.fullName}</span>
                     </span>
-                    <span className="text-ui-xs text-icon3 block truncate">
+                    <span className="text-ui-sm text-icon3 block truncate">
                       {repo.private ? 'private' : 'public'} · {repo.defaultBranch}
                     </span>
                   </span>

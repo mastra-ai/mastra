@@ -16,7 +16,7 @@ export function SettingsSubsection({
     <section className="flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <Txt as="h2" variant="ui-lg" className="text-icon6 font-medium">
+          <Txt as="h2" variant="ui-md" className="text-icon6 font-semibold">
             {title}
           </Txt>
           {description && (

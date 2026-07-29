@@ -22,10 +22,12 @@ export function FactoryManagementSection() {
       <SettingsSubsection title="Danger zone" description="Removing a Factory cannot be undone.">
         <div className="border-border1 flex items-center justify-between gap-4 border-y py-4">
           <div className="flex min-w-0 flex-col">
-            <Txt variant="ui-md" className="truncate font-medium">
+            <Txt variant="ui-md" className="text-icon5 truncate">
               Remove {factory.name}
             </Txt>
-            <Txt variant="ui-xs">Deletes this Factory from the organization, including its repository links.</Txt>
+            <Txt variant="ui-sm" className="text-icon3">
+              Deletes this Factory from the organization, including its repository links.
+            </Txt>
           </div>
           <Button
             size="xs"

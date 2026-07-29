@@ -85,14 +85,16 @@ function TokenRow({
       <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center gap-2">
-            <Txt variant="ui-sm" className="font-medium">
+            <Txt variant="ui-md" className="text-icon5">
               {title}
             </Txt>
             <Badge size="sm" variant={configured ? 'success' : 'default'}>
               {configured ? 'Configured' : 'Not set'}
             </Badge>
           </div>
-          <Txt variant="ui-xs">{description}</Txt>
+          <Txt variant="ui-sm" className="text-icon3">
+            {description}
+          </Txt>
         </div>
         {!editing && (
           <div className="flex shrink-0 items-center gap-2">
