@@ -9,6 +9,7 @@ import { parseHeaders } from './headers.js';
 
 const LOCAL_URL = 'http://localhost:4111';
 const OBSERVABILITY_URL = 'https://observability.mastra.ai';
+const LEARNING_URL = 'https://output.signals.mastra.ai';
 const AUTHORIZATION_HEADER = 'Authorization';
 const PROJECT_ID_HEADER = 'X-Mastra-Project-Id';
 
@@ -44,7 +45,11 @@ export async function resolveTarget(
   }
 
   if (isObservabilityPath(path)) {
-    return resolveObservabilityTarget(customHeaders, timeoutMs);
+    return resolvePlatformServiceTarget(OBSERVABILITY_URL, customHeaders, timeoutMs);
+  }
+
+  if (isLearningPath(path)) {
+    return resolvePlatformServiceTarget(LEARNING_URL, customHeaders, timeoutMs);
   }
 
   if (await canReachLocal(timeoutMs, fetchFn, apiPrefix)) {
@@ -85,7 +90,12 @@ export async function resolveTarget(
   }
 }
 
-async function resolveObservabilityTarget(
+/**
+ * Resolves a hosted Mastra platform service target (observability or learning)
+ * with platform credentials instead of a project deployment URL.
+ */
+async function resolvePlatformServiceTarget(
+  baseUrl: string,
   customHeaders: Record<string, string>,
   timeoutMs: number,
 ): Promise<ResolvedTarget> {
@@ -116,7 +126,7 @@ async function resolveObservabilityTarget(
       : undefined;
 
   return {
-    baseUrl: OBSERVABILITY_URL,
+    baseUrl,
     headers,
     timeoutMs,
     fallbackHeaders,
@@ -125,6 +135,10 @@ async function resolveObservabilityTarget(
 
 function isObservabilityPath(path?: string): boolean {
   return path?.startsWith('/observability/') || path === '/observability';
+}
+
+function isLearningPath(path?: string): boolean {
+  return path?.startsWith('/learning/') || path === '/learning';
 }
 
 function loadDotenv(cwd: string): Record<string, string> {
