@@ -1099,6 +1099,63 @@ describe('vNext Workflow Handlers', () => {
       expect(pushed.length).toBe(firstChunks.length);
     });
 
+    // `stream()` memoizes its output for a live run, so the test above would also pass
+    // with a pump deduped on the output object. `resumeStream()` does not memoize: every
+    // call builds a fresh `WorkflowRunOutput`, so two concurrent resumes of the same run
+    // are the case that only a runId-keyed pump can dedupe.
+    it('caches each chunk once when two clients resume-stream the same run', async () => {
+      const serverCache = mockMastra.getServerCache();
+      const pushed: any[] = [];
+      vi.spyOn(serverCache!, 'listPush').mockImplementation(async (_key, value) => {
+        pushed.push(value);
+      });
+
+      const runId = 'test-run-cache-pump-resume';
+      const suspended = await reusableWorkflow.createRun({ runId });
+      await suspended.start({ inputData: {} });
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // `createRun()` returns the run cached under this runId, so both handler calls
+      // below resume through this same instance. Wrapping its `resumeStream` once
+      // captures the output each call produces, which lets the test assert its own
+      // premise: two distinct objects, which an identity-keyed pump would not dedupe.
+      const outputs: unknown[] = [];
+      const resumeStream = suspended.resumeStream.bind(suspended);
+      vi.spyOn(suspended, 'resumeStream').mockImplementation((resumeOptions: any) => {
+        const output = resumeStream(resumeOptions);
+        outputs.push(output);
+        return output;
+      });
+
+      const resumeParams = {
+        mastra: mockMastra,
+        workflowId: 'reusable-workflow',
+        runId,
+        step: 'test-step',
+        resumeData: {},
+      };
+
+      const [first, second] = await Promise.all([
+        RESUME_STREAM_WORKFLOW_ROUTE.handler({ ...resumeParams } as any),
+        RESUME_STREAM_WORKFLOW_ROUTE.handler({ ...resumeParams } as any),
+      ]);
+
+      // Only one of two concurrent resumes of the same suspended run carries it to
+      // completion; the other output never receives a `workflow-finish` (pre-existing
+      // behavior, independent of caching), so take whichever stream closes instead of
+      // awaiting both.
+      const completedChunks = await Promise.any([drain(first as ReadableStream), drain(second as ReadableStream)]);
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Premise: two calls, two separate outputs — nothing memoized this route.
+      expect(outputs.length).toBe(2);
+      expect(outputs[0]).not.toBe(outputs[1]);
+      // The cache holds one run's worth of history: a pump per output would push
+      // roughly double what any single subscriber saw.
+      expect(pushed.length).toBeGreaterThan(0);
+      expect(pushed.length).toBeLessThanOrEqual(completedChunks.length);
+    });
+
     it('caches chunks in emission order even when the cache backend resolves out of order', async () => {
       const serverCache = mockMastra.getServerCache();
       const pushedTypes: unknown[] = [];
