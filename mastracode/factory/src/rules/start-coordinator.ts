@@ -144,7 +144,14 @@ export class FactoryStartCoordinator {
     if (!request.requestContext) {
       requestContext.set('user', { workosId: request.userId, organizationId: request.orgId });
     }
-    const sessionState = {
+    // Sessions kicked off against third-party content (a PR under review, or
+    // any pull-request-sourced work item) get `untrustedCheckout` so the SDK
+    // never ingests the checkout's AGENTS.md/CLAUDE.md into the system prompt
+    // or reminders — those files are attacker-writable in a PR branch.
+    const untrustedCheckout =
+      request.workItem.input.externalSource?.type === 'pull-request' ||
+      (request.invocation?.type === 'skill' && request.invocation.skillName === 'factory-review');
+    const sessionTags = {
       factoryProjectId: request.factoryProjectId,
       projectRepositoryId: sourceSession.projectRepositoryId,
     };
@@ -154,15 +161,16 @@ export class FactoryStartCoordinator {
       resourceId: sourceSession.sessionId,
       threadId: sourceSession.sessionId,
       requestContext,
-      tags: sessionState,
+      tags: sessionTags,
     });
     // Bound-agent authority gates (the transition tool, the factory-phase
     // processor, workspace token selection) resolve the session address from
     // controller state. Seed it server-side — `tags` covers fresh creation,
     // the explicit setState covers get-or-create returning a session another
     // caller created without them — so autonomous runs never depend on a
-    // browser connecting to populate the state.
-    await session.state.set(sessionState);
+    // browser connecting to populate the state. `untrustedCheckout` is a
+    // boolean so it rides only on state (tags are string-valued).
+    await session.state.set({ ...sessionTags, ...(untrustedCheckout ? { untrustedCheckout: true } : {}) });
     if (this.#memorySettings) {
       try {
         const record = await this.#memorySettings.get({ orgId: request.orgId, userId: request.userId });

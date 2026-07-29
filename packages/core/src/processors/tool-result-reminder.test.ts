@@ -239,6 +239,36 @@ describe('AgentsMDInjector', () => {
     );
   });
 
+  it('injects nothing when isEnabled returns false (untrusted checkout)', async () => {
+    const messageList = new TestMessageList();
+    const toolCallId = 'call-agents-disabled';
+    messageList.push(createUserMessage('Open the instructions'));
+    messageList.pushResponse(
+      createAssistantMessage({
+        format: 2,
+        parts: [
+          createToolInvocationPart(toolCallId, { path: '/repo/src/agents/nested/AGENTS.md' }, 'result', { ok: true }),
+        ],
+      }),
+    );
+
+    const testProcessor = new AgentsMDInjector({
+      reminderText: REMINDER_TEXT,
+      pathExists: path => String(path) === '/repo/src/agents/nested/AGENTS.md',
+      isDirectory: () => false,
+      readFile: () => FILE_CONTENT,
+      isEnabled: () => false,
+    });
+
+    await testProcessor.processInputStep(
+      createProcessInputStepArgs(messageList, [
+        createToolCall({ path: '/repo/src/agents/nested/AGENTS.md' }, 'view', toolCallId),
+      ]),
+    );
+
+    expect(extractReminderMarkup(messageList)).toEqual([]);
+  });
+
   it('injects reminder for tool calls array format', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-read';

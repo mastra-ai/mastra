@@ -714,6 +714,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       ...(config?.inputProcessors ?? []),
       new PlanRejectionAbortProcessor(),
       new AgentsMDInjector({
+        // Untrusted checkouts (review sessions on PR branches) must not have
+        // repo instruction files injected as system reminders — the files are
+        // attacker-writable content, not configuration.
+        isEnabled: ({ requestContext }) => {
+          const agentControllerContext = requestContext?.get('controller') as
+            | AgentControllerRequestContext<{ untrustedCheckout?: boolean }>
+            | undefined;
+          return agentControllerContext?.getState()?.untrustedCheckout !== true;
+        },
         getIgnoredInstructionPaths: ({ requestContext }) => {
           const agentControllerContext = requestContext?.get('controller') as
             | AgentControllerRequestContext<{ projectPath?: string }>
