@@ -1,7 +1,7 @@
 {
-  "name": "@mastra/e2b",
-  "version": "0.7.0",
-  "description": "E2B cloud sandbox provider for Mastra workspaces",
+  "name": "@mastra/isolated-vm",
+  "version": "0.0.1",
+  "description": "In-process V8 isolate Code Mode transport for Mastra, backed by isolated-vm",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -22,29 +22,23 @@
     "build": "tsdown --silent --config tsdown.config.ts",
     "build:lib": "pnpm build",
     "build:watch": "pnpm build --watch",
-    "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "test:watch": "vitest watch",
-    "test": "vitest run ./src/**/*.integration.test.ts",
-    "test:cloud": "pnpm test",
     "lint": "oxlint . && eslint .",
     "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "e2b": "^2.29.1",
-    "esbuild": "^0.28.0"
+    "esbuild": "^0.28.0",
+    "isolated-vm": "^6.1.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@internal/workspace-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@mastra/gcs": "workspace:*",
-    "@mastra/s3": "workspace:*",
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
-    "@vitest/ui": "catalog:",
-    "dotenv": "^17.4.2",
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
@@ -61,7 +55,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "workspaces/e2b"
+    "directory": "packages/isolated-vm"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"

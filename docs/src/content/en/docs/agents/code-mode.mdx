@@ -40,6 +40,8 @@ With code mode, your tools keep running on the host with full validation, reques
 
 The function runs in a [Workspace sandbox](/docs/workspace/overview). A sandbox is required, because code mode runs model-authored code and the execution boundary must be chosen deliberately. Pass one via `sandbox`, or run the agent in a workspace that provides one. To execute on the host machine, pass `new LocalSandbox()` explicitly. This runs the function as a host `node` process with host privileges, so only use it for trusted or local development.
 
+Transports that bring their own execution boundary are the exception: with [`IsolatedVmCodeModeTransport`](/reference/tools/isolated-vm-transport) the program runs in an in-process V8 isolate and no sandbox is needed (see [In-process isolation](#in-process-isolation)).
+
 ## Quickstart
 
 `createCodeMode()` returns the tool plus generated instructions. With no `id`, the tool uses the name `execute_typescript`. Add both to your agent:
@@ -155,8 +157,25 @@ const { tool, instructions } = createCodeMode(
 )
 ```
 
+## In-process isolation
+
+To get a secure boundary without spawning processes or running a remote sandbox, use [`IsolatedVmCodeModeTransport`](/reference/tools/isolated-vm-transport) from `@mastra/isolated-vm`. It runs the program in an in-process V8 isolate, so no sandbox is required: the isolate has no filesystem, network, or process access, and its only capabilities are the `external_*` functions bridged back to your tools on the host.
+
+```typescript
+import { createCodeMode } from '@mastra/core/tools'
+import { IsolatedVmCodeModeTransport } from '@mastra/isolated-vm'
+
+const { tool, instructions } = createCodeMode(
+  { tools }, // no sandbox needed
+  new IsolatedVmCodeModeTransport({ memoryLimitMb: 128 }),
+)
+```
+
+`isolated-vm` is a native addon, and on Node.js 20 and later the host process must be started with the `--no-node-snapshot` flag. See the [IsolatedVmCodeModeTransport reference](/reference/tools/isolated-vm-transport) for setup details.
+
 ## Related
 
 - [createCodeMode() reference](/reference/tools/create-code-mode)
+- [IsolatedVmCodeModeTransport reference](/reference/tools/isolated-vm-transport)
 - [Tools](/docs/agents/using-tools)
 - [Workspace overview](/docs/workspace/overview)
