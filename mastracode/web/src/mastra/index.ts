@@ -19,7 +19,6 @@
 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { ConsoleLogger, type LogLevelType } from '@mastra/core/logger';
 import { Mastra } from '@mastra/core/mastra';
 import { LocalSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
@@ -255,7 +254,6 @@ const mcAgentController = process.env.SLACK_APP_SIGNING_SECRET ? preparedArgs.ag
 if (mcAgentController) {
   mcAgentController.setChannels(
     createAgentControllerSlackChannels({
-      getMastra: () => mcAgentController.getMastra(),
       accountLinks,
       channelLinkStateSigner,
       projects: factoryProjects,
@@ -311,13 +309,9 @@ preparedArgs.server = {
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
 // in the entry file (see module docs). `prepare()` returns the constructor args
 // carrying the controller (via `agentControllers`), storage, and the assembled
-// `server` config (middleware + apiRoutes + cors). The Slack channels are
-// layered onto the controller above via `setChannels`, and the debug logger is
-// set here so channel rendering rides the same deployed instance while the
-// factory keeps owning the rest of the config.
-export const mastra: Mastra = new Mastra({
+// `server` config (middleware + apiRoutes + cors).
+export const mastra = new Mastra({
   ...preparedArgs,
-  logger: new ConsoleLogger({ level: (process.env.LOG_LEVEL as LogLevelType) ?? 'debug' }),
 });
 
 // Post-construct boot: initialize the controller (which now inherits this

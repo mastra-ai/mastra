@@ -30,13 +30,6 @@ type HandlerMessage = Parameters<ChannelHandler>[1];
 /** Dependencies the Slack channel handlers close over, injected from the web entry. */
 interface SlackChannelDeps {
   /**
-   * Accessor for the server-owned Mastra instance. Lazy (not the instance
-   * itself) because the provider is constructed inside the `new Mastra(...)`
-   * literal — the instance doesn't exist yet at construction, only later when
-   * a handler actually fires.
-   */
-  getMastra: () => Mastra | undefined;
-  /**
    * The factory's reverse-index store mapping a Slack sender to a Mastra
    * tenant. When provided, inbound messages from an unlinked sender are not
    * dispatched — the run only proceeds (with the sender's tenant stamped on
@@ -460,8 +453,8 @@ export const resolveChannelThreadId: ResolveThreadId = ({ resourceId, defaultThr
  * NOT the internal UUID — the mapping lives in the stored thread's channel
  * metadata.
  */
-async function findInternalThread(getMastra: () => Mastra | undefined, thread: HandlerThread) {
-  const store = await getMastra()?.getStorage()?.getStore('memory');
+async function findInternalThread(mastra: Mastra | undefined, thread: HandlerThread) {
+  const store = await mastra?.getStorage()?.getStore('memory');
   const { threads } = (await store?.listThreads({
     filter: {
       metadata: {
@@ -514,7 +507,6 @@ async function gateDispatch(
 }
 
 function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
-  const { getMastra } = deps;
   return async (thread, message, defaultHandler, ctx) => {
     // Gate on the sender having linked their Slack account to a Mastra tenant.
     // Unlinked → post the ephemeral Connect card and stop; no session/run is
@@ -542,7 +534,7 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
 
     if (!process.env.MASTRACODE_PUBLIC_URL) return;
 
-    const internalThread = await findInternalThread(getMastra, thread);
+    const internalThread = await findInternalThread(ctx.mastra, thread);
     if (!internalThread) {
       console.warn('[onMention] no internal thread found for', thread.id);
       return;

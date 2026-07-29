@@ -15,8 +15,8 @@ import {
  * resolved tenant onto `requestContext`, so tests that drive them must pass a
  * real one — a bare `{}` throws once the sender resolves as linked.
  */
-function handlerCtx() {
-  return { mastra: undefined, requestContext: new RequestContext() };
+function handlerCtx(mastra?: unknown) {
+  return { mastra: mastra as any, requestContext: new RequestContext() };
 }
 
 function makeThread() {
@@ -316,7 +316,7 @@ describe('handler dispatch gating', () => {
     const accountLinks = fullStore({ orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' });
     const projects = makeProjects([{ id: 'fp-1' }]);
     const defaultHandler = vi.fn();
-    const handlers = createHandlers({ getMastra: () => undefined, accountLinks, projects });
+    const handlers = createHandlers({ accountLinks, projects });
 
     const ctx = handlerCtx();
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, ctx);
@@ -335,7 +335,7 @@ describe('handler dispatch gating', () => {
     const thread = makeSubscribedThread();
     const accountLinks = fullStore({ orgId: 'org-1', userId: 'user-1' });
     const defaultHandler = vi.fn();
-    const handlers = createHandlers({ getMastra: () => undefined, accountLinks });
+    const handlers = createHandlers({ accountLinks });
 
     const ctx = handlerCtx();
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, ctx);
@@ -350,7 +350,6 @@ describe('handler dispatch gating', () => {
     const accountLinks = fullStore(null);
     const defaultHandler = vi.fn();
     const handlers = createHandlers({
-      getMastra: () => undefined,
       accountLinks,
       channelLinkStateSigner: createChannelLinkStateSigner('test-secret'),
     });
@@ -370,7 +369,7 @@ describe('handler dispatch gating', () => {
     const accountLinks = fullStore({ orgId: 'org-1', userId: 'user-1' });
     const projects = makeProjects([{ id: 'fp-1' }, { id: 'fp-2' }]);
     const defaultHandler = vi.fn();
-    const handlers = createHandlers({ getMastra: () => undefined, accountLinks, projects });
+    const handlers = createHandlers({ accountLinks, projects });
 
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
 
@@ -385,7 +384,7 @@ describe('handler dispatch gating', () => {
     const accountLinks = fullStore({ orgId: 'org-1', userId: 'user-1' });
     const projects = makeProjects([{ id: 'fp-1' }, { id: 'fp-2' }]);
     const defaultHandler = vi.fn();
-    const handlers = createHandlers({ getMastra: () => undefined, accountLinks, projects });
+    const handlers = createHandlers({ accountLinks, projects });
 
     await handlers.onMention!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
 
@@ -397,7 +396,7 @@ describe('handler dispatch gating', () => {
     const thread = makeSubscribedThread();
     const accountLinks = fullStore({ orgId: 'org-1', userId: 'user-1' });
     const defaultHandler = vi.fn();
-    const handlers = createHandlers({ getMastra: () => undefined, accountLinks });
+    const handlers = createHandlers({ accountLinks });
 
     await handlers.onSubscribedMessage!(thread, makeMessage('T-1'), defaultHandler, handlerCtx());
 
@@ -433,7 +432,7 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
       setDefaultFactory: vi.fn().mockResolvedValue(true),
     } as any;
     const projects = makeProjects([{ id: 'fp-1' }]);
-    return { getMastra: () => undefined, accountLinks, projects, sourceControl };
+    return { accountLinks, projects, sourceControl };
   }
 
   const resolveArgs = (thread = { id: 'slack:C-1:1700.42' }) => ({
@@ -544,8 +543,8 @@ describe('View Session card link', () => {
     const store = {
       listThreads: vi.fn().mockResolvedValue({ threads: internalThread ? [internalThread] : [] }),
     };
-    const getMastra = (() => ({ getStorage: () => ({ getStore: () => Promise.resolve(store) }) })) as any;
-    return { accountLinks, projects, getMastra };
+    const mastra = { getStorage: () => ({ getStore: () => Promise.resolve(store) }) };
+    return { accountLinks, projects, mastra };
   }
 
   function makeCardThread() {
@@ -562,7 +561,7 @@ describe('View Session card link', () => {
     const handlers = createHandlers(deps as any);
     const thread = makeCardThread();
 
-    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx());
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
 
     expect(thread.post).toHaveBeenCalledTimes(1);
     const card = thread.post.mock.calls[0][0];
@@ -584,7 +583,7 @@ describe('View Session card link', () => {
     const handlers = createHandlers(deps as any);
     const thread = makeCardThread();
 
-    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx());
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
 
     const card = thread.post.mock.calls[0][0];
     const actions = card.children.find((c: any) => c.type === 'actions');
@@ -597,7 +596,7 @@ describe('View Session card link', () => {
     const handlers = createHandlers(deps as any);
     const thread = makeCardThread();
 
-    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx());
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
 
     const card = thread.post.mock.calls[0][0];
     const actions = card.children.find((c: any) => c.type === 'actions');
@@ -614,7 +613,7 @@ describe('View Session card link', () => {
     const handlers = createHandlers(deps as any);
     const thread = makeCardThread();
 
-    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx());
+    await handlers.onDirectMessage!(thread, makeMessage('T-1'), vi.fn(), handlerCtx(deps.mastra));
 
     const card = thread.post.mock.calls[0][0];
     const actions = card.children.find((c: any) => c.type === 'actions');
