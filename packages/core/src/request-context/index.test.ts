@@ -308,6 +308,60 @@ describe('RequestContext', () => {
       expect(json).toEqual({ serializable: 'value' });
       expect(json).not.toHaveProperty('bigIntArray');
     });
+
+    it('should skip BigInt-element typed arrays created in another realm', async () => {
+      // A foreign-realm BigInt64Array passes ArrayBuffer.isView but fails
+      // `instanceof BigInt64Array`, so the fast path must detect it via the
+      // cross-realm brand tag — JSON.stringify still throws on its elements.
+      const vm = await import('node:vm');
+      const foreign = vm.runInNewContext('new BigInt64Array([1n])');
+
+      const ctx = new RequestContext();
+      ctx.set('foreignBigIntArray', foreign);
+      ctx.set('serializable', 'value');
+
+      const json = ctx.toJSON();
+
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('foreignBigIntArray');
+    });
+
+    it('should skip typed arrays whose custom enumerable getter throws', () => {
+      // The element fast path must not hide non-index properties from the
+      // probe: a throwing getter fails a real JSON.stringify, so it must
+      // fail the probe too.
+      const typed = new Uint8Array([1]);
+      Object.defineProperty(typed, 'boom', {
+        enumerable: true,
+        get() {
+          throw new Error('getter invoked');
+        },
+      });
+
+      const ctx = new RequestContext();
+      ctx.set('throwingTyped', typed);
+      ctx.set('serializable', 'value');
+
+      const json = ctx.toJSON();
+
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('throwingTyped');
+    });
+
+    it('should skip typed arrays whose custom property leads back into a cycle', () => {
+      const typed = new Uint8Array([1]);
+      const holder: Record<string, unknown> = { typed };
+      Object.defineProperty(typed, 'back', { enumerable: true, value: holder });
+
+      const ctx = new RequestContext();
+      ctx.set('cyclicTyped', typed);
+      ctx.set('serializable', 'value');
+
+      const json = ctx.toJSON();
+
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('cyclicTyped');
+    });
   });
 
   describe('serializeForSpan', () => {

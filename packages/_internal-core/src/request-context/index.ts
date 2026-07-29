@@ -310,16 +310,35 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
           throw new RangeError('RequestContext.isSerializable: value expands past the serialization probe budget');
         }
         // Typed arrays serialize one element per index; charge them against
-        // the budget arithmetically and skip them so the probe doesn't
-        // materialize every element through the replacer. BigInt64Array /
-        // BigUint64Array fall through so the engine still throws TypeError
-        // on their BigInt elements, matching the unbudgeted probe's verdict.
-        if (ArrayBuffer.isView(probed) && !(probed instanceof BigInt64Array) && !(probed instanceof BigUint64Array)) {
+        // the budget arithmetically instead of materializing every element
+        // through the replacer.
+        if (ArrayBuffer.isView(probed)) {
+          // Detect BigInt element types via the cross-realm-safe brand tag —
+          // `instanceof` fails for views from another realm — and pass them
+          // through so the engine still throws TypeError on their BigInt
+          // elements, matching the unbudgeted probe's verdict.
+          const tag = Object.prototype.toString.call(probed);
+          if (tag === '[object BigInt64Array]' || tag === '[object BigUint64Array]') {
+            return probed;
+          }
           budget -= (probed as { length?: number }).length ?? 0;
           if (budget < 0) {
             throw new RangeError('RequestContext.isSerializable: value expands past the serialization probe budget');
           }
-          return undefined;
+          // Preserve probe semantics for non-index own enumerable properties
+          // (a getter that throws, or a value that leads back into a cycle,
+          // must still fail the probe the way it fails a real serialization):
+          // stand in a surrogate carrying only those properties. Reading a
+          // throwing getter here propagates into the catch below, exactly as
+          // the engine's own property read would have.
+          const surrogate: Record<string, unknown> = {};
+          for (const key of Object.keys(probed)) {
+            const index = Number(key);
+            if (!(Number.isInteger(index) && index >= 0 && String(index) === key)) {
+              surrogate[key] = (probed as unknown as Record<string, unknown>)[key];
+            }
+          }
+          return surrogate;
         }
         return probed;
       });
