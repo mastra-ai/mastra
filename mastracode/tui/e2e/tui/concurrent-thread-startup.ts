@@ -26,7 +26,7 @@ export const concurrentThreadStartupScenario: McE2eScenario = {
     return { MASTRA_RESOURCE_ID: RESOURCE_ID };
   },
   prepare({ appDataDir, dbPath, projectDir }) {
-    lockOwner = spawn(process.execPath, ['-e', 'setTimeout(() => process.exit(0), 30000)'], { stdio: 'ignore' });
+    lockOwner = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
     if (!lockOwner.pid) throw new Error('Failed to start thread lock owner');
     lockOwner.unref();
 
