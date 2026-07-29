@@ -2,6 +2,7 @@
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import type { TraceIntelligenceProgress } from '../signals-empty-state';
 import { SignalsEmptyState } from '../signals-empty-state';
 import { SignalsOverviewPage } from '../signals-overview-page';
 
@@ -85,21 +86,19 @@ describe('SignalsOverviewPage', () => {
 describe('SignalsEmptyState', () => {
   describe('when progress is available', () => {
     it('shows trace and trace signal processing progress', () => {
-      render(
-        <SignalsEmptyState
-          progress={{
-            status: 'processing',
-            traceCount: 87,
-            signals: {
-              goal: { generated: 87, embedded: 84 },
-              outcome: { generated: 87, embedded: 40 },
-              behavior: { generated: 52, embedded: 12 },
-              sentiment: { generated: 0, embedded: 0 },
-            },
-            availableSignals: ['goal'],
-          }}
-        />,
-      );
+      const progress: TraceIntelligenceProgress = {
+        status: 'processing',
+        traceCount: 87,
+        signals: {
+          goal: { generated: 87, embedded: 84 },
+          outcome: { generated: 87, embedded: 40 },
+          behavior: { generated: 52, embedded: 12 },
+          sentiment: { generated: 0, embedded: 0 },
+        },
+        availableSignals: ['goal'],
+      };
+
+      render(<SignalsEmptyState progress={progress} />);
 
       expect(screen.getByText('Analyzing traces for Trace Intelligence.')).not.toBeNull();
       expect(screen.getByText('87')).not.toBeNull();

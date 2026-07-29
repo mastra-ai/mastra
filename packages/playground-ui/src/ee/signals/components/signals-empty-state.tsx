@@ -1,4 +1,4 @@
-import type { TraceSignalName } from '@mastra/client-js';
+import type { EntityLearningProgressResponse, TraceSignalName } from '@mastra/client-js';
 import { CpuIcon } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 
@@ -45,12 +45,7 @@ const PipelineConnector = () => (
   </div>
 );
 
-export type TraceIntelligenceProgress = {
-  status: 'collecting' | 'processing' | 'ready';
-  traceCount: number;
-  signals: Record<TraceSignalName, { generated: number; embedded: number }>;
-  availableSignals: TraceSignalName[];
-};
+export type TraceIntelligenceProgress = EntityLearningProgressResponse;
 
 export type SignalsEmptyStateProps = {
   actionSlot?: ReactNode;
@@ -97,7 +92,9 @@ function ProgressSummary({ progress }: { progress: TraceIntelligenceProgress }) 
       </div>
       <div className="border-border1 bg-surface3 rounded-md border px-3 py-2">
         <dt className="text-neutral3 text-xs">Trace signal types ready</dt>
-        <dd className="text-neutral6 mt-1 text-lg font-semibold">{progress.availableSignals.length} of 4</dd>
+        <dd className="text-neutral6 mt-1 text-lg font-semibold">
+          {progress.availableSignals.length} of {signalDefinitions.length}
+        </dd>
       </div>
       <div className="border-border1 bg-surface3 rounded-md border px-3 py-2">
         <dt className="text-neutral3 text-xs">Status</dt>
