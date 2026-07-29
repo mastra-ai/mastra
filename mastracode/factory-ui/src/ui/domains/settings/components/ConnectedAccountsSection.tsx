@@ -128,12 +128,7 @@ export function ConnectedAccountsSection() {
       <DataList aria-label="Connected accounts" variant="lined" columns="minmax(0,1fr) auto auto auto">
         {accounts.map(account => (
           <DataList.RowStatic key={`${account.platform}:${account.externalTeamId}:${account.externalUserId}`}>
-            <DataList.NameCell>
-              <span className="flex items-center gap-2">
-                {account.platform === 'slack' && <Slack className="text-icon3 size-4 shrink-0" aria-hidden="true" />}
-                <span>{accountLabel(account)}</span>
-              </span>
-            </DataList.NameCell>
+            <DataList.NameCell>{accountLabel(account)}</DataList.NameCell>
             <DataList.Cell>
               {/* Which factory this sender's Slack sessions go to. Empty until
                   picked (or auto-stamped by the first single-factory run). */}
