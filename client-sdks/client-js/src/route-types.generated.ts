@@ -3201,9 +3201,9 @@ export type GetAgentsAgentId_PathParams = {
 };
 
 export type GetAgentsAgentId_QueryParams = {
-  /** Which stored config version to resolve: draft (latest version) or published (active version, default). Mutually exclusive with versionId. */
+  /** Which stored config version to resolve: draft (latest version) or published (active version, default). When both status and versionId are provided, versionId takes precedence. */
   status?: ('draft' | 'published') | undefined;
-  /** Specific version ID to resolve. Mutually exclusive with status — if both are provided, versionId takes precedence. */
+  /** Specific version ID to resolve. Takes precedence over status when both are provided. */
   versionId?: string | undefined;
 };
 
