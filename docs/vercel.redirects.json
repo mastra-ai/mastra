@@ -1014,6 +1014,16 @@
       "source": "/docs/guide/tools",
       "destination": "/docs/agents/using-tools",
       "permanent": true
+    },
+    {
+      "source": "/docs/deployment/worker-reference",
+      "destination": "/reference/workers/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/worker-deployment",
+      "destination": "/guides/deployment/mastra-workers",
+      "permanent": true
     }
   ]
 }

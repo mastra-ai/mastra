@@ -9,6 +9,9 @@ packages:
   - "@mastra/libsql"
 ---
 
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
 # Workers
 
 :::experimental
@@ -79,7 +82,8 @@ This setup needs no external infrastructure beyond your storage adapter. It does
 
 To run workers separately, configure a distributed [PubSub](/docs/server/pubsub) backend and use the `MASTRA_WORKERS` environment variable to control which workers start in each process.
 
-The following example uses Redis Streams with PostgreSQL:
+<Tabs>
+  <TabItem value="redis" label="Redis Streams + PostgreSQL">
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
@@ -96,7 +100,8 @@ export const mastra = new Mastra({
 })
 ```
 
-The following example uses Google Cloud Pub/Sub with LibSQL:
+  </TabItem>
+  <TabItem value="gcp" label="Google Cloud Pub/Sub + LibSQL">
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
@@ -113,32 +118,16 @@ export const mastra = new Mastra({
 })
 ```
 
-Any [supported storage backend](#prerequisites-for-split-deployments) works — swap `PostgresStore` or `LibSQLStore` with your preferred backend.
+  </TabItem>
+</Tabs>
 
-Run the same build artifact in multiple containers, each with a different `MASTRA_WORKERS` value:
+Any [supported storage backend](/reference/workers/overview#supported-storage-backends) works — swap the storage adapter for your preferred database.
 
-| Process | `MASTRA_WORKERS` | Role |
-| - | - | - |
-| API | `false` | Serves HTTP requests, publishes events, no workers |
-| Orchestration | `orchestration` | Pulls workflow events, executes steps |
-| Scheduler | `scheduler` | Polls for due schedules, publishes start events |
-| Background tasks | `backgroundTasks` | Executes background tool calls |
+Run the same build artifact in multiple containers, each with a different [`MASTRA_WORKERS`](/reference/workers/overview#mastra_workers) value to control which worker starts in each process.
 
-The [worker deployment guide](/docs/deployment/worker-deployment) walks through this setup with a Docker Compose example.
+Split deployments require a distributed PubSub backend ([`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)), a shared [storage backend](/reference/workers/overview#supported-storage-backends), and network connectivity between the orchestration worker and the API.
 
-## Prerequisites for split deployments
-
-Split worker deployments require:
-
-- **Distributed PubSub**: [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub) are the supported backends. The default in-memory PubSub can't deliver events across processes.
-- **Shared storage**: All processes must connect to the same database. The storage backend must support the `workflows`, `backgroundTasks`, and `schedules` domains. The following backends support all three:
-  - [`PostgresStore`](/reference/storage/postgresql)
-  - [`LibSQLStore`](/reference/storage/libsql)
-  - `MySQLStore` (`@mastra/mysql`)
-  - [`MongoDBStore`](/reference/storage/mongodb)
-  - [`SpannerStore`](/reference/storage/spanner)
-  - [`ConvexStore`](/reference/storage/convex)
-- **Network connectivity**: The orchestration worker must be able to reach the API over HTTP for step execution in fully split setups.
+The [worker deployment guide](/guides/deployment/mastra-workers) walks through this setup with a Docker Compose example.
 
 ## Network architecture
 
@@ -150,23 +139,7 @@ In a split deployment:
 - **Workers connect outbound only.** They pull events from the distributed PubSub backend and read/write to the shared storage database. They do not accept inbound traffic from clients.
 - **The orchestration worker calls the API internally.** It sends step execution requests to the API over the container network using `MASTRA_STEP_EXECUTION_URL`. This is internal service-to-service communication, not a public endpoint.
 
-```
-                    ┌─────────────┐
-    Clients ──────► │  API Server │ ◄─── only public endpoint
-                    └──────┬──────┘
-                           │ internal network
-              ┌────────────┼────────────────┐
-              │            │                │
-        ┌─────▼─────┐ ┌───▼────┐ ┌─────────▼──────────┐
-        │Orchestrator│ │Scheduler│ │Background Task Worker│
-        └─────┬─────┘ └───┬────┘ └─────────┬──────────┘
-              │            │                │
-         ┌────▼────────────▼────────────────▼────┐
-         │      PubSub backend + Storage DB        │
-         └───────────────────────────────────────┘
-```
-
-If a worker-related feature needs an HTTP route (for example, token minting for a voice integration), that route runs on the API server, not on the worker process. The worker handles the background processing; the API handles the client-facing interface.
+All three worker types (orchestration, scheduler, background task) sit behind the API on a private network. They share access to the PubSub backend and storage database but never receive traffic directly from clients. If a worker-related feature needs an HTTP route (for example, token minting for a voice integration), that route runs on the API server, not on the worker process.
 
 ## Known limitations
 
@@ -176,7 +149,7 @@ If a worker-related feature needs an HTTP route (for example, token minting for 
 
 ## Related
 
-- [Worker deployment guide](/docs/deployment/worker-deployment): Docker Compose example and topology options
+- [Worker deployment guide](/guides/deployment/mastra-workers): Docker Compose example and topology options
 - [Worker authentication](/docs/deployment/worker-auth): Secure worker-to-API communication
 - [Workers reference](/reference/workers/overview): Environment variables, worker types, and storage backends
 - [CLI reference](/reference/cli/mastra#mastra-worker-build): `mastra worker build` and `mastra worker start`

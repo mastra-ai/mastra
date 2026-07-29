@@ -1017,14 +1017,6 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'deployment/worker-deployment',
-              label: 'Worker Deployment',
-              customProps: {
-                tags: ['beta'],
-              },
-            },
-            {
-              type: 'doc',
               id: 'deployment/worker-auth',
               label: 'Worker Auth',
               customProps: {
