@@ -22,6 +22,8 @@ import type { DbClient, QueryValues, TxClient } from '../client';
 import { PoolAdapter } from '../client';
 import { buildConstraintName } from './constraint-utils';
 import { isDuplicateRelationError, isDuplicateSchemaError } from './pg-errors';
+import { getSchemaSnapshot } from './schema-snapshot';
+import type { SchemaSnapshot } from './schema-snapshot';
 
 // Re-export DbClient for external use
 export type { DbClient } from '../client';
@@ -408,6 +410,52 @@ export class PgDB extends MastraBase {
   }
 
   /**
+   * Catalog snapshot for the current init window, or `null` outside it.
+   *
+   * When non-null, the init-path methods below answer existence questions from
+   * it instead of round-tripping to the server, and record the objects they
+   * create so later callers in the same init see them. See
+   * {@link SchemaSnapshot} for why it is scoped to init only.
+   */
+  private get schemaSnapshot(): SchemaSnapshot | null {
+    return getSchemaSnapshot(this.client, this.schemaName);
+  }
+
+  /**
+   * Whether the snapshot proves `generateTableSQL` would be a no-op for this
+   * table — i.e. the CREATE statement can be skipped.
+   *
+   * For most tables that is just "the table exists". `workflow_snapshot` is the
+   * exception: its generated SQL also carries a DO block that back-fills the
+   * `(workflow_name, run_id)` unique constraint and promotes it to the table's
+   * replica identity, so a table created by an older version still needs the
+   * statement to run.
+   */
+  private snapshotShowsTableConverged(snapshot: SchemaSnapshot, tableName: TABLE_NAMES): boolean {
+    if (!snapshot.tables.has(tableName)) return false;
+
+    if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
+      const constraintName = buildConstraintName({
+        baseName: 'mastra_workflow_snapshot_workflow_name_run_id_key',
+        schemaName: this.schemaName ? parseSqlIdentifier(this.schemaName, 'schema name') : undefined,
+      }).toLowerCase();
+      return snapshot.indexes.has(constraintName) && snapshot.replicaIdentityIndexes.has(constraintName);
+    }
+
+    return true;
+  }
+
+  /** Column set for `tableName` in the snapshot, created empty if absent. */
+  private snapshotColumns(snapshot: SchemaSnapshot, tableName: string): Set<string> {
+    let columns = snapshot.columns.get(tableName);
+    if (!columns) {
+      columns = new Set<string>();
+      snapshot.columns.set(tableName, columns);
+    }
+    return columns;
+  }
+
+  /**
    * Gets the set of column names that actually exist in the database table.
    * Results are cached; the cache is invalidated when alterTable() adds new columns.
    */
@@ -451,6 +499,13 @@ export class PgDB extends MastraBase {
 
   async hasColumn(table: string, column: string): Promise<boolean> {
     const schema = this.schemaName || 'public';
+
+    const snapshot = this.schemaSnapshot;
+    if (snapshot) {
+      const columns = snapshot.columns.get(table);
+      if (!columns) return false;
+      return columns.has(column) || columns.has(column.toLowerCase());
+    }
 
     const result = await this.client.oneOrNone(
       `SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4)`,
@@ -705,15 +760,38 @@ export class PgDB extends MastraBase {
         await this.setupSchema();
       }
 
-      const sql = generateTableSQL({ tableName, schema, schemaName: this.schemaName, compositePrimaryKey });
+      const snapshot = this.schemaSnapshot;
+      // Skipping the statement when everything it would create is already there
+      // is not only a saved round trip: `CREATE TABLE IF NOT EXISTS` requires
+      // CREATE on the schema, so on a converged schema this is also what lets a
+      // least-privilege role finish init instead of failing with
+      // "permission denied".
+      if (!snapshot || !this.snapshotShowsTableConverged(snapshot, tableName)) {
+        const sql = generateTableSQL({ tableName, schema, schemaName: this.schemaName, compositePrimaryKey });
 
-      try {
-        await this.client.none(sql);
-      } catch (error) {
-        // `CREATE TABLE IF NOT EXISTS` is not atomic across concurrent
-        // backends. Two processes can both pass the existence probe and one
-        // surfaces a catalog duplicate error. Treat it as "already created".
-        if (!isDuplicateRelationError(error)) throw error;
+        try {
+          await this.client.none(sql);
+        } catch (error) {
+          // `CREATE TABLE IF NOT EXISTS` is not atomic across concurrent
+          // backends. Two processes can both pass the existence probe and one
+          // surfaces a catalog duplicate error. Treat it as "already created".
+          if (!isDuplicateRelationError(error)) throw error;
+        }
+
+        if (snapshot) {
+          snapshot.tables.add(tableName);
+          // generateTableSQL emits the declared columns plus a `Z` twin for
+          // every timestamp column; record both so the alterTable pass below
+          // and later domains don't re-probe for them.
+          const created = this.snapshotColumns(snapshot, tableName);
+          for (const [name, def] of Object.entries(schema)) {
+            const parsedName = parseSqlIdentifier(name, 'column name');
+            created.add(parsedName);
+            if (def.type === 'timestamp') {
+              created.add(`${parsedName}Z`);
+            }
+          }
+        }
       }
 
       await this.alterTable({
@@ -1172,6 +1250,11 @@ export class PgDB extends MastraBase {
     ifNotExists: string[];
   }): Promise<void> {
     const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+    const snapshot = this.schemaSnapshot;
+    // Every ALTER below is `ADD COLUMN IF NOT EXISTS`, so on a converged schema
+    // they are all no-ops the server still has to parse and acknowledge. When a
+    // snapshot is live, only issue the ones that will actually change something.
+    const knownColumns = snapshot ? this.snapshotColumns(snapshot, tableName) : null;
 
     try {
       for (const columnName of ifNotExists) {
@@ -1185,12 +1268,19 @@ export class PgDB extends MastraBase {
           const alterSql =
             `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}" ${sqlType} ${nullable} ${defaultValue}`.trim();
 
-          await this.client.none(alterSql);
+          if (!knownColumns?.has(parsedColumnName)) {
+            await this.client.none(alterSql);
+            knownColumns?.add(parsedColumnName);
+          }
 
           if (sqlType === 'TIMESTAMP') {
-            const timestampZSql =
-              `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${parsedColumnName}Z" TIMESTAMPTZ DEFAULT NOW()`.trim();
-            await this.client.none(timestampZSql);
+            const tzColumnName = `${parsedColumnName}Z`;
+            if (!knownColumns?.has(tzColumnName)) {
+              const timestampZSql =
+                `ALTER TABLE ${fullTableName} ADD COLUMN IF NOT EXISTS "${tzColumnName}" TIMESTAMPTZ DEFAULT NOW()`.trim();
+              await this.client.none(timestampZSql);
+              knownColumns?.add(tzColumnName);
+            }
           }
 
           this.logger?.debug?.(`Ensured column ${parsedColumnName} exists in table ${fullTableName}`);

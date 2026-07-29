@@ -151,8 +151,9 @@ async function timeOnce(mode: 'pinned' | 'parallel'): Promise<number> {
  *                                  (FROM pg_indexes + indexname = ...)
  * - "snapshot catalog reads"     — schema-scoped catalog snapshot reads
  *                                  (pg_catalog.pg_tables / pg_class+
- *                                  pg_attribute / pg_catalog.pg_indexes
- *                                  WITHOUT an indexname predicate)
+ *                                  pg_attribute / pg_index or
+ *                                  pg_catalog.pg_indexes WITHOUT an
+ *                                  indexname predicate)
  * - "ALTER TABLE" / "CREATE TABLE" / "CREATE INDEX" — DDL
  * - "other"                      — everything else the init issued
  */
@@ -176,6 +177,7 @@ function classifyStatement(query: string): StatementClass {
   if (/from\s+pg_catalog\.pg_tables\s+where\s+schemaname\s*=/i.test(q)) return 'snapshot catalog reads';
   if (/pg_catalog\.pg_class/i.test(q) && /pg_attribute/i.test(q)) return 'snapshot catalog reads';
   if (/from\s+pg_catalog\.pg_indexes/i.test(q) && !/indexname\s*=/i.test(q)) return 'snapshot catalog reads';
+  if (/pg_catalog\.pg_index\b/i.test(q) && /indisreplident/i.test(q)) return 'snapshot catalog reads';
   if (/^\s*alter\s+table/i.test(q)) return 'ALTER TABLE';
   if (/^\s*create\s+table/i.test(q)) return 'CREATE TABLE';
   if (/^\s*create\s+(unique\s+)?index/i.test(q)) return 'CREATE INDEX';
