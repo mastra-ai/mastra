@@ -99,53 +99,6 @@ Two behaviors follow from routing approvals through the session:
 
 See [Tool approvals and permissions](/docs/agent-controller/tool-approvals) for policies, categories, and session grants.
 
-## Account linking
-
-Model credentials resolve per tenant. A message from a web UI carries the signed-in user, so the run loads that user's stored credentials. An inbound chat message doesn't, so a channel run has no tenant and can't resolve credentials unless you tell it which tenant the sender belongs to.
-
-Resolve the sender in a channel handler and stamp the tenant on `ctx.requestContext` before calling `defaultHandler`. The run then loads that tenant's credentials.
-
-```typescript {8-9} filename="channels.ts"
-import { AgentControllerChannels } from '@mastra/core/channels'
-
-const channels = new AgentControllerChannels({
-  adapters,
-  handlers: {
-    onDirectMessage: async (thread, message, defaultHandler, ctx) => {
-      const link = await lookupLink(message.sender)
-      if (!link) {
-        await postConnectPrompt(thread)
-        return
-      }
-
-      ctx.requestContext.set('user', { id: link.userId, organizationId: link.orgId })
-      await defaultHandler(thread, message)
-    },
-  },
-})
-```
-
-`ctx.requestContext` holds the [`RequestContext`](/docs/server/request-context) for the run this message is about to start. Mastra builds a fresh one for every message, so a write can't leak from one sender's run into another's. After the handler returns, Mastra adds its own channel entries and dispatches with the same instance, so whatever you wrote reaches the run.
-
-`organizationId` is optional for personal accounts.
-
-Returning without calling `defaultHandler` starts no run. That's how an unlinked sender gets a connect prompt instead of an answer. The handler is the only gate, so every handler that can start a run needs the same check.
-
-Populate the reverse lookup from your own connect flow: when a signed-in user links their platform identity, store the mapping your handler reads. Sign any deep link that carries the sender identity so a forged identity can't bind to the wrong tenant.
-
-Once senders are linked, the `resolveResourceId` config hook can key new channel threads to tenant-owned resources. For example, return a workspace session ID owned by the linked user so the channel conversation runs in that user's session instead of a per-thread default.
-
-The `resolveThreadId` config hook controls the internal Mastra thread ID the same way. It runs after `resolveResourceId` with the resolved owner on its context, and only for newly created threads. Return `defaultThreadId` to keep the built-in random ID, or an ID you control, for example the session ID from `resolveResourceId`, so channel-created threads use the same `threadId === sessionId` convention as threads your app creates itself:
-
-```typescript filename="channels.ts"
-const channels = new AgentControllerChannels({
-  adapters,
-  resolveResourceId: async ctx => resolveSessionId(ctx),
-  resolveThreadId: ({ resourceId, defaultThreadId }) =>
-    isSessionId(resourceId) ? resourceId : defaultThreadId,
-})
-```
-
 ## Limits
 
 - Adapters can be constructed manually as shown above. The managed connect flow (`mastra.channels.slack.connect(...)`) also supports controller-owned installations — call it with an options object (`connect({ id, name })`) to connect a controller that has no registered agent. Adapters without controller support must still be constructed manually.

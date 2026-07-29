@@ -402,14 +402,16 @@ onDirectMessage: async (thread, message, defaultHandler, ctx) => {
 }
 ```
 
-`ctx.requestContext` is the [`RequestContext`](/docs/server/request-context) for the run this message is about to start, built fresh for every message. Write to it before calling `defaultHandler` and the value reaches the run, alongside the channel entries Mastra adds afterward. Use it to stamp a tenant so per-tenant credentials resolve for channel runs:
+`ctx.requestContext` is the [`RequestContext`](/docs/server/request-context) for the run this message is about to start, built fresh for every message. Write to it before calling `defaultHandler` and the value reaches the run, alongside the channel entries Mastra adds afterward:
 
 ```typescript
 onDirectMessage: async (thread, message, defaultHandler, ctx) => {
-  ctx.requestContext.set('user', { id: linkedUserId, organizationId: linkedOrgId })
+  ctx.requestContext.set('locale', 'en-GB')
   await defaultHandler(thread, message)
 }
 ```
+
+Anything the run reads from its request context can be decided per message this way, such as which user a platform sender maps to.
 
 `ctx` is not optional. Mastra always passes it. Handlers that declare fewer parameters still satisfy the type, so a three-parameter handler needs no change, but code that calls a `ChannelHandler` value directly must pass all four arguments.
 
