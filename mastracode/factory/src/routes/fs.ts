@@ -669,6 +669,13 @@ async function executeBoundedGitDiff(sandbox: MaterializationSandbox, args: stri
   );
 }
 
+function truncatePatch(patchBuffer: Buffer): string {
+  const patch = patchBuffer.subarray(0, MAX_DIFF_BYTES).toString('utf8');
+  const lastNewline = patch.lastIndexOf('\n');
+  if (lastNewline >= 0) return patch.slice(0, lastNewline + 1);
+  return patch.replace(/\uFFFD+$/, '');
+}
+
 export async function readSessionWorkspaceDiff(
   fleet: SandboxFleet,
   session: SourceControlSession,
@@ -730,7 +737,7 @@ export async function readSessionWorkspaceDiff(
   return {
     workspacePath: session.sessionId,
     path: safePath,
-    patch: patchBuffer.subarray(0, MAX_DIFF_BYTES).toString('utf8'),
+    patch: truncated ? truncatePatch(patchBuffer) : result.stdout,
     truncated,
   };
 }

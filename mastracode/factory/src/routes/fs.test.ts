@@ -518,6 +518,18 @@ describe('workspace changes', () => {
     expect(Buffer.byteLength(result.patch)).toBe(maxDiffBytes);
   });
 
+  it('does not emit a replacement character when truncation splits UTF-8', async () => {
+    const maxDiffBytes = 512 * 1024;
+    const prefix = 'a'.repeat(maxDiffBytes - 1);
+    const { fleet } = makeFleet(() => ({ exitCode: 0, stdout: `${prefix}€` }));
+
+    const result = await readSessionWorkspaceDiff(fleet, makeSession(), 'src/unicode.ts');
+
+    expect(result.truncated).toBe(true);
+    expect(result.patch).toBe(prefix);
+    expect(result.patch).not.toContain('\uFFFD');
+  });
+
   it('includes both paths when reading a renamed file diff', async () => {
     const { fleet } = makeFleet((_script, command, args) => {
       expect(command).toBe('sh');
