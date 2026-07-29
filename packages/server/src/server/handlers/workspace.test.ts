@@ -500,18 +500,21 @@ describe('Workspace Handlers', () => {
       expect(resolver).toHaveBeenCalledTimes(1);
     });
 
-    it('should fall through to the agent workspace lookup when the resolver reports not-found', async () => {
-      // Agents can own a workspace that was never registered via
-      // `Mastra.addWorkspace` (e.g. the auto-registration on
-      // `agent.getWorkspace()` hasn't run yet). A configured resolver that
-      // returns `undefined` for that id must not short-circuit the agent
-      // iteration, otherwise a GET would 404 despite the agent owning it.
-      const agentWorkspace = createWorkspace('agent-owned-ws', { name: 'Agent Owned Workspace' });
+    it('should not invoke agent function-based workspaces when a resolver is configured and reports not-found', async () => {
+      // When a resolver is configured on `@mastra/core`, the resolver + registry
+      // are authoritative: a resolver miss must return a clean not-configured
+      // response without side-effect-invoking every agent's function-based
+      // workspace. Function-based agent workspaces are request-scoped; invoking
+      // them here with a default RequestContext would either register a wrong
+      // workspace under `source: 'agent'` (first-writer-wins in the registry)
+      // or throw and escape the handler as a 500. The legacy agent-iteration
+      // fallback is intentionally confined to the older-core code path.
+      const agentWorkspaceFactory = vi.fn(() => createWorkspace('agent-owned-ws', { name: 'Agent Owned' }));
       const agent = new Agent({
         name: 'lonely-agent',
         instructions: 'test',
         model: { provider: 'openai', name: 'gpt-4o' } as any,
-        workspace: agentWorkspace,
+        workspace: agentWorkspaceFactory as any,
       });
 
       const resolver = vi.fn(async () => undefined);
@@ -521,18 +524,19 @@ describe('Workspace Handlers', () => {
         agents: { lonelyAgent: agent },
       });
 
+      // Reset call count so we only measure invocations triggered by the
+      // handler itself, not any construction-time bookkeeping.
+      agentWorkspaceFactory.mockClear();
+
       const result = await GET_WORKSPACE_ROUTE.handler({
         ...createTestServerContext({ mastra }),
         workspaceId: 'agent-owned-ws',
       });
 
-      expect(result).toMatchObject({
-        isWorkspaceConfigured: true,
-        id: 'agent-owned-ws',
-        name: 'Agent Owned Workspace',
-      });
+      expect(result).toMatchObject({ isWorkspaceConfigured: false });
       expect(resolver).toHaveBeenCalledWith('agent-owned-ws', expect.objectContaining({ mastra }));
       expect(resolver).toHaveBeenCalledTimes(1);
+      expect(agentWorkspaceFactory).not.toHaveBeenCalled();
     });
   });
 

@@ -151,7 +151,13 @@ function requireWorkspaceV1Support(): void {
  * empty even though the underlying sandbox is still reachable.
  *
  * Backwards compatible: falls through to the sync `getWorkspaceById`, and then
- * to iterating agents, if the newer methods are not present on `@mastra/core`.
+ * to iterating agents, only when the newer async method is not present on the
+ * installed `@mastra/core`. The agent-iteration fallback is intentionally kept
+ * on the legacy path only: it invokes each agent's function-based workspace
+ * with a default `RequestContext`, which is unsafe for request-scoped factories
+ * and would side-effect-register a wrong workspace under `source: 'agent'`.
+ * Modern `@mastra/core` avoids this entirely — the resolver + registry are
+ * authoritative.
  */
 async function getWorkspaceById(mastra: any, workspaceId: string): Promise<Workspace | undefined> {
   requireWorkspaceV1Support();
@@ -165,9 +171,9 @@ async function getWorkspaceById(mastra: any, workspaceId: string): Promise<Works
   // Prefer the async resolver — it consults the registry first and falls back
   // to the configured `resolveWorkspaceById` hook on a miss. It always throws
   // `MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND` on a miss (rather than returning
-  // undefined), so we catch that specific error and fall through to the agent
-  // iteration below; any other error is a real operational failure and must
-  // propagate rather than be masked as a nonexistent workspace.
+  // undefined); we downgrade that specific error to `undefined` so callers can
+  // surface a clean 404. Any other error is a real operational failure (DB /
+  // network / resolver bug) and must propagate rather than be masked.
   if (typeof mastra.resolveWorkspaceById === 'function') {
     try {
       return await mastra.resolveWorkspaceById(workspaceId);
@@ -175,22 +181,23 @@ async function getWorkspaceById(mastra: any, workspaceId: string): Promise<Works
       if ((err as { id?: string })?.id !== 'MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND') {
         throw err;
       }
-      // Fall through to the agent fallback below: an agent may own a
-      // workspace that wasn't registered via `addWorkspace` and therefore
-      // isn't visible to the sync registry / lazy resolver.
-    }
-  } else if (typeof mastra.getWorkspaceById === 'function') {
-    // Older @mastra/core without the lazy resolver: sync registry lookup only.
-    try {
-      return mastra.getWorkspaceById(workspaceId);
-    } catch {
-      // Not in the registry — fall through to the agent iteration.
+      return undefined;
     }
   }
 
-  // Search through agents for the workspace. This covers agents that own a
-  // workspace but never registered it via `Mastra.addWorkspace`, so neither
-  // the sync registry nor the configured resolver can find it.
+  // Legacy path: older @mastra/core without the async lazy resolver. Fall back
+  // to the sync registry, and then to iterating agents. Iterating agents is
+  // deliberately confined to this branch — it invokes function-based agent
+  // workspaces with a default RequestContext, which is unsafe for request-
+  // scoped factories.
+  if (typeof mastra.getWorkspaceById === 'function') {
+    try {
+      return mastra.getWorkspaceById(workspaceId);
+    } catch {
+      // Not in the registry — fall through to the agent iteration below.
+    }
+  }
+
   const agents = mastra.listAgents?.() ?? {};
   for (const agent of Object.values(agents)) {
     if ((agent as any).hasOwnWorkspace?.()) {
