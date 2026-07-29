@@ -34,6 +34,9 @@ let baseUrl;
 try {
   const parsed = new URL(values.url);
   if (parsed.protocol !== 'https:') throw new Error('unsupported protocol');
+  // Slack's webhook and redirect URLs are this origin plus a path, so a query
+  // or fragment would land mid-URL (`https://host/?x=1/api/...`) and break both.
+  if (parsed.search || parsed.hash) throw new Error('query and fragment are not supported');
   baseUrl = parsed.toString().replace(/\/$/, '');
 } catch {
   console.error(`Invalid --url: ${values.url}`);

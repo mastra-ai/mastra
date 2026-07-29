@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import type { ConnectedChannelAccount } from '../../domains/settings/services/channelAccounts';
 import { SlackConnectionPage } from '../SlackConnectionPage';
 
@@ -148,7 +148,7 @@ describe('SlackConnectionPage', () => {
     await user.click(workItemSwitch);
 
     await waitFor(() => expect(patchBody).toEqual({ slackWorkItemsEnabled: true }));
-    await waitFor(() => expect(client.isMutating()).toBe(0));
+    await waitForMutationsIdle(client);
   });
 
   it('given a linked account, when disconnected, then it sends the sender key and returns to the connect state', async () => {

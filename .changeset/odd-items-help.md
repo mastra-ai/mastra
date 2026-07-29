@@ -2,4 +2,13 @@
 '@mastra/factory': minor
 ---
 
-Added per-Factory Slack session settings and optional Factory context in signed integration state, allowing new Slack sessions to create Work-board cards when enabled and OAuth flows to return to the initiating Factory.
+Added a per-Factory Slack work-item setting so a new Slack thread only opens a Work-board card when that Factory opts in, and Slack OAuth now returns to the Factory the flow started from.
+
+```ts
+// Opt a Factory into Work-board cards for new Slack threads.
+await fetch(`/web/factory/projects/${factoryProjectId}`, {
+  method: 'PATCH',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ slackWorkItemsEnabled: true }),
+});
+```
