@@ -6,8 +6,6 @@ import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { PullRequestLinks } from '../../chat/components/PullRequestLinks';
-import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
-import { useChatTranscript } from '../../chat/context/useChatTranscript';
 import { relatedWorkItems, relationshipLabel, relationshipPath } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
@@ -38,8 +36,6 @@ export function FactorySessionHeader() {
   const items = useWorkItemsQuery(factoryId);
   const workspaces = useWorkspacesQuery(projectRepositoryId);
   const factoryQuery = useFactoryQuery(factoryId);
-  const { baseUrl, resourceId, projectPath } = useChatSessionContext();
-  const { transcript, busy } = useChatTranscript();
   const repository = factoryQuery.data?.repositories.find(
     candidate => candidate.projectRepositoryId === projectRepositoryId,
   );
@@ -110,18 +106,7 @@ export function FactorySessionHeader() {
               );
             })}
             {isReview ? (
-              <PullRequestLinks
-                baseUrl={baseUrl}
-                resourceId={resourceId}
-                projectPath={projectPath}
-                projectRepositoryId={projectRepositoryId}
-                reviewItem={currentItem}
-                repositorySlug={repository?.slug}
-                threadId={threadId}
-                transcriptEntries={transcript.entries}
-                busy={busy}
-                size="sm"
-              />
+              <PullRequestLinks repository={repository} reviewItem={currentItem} threadId={threadId} size="sm" />
             ) : null}
           </div>
         ) : null}
