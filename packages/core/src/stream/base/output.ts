@@ -30,6 +30,7 @@ import type {
 import { safeClose, safeEnqueue } from './input';
 import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
 import { getTransformedSchema } from './schema';
+import { expandStreamStateRequestBodies } from './serialized-state';
 
 /**
  * Helper function to create a destructurable version of MastraModelOutput.
@@ -1933,6 +1934,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   deserializeState(state: any) {
+    state = expandStreamStateRequestBodies(state);
     this.#status = state.status;
     this.#bufferedSteps = state.bufferedSteps;
     this.#bufferedReasoningDetails = state.bufferedReasoningDetails;

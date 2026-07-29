@@ -1,3 +1,4 @@
+import { compactStreamStateRequestBodies } from '../../stream/base/serialized-state';
 import type { WorkflowRunState } from '../../workflows/types';
 
 /**
@@ -145,17 +146,19 @@ function pruneStepResult(result: Record<string, any>): Record<string, any> {
   // aggregation entries which get the same per-entry rules (completed
   // iterations stripped, still-suspended ones preserved).
   if (isPlainObject(pruned.suspendPayload)) {
-    const meta = pruned.suspendPayload.__workflow_meta;
+    let suspendPayload = { ...pruned.suspendPayload };
+    const meta = suspendPayload.__workflow_meta;
     if (isPlainObject(meta) && isPlainObject(meta.foreachOutput)) {
       const foreachOutput: Record<string, any> = {};
       for (const [index, entry] of Object.entries(meta.foreachOutput)) {
         foreachOutput[index] = pruneStepResult(entry as Record<string, any>);
       }
-      pruned.suspendPayload = {
-        ...pruned.suspendPayload,
-        __workflow_meta: { ...meta, foreachOutput },
-      };
+      suspendPayload = { ...suspendPayload, __workflow_meta: { ...meta, foreachOutput } };
     }
+    if (isPlainObject(suspendPayload.__streamState)) {
+      suspendPayload.__streamState = compactStreamStateRequestBodies(suspendPayload.__streamState);
+    }
+    pruned.suspendPayload = suspendPayload;
   }
 
   return pruned;
