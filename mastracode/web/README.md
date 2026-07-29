@@ -104,9 +104,7 @@ pnpm --dir mastracode/web slack:manifest \
 
 The command writes JSON to stdout. Add `--copy` on macOS to copy it with
 `pbcopy` instead. At [api.slack.com/apps](https://api.slack.com/apps), choose
-**Create New App → From a manifest** and paste the result. See
-[`slack-app-manifest.example.json`](./slack-app-manifest.example.json) for a
-static example.
+**Create New App → From a manifest** and paste the result.
 
 Install it to your workspace, then copy these from **Basic Information → App
 Credentials** into `.env`:
