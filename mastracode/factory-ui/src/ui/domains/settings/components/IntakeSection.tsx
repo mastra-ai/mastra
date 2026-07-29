@@ -182,119 +182,117 @@ export function IntakeSection() {
   const busy = saveMutation.isPending;
 
   return (
-    <>
-      <SettingsSubsection title="Issue sources" description={INTAKE_INTRO}>
-        <SettingsCard>
-          <SettingsRow
-            label="GitHub issues"
-            hint="Open issues from the selected repositories. Pull requests always appear in Review."
-          >
-            <Switch
-              aria-label="Sync GitHub issues"
-              checked={config.github.enabled}
-              disabled={busy}
-              onCheckedChange={enabled => update({ ...config, github: { ...config.github, enabled } })}
-            />
-          </SettingsRow>
+    <SettingsSubsection title="Issue sources" description={INTAKE_INTRO}>
+      <SettingsCard>
+        <SettingsRow
+          label="GitHub issues"
+          hint="Open issues from the selected repositories. Pull requests always appear in Review."
+        >
+          <Switch
+            aria-label="Sync GitHub issues"
+            checked={config.github.enabled}
+            disabled={busy}
+            onCheckedChange={enabled => update({ ...config, github: { ...config.github, enabled } })}
+          />
+        </SettingsRow>
 
-          {config.github.enabled && (
-            <div className="px-4">
-              {linkedRepositories.length === 0 ? (
-                <Txt as="p" variant="ui-sm" className="text-icon3 py-3">
-                  No linked repositories yet — link a repository to a factory to add one.
+        {config.github.enabled && (
+          <div className="px-4">
+            {linkedRepositories.length === 0 ? (
+              <Txt as="p" variant="ui-sm" className="text-icon3 py-3">
+                No linked repositories yet — link a repository to a factory to add one.
+              </Txt>
+            ) : (
+              <SourcePickerGroup>
+                <SourcePickerSection
+                  label="Repositories"
+                  items={linkedRepositories.map(repository => ({ id: repository.slug, label: repository.slug }))}
+                  selectedIds={config.github.sourceIds}
+                  disabled={busy}
+                  pending={busy}
+                  onToggleItem={slug =>
+                    update({
+                      ...config,
+                      github: {
+                        ...config.github,
+                        sourceIds: toggleId(config.github.sourceIds, slug),
+                      },
+                    })
+                  }
+                />
+              </SourcePickerGroup>
+            )}
+          </div>
+        )}
+
+        <SettingsRow label="Linear issues" hint="Active issues from the selected projects.">
+          <Switch
+            aria-label="Sync Linear issues"
+            checked={config.linear.enabled}
+            disabled={busy || !linearConnected}
+            onCheckedChange={enabled => update({ ...config, linear: { ...config.linear, enabled } })}
+          />
+        </SettingsRow>
+
+        {!linearConnected ? (
+          <div className="flex items-center gap-3 px-4 py-3">
+            <Txt as="span" variant="ui-sm" className="text-icon3">
+              {linearStatus?.enabled === false
+                ? 'Linear is not configured on this server.'
+                : 'Connect a Linear workspace to sync its issues.'}
+            </Txt>
+            {linearStatus?.enabled !== false && (
+              <Button size="xs" onClick={() => connectLinear(baseUrl)}>
+                Connect Linear
+              </Button>
+            )}
+          </div>
+        ) : config.linear.enabled && isLinearReauthError(linearProjectsQuery.error) ? (
+          // Expired token still reports connected; offer OAuth again.
+          <div className="flex items-center gap-3 px-4 py-3">
+            <Txt as="span" variant="ui-sm" className="text-icon3">
+              Linear authorization expired. Reconnect to keep syncing issues.
+            </Txt>
+            <Button size="xs" onClick={() => connectLinear(baseUrl)}>
+              Reconnect Linear
+            </Button>
+          </div>
+        ) : (
+          config.linear.enabled && (
+            <div className="flex flex-col gap-2.5 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Txt as="span" variant="ui-sm" className="text-icon3">
+                  Connected to {linearStatus?.workspace?.name ?? 'a Linear workspace'}
                 </Txt>
-              ) : (
+                <Button size="xs" variant="ghost" onClick={() => connectLinear(baseUrl)}>
+                  Reconnect
+                </Button>
+              </div>
+              {(linearProjectsQuery.data ?? []).length > 0 && (
                 <SourcePickerGroup>
-                  <SourcePickerSection
-                    label="Repositories"
-                    items={linkedRepositories.map(repository => ({ id: repository.slug, label: repository.slug }))}
-                    selectedIds={config.github.sourceIds}
-                    disabled={busy}
-                    pending={busy}
-                    onToggleItem={slug =>
-                      update({
-                        ...config,
-                        github: {
-                          ...config.github,
-                          sourceIds: toggleId(config.github.sourceIds, slug),
-                        },
-                      })
-                    }
-                  />
+                  {groupLinearProjectsByTeam(linearProjectsQuery.data ?? []).map(group => (
+                    <SourcePickerSection
+                      key={group.id}
+                      label={group.label}
+                      items={group.projects.map(project => ({ id: project.id, label: project.name }))}
+                      selectedIds={config.linear.sourceIds}
+                      disabled={busy}
+                      pending={busy}
+                      onToggleItem={projectId =>
+                        update({
+                          ...config,
+                          linear: { ...config.linear, sourceIds: toggleId(config.linear.sourceIds, projectId) },
+                        })
+                      }
+                    />
+                  ))}
                 </SourcePickerGroup>
               )}
             </div>
-          )}
-
-          <SettingsRow label="Linear issues" hint="Active issues from the selected projects.">
-            <Switch
-              aria-label="Sync Linear issues"
-              checked={config.linear.enabled}
-              disabled={busy || !linearConnected}
-              onCheckedChange={enabled => update({ ...config, linear: { ...config.linear, enabled } })}
-            />
-          </SettingsRow>
-
-          {!linearConnected ? (
-            <div className="flex items-center gap-3 px-4 py-3">
-              <Txt as="span" variant="ui-sm" className="text-icon3">
-                {linearStatus?.enabled === false
-                  ? 'Linear is not configured on this server.'
-                  : 'Connect a Linear workspace to sync its issues.'}
-              </Txt>
-              {linearStatus?.enabled !== false && (
-                <Button size="xs" onClick={() => connectLinear(baseUrl)}>
-                  Connect Linear
-                </Button>
-              )}
-            </div>
-          ) : config.linear.enabled && isLinearReauthError(linearProjectsQuery.error) ? (
-            // Expired token still reports connected; offer OAuth again.
-            <div className="flex items-center gap-3 px-4 py-3">
-              <Txt as="span" variant="ui-sm" className="text-icon3">
-                Linear authorization expired. Reconnect to keep syncing issues.
-              </Txt>
-              <Button size="xs" onClick={() => connectLinear(baseUrl)}>
-                Reconnect Linear
-              </Button>
-            </div>
-          ) : (
-            config.linear.enabled && (
-              <div className="flex flex-col gap-2.5 px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <Txt as="span" variant="ui-sm" className="text-icon3">
-                    Connected to {linearStatus?.workspace?.name ?? 'a Linear workspace'}
-                  </Txt>
-                  <Button size="xs" variant="ghost" onClick={() => connectLinear(baseUrl)}>
-                    Reconnect
-                  </Button>
-                </div>
-                {(linearProjectsQuery.data ?? []).length > 0 && (
-                  <SourcePickerGroup>
-                    {groupLinearProjectsByTeam(linearProjectsQuery.data ?? []).map(group => (
-                      <SourcePickerSection
-                        key={group.id}
-                        label={group.label}
-                        items={group.projects.map(project => ({ id: project.id, label: project.name }))}
-                        selectedIds={config.linear.sourceIds}
-                        disabled={busy}
-                        pending={busy}
-                        onToggleItem={projectId =>
-                          update({
-                            ...config,
-                            linear: { ...config.linear, sourceIds: toggleId(config.linear.sourceIds, projectId) },
-                          })
-                        }
-                      />
-                    ))}
-                  </SourcePickerGroup>
-                )}
-              </div>
-            )
-          )}
-        </SettingsCard>
-      </SettingsSubsection>
-    </>
+          )
+        )}
+      </SettingsCard>
+    </SettingsSubsection>
   );
 }
 

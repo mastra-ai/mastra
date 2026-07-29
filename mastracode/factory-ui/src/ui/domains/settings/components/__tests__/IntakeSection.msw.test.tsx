@@ -2,7 +2,6 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -41,7 +40,7 @@ const linearProjects: LinearProject[] = [
 function seedGithubProject() {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'mastra', slackWorkItemsEnabled: false }] }),
+      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'mastra' }] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
       HttpResponse.json({
@@ -83,19 +82,10 @@ function useIntakeHandlers({
 
 function renderIntakeSection() {
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/factories/fp-1/settings/intake']}>
-      <Routes>
-        <Route
-          path="/factories/:factoryId/settings/intake"
-          element={
-            <>
-              <IntakeSection />
-              <Toaster position="bottom-right" />
-            </>
-          }
-        />
-      </Routes>
-    </MemoryRouter>,
+    <>
+      <IntakeSection />
+      <Toaster position="bottom-right" />
+    </>,
   );
 }
 
