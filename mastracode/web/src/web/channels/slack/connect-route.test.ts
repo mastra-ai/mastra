@@ -458,6 +458,23 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=error');
   });
 
+  it('callback gives the token exchange a deadline and fails closed when it is missed', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('The operation was aborted'), { name: 'TimeoutError' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { routes, saveAccountLink } = oidcRoutes();
+    const c = fakeCtx(tenantSigner.sign('org-9', 'user-9'), undefined, { code: 'code-1' });
+
+    await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
+
+    // A hung token endpoint must not hold the request open indefinitely, and a
+    // failed exchange must never bind an account.
+    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBeInstanceOf(AbortSignal);
+    expect(saveAccountLink).not.toHaveBeenCalled();
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=error');
+  });
+
   it('callback rejects an id_token with no expiry claim', async () => {
     const { exp: _dropped, ...noExp } = validClaims;
     const fetchMock = vi.fn().mockResolvedValue({

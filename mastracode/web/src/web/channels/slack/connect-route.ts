@@ -40,6 +40,7 @@ interface SlackOidcConfig {
 const SLACK_AUTHORIZE_URL = 'https://slack.com/openid/connect/authorize';
 const SLACK_TOKEN_URL = 'https://slack.com/api/openid.connect.token';
 const OIDC_CALLBACK_PATH = '/connect/slack/oidc/callback';
+const SLACK_TOKEN_TIMEOUT_MS = 10_000;
 
 /**
  * Decode a JWT's payload WITHOUT signature verification. Safe here because the
@@ -143,6 +144,9 @@ export function createSlackConnectRoutes(deps: {
         const code = c.req.query('code');
         if (!tenant || !code) return c.redirect(`${uiOrigin}/?slack=error`);
 
+        // Bound the exchange: without a deadline a slow token endpoint parks the
+        // request until the platform's own timeout, and this route is reachable
+        // by anyone holding a signed state.
         const tokenRes = await fetch(SLACK_TOKEN_URL, {
           method: 'POST',
           headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -152,9 +156,10 @@ export function createSlackConnectRoutes(deps: {
             code,
             redirect_uri: `${oidc!.redirectBaseUrl.replace(/\/$/, '')}${OIDC_CALLBACK_PATH}`,
           }),
-        });
-        const token = (await tokenRes.json().catch(() => null)) as { ok?: boolean; id_token?: string } | null;
-        if (!tokenRes.ok || !token?.ok || typeof token.id_token !== 'string') {
+          signal: AbortSignal.timeout(SLACK_TOKEN_TIMEOUT_MS),
+        }).catch(() => null);
+        const token = (await tokenRes?.json().catch(() => null)) as { ok?: boolean; id_token?: string } | null;
+        if (!tokenRes?.ok || !token?.ok || typeof token.id_token !== 'string') {
           return c.redirect(`${uiOrigin}/?slack=error`);
         }
 
