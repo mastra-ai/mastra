@@ -384,6 +384,18 @@ describe('AgentControllerChannels', () => {
     await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'reply on pre-existing thread' });
   }, 30_000);
 
+  it('derives the channel-thread owner when an approval click creates the mapped thread', async () => {
+    const { adapter, mastra, channels } = await createSetup();
+
+    // No message ever arrived, so the click creates the mapped thread — it must
+    // still be keyed off the channel thread, not the clicker.
+    await simulateAction(channels, adapter, 'chan-1:t-click', 'tool_approve:no-such-tool-call');
+
+    const threads = await getChannelThreads(mastra, 'chan-1:t-click');
+    expect(threads).toHaveLength(1);
+    expect(threads[0]!.resourceId).toBe('channel:chan-1:t-click');
+  }, 30_000);
+
   it('exposes webhook routes under /api/agent-controllers/{id}', async () => {
     const { channels } = await createSetup();
     const routes = channels.getWebhookRoutes();
