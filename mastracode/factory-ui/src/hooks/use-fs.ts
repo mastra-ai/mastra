@@ -2,7 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import type { ArtifactListing, DirectoryListing, WorkspaceFile, WorkspaceRenderedListing } from '../api/types';
+import type {
+  ArtifactListing,
+  DirectoryListing,
+  WorkspaceChanges,
+  WorkspaceDiff,
+  WorkspaceFile,
+  WorkspaceRenderedListing,
+} from '../api/types';
 
 /**
  * Server-driven directory listing for the project picker (mirrors
@@ -57,5 +64,34 @@ export function useWorkspaceFile(
       client.get<WorkspaceFile>(
         `/web/workspace/file?workspacePath=${encodeURIComponent(workspacePath ?? '')}&path=${encodeURIComponent(filePath ?? '')}`,
       ),
+  });
+}
+
+export function useWorkspaceChanges(workspacePath: string | undefined, options: { enabled?: boolean } = {}) {
+  const { client } = useApiConfig();
+  return useQuery<WorkspaceChanges>({
+    queryKey: queryKeys.workspaceChanges(workspacePath),
+    enabled: Boolean(workspacePath && (options.enabled ?? true)),
+    queryFn: () =>
+      client.get<WorkspaceChanges>(`/web/workspace/changes?workspacePath=${encodeURIComponent(workspacePath ?? '')}`),
+  });
+}
+
+export function useWorkspaceDiff(
+  workspacePath: string | undefined,
+  filePath: string | undefined,
+  previousFilePath?: string,
+  options: { enabled?: boolean } = {},
+) {
+  const { client } = useApiConfig();
+  return useQuery<WorkspaceDiff>({
+    queryKey: queryKeys.workspaceDiff(workspacePath, filePath, previousFilePath),
+    enabled: Boolean(workspacePath && filePath && (options.enabled ?? true)),
+    queryFn: () => {
+      const previousPathQuery = previousFilePath ? `&previousPath=${encodeURIComponent(previousFilePath)}` : '';
+      return client.get<WorkspaceDiff>(
+        `/web/workspace/changes/diff?workspacePath=${encodeURIComponent(workspacePath ?? '')}&path=${encodeURIComponent(filePath ?? '')}${previousPathQuery}`,
+      );
+    },
   });
 }

@@ -21,6 +21,10 @@ import type {
   ArtifactListing,
   DirectoryEntry,
   DirectoryListing,
+  WorkspaceChange,
+  WorkspaceChanges,
+  WorkspaceChangeStatus,
+  WorkspaceDiff,
   WorkspaceFile,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
@@ -32,6 +36,10 @@ export type {
   ArtifactListing,
   DirectoryEntry,
   DirectoryListing,
+  WorkspaceChange,
+  WorkspaceChanges,
+  WorkspaceChangeStatus,
+  WorkspaceDiff,
   WorkspaceFile,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
@@ -135,9 +143,7 @@ export interface OAuthStartResponse {
 }
 
 export type OAuthPollResponse =
-  | { status: 'pending'; nextPollMs: number }
-  | { status: 'complete' }
-  | { status: 'failed'; error: string };
+  { status: 'pending'; nextPollMs: number } | { status: 'complete' } | { status: 'failed'; error: string };
 
 export interface ActivateModelPackResponse {
   ok: true;

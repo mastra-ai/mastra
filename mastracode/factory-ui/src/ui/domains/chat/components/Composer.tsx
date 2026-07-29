@@ -157,14 +157,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     });
     if (accepted.length === 0) return;
     const additions = await Promise.all(
-      accepted.map(
-        async (file): Promise<PendingImage> => ({
-          id: `pending-image-${pendingImageSeq++}`,
-          data: await readFileAsBase64(file),
-          mediaType: file.type,
-          filename: file.name || undefined,
-        }),
-      ),
+      accepted.map(async (file): Promise<PendingImage> => ({
+        id: `pending-image-${pendingImageSeq++}`,
+        data: await readFileAsBase64(file),
+        mediaType: file.type,
+        filename: file.name || undefined,
+      })),
     );
     setImages(prev => [...prev, ...additions]);
   };
@@ -336,7 +334,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
           placeholder={busy ? 'Steer the agent…' : 'Ask Mastra Code…'}
           disabled={disabled}
           maxHeight={composerVariantMaxHeight[variant]}
-          className={cn(composerVariantClass[variant], 'text-[15px] text-neutral3')}
+          className={cn(composerVariantClass[variant], 'text-[15px]')}
           aria-label="Message"
           aria-keyshortcuts="Shift+Tab"
         />

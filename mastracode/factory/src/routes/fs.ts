@@ -8,7 +8,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import type { SandboxFleet } from '../sandbox/fleet.js';
+import type { MaterializationSandbox, SandboxFleet } from '../sandbox/fleet.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import type { RouteAuth } from './route.js';
 
@@ -74,6 +74,34 @@ export interface WorkspaceFile {
   truncated?: boolean;
 }
 
+export type WorkspaceChangeStatus =
+  | 'modified'
+  | 'added'
+  | 'deleted'
+  | 'renamed'
+  | 'copied'
+  | 'untracked'
+  | 'conflicted';
+
+export interface WorkspaceChange {
+  path: string;
+  previousPath?: string;
+  status: WorkspaceChangeStatus;
+}
+
+export interface WorkspaceChanges {
+  workspacePath: string;
+  available: boolean;
+  changes: WorkspaceChange[];
+}
+
+export interface WorkspaceDiff {
+  workspacePath: string;
+  path: string;
+  patch: string;
+  truncated: boolean;
+}
+
 export type ArtifactEntry = WorkspaceRenderedEntry;
 
 export interface ArtifactListing {
@@ -85,6 +113,25 @@ export interface ArtifactListing {
 }
 
 const MAX_TEXT_FILE_BYTES = 512 * 1024;
+const MAX_DIFF_BYTES = 512 * 1024;
+const BOUNDED_GIT_DIFF_SCRIPT = `
+allow_exit_one=$1
+shift
+status_file=$(mktemp)
+stderr_file=$(mktemp)
+trap 'rm -f "$status_file" "$stderr_file"' EXIT
+(
+  git "$@" 2>"$stderr_file"
+  printf '%s' "$?" >"$status_file"
+) | head -c ${MAX_DIFF_BYTES + 1}
+status=$(cat "$status_file")
+case "$status" in
+  0|141) exit 0 ;;
+  1) [ "$allow_exit_one" = "1" ] && exit 0 ;;
+esac
+cat "$stderr_file" >&2
+exit "\${status:-1}"
+`;
 const TEXT_DECODER = new TextDecoder('utf-8', { fatal: true });
 const APPROVED_RENDERED_ROOTS = new Set(['.artifacts']);
 
@@ -370,7 +417,7 @@ async function resolveAuthorizedSession(
 }
 
 interface SessionSandboxHandle {
-  sandbox: { executeCommand(command: string, args?: string[], options?: { timeout?: number }): Promise<unknown> };
+  sandbox: MaterializationSandbox;
   filesystem: SandboxFilesystem;
   workdir: string;
 }
@@ -420,14 +467,14 @@ export async function listSessionRenderedPath(
   // One round trip: emit "type\tsize\tmtime\tpath" per entry. `safeRoot` comes
   // from a fixed allowlist so interpolating it (quoted) is safe.
   const quotedRoot = `'${rootPath.replace(/'/g, `'\\''`)}'`;
-  const result = (await handle.sandbox.executeCommand(
+  const result = await handle.sandbox.executeCommand(
     'sh',
     [
       '-c',
       `test -d ${quotedRoot} && find ${quotedRoot} -mindepth 1 -printf '%y\\t%s\\t%T@\\t%p\\n' 2>/dev/null || true`,
     ],
     { timeout: 30_000 },
-  )) as { exitCode: number; stdout: string };
+  );
   if (result.exitCode !== 0) return empty;
 
   const entries: WorkspaceRenderedEntry[] = [];
@@ -480,6 +527,127 @@ export async function readSessionWorkspaceFile(
   } catch {
     return { ...base, contentType: 'unsupported' };
   }
+}
+
+function changeStatus(code: string): WorkspaceChangeStatus {
+  if (code === '??') return 'untracked';
+  if (code.includes('U') || code === 'AA' || code === 'DD') return 'conflicted';
+  if (code.includes('R')) return 'renamed';
+  if (code.includes('C')) return 'copied';
+  if (code.includes('D')) return 'deleted';
+  if (code.includes('A')) return 'added';
+  return 'modified';
+}
+
+export function parseWorkspaceChanges(output: string): WorkspaceChange[] {
+  const records = output.split('\0');
+  const changes: WorkspaceChange[] = [];
+
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index];
+    if (!record || record.length < 4) continue;
+    const code = record.slice(0, 2);
+    const path = record.slice(3);
+    const status = changeStatus(code);
+    if (status === 'renamed' || status === 'copied') {
+      const previousPath = records[index + 1];
+      if (previousPath) index += 1;
+      changes.push({ path, previousPath: previousPath || undefined, status });
+      continue;
+    }
+    changes.push({ path, status });
+  }
+
+  return changes.toSorted((a, b) => a.path.localeCompare(b.path));
+}
+
+export async function listSessionWorkspaceChanges(
+  fleet: SandboxFleet,
+  session: SourceControlSession,
+): Promise<WorkspaceChanges> {
+  const handle = await sessionSandbox(fleet, session);
+  if (!handle) return { workspacePath: session.sessionId, available: false, changes: [] };
+
+  const result = await handle.sandbox.executeCommand(
+    'git',
+    ['-C', handle.workdir, 'status', '--porcelain=v1', '-z', '--untracked-files=all'],
+    { timeout: 30_000 },
+  );
+  if (result.exitCode !== 0) return { workspacePath: session.sessionId, available: false, changes: [] };
+  return { workspacePath: session.sessionId, available: true, changes: parseWorkspaceChanges(result.stdout) };
+}
+
+async function executeBoundedGitDiff(sandbox: MaterializationSandbox, args: string[], allowExitOne = false) {
+  return sandbox.executeCommand(
+    'sh',
+    ['-c', BOUNDED_GIT_DIFF_SCRIPT, 'mastracode-diff', allowExitOne ? '1' : '0', ...args],
+    { timeout: 30_000 },
+  );
+}
+
+export async function readSessionWorkspaceDiff(
+  fleet: SandboxFleet,
+  session: SourceControlSession,
+  path: string,
+  previousPath?: string,
+): Promise<WorkspaceDiff> {
+  const safePath = assertRelativePath(path, 'path');
+  const safePreviousPath = previousPath ? assertRelativePath(previousPath, 'previousPath') : undefined;
+  const handle = await sessionSandbox(fleet, session);
+  if (!handle) throw new Error('Session workspace is not available');
+
+  const pathspecs = safePreviousPath ? [safePreviousPath, safePath] : [safePath];
+  let result = await executeBoundedGitDiff(handle.sandbox, [
+    '-C',
+    handle.workdir,
+    'diff',
+    '--find-renames',
+    '--no-ext-diff',
+    '--no-color',
+    '--unified=3',
+    'HEAD',
+    '--',
+    ...pathspecs,
+  ]);
+  if (result.exitCode !== 0) throw new Error(result.stderr || 'Unable to read workspace diff');
+
+  if (!result.stdout) {
+    const untracked = await handle.sandbox.executeCommand(
+      'git',
+      ['-C', handle.workdir, 'ls-files', '--others', '--exclude-standard', '--', safePath],
+      { timeout: 30_000 },
+    );
+    if (untracked.exitCode === 0 && untracked.stdout.trim()) {
+      result = await executeBoundedGitDiff(
+        handle.sandbox,
+        [
+          '-C',
+          handle.workdir,
+          'diff',
+          '--no-index',
+          '--no-ext-diff',
+          '--no-color',
+          '--unified=3',
+          '--',
+          '/dev/null',
+          safePath,
+        ],
+        true,
+      );
+      if (result.exitCode !== 0 && result.exitCode !== 1) {
+        throw new Error(result.stderr || 'Unable to read workspace diff');
+      }
+    }
+  }
+
+  const patchBuffer = Buffer.from(result.stdout);
+  const truncated = patchBuffer.length > MAX_DIFF_BYTES;
+  return {
+    workspacePath: session.sessionId,
+    path: safePath,
+    patch: patchBuffer.subarray(0, MAX_DIFF_BYTES).toString('utf8'),
+    truncated,
+  };
 }
 
 export interface ResolvedCodebase {
@@ -575,6 +743,45 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
             message.includes('escapes') ||
             message.includes('not approved') ||
             message.includes('not available')
+              ? 403
+              : 500;
+          return c.json({ error: message }, status);
+        }
+      },
+    }),
+    registerApiRoute('/web/workspace/changes', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const workspacePath = c.req.query('workspacePath');
+        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
+        try {
+          const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
+          if (!session || !sessionFs) return c.json({ workspacePath, available: false, changes: [] });
+          return c.json(await listSessionWorkspaceChanges(sessionFs.fleet, session));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return c.json({ error: message }, message.includes('not available') ? 403 : 500);
+        }
+      },
+    }),
+    registerApiRoute('/web/workspace/changes/diff', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const workspacePath = c.req.query('workspacePath');
+        const path = c.req.query('path');
+        const previousPath = c.req.query('previousPath');
+        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
+        if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
+        try {
+          const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
+          if (!session || !sessionFs) return c.json({ error: 'Session workspace is not available' }, 403);
+          return c.json(await readSessionWorkspaceDiff(sessionFs.fleet, session, path, previousPath));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const status =
+            message.includes('relative') || message.includes('escapes') || message.includes('not available')
               ? 403
               : 500;
           return c.json({ error: message }, status);

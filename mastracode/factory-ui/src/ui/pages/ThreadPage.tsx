@@ -18,6 +18,8 @@ import { useThreadPageKickoffs } from '../domains/chat/hooks/useThreadPageKickof
 import { useFactoryQuery } from '../../hooks/useFactories';
 import { useUserSessionQuery } from '../../hooks/useWorkspaces';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
+import { useInvalidateWorkspaceChangesOnRunCompletion } from '../domains/workspace-viewer/useInvalidateWorkspaceChangesOnRunCompletion';
 
 const threadComposerContainerClass = 'w-full p-3 md:p-5';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
@@ -26,7 +28,6 @@ export function ThreadPage() {
   const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId?: string; threadId?: string }>();
   const userThreadMatch = useMatch('/factories/:factoryId/user/threads/:threadId');
   const isMobile = useIsMobile();
-  const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
   const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
   const factoryQuery = useFactoryQuery(factoryId);
   const userSessionQuery = useUserSessionQuery(userThreadMatch ? threadId : undefined);
@@ -40,7 +41,6 @@ export function ThreadPage() {
     <ChatLayout
       sidebar={<Sidebar />}
       header={<ChatHeader />}
-      rightPanelExpanded={workspaceViewerExpanded}
       rightPanelAvailable={Boolean(workspacePath)}
       onRightPanelOpen={() => setWorkspaceViewerVisible(true)}
       onRightPanelClose={() => setWorkspaceViewerVisible(false)}
@@ -51,7 +51,6 @@ export function ThreadPage() {
             renderedPaths={renderedPaths}
             title="Workspace files"
             context={workspaceFactory?.name}
-            onExpandedChange={setWorkspaceViewerExpanded}
           />
         ) : undefined
       }
@@ -62,7 +61,7 @@ export function ThreadPage() {
           </div>
         ) : (
           <ChatSessionBoundary threadId={threadId}>
-            <ThreadPageMain />
+            <ThreadPageMain workspacePath={workspacePath} />
           </ChatSessionBoundary>
         )
       }
@@ -70,7 +69,9 @@ export function ThreadPage() {
   );
 }
 
-function ThreadPageMain() {
+function ThreadPageMain({ workspacePath }: { workspacePath: string | undefined }) {
+  const { busy } = useChatTranscript();
+  useInvalidateWorkspaceChangesOnRunCompletion(workspacePath, busy);
   useGlobalShortcuts();
 
   return (

@@ -67,23 +67,18 @@ describe('ChatLayout', () => {
     });
   });
 
-  describe('given the right panel changes between compact and expanded', () => {
-    it('keeps the existing panel mounted so internal viewer state is preserved', async () => {
+  describe('given a right panel', () => {
+    it('keeps the existing panel mounted across chat rerenders', async () => {
       const user = userEvent.setup();
       const { rerender } = render(
-        <ChatLayout
-          sidebar={<div />}
-          content={<div />}
-          rightPanel={<StatefulRightPanel />}
-          rightPanelExpanded={false}
-        />,
+        <ChatLayout sidebar={<div />} content={<div>first-content</div>} rightPanel={<StatefulRightPanel />} />,
       );
 
       await user.click(screen.getByRole('button', { name: 'right-panel-closed' }));
       expect(screen.getByRole('button', { name: 'right-panel-opened' })).toBeInTheDocument();
 
       rerender(
-        <ChatLayout sidebar={<div />} content={<div />} rightPanel={<StatefulRightPanel />} rightPanelExpanded />,
+        <ChatLayout sidebar={<div />} content={<div>second-content</div>} rightPanel={<StatefulRightPanel />} />,
       );
 
       expect(screen.getByRole('button', { name: 'right-panel-opened' })).toBeInTheDocument();

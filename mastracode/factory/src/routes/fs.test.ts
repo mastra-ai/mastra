@@ -9,7 +9,10 @@ import type { SourceControlSession } from '../storage/domains/source-control/bas
 import {
   listArtifacts,
   listSessionRenderedPath,
+  listSessionWorkspaceChanges,
   listWorkspaceRenderedPath,
+  parseWorkspaceChanges,
+  readSessionWorkspaceDiff,
   readSessionWorkspaceFile,
   readWorkspaceFile,
 } from './fs.js';
@@ -223,10 +226,12 @@ function makeSession(overrides: Partial<SourceControlSession> = {}): SourceContr
  * Fake fleet whose sandbox answers the exact shell scripts the session-backed
  * helpers issue (find listing, readlink/stat confinement checks, base64 read).
  */
-function makeFleet(respond: (script: string) => { exitCode: number; stdout: string; stderr?: string }) {
-  const executeCommand = vi.fn(async (_cmd: string, args?: string[]) => {
-    const script = args?.[1] ?? '';
-    const result = respond(script);
+function makeFleet(
+  respond: (script: string, command: string, args: string[]) => { exitCode: number; stdout: string; stderr?: string },
+) {
+  const executeCommand = vi.fn(async (command: string, args: string[] = []) => {
+    const script = args[1] ?? '';
+    const result = respond(script, command, args);
     return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr ?? '' };
   });
   const fleet = {
@@ -315,11 +320,9 @@ describe('readSessionWorkspaceFile', () => {
   function respondForFile(content: string) {
     const abs = `${WORKDIR}/.artifacts/understand-pr/HISTORY.md`;
     return (script: string) => {
-      if (script.startsWith('readlink -f')) return { exitCode: 0, stdout: `${abs}\n` };
-      if (script.startsWith('stat -c'))
-        return { exitCode: 0, stdout: `regular file\t${content.length}\t1700000000\t0\n` };
-      if (script.startsWith('base64 <'))
-        return { exitCode: 0, stdout: Buffer.from(content, 'utf8').toString('base64') };
+      if (script.includes(`p='${abs}'`)) return { exitCode: 0, stdout: `${WORKDIR}\n${abs}` };
+      if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `regular file|${content.length}|1700000000|0\n` };
+      if (script.includes('base64 <')) return { exitCode: 0, stdout: Buffer.from(content, 'utf8').toString('base64') };
       return { exitCode: 1, stdout: '', stderr: `unexpected script: ${script}` };
     };
   }
@@ -361,8 +364,10 @@ describe('readSessionWorkspaceFile', () => {
 
   it('rejects directories', async () => {
     const { fleet } = makeFleet(script => {
-      if (script.startsWith('readlink -f')) return { exitCode: 0, stdout: `${WORKDIR}/.artifacts\n` };
-      if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `directory\t0\t1700000000\t0\n` };
+      if (script.includes(`p='${WORKDIR}/.artifacts'`)) {
+        return { exitCode: 0, stdout: `${WORKDIR}\n${WORKDIR}/.artifacts` };
+      }
+      if (script.startsWith('stat -c')) return { exitCode: 0, stdout: `directory|0|1700000000|0\n` };
       return { exitCode: 1, stdout: '' };
     });
 
@@ -384,5 +389,149 @@ describe('readSessionWorkspaceFile', () => {
     await expect(readSessionWorkspaceFile(fleet, makeSession(), '.artifacts/a.md')).rejects.toThrow(
       'Session workspace is not available',
     );
+  });
+});
+
+describe('workspace changes', () => {
+  it('parses modified, untracked, deleted, and renamed files from null-delimited status output', () => {
+    const output = [
+      ' M src/edited.ts',
+      '?? src/new.ts',
+      'D  src/removed.ts',
+      'R  src/renamed.ts',
+      'src/old.ts',
+      '',
+    ].join('\0');
+
+    expect(parseWorkspaceChanges(output)).toEqual([
+      { path: 'src/edited.ts', status: 'modified' },
+      { path: 'src/new.ts', status: 'untracked' },
+      { path: 'src/removed.ts', status: 'deleted' },
+      { path: 'src/renamed.ts', previousPath: 'src/old.ts', status: 'renamed' },
+    ]);
+  });
+
+  it('lists pending changes with one lightweight git status command', async () => {
+    const { fleet, executeCommand } = makeFleet((_script, command, args) => {
+      expect(command).toBe('git');
+      expect(args).toEqual(['-C', WORKDIR, 'status', '--porcelain=v1', '-z', '--untracked-files=all']);
+      return { exitCode: 0, stdout: ' M src/edited.ts\0' };
+    });
+
+    const session = makeSession();
+    await expect(listSessionWorkspaceChanges(fleet, session)).resolves.toEqual({
+      workspacePath: session.sessionId,
+      available: true,
+      changes: [{ path: 'src/edited.ts', status: 'modified' }],
+    });
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns a bounded unified diff for one selected file', async () => {
+    const patch = [
+      'diff --git a/src/edited.ts b/src/edited.ts',
+      '--- a/src/edited.ts',
+      '+++ b/src/edited.ts',
+      '@@ -1 +1 @@',
+      '-old',
+      '+new',
+      '',
+    ].join('\n');
+    const { fleet, executeCommand } = makeFleet((script, command, args) => {
+      expect(command).toBe('sh');
+      expect(script).toContain('head -c 524289');
+      expect(args.slice(3)).toEqual([
+        '0',
+        '-C',
+        WORKDIR,
+        'diff',
+        '--find-renames',
+        '--no-ext-diff',
+        '--no-color',
+        '--unified=3',
+        'HEAD',
+        '--',
+        'src/edited.ts',
+      ]);
+      return { exitCode: 0, stdout: patch };
+    });
+
+    const session = makeSession();
+    await expect(readSessionWorkspaceDiff(fleet, session, 'src/edited.ts')).resolves.toEqual({
+      workspacePath: session.sessionId,
+      path: 'src/edited.ts',
+      patch,
+      truncated: false,
+    });
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it('includes both paths when reading a renamed file diff', async () => {
+    const { fleet } = makeFleet((_script, command, args) => {
+      expect(command).toBe('sh');
+      expect(args.slice(3)).toEqual([
+        '0',
+        '-C',
+        WORKDIR,
+        'diff',
+        '--find-renames',
+        '--no-ext-diff',
+        '--no-color',
+        '--unified=3',
+        'HEAD',
+        '--',
+        'src/old.ts',
+        'src/renamed.ts',
+      ]);
+      return { exitCode: 0, stdout: 'rename diff' };
+    });
+
+    await expect(readSessionWorkspaceDiff(fleet, makeSession(), 'src/renamed.ts', 'src/old.ts')).resolves.toEqual(
+      expect.objectContaining({ path: 'src/renamed.ts', patch: 'rename diff' }),
+    );
+  });
+
+  it('creates a bounded diff for an untracked file', async () => {
+    let commandIndex = 0;
+    const { fleet, executeCommand } = makeFleet((script, command, args) => {
+      commandIndex += 1;
+      if (commandIndex === 1) {
+        expect(command).toBe('sh');
+        return { exitCode: 0, stdout: '' };
+      }
+      if (commandIndex === 2) {
+        expect(command).toBe('git');
+        expect(args).toEqual(['-C', WORKDIR, 'ls-files', '--others', '--exclude-standard', '--', 'src/new.ts']);
+        return { exitCode: 0, stdout: 'src/new.ts\n' };
+      }
+      expect(command).toBe('sh');
+      expect(script).toContain('head -c 524289');
+      expect(args.slice(3)).toEqual([
+        '1',
+        '-C',
+        WORKDIR,
+        'diff',
+        '--no-index',
+        '--no-ext-diff',
+        '--no-color',
+        '--unified=3',
+        '--',
+        '/dev/null',
+        'src/new.ts',
+      ]);
+      return { exitCode: 0, stdout: 'new file diff' };
+    });
+
+    await expect(readSessionWorkspaceDiff(fleet, makeSession(), 'src/new.ts')).resolves.toEqual(
+      expect.objectContaining({ path: 'src/new.ts', patch: 'new file diff' }),
+    );
+    expect(executeCommand).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects diff paths that escape the workspace before running git', async () => {
+    const { fleet, executeCommand } = makeFleet(() => ({ exitCode: 0, stdout: '' }));
+
+    await expect(readSessionWorkspaceDiff(fleet, makeSession(), '../secret')).rejects.toThrow('path escapes workspace');
+    expect(executeCommand).not.toHaveBeenCalled();
   });
 });
