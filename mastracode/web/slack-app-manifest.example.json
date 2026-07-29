@@ -14,15 +14,6 @@
       "display_name": "Mastra Factory (dev)",
       "always_online": true
     },
-    "slash_commands": [
-      {
-        "command": "/factory",
-        "url": "https://YOUR-TUNNEL-HOSTNAME/api/agent-controllers/mastra-code/channels/slack/webhook",
-        "description": "List or set your default factory for Slack sessions",
-        "usage_hint": "[factory name]",
-        "should_escape": false
-      }
-    ],
     "assistant_view": {
       "assistant_description": "AI assistant powered by Mastra"
     }
@@ -34,7 +25,6 @@
     ],
     "scopes": {
       "bot": [
-        "commands",
         "chat:write",
         "chat:write.public",
         "im:write",

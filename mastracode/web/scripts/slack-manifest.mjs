@@ -57,15 +57,6 @@ const manifest = {
       display_name: values.name,
       always_online: true,
     },
-    slash_commands: [
-      {
-        command: '/factory',
-        url: webhookUrl,
-        description: 'List or set your default factory for Slack sessions',
-        usage_hint: '[factory name]',
-        should_escape: false,
-      },
-    ],
     assistant_view: {
       assistant_description: 'AI assistant powered by Mastra',
     },
@@ -74,7 +65,6 @@ const manifest = {
     redirect_urls: [`${baseUrl}/slack/oauth/callback`, `${baseUrl}/connect/slack/oidc/callback`],
     scopes: {
       bot: [
-        'commands',
         'chat:write',
         'chat:write.public',
         'im:write',
@@ -119,7 +109,8 @@ if (values.copy) {
     console.error('Could not copy the manifest with pbcopy. Run without --copy to print it instead.');
     process.exit(1);
   }
-  console.log('Manifest copied to clipboard.');
+  const message = '✓ Manifest copied to clipboard.';
+  console.log(process.stdout.isTTY && !process.env.NO_COLOR ? `\u001B[32m${message}\u001B[39m` : message);
 } else {
   process.stdout.write(`${output}\n`);
 }
