@@ -345,15 +345,9 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       if (this.sandboxPoolRows.some(row => row.sandboxId === input.sandboxId)) return;
       this.sandboxPoolRows.push({ id: randomUUID(), releasedAt: new Date(), ...input });
     },
-    claim: async ({
-      projectRepositoryId,
-      userId,
-    }: {
-      projectRepositoryId: string;
-      userId: string;
-    }): Promise<PooledSandbox | null> => {
+    claim: async ({ projectRepositoryId }: { projectRepositoryId: string }): Promise<PooledSandbox | null> => {
       const candidates = this.sandboxPoolRows
-        .filter(row => row.projectRepositoryId === projectRepositoryId && row.userId === userId)
+        .filter(row => row.projectRepositoryId === projectRepositoryId)
         .sort((left, right) => right.releasedAt.getTime() - left.releasedAt.getTime());
       const claimed = candidates[0];
       if (!claimed) return null;

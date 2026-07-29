@@ -237,13 +237,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
 
     const materialize = async (): Promise<Workspace> => {
       // A terminal work item or a deleted session may have returned a
-      // still-warm VM — with this repository already cloned for this user —
-      // to the reuse pool. Adopt it before provisioning a fresh sandbox.
+      // still-warm VM — with this repository already cloned — to the reuse
+      // pool. Adopt it before provisioning a fresh sandbox. Pooled VMs carry
+      // no credentials (tokens are injected per command, and the workdir is
+      // scrubbed on release and again below), so any user's session for this
+      // repository can claim one.
       let claimedPooledSandbox = false;
       if (!isLocalSandbox && !session.sandboxId) {
         const pooled = await storage.sandboxPool.claim({
           projectRepositoryId: session.projectRepositoryId,
-          userId: session.userId,
         });
         if (pooled) {
           await storage.sessions.setSandbox({

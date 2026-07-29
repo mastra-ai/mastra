@@ -172,7 +172,7 @@ describe('releaseWorkItemSandboxes', () => {
 
     expect(fleet.reattachSandbox).toHaveBeenCalledWith('sandbox-1');
     expect(calls.some(script => script.includes('checkout -f') && script.includes('main'))).toBe(true);
-    expect(calls.some(script => script.includes('reset --hard') && script.includes('clean -fd'))).toBe(true);
+    expect(calls.some(script => script.includes('reset --hard') && script.includes('clean -fdx'))).toBe(true);
     expect(storage.sandboxPoolRows).toHaveLength(1);
   });
 

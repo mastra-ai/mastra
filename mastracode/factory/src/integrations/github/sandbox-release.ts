@@ -45,7 +45,7 @@ export async function cleanReleasedSandbox(options: {
  * Called when the item commits into a terminal stage (`done` / `canceled`):
  * its branch sessions stop receiving runs, so their VMs — which would
  * otherwise idle until the provider reaps them — can serve the next session
- * for the same repository and user instead of a fresh provision. Each session
+ * for the same repository instead of a fresh provision. Each session
  * keeps its row (a reopened branch simply claims a pooled VM or provisions
  * fresh on next use); it only loses its sandbox binding.
  */

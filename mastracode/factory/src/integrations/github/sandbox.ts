@@ -350,7 +350,9 @@ export async function recycleClaimedWorkdir(
   if (inspect.exitCode !== 0) return;
   const recycle = await sh(
     sandbox,
-    `git -C ${w} checkout -f ${shellQuote(defaultBranch)} && git -C ${w} reset --hard && git -C ${w} clean -fd`,
+    // `-x` also drops gitignored files (.env, build caches) so no session
+    // state survives into the next claim.
+    `git -C ${w} checkout -f ${shellQuote(defaultBranch)} && git -C ${w} reset --hard && git -C ${w} clean -fdx`,
     { phase: 'claimed workdir recycle' },
   );
   if (recycle.exitCode === 0) return;

@@ -209,10 +209,8 @@ function fakeGithubIntegration() {
         markMaterialized: vi.fn(async () => {}),
       },
       sandboxPool: {
-        claim: vi.fn(async ({ projectRepositoryId, userId }: { projectRepositoryId: string; userId: string }) => {
-          const index = mocks.pooledSandboxes.findIndex(
-            row => row.projectRepositoryId === projectRepositoryId && row.userId === userId,
-          );
+        claim: vi.fn(async ({ projectRepositoryId }: { projectRepositoryId: string }) => {
+          const index = mocks.pooledSandboxes.findIndex(row => row.projectRepositoryId === projectRepositoryId);
           return index === -1 ? null : mocks.pooledSandboxes.splice(index, 1)[0];
         }),
       },
@@ -509,9 +507,11 @@ describe('GitHub session workspace preparation', () => {
     const workspace = createRemoteFactory();
     addProject({ sandboxProvider: 'railway' });
     addSession({ id: 'session-a' });
+    // Released by a different user: the pool is per-repository, and pooled
+    // VMs carry no credentials, so cross-user claims are expected.
     mocks.pooledSandboxes.push({
       projectRepositoryId: 'project-1',
-      userId: 'user-1',
+      userId: 'user-2',
       sandboxId: 'sb-pooled',
       sandboxWorkdir: '/workspace/pooled/hello',
     });
@@ -533,7 +533,7 @@ describe('GitHub session workspace preparation', () => {
     );
   });
 
-  it('provisions fresh when the pool has no sandbox for this repository link and user', async () => {
+  it('provisions fresh when the pool has no sandbox for this repository link', async () => {
     const workspace = createRemoteFactory();
     addProject({ sandboxProvider: 'railway' });
     addSession({ id: 'session-a' });

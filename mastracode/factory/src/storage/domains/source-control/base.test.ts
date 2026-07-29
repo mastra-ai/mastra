@@ -255,11 +255,11 @@ describe('SourceControlStorage', () => {
     ).toBeNull();
   });
 
-  it('releases and claims pooled sandboxes scoped to the project-repository link and user', async () => {
+  it('releases and claims pooled sandboxes scoped to the project-repository link', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });
 
-    expect(await github.sandboxPool.claim({ projectRepositoryId: link.id, userId: 'user-1' })).toBeNull();
+    expect(await github.sandboxPool.claim({ projectRepositoryId: link.id })).toBeNull();
 
     const materializedAt = new Date('2026-07-01T00:00:00Z');
     await github.sandboxPool.release({
@@ -288,11 +288,12 @@ describe('SourceControlStorage', () => {
       materializedAt,
     });
 
-    expect(await github.sandboxPool.claim({ projectRepositoryId: link.id, userId: 'user-2' })).toBeNull();
-    expect(await github.sandboxPool.claim({ projectRepositoryId: 'missing', userId: 'user-1' })).toBeNull();
+    expect(await github.sandboxPool.claim({ projectRepositoryId: 'missing' })).toBeNull();
 
-    const first = await github.sandboxPool.claim({ projectRepositoryId: link.id, userId: 'user-1' });
-    const second = await github.sandboxPool.claim({ projectRepositoryId: link.id, userId: 'user-1' });
+    // The pool is per-repository, not per-user: a different user's session
+    // may claim a VM released by user-1 (tokens are never stored in the VM).
+    const first = await github.sandboxPool.claim({ projectRepositoryId: link.id });
+    const second = await github.sandboxPool.claim({ projectRepositoryId: link.id });
     expect([first?.sandboxId, second?.sandboxId].sort()).toEqual(['sandbox-a', 'sandbox-b']);
     expect([first, second].find(claimed => claimed?.sandboxId === 'sandbox-a')).toMatchObject({
       orgId: 'org-1',
@@ -301,7 +302,7 @@ describe('SourceControlStorage', () => {
       sandboxWorkdir: '/workspace/mastra',
       materializedAt,
     });
-    expect(await github.sandboxPool.claim({ projectRepositoryId: link.id, userId: 'user-1' })).toBeNull();
+    expect(await github.sandboxPool.claim({ projectRepositoryId: link.id })).toBeNull();
   });
 
   it('hands one pooled sandbox to exactly one concurrent claimer', async () => {
@@ -317,8 +318,8 @@ describe('SourceControlStorage', () => {
     });
 
     const claims = await Promise.all([
-      github.sandboxPool.claim({ projectRepositoryId: link.id, userId: 'user-1' }),
-      github.sandboxPool.claim({ projectRepositoryId: link.id, userId: 'user-1' }),
+      github.sandboxPool.claim({ projectRepositoryId: link.id }),
+      github.sandboxPool.claim({ projectRepositoryId: link.id }),
     ]);
     expect(claims.filter(claimed => claimed !== null)).toHaveLength(1);
   });
@@ -337,7 +338,7 @@ describe('SourceControlStorage', () => {
 
     await github.projectRepositories.unlink({ orgId: 'org-1', id: link.id });
 
-    expect(await github.sandboxPool.claim({ projectRepositoryId: link.id, userId: 'user-1' })).toBeNull();
+    expect(await github.sandboxPool.claim({ projectRepositoryId: link.id })).toBeNull();
   });
 
   it('re-points a sandbox binding workdir and clears its materialization', async () => {

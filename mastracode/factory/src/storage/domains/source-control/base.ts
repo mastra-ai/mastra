@@ -307,13 +307,17 @@ export interface ProjectRepositorySandbox {
 
 /**
  * A provider sandbox that is no longer bound to any session and can be handed
- * to the next session for the same project-repository link and user instead
- * of provisioning a fresh VM.
+ * to the next session for the same project-repository link instead of
+ * provisioning a fresh VM. Pooling is per-repository, not per-user: no
+ * credentials are baked into the VM (tokens are injected per command), so any
+ * user's session can safely claim it. `userId` records who released it,
+ * purely as provenance.
  */
 export interface PooledSandbox {
   id: string;
   orgId: string;
   projectRepositoryId: string;
+  /** User whose session released this sandbox (provenance, not a claim key). */
   userId: string;
   sandboxId: string;
   sandboxWorkdir: string;
@@ -431,12 +435,12 @@ export interface SourceControlStorageHandle {
      */
     release(args: ReleasePooledSandboxInput): Promise<void>;
     /**
-     * Atomically take one pooled sandbox for the given project-repository link
-     * and user, preferring the most recently released (warmest) VM. Returns
+     * Atomically take one pooled sandbox for the given project-repository
+     * link, preferring the most recently released (warmest) VM. Returns
      * `null` when the pool is empty. Each pooled sandbox is handed to exactly
      * one claimer even under concurrent claims.
      */
-    claim(args: { projectRepositoryId: string; userId: string }): Promise<PooledSandbox | null>;
+    claim(args: { projectRepositoryId: string }): Promise<PooledSandbox | null>;
   };
   readonly worktrees: {
     upsert(args: UpsertSourceControlWorktreeInput): Promise<void>;
@@ -1077,11 +1081,10 @@ export class SourceControlStorage extends FactoryStorageDomain {
             // The provider sandbox is already pooled — keep the existing row.
           }
         },
-        claim: async ({ projectRepositoryId, userId }) => {
+        claim: async ({ projectRepositoryId }) => {
           if (!(await getProjectRepositoryById(projectRepositoryId))) return null;
           const rows = await db().findMany<SandboxPoolDbRow>(SANDBOX_POOL, {
             project_repository_id: projectRepositoryId,
-            user_id: userId,
           });
           rows.sort((left, right) => right.released_at.getTime() - left.released_at.getTime());
           for (const row of rows) {

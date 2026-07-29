@@ -519,7 +519,8 @@ describe('recycleClaimedWorkdir', () => {
     const recycle = sandbox.calls[1]!;
     expect(recycle).toContain("checkout -f 'main'");
     expect(recycle).toContain('reset --hard');
-    expect(recycle).toContain('clean -fd');
+    // `-x` included: gitignored files (.env, caches) must not leak between sessions.
+    expect(recycle).toContain('clean -fdx');
     expect(sandbox.calls.some(call => call.startsWith('rm -rf'))).toBe(false);
   });
 
