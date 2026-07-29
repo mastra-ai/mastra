@@ -312,7 +312,7 @@ interface PrepareResult {
 
 #### `recoverActiveRuns(options?)`
 
-Discovers all runs stuck in `running` status for this agent and re-drives them from the last persisted snapshot. Returns a summary of what was recovered.
+Discovers runs stuck in `running` status for this agent and re-drives them from the last persisted snapshot. Recovers up to `options.limit` runs (default: 100). Returns a summary of what was recovered.
 
 ```typescript
 const result = await durableAgent.recoverActiveRuns()
@@ -363,7 +363,7 @@ interface DurableAgentRecoverActiveRunsResult {
 Recovers a single run by ID. Returns a streamable result with the same shape as `stream()`. Use this when you need to observe the recovery stream in real time.
 
 ```typescript
-const { output, cleanup } = await durableAgent.recover(runId, {
+const { output, cleanup } = await durableAgent.recover('run-abc-123', {
   onChunk: chunk => console.log(chunk),
   onError: ({ error }) => console.error(error),
 })
