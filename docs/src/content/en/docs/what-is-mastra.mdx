@@ -9,9 +9,9 @@ packages:
 
 Mastra is an open-source TypeScript framework for building AI applications and autonomous AI systems. Use it for anything from an AI feature inside an existing product to long-running agents that run entire processes on their own, such as a software factory that plans, builds, reviews, and ships code.
 
-Mastra gives you everything you need to build an agent harness out of the box. It's built on established patterns, so you make fewer integration decisions and spend more time on your product. And, as you'd expect from an AI framework, it's built for AI to use too: your [coding agent](/docs/getting-started/build-with-ai) will feel right at home.
+Mastra gives you everything you need to build an agent harness out of the box. It's built on established patterns, so you make fewer integration decisions and spend more time on your product. And, as you'd expect from an AI framework, it includes a [skill](/docs/getting-started/build-with-ai) that helps your coding agent write accurate, up-to-date Mastra code.
 
-Mastra is open and portable. Run it standalone or inside your existing web server, and call your agents from your own code, over HTTP, or from the channels where your team already works.
+Run Mastra standalone or inside your existing web server, and call your agents from your own code, over HTTP using the [Mastra client](/docs/server/mastra-client), or from the channels where your team already works.
 
 :::tip[📹 Watch]
 
@@ -49,15 +49,15 @@ Add the other pieces when you need them. Mastra is a harness, not just a loop th
 
 ## Studio
 
-![Experiment results in Studio showing per-item scores for an agent](/img/studio-experiments-results.png)
+![Agent chat in Studio showing tool calls and task progress](/img/studio-agent-chat.png)
 
 [Studio](/docs/studio/overview) is an interactive development environment where you test your agents and iterate quickly.
 
-Studio isn't just for engineers. Deploy it and share it with your team, so a product manager can try an agent before it ships. With the [Editor](/docs/editor/overview) and [Agent Builder](/docs/agent-builder/overview), non-technical teammates can create and iterate on agents themselves, with every change versioned.
+Studio isn't just for engineers. Deploy it and share it with your team, so teammates can try an agent before it ships. With the [Editor](/docs/editor/overview) and [Agent Builder](/docs/agent-builder/overview), non-technical teammates can create and iterate on agents themselves, with every change versioned.
 
 ## Observability and evals
 
-![Metrics dashboard in Studio showing latency, token usage, and cost](/img/studio-metrics.png)
+![Trace view in Studio showing an agent run with model, tool, and workspace spans](/img/studio-traces.png)
 
 Mastra has built-in logs, traces, and metrics, so you can understand every run in development and production. Every agent run, workflow step, tool call, and model interaction produces a span you can inspect. See [Observability](/docs/observability/overview).
 
@@ -65,27 +65,25 @@ Evals close the loop. Score outputs with rule-based or LLM-as-judge [scorers](/d
 
 ## Memory
 
-Memory is the difference between a smart agent and one that forgets everything between messages. Mastra has built-in [memory](/docs/memory/overview) that gives your agents human-like recall: message history, structured facts about users, and semantic recall of relevant past interactions. No separate memory system to integrate.
+Memory is the difference between an agent that can build on prior work and one that starts over every message. Mastra has built-in [memory](/docs/memory/overview) for message history, structured facts about users, semantic recall, and long-running context.
 
-For long-running conversations, [Observational Memory](/docs/memory/observational-memory) runs background agents that compress old messages into dense observations. The context window stays small without manual compaction, and the agent keeps its long-term memory.
+[Observational Memory](/docs/memory/observational-memory) turns older conversation history into compact text observations. An observer agent extracts the durable facts, decisions, and preferences from raw messages, while recent messages stay available in full. This keeps the context window predictable and debuggable without wiring up a separate memory system.
 
 ## Sandboxes and durable execution
 
-For a harness to do anything beyond generating text, the agent needs a real environment to work in. A Mastra [workspace](/docs/workspace/overview) provides it: a filesystem and a sandbox where agents read and write files, run shell commands, install packages, and load skills from disk. Start with the local providers, then connect a cloud [sandbox provider](/docs/workspace/sandbox) behind the same API when you need isolation or scale.
+Agents often need two things once they move beyond chat:
 
-Long-running agents can't die when the server does. [Durable agents](/docs/long-running-agents/durable-agents) run the agentic loop inside a workflow with persisted state:
-
-- Interrupted runs survive process restarts.
-- Clients reconnect to a live stream without starting over.
-- Work continues in the background after the original request ends.
+- **A workspace to act in**: A Mastra [workspace](/docs/workspace/overview) gives an agent a filesystem and sandbox where it can read and write files, run shell commands, install packages, and load skills from disk. Use local providers in development, then switch to a cloud [sandbox provider](/docs/workspace/sandbox) when you need isolation or scale.
+- **A durable runtime for long work**: [Durable agents](/docs/long-running-agents/durable-agents) run the agentic loop inside a workflow with persisted state. Interrupted runs survive process restarts, clients can reconnect to the same live stream, and background work can continue after the original request ends.
 
 ## Deploy anywhere
 
 Mastra is open by default. It supports many model providers through a single [model router](/models), and works with your preferred databases, sandboxes, and observability platforms.
 
-The fastest path to production is deploying to [Mastra platform](https://mastra.ai/ai-agent-deployment), which gives you automatic deployments, managed infrastructure, and hosted observability and Studio.
+Choose the deployment path that fits your project:
 
-You're never locked in. Mastra is 100% open source, with [deployers](/docs/deployment/overview) for targets like Vercel, Netlify, and Cloudflare, and it self-hosts anywhere Node.js runs. Run it as a dedicated server, or import it into an existing TypeScript application with a [server adapter](/docs/server/server-adapters).
+- **Mastra platform**: The fastest path to production, with automatic deployments, managed infrastructure, and hosted observability and Studio.
+- **Other deployment targets**: Mastra is open source, with [deployers](/docs/deployment/overview) for targets like Vercel, Netlify, and Cloudflare. It also self-hosts anywhere Node.js runs, either as a dedicated server or inside an existing TypeScript application with a [server adapter](/docs/server/server-adapters).
 
 ## Security
 
