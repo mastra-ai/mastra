@@ -35,7 +35,6 @@ import {
   slackDemoAgent,
   billingAgent,
   balanceAgent,
-  webSearchAgent,
 } from './agents/index';
 import { MCPClient } from '@mastra/mcp';
 import { myMcpServer, myMcpServerTwo, mcpAppsServer } from './mcp/server';
@@ -162,7 +161,6 @@ export const mastra = new Mastra({
     clinicDirectAgent,
     clinicSpecialistAgent,
     clinicSupervisorAgent,
-    webSearchAgent,
   },
   processors: {
     moderationProcessor,
