@@ -38,7 +38,7 @@ Parse the PR reference from `$ARGUMENTS`. Then:
 
 The PR may already carry reviews — from bots (CodeRabbit, linters, security scanners) and from humans. Collect them before forming your own opinion.
 
-**Wait for pending bot reviews first.** Bots review every push, but not instantly — a verdict formed before they finish reads a PR that hasn't been fully reviewed yet. Detect a pending bot two ways: `gh pr checks <number>` shows queued or in-progress review checks, or a bot that reviewed this PR before has no review or comment on the head commit (compare the head commit's pushed date against the bot's latest activity timestamps). If a bot is pending, poll every 60 seconds for up to 10 minutes (`sleep 60` between checks). If it still hasn't posted when the wait is exhausted, proceed — but name the missing bot signal in the handoff and weigh it in the approval gates; never present the collected signal as complete when it isn't.
+**Wait for pending bot reviews first.** Bots review every push, but not instantly — a verdict formed before they finish reads a PR that hasn't been fully reviewed yet. Detect a pending bot two ways: `gh pr checks <number>` shows queued or in-progress review checks, or a bot that reviewed this PR before has no review or comment on the head commit (compare the head commit's pushed date against the bot's latest activity timestamps). If a bot is pending, poll every 60 seconds for up to 10 minutes (`sleep 60` between checks). If it still hasn't posted when the wait is exhausted, proceed with the review — but name the missing bot signal in the handoff and never present the collected signal as complete when it isn't. A bot still pending fails the no-pending-bot approval gate: the review completes, the verdict is request changes, because approval would vouch for signal that was never collected.
 
 Then collect:
 
@@ -46,8 +46,10 @@ Then collect:
 2. Unresolved inline threads, which need GraphQL:
 
    ```shell
-   gh api graphql -f query='query { repository(owner: "<owner>", name: "<repo>") { pullRequest(number: <number>) { reviewThreads(first: 100) { nodes { isResolved isOutdated path line comments(first: 10) { nodes { author { login } body } } } } } } }'
+   gh api graphql -f query='query { repository(owner: "<owner>", name: "<repo>") { pullRequest(number: <number>) { reviewThreads(first: 100) { pageInfo { hasNextPage endCursor } nodes { isResolved isOutdated path line comments(first: 10) { nodes { author { login } body } } } } } } }'
    ```
+
+   Paginate to exhaustion: while `pageInfo.hasNextPage` is true, repeat the query with `reviewThreads(first: 100, after: "<endCursor>")` and collect every page — a finding on page two is as substantive as one on page one.
 
 3. `gh pr view <number> --json comments --jq '.comments[] | {author: .author.login, body}'` for top-level comments (bot summaries often land here).
 
@@ -99,7 +101,7 @@ Approval is earned, not the default — the burden of proof is on the PR, and yo
 
 1. **Verification executed** — the changed packages' tests and typecheck ran in the sandbox and passed (or, for a conflicting PR, ran on the head branch with the qualification recorded).
 2. **Existing signal dispositioned** — every substantive prior finding is confirmed, addressed, or refuted; none remains confirmed-unaddressed.
-3. **No pending bot** — no review bot is still working on the head commit (Phase 2 wait exhausted counts as a failed gate only if the bot's history on this PR shows major findings).
+3. **No pending bot** — no review bot is still working on the head commit. A bot still pending — including one that outlasted the Phase 2 wait — fails this gate regardless of the bot's history: a pending bot can still surface a new blocking issue.
 4. **Behavior is tested** — the change's behavior is covered by meaningful assertions, or the handoff records the affirmative reason none are needed.
 5. **Adversarial check survived** — with its one-line record.
 
@@ -126,7 +128,7 @@ Next, publish the review on the PR itself — this is part of every pass, not so
 
 If GitHub rejects the review submission (e.g. the token authored the PR and cannot approve or request changes on it), fall back to `gh pr comment <number> --body-file <file>` so the verdict still lands on the PR, and report the fallback under **Verification** — how the verdict was published is an operational outcome, not an assumption.
 
-**Non-blocking follow-ups become a PR, not homework.** After publishing the review, if it produced non-blocking findings with concrete mechanical fixes — typos, small hardening, a missing test case, doc touch-ups — implement them yourself instead of leaving them as a burden on the author:
+**Non-blocking follow-ups become a PR, not homework.** After publishing the review, if it produced non-blocking findings with concrete mechanical fixes — typos, small hardening, a supplemental test case, doc touch-ups — implement them yourself instead of leaving them as a burden on the author. Supplemental means coverage beyond what the behavior-tested gate required: a test gap that failed that gate is a requested change on the reviewed PR, never follow-up work:
 
 1. Branch from the reviewed PR's head: `git fetch origin pull/<number>/head && git checkout -b factory/review-followups-pr-<number> FETCH_HEAD`.
 2. Apply the fixes, run the narrowest tests covering them, and commit.
