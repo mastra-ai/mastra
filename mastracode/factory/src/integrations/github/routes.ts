@@ -844,13 +844,10 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           return c.json({ error: 'invalid_url' }, 400);
         }
 
-        if (!runIssueTriage) return c.json({ error: 'triage_unavailable' }, 503);
+        if (!runBoardIssueTriage) return c.json({ error: 'triage_unavailable' }, 503);
         const branch = `factory/issue-${issueNumber}`;
         const projectPath = computeWorktreePath(sandboxRow.sandboxWorkdir, branch);
-        await github.addIssueLabels(Number(project.installation.externalId), project.repository.slug, issueNumber, [
-          'auto-triaged',
-        ]);
-        const result = await runIssueTriage({
+        const result = await runBoardIssueTriage({
           repository: project.repository.slug,
           issueNumber,
           issueTitle: body.title,
@@ -860,7 +857,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           resourceId: project.factoryProjectId,
           projectPath,
           branch,
-          defaultModelId: await resolveFactoryDefaultModelId(options.projects, project.factoryProjectId),
         });
         await emitAudit?.({
           context: loose(c),
