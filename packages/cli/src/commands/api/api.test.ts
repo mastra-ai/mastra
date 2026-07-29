@@ -595,12 +595,12 @@ describe('api command executor', () => {
     );
 
     await executeDescriptor(API_COMMANDS.learningEntities, [], '{"entityType":"agent"}', {
-      url: 'https://learning.example.com',
+      url: 'https://example.com',
       header: [],
       pretty: false,
     });
 
-    expect(fetchMock).toHaveBeenCalledWith('https://learning.example.com/api/learning/entities?entityType=agent', {
+    expect(fetchMock).toHaveBeenCalledWith('https://example.com/api/learning/entities?entityType=agent', {
       method: 'GET',
       headers: {},
       signal: expect.any(AbortSignal),
@@ -619,11 +619,11 @@ describe('api command executor', () => {
       API_COMMANDS.learningThemeGet,
       ['my-agent', '42'],
       '{"entityType":"agent","signalName":"goal","snapshotId":"snap"}',
-      { url: 'https://learning.example.com', header: [], pretty: false },
+      { url: 'https://example.com', header: [], pretty: false },
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://learning.example.com/api/learning/entities/my-agent/themes/42?entityType=agent&signalName=goal&snapshotId=snap',
+      'https://example.com/api/learning/entities/my-agent/themes/42?entityType=agent&signalName=goal&snapshotId=snap',
       { method: 'GET', headers: {}, signal: expect.any(AbortSignal) },
     );
     expect(JSON.parse(stdout)).toEqual({
@@ -642,7 +642,7 @@ describe('api command executor', () => {
       'mastra',
       'api',
       '--url',
-      'https://learning.example.com',
+      'https://example.com',
       'learning',
       'snapshots',
       '--schema',
