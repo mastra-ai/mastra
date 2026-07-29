@@ -62,9 +62,19 @@ export function workItemMeta(item: WorkItem): string {
  * still carry divergent role refs; the last-filed ref wins (runs converge them
  * back onto one thread the next time they file).
  */
-export function itemThreadSession(sessions: Record<string, WorkItemSessionRef>): WorkItemSessionRef | null {
-  const refs = Object.values(sessions);
-  return refs.at(-1) ?? null;
+export function itemThreadSession(sessions: Record<string, WorkItemSessionRef>): WorkItemSessionRef | undefined {
+  return Object.values(sessions).at(-1);
+}
+
+/** Source keys already materialized as cards, in either workflow — candidates matching one are dropped. */
+export function persistedSourceKeys(items: readonly WorkItem[]): ReadonlySet<string> {
+  const keys = new Set<string>();
+  for (const item of items) {
+    if (item.sourceKey) keys.add(item.sourceKey);
+    const candidateSourceKey = candidateSourceKeyForItem(item);
+    if (candidateSourceKey) keys.add(candidateSourceKey);
+  }
+  return keys;
 }
 
 /** Session refs whose worktree was deleted are stale: their thread went with it. */

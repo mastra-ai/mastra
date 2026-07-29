@@ -106,7 +106,7 @@ export const LINEAR_FETCH_HINT = `Start by fetching the issue's full details (de
  * review run. Manual cards (or cards missing the needed metadata) can't
  * start runs.
  */
-export function itemRunSpec(item: WorkItem): ItemRunSpec | null {
+export function itemRunSpec(item: WorkItem): ItemRunSpec | undefined {
   const meta = item.metadata;
   const githubNumber = githubNumberForItem(item);
   if (item.source === 'github-issue' && githubNumber !== undefined) {
@@ -136,7 +136,7 @@ export function itemRunSpec(item: WorkItem): ItemRunSpec | null {
       actions: [reviewRunAction(ref, checkout)],
     };
   }
-  return null;
+  return;
 }
 
 /**

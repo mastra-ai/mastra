@@ -19,13 +19,13 @@ export function IntakeColumnExtras({
   pulls,
   linearIssues,
 }: {
-  source: IntakeSource | null;
+  source?: IntakeSource;
   issues: ReturnType<typeof useProjectIssuesQuery>;
   pulls: ReturnType<typeof useProjectPullRequestsQuery>;
   linearIssues: ReturnType<typeof useLinearIssuesQuery>;
 }) {
   const { baseUrl } = useApiConfig();
-  if (source === null) return null;
+  if (source === undefined) return null;
   const feed = source === 'github' ? issues : source === 'github-prs' ? pulls : linearIssues;
 
   return (

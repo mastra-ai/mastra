@@ -73,7 +73,8 @@ export function WorkItemCard({
   const runSpec = itemRunSpec(item);
   const sessions = liveSessions(item.sessions, liveWorktreePaths);
   // Offer only runs whose session slot hasn't been used yet on this card.
-  const runActions = runSpec === null ? [] : runSpec.actions.filter(action => !(action.role in sessions));
+  const runActions = runSpec === undefined ? [] : runSpec.actions.filter(action => !(action.role in sessions));
+  const defaultRunAction = runActions[0];
   const threadSession = itemThreadSession(sessions);
   const relatedItems = relatedWorkItems(item, allItems);
   const labels = metadataLabels(item.metadata);
@@ -95,7 +96,7 @@ export function WorkItemCard({
           runPending && 'opacity-70',
         )}
       >
-        {threadSession !== null ? (
+        {threadSession !== undefined ? (
           <Link
             to={`/factories/${factoryId}/workspaces/${threadSession.sessionId}/threads/${threadSession.threadId}`}
             draggable={false}
@@ -112,14 +113,14 @@ export function WorkItemCard({
             disabled={runDisabled}
             aria-busy={runPending || undefined}
             aria-label={
-              runSpec !== null && runActions[0] !== undefined
-                ? `${runActions[0].label} ${item.title}`
+              runSpec !== undefined && defaultRunAction !== undefined
+                ? `${defaultRunAction.label} ${item.title}`
                 : `Create thread for ${item.title}`
             }
             className="focus-visible:outline-accent1 absolute inset-0 z-10 cursor-pointer rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed"
             onClick={() =>
-              runSpec !== null && runActions[0] !== undefined
-                ? onStartRun(runSpec, runActions[0])
+              runSpec !== undefined && defaultRunAction !== undefined
+                ? onStartRun(runSpec, defaultRunAction)
                 : onCreateSession(itemSessionSpec(item))
             }
           />
@@ -140,7 +141,7 @@ export function WorkItemCard({
               }
             />
             <DropdownMenu.Content align="end" className="min-w-44">
-              {runSpec !== null &&
+              {runSpec !== undefined &&
                 runActions.map(action => {
                   const starting = pendingRunRoles.has(action.role);
                   return (
@@ -185,7 +186,7 @@ export function WorkItemCard({
           </div>
         </div>
         <CardLabels labels={labels} />
-        {threadSession !== null && (
+        {threadSession !== undefined && (
           <span className="text-ui-xs text-accent1 flex items-center gap-1">
             <MessagesSquare size={11} aria-hidden />
             <span className="truncate">Session · {threadSession.branch}</span>

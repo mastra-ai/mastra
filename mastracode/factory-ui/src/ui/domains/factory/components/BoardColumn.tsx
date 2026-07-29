@@ -124,65 +124,122 @@ export function BoardColumn({
       }}
     >
       {collapsed ? (
-        <div className="flex min-h-0 flex-1 flex-col items-center gap-3 py-1">
-          <div className="relative flex h-8 w-full items-center justify-center">
-            <span
-              aria-hidden
-              className={cn(
-                'text-ui-xs text-icon3 flex h-8 items-center font-medium tabular-nums',
-                headerAction &&
-                  'transition-opacity group-hover/column:opacity-0 group-focus-within/column:opacity-0 pointer-coarse:opacity-0 any-pointer-coarse:opacity-0 motion-reduce:transition-none',
-              )}
-            >
-              {taskCount}
-            </span>
-            {headerAction ? (
-              <div className={cn('absolute inset-0 flex items-center justify-center', COLUMN_ACTION_REVEAL_CLASS)}>
-                {headerAction}
-              </div>
-            ) : null}
-          </div>
-          <Txt as="h2" variant="ui-smd" className="text-icon3 m-0 font-semibold [writing-mode:vertical-rl]">
-            {label}
-          </Txt>
-        </div>
+        <CollapsedColumnBody label={label} taskCount={taskCount} headerAction={headerAction} />
       ) : (
-        <>
-          <div className="flex min-h-8 items-start justify-between gap-2">
-            <div className="flex h-8 min-w-0 items-center gap-2">
-              <BoardStageIcon stage={stage} />
-              <Txt as="h2" variant="ui-smd" className="text-icon3 m-0 truncate font-semibold">
-                {label}
-              </Txt>
-              {loading ? (
-                <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
-              ) : (
-                <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
-              )}
-            </div>
-            {headerAction ? (
-              <div className={cn('flex h-8 shrink-0 items-center', COLUMN_ACTION_REVEAL_CLASS)}>{headerAction}</div>
-            ) : null}
-          </div>
-          {headerExtras}
-          {/* Cards scroll inside the swimlane; the page stays fixed. */}
-          <div className="min-h-16 flex-1">
-            <ScrollArea className="h-full">
-              <div ref={cardListRef} className="relative flex flex-col gap-2.5 pb-2">
-                {children}
-                <div
-                  aria-hidden
-                  style={{ top: dropLineTop }}
-                  className={cn(
-                    'pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-neutral1 transition-opacity motion-reduce:transition-none',
-                    dragOver ? 'opacity-100' : 'opacity-0',
-                  )}
-                />
-              </div>
-            </ScrollArea>
-          </div>
-        </>
+        <ColumnBody
+          stage={stage}
+          label={label}
+          taskCount={taskCount}
+          totalTaskCount={totalTaskCount}
+          loading={loading}
+          dragOver={dragOver}
+          dropLineTop={dropLineTop}
+          cardListRef={cardListRef}
+          headerAction={headerAction}
+          headerExtras={headerExtras}
+        >
+          {children}
+        </ColumnBody>
       )}
     </section>
+  );
+}
+
+function CollapsedColumnBody({
+  label,
+  taskCount,
+  headerAction,
+}: {
+  label: string;
+  taskCount: number;
+  headerAction?: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center gap-3 py-1">
+      <div className="relative flex h-8 w-full items-center justify-center">
+        <span
+          aria-hidden
+          className={cn(
+            'text-ui-xs text-icon3 flex h-8 items-center font-medium tabular-nums',
+            headerAction &&
+              'transition-opacity group-hover/column:opacity-0 group-focus-within/column:opacity-0 pointer-coarse:opacity-0 any-pointer-coarse:opacity-0 motion-reduce:transition-none',
+          )}
+        >
+          {taskCount}
+        </span>
+        {headerAction ? (
+          <div className={cn('absolute inset-0 flex items-center justify-center', COLUMN_ACTION_REVEAL_CLASS)}>
+            {headerAction}
+          </div>
+        ) : null}
+      </div>
+      <Txt as="h2" variant="ui-smd" className="text-icon3 m-0 font-semibold [writing-mode:vertical-rl]">
+        {label}
+      </Txt>
+    </div>
+  );
+}
+
+function ColumnBody({
+  stage,
+  label,
+  taskCount,
+  totalTaskCount,
+  loading,
+  dragOver,
+  dropLineTop,
+  cardListRef,
+  headerAction,
+  headerExtras,
+  children,
+}: {
+  stage: BoardStageId;
+  label: string;
+  taskCount: number;
+  totalTaskCount: number;
+  loading: boolean;
+  dragOver: boolean;
+  dropLineTop: number;
+  cardListRef: React.RefObject<HTMLDivElement | null>;
+  headerAction?: React.ReactNode;
+  headerExtras?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <>
+      <div className="flex min-h-8 items-start justify-between gap-2">
+        <div className="flex h-8 min-w-0 items-center gap-2">
+          <BoardStageIcon stage={stage} />
+          <Txt as="h2" variant="ui-smd" className="text-icon3 m-0 truncate font-semibold">
+            {label}
+          </Txt>
+          {loading ? (
+            <Skeleton className="h-6 w-12 shrink-0 rounded-full" />
+          ) : (
+            <ColumnTaskBadge count={taskCount} total={totalTaskCount} label={label} />
+          )}
+        </div>
+        {headerAction ? (
+          <div className={cn('flex h-8 shrink-0 items-center', COLUMN_ACTION_REVEAL_CLASS)}>{headerAction}</div>
+        ) : null}
+      </div>
+      {headerExtras}
+      {/* Cards scroll inside the swimlane; the page stays fixed. */}
+      <div className="min-h-16 flex-1">
+        <ScrollArea className="h-full">
+          <div ref={cardListRef} className="relative flex flex-col gap-2.5 pb-2">
+            {children}
+            <div
+              aria-hidden
+              style={{ top: dropLineTop }}
+              className={cn(
+                'pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-neutral1 transition-opacity motion-reduce:transition-none',
+                dragOver ? 'opacity-100' : 'opacity-0',
+              )}
+            />
+          </div>
+        </ScrollArea>
+      </div>
+    </>
   );
 }

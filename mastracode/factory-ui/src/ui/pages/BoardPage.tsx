@@ -7,7 +7,8 @@ import { Plus } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { INTAKE_SOURCES, stageContentCount } from '../domains/factory/boardCandidates';
-import { itemAppearsInStage } from '../domains/factory/boardStages';
+import type { IntakeSource } from '../domains/factory/boardCandidates';
+import { boardLoadingStages, boardStages, itemAppearsInStage } from '../domains/factory/boardStages';
 import type { BoardKind } from '../domains/factory/boardStages';
 import { BoardColumn } from '../domains/factory/components/BoardColumn';
 import { BoardColumnEmptyState } from '../domains/factory/components/BoardColumnEmptyState';
@@ -16,7 +17,12 @@ import { FactoryPageShell } from '../domains/factory/components/FactoryPageShell
 import { InlineWorkItemComposer } from '../domains/factory/components/InlineWorkItemComposer';
 import { IntakeColumnExtras } from '../domains/factory/components/IntakeColumnExtras';
 import { WorkItemCard } from '../domains/factory/components/WorkItemCard';
-import { useBoardState } from '../domains/factory/hooks/useBoardState';
+import { useBoardComposer } from '../domains/factory/hooks/useBoardComposer';
+import { useBoardDecisions } from '../domains/factory/hooks/useBoardDecisions';
+import { useBoardIntake } from '../domains/factory/hooks/useBoardIntake';
+import { useBoardItems } from '../domains/factory/hooks/useBoardItems';
+import { useBoardRuns } from '../domains/factory/hooks/useBoardRuns';
+import { useBoardScroll } from '../domains/factory/hooks/useBoardScroll';
 import type { FactoryProject, LinkedRepositoryPayload } from '../domains/workspaces/services/github';
 import { SkeletonRows } from '../ui/SkeletonRows';
 import { GithubIcon } from '../ui/icons';
@@ -79,22 +85,50 @@ function BoardContent({
   repository: LinkedRepositoryPayload;
   kind: BoardKind;
 }) {
-  const board = useBoardState({ factory, repository, kind });
-  const { composer, intake, scroll, stages } = board;
+  const factoryProjectId = factory.id;
+  const review = kind === 'review';
+  const stages = boardStages(kind);
 
-  if (board.itemsError !== undefined) {
+  const items = useBoardItems({ factoryProjectId, kind });
+  const intake = useBoardIntake({ factoryProjectId, repository, kind, knownSourceKeys: items.knownSourceKeys });
+  const runs = useBoardRuns({
+    factoryProjectId,
+    projectRepositoryId: repository.projectRepositoryId,
+    workItems: items.all,
+    refetchItems: items.refetch,
+  });
+  const decisions = useBoardDecisions(factoryProjectId);
+  const composer = useBoardComposer(factoryProjectId);
+  const loadingStages = boardLoadingStages({
+    stages,
+    itemsPending: items.isPending,
+    intakePending: intake.isPending,
+    triagePending: intake.isTriagePending,
+  });
+  const scroll = useBoardScroll({
+    boardKey: `${factoryProjectId}:${kind}`,
+    settled: loadingStages.size === 0,
+    stages,
+    workItems: items.visible,
+    candidates: intake.candidates,
+  });
+
+  if (items.error !== undefined) {
     return (
       <Notice variant="destructive">
-        {board.itemsError instanceof Error ? board.itemsError.message : 'Failed to load the board'}
+        {items.error instanceof Error ? items.error.message : 'Failed to load the board'}
       </Notice>
     );
   }
 
+  const mutationError = runs.error ?? items.mutationError;
+  const totalTaskCount = items.visible.length + intake.candidates.length;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {board.mutationError !== undefined && (
+      {mutationError !== undefined && (
         <Notice variant="destructive">
-          {board.mutationError instanceof Error ? board.mutationError.message : 'Board action failed'}
+          {mutationError instanceof Error ? mutationError.message : 'Board action failed'}
         </Notice>
       )}
       <ScrollArea
@@ -108,8 +142,8 @@ function BoardContent({
       >
         <div className="flex h-full min-h-0 gap-3">
           {stages.map(stage => {
-            const loading = board.loadingStages.has(stage.id);
-            const taskCount = stageContentCount(stage.id, stages, board.workItems, board.candidates);
+            const loading = loadingStages.has(stage.id);
+            const taskCount = stageContentCount(stage.id, stages, items.visible, intake.candidates);
             const composerOpen = composer.stage === stage.id;
             return (
               <BoardColumn
@@ -117,13 +151,13 @@ function BoardContent({
                 stage={stage.id}
                 label={stage.label}
                 taskCount={taskCount}
-                totalTaskCount={board.totalTaskCount}
+                totalTaskCount={totalTaskCount}
                 loading={loading}
                 composerOpen={composerOpen}
                 laneRef={scroll.registerLane(stage.id)}
-                onDrop={board.handleDrop}
+                onDrop={items.handleDrop}
                 headerAction={
-                  !board.review &&
+                  !review &&
                   !loading &&
                   stage.id !== 'done' &&
                   stage.id !== 'canceled' &&
@@ -144,40 +178,42 @@ function BoardContent({
                   ) : undefined
                 }
                 headerExtras={
-                  stage.id === 'intake' && intake.showSwitch ? <IntakeSourceSwitch intake={intake} /> : undefined
+                  stage.id === 'intake' && intake.showSwitch ? (
+                    <IntakeSourceSwitch available={intake.available} active={intake.active} onSelect={intake.select} />
+                  ) : undefined
                 }
               >
                 {composerOpen ? (
                   <InlineWorkItemComposer
                     stage={stage.id}
                     stageLabel={stage.label}
-                    onCreate={title => composer.create(stage.id, title)}
+                    onCreate={title => composer.submit(stage.id, title)}
                     onClose={() => composer.close(stage.id)}
                   />
                 ) : null}
-                {board.workItems
+                {items.visible
                   .filter(item => itemAppearsInStage(item, stage.id, stages))
                   .map(item => (
                     <WorkItemCard
                       key={`${item.id}:${stage.id}`}
                       item={item}
                       columnStage={stage.id}
-                      allItems={board.allWorkItems}
-                      liveWorktreePaths={board.liveWorktreePaths}
-                      runDisabled={board.runDisabled}
-                      evaluatingStage={board.evaluatingStages.get(item.id)}
-                      transitionReason={board.transitionReasons[item.id]}
-                      decision={board.decisionByItem.get(item.id)}
-                      retryingDecisionId={board.retryDecision.isPending ? board.retryDecision.variables : undefined}
-                      onRetryDecision={decisionId => board.retryDecision.mutate(decisionId)}
-                      pendingRunRoles={board.pendingRunRolesFor(item.id)}
-                      onCreateSession={() => void board.openOrCreateSession(item, stage.id)}
-                      onStartRun={(_spec, action) => void board.openOrStartRun(item, action.role)}
-                      onMove={toStage => board.moveItem(item.id, toStage)}
-                      onRemove={() => board.removeItem(item.id)}
+                      allItems={items.all}
+                      liveWorktreePaths={runs.liveWorktreePaths}
+                      runDisabled={runs.disabled}
+                      evaluatingStage={items.evaluatingStages.get(item.id)}
+                      transitionReason={items.transitionReasons[item.id]}
+                      decision={decisions.byItem.get(item.id)}
+                      retryingDecisionId={decisions.retryingId}
+                      onRetryDecision={decisions.retry}
+                      pendingRunRoles={runs.pendingRolesFor(item.id)}
+                      onCreateSession={() => void runs.openOrCreateSession(item, stage.id)}
+                      onStartRun={(_spec, action) => void runs.openOrStartRun(item, action.role)}
+                      onMove={toStage => items.move(item.id, toStage)}
+                      onRemove={() => items.remove(item.id)}
                     />
                   ))}
-                {board.candidates
+                {intake.candidates
                   .filter(candidate => candidate.column === stage.id)
                   .map(candidate => {
                     const issue = candidate.issue;
@@ -185,12 +221,12 @@ function BoardContent({
                       <CandidateCard
                         key={candidate.sourceKey}
                         candidate={candidate}
-                        pendingRunRoles={board.pendingRunRolesForSource(candidate.sourceKey)}
-                        triageStarting={issue !== undefined && board.triagingIssueNumbers.has(issue.number)}
-                        disabled={!board.runEnabled}
-                        onRun={(action, prompt) => board.startCandidateRun(candidate, action, prompt)}
-                        onFile={() => board.fileCandidate(candidate)}
-                        onTriage={issue ? () => board.triageCandidate(issue) : undefined}
+                        pendingRunRoles={runs.pendingRolesForSource(candidate.sourceKey)}
+                        triageStarting={issue !== undefined && runs.triagingIssueNumbers.has(issue.number)}
+                        disabled={!runs.enabled}
+                        onRun={(action, prompt) => runs.startCandidateRun(candidate, action, prompt)}
+                        onFile={() => items.handleDrop({ kind: 'candidate', candidate }, candidate.column)}
+                        onTriage={issue ? () => runs.triageCandidate(issue) : undefined}
                       />
                     );
                   })}
@@ -198,7 +234,7 @@ function BoardContent({
                   <SkeletonRows label={`Loading ${stage.label} column`} rows={3} rowClassName="h-24 w-full" />
                 )}
                 {!loading && !composerOpen && taskCount === 0 && (
-                  <BoardColumnEmptyState stage={stage.id} kind={kind} hasIntakeSource={intake.active !== null} />
+                  <BoardColumnEmptyState stage={stage.id} kind={kind} hasIntakeSource={intake.active !== undefined} />
                 )}
                 {stage.id === 'intake' && (
                   <IntakeColumnExtras
@@ -217,18 +253,26 @@ function BoardContent({
   );
 }
 
-function IntakeSourceSwitch({ intake }: { intake: ReturnType<typeof useBoardState>['intake'] }) {
+function IntakeSourceSwitch({
+  available,
+  active,
+  onSelect,
+}: {
+  available: readonly IntakeSource[];
+  active?: IntakeSource;
+  onSelect: (source: IntakeSource) => void;
+}) {
   return (
     <div role="group" aria-label="Intake source" className="flex items-center gap-1 pb-1">
-      {INTAKE_SOURCES.filter(source => intake.available.includes(source.id)).map(source => (
+      {INTAKE_SOURCES.filter(source => available.includes(source.id)).map(source => (
         <button
           key={source.id}
           type="button"
-          aria-pressed={intake.active === source.id}
-          onClick={() => intake.select(source.id)}
+          aria-pressed={active === source.id}
+          onClick={() => onSelect(source.id)}
           className={cn(
             'rounded-full border px-2.5 py-0.5 text-ui-xs transition',
-            intake.active === source.id
+            active === source.id
               ? 'border-accent1 bg-surface4 text-icon6'
               : 'border-border1 bg-transparent text-icon3 hover:text-icon5',
           )}
