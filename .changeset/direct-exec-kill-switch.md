@@ -2,4 +2,4 @@
 '@mastra/platform-workspace': patch
 ---
 
-Fix direct-exec fallback loop: when the WebSocket transport fails on a sandbox (Railway rejects the handshake, mid-stream drop, etc.), disable direct-exec permanently for that sandbox instead of re-minting a fresh lease on every subsequent exec. Also surface WebSocket close code, reason, and `opened` state in `DirectExecResult` and emit a diagnostic warning on transport failure so we can see why Railway is refusing the upgrade in production.
+Fixed sandbox command execution to stop retrying the direct connection after it fails once. Previously, every command on an affected sandbox paid for a failed connection attempt before falling back; now the sandbox switches to the fallback path permanently and commands run without the extra delay. Added a diagnostic warning with connection failure details to help identify the underlying cause.

@@ -90,8 +90,12 @@ export interface DirectExecResult {
   truncated: boolean;
   timedOut: boolean;
   /**
-   * WebSocket close metadata. Populated on any close (normal or transport
-   * failure). `opened` distinguishes handshake failures (never opened) from
+   * WebSocket close metadata. Only populated when a `close` event fires
+   * before we settle — i.e. mid-stream drops and close-before-exit-frame.
+   * Absent on a normal exit (we settle on the `exit` frame, before close)
+   * and on handshake failures where the runtime fires `error` without a
+   * `close` event (Node 22's undici does this for refused upgrades).
+   * `opened` distinguishes handshake failures (never opened) from
    * mid-stream drops. Callers use this for diagnostic logging; not part of
    * the CommandResult contract.
    */
