@@ -370,3 +370,4 @@ allowBuilds:
   node-liblzma: false
   workerd: false
   braintrust: false
+  isolated-vm: true

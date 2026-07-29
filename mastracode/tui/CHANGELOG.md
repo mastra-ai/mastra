@@ -1,5 +1,25 @@
 # mastracode
 
+## 0.32.4-alpha.2
+
+### Patch Changes
+
+- Extended Mastra Code's transient retry policy to cover provider server errors with up to 10 retries and exponential backoff starting at 500ms. ([#20393](https://github.com/mastra-ai/mastra/pull/20393))
+
+- Fixed retry timing in Mastra Code so the TUI only shows a retry delay when a retry is actually scheduled. ([#20392](https://github.com/mastra-ai/mastra/pull/20392))
+
+- Updated dependencies [[`7457af7`](https://github.com/mastra-ai/mastra/commit/7457af7d309fa4ba4d975904249c0d05ec32e6b7), [`55c9e24`](https://github.com/mastra-ai/mastra/commit/55c9e248c27c1d72b5bb7e94ea6b8a3999eee49f), [`07f5b4b`](https://github.com/mastra-ai/mastra/commit/07f5b4ba9d608d88865030732e580298296adf99)]:
+  - @mastra/code-sdk@1.1.1-alpha.2
+  - @mastra/core@1.55.0-alpha.2
+
+## 0.32.4-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`ba369f2`](https://github.com/mastra-ai/mastra/commit/ba369f2a0aaf998da0d6aa033d26f64f96bef8ac), [`dcfed93`](https://github.com/mastra-ai/mastra/commit/dcfed93e1e256c6abfa792cbb7ca836f5d0e8638), [`2876e15`](https://github.com/mastra-ai/mastra/commit/2876e15b4d2f616a3bc1ed3af57d546c268384ce), [`4137863`](https://github.com/mastra-ai/mastra/commit/4137863eaa35f430117d21d5dc1bf2f534e64339), [`4137863`](https://github.com/mastra-ai/mastra/commit/4137863eaa35f430117d21d5dc1bf2f534e64339), [`598080f`](https://github.com/mastra-ai/mastra/commit/598080f224edb3f0f5b801035b067fac50a56a03)]:
+  - @mastra/core@1.55.0-alpha.1
+  - @mastra/code-sdk@1.1.1-alpha.1
+
 ## 0.32.4-alpha.0
 
 ### Patch Changes

@@ -356,7 +356,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
         'GET',
         `${API_PREFIX}/repositories/${repositoryId}/events?${query}`,
       );
-      this.deps?.logger.info('Platform GitHub repository event poll completed', {
+      this.deps?.logger.debug('Platform GitHub repository event poll completed', {
         repositoryId,
         eventCount: page.events.length,
         latencyMs: Math.round(performance.now() - pollStartedAt),

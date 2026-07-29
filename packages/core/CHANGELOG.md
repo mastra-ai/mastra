@@ -1,5 +1,61 @@
 # @mastra/core
 
+## 1.55.0-alpha.2
+
+### Minor Changes
+
+- Channel handlers can now contribute to the request context of the run they start. ([#20060](https://github.com/mastra-ai/mastra/pull/20060))
+
+  `ChannelHandlerContext` gains a `requestContext` field holding the `RequestContext` for the run the inbound message is about to start. It is constructed fresh for every message, and a handler may write to it before calling `defaultHandler`. Core then adds its own channel and render-context entries and dispatches with the same instance, so anything the handler wrote reaches the run.
+
+  ```ts
+  import { AgentControllerChannels } from '@mastra/core/channels';
+
+  const channels = new AgentControllerChannels({
+    adapters,
+    handlers: {
+      onDirectMessage: async (thread, message, defaultHandler, ctx) => {
+        ctx.requestContext.set('locale', 'en-GB');
+        await defaultHandler(thread, message);
+      },
+    },
+  });
+  ```
+
+  Anything a run reads from its request context can now be decided per inbound message — for example resolving which user a platform sender maps to, so the run uses that user's stored credentials.
+
+  **Contract change:** `ChannelHandler`'s 4th `ctx` parameter is now non-optional (`ctx: ChannelHandlerContext`, previously `ctx?: ChannelHandlerContext`). Core has always passed it, and requiring it means a handler writing `ctx.requestContext.set(...)` needs neither a non-null assertion nor a guard that would silently skip the write.
+
+  Handler _implementations_ are unaffected: TypeScript lets a function declaring fewer parameters satisfy a type declaring more, so existing three-parameter handlers — and anyone who wrote `ctx?.mastra` — keep compiling. Code that _calls_ a `ChannelHandler`-typed value with three arguments does need updating, and will fail with `Expected 4 arguments, but got 3` until the context is passed.
+
+### Patch Changes
+
+- Improved workflow and MCP tool-result formatting to avoid serializing large values during equality checks while preserving explicit model outputs. ([#20340](https://github.com/mastra-ai/mastra/pull/20340))
+
+## 1.55.0-alpha.1
+
+### Minor Changes
+
+- Added support for Code Mode transports that provide their own execution boundary. A transport can now declare `requiresSandbox: false` and `createCodeMode()` will run it without a workspace sandbox, which enables in-process transports such as `IsolatedVmCodeModeTransport` from `@mastra/isolated-vm`: ([#20359](https://github.com/mastra-ai/mastra/pull/20359))
+
+  ```typescript
+  import { createCodeMode } from '@mastra/core/tools';
+  import { IsolatedVmCodeModeTransport } from '@mastra/isolated-vm';
+
+  // No sandbox needed — the V8 isolate is the execution boundary
+  const { tool, instructions } = createCodeMode({ tools }, new IsolatedVmCodeModeTransport());
+  ```
+
+  Also fixed the generated Code Mode instructions to describe isolation accurately instead of always claiming the program runs fully sandboxed, since the actual boundary depends on the configured sandbox and transport. The `sanitizeToolId` helper used for `external_*` naming is now exported from `@mastra/core/tools` so transports can reuse it instead of duplicating it.
+
+### Patch Changes
+
+- Fixed Zod 4 installations reporting peer dependency warnings. ([#20313](https://github.com/mastra-ai/mastra/pull/20313))
+
+- Fixed channel tool approval actions so missing thread mappings cannot create conversations under the button clicker's identity. ([#20374](https://github.com/mastra-ai/mastra/pull/20374))
+
+- Fixed the default workflow execution engine serializing the full RequestContext on every step and entry and then discarding the result. `serializeRequestContext` probes every stored value with `JSON.stringify` via `RequestContext.toJSON()`, but on the default engine the serialized object was never read — only engines with `requiresDurableContextSerialization()` (e.g. Inngest) restore context from serialized results. The step/entry return paths now skip serialization on the default engine; snapshot persistence is unaffected. ([#20369](https://github.com/mastra-ai/mastra/pull/20369))
+
 ## 1.55.0-alpha.0
 
 ### Minor Changes

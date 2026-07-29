@@ -10,7 +10,7 @@ A workspace gives an environment two things your agents can use at runtime:
 - A **bucket** for filesystem storage, exposed to your code as [`PlatformFilesystem`](/reference/workspace/platform-filesystem).
 - A **sandbox** for executing commands, exposed as [`PlatformSandbox`](/reference/workspace/platform-sandbox).
 
-Workspaces are provisioned per [environment](/docs/mastra-platform/environments), so `production` and `staging` each get their own bucket and sandbox. The platform manages provisioning, credentials, and lifecycle; your deploy code only needs to construct the providers.
+Workspaces are provisioned per [environment](/docs/mastra-platform/environments), so `production` and `staging` each get their own bucket and sandbox. The platform manages provisioning, credentials, and lifecycle. Your deploy code only needs to construct the providers.
 
 ## When workspaces are provisioned
 
@@ -18,7 +18,7 @@ New projects have workspaces enabled by default. When you create an environment,
 
 Existing projects that haven't opted in show an **Enable workspaces** action in the Workspaces tab. Enabling provisions a bucket for every environment on the project.
 
-If provisioning fails for an environment — for example while Railway is under load — the Workspaces tab shows the failure and offers a retry. The environment itself is still created; only the workspace is unavailable until you retry.
+If provisioning fails for an environment, for example while Railway is under load, the Workspaces tab shows the failure and offers a retry. The environment itself is still created. Only the workspace is unavailable until you retry.
 
 ## Use the workspace from your code
 
@@ -75,7 +75,7 @@ MASTRA_ENVIRONMENT_ID=your-environment-id
 MASTRA_PLATFORM_BUCKET_NAME=your-bucket-name
 ```
 
-`PlatformFilesystem` and `PlatformSandbox` behave the same locally as on the platform — they connect to the same bucket and sandbox pool for that environment. Use a `staging` or `preview` environment's variables for local runs if you want to keep production data isolated.
+`PlatformFilesystem` and `PlatformSandbox` behave the same locally as on the platform, they connect to the same bucket and sandbox pool for that environment. Use a `staging` or `preview` environment's variables for local runs if you want to keep production data isolated.
 
 For a purely offline loop that never touches the platform, swap the providers for [`LocalFilesystem`](/reference/workspace/local-filesystem) and [`LocalSandbox`](/reference/workspace/local-sandbox) in a local build.
 
@@ -89,6 +89,6 @@ The Workspaces tab in your platform project shows, per environment:
 
 ## See also
 
-- [`PlatformFilesystem`](/reference/workspace/platform-filesystem) — reference for the filesystem provider.
-- [`PlatformSandbox`](/reference/workspace/platform-sandbox) — reference for the sandbox provider.
-- [Environments](/docs/mastra-platform/environments) — how environments scope workspaces, variables, and databases.
+- [`PlatformFilesystem`](/reference/workspace/platform-filesystem): reference for the filesystem provider.
+- [`PlatformSandbox`](/reference/workspace/platform-sandbox): reference for the sandbox provider.
+- [Environments](/docs/mastra-platform/environments): how environments scope workspaces, variables, and databases.

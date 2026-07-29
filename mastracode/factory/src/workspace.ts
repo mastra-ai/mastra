@@ -20,6 +20,7 @@ import {
   checkoutSessionBranch,
   MaterializeError,
   materializeRepo,
+  recycleClaimedWorkdir,
   runWorktreeSetup,
 } from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
@@ -173,7 +174,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     if (!installation) throw new Error(`GitHub installation ${connection.installationId} was not found`);
     const repoFullName = repository.slug;
 
-    const workdir = isLocalSandbox
+    let workdir = isLocalSandbox
       ? fleet.computeLocalSessionWorkdir(repoFullName, session.id)
       : (session.sandboxWorkdir ?? projectRepository.sandboxWorkdir);
     // The system prompt derives its working directory from `state.projectPath`
@@ -235,6 +236,30 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     }
 
     const materialize = async (): Promise<Workspace> => {
+      // A terminal work item or a deleted session may have returned a
+      // still-warm VM — with this repository already cloned — to the reuse
+      // pool. Adopt it before provisioning a fresh sandbox. Pooled VMs carry
+      // no credentials (tokens are injected per command, and the workdir is
+      // scrubbed on release and again below), so any user's session for this
+      // repository can claim one.
+      let claimedPooledSandbox = false;
+      if (!isLocalSandbox && !session.sandboxId) {
+        const pooled = await storage.sandboxPool.claim({
+          projectRepositoryId: session.projectRepositoryId,
+        });
+        if (pooled) {
+          await storage.sessions.setSandbox({
+            id: session.id,
+            sandboxId: pooled.sandboxId,
+            sandboxWorkdir: pooled.sandboxWorkdir,
+          });
+          session.sandboxId = pooled.sandboxId;
+          session.sandboxWorkdir = pooled.sandboxWorkdir;
+          workdir = pooled.sandboxWorkdir;
+          claimedPooledSandbox = true;
+        }
+      }
+
       const access = await github.versionControl.getRepositoryAccess({
         orgId: session.orgId,
         repositoryId: repository.id,
@@ -278,6 +303,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const isGitMissing = (error: unknown) => error instanceof MaterializeError && error.code === 'git-missing';
 
       let sandbox = await ensureSandbox();
+      // A claimed VM still has the previous session's branch checked out —
+      // reset it to the default branch before materialize/checkout. When the
+      // pooled VM was already reaped, `ensureSandbox` provisioned fresh and
+      // the recycle is a no-op (no checkout on disk yet).
+      if (claimedPooledSandbox) await recycleClaimedWorkdir(sandbox, workdir, repository.defaultBranch);
       try {
         await runMaterialize(sandbox);
       } catch (error) {

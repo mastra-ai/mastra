@@ -19,7 +19,7 @@ export function SettingsPage() {
   const location = useLocation();
 
   if (!isSettingsSection(section)) {
-    return <Navigate to="../general" replace state={location.state} />;
+    return <Navigate to="../preferences" replace state={location.state} />;
   }
   return <SettingsPageContent />;
 }
