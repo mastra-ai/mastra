@@ -81,7 +81,7 @@ describe('ModelSpanTracker', () => {
   });
 
   describe('provider-reported costs', () => {
-    it('records OpenRouter usage.cost as the exact generation cost', () => {
+    it('adds OpenRouter usage.cost and upstreamInferenceCost for the exact generation cost', () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -105,12 +105,38 @@ describe('ModelSpanTracker', () => {
       expect(span?.attributes?.costContext).toEqual({
         provider: 'openrouter',
         model: 'anthropic/claude-sonnet-4',
-        estimatedCost: 0.0123,
+        estimatedCost: 0.0223,
         costUnit: 'USD',
         costMetadata: {
           source: 'provider_reported',
-          providerCostField: 'usage.cost',
+          providerCostField: 'usage.cost+usage.costDetails.upstreamInferenceCost',
         },
+      });
+    });
+
+    it('records the response model from the end attributes', () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'openrouter/auto', provider: 'openrouter' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      tracker.endGeneration({
+        attributes: { responseModel: 'openai/gpt-4o' },
+        providerMetadata: {
+          openrouter: {
+            usage: {
+              cost: 0.0123,
+            },
+          },
+        },
+      });
+
+      const [span] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      expect(span?.attributes?.costContext).toMatchObject({
+        model: 'openai/gpt-4o',
+        estimatedCost: 0.0123,
       });
     });
 
@@ -140,6 +166,35 @@ describe('ModelSpanTracker', () => {
         costMetadata: {
           source: 'provider_reported',
           providerCostField: 'usage.costDetails.upstreamInferenceCost',
+        },
+      });
+    });
+
+    it('records the exact cost when end attributes are omitted', () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'openai/gpt-4o', provider: 'openrouter' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+
+      tracker.endGeneration({
+        providerMetadata: {
+          openrouter: {
+            usage: {
+              cost: 0.0042,
+            },
+          },
+        },
+      });
+
+      const [span] = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      expect(span?.attributes?.costContext).toMatchObject({
+        provider: 'openrouter',
+        estimatedCost: 0.0042,
+        costMetadata: {
+          source: 'provider_reported',
+          providerCostField: 'usage.cost',
         },
       });
     });

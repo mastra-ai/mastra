@@ -45,6 +45,7 @@ type StepInputPreview = Array<{ role: string; content: string }> | Record<string
 
 function extractOpenRouterCostContext(
   providerMetadata: EndGenerationOptions['providerMetadata'],
+  attributes: EndGenerationOptions['attributes'],
   modelSpan?: Span<SpanType.MODEL_GENERATION>,
 ): CostContext | undefined {
   const openrouter = providerMetadata?.openrouter;
@@ -63,28 +64,33 @@ function extractOpenRouterCostContext(
       : undefined;
   const reportedCost =
     typeof usage.cost === 'number' && Number.isFinite(usage.cost) && usage.cost >= 0 ? usage.cost : undefined;
-  const totalCost =
-    reportedCost !== undefined
-      ? reportedCost
-      : costDetails &&
-          typeof costDetails.upstreamInferenceCost === 'number' &&
-          Number.isFinite(costDetails.upstreamInferenceCost) &&
-          costDetails.upstreamInferenceCost >= 0
-        ? costDetails.upstreamInferenceCost
-        : undefined;
+  const upstreamInferenceCost =
+    costDetails &&
+    typeof costDetails.upstreamInferenceCost === 'number' &&
+    Number.isFinite(costDetails.upstreamInferenceCost) &&
+    costDetails.upstreamInferenceCost >= 0
+      ? costDetails.upstreamInferenceCost
+      : undefined;
 
-  if (totalCost === undefined) {
+  if (reportedCost === undefined && upstreamInferenceCost === undefined) {
     return undefined;
   }
 
+  const providerCostField =
+    reportedCost !== undefined && upstreamInferenceCost !== undefined
+      ? 'usage.cost+usage.costDetails.upstreamInferenceCost'
+      : reportedCost !== undefined
+        ? 'usage.cost'
+        : 'usage.costDetails.upstreamInferenceCost';
+
   return {
     provider: 'openrouter',
-    model: modelSpan?.attributes?.responseModel ?? modelSpan?.attributes?.model,
-    estimatedCost: totalCost,
+    model: attributes?.responseModel ?? modelSpan?.attributes?.responseModel ?? modelSpan?.attributes?.model,
+    estimatedCost: (reportedCost ?? 0) + (upstreamInferenceCost ?? 0),
     costUnit: 'USD',
     costMetadata: {
       source: 'provider_reported',
-      providerCostField: reportedCost !== undefined ? 'usage.cost' : 'usage.costDetails.upstreamInferenceCost',
+      providerCostField,
     },
   };
 }
@@ -397,12 +403,16 @@ export class ModelSpanTracker {
    */
   endGeneration(options?: EndGenerationOptions): void {
     const { usage, providerMetadata, ...spanOptions } = options ?? {};
+    const providerCostContext = extractOpenRouterCostContext(providerMetadata, spanOptions.attributes, this.#modelSpan);
+
+    if (providerCostContext && !spanOptions.attributes) {
+      spanOptions.attributes = {};
+    }
 
     if (spanOptions.attributes) {
       spanOptions.attributes.completionStartTime = this.#completionStartTime;
       spanOptions.attributes.usage = extractUsageMetrics(usage, providerMetadata);
-      spanOptions.attributes.costContext =
-        extractOpenRouterCostContext(providerMetadata, this.#modelSpan) ?? spanOptions.attributes.costContext;
+      spanOptions.attributes.costContext = providerCostContext ?? spanOptions.attributes.costContext;
     }
 
     this.#modelSpan?.end(spanOptions);
