@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it } from 'vitest';
 import type { AgentExecutionOptionsBase } from '../agent.types';
 import type { SerializableDurableOptions, RunRegistryEntry } from './types';

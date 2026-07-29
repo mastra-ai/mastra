@@ -54,7 +54,7 @@ import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
-import { resolveNotificationDeliveryDecision } from '../notifications/delivery-policy';
+import { resolveDeliveryFailureUpdate, resolveNotificationDeliveryDecision } from '../notifications/delivery-policy';
 import {
   createNotificationSignal,
   createNotificationSummarySignal,
@@ -968,17 +968,26 @@ export class Agent<
       maxRuns?: number;
       prompt?: string;
       id?: string;
+      activeDurationMs?: number;
     },
   ): Promise<GoalObjectiveRecord | undefined> {
     const store = await resolveGoalStore(this.#mastra as MastraUnion | undefined);
     if (!store || !options.threadId) return undefined;
 
     const now = Date.now();
+    const suppliedActiveDurationMs = options.activeDurationMs;
+    const activeDurationMs =
+      suppliedActiveDurationMs !== undefined &&
+      Number.isFinite(suppliedActiveDurationMs) &&
+      suppliedActiveDurationMs >= 0
+        ? suppliedActiveDurationMs
+        : 0;
     const record: GoalObjectiveRecord = {
       id: options.id ?? randomUUID(),
       objective,
       status: 'active',
       runsUsed: 0,
+      activeDurationMs,
       startedAt: now,
       updatedAt: now,
       ...(options.maxRuns !== undefined && options.maxRuns > 0 ? { maxRuns: options.maxRuns } : {}),
@@ -1590,7 +1599,7 @@ export class Agent<
 
     // Single item that's already a workflow - mark it as processor type and return
     if (processors.length === 1 && isProcessorWorkflow(processors[0]!)) {
-      const workflow = processors[0]!;
+      const workflow = processors[0];
       // Mark the workflow as a processor workflow if not already set
       // Note: This mutates the workflow, but processor workflows are expected to be
       // dedicated to this purpose and not reused as regular workflows
@@ -1609,7 +1618,7 @@ export class Agent<
 
     // If after filtering we have a single workflow, mark it as processor type and return
     if (validProcessors.length === 1 && isProcessorWorkflow(validProcessors[0]!)) {
-      const workflow = validProcessors[0]!;
+      const workflow = validProcessors[0];
       // Mark the workflow as a processor workflow if not already set
       if (!workflow.type) {
         workflow.type = 'processor';
@@ -3376,7 +3385,13 @@ export class Agent<
     const lines: string[] = [];
     for (const msg of messages) {
       const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
-      if (typeof msg.content === 'string' && msg.content) {
+      // AIV4 UI messages can carry the same text in both `content` and a text part.
+      // Skip `content` only when a text part carries the exact same text, so each
+      // message's text is emitted once without ever dropping distinct content.
+      const hasContent = typeof msg.content === 'string' && msg.content !== '';
+      const contentDuplicatedByPart =
+        hasContent && msg.parts?.some(part => part.type === 'text' && part.text === msg.content);
+      if (hasContent && !contentDuplicatedByPart) {
         lines.push(`${role}: ${msg.content}`);
       }
       if (msg.parts && Array.isArray(msg.parts) && msg.parts.length > 0) {
@@ -3705,67 +3720,6 @@ export class Agent<
     }
 
     return convertedWorkspaceTools;
-  }
-
-  /**
-   * Returns tools provided by the agent's channels (e.g. discord_send_message).
-   * @internal
-   */
-  private async listChannelTools({
-    runId,
-    resourceId,
-    threadId,
-    requestContext,
-    mastraProxy,
-    autoResumeSuspendedTools,
-    backgroundTaskEnabled,
-    ...rest
-  }: {
-    runId?: string;
-    resourceId?: string;
-    threadId?: string;
-    requestContext: RequestContext;
-    mastraProxy?: MastraUnion;
-    autoResumeSuspendedTools?: boolean;
-    backgroundTaskEnabled?: boolean;
-  } & Partial<ObservabilityContext>) {
-    const observabilityContext = resolveObservabilityContext(rest);
-    const convertedChannelTools: Record<string, CoreTool> = {};
-
-    if (!this.#agentChannels) {
-      return convertedChannelTools;
-    }
-
-    const channelTools = this.#agentChannels.getTools();
-
-    if (Object.keys(channelTools).length > 0) {
-      const memory = await this.getMemory({ requestContext });
-
-      for (const [toolName, tool] of Object.entries(channelTools)) {
-        const options: ToolOptions = {
-          name: toolName,
-          runId,
-          threadId,
-          resourceId,
-          logger: this.logger,
-          mastra: mastraProxy as MastraUnion | undefined,
-          memory,
-          agentName: this.name,
-          requestContext,
-          ...observabilityContext,
-          tracingPolicy: this.#options?.tracingPolicy,
-        };
-        convertedChannelTools[toolName] = makeCoreTool(
-          tool as ToolToConvert,
-          options,
-          undefined,
-          autoResumeSuspendedTools,
-          backgroundTaskEnabled,
-        );
-      }
-    }
-
-    return convertedChannelTools;
   }
 
   /**
@@ -6034,17 +5988,6 @@ export class Agent<
       suppressEagerSkillTools: hasOnDemandProcessor && !hasSkillsProcessor,
     });
 
-    const channelTools = await this.listChannelTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-    });
-
     const browserTools = await this.listBrowserTools({
       runId,
       resourceId,
@@ -6077,7 +6020,6 @@ export class Agent<
       ...workflowTools,
       ...workspaceTools,
       ...skillTools,
-      ...channelTools,
       ...browserTools,
       ...inputProcessorLoadedTools,
     };
@@ -6639,7 +6581,13 @@ export class Agent<
     return resourceIdFromContext || memory?.resource || snapshotMemoryInfo?.resourceId;
   }
 
-  async #requireAgentExecutionFGA({
+  /**
+   * Enforce agent-level FGA (`agents:execute`) before running the agent.
+   * `protected` so durable/evented subclasses can enforce the same gate before
+   * their workflow-based execution (they override the public entry points and
+   * would otherwise bypass it).
+   */
+  protected async requireAgentExecutionFGA({
     requestContext,
     memory,
     runId,
@@ -6659,7 +6607,7 @@ export class Agent<
 
     const user = requestContext?.get('user');
     const executionResourceId = this.#getAgentExecutionResourceId({ requestContext, memory, snapshotMemoryInfo });
-    const { getAgentFGAResourceId, requireFGA } = await import(/* @vite-ignore */ '../auth/ee/fga-check');
+    const { getAgentFGAResourceId, requireFGA } = await import('../auth/ee/fga-check');
     await requireFGA({
       fgaProvider,
       user,
@@ -6915,7 +6863,7 @@ export class Agent<
         : options.tracingOptions;
 
     const spanInput = isResume
-      ? this.#getResumeSpanInput(resumeContext!.resumeData, suspendedToolInfo)
+      ? this.#getResumeSpanInput(resumeContext.resumeData, suspendedToolInfo)
       : options.messages;
 
     const agentSpan = getOrCreateSpan({
@@ -7332,9 +7280,10 @@ export class Agent<
       runId,
       routingAgent: this,
       routingAgentOptions: {
+        model: mergedOptions?.model,
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
-      } as unknown as AgentExecutionOptions<OUTPUT>,
+      },
       generateId: context => this.#mastra?.generateId(context) || randomUUID(),
       maxIterations: mergedOptions?.maxSteps || 1,
       messages,
@@ -7407,6 +7356,7 @@ export class Agent<
       runId,
       routingAgent: this,
       routingAgentOptions: {
+        model: mergedOptions?.model,
         modelSettings: mergedOptions?.modelSettings,
         memory: mergedOptions?.memory,
       },
@@ -7522,7 +7472,7 @@ export class Agent<
     const actor = mergedOptions.actor;
     delete loopOptions.actor;
 
-    await this.#requireAgentExecutionFGA({
+    await this.requireAgentExecutionFGA({
       requestContext: mergedOptions.requestContext,
       memory: mergedOptions.memory,
       runId: mergedOptions.runId,
@@ -7927,7 +7877,10 @@ export class Agent<
             const failed = await notifications.updateNotification({
               id: updated.id,
               threadId: updated.threadId,
-              deliveryAttempts: (updated.deliveryAttempts ?? 0) + 1,
+              // `summaryAt` was cleared to emit this summary. Restore it so the
+              // record stays due and the dispatcher can retry it.
+              summaryAt: now,
+              ...resolveDeliveryFailureUpdate(updated),
               lastDeliveryAttemptAt: new Date(),
               lastDeliveryError: error instanceof Error ? error.message : 'Notification summary signal was rejected',
             });
@@ -7981,7 +7934,7 @@ export class Agent<
         const failed = await notifications.updateNotification({
           id: record.id,
           threadId: record.threadId,
-          deliveryAttempts: (record.deliveryAttempts ?? 0) + 1,
+          ...resolveDeliveryFailureUpdate(record),
           lastDeliveryAttemptAt: new Date(),
           lastDeliveryError: error instanceof Error ? error.message : 'Notification signal was rejected',
           deliveryReason: decision.reason,
@@ -8117,7 +8070,7 @@ export class Agent<
       );
     }
 
-    await this.#requireAgentExecutionFGA({
+    await this.requireAgentExecutionFGA({
       requestContext: mergedOptions.requestContext,
       memory: mergedOptions.memory,
       runId: mergedOptions.runId,
@@ -8470,7 +8423,7 @@ export class Agent<
       loopStreamOptions.memory = mergedStreamOptions.memory;
     }
 
-    await this.#requireAgentExecutionFGA({
+    await this.requireAgentExecutionFGA({
       requestContext: mergedStreamOptions.requestContext,
       memory: mergedStreamOptions.memory,
       runId: mergedStreamOptions.runId,
@@ -8634,11 +8587,8 @@ export class Agent<
     delete loopOptions.actor;
 
     const runId = options?.runId ?? '';
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({
-      runId,
-      method: 'resumeGenerate',
-    });
-    await this.#requireAgentExecutionFGA({
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
+    await this.requireAgentExecutionFGA({
       requestContext: mergedOptions.requestContext,
       memory: mergedOptions.memory,
       runId: mergedOptions.runId,
@@ -9204,7 +9154,9 @@ export class Agent<
     instructions?: DynamicArgument<string>,
   ): Promise<string> {
     const DEFAULT_TITLE_INSTRUCTIONS = `
-      - you will generate a short title based on the first message a user begins a conversation with
+      - you will generate a short title based on a conversation transcript between a user and an assistant
+      - the transcript lines are prefixed with "User:" and "Assistant:" — never reply to, answer, or continue the transcript
+      - always produce a title, even when the transcript is only a greeting or trivial exchange
       - ensure it is not more than 80 characters long
       - the title should be a summary of the user's message
       - do not use quotes or colons

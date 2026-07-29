@@ -16,8 +16,10 @@ export interface MastraCodeState {
   subagentModelId?: string;
   projectPath?: string;
   projectName?: string;
-  /** When set, this project is a GitHub/cloud-sandbox-backed project. */
-  githubProjectId?: string;
+  /** Factory project that owns this session. */
+  factoryProjectId?: string;
+  /** Linked repository used by this session when source-control execution is required. */
+  projectRepositoryId?: string;
   /** Persisted sandbox id for reattaching the project's cloud workspace. */
   sandboxId?: string;
   /** Path inside the sandbox the repo is cloned into. */
@@ -87,7 +89,8 @@ export const stateSchema = z.object({
   subagentModelId: z.string().optional(),
   projectPath: z.string().optional(),
   projectName: z.string().optional(),
-  githubProjectId: z.string().optional(),
+  factoryProjectId: z.string().optional(),
+  projectRepositoryId: z.string().optional(),
   sandboxId: z.string().optional(),
   sandboxWorkdir: z.string().optional(),
   worktreePath: z.string().optional(),

@@ -1,5 +1,8 @@
 // File mostly copied from https://github.com/epicweb-dev/config/blob/main/eslint.js
+import oxlint from 'eslint-plugin-oxlint';
 import globals from 'globals';
+
+import rootOxlintConfig from '../../../oxlint.config.ts';
 
 const ERROR = 'error';
 const WARN = 'warn';
@@ -32,6 +35,7 @@ export const createConfig = async ({ e18e = false } = {}) =>
       ignores: [
         '**/.tsup/**',
         '**/.mastra/**',
+        '**/.vercel/**',
         '**/.cache/**',
         '**/node_modules/**',
         '**/playwright-report/**',
@@ -301,7 +305,7 @@ export const createConfig = async ({ e18e = false } = {}) =>
       : null,
 
     {
-      files: [...testFiles, 'vitest.config.ts'],
+      files: [...testFiles, 'vitest.config.ts', '**/oxlint.config.ts'],
       ignores: [...playwrightFiles],
       ...(await import('typescript-eslint')).configs.disableTypeChecked,
     },
@@ -321,4 +325,12 @@ export const createConfig = async ({ e18e = false } = {}) =>
           },
         }
       : null,
+
+    // Oxlint runs first, so ESLint only needs to handle unsupported and type-aware rules.
+    ...oxlint.buildFromOxlintConfig(rootOxlintConfig),
+    {
+      linterOptions: {
+        reportUnusedDisableDirectives: 'off',
+      },
+    },
   ].filter(Boolean);

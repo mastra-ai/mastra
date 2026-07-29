@@ -41,9 +41,7 @@ describe('AIMock loop scenario: my regression', () => {
       llm: getMock(),
       prompt: 'Do the thing.',
       tools: {
-        my_tool: createTool({
-          /* ... */
-        }),
+        my_tool: createTool({/* ... */}),
       },
       stopWhen: stepCountIs(5),
       fixtures: llm => {
@@ -56,9 +54,7 @@ describe('AIMock loop scenario: my regression', () => {
               {
                 id: 'call_1',
                 name: 'my_tool',
-                arguments: {
-                  /* ... */
-                },
+                arguments: {/* ... */},
               },
             ],
           },

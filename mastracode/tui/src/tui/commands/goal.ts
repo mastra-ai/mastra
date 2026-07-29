@@ -342,11 +342,6 @@ async function startGoal(
   }
 
   state.planStartedGoalId = undefined;
-  if (options.trigger === 'none') {
-    // Plan-started goals don't begin accruing active time until the user
-    // actually triggers them.
-    goalManager.resetActiveTimer();
-  }
   if (shouldPersistToCreatedThread) {
     goalManager.persistOnNextThreadCreate();
   }

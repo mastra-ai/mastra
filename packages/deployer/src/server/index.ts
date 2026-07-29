@@ -21,6 +21,7 @@ import { timeout } from 'hono/timeout';
 import { describeRoute } from 'hono-openapi';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import { escapeStudioHtmlValue, injectStudioHtmlConfig, normalizeStudioBase } from '../build/utils';
+import { agentLearningProxyHandler } from './handlers/agent-learning';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
@@ -208,32 +209,35 @@ export async function createHonoServer(
   // to avoid "can't modify immutable headers" error on WebSocket upgrade
   // This is async because it dynamically imports @hono/node-ws to avoid
   // bundling ws into user code. Returns null if ws is not available.
-  const browserStreamSetup = await setupBrowserStream(app, {
-    getToolset: async (agentId: string) => {
-      // Look up agent and return its browser if configured.
-      // First try the runtime registry (code-defined + previously hydrated agents),
-      // then fall back to the editor for stored agents (hydrates on first access).
-      try {
-        const runtimeAgent = mastra.getAgentById(agentId);
-        if (runtimeAgent) {
-          return runtimeAgent.browser;
-        }
-      } catch {
-        // Agent not in runtime registry — try stored agents via editor
-      }
+  const browserStreamSetup =
+    options.browserStream === false
+      ? null
+      : await setupBrowserStream(app, {
+          getToolset: async (agentId: string) => {
+            // Look up agent and return its browser if configured.
+            // First try the runtime registry (code-defined + previously hydrated agents),
+            // then fall back to the editor for stored agents (hydrates on first access).
+            try {
+              const runtimeAgent = mastra.getAgentById(agentId);
+              if (runtimeAgent) {
+                return runtimeAgent.browser;
+              }
+            } catch {
+              // Agent not in runtime registry — try stored agents via editor
+            }
 
-      try {
-        const storedAgent = await mastra.getEditor?.()?.agent.getById(agentId);
-        return storedAgent?.browser;
-      } catch {
-        return undefined;
-      }
-    },
-    apiPrefix,
-  });
+            try {
+              const storedAgent = await mastra.getEditor?.()?.agent.getById(agentId);
+              return storedAgent?.browser;
+            } catch {
+              return undefined;
+            }
+          },
+          apiPrefix,
+        });
 
   // Fallback session probe when browser streaming isn't available
-  // (ws / @hono/node-ws not installed, or serverless environment).
+  // (ws / @hono/node-ws not installed, disabled by deployer, or serverless environment).
   // Lets the client decide not to open a WS instead of failing the upgrade.
   if (!browserStreamSetup) {
     app.get(`${apiPrefix}/agents/:agentId/browser/session`, c =>
@@ -271,6 +275,10 @@ export async function createHonoServer(
     }),
     healthHandler,
   );
+
+  if (options?.isDev && options.studio) {
+    app.get('/api/learning/*', agentLearningProxyHandler);
+  }
 
   if (options?.isDev || server?.build?.swaggerUI) {
     app.get(

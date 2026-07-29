@@ -20,11 +20,12 @@ export interface TaskRecord {
  *
  * Stored in the thread-state domain under `type: 'goal'`. The objective drives
  * the in-loop goal scorer (the agent keeps working until the goal is judged
- * complete or the run budget is exhausted). All settings except `objective`,
- * `status`, and `runsUsed` are optional: when absent here they fall back to the
- * Agent's `goal` config at read time, so an objective only persists the fields a
- * caller explicitly provided. `judgeModelId` is required at runtime for the goal
- * to do anything — when neither this record nor the Agent's `goal.judge`
+ * complete or the run budget is exhausted). Goal settings are optional: when
+ * absent here they fall back to the Agent's `goal` config at read time, so an
+ * objective only persists the settings a caller explicitly provided.
+ * `activeDurationMs` is persisted accounting data rather than a goal setting;
+ * when absent, consumers treat it as zero. `judgeModelId` is required at runtime
+ * for the goal to do anything — when neither this record nor the Agent's `goal.judge`
  * resolves a judge model, the goal step is a no-op.
  */
 export interface GoalObjectiveRecord {
@@ -35,6 +36,8 @@ export interface GoalObjectiveRecord {
   status: 'active' | 'paused' | 'done';
   /** Number of goal evaluations consumed so far. */
   runsUsed: number;
+  /** Accumulated active-pursuit time in milliseconds. Missing values represent zero. */
+  activeDurationMs?: number;
   /** Max evaluations before the goal stops. Falls back to agent `goal.maxRuns` (default 50). */
   maxRuns?: number;
   /** Judge model id. Falls back to agent `goal.judge`; if neither resolves the goal is a no-op. */
