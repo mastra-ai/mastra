@@ -3969,6 +3969,15 @@
       "docUrl": "https://docs.mthreads.com/kuaecloud/kuaecloud-doc-online/coding_plan/",
       "gateway": "models.dev"
     },
+    "modal": {
+      "url": "https://inference.us-west.modal.direct/v1",
+      "apiKeyEnvVar": "MODAL_PROXY_TOKEN",
+      "apiKeyHeader": "Authorization",
+      "name": "Modal",
+      "models": ["thinkingmachines/Inkling-NVFP4"],
+      "docUrl": "https://modal.com/docs/guide/endpoints",
+      "gateway": "models.dev"
+    },
     "qihang-ai": {
       "url": "https://api.qhaigc.net/v1",
       "apiKeyEnvVar": "QIHANG_API_KEY",
@@ -9951,6 +9960,7 @@
       "qwen-3.6-plus"
     ],
     "kuae-cloud-coding-plan": ["GLM-4.7"],
+    "modal": ["thinkingmachines/Inkling-NVFP4"],
     "qihang-ai": [
       "claude-haiku-4-5-20251001",
       "claude-opus-4-5-20251101",

@@ -2770,6 +2770,7 @@ export type ProviderModelsMap = {
     'qwen-3.6-plus',
   ];
   readonly 'kuae-cloud-coding-plan': readonly ['GLM-4.7'];
+  readonly modal: readonly ['thinkingmachines/Inkling-NVFP4'];
   readonly 'qihang-ai': readonly [
     'claude-haiku-4-5-20251001',
     'claude-opus-4-5-20251101',
