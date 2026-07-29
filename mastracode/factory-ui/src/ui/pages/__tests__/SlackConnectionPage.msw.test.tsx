@@ -55,10 +55,20 @@ describe('SlackConnectionPage', () => {
     mockAccounts([slackLink]);
 
     renderPage();
+    const user = userEvent.setup();
 
-    expect(await screen.findByText('Mastra (T06CB4A5FT9)')).toBeInTheDocument();
-    expect(screen.getByText('Caleb Barnes (U095PUH0FKL)')).toBeInTheDocument();
-    expect(screen.getByText(/July 29, 2026/)).toBeInTheDocument();
+    const workspaceName = await screen.findByText('Mastra');
+    expect(screen.queryByText('Mastra (T06CB4A5FT9)')).not.toBeInTheDocument();
+    await user.hover(workspaceName);
+    expect(await screen.findByText('Workspace ID: T06CB4A5FT9')).toBeInTheDocument();
+
+    const accountName = screen.getByText('Caleb Barnes');
+    expect(screen.queryByText('Caleb Barnes (U095PUH0FKL)')).not.toBeInTheDocument();
+    await user.hover(accountName);
+    expect(await screen.findByText('Slack user ID: U095PUH0FKL')).toBeInTheDocument();
+
+    expect(screen.getByText(/Connected July 29, 2026/)).toBeInTheDocument();
+    expect(screen.queryByText('Connected', { selector: 'span' })).not.toBeInTheDocument();
     expect(screen.getByText('Start and continue Factory sessions from Slack.')).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Default factory for Caleb Barnes' })).toHaveTextContent('OM Game');
     expect(screen.getAllByRole('heading', { level: 2 }).map(heading => heading.textContent)).toEqual([

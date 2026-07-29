@@ -14,6 +14,7 @@ import {
 import { useSetFactorySlackWorkItemsMutation } from '../../hooks/useFactorySlackWorkItems';
 import { useFactoriesQuery } from '../../hooks/useFactories';
 import { ConnectionSettingsShell } from '../domains/settings/components/ConnectionSettingsShell';
+import { IdentityWithTooltip } from '../domains/settings/components/IdentityWithTooltip';
 import { SettingsCard, SettingsRow } from '../domains/settings/components/SettingsCard';
 import { SettingsSubsection } from '../domains/settings/components/SettingsSubsection';
 import { SlackLogo } from '../domains/settings/components/SlackLogo';
@@ -124,13 +125,29 @@ export function SlackConnectionSettings() {
                 <SettingsCard key={`${account.externalTeamId}:${account.externalUserId}`}>
                   <SettingsRow
                     label="Workspace"
-                    hint={`${account.externalTeamName ?? 'Slack workspace'} (${account.externalTeamId})`}
+                    hint={
+                      <IdentityWithTooltip
+                        label={account.externalTeamName ?? 'Slack workspace'}
+                        idLabel="Workspace ID"
+                        id={account.externalTeamId}
+                      />
+                    }
                   />
                   <SettingsRow
                     label="Slack account"
-                    hint={`${account.externalUserName ?? account.externalUserId} (${account.externalUserId})`}
+                    hint={
+                      <>
+                        <IdentityWithTooltip
+                          label={account.externalUserName ?? account.externalUserId}
+                          idLabel="Slack user ID"
+                          id={account.externalUserId}
+                        />
+                        <Txt as="span" variant="ui-xs" className="text-icon2">
+                          Connected {linkedDateFormatter.format(new Date(account.linkedAt))}
+                        </Txt>
+                      </>
+                    }
                   />
-                  <SettingsRow label="Connected" hint={linkedDateFormatter.format(new Date(account.linkedAt))} />
                   <SettingsRow label="Default factory" hint="New Slack sessions are routed to this Factory.">
                     <Select
                       value={account.defaultFactoryProjectId ?? ''}
