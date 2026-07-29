@@ -76,7 +76,7 @@ export function useBoardItems({ factoryProjectId, kind }: { factoryProjectId: st
         metadata,
       });
       if (toStage !== 'intake') requestTransition(item, toStage);
-      // swallowed — the failure already reaches the user through mutationError
+      // swallow only — the failure already reaches the UI through `mutationError`
     })().catch(() => {});
   };
 
