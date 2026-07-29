@@ -20,5 +20,21 @@
     "gpt-5.6-luna",
     "gpt-5.6-sol",
     "gpt-5.6-terra"
+  ],
+  "structuredOutput": [
+    "deepseek-v4-pro",
+    "gemini-3.1-flash-lite-preview",
+    "gemini-3.1-pro-preview",
+    "glm-5.2",
+    "gpt-5.1-codex",
+    "gpt-5.1-codex-max",
+    "gpt-5.3-codex",
+    "gpt-5.4",
+    "gpt-5.4-mini",
+    "gpt-5.4-nano",
+    "gpt-5.5",
+    "gpt-5.6-luna",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra"
   ]
 }

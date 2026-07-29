@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
+import { createDurableAgent } from '../agent/durable/create-durable-agent';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
@@ -74,6 +75,7 @@ import { computeNextFireAt } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
+import { __registerMastraCtor } from './mastra-ctor-holder';
 import type { RunScope } from './run-scope';
 import { createRunScope } from './run-scope';
 import type { VersionOverrides, VersionSelector } from './types';
@@ -563,7 +565,9 @@ export interface Config<
    *
    * - `undefined` (default): Auto-creates default workers (existing behavior)
    * - `false`: Disables all event processing — useful when running standalone workers separately
-   * - `MastraWorker[]`: Use exactly these workers
+   * - `MastraWorker[]`: Additional workers merged with the auto-created
+   *   defaults. A custom worker replaces a default with the same `name`;
+   *   duplicate names within the array throw. Use `false` to run no workers.
    */
   workers?: MastraWorker[] | false;
 
@@ -756,6 +760,20 @@ export class Mastra<
    * worker-existence checks and double-subscribe to the scheduling topics.
    */
   #schedulingWorkersStartPromise?: Promise<void>;
+  /**
+   * In-flight promise for `__ensureExecutionWorkersStarted()`. Serializes
+   * concurrent lazy startups triggered by background-task dispatches so two
+   * first dispatches on a cold instance can't both init/start the same
+   * workers.
+   */
+  #executionWorkersStartPromise?: Promise<void>;
+  /**
+   * Fast path for `__ensureExecutionWorkersStarted()`. Set once the execution
+   * workers + push wiring are confirmed running; reset by `stopWorkers()`.
+   * Kept separate from `#workersStarted`, which partial `startWorkers(name)`
+   * calls also set without starting the workflow consumer.
+   */
+  #executionWorkersStarted = false;
   // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
   // pull-mode workers (OrchestrationWorker) and push-mode entry points
   // (in-process EventEmitter listener, the /api/workers/events HTTP route).
@@ -1321,13 +1339,8 @@ export class Mastra<
       // runtime triggers (e.g. schedules.create()) don't lazily inject
       // scheduler / agent-schedule workers behind the user's back.
       this.#workersDisabled = true;
-    } else if (Array.isArray(workersOption)) {
-      this.#workers = workersOption;
-      for (const w of this.#workers) {
-        w.__registerMastra(this);
-      }
     } else {
-      // Default: auto-create workers based on config.
+      // Auto-create default workers based on config.
       //
       // Skip OrchestrationWorker when the configured pubsub doesn't support
       // pull delivery (e.g. EventEmitter, GCP Pub/Sub push) — those transports
@@ -1344,7 +1357,18 @@ export class Mastra<
       if (config?.backgroundTasks?.enabled) {
         defaultWorkers.push(new BackgroundTaskWorker(config.backgroundTasks));
       }
-      this.#workers = defaultWorkers;
+      // Merge custom workers with the defaults: a custom worker replaces a
+      // default sharing its name (e.g. a custom OrchestrationWorker), and
+      // duplicate names within the custom array fail loud.
+      const customWorkers = workersOption ?? [];
+      const customNames = new Set<string>();
+      for (const w of customWorkers) {
+        if (customNames.has(w.name)) {
+          throw new Error(`Duplicate worker name "${w.name}" in the 'workers' option`);
+        }
+        customNames.add(w.name);
+      }
+      this.#workers = [...defaultWorkers.filter(w => !customNames.has(w.name)), ...customWorkers];
       for (const w of this.#workers) {
         w.__registerMastra(this);
       }
@@ -1459,16 +1483,15 @@ export class Mastra<
     }
 
     this.#backgroundTaskConfig = config?.backgroundTasks;
-    // Auto-create the background-task manager only when this Mastra is
-    // running workers. When `workers: false`, the consumer of the
-    // background-tasks topic must live elsewhere — the producer can still
-    // construct its own `BackgroundTaskManager` and call `init()` directly
-    // (see redis-streams cross-process tests for that pattern). Initializing
-    // a worker here would compete with the dedicated worker process for
-    // dispatch events.
-    if (workersOption !== false) {
-      this.#ensureBackgroundTaskManager();
-    }
+    // Always create the background-task manager when background tasks are
+    // enabled. When workers are disabled (`workers: false`) or when a
+    // MASTRA_WORKERS filter is set that excludes 'backgroundTasks', the
+    // manager runs in 'producer' mode: it can enqueue/dispatch tasks and
+    // receive completion notifications via the fan-out result topic, but
+    // does NOT join the worker consumer group — so it won't compete with
+    // a dedicated BackgroundTaskWorker process for dispatch events.
+    const bgWorkerFiltered = this.#workerFilter && !this.#workerFilter.has('backgroundTasks');
+    this.#ensureBackgroundTaskManager(workersOption === false || bgWorkerFiltered ? 'producer' : undefined);
 
     this.#schedulerConfig = config?.scheduler;
     this.#notificationDispatchConfig = config?.notifications?.dispatch;
@@ -1649,6 +1672,23 @@ export class Mastra<
     for (const [key, agentController] of Object.entries(agentControllerEntries)) {
       this.#harnesses[key] = agentController;
       agentController.__registerMastra(this);
+
+      // Set up AgentControllerChannels for manual adapter configurations,
+      // mirroring the agent channels wiring in `addAgent`.
+      const controllerChannels = agentController.getChannels();
+      if (controllerChannels) {
+        controllerChannels.__setLogger(this.#logger);
+        const channelRoutes = controllerChannels.getWebhookRoutes();
+        if (channelRoutes.length > 0) {
+          this.#server = {
+            ...this.#server,
+            apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
+          };
+        }
+        controllerChannels.initialize(this).catch(err => {
+          this.#logger?.error(`Failed to initialize channels for agent controller ${key}:`, err);
+        });
+      }
     }
 
     // `registerHook` adds to a module-level emitter that never drops handlers on
@@ -1687,12 +1727,26 @@ export class Mastra<
     }
   }
 
-  #ensureBackgroundTaskManager(): void {
+  #ensureBackgroundTaskManager(modeOverride?: 'producer' | 'worker' | 'full'): void {
     if (!this.#backgroundTaskConfig?.enabled || !this.#storage || this.#backgroundTaskManager) {
       return;
     }
 
-    const bgManager = new BackgroundTaskManager(this.#backgroundTaskConfig);
+    // Derive the effective mode from the worker configuration when no
+    // explicit override is given. Late call-sites (#maybeEnableBackgroundTasksForAgent,
+    // setStorage) don't know the worker topology, so we derive it here to
+    // ensure producer mode is consistently applied when workers are disabled
+    // or the backgroundTasks worker is excluded by the MASTRA_WORKERS filter.
+    const effectiveMode =
+      modeOverride ??
+      (this.#workersDisabled || (this.#workerFilter && !this.#workerFilter.has('backgroundTasks'))
+        ? 'producer'
+        : undefined);
+
+    const managerConfig = effectiveMode
+      ? { ...this.#backgroundTaskConfig, mode: effectiveMode }
+      : this.#backgroundTaskConfig;
+    const bgManager = new BackgroundTaskManager(managerConfig);
     bgManager.__registerMastra(this);
     this.#backgroundTaskManager = bgManager;
 
@@ -1980,16 +2034,40 @@ export class Mastra<
   }
 
   /**
-   * Returns the `AgentChannels` instances for all registered agents.
-   * Keys are agent IDs.
+   * Returns the `AgentChannels` instances for all registered agents and
+   * agent controllers. Keys are agent / agent controller registration keys.
+   * A controller's channels — also attached to its mode agents — are
+   * reported once, under the controller's key.
    */
   public getChannels(): Record<string, AgentChannels> {
     const result: Record<string, AgentChannels> = {};
+    // Collect controller channels first so mode agents carrying a
+    // controller's channels instance aren't double-reported under agent
+    // keys. (Identity match rather than `instanceof AgentControllerChannels`:
+    // a value import of that class from here recreates the module cycle
+    // documented at the top of this file.)
+    const controllerEntries: Array<[string, AgentChannels]> = [];
+    const controllerOwned = new Set<AgentChannels>();
+    for (const [controllerKey, controller] of Object.entries(this.#harnesses ?? {})) {
+      const controllerChannels = controller.getChannels();
+      if (controllerChannels) {
+        controllerEntries.push([controllerKey, controllerChannels]);
+        controllerOwned.add(controllerChannels);
+      }
+    }
     for (const [agentKey, agent] of Object.entries(this.#agents ?? {})) {
       const agentChannels = agent.getChannels();
-      if (agentChannels instanceof AgentChannels) {
+      if (agentChannels instanceof AgentChannels && !controllerOwned.has(agentChannels)) {
         result[agentKey] = agentChannels;
       }
+    }
+    for (const [controllerKey, controllerChannels] of controllerEntries) {
+      if (result[controllerKey]) {
+        this.#logger?.warn(
+          `Channels key collision: an agent and an agent controller are both registered under '${controllerKey}'; reporting the controller's channels.`,
+        );
+      }
+      result[controllerKey] = controllerChannels;
     }
     return result;
   }
@@ -2230,6 +2308,26 @@ export class Mastra<
       throw createUndefinedPrimitiveError('agent', agent, key);
     }
 
+    // Auto-wrap regular Agents that opted in via AgentConfig.durable.
+    // The wrapped agent then flows into the isDurableAgentLike branch below,
+    // which handles __setMastra, workflow registration, and channel routes.
+    //
+    // Statically importing `createDurableAgent` here is safe because `agent.ts`
+    // imports `Mastra` type-only, so there is no `agent → mastra` runtime edge
+    // to close the init cycle. See the import note in `agent/agent.ts`.
+    //
+    // A standalone durable `Agent` satisfies `isDurableAgentLike` via a
+    // self-referential `.agent` getter (see `Agent#agent`), so we must
+    // discriminate against a real wrapper by checking `agent.agent !== agent`.
+    // Real wrappers (e.g. `DurableAgent`, `InngestAgent`) point `.agent` at a
+    // distinct inner `Agent`; the standalone placeholder points at itself.
+    const isRealDurableWrapper = isDurableAgentLike(agent) && (agent as DurableAgentLike).agent !== (agent as unknown);
+    if (!isRealDurableWrapper && (agent as Agent).durable) {
+      const durableOption = (agent as Agent).durable;
+      const opts = durableOption === true ? {} : { ...(durableOption as object) };
+      agent = createDurableAgent({ agent: agent as Agent, ...opts }) as unknown as A;
+    }
+
     // Handle durable agent wrappers (e.g., InngestAgent)
     // These wrap a regular Agent with execution engine-specific capabilities
     if (isDurableAgentLike(agent)) {
@@ -2279,6 +2377,39 @@ export class Mastra<
         this.addWorkflow(workflow, workflow.id);
       }
 
+      // Register configured processor workflows from the agent
+      // Use .then() to handle async resolution without blocking the constructor
+      // This excludes memory-derived processors to avoid triggering memory factory functions
+      underlyingAgent
+        .getConfiguredProcessorWorkflows()
+        .then(processorWorkflows => {
+          for (const workflow of processorWorkflows) {
+            this.addWorkflow(workflow, workflow.id);
+          }
+        })
+        .catch(err => {
+          this.#logger?.debug(`Failed to register processor workflows for durable agent ${agentKey}:`, err);
+        });
+
+      // Register agent workspace in the workspaces registry for direct lookup.
+      // Dynamic workspace functions may return undefined without request context — that's fine,
+      // the if (workspace) guard below will skip registration and they'll register lazily later.
+      if (underlyingAgent.hasOwnWorkspace?.()) {
+        Promise.resolve(underlyingAgent.getWorkspace?.())
+          .then(workspace => {
+            if (workspace) {
+              this.addWorkspace(workspace, undefined, {
+                source: 'agent',
+                agentId: durableAgent.id ?? agentKey,
+                agentName: durableAgent.name,
+              });
+            }
+          })
+          .catch(err => {
+            this.#logger?.debug(`Failed to register workspace for durable agent ${agentKey}:`, err);
+          });
+      }
+
       // Register scorers from the underlying agent so durable runs can resolve
       // them via mastra.getScorer()/getScorerById() at workflow time.
       underlyingAgent
@@ -2291,6 +2422,47 @@ export class Mastra<
         .catch(err => {
           this.#logger?.debug(`Failed to register scorers from durable agent ${agentKey}:`, err);
         });
+
+      // Register durable-agent-owned tools with the background task manager.
+      // Namespaced as `agentId:toolName` to avoid cross-agent collisions.
+      // Use agentKey (derived from durableAgent.id) rather than underlyingAgent.id
+      // because the dispatch side uses the durable wrapper's identity.
+      if (this.#backgroundTaskManager) {
+        const durableAgentId = durableAgent.id ?? agentKey;
+        Promise.resolve(underlyingAgent.listTools())
+          .then(agentTools => {
+            for (const [toolKey, tool] of Object.entries(agentTools || {})) {
+              if (tool && typeof (tool as any).execute === 'function') {
+                this.#registerToolWithBackgroundManager(
+                  `${durableAgentId}:${toolKey}`,
+                  tool as ToolAction<any, any, any, any>,
+                );
+              }
+            }
+          })
+          .catch(err => {
+            this.#logger?.debug(
+              `Failed to register durable agent tools for background tasks (agent ${agentKey}):`,
+              err,
+            );
+          });
+      }
+
+      // Set up AgentChannels for manual adapter configurations
+      const agentChannelsInstance = underlyingAgent.getChannels();
+      if (agentChannelsInstance) {
+        agentChannelsInstance.__setLogger(this.#logger);
+        const channelRoutes = agentChannelsInstance.getWebhookRoutes();
+        if (channelRoutes.length > 0) {
+          this.#server = {
+            ...this.#server,
+            apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
+          };
+        }
+        agentChannelsInstance.initialize(this).catch(err => {
+          this.#logger?.error(`Failed to initialize channels for durable agent ${agentKey}:`, err);
+        });
+      }
 
       return;
     }
@@ -2371,6 +2543,28 @@ export class Mastra<
       .catch(err => {
         this.#logger?.debug(`Failed to register scorers from agent ${agentKey}:`, err);
       });
+
+    // Register agent-owned tools with the background task manager's static
+    // executor registry so cross-process workers can resolve dispatched tasks
+    // for tools that are only attached to an agent (not top-level on Mastra).
+    // Keys are namespaced as `agentId:toolName` to avoid cross-agent collisions
+    // when multiple agents define tools with the same config key.
+    // Dynamic (function-based) tools are resolved lazily and cannot be
+    // eagerly registered — only static tool records are wired here.
+    if (this.#backgroundTaskManager) {
+      const agentId = mastraAgent.id ?? agentKey;
+      Promise.resolve(mastraAgent.listTools())
+        .then(agentTools => {
+          for (const [toolKey, tool] of Object.entries(agentTools || {})) {
+            if (tool && typeof (tool as any).execute === 'function') {
+              this.#registerToolWithBackgroundManager(`${agentId}:${toolKey}`, tool as ToolAction<any, any, any, any>);
+            }
+          }
+        })
+        .catch(err => {
+          this.#logger?.debug(`Failed to register agent tools for background tasks (agent ${agentKey}):`, err);
+        });
+    }
 
     // Set up AgentChannels for manual adapter configurations
     const agentChannelsInstance = mastraAgent.getChannels();
@@ -3403,25 +3597,10 @@ export class Mastra<
       return { agents: 0, recovered: 0, succeeded: 0, failed: 0 };
     }
 
-    // Duck-type on the presence of `recoverActiveRuns()` rather than
-    // `instanceof DurableAgent` — importing the concrete class here would
-    // pull the entire durable-agent module into `mastra/index.ts` and
-    // introduce a runtime import cycle (`Mastra` <-> `DurableAgent`).
-    // The recovery API is only surfaced by default-engine `DurableAgent`
-    // instances; Inngest-style wrappers legitimately lack it and are
-    // skipped automatically.
-    type RecoverableDurableAgent = {
-      id: string;
-      recoverActiveRuns(): Promise<{
-        recovered: Array<{ runId: string }>;
-        succeeded: number;
-        failed: number;
-      }>;
-    };
-    const durableAgents: RecoverableDurableAgent[] = [];
+    const durableAgents: DurableAgentLike[] = [];
     for (const agent of Object.values(this.#agents ?? {})) {
-      if (agent && typeof (agent as any).recoverActiveRuns === 'function') {
-        durableAgents.push(agent as unknown as RecoverableDurableAgent);
+      if (agent && isDurableAgentLike(agent)) {
+        durableAgents.push(agent);
       }
     }
 
@@ -5268,6 +5447,22 @@ export class Mastra<
       targets = this.#workers;
     }
 
+    // When explicitly starting the backgroundTasks worker (e.g.
+    // `startWorkers('backgroundTasks')`), upgrade a producer-mode manager to
+    // full mode so the worker can subscribe to dispatch events. Without this,
+    // a manager created at construction time as 'producer' (because
+    // MASTRA_WORKERS excluded backgroundTasks) would be reused by the worker
+    // but never subscribe to the dispatch topic.
+    if (
+      name === 'backgroundTasks' &&
+      this.#backgroundTaskManager &&
+      this.#backgroundTaskManager.config.mode === 'producer'
+    ) {
+      await this.#backgroundTaskManager.shutdown();
+      this.#backgroundTaskManager = undefined;
+      this.#ensureBackgroundTaskManager('full');
+    }
+
     for (const worker of targets) {
       await worker.init(deps);
       await worker.start();
@@ -5277,71 +5472,7 @@ export class Mastra<
     // OrchestrationWorker pulling events — wire handleWorkflowEvent directly
     // to the pubsub so workflow events still get processed in-process.
     if (!name) {
-      const modes = this.#pubsub.supportedModes ?? ['pull'];
-      const pushOnly = modes.includes('push') && !modes.includes('pull');
-      if (pushOnly && !this.#pushSubscription) {
-        const cb: EventCallback = (event, ack, nack) => {
-          // In cross-process push environments (e.g. UnixSocketPubSub),
-          // every subscriber receives every event — including events for
-          // internal workflows registered on a different process. Skip
-          // events whose workflow exists in neither the internal nor the
-          // public registry so only the owning process handles them.
-          // Without this guard the WEP would publish workflow.fail,
-          // propagating through workflows-finish and erroneously
-          // terminating the correct process's run.
-          const data = event.data as Record<string, unknown> | undefined;
-          const wfId = data?.workflowId as string | undefined;
-          const rId = data?.runId as string | undefined;
-          if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
-            if (ack) {
-              void ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err));
-            }
-            return;
-          }
-
-          void this.handleWorkflowEvent(event)
-            .then(result => {
-              if (result.ok) {
-                if (ack) {
-                  return ack().catch(err =>
-                    this.#logger?.error?.('Error acking workflow event in push subscription', err),
-                  );
-                }
-                return;
-              }
-              // Non-ok result: ask the transport to redeliver (nack) when the
-              // handle layer says retry. The WEP tracks per-event delivery
-              // attempts and eventually returns `retry: false` to break the
-              // loop and surface a terminal workflow.fail. For terminal
-              // failures we ack so the event is dropped from the transport.
-              if (result.retry) {
-                if (nack) {
-                  return nack().catch(err =>
-                    this.#logger?.error?.('Error nacking workflow event in push subscription', err),
-                  );
-                }
-                // Transport does not support nack. Do NOT ack — acking a
-                // retryable failure would drop the event and silently lose
-                // the workflow run. Log and let the transport's own delivery
-                // semantics decide (most non-ack transports redeliver until
-                // explicitly acked).
-                this.#logger?.error?.('Retryable workflow event cannot be requeued because nack is unavailable', {
-                  type: event.type,
-                  runId: event.runId,
-                });
-                return;
-              }
-              if (ack) {
-                return ack().catch(err =>
-                  this.#logger?.error?.('Error acking terminal workflow event in push subscription', err),
-                );
-              }
-            })
-            .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
-        };
-        await this.#pubsub.subscribe('workflows', cb);
-        this.#pushSubscription = { topic: 'workflows', cb };
-      }
+      await this.#wirePushWorkflowSubscription();
     }
 
     // Subscribe user-defined event listeners (non-workflow topics, or legacy inline WEP)
@@ -5372,9 +5503,160 @@ export class Mastra<
   }
 
   /**
+   * Wire `handleWorkflowEvent` directly to the pubsub when it is push-only
+   * (no pull mode for an OrchestrationWorker to drive). Idempotent — no-op
+   * when the pubsub supports pull or the subscription already exists.
+   * Shared by `startWorkers()` and `__ensureExecutionWorkersStarted()`.
+   */
+  async #wirePushWorkflowSubscription(): Promise<void> {
+    const modes = this.#pubsub.supportedModes ?? ['pull'];
+    const pushOnly = modes.includes('push') && !modes.includes('pull');
+    if (pushOnly && !this.#pushSubscription) {
+      const cb: EventCallback = (event, ack, nack) => {
+        // In cross-process push environments (e.g. UnixSocketPubSub),
+        // every subscriber receives every event — including events for
+        // internal workflows registered on a different process. Skip
+        // events whose workflow exists in neither the internal nor the
+        // public registry so only the owning process handles them.
+        // Without this guard the WEP would publish workflow.fail,
+        // propagating through workflows-finish and erroneously
+        // terminating the correct process's run.
+        const data = event.data as Record<string, unknown> | undefined;
+        const wfId = data?.workflowId as string | undefined;
+        const rId = data?.runId as string | undefined;
+        if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
+          if (ack) {
+            void ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err));
+          }
+          return;
+        }
+
+        void this.handleWorkflowEvent(event)
+          .then(result => {
+            if (result.ok) {
+              if (ack) {
+                return ack().catch(err =>
+                  this.#logger?.error?.('Error acking workflow event in push subscription', err),
+                );
+              }
+              return;
+            }
+            // Non-ok result: ask the transport to redeliver (nack) when the
+            // handle layer says retry. The WEP tracks per-event delivery
+            // attempts and eventually returns `retry: false` to break the
+            // loop and surface a terminal workflow.fail. For terminal
+            // failures we ack so the event is dropped from the transport.
+            if (result.retry) {
+              if (nack) {
+                return nack().catch(err =>
+                  this.#logger?.error?.('Error nacking workflow event in push subscription', err),
+                );
+              }
+              // Transport does not support nack. Do NOT ack — acking a
+              // retryable failure would drop the event and silently lose
+              // the workflow run. Log and let the transport's own delivery
+              // semantics decide (most non-ack transports redeliver until
+              // explicitly acked).
+              this.#logger?.error?.('Retryable workflow event cannot be requeued because nack is unavailable', {
+                type: event.type,
+                runId: event.runId,
+              });
+              return;
+            }
+            if (ack) {
+              return ack().catch(err =>
+                this.#logger?.error?.('Error acking terminal workflow event in push subscription', err),
+              );
+            }
+          })
+          .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
+      };
+      await this.#pubsub.subscribe('workflows', cb);
+      this.#pushSubscription = { topic: 'workflows', cb };
+    }
+  }
+
+  /**
+   * Ensure the execution-side machinery — the `orchestration` and
+   * `backgroundTasks` workers, plus the push-mode workflow subscription —
+   * is running. Called lazily by {@link BackgroundTaskManager} when a task
+   * is dispatched or resumed, so background tasks execute in "library mode"
+   * where nothing ever calls `startWorkers()` (no server, no `mastra dev`;
+   * see #19339).
+   *
+   * Deliberately narrower than `startWorkers()`: it never injects or starts
+   * the scheduler/agent-schedule workers and never subscribes user event
+   * listeners — dispatching a background task must not boot cron machinery
+   * as a side effect.
+   *
+   * Honors the same opt-outs as the rest of the worker lifecycle:
+   * `workers: false` / `MASTRA_WORKERS=false` (standalone-worker topologies
+   * run their own worker processes, so this instance must not start local
+   * ones) and the `MASTRA_WORKERS` name filter.
+   *
+   * The fast path is its own `#executionWorkersStarted` flag, NOT
+   * `#workersStarted` — the latter is set by any `startWorkers(name)` call,
+   * including partial named starts (e.g. `startWorkers('backgroundTasks')`)
+   * that never start the orchestration worker or push wiring, which would
+   * leave dispatched tasks stuck again. The pass itself is idempotent
+   * (per-worker `isRunning` checks, idempotent push wiring), so running it
+   * once after a full `startWorkers()` boot is a cheap no-op.
+   *
+   * @internal
+   */
+  async __ensureExecutionWorkersStarted(): Promise<void> {
+    if (this.#executionWorkersStarted) return;
+    if (this.#workersDisabled) return;
+    // Memoize the in-flight startup so concurrent first dispatches on a cold
+    // instance share one start instead of racing worker.init()/start().
+    // Cleared on settle so a dispatch after stopWorkers() can start again.
+    if (!this.#executionWorkersStartPromise) {
+      this.#executionWorkersStartPromise = this.#startExecutionWorkers().finally(() => {
+        this.#executionWorkersStartPromise = undefined;
+      });
+    }
+    await this.#executionWorkersStartPromise;
+  }
+
+  async #startExecutionWorkers(): Promise<void> {
+    // Storage init is memoized (see augmentWithInit) — cheap when already run.
+    if (this.#storage) {
+      await this.#storage.init();
+    }
+
+    const deps: WorkerDeps = {
+      pubsub: this.#pubsub,
+      storage: this.#storage!,
+      logger: this.#logger as unknown as IMastraLogger,
+      mastra: this,
+    };
+
+    for (const worker of this.#workers) {
+      if (worker.name !== 'orchestration' && worker.name !== 'backgroundTasks') continue;
+      if (this.#workerFilter && !this.#workerFilter.has(worker.name)) continue;
+      if (worker.isRunning) continue;
+      await worker.init(deps);
+      await worker.start();
+    }
+
+    await this.#wirePushWorkflowSubscription();
+    this.#executionWorkersStarted = true;
+  }
+
+  /**
    * Stop all running workers and unsubscribe event listeners.
    */
   public async stopWorkers(): Promise<void> {
+    // A background-task dispatch may have kicked off a lazy execution-worker
+    // start (`__ensureExecutionWorkersStarted`) that is still in flight. Wait
+    // for it so the teardown below covers what it started — otherwise the
+    // start finishes after this method returns, leaving workers running and
+    // subscriptions wired behind a "stopped" instance. Failures are already
+    // logged by the start path; here they just mean there is less to stop.
+    while (this.#executionWorkersStartPromise) {
+      await this.#executionWorkersStartPromise.catch(() => {});
+    }
+
     // Stop registered workers in reverse order
     for (const worker of [...this.#workers].reverse()) {
       if (worker.isRunning) {
@@ -5398,6 +5680,7 @@ export class Mastra<
 
     await this.#pubsub.flush();
     this.#workersStarted = false;
+    this.#executionWorkersStarted = false;
   }
 
   /**
@@ -5525,7 +5808,7 @@ export class Mastra<
    *
    * @example
    * ```typescript
-   * import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
+   * import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
    * import { MastraModelGateway, type MastraModelGatewayInterface } from '@mastra/core/llm';
    *
    * const plainGateway: MastraModelGatewayInterface = {
@@ -5745,3 +6028,9 @@ export class Mastra<
     return this.#serverCache;
   }
 }
+
+// Publish the constructor so `Agent`'s ephemeral-Mastra path can build one
+// without a static `agent → mastra` runtime import (which would re-create the
+// init cycle documented in `agent/agent.ts`). Runs once, after the class above
+// is initialized. See `./mastra-ctor-holder`.
+__registerMastraCtor(Mastra);

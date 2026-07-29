@@ -260,7 +260,7 @@ export function ExperimentPageTabs({
       defaultTab="summary"
       value={activeTab}
       onValueChange={handleTabChange}
-      className="grid grid-rows-[auto_1fr] h-full overflow-hidden"
+      className="grid h-full grid-rows-[auto_1fr] overflow-hidden"
     >
       <TabList>
         <Tab value="summary">Summary</Tab>
@@ -271,18 +271,18 @@ export function ExperimentPageTabs({
         </Tab>
       </TabList>
 
-      <TabContent value="summary" className="overflow-y-auto mt-5">
+      <TabContent value="summary" className="mt-5 overflow-y-auto">
         <ExperimentScorerSummary scoresByItemId={scoresByExperimentId} experimentStatus={experimentStatus} />
       </TabContent>
 
-      <TabContent value="reviews" className="overflow-auto mt-2 pb-0">
+      <TabContent value="reviews" className="mt-2 overflow-auto pb-0">
         <DatasetReview datasetId={datasetId} experimentId={experimentId} featuredItemId={reviewFeaturedItemId} />
       </TabContent>
 
-      <TabContent value="results" className="grid grid-rows-[auto_1fr] overflow-hidden mt-2">
+      <TabContent value="results" className="mt-2 grid grid-rows-[auto_1fr] overflow-hidden">
         <div className="mb-4">
           {selectedIds.size > 0 && (
-            <div className="flex items-center gap-2 px-4 py-2 bg-surface3">
+            <div className="bg-surface3 flex items-center gap-2 px-4 py-2">
               <Txt variant="ui-xs" className="text-neutral5 font-medium">
                 {selectedIds.size} selected
               </Txt>
@@ -313,8 +313,8 @@ export function ExperimentPageTabs({
           )}
         >
           {/* List column - always visible */}
-          <div className="flex overflow-y-auto w-full">
-            <div className="grid gap-8 content-start w-full overflow-y-auto">
+          <div className="flex w-full overflow-y-auto">
+            <div className="grid w-full content-start gap-8 overflow-y-auto">
               <ExperimentResultsList
                 results={results}
                 isLoading={isLoading}
@@ -334,7 +334,7 @@ export function ExperimentPageTabs({
 
           {featuredResult && (
             <div
-              className="grid gap-4 max-h-full min-h-0 overflow-auto content-start"
+              className="grid max-h-full min-h-0 content-start gap-4 overflow-auto"
               style={{ gridTemplateRows: rightColumnGridRows }}
             >
               <ExperimentResultPanel

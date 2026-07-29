@@ -7,6 +7,14 @@ import { DynamicForm } from '../dynamic-form';
 afterEach(() => cleanup());
 
 describe('DynamicForm', () => {
+  describe('when the schema is a root-level primitive', () => {
+    it('labels the generated field as Input', async () => {
+      render(<DynamicForm schema={z.string()} onSubmit={() => {}} />);
+
+      expect(await screen.findByLabelText<HTMLTextAreaElement>(/^Input/)).not.toBeNull();
+    });
+  });
+
   describe('when readOnly is set', () => {
     it('marks string fields read-only', async () => {
       render(

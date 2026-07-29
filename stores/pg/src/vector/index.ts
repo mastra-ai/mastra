@@ -162,6 +162,20 @@ export class PgVector extends MastraVector<PGVectorFilter> {
 
       this.pool = new pg.Pool(poolConfig);
 
+      // pg emits 'error' on the pool when an idle client's connection drops
+      // (backend restart, network partition, cloud proxies reaping idle
+      // sockets). Without a listener Node escalates the event to an
+      // uncaughtException and crashes the process. The pool already discards
+      // the dead client, so warn and let the next checkout reconnect.
+      this.pool.on('error', err => {
+        this.logger?.warn?.(
+          'PgVector: idle pool client error (pool discards the client and reconnects on next checkout)',
+          {
+            err: err instanceof Error ? err.message : err,
+          },
+        );
+      });
+
       // Warm the created indexes cache in background so we don't need to check if indexes exist every time
       // Store the promise so we can wait for it during disconnect to avoid "pool already closed" errors
       this.cacheWarmupPromise = (async () => {

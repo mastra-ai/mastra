@@ -156,6 +156,7 @@ export class LSPClient {
   private processManager: SandboxProcessManager;
   private diagnostics: Map<string, any[]> = new Map();
   private initializationOptions: Record<string, unknown> | null = null;
+  private supportsPullDiagnostics: boolean = false;
 
   constructor(serverDef: LSPServerDef, workspaceRoot: string, processManager: SandboxProcessManager) {
     this.serverDef = serverDef;
@@ -292,13 +293,21 @@ export class LSPClient {
     // Handle window/workDoneProgress/create requests
     this.connection.onRequest('window/workDoneProgress/create', () => null);
 
+    // Handle client/registerCapability requests (TS 7+ sends these during init)
+    this.connection.onRequest('client/registerCapability', () => null);
+
     let initTimer: ReturnType<typeof setTimeout>;
-    await Promise.race([
+    const initResult: any = await Promise.race([
       this.connection.sendRequest('initialize', initParams),
       new Promise((_, reject) => {
         initTimer = setTimeout(() => reject(new Error('LSP initialize request timed out')), initTimeout);
       }),
     ]).finally(() => clearTimeout(initTimer!));
+
+    // Detect pull diagnostics support (TS 7+ native LSP uses this instead of push)
+    if (initResult?.capabilities?.diagnosticProvider) {
+      this.supportsPullDiagnostics = true;
+    }
 
     // Send initialized notification
     this.connection.sendNotification('initialized', {});
@@ -335,12 +344,16 @@ export class LSPClient {
   /**
    * Wait for diagnostics to arrive for a file.
    *
-   * When `waitForChange` is false (default), returns as soon as diagnostics
-   * are available. To avoid returning a premature empty array (servers may
-   * publish `[]` first while still analysing), empty results trigger a short
-   * settle window: polling continues for up to `settleMs` (default 500ms)
-   * to see if non-empty diagnostics arrive. Non-empty results are returned
-   * immediately.
+   * For servers that support pull diagnostics (e.g. TypeScript 7+ native LSP),
+   * sends a `textDocument/diagnostic` request directly instead of waiting for
+   * push notifications.
+   *
+   * For push-based servers (e.g. TypeScript ≤6 via typescript-language-server),
+   * returns as soon as diagnostics are available. To avoid returning a premature
+   * empty array (servers may publish `[]` first while still analysing), empty
+   * results trigger a short settle window: polling continues for up to `settleMs`
+   * (default 500ms) to see if non-empty diagnostics arrive. Non-empty results
+   * are returned immediately.
    */
   async waitForDiagnostics(
     filePath: string,
@@ -349,6 +362,28 @@ export class LSPClient {
     settleMs: number = 500,
   ): Promise<any[]> {
     if (!this.connection) return [];
+
+    // Pull diagnostics: request directly from the server
+    if (this.supportsPullDiagnostics) {
+      try {
+        const result: any = await withTimeout(
+          this.connection.sendRequest('textDocument/diagnostic', {
+            textDocument: { uri: toFileUri(filePath) },
+          }),
+          timeoutMs,
+          'Pull diagnostics request timed out',
+        );
+        const items = result?.items ?? [];
+        // Mirror into the diagnostics map so later lookups see the same
+        // data regardless of whether the server pushes or pulls.
+        this.diagnostics.set(diagnosticsKey(toFileUri(filePath)), items);
+        return items;
+      } catch {
+        return [];
+      }
+    }
+
+    // Push diagnostics: poll the diagnostics map populated by publishDiagnostics
     const uri = diagnosticsKey(toFileUri(filePath));
     const startTime = Date.now();
     const initialDiagnostics = this.diagnostics.get(uri);

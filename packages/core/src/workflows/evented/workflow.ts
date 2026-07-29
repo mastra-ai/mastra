@@ -672,6 +672,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
       workflowId,
       state,
       setState,
+      abortSignal,
       ...obsFields
     }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
@@ -685,6 +686,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
         mastra,
         requestContext,
         ...observabilityContext,
+        abortSignal,
         workflow: {
           runId,
           workflowId,
@@ -1246,7 +1248,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               }
 
               if (validatedResult.systemMessages) {
-                passThrough.messageList!.replaceAllSystemMessages(validatedResult.systemMessages as CoreMessage[]);
+                passThrough.messageList.replaceAllSystemMessages(validatedResult.systemMessages as CoreMessage[]);
               }
 
               // Preserve messages in return - passThrough doesn't include messages,
@@ -1255,7 +1257,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...passThrough,
                 messages,
                 ...validatedResult,
-                systemMessages: passThrough.messageList!.getSystemMessages(),
+                systemMessages: passThrough.messageList.getSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
             }

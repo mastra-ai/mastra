@@ -32,16 +32,17 @@ function makeAgent(id = 'test-agent') {
 }
 
 function makeMastra() {
+  const storage = new InMemoryStore();
   const controller = new AgentController({
     id: 'code',
-    storage: new InMemoryStore(),
+    storage,
     workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
     modes: [
       { id: 'build', name: 'Build', default: true, agent: makeAgent() },
       { id: 'plan', name: 'Plan', agent: makeAgent() },
     ],
   });
-  const mastra = new Mastra({ agentControllers: { code: controller }, storage: new InMemoryStore() });
+  const mastra = new Mastra({ agentControllers: { code: controller }, storage });
   return { mastra, controller };
 }
 
@@ -91,6 +92,18 @@ describe('agent-controller routes', () => {
       } as any)) as { threadId?: string };
 
       expect(second.threadId).toBe(first.threadId);
+    });
+
+    it('binds the session to an exact thread id when requested', async () => {
+      const res = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+        threadId: 'factory-session-1',
+      } as any)) as { resourceId: string; threadId?: string };
+
+      expect(res.resourceId).toBe('user-1');
+      expect(res.threadId).toBe('factory-session-1');
     });
 
     it('404s for an unknown agent controller id', async () => {
@@ -452,6 +465,99 @@ describe('agent-controller routes', () => {
         resourceId: 'user-1',
       } as any)) as { running?: boolean };
       expect(res.running).toBe(true);
+    });
+  });
+
+  describe('LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE message shape', () => {
+    it('returns persisted messages in the MastraDBMessage shape (nested content.parts)', async () => {
+      // Given a session/thread with a persisted assistant DB message
+      const created = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-msg-shape',
+      } as any)) as { threadId: string };
+      const threadId = created.threadId;
+
+      const memory = await mastra.getStorage()!.getStore('memory');
+      await memory!.saveMessages({
+        messages: [
+          {
+            id: 'm-assistant-1',
+            role: 'assistant',
+            threadId,
+            resourceId: 'user-msg-shape',
+            createdAt: new Date('2026-01-01T00:00:00.000Z'),
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'hello world' }],
+            },
+          } as any,
+        ],
+      });
+
+      // When the thread messages are listed over the REST handler
+      const res = (await LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-msg-shape',
+        threadId,
+      } as any)) as { messages: any[] };
+
+      // Then the response exposes the DB-native nested content (not a flat union array)
+      const message = res.messages.find(m => m.id === 'm-assistant-1');
+      expect(message).toBeDefined();
+      expect(message.role).toBe('assistant');
+      expect(Array.isArray(message.content)).toBe(false);
+      expect(message.content.format).toBe(2);
+      expect(message.content.parts).toEqual([{ type: 'text', text: 'hello world' }]);
+      expect(message.createdAt).toBe('2026-01-01T00:00:00.000Z');
+    });
+
+    it('preserves signal-role messages with their data parts', async () => {
+      // Given a session/thread with a persisted signal DB message
+      const created = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-signal-shape',
+      } as any)) as { threadId: string };
+      const threadId = created.threadId;
+
+      const memory = await mastra.getStorage()!.getStore('memory');
+      await memory!.saveMessages({
+        messages: [
+          {
+            id: 'm-signal-1',
+            role: 'signal',
+            threadId,
+            resourceId: 'user-signal-shape',
+            createdAt: new Date('2026-01-02T00:00:00.000Z'),
+            content: {
+              format: 2,
+              parts: [
+                {
+                  type: 'data-signal',
+                  data: { id: 's1', type: 'reactive', tagName: 'system-reminder', contents: 'continue' },
+                },
+              ],
+              metadata: { signal: { id: 's1', type: 'reactive', tagName: 'system-reminder' } },
+            },
+          } as any,
+        ],
+      });
+
+      // When the thread messages are listed over the REST handler
+      const res = (await LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-signal-shape',
+        threadId,
+      } as any)) as { messages: any[] };
+
+      // Then the signal row is passed through unflattened with role 'signal'
+      const message = res.messages.find(m => m.id === 'm-signal-1');
+      expect(message).toBeDefined();
+      expect(message.role).toBe('signal');
+      expect(message.content.parts[0].type).toBe('data-signal');
     });
   });
 

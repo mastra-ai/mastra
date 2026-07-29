@@ -5,8 +5,7 @@ const {
   fetchChangelogMock,
   detectPackageManagerMock,
   isNewerVersionMock,
-  runUpdateMock,
-  getInstallCommandMock,
+  performUpdateMock,
   loadSettingsMock,
   saveSettingsMock,
 } = vi.hoisted(() => ({
@@ -14,8 +13,7 @@ const {
   fetchChangelogMock: vi.fn(),
   detectPackageManagerMock: vi.fn(),
   isNewerVersionMock: vi.fn(),
-  runUpdateMock: vi.fn(),
-  getInstallCommandMock: vi.fn(),
+  performUpdateMock: vi.fn(),
   loadSettingsMock: vi.fn(),
   saveSettingsMock: vi.fn(),
 }));
@@ -25,8 +23,7 @@ vi.mock('@mastra/code-sdk/utils/update-check', () => ({
   fetchChangelog: fetchChangelogMock,
   detectPackageManager: detectPackageManagerMock,
   isNewerVersion: isNewerVersionMock,
-  runUpdate: runUpdateMock,
-  getInstallCommand: getInstallCommandMock,
+  performUpdate: performUpdateMock,
 }));
 
 vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
@@ -73,8 +70,10 @@ describe('handleUpdateCommand', () => {
     fetchChangelogMock.mockResolvedValue('  • New thing');
     detectPackageManagerMock.mockResolvedValue('pnpm');
     isNewerVersionMock.mockReturnValue(true);
-    runUpdateMock.mockResolvedValue(false);
-    getInstallCommandMock.mockReturnValue('pnpm add -g mastracode@0.2.0');
+    performUpdateMock.mockResolvedValue({
+      status: 'failed',
+      message: 'Auto-update failed. Run `pnpm add -g mastracode@0.2.0` manually.',
+    });
     loadSettingsMock.mockReturnValue({ updateDismissedVersion: null });
   });
 
@@ -128,11 +127,15 @@ describe('handleUpdateCommand', () => {
 
     expect(saveSettingsMock).toHaveBeenLastCalledWith({ updateDismissedVersion: '0.2.0' });
     expect(ctx.showInfo).toHaveBeenLastCalledWith('Update skipped.');
-    expect(runUpdateMock).not.toHaveBeenCalled();
+    expect(performUpdateMock).not.toHaveBeenCalled();
     expect(ctx.state.activeInlineQuestion).toBeUndefined();
   });
 
-  it('shows the manual install command when the selected update fails', async () => {
+  it('surfaces the failure message (with captured stderr) when the update fails', async () => {
+    performUpdateMock.mockResolvedValue({
+      status: 'failed',
+      message: 'Auto-update failed. Run `pnpm add -g mastracode@0.2.0` manually.\n\nnpm ERR! permission denied',
+    });
     const ctx = createCtx('0.1.0');
 
     const command = handleUpdateCommand(ctx);
@@ -140,9 +143,50 @@ describe('handleUpdateCommand', () => {
     ctx.state.activeInlineQuestion.config.onSubmit('Yes');
     await command;
 
-    expect(runUpdateMock).toHaveBeenCalledWith('pnpm', '0.2.0');
-    expect(getInstallCommandMock).toHaveBeenCalledWith('pnpm', '0.2.0');
-    expect(ctx.showError).toHaveBeenCalledWith('Auto-update failed. Run `pnpm add -g mastracode@0.2.0` manually.');
+    expect(performUpdateMock).toHaveBeenCalledWith('pnpm', '0.2.0');
+    expect(ctx.showError).toHaveBeenCalledWith(
+      'Auto-update failed. Run `pnpm add -g mastracode@0.2.0` manually.\n\nnpm ERR! permission denied',
+    );
     expect(ctx.stop).not.toHaveBeenCalled();
+  });
+
+  it('shows an honest message (no restart) when the running install did not change', async () => {
+    performUpdateMock.mockResolvedValue({
+      status: 'unchanged',
+      message: 'Your Mastra Code install (at /opt/vite-plus/mastracode) is not managed by pnpm.',
+    });
+    const ctx = createCtx('0.1.0');
+
+    const command = handleUpdateCommand(ctx);
+    await flushPromises();
+    ctx.state.activeInlineQuestion.config.onSubmit('Yes');
+    await command;
+
+    expect(ctx.showError).toHaveBeenCalledWith(
+      'Your Mastra Code install (at /opt/vite-plus/mastracode) is not managed by pnpm.',
+    );
+    expect(ctx.stop).not.toHaveBeenCalled();
+  });
+
+  it('confirms success and restarts when the update is verified on disk', async () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const logSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    performUpdateMock.mockResolvedValue({
+      status: 'updated',
+      message: 'Updated to v0.2.0. Please restart Mastra Code.',
+    });
+    const ctx = createCtx('0.1.0');
+
+    const command = handleUpdateCommand(ctx);
+    await flushPromises();
+    ctx.state.activeInlineQuestion.config.onSubmit('Yes');
+    await command;
+
+    // The confirmation is printed after the TUI stops so it survives the exit.
+    expect(ctx.stop).toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith('Updated to v0.2.0. Please restart Mastra Code.');
+    expect(exitSpy).toHaveBeenCalledWith(0);
+    logSpy.mockRestore();
+    exitSpy.mockRestore();
   });
 });

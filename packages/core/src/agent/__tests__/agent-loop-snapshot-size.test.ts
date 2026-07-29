@@ -14,7 +14,7 @@
  *  1. snapshot size must not grow with the number of historical suspensions
  *  2. a pruned snapshot must still resume correctly (strip-and-resume)
  */
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
@@ -141,153 +141,137 @@ function countMarker(runs: { workflowName: string; snapshot: string | WorkflowRu
   }, 0);
 }
 
-describe.each([
-  { engine: 'default', evented: false },
-  { engine: 'evented', evented: true },
-])(
-  'agent-loop snapshot size ($engine engine)',
-  ({ evented }) => {
-    beforeAll(() => {
-      if (evented) vi.stubEnv('MASTRA_EVENTED_EXECUTION', 'true');
+describe('agent-loop snapshot size', () => {
+  it('snapshot size does not grow with the number of historical suspensions', async () => {
+    executedCalls.length = 0;
+    const agent = new Agent({
+      id: 'size-agent',
+      name: 'Size Agent',
+      instructions: 'You find users.',
+      model: createTwoToolCallModel(),
+      tools: { findUserTool: createApprovalTool() },
     });
 
-    afterAll(() => {
-      if (evented) vi.unstubAllEnvs();
+    const mastra = new Mastra({
+      agents: { agent },
+      logger: false,
+      storage: new InMemoryStore(),
     });
 
-    it('snapshot size does not grow with the number of historical suspensions', async () => {
-      executedCalls.length = 0;
-      const agent = new Agent({
-        id: 'size-agent',
-        name: 'Size Agent',
-        instructions: 'You find users.',
-        model: createTwoToolCallModel(),
-        tools: { findUserTool: createApprovalTool() },
-      });
+    const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))!;
 
-      const mastra = new Mastra({
-        agents: { agent },
-        logger: false,
-        storage: new InMemoryStore(),
-      });
+    // ~100 messages × ~600 chars ≈ 60KB of raw conversation
+    const filler = 'x'.repeat(600);
+    const thread = buildLongThread(100, filler);
+    const rawThreadSize = JSON.stringify(thread).length;
 
-      const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))!;
+    const stream = await agent.stream(thread, { requireToolApproval: true });
+    const first = await collectApproval(stream);
+    expect(first.toolCallId).toBeTruthy();
 
-      // ~100 messages × ~600 chars ≈ 60KB of raw conversation
-      const filler = 'x'.repeat(600);
-      const thread = buildLongThread(100, filler);
-      const rawThreadSize = JSON.stringify(thread).length;
+    const runsAtFirstSuspension = (await workflowsStore.listWorkflowRuns({})).runs;
+    const sizeAtFirstSuspension = totalSnapshotSize(runsAtFirstSuspension);
+    // Exactly one serialized copy of the conversation may exist per suspended
+    // step (`__streamState.messageList`) — not one per step payload/prevOutput
+    // and not another in `context.input`.
+    const fillerCopiesFirst = countMarker(runsAtFirstSuspension, `message 42: ${filler}`);
 
-      const stream = await agent.stream(thread, { requireToolApproval: true });
-      const first = await collectApproval(stream);
-      expect(first.toolCallId).toBeTruthy();
+    const resume1 = await agent.approveToolCall({ runId: stream.runId, toolCallId: first.toolCallId });
+    const second = await collectApproval(resume1);
+    expect(second.toolCallId).toBeTruthy();
+    expect(second.toolCallId).not.toBe(first.toolCallId);
+    expect(executedCalls).toEqual(['User 1']);
 
-      const runsAtFirstSuspension = (await workflowsStore.listWorkflowRuns({})).runs;
-      const sizeAtFirstSuspension = totalSnapshotSize(runsAtFirstSuspension);
-      // Exactly one serialized copy of the conversation may exist per suspended
-      // step (`__streamState.messageList`) — not one per step payload/prevOutput
-      // and not another in `context.input`.
-      const fillerCopiesFirst = countMarker(runsAtFirstSuspension, `message 42: ${filler}`);
+    const runsAtSecondSuspension = (await workflowsStore.listWorkflowRuns({})).runs;
+    const sizeAtSecondSuspension = totalSnapshotSize(runsAtSecondSuspension);
+    const fillerCopiesSecond = countMarker(runsAtSecondSuspension, `message 42: ${filler}`);
 
-      const resume1 = await agent.approveToolCall({ runId: stream.runId, toolCallId: first.toolCallId });
-      const second = await collectApproval(resume1);
-      expect(second.toolCallId).toBeTruthy();
-      expect(second.toolCallId).not.toBe(first.toolCallId);
-      expect(executedCalls).toEqual(['User 1']);
+    // The second suspension may not retain the first suspension's resume
+    // state (stale `__streamState` on completed steps) nor otherwise re-copy
+    // the conversation. Allow small growth (the tool call/result messages
+    // appended between suspensions), but nothing proportional to a second
+    // conversation copy.
+    expect(fillerCopiesSecond).toBeLessThanOrEqual(fillerCopiesFirst);
+    expect(sizeAtSecondSuspension).toBeLessThan(sizeAtFirstSuspension + rawThreadSize * 0.5);
 
-      const runsAtSecondSuspension = (await workflowsStore.listWorkflowRuns({})).runs;
-      const sizeAtSecondSuspension = totalSnapshotSize(runsAtSecondSuspension);
-      const fillerCopiesSecond = countMarker(runsAtSecondSuspension, `message 42: ${filler}`);
+    // And the snapshot must stay O(thread), not O(thread × suspensions). The
+    // constant factor reflects the remaining live resume-state copies:
+    // each `__streamState.messageList` encodes the conversation twice
+    // (`content.content` + `content.parts[].text`), and a suspension is held
+    // in the tool-call step's suspendPayload, its foreach aggregation entry,
+    // and the parent loop row. Deduplicating those is a follow-up —
+    // measured: ~7.4× vs ~33× unpruned.
+    const ceiling = rawThreadSize * 9;
+    expect(sizeAtFirstSuspension).toBeLessThan(ceiling);
+    expect(sizeAtSecondSuspension).toBeLessThan(ceiling);
 
-      // The second suspension may not retain the first suspension's resume
-      // state (stale `__streamState` on completed steps) nor otherwise re-copy
-      // the conversation. Allow small growth (the tool call/result messages
-      // appended between suspensions), but nothing proportional to a second
-      // conversation copy.
-      expect(fillerCopiesSecond).toBeLessThanOrEqual(fillerCopiesFirst);
-      expect(sizeAtSecondSuspension).toBeLessThan(sizeAtFirstSuspension + rawThreadSize * 0.5);
+    // The run must still complete correctly after the final approval.
+    const resume2 = await agent.approveToolCall({ runId: stream.runId, toolCallId: second.toolCallId });
+    const final = await collectApproval(resume2);
+    expect(final.text).toBe('All users found');
+    expect(executedCalls).toEqual(['User 1', 'User 2']);
 
-      // And the snapshot must stay O(thread), not O(thread × suspensions). The
-      // constant factor reflects the remaining live resume-state copies:
-      // each `__streamState.messageList` encodes the conversation twice
-      // (`content.content` + `content.parts[].text`), and a suspension is held
-      // in the tool-call step's suspendPayload, its foreach aggregation entry,
-      // and the parent loop row (the evented engine mirrors one more copy into
-      // the nested run's context). Deduplicating those is a follow-up —
-      // measured: ~7.4× (default) / ~9.8× (evented) vs ~33× unpruned.
-      const ceiling = rawThreadSize * (evented ? 12 : 9);
-      expect(sizeAtFirstSuspension).toBeLessThan(ceiling);
-      expect(sizeAtSecondSuspension).toBeLessThan(ceiling);
+    // Terminal runs delete their snapshot rows entirely.
+    expect((await workflowsStore.listWorkflowRuns({})).runs).toHaveLength(0);
+  }, 60000);
 
-      // The run must still complete correctly after the final approval.
-      const resume2 = await agent.approveToolCall({ runId: stream.runId, toolCallId: second.toolCallId });
-      const final = await collectApproval(resume2);
-      expect(final.text).toBe('All users found');
-      expect(executedCalls).toEqual(['User 1', 'User 2']);
+  it('resumes from the persisted snapshot alone (simulated restart)', async () => {
+    // After a restart, the persisted snapshot is the only source of resume
+    // state — no live RunScope, no in-memory run registration. Whatever the
+    // snapshot pruning keeps must be sufficient on its own.
+    executedCalls.length = 0;
+    const storage = new InMemoryStore();
 
-      // Terminal runs delete their snapshot rows entirely.
-      expect((await workflowsStore.listWorkflowRuns({})).runs).toHaveLength(0);
-    }, 60000);
+    const agentBefore = new Agent({
+      id: 'restart-agent',
+      name: 'Restart Agent',
+      instructions: 'You find users.',
+      model: createTwoToolCallModel(),
+      tools: { findUserTool: createApprovalTool() },
+    });
+    new Mastra({ agents: { agent: agentBefore }, logger: false, storage });
 
-    it('resumes from the persisted snapshot alone (simulated restart)', async () => {
-      // After a restart, the persisted snapshot is the only source of resume
-      // state — no live RunScope, no in-memory run registration. Whatever the
-      // snapshot pruning keeps must be sufficient on its own.
-      executedCalls.length = 0;
-      const storage = new InMemoryStore();
+    const filler = 'y'.repeat(600);
+    const thread = buildLongThread(50, filler);
 
-      const agentBefore = new Agent({
-        id: 'restart-agent',
-        name: 'Restart Agent',
-        instructions: 'You find users.',
-        model: createTwoToolCallModel(),
-        tools: { findUserTool: createApprovalTool() },
-      });
-      new Mastra({ agents: { agent: agentBefore }, logger: false, storage });
+    const stream = await agentBefore.stream(thread, { requireToolApproval: true });
+    const first = await collectApproval(stream);
+    expect(first.toolCallId).toBeTruthy();
 
-      const filler = 'y'.repeat(600);
-      const thread = buildLongThread(50, filler);
+    // "Restart": a fresh Mastra + agent instance over the same storage. The
+    // fresh mock model returns final text on its first call, which is the
+    // call the resumed loop makes after executing the approved tool.
+    const finalTextModel = new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-after-restart', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Resumed after restart' },
+          { type: 'text-end', id: 'text-1' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+        ]),
+      }),
+    });
 
-      const stream = await agentBefore.stream(thread, { requireToolApproval: true });
-      const first = await collectApproval(stream);
-      expect(first.toolCallId).toBeTruthy();
+    const agentAfter = new Agent({
+      id: 'restart-agent',
+      name: 'Restart Agent',
+      instructions: 'You find users.',
+      model: finalTextModel,
+      tools: { findUserTool: createApprovalTool() },
+    });
+    const mastraAfter = new Mastra({ agents: { agent: agentAfter }, logger: false, storage });
 
-      // "Restart": a fresh Mastra + agent instance over the same storage. The
-      // fresh mock model returns final text on its first call, which is the
-      // call the resumed loop makes after executing the approved tool.
-      const finalTextModel = new MockLanguageModelV2({
-        doStream: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-after-restart', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: 'Resumed after restart' },
-            { type: 'text-end', id: 'text-1' },
-            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
-          ]),
-        }),
-      });
+    const resumed = await agentAfter.approveToolCall({ runId: stream.runId, toolCallId: first.toolCallId });
+    const final = await collectApproval(resumed);
 
-      const agentAfter = new Agent({
-        id: 'restart-agent',
-        name: 'Restart Agent',
-        instructions: 'You find users.',
-        model: finalTextModel,
-        tools: { findUserTool: createApprovalTool() },
-      });
-      const mastraAfter = new Mastra({ agents: { agent: agentAfter }, logger: false, storage });
+    expect(executedCalls).toEqual(['User 1']);
+    expect(final.text).toBe('Resumed after restart');
 
-      const resumed = await agentAfter.approveToolCall({ runId: stream.runId, toolCallId: first.toolCallId });
-      const final = await collectApproval(resumed);
-
-      expect(executedCalls).toEqual(['User 1']);
-      expect(final.text).toBe('Resumed after restart');
-
-      const workflowsStore = (await mastraAfter.getStorage()!.getStore('workflows'))!;
-      expect((await workflowsStore.listWorkflowRuns({})).runs).toHaveLength(0);
-    }, 60000);
-  },
-  120000,
-);
+    const workflowsStore = (await mastraAfter.getStorage()!.getStore('workflows'))!;
+    expect((await workflowsStore.listWorkflowRuns({})).runs).toHaveLength(0);
+  }, 60000);
+});

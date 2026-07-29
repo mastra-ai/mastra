@@ -6,6 +6,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/voice/livekit",
+      "destination": "/docs/voice/realtime-voice",
+      "permanent": true
+    },
+    {
       "source": "/docs/observability/tracing/exporters/cloud",
       "destination": "/docs/observability/integrations/exporters/mastra-platform",
       "permanent": true
@@ -998,6 +1003,16 @@
     {
       "source": "/docs/scorers/creating-custom-scorers",
       "destination": "/docs/evals/custom-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/agents",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guide/tools",
+      "destination": "/docs/agents/using-tools",
       "permanent": true
     }
   ]

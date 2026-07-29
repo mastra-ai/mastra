@@ -645,6 +645,31 @@ describe('AutoExtractedMetrics', () => {
     );
   });
 
+  it('should estimate costs for Vercel AI Gateway model ids', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        provider: 'gateway',
+        model: 'anthropic/claude-haiku-4.5',
+        usage: { inputTokens: 100, outputTokens: 50 },
+      },
+    });
+
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const inputTokens = emittedMetrics.find(m => m.metric.name === 'mastra_model_total_input_tokens');
+    expect(inputTokens!.metric.costContext).toMatchObject({
+      provider: 'vercel',
+      model: 'claude-haiku-4-5',
+      costMetadata: { pricing_id: 'vercel-claude-haiku-4-5' },
+    });
+    expect(inputTokens!.metric.costContext?.estimatedCost).toBeCloseTo(0.0001);
+  });
+
   it('should estimate costs for Bedrock inference-profile model ids', () => {
     setup();
     const span = createMockSpan({

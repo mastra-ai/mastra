@@ -1,2 +1,8 @@
 packages:
   - '.'
+
+# Security floors for Dependabot alerts on transitive deps.
+overrides:
+  js-yaml@>=4.0.0 <4.2.0: 4.3.0
+  qs@>=6.11.1 <6.15.2: 6.15.2
+  uuid@<11.1.1: 11.1.1

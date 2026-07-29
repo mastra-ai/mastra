@@ -2,8 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { openai } from '@ai-sdk/openai';
 import { openai as openai_v5 } from '@ai-sdk/openai-v5';
 import { openai as openai_v6 } from '@ai-sdk/openai-v6';
+import { openai as openai_v7 } from '@ai-sdk/openai-v7';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import type { LanguageModelV3 } from '@ai-sdk/provider-v6';
+import type { LanguageModelV4 } from '@ai-sdk/provider-v7';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
@@ -30,15 +32,17 @@ const mock = createGatewayMock();
 beforeAll(() => mock.start());
 afterAll(() => mock.saveAndStop());
 
-function runStreamE2ETest(version: 'v1' | 'v2' | 'v3') {
-  let openaiModel: LanguageModelV1 | LanguageModelV2 | LanguageModelV3;
+function runStreamE2ETest(version: 'v1' | 'v2' | 'v3' | 'v4') {
+  let openaiModel: LanguageModelV1 | LanguageModelV2 | LanguageModelV3 | LanguageModelV4;
 
   if (version === 'v1') {
     openaiModel = openai('gpt-4o-mini');
   } else if (version === 'v2') {
     openaiModel = openai_v5('gpt-4o-mini');
-  } else {
+  } else if (version === 'v3') {
     openaiModel = openai_v6('gpt-4o-mini');
+  } else {
+    openaiModel = openai_v7('gpt-4o-mini');
   }
 
   describe(`${version} - stream`, () => {
@@ -761,3 +765,4 @@ describe('OpenAI WebSocket transport (router)', () => {
 runStreamE2ETest('v1');
 runStreamE2ETest('v2');
 runStreamE2ETest('v3');
+runStreamE2ETest('v4');

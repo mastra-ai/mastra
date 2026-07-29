@@ -55,13 +55,12 @@ export interface LoopScenarioResult {
 /**
  * Agent / execution variant for loop scenarios.
  *
- * The first three select the *execution engine* (how the loop runs); `'fs'`
+ * The first two select the *execution engine* (how the loop runs); `'fs'`
  * selects the *agent-assembly method* (how the agent is built) and runs on the
  * normal execution path. Treating them as one axis lets every scenario run
  * through {@link describeForAllEngines} cover the file-routing path for free.
  *
- * - `'normal'` — default direct engine (no env var, regular `new Agent(...)`).
- * - `'evented'` — evented workflow engine via `MASTRA_EVENTED_EXECUTION=true`.
+ * - `'normal'` — default direct engine (regular `new Agent(...)`).
  * - `'durable'` — durable execution via `createDurableAgent` wrapper.
  * - `'fs'` — agent assembled from file-system routing (`assembleAgentFromFsEntry`,
  *   `instructions.md` body + discovered `tools/*`) and registered through
@@ -72,17 +71,16 @@ export interface LoopScenarioResult {
  *   instructions, `sharedAgent`, `workflows`-as-tool, durable resume/suspension)
  *   skip this variant via `{ skip: ['fs'] }`.
  */
-export type EngineVariant = 'normal' | 'evented' | 'durable' | 'fs';
+export type EngineVariant = 'normal' | 'durable' | 'fs';
 
 /** All supported engine variants for parameterised test runs. */
-export const ALL_ENGINE_VARIANTS: readonly EngineVariant[] = ['normal', 'evented', 'durable', 'fs'] as const;
+export const ALL_ENGINE_VARIANTS: readonly EngineVariant[] = ['normal', 'durable', 'fs'] as const;
 
 export interface RunLoopScenarioOptions {
   /** Active AIMock handle for the current suite (from {@link useLoopScenarioAimock}). */
   llm: LLMock;
   /**
    * Execution engine variant. Defaults to `'normal'`.
-   * - `'evented'` sets `MASTRA_EVENTED_EXECUTION=true` for the run.
    * - `'durable'` wraps the agent with `createDurableAgent`.
    */
   engine?: EngineVariant;

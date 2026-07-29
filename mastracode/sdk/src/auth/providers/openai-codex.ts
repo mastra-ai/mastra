@@ -33,6 +33,7 @@ if (typeof process !== 'undefined' && (process.versions?.node || process.version
   });
 }
 
+import { parseAuthorizationInput } from '../authorization-input.js';
 import { generatePKCE } from '../pkce.js';
 import type { AuthMode, OAuthCredentials, OAuthLoginCallbacks, OAuthPrompt, OAuthProviderInterface } from '../types.js';
 
@@ -97,39 +98,6 @@ type JwtPayload = {
 async function createState(): Promise<string> {
   const randomBytes = await getRandomBytes();
   return randomBytes(16).toString('hex');
-}
-
-function parseAuthorizationInput(input: string): {
-  code?: string;
-  state?: string;
-} {
-  const value = input.trim();
-  if (!value) return {};
-
-  try {
-    const url = new URL(value);
-    return {
-      code: url.searchParams.get('code') ?? undefined,
-      state: url.searchParams.get('state') ?? undefined,
-    };
-  } catch {
-    // not a URL
-  }
-
-  if (value.includes('#')) {
-    const [code, state] = value.split('#', 2);
-    return { code, state };
-  }
-
-  if (value.includes('code=')) {
-    const params = new URLSearchParams(value);
-    return {
-      code: params.get('code') ?? undefined,
-      state: params.get('state') ?? undefined,
-    };
-  }
-
-  return { code: value };
 }
 
 function decodeJwt(token: string): JwtPayload | null {
@@ -415,12 +383,34 @@ async function startLocalOAuthServer(
   });
 }
 
-async function loginOpenAICodexDevice(options: {
-  onAuth: (info: { url: string; instructions?: string }) => void;
-  onProgress?: (message: string) => void;
-  signal?: AbortSignal;
-  sleep?: (ms: number) => Promise<void>;
-}): Promise<OAuthCredentials> {
+/**
+ * Serializable pending state for a Codex device-code login. Safe to persist
+ * (e.g. a `pending jsonb` column) so polling can span HTTP requests — the
+ * device token response carries the `code_verifier`, so no PKCE state needs
+ * to be kept client-side.
+ */
+export interface CodexDeviceLoginPending {
+  deviceAuthId: string;
+  userCode: string;
+  /** Verification URL for the user to open. */
+  url: string;
+  instructions: string;
+  /** Poll interval in ms suggested by the server. */
+  intervalMs: number;
+  /** ms epoch after which the device authorization expires. */
+  deadlineAt: number;
+}
+
+export type CodexDevicePollResult =
+  | { status: 'complete'; credentials: OAuthCredentials }
+  | { status: 'pending'; nextPollMs: number }
+  | { status: 'failed'; error: string };
+
+/**
+ * Start a Codex device-code login: request a user code and return the
+ * serializable pending state for subsequent polls.
+ */
+export async function startCodexDeviceLogin(options?: { signal?: AbortSignal }): Promise<CodexDeviceLoginPending> {
   const response = await fetch(DEVICE_USER_CODE_URL, {
     method: 'POST',
     headers: {
@@ -428,7 +418,7 @@ async function loginOpenAICodexDevice(options: {
       'User-Agent': 'mastracode',
     },
     body: JSON.stringify({ client_id: CLIENT_ID, originator: 'mastracode' }),
-    signal: options.signal,
+    signal: options?.signal,
   });
 
   if (!response.ok) {
@@ -450,71 +440,124 @@ async function loginOpenAICodexDevice(options: {
 
   const intervalSeconds =
     typeof deviceData.interval === 'number' ? deviceData.interval : Number.parseInt(deviceData.interval ?? '', 10) || 5;
-  const pollDelayMs = Math.max(intervalSeconds, 1) * 1000;
-  const sleep = options.sleep ?? (ms => new Promise<void>(resolve => setTimeout(resolve, ms)));
-  const startedAt = Date.now();
 
-  options.onAuth({
+  return {
+    deviceAuthId: deviceData.device_auth_id,
+    userCode,
     url: DEVICE_AUTHORIZE_URL,
     instructions: `Enter code: ${userCode}`,
+    intervalMs: Math.max(intervalSeconds, 1) * 1000,
+    deadlineAt: Date.now() + DEVICE_AUTH_TIMEOUT_MS,
+  };
+}
+
+/**
+ * Perform exactly one upstream poll for a pending Codex device login.
+ * The Codex device endpoint signals "still pending" via HTTP 403/404 (it is
+ * not an RFC 8628 error-JSON endpoint); on success it returns the
+ * authorization code plus server-held PKCE verifier, which we exchange
+ * immediately for credentials. Never throws for flow-level conditions.
+ */
+export async function pollCodexDeviceLogin(
+  pending: CodexDeviceLoginPending,
+  options?: { signal?: AbortSignal },
+): Promise<CodexDevicePollResult> {
+  if (Date.now() >= pending.deadlineAt) {
+    return { status: 'failed', error: 'OpenAI Codex device authorization timed out after 15 minutes' };
+  }
+
+  const pollResponse = await fetch(DEVICE_TOKEN_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'mastracode',
+    },
+    body: JSON.stringify({
+      device_auth_id: pending.deviceAuthId,
+      user_code: pending.userCode,
+    }),
+    signal: options?.signal,
   });
+
+  if (pollResponse.ok) {
+    const data = (await pollResponse.json()) as {
+      authorization_code?: string;
+      code_verifier?: string;
+    };
+
+    if (!data.authorization_code || !data.code_verifier) {
+      return { status: 'failed', error: 'OpenAI Codex device token response missing required fields' };
+    }
+
+    const tokenResult = await exchangeAuthorizationCode(
+      data.authorization_code,
+      data.code_verifier,
+      DEVICE_REDIRECT_URI,
+    );
+    if (tokenResult.type !== 'success') {
+      return { status: 'failed', error: 'Token exchange failed' };
+    }
+
+    let accountId: string;
+    try {
+      accountId = requireAccountId(tokenResult);
+    } catch (error) {
+      return { status: 'failed', error: error instanceof Error ? error.message : String(error) };
+    }
+
+    return {
+      status: 'complete',
+      credentials: {
+        access: tokenResult.access,
+        refresh: tokenResult.refresh,
+        expires: tokenResult.expires,
+        accountId,
+      },
+    };
+  }
+
+  if (pollResponse.status !== 403 && pollResponse.status !== 404) {
+    const text = await pollResponse.text().catch(() => '');
+    return {
+      status: 'failed',
+      error: `OpenAI Codex device authorization failed: ${pollResponse.status}${text ? ` ${text}` : ''}`,
+    };
+  }
+
+  return { status: 'pending', nextPollMs: pending.intervalMs };
+}
+
+async function loginOpenAICodexDevice(options: {
+  onAuth: (info: { url: string; instructions?: string }) => void;
+  onProgress?: (message: string) => void;
+  signal?: AbortSignal;
+  sleep?: (ms: number) => Promise<void>;
+}): Promise<OAuthCredentials> {
+  const pending = await startCodexDeviceLogin({ signal: options.signal });
+  const sleep = options.sleep ?? (ms => new Promise<void>(resolve => setTimeout(resolve, ms)));
+
+  options.onAuth({
+    url: pending.url,
+    instructions: pending.instructions,
+  });
+
+  await sleep(pending.intervalMs);
 
   while (true) {
     if (options.signal?.aborted) {
       throw new Error('Login cancelled');
     }
-    if (Date.now() - startedAt >= DEVICE_AUTH_TIMEOUT_MS) {
-      throw new Error('OpenAI Codex device authorization timed out after 15 minutes');
+
+    const result = await pollCodexDeviceLogin(pending, { signal: options.signal });
+    if (result.status === 'complete') {
+      return result.credentials;
     }
-
-    const pollResponse = await fetch(DEVICE_TOKEN_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'mastracode',
-      },
-      body: JSON.stringify({
-        device_auth_id: deviceData.device_auth_id,
-        user_code: userCode,
-      }),
-      signal: options.signal,
-    });
-
-    if (pollResponse.ok) {
-      const data = (await pollResponse.json()) as {
-        authorization_code?: string;
-        code_verifier?: string;
-      };
-
-      if (!data.authorization_code || !data.code_verifier) {
-        throw new Error('OpenAI Codex device token response missing required fields');
-      }
-
-      const tokenResult = await exchangeAuthorizationCode(
-        data.authorization_code,
-        data.code_verifier,
-        DEVICE_REDIRECT_URI,
-      );
-      if (tokenResult.type !== 'success') {
-        throw new Error('Token exchange failed');
-      }
-
-      const accountId = requireAccountId(tokenResult);
-      return {
-        access: tokenResult.access,
-        refresh: tokenResult.refresh,
-        expires: tokenResult.expires,
-        accountId,
-      };
-    }
-
-    if (pollResponse.status !== 403 && pollResponse.status !== 404) {
-      const text = await pollResponse.text().catch(() => '');
-      throw new Error(`OpenAI Codex device authorization failed: ${pollResponse.status}${text ? ` ${text}` : ''}`);
+    if (result.status === 'failed') {
+      throw new Error(result.error);
     }
 
     options.onProgress?.('Waiting for OpenAI Codex device authorization...');
-    await sleep(pollDelayMs);
+    await sleep(result.nextPollMs);
   }
 }
 

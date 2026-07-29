@@ -16,7 +16,7 @@
  * path — including post-execution rebuilds like title generation — registers
  * a handler it doesn't release.
  */
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { __hookHandlerCount, AvailableHooks } from '../../hooks';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
@@ -52,13 +52,6 @@ async function streamAndDrain(agent: Agent, prompt: string, options?: AgentExecu
 }
 
 describe('standalone Agent ephemeral Mastra hook leak (#19404)', () => {
-  beforeAll(() => {
-    vi.stubEnv('MASTRA_EVENTED_EXECUTION', 'false');
-  });
-  afterAll(() => {
-    vi.unstubAllEnvs();
-  });
-
   it('standalone stream() does not register a module-level scorer hook', async () => {
     const baseline = scorerHookCount();
 

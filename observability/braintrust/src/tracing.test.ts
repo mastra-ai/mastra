@@ -17,10 +17,9 @@ import type {
 } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { initLogger, _exportsForTestingOnly } from 'braintrust';
-import type { Logger } from 'braintrust';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BraintrustExporter } from './tracing';
-import type { BraintrustExporterConfig } from './tracing';
+import type { BraintrustExporterConfig, BraintrustLogger, BraintrustSpan } from './tracing';
 
 // Mock Braintrust initLogger function (must be at the top level)
 vi.mock('braintrust');
@@ -2390,7 +2389,7 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
 
     // Create exporter with braintrustLogger parameter
     const config: BraintrustExporterConfig = {
-      braintrustLogger: mockLogger as Logger<true>,
+      braintrustLogger: mockLogger,
     };
     const exporter = new TestBraintrustExporter(config);
 
@@ -2436,6 +2435,53 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
     expect(traceData.getRoot()).toBe(mockLogger);
   });
 
+  it('accepts a structurally compatible logger and span', async () => {
+    const spanStart = vi.fn(() => span);
+    const spanLog = vi.fn();
+    const spanEnd = vi.fn(() => 0);
+    const span: BraintrustSpan = {
+      id: 'structural-span-id',
+      startSpan: spanStart,
+      log: spanLog,
+      end: spanEnd,
+    };
+    const loggerStart = vi.fn(() => span);
+    const loggerFeedback = vi.fn();
+    const logger: BraintrustLogger = {
+      startSpan: loggerStart,
+      logFeedback: loggerFeedback,
+    };
+    const exporter = new TestBraintrustExporter({ braintrustLogger: logger });
+    const rootSpan = createMockSpan({
+      id: 'structural-root-id',
+      name: 'structural-root',
+      type: SpanType.AGENT_RUN,
+      isRoot: true,
+      attributes: {},
+    });
+
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_STARTED,
+      exportedSpan: rootSpan,
+    });
+    await exporter.onScoreEvent({
+      type: 'score',
+      score: {
+        scoreId: 'structural-score-id',
+        timestamp: new Date(),
+        traceId: rootSpan.traceId,
+        spanId: rootSpan.id,
+        scorerId: 'structural-scorer',
+        score: 1,
+      },
+    });
+
+    expect(loggerStart).toHaveBeenCalledOnce();
+    expect(loggerFeedback).toHaveBeenCalledWith(
+      expect.objectContaining({ id: rootSpan.id, scores: { 'structural-scorer': 1 } }),
+    );
+  });
+
   it('should attach to external span when detected via currentSpan()', async () => {
     // Mock currentSpan to return an external span (simulating logger.traced() or Eval context)
     const { currentSpan: realCurrentSpan } = await import('braintrust');
@@ -2447,7 +2493,7 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
 
     // Create exporter with braintrustLogger parameter
     const config: BraintrustExporterConfig = {
-      braintrustLogger: mockLogger as Logger<true>,
+      braintrustLogger: mockLogger,
     };
     const exporter = new TestBraintrustExporter(config);
     const traceId = 'trace-id';
@@ -2504,8 +2550,8 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
     mockedCurrentSpan.mockReturnValue(undefined as any);
 
     const config: BraintrustExporterConfig = {
-      braintrustLogger: mockLogger as Logger<true>,
-      currentSpan: vi.fn(() => mockExternalSpan as any),
+      braintrustLogger: mockLogger,
+      currentSpan: vi.fn(() => mockExternalSpan),
     };
     const exporter = new TestBraintrustExporter(config);
     const rootSpan = createMockSpan({
@@ -2551,7 +2597,7 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
 
     // Create exporter with braintrustLogger parameter
     const config: BraintrustExporterConfig = {
-      braintrustLogger: mockLogger as Logger<true>,
+      braintrustLogger: mockLogger,
     };
     const exporter = new TestBraintrustExporter(config);
     const traceId = 'trace-id';
@@ -2664,7 +2710,7 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
     mockedCurrentSpan.mockReturnValue(mockExternalSpan as any);
 
     const config: BraintrustExporterConfig = {
-      braintrustLogger: mockLogger as Logger<true>,
+      braintrustLogger: mockLogger,
       logLevel: 'debug',
     };
     const exporter = new TestBraintrustExporter(config);
