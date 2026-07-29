@@ -429,6 +429,65 @@ describe('aiV5UIMessagesToAIV5ModelMessages — MCP content tool result output',
     expect(toolResult.output.value).toBe(rawOutput);
   });
 
+  it('preserves JSON output when distinct circular MCP results cannot be structurally compared', () => {
+    const createCircularMcpOutput = () => {
+      const image: Record<string, unknown> = {
+        type: 'image',
+        data: 'base64data',
+        mimeType: 'image/png',
+      };
+      image.self = image;
+      return { content: [image] };
+    };
+    const uiOutput = createCircularMcpOutput();
+    const rawOutput = createCircularMcpOutput();
+
+    const messages: AIV5Type.UIMessage[] = [
+      {
+        id: 'msg-tool-ui',
+        role: 'assistant',
+        parts: [
+          {
+            type: 'tool-screenshot',
+            toolCallId: 'call-circular-mcp-comparison',
+            state: 'output-available',
+            input: {},
+            output: uiOutput,
+          } as any,
+        ],
+      },
+    ];
+    const dbMessages = [
+      {
+        id: 'msg-tool-db',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'call-circular-mcp-comparison',
+                toolName: 'screenshot',
+                state: 'result',
+                args: {},
+                result: rawOutput,
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const result = aiV5UIMessagesToAIV5ModelMessages(messages, dbMessages as any);
+    const toolMessage = result.find(message => message.role === 'tool');
+    const toolResult = (toolMessage!.content as any[]).find(part => part.type === 'tool-result');
+
+    expect(toolResult.output.type).toBe('json');
+    expect(toolResult.output.value).toBe(uiOutput);
+  });
+
   it('preserves explicit JSON output that is structurally equal to the raw MCP result', () => {
     const createMcpOutput = () => ({
       content: [

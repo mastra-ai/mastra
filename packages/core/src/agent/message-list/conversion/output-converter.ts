@@ -2,7 +2,7 @@ import { convertToCoreMessages as convertToCoreMessagesV4 } from '@internal/ai-s
 import type { CoreMessage as CoreMessageV4, UIMessage as UIMessageV4 } from '@internal/ai-sdk-v4';
 import * as AIV5 from '@internal/ai-sdk-v5';
 
-import { deepEqual } from '../../../utils';
+import { deepEqual } from '../../../utils/deep-equal';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from '../adapters';
 import type { AdapterContext } from '../adapters';
 import { TypeDetector } from '../detection/TypeDetector';
@@ -376,13 +376,13 @@ function applyMcpContentToolResultOutputs(
       let converted: ReturnType<typeof convertMcpContentToolResultOutput>;
       try {
         converted = convertMcpContentToolResultOutput(rawOutput);
+        if (!converted) return part;
+        if (!isDefaultToolResultOutput(part.output, rawOutput)) return part;
       } catch {
-        // MCP content may contain values that JSON.stringify cannot serialize.
-        // Preserve the original JSON output when the optional conversion fails.
+        // MCP content may contain values that cannot be serialized or structurally compared.
+        // Preserve the original JSON output when the optional conversion cannot complete.
         return part;
       }
-      if (!converted) return part;
-      if (!isDefaultToolResultOutput(part.output, rawOutput)) return part;
       modified = true;
       return { ...part, output: converted } as typeof part;
     });
