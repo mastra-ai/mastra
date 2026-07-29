@@ -3201,7 +3201,7 @@ export type GetAgentsAgentId_PathParams = {
 };
 
 export type GetAgentsAgentId_QueryParams = {
-  /** Which stored config version to resolve: draft (latest, default) or published (active version). Mutually exclusive with versionId. */
+  /** Which stored config version to resolve: draft (latest version) or published (active version, default). Mutually exclusive with versionId. */
   status?: ('draft' | 'published') | undefined;
   /** Specific version ID to resolve. Mutually exclusive with status — if both are provided, versionId takes precedence. */
   versionId?: string | undefined;
@@ -12477,6 +12477,8 @@ export type PostStoredAgents_Body = {
     | undefined;
   /** Agent visibility: private (owner/admin only) or public (any reader) */
   visibility?: ('private' | 'public') | undefined;
+  /** Publish the initial version so the agent resolves at status="published". Defaults to true when omitted. Pass false to stage the agent as an unpublished draft — useful when overriding a code-defined agent, whose code definition keeps serving traffic until the override is published. */
+  autoPublish?: boolean | undefined;
   /** Name of the agent */
   name: string;
   /** Description of the agent */

@@ -125,7 +125,7 @@ export const agentIdPathParams = z.object({
 /**
  * Query params for GET /agents/:agentId — controls which stored config version is used for overrides.
  * Use either `status` or `versionId`, not both.
- * - `status` — 'draft' (latest version, default) or 'published' (active published version).
+ * - `status` — 'draft' (latest version) or 'published' (active published version, default).
  * - `versionId` — Resolve with a specific version ID.
  */
 export const agentVersionQuerySchema = z.object({
@@ -133,7 +133,7 @@ export const agentVersionQuerySchema = z.object({
     .enum(['draft', 'published'])
     .optional()
     .describe(
-      'Which stored config version to resolve: draft (latest, default) or published (active version). Mutually exclusive with versionId.',
+      'Which stored config version to resolve: draft (latest version) or published (active version, default). Mutually exclusive with versionId.',
     ),
   versionId: z
     .string()

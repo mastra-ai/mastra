@@ -792,6 +792,23 @@ const agent = await mastraClient.createStoredAgent({
 })
 ```
 
+By default, `createStoredAgent()` publishes the initial version immediately. Set `autoPublish` to `false` to create an unpublished draft that you can review before calling [`activateVersion()`](#activateversion):
+
+```typescript
+const draft = await mastraClient.createStoredAgent({
+  id: 'draft-agent',
+  name: 'Draft Assistant',
+  instructions: 'You are a helpful assistant.',
+  model: {
+    provider: 'openai',
+    name: '__AI_SDK_OPENAI_MODEL_BASE__',
+  },
+  autoPublish: false,
+})
+```
+
+Editors configured with the `code` source always publish the initial version because saving writes the agent configuration to the file system.
+
 With all options:
 
 ```typescript
