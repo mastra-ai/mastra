@@ -1,9 +1,3 @@
-/**
- * Decorative trend preview: a stretched line + area over a fixed viewBox, with
- * a dot marking the latest point. Carries no labels, so the caller must state
- * the numbers it summarizes in text.
- */
-
 import { useId } from 'react';
 
 const VIEW_WIDTH = 100;

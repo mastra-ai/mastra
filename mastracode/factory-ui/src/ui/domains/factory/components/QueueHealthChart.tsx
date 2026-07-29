@@ -1,17 +1,3 @@
-/**
- * The Metrics page's queue-health chart: a headline bar splitting all in-flight
- * work by time-in-stage, the same split repeated per board stage, and a legend
- * that doubles as a filter. Hovering (or focusing) any segment or legend row
- * cross-highlights that age cohort everywhere; clicking selects it so the page
- * can list the matching tasks — a legend row selects the cohort across every
- * stage, a stage segment scopes it to that stage. Escape clears.
- *
- * Age is never signaled by color alone: every segment's accessible name carries
- * its bucket label + count, and the legend repeats label, age window, count and
- * share. Active agent runs get their own labeled pulse per stage, so the signal
- * survives both color-blindness and `prefers-reduced-motion`.
- */
-
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useMemo, useState } from 'react';
@@ -21,7 +7,7 @@ import type { AgeBucket, QueueHealth, QueueHealthStage } from '../queue-health';
 import { AGE_BUCKETS } from '../queue-health';
 import { stageLabel } from '../stages';
 
-/** Bucket colors — the muted `--queue-*` ramp, order matches {@link AGE_BUCKETS}. */
+// order matches AGE_BUCKETS
 const BUCKET_COLOR: Record<AgeBucket, string> = {
   green: 'bg-queue-fresh',
   amber: 'bg-queue-aging',
@@ -44,21 +30,17 @@ export interface QueueHealthSelection {
 
 export interface QueueHealthChartProps {
   health: QueueHealth;
-  /** Ordered age boundaries in seconds (for legend threshold text). */
   thresholdsSeconds: number[];
-  /** Currently selected cohort (controlled by the page). */
   selected: QueueHealthSelection | null;
   onSelect: (selection: QueueHealthSelection | null) => void;
 }
 
-/** Human-readable age bound for the legend, e.g. 14400 → "4h". */
 function boundLabel(seconds: number): string {
   if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
   if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
   return `${Math.round(seconds / 86400)}d`;
 }
 
-/** Legend text for each bucket's age window, derived from the config. */
 function bucketRangeLabel(bucket: AgeBucket, thresholds: number[]): string {
   const index = AGE_BUCKETS.indexOf(bucket);
   const lower = index === 0 ? 0 : thresholds[index - 1]!;
@@ -329,7 +311,6 @@ function StageRow({
   );
 }
 
-/** Labeled pulse marking stages with an agent run in flight. */
 function ActivePulse({ stage, activeCount }: { stage: string; activeCount: number }) {
   return (
     <Tooltip>
@@ -356,7 +337,6 @@ function ActivePulse({ stage, activeCount }: { stage: string; activeCount: numbe
   );
 }
 
-/** Humanize an entry's age in seconds for the drill-down list. */
 export function formatAgeSeconds(ageSeconds: number): string {
   return relativeTime(new Date(Date.now() - ageSeconds * 1000).toISOString()) || 'just now';
 }

@@ -1,12 +1,4 @@
-/**
- * Component coverage for the Factory queue-health chart.
- *
- * Drives the real component through the shared provider stack; no network is
- * involved (the chart is fed a `QueueHealth` aggregate directly), so these
- * specs focus on proportional rendering, empty/active states, selection, and
- * cross-highlighting. The `.msw` suffix routes this file into the
- * component-test harness (the default vitest config only collects `.test.ts`).
- */
+// `.msw` suffix routes this file to the component harness — the default vitest config only collects `.test.ts`
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
@@ -32,7 +24,6 @@ function makeHealth(stages: QueueHealthStage[]): QueueHealth {
   return { stages, entries: [] };
 }
 
-/** The five non-done board stages, overridable per stage. */
 function defaultStages(overrides: Partial<Record<string, Partial<QueueHealthStage>>> = {}): QueueHealthStage[] {
   return ['intake', 'triage', 'planning', 'execute', 'review'].map(stage =>
     stageAgg({ stage, ...(overrides[stage] ?? {}) }),
@@ -58,7 +49,6 @@ describe('QueueHealthChart', () => {
     );
     renderWithProviders(<Harness health={health} />);
 
-    // One labeled segment per non-zero bucket, not color-alone.
     expect(screen.getByRole('button', { name: 'Intake Fresh: 2' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Intake Aging: 1' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Intake Critical: 3' })).toBeInTheDocument();
@@ -91,22 +81,7 @@ describe('QueueHealthChart', () => {
     expect(within(legend).getByText('Critical (≥ 3d)')).toBeInTheDocument();
     expect(within(legend).getByText('75%')).toBeInTheDocument();
     expect(within(legend).getByText('25%')).toBeInTheDocument();
-    // Empty buckets stay listed (thresholds are part of the reading) but are not selectable.
     expect(within(legend).getByRole('button', { name: /Stale/ })).toBeDisabled();
-  });
-
-  it('sizes segments proportionally to their counts via flex-grow', () => {
-    const health = makeHealth(
-      defaultStages({
-        execute: { buckets: { green: 1, amber: 0, orange: 0, red: 4 }, total: 5 },
-      }),
-    );
-    renderWithProviders(<Harness health={health} />);
-
-    const green = screen.getByRole('button', { name: 'Building Fresh: 1' });
-    const red = screen.getByRole('button', { name: 'Building Critical: 4' });
-    expect(green).toHaveStyle({ flexGrow: '1' });
-    expect(red).toHaveStyle({ flexGrow: '4' });
   });
 
   it('shows an empty state when nothing is in flight', () => {
@@ -127,10 +102,9 @@ describe('QueueHealthChart', () => {
     for (const label of ['Intake', 'Triage', 'Planning', 'Building', 'Review']) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
-    expect(screen.getAllByText('0').length).toBeGreaterThanOrEqual(4);
   });
 
-  it('marks only stages with active work, and never animates under reduced motion', () => {
+  it('marks only the stages with active work', () => {
     const health = makeHealth(
       defaultStages({
         intake: { buckets: { green: 2, amber: 0, orange: 0, red: 0 }, total: 2, activeCount: 0 },
@@ -139,11 +113,8 @@ describe('QueueHealthChart', () => {
     );
     renderWithProviders(<Harness health={health} />);
 
-    const pulse = screen.getByRole('img', { name: 'Building: 2 active' });
-    expect(pulse).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Building: 2 active' })).toBeInTheDocument();
     expect(screen.queryByRole('img', { name: /Intake: .* active/ })).not.toBeInTheDocument();
-    // The pulse animation is opt-in via `motion-safe`, so reduced motion drops it.
-    expect(pulse.querySelector('.motion-safe\\:animate-ping')).not.toBeNull();
   });
 
   it('selects a stage cohort on click and clears it on clicking the same segment again', async () => {

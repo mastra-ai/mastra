@@ -1,16 +1,3 @@
-/**
- * The Metrics page's queue-health panel: in-flight work split by time in its
- * current stage, with a click-to-filter drill-down list of the matching tasks.
- * The list opens on the worst non-empty cohort, oldest first, so the section
- * also serves as the aging-work readout (intake excluded — see
- * `computeQueueHealth`).
- *
- * Unlike the rest of the Metrics dashboard this is a live snapshot — it is
- * not scoped by the page's date-range control. Aggregation is client-side
- * (`computeQueueHealth`) because the active-work signal is browser-only
- * (`useWorkspaceActivity`); the section merges that polled activity map with
- * the work items + age thresholds it fetches via React Query.
- */
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -42,7 +29,6 @@ const BUCKET_LABEL: Record<AgeBucket, string> = {
 
 const DEFAULT_THRESHOLDS = [14400, 86400, 259200];
 
-/** Worst non-empty cohort, so the list opens on the work that hurts most. */
 function worstCohort(health: QueueHealth): QueueHealthSelection | null {
   for (let index = AGE_BUCKETS.length - 1; index >= 0; index--) {
     const bucket = AGE_BUCKETS[index]!;
@@ -111,7 +97,6 @@ export function QueueHealthPanel({ factoryProjectId }: { factoryProjectId: strin
   );
 }
 
-/** Set of worktree paths with an agent run in flight (the sidebar dot source). */
 function useActivePaths(): ReadonlySet<string> {
   const { baseUrl } = useApiConfig();
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -176,8 +161,7 @@ function DrillDownList({
           {entries.map(entry => (
             <li
               key={`${entry.itemId}:${entry.stage}`}
-              // separator drawn in the 1px gap below the row, so the hover
-              // background's rounded corners never meet the rule
+              // rule sits in the 1px gap below the row — rounded hover bg never meets it
               className={`hover:bg-surface4 after:bg-border1 has-[a:focus-visible]:outline-accent1 relative -mx-2 mb-px flex min-w-0 items-center gap-3 rounded-md px-2 py-2 transition-colors after:absolute after:inset-x-2 after:-bottom-px after:h-px last:mb-0 last:after:hidden has-[a:focus-visible]:outline-2 ${entry.url ? 'cursor-pointer' : ''}`}
             >
               <span className="min-w-0 flex-1">

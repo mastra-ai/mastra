@@ -1,12 +1,3 @@
-/**
- * A part-to-whole distribution: one gapped bar of proportional segments over a
- * legend that repeats each slice's label, count and share. Hovering either the
- * segment or its legend row highlights that slice on both.
- *
- * Share is never carried by color alone — every segment's accessible name and
- * its legend row spell out label, count and percentage.
- */
-
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
@@ -15,7 +6,7 @@ export interface ShareBarSlice {
   key: string;
   label: string;
   value: number;
-  /** Background utility for the slice, e.g. `bg-chart-soft-1`. */
+  /** Background utility, e.g. `bg-chart-soft-1`. */
   color: string;
 }
 

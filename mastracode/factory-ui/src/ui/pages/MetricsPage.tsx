@@ -32,7 +32,7 @@ function shiftUtcDay(day: string, offset: number): string {
   return new Date(Date.parse(`${day}T00:00:00.000Z`) + offset * DAY_MS).toISOString().slice(0, 10);
 }
 
-/** Windows the picker offers, all inside the server's 366-day aggregation cap. */
+// all inside the server's 366-day aggregation cap
 const RANGE_PRESETS = [
   { days: 7, label: 'Last 7 days' },
   { days: 30, label: 'Last 30 days' },
@@ -58,13 +58,6 @@ const TERMINAL_STAGE_IDS = new Set(['done', 'canceled']);
 
 const EM_DASH = '—';
 
-/**
- * Factory flow metrics: throughput, cycle time, live queue health and demand
- * mix — aggregated server-side from the board's stage history (queue health
- * aggregates client-side in `QueueHealthPanel`, which also carries the
- * aging-work list via its drill-down). "Agents running" is live, from the same
- * thread-state source as the sidebar activity dots.
- */
 export function MetricsPage() {
   return (
     <DocumentFactoryPageShell>{project => <MetricsContent factoryProjectId={project.id} />}</DocumentFactoryPageShell>
@@ -83,8 +76,7 @@ function MetricsContent({ factoryProjectId }: { factoryProjectId: string | undef
     return <Notice variant="destructive">{message}</Notice>;
   }
   const metrics = metricsQuery.data;
-  // Prefer the server's count so the label stays paired with the rendered data
-  // (placeholderData keeps the old range's metrics during a refetch).
+  // server count, not the picker — placeholderData keeps the old range during a refetch
   const windowDays = metrics?.windowDays ?? rangeDays;
 
   return (
@@ -130,30 +122,17 @@ const BREAKDOWN_VIEWS = {
 
 type BreakdownView = keyof typeof BREAKDOWN_VIEWS;
 
-/**
- * Panel enter/exit. Base UI holds the outgoing panel in the DOM while its
- * `data-ending-style` transition runs, so both directions animate; the exit is
- * quicker so the incoming panel does not feel delayed. The outgoing panel is
- * pulled out of flow for that overlap — left in it, the two panels would stack
- * and the section would balloon to their combined height mid-switch.
- */
 const PANEL_MOTION = [
-  // the panel is a grid; without an explicit minmax(0,…) track its auto minimum
-  // is the widest untruncated title and the whole page gains a scrollbar
+  // grid panel — without minmax(0,…) its auto minimum is the longest untruncated title
   'grid-cols-[minmax(0,1fr)]',
   'overflow-visible transition-[opacity,transform] duration-300 ease-out',
   'data-[starting-style]:translate-y-2 data-[starting-style]:opacity-0',
   'data-[ending-style]:-translate-y-1 data-[ending-style]:opacity-0 data-[ending-style]:duration-150',
+  // outgoing panel out of flow — in flow both panels stack and the section balloons
   'data-[ending-style]:pointer-events-none data-[ending-style]:absolute data-[ending-style]:inset-x-0 data-[ending-style]:top-0',
   'motion-reduce:transition-none',
 ].join(' ');
 
-/**
- * Three readings of the same board — what is waiting (live), where it came from
- * and how much of it moved itself (both windowed) — behind one tab switch
- * rather than three competing sections. The tab label is the heading; only the
- * live-vs-windowed caveat is spelled out under it.
- */
 function BreakdownSection({
   factoryProjectId,
   metrics,
@@ -166,7 +145,7 @@ function BreakdownSection({
     <Tabs defaultTab="queue" value={view} onValueChange={setView} className="flex flex-col gap-4 overflow-visible">
       <h2 className="sr-only">Board breakdowns</h2>
       <div className="flex flex-col gap-2">
-        {/* list padding + tab padding pulled into the gutter so labels sit on the text column */}
+        {/* list + tab padding pulled into the gutter so labels sit on the text column */}
         <div className="-ml-4">
           <TabList variant="pill-ghost" className="text-ui-sm w-fit">
             {Object.entries(BREAKDOWN_VIEWS).map(([value, { label, shortLabel, icon: Icon }]) => (
@@ -223,7 +202,6 @@ function RangePicker({ rangeDays, onSelect }: { rangeDays: number; onSelect: (da
   );
 }
 
-/** Live count of worktrees with an agent run in flight (sidebar dot source). */
 function useAgentsRunningCount(): number {
   const { baseUrl } = useApiConfig();
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -310,12 +288,7 @@ function FlowOverview({
   );
 }
 
-/**
- * Run `update` inside a view transition so the card morphs into its expanded
- * box instead of jumping. Falls back to a plain state change where the API is
- * missing (Firefox, jsdom) — `flushSync` is required: the transition captures
- * the DOM synchronously after the callback.
- */
+// flushSync required — the transition captures the DOM synchronously after the callback
 function morph(update: () => void) {
   const view = document as Document & {
     startViewTransition?: (callback: () => void) => { ready: Promise<void> };
@@ -324,15 +297,10 @@ function morph(update: () => void) {
     update();
     return;
   }
-  // a hidden tab or an overlapping transition rejects `ready` — the DOM update
-  // still lands, so the rejection is noise
+  // hidden tab or overlapping transition rejects `ready` — DOM update still lands
   view.startViewTransition(() => flushSync(update)).ready.catch(() => {});
 }
 
-/**
- * Compact throughput readout: the same card shape as its neighbours, growing
- * in place into the full daily-completions chart when clicked.
- */
 function ThroughputCard({
   metrics,
   completed,
@@ -441,14 +409,8 @@ function OverviewReadout({
   );
 }
 
-/**
- * Per-stage automation: what share of completed passes through each stage was
- * fully automated (entered and exited by automation, first visit), and how
- * the automated passes' items ended up.
- */
 function StageAutomation({ metrics }: { metrics: FactoryMetrics }) {
-  // Rows only exist for stages with ≥1 exit, so an empty list means no stage
-  // had a completed pass in the window.
+  // rows exist only for stages with ≥1 exit
   if (metrics.stageAutomation.length === 0) {
     return (
       <Txt as="p" variant="ui-sm" className="text-icon3 m-0">
@@ -462,9 +424,7 @@ function StageAutomation({ metrics }: { metrics: FactoryMetrics }) {
       : `${stageLabel(stage)}: ${pct}% automated, ${automated} of ${exits} passes${outcomes ? ` — ${outcomes}` : ''}`;
 
   const rowsByStage = new Map(metrics.stageAutomation.map(row => [row.stage, row]));
-  // Non-terminal board stages in column order, plus any stages present in the
-  // data but unknown to the board (raw id, sorted last — same rule as
-  // stageLabel/stageOrder).
+  // board stages in column order, then unknown ids last — same rule as stageOrder
   const stageIds = new Set<string>();
   for (const stage of BOARD_STAGES) {
     if (!TERMINAL_STAGE_IDS.has(stage.id)) stageIds.add(stage.id);
@@ -523,7 +483,6 @@ function StageAutomation({ metrics }: { metrics: FactoryMetrics }) {
   );
 }
 
-/** Compact split of automated-pass outcomes, omitting zero buckets. */
 function outcomeSummary(outcomes: FactoryMetrics['stageAutomation'][number]['outcomes']): string {
   const parts: string[] = [];
   if (outcomes.done > 0) parts.push(`${outcomes.done} done`);
@@ -542,7 +501,7 @@ function SourceMix({ metrics }: { metrics: FactoryMetrics }) {
       </Txt>
     );
   }
-  // Sorted so the ramp reads largest → smallest, whatever order the API returns.
+  // sorted so the color ramp reads largest → smallest
   const slices = [...metrics.sourceMix]
     .sort((a, b) => b.count - a.count)
     .map((entry, index) => ({
