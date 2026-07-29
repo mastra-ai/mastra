@@ -62,7 +62,10 @@ function Board({ factory, kind }: { factory: FactoryProject; kind: BoardKind }) 
               : 'Link a GitHub repository in Repository settings. Its issues will appear in Intake, ready to move through planning and build.'
           }
           actionSlot={
-            <Link to={settingsSectionPath(factory.id, 'repositories')} className={buttonVariants({ variant: 'primary' })}>
+            <Link
+              to={settingsSectionPath(factory.id, 'repositories')}
+              className={buttonVariants({ variant: 'primary' })}
+            >
               Open Repository settings
             </Link>
           }
