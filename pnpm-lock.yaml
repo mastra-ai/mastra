@@ -2272,9 +2272,6 @@ importers:
       react-dom:
         specifier: 'catalog:'
         version: 19.2.7(react@19.2.7)
-      react-resizable-panels:
-        specifier: ^4.11.0
-        version: 4.11.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       react-router:
         specifier: ^7.13.1
         version: 7.18.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)

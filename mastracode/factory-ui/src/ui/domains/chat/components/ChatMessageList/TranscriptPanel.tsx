@@ -8,8 +8,7 @@ import { Transcript } from '../Transcript';
 import { EmptyThreadState } from './EmptyThreadState';
 import { WorkingIndicator } from './WorkingIndicator';
 
-// Inset belongs on the scroller, not an ancestor — padding sits inside the border box, so the
-// scrollbar stays flush right instead of being dragged inward with the content.
+// Inset on the scroller, not an ancestor — ancestor padding drags the scrollbar inward.
 const transcriptInsetClass =
   'pr-[calc(0.75rem+var(--workspace-files-inset,0px))] md:pr-[calc(1.25rem+var(--workspace-files-inset,0px))] transition-[padding] duration-360 ease-out-custom motion-reduce:transition-none';
 
