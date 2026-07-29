@@ -14,6 +14,7 @@ import { useProvidersQuery } from '../../hooks/use-providers';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import { useUserSessionQuery } from '../../hooks/useWorkspaces';
 import { providerDisplayName } from '../domains/settings/components/provider-display-name';
+import { settingsSectionPath } from '../domains/settings/settingsSections';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
@@ -169,10 +170,10 @@ function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard
       as="h2"
       iconSlot={<Bot size={40} className="text-icon3" />}
       titleSlot={`You don't have access to ${providerName}`}
-      descriptionSlot={`The Factory default model (${guard.modelId}) needs a ${providerName} credential. Add your own key in Model settings${orgHint}.`}
+      descriptionSlot={`The Factory default model (${guard.modelId}) needs a ${providerName} credential. Add your own key in Models settings${orgHint}.`}
       actionSlot={
-        <Link to={`/factories/${factoryId}/settings/model`} className={buttonVariants({ variant: 'primary' })}>
-          Open Model settings
+        <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'primary' })}>
+          Open Models settings
         </Link>
       }
     />
@@ -185,10 +186,10 @@ function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
       as="h2"
       iconSlot={<Bot size={40} className="text-icon3" />}
       titleSlot="No default model configured for this Factory"
-      descriptionSlot="Connect a model provider and choose a default model in Model settings before starting a chat."
+      descriptionSlot="Connect a model provider and choose a default model in Models settings before starting a chat."
       actionSlot={
-        <Link to={`/factories/${factoryId}/settings/model`} className={buttonVariants({ variant: 'primary' })}>
-          Open Model settings
+        <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'primary' })}>
+          Open Models settings
         </Link>
       }
     />

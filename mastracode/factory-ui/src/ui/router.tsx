@@ -107,7 +107,7 @@ export function createAppRoutes(): RouteObject[] {
                 {
                   path: 'settings',
                   children: [
-                    { index: true, element: <Navigate to="general" replace /> },
+                    { index: true, element: <Navigate to="preferences" replace /> },
                     { path: ':section', element: <SettingsPage /> },
                   ],
                 },

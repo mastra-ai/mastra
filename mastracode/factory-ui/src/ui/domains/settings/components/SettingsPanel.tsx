@@ -16,20 +16,15 @@ import {
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { SettingsHeader } from './SettingsHeader';
+import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
 import { IntakeSection } from './IntakeSection';
 import { ModelPacksSection } from './ModelPacksSection';
-import { FactorySetupSection } from './FactorySetupSection';
-import { SourceControlSection } from './SourceControlSection';
+import { RepositoriesSection } from './RepositoriesSection';
 import { OMSection } from './OMSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { BehaviorSettings, GeneralSettings, ModelSettings } from './SettingsPanel.parts';
 
-/**
- * Shared subsection recipe: header (title + optional description + optional
- * right-side action) above a contained card. Containment replaces hairline
- * separators so uneven content heights still read as intentional.
- */
 function SettingsSubsection({
   title,
   description,
@@ -67,10 +62,6 @@ function getSettingsUpdateErrorMessage(error: unknown): string {
   return 'Failed to update settings';
 }
 
-/**
- * Settings content pane: renders the section addressed by the settings-page
- * URL while the page shell supplies document scrolling.
- */
 export function SettingsPanel() {
   const section = useSettingsSection();
   const { theme, setTheme } = useTheme();
@@ -106,18 +97,13 @@ export function SettingsPanel() {
     <section aria-label="Settings" className="flex flex-1 flex-col px-5 pb-5">
       <div className="mx-auto grid w-full max-w-4xl py-3">
         {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
-        {section === 'general' && (
-          <>
-            <GeneralSettings theme={theme} onThemeChange={setTheme} />
-            <FactorySetupSection />
-            <IntakeSection />
-          </>
-        )}
-        {section === 'source-control' && <SourceControlSection />}
-        {section === 'model' && (
+        {section === 'preferences' && <GeneralSettings theme={theme} onThemeChange={setTheme} />}
+        {section === 'factory' && <FactoryManagementSection />}
+        {section === 'repositories' && <RepositoriesSection />}
+        {section === 'intake' && <IntakeSection />}
+        {section === 'models' && (
           <div className="flex flex-col gap-8">
             <SettingsSubsection title="Defaults">
-              {/* Rows bring their own py-3; -my-3 keeps the card's effective padding even on all sides. */}
               <div className="divide-border1/40 -my-3 divide-y">
                 <FactoryDefaultModelSection models={models} />
                 <ModelSettings
@@ -127,8 +113,11 @@ export function SettingsPanel() {
                 />
               </div>
             </SettingsSubsection>
-            <SettingsSubsection title="Providers">
+            <SettingsSubsection title="Provider access">
               <ProviderAccessSection />
+            </SettingsSubsection>
+            <SettingsSubsection title="Custom providers">
+              <CustomProvidersSection />
             </SettingsSubsection>
             <SettingsSubsection
               title="Model packs"
@@ -154,7 +143,6 @@ export function SettingsPanel() {
             setPermissionForCategory={setPermissionForCategory}
           />
         )}
-        {section === 'custom-providers' && <CustomProvidersSection />}
       </div>
     </section>
   );

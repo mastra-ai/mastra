@@ -6,31 +6,27 @@ import {
 } from '@mastra/playground-ui/components/InputGroup';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { useRepositorySettingsQuery, useSaveRepositorySettingsMutation } from '../../../../hooks/useRepositorySettings';
-import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import type { FactoryProject } from '../../workspaces/services/github';
 
-/**
- * One editable setup-command row per linked repository. The field is a draft —
- * nothing persists until Save — so typing a long command never spams the
- * server. Saving a blank field clears the command.
- */
 function RepositorySetupRow({ projectRepositoryId, label }: { projectRepositoryId: string; label: string }) {
   const settingsQuery = useRepositorySettingsQuery(projectRepositoryId);
   const saveMutation = useSaveRepositorySettingsMutation();
 
   const saved = settingsQuery.data?.setupCommand ?? '';
-  const [draft, setDraft] = useState(saved);
-  // Re-sync the draft when the stored value (re)loads.
-  useEffect(() => setDraft(saved), [saved]);
-
-  const dirty = draft.trim() !== saved;
+  const [draft, setDraft] = useState<string>();
+  const currentDraft = draft ?? saved;
+  const dirty = currentDraft.trim() !== saved;
   const save = () => {
     saveMutation.mutate(
-      { projectRepositoryId, settings: { setupCommand: draft.trim() || null } },
+      { projectRepositoryId, settings: { setupCommand: currentDraft.trim() || null } },
       {
-        onSuccess: () => toast.success('Setup command saved'),
+        onSuccess: () => {
+          setDraft(undefined);
+          toast.success('Setup command saved');
+        },
         onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save setup command'),
       },
     );
@@ -46,7 +42,7 @@ function RepositorySetupRow({ projectRepositoryId, label }: { projectRepositoryI
           aria-label={`Setup command for ${label}`}
           placeholder="e.g. pnpm i && pnpm build"
           className="font-mono"
-          value={draft}
+          value={currentDraft}
           disabled={settingsQuery.isPending || saveMutation.isPending}
           onChange={e => setDraft(e.target.value)}
           onKeyDown={e => {
@@ -68,24 +64,15 @@ function RepositorySetupRow({ projectRepositoryId, label }: { projectRepositoryI
   );
 }
 
-/**
- * Settings › General › Worktree setup: a per-repository shell command (e.g.
- * `pnpm i && pnpm build`) that runs inside every freshly created worktree
- * before any agent execution, so agents always start from a built tree.
- * Rendered only when at least one linked repository exists.
- */
-export function FactorySetupSection() {
-  const factoriesQuery = useFactoriesQuery();
-  const rows = (factoriesQuery.data ?? []).flatMap(factory =>
-    factory.repositories.map(repository => ({
-      projectRepositoryId: repository.projectRepositoryId,
-      label: factory.name === repository.slug ? repository.slug : `${factory.name} · ${repository.slug}`,
-    })),
-  );
+export function FactorySetupSection({ factory }: { factory: FactoryProject }) {
+  const rows = factory.repositories.map(repository => ({
+    projectRepositoryId: repository.projectRepositoryId,
+    label: repository.slug,
+  }));
   if (rows.length === 0) return null;
 
   return (
-    <div className="not-last:border-border1/40 mt-6 flex flex-col gap-4 pt-4 not-last:border-b not-last:pb-6">
+    <div className="border-border1/40 flex flex-col gap-4 border-t pt-6">
       <div className="flex flex-col">
         <Txt variant="ui-lg" className="text-icon6 font-medium">
           Worktree setup

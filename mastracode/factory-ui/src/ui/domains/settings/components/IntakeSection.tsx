@@ -171,12 +171,13 @@ function SourcePickerSection({
   );
 }
 
-/**
- * Settings › General › Intake sources: choose which sources feed the Factory
- * Intake page. GitHub syncs selected connected repositories; Linear syncs
- * selected Linear projects (grouped by team). Nothing is synced until
- * something is picked. Every change persists immediately.
- */
+const INTAKE_INTRO = (
+  <Txt as="p" variant="ui-sm" className="text-icon3 max-w-3xl">
+    Choose which connected GitHub repositories and Linear projects feed issues into Intake. Pull requests appear
+    automatically in Review. These settings apply across your account and do not control code access.
+  </Txt>
+);
+
 export function IntakeSection() {
   const { baseUrl } = useApiConfig();
   const configQuery = useIntakeConfigQuery();
@@ -191,25 +192,20 @@ export function IntakeSection() {
   const config = configQuery.data;
   const linkedRepositories = (factoriesQuery.data ?? []).flatMap(factory => factory.repositories);
 
-  const heading = (
-    <Txt variant="ui-lg" className="text-icon6 font-medium">
-      Intake sources
-    </Txt>
-  );
 
   if (configQuery.isPending) {
     return (
-      <div className="mt-6 pt-4">
-        {heading}
+      <div className="flex flex-col gap-4">
+        {INTAKE_INTRO}
         <SkeletonRows label="Loading intake sources" rows={4} />
       </div>
     );
   }
   if (configQuery.isError || !config) {
     return (
-      <div className="mt-6 pt-4">
-        {heading}
-        <Txt as="p" variant="ui-sm" className="text-icon3 py-4">
+      <div className="flex flex-col gap-4">
+        {INTAKE_INTRO}
+        <Txt as="p" variant="ui-sm" className="text-icon3">
           Intake configuration is unavailable. Connect GitHub or Linear first.
         </Txt>
       </div>
@@ -225,12 +221,12 @@ export function IntakeSection() {
   const busy = saveMutation.isPending;
 
   return (
-    <div className="mt-6 flex flex-col gap-6 pt-4">
-      {heading}
+    <div className="flex flex-col gap-6">
+      {INTAKE_INTRO}
       <section className="flex flex-col gap-2" aria-label="GitHub intake">
         <SourceHeader
-          title="GitHub repositories"
-          hint="Sync open issues from the selected connected repositories. Nothing syncs until you pick one."
+          title="GitHub issues"
+          hint="Sync open issues from the selected repositories. Pull requests always appear in Review."
           enabled={config.github.enabled}
           disabled={busy}
           onToggle={enabled => update({ ...config, github: { ...config.github, enabled } })}
@@ -264,8 +260,8 @@ export function IntakeSection() {
 
       <section className="flex flex-col gap-2" aria-label="Linear intake">
         <SourceHeader
-          title="Linear projects"
-          hint="Sync active issues from the Linear projects picked per team. Nothing syncs until you pick one."
+          title="Linear issues"
+          hint="Sync active issues from the selected Linear projects."
           enabled={config.linear.enabled}
           disabled={busy || !linearConnected}
           onToggle={enabled => update({ ...config, linear: { ...config.linear, enabled } })}
@@ -284,8 +280,7 @@ export function IntakeSection() {
             )}
           </div>
         ) : config.linear.enabled && isLinearReauthError(linearProjectsQuery.error) ? (
-          // Connected on paper, but the token is expired/revoked: offer the
-          // OAuth flow again instead of a silently empty project picker.
+          // Expired token still reports connected; offer OAuth again.
           <div className="flex items-center gap-3 pl-1">
             <Txt as="span" variant="ui-xs" className="text-icon3">
               Linear authorization expired. Reconnect to keep syncing issues.
