@@ -324,6 +324,22 @@ describe('SourceControlStorage', () => {
     expect(claims.filter(claimed => claimed !== null)).toHaveLength(1);
   });
 
+  it('treats releasing into a missing project repository as a silent no-op', async () => {
+    // Best-effort contract: a concurrently unlinked repository must not turn
+    // a background release into a thrown error.
+    await expect(
+      github.sandboxPool.release({
+        orgId: 'org-1',
+        projectRepositoryId: 'missing',
+        userId: 'user-1',
+        sandboxId: 'sandbox-a',
+        sandboxWorkdir: '/workspace/mastra',
+        materializedAt: null,
+      }),
+    ).resolves.toBeUndefined();
+    expect(await github.sandboxPool.claim({ projectRepositoryId: 'missing' })).toBeNull();
+  });
+
   it('drops pooled sandboxes when the project repository is unlinked', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });

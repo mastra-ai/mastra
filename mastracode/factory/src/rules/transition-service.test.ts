@@ -121,6 +121,24 @@ describe('FactoryTransitionService', () => {
     expect(onTerminalStage).toHaveBeenCalledOnce();
   });
 
+  it('returns a committed terminal transition when onTerminalStage hangs past the cleanup bound', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage);
+    // Never settles — models a hung sandbox-provider call during cleanup.
+    const onTerminalStage = vi.fn(() => new Promise<void>(() => {}));
+    const service = new FactoryTransitionService({
+      rules: defaultFactoryRules({ version: 'rules-v1' }),
+      storage,
+      onTerminalStage,
+      terminalCleanupTimeoutMs: 20,
+    });
+
+    const result = await service.transition(request(item, { stage: 'done' }));
+
+    expect(result.status).toBe('accepted');
+    expect(onTerminalStage).toHaveBeenCalledOnce();
+  });
+
   it('queues an urgent wake-up when a board drag has no skill follow-up', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage, { stages: ['triage'] });

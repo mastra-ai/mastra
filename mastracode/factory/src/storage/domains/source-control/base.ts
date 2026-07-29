@@ -1065,7 +1065,10 @@ export class SourceControlStorage extends FactoryStorageDomain {
       },
       sandboxPool: {
         release: async input => {
-          await requireProjectRepositoryById(input.projectRepositoryId);
+          // Mirror claim(): a concurrently unlinked project repository makes
+          // the release a silent no-op (the unlink cascade drops pool rows
+          // anyway) — callers treat release as best-effort and must not throw.
+          if (!(await getProjectRepositoryById(input.projectRepositoryId))) return;
           try {
             await db().insertOne<SandboxPoolDbRow>(SANDBOX_POOL, {
               org_id: input.orgId,
