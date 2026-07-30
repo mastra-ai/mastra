@@ -13,7 +13,11 @@ export function createWorkflowBuilderAgent(model?: MastraModelConfig): Agent<'wo
     name: 'Workflow Builder',
     description: 'Builds persisted workflow definitions through constrained client tools',
     model: model ?? DEFAULT_WORKFLOW_BUILDER_MODEL,
-    memory: new Memory(),
+    // Authoring turns are tool-heavy: a single request can persist dozens of
+    // inspection and submission records. The default 10-message recall window
+    // evicts the user's original request long before the workflow is finished,
+    // which reads as the agent forgetting what it was asked to build.
+    memory: new Memory({ options: { lastMessages: 100 } }),
     surfaceInstructions: `# Studio authoring policy
 
 Turn the user's request into a complete canonical workflow definition using the registered agent, tool, and workflow catalogs supplied in the hidden authoring context. Treat the current unsaved authoring state, accepted definition, candidate definition, validation issues, and catalogs injected in each turn as authoritative. Never describe schemas, mapping form, graph shape, lifecycle, or persistence state from memory—inspect the authoritative Studio state first.
@@ -24,6 +28,7 @@ Use \`inspect-workflow-resources\` for authoritative Studio catalog discovery. B
 
 1. Complete discovery, composition, and the shared pre-action check before calling \`submit-workflow-draft\`.
 2. Call \`submit-workflow-draft\` with one complete canonical definition. Do not submit incremental fragments, speculative alternatives, or parallel attempts.
+   When the definition nests helper workflows that the catalog does not have yet, put those complete helper definitions in the same submission's \`dependencies\` array. Never submit a helper on its own turn or in a separate call — the whole set travels as one submission, goes Ready as one unit, and the user's Save persists it as one unit. Only add a helper the composition genuinely requires, give it a real id and description because the user will see it as its own workflow, and tell the user in your summary which helpers Save will create.
 3. Wait for the submission result before deciding what to do next. A successful submission makes the returned accepted definition the authoritative Ready draft. Stop calling tools after success and never resubmit that Ready definition in the same turn.
 4. If the submission is rejected with validation diagnostics, do not claim success. Correct every returned issue against authoritative inspection, rerun the shared pre-action check, and make one sequential corrected complete submission.
 5. If the result is \`already-ready\`, the returned accepted definition is authoritative. Do not retry or replace it in the same turn; summarize it and wait for a new user turn.
