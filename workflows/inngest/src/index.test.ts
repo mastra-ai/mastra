@@ -15004,8 +15004,21 @@ createWorkflowTestSuite({
     const tools: Record<string, any> = {};
     for (const [id, entry] of Object.entries(registry)) {
       workflows[id] = entry.workflow as InngestWorkflow<any, any, any, any, any, any, any>;
-      if (entry.mastraAgents) Object.assign(agents, entry.mastraAgents);
-      if (entry.mastraTools) Object.assign(tools, entry.mastraTools);
+      // Fail loudly if two registry entries declare the same agent/tool id with
+      // different instances — Object.assign would silently last-write-win and
+      // route by-id lookups to the wrong instance.
+      for (const [agentId, agent] of Object.entries(entry.mastraAgents ?? {})) {
+        if (agentId in agents && agents[agentId] !== agent) {
+          throw new Error(`registerWorkflows: agent id collision across registry entries: "${agentId}"`);
+        }
+        agents[agentId] = agent;
+      }
+      for (const [toolId, tool] of Object.entries(entry.mastraTools ?? {})) {
+        if (toolId in tools && tools[toolId] !== tool) {
+          throw new Error(`registerWorkflows: tool id collision across registry entries: "${toolId}"`);
+        }
+        tools[toolId] = tool;
+      }
     }
 
     // Create storage

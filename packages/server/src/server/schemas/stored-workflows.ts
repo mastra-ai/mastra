@@ -113,15 +113,21 @@ const graphEntrySchema = z.discriminatedUnion('type', [
     id: z.string(),
     date: z.string(),
   }),
-  z.object({
-    // Declarative-only conditional. Inbound stored workflows must ship a
-    // `predicates` array aligned with `steps`; closure-based branches are not
-    // accepted over the wire (they'd be arbitrary JS strings we can't
-    // safely rehydrate).
-    type: z.literal('conditional'),
-    steps: z.array(singleStepEntrySchema),
-    predicates: z.array(predicateSchema),
-  }),
+  z
+    .object({
+      // Declarative-only conditional. Inbound stored workflows must ship a
+      // `predicates` array aligned with `steps`; closure-based branches are not
+      // accepted over the wire (they'd be arbitrary JS strings we can't
+      // safely rehydrate).
+      type: z.literal('conditional'),
+      steps: z.array(singleStepEntrySchema),
+      predicates: z.array(predicateSchema),
+    })
+    .refine(entry => entry.predicates.length === entry.steps.length, {
+      message:
+        'conditional entries must have exactly one predicate per branch (`predicates` and `steps` must be the same length)',
+      path: ['predicates'],
+    }),
   z.object({
     // Declarative-only loop. Same rationale as `conditional`.
     type: z.literal('loop'),

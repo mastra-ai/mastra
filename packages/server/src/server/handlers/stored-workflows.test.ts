@@ -698,6 +698,25 @@ describe('Stored Workflows handlers', () => {
       expect(result.success).toBe(false);
     });
 
+    it('rejects a conditional entry whose predicates/steps lengths differ', () => {
+      const result = upsertStoredWorkflowBodySchema.safeParse({
+        ...validBody,
+        graph: [
+          {
+            type: 'conditional',
+            steps: [
+              { type: 'tool', id: 'echo', toolId: 'echo-tool' },
+              { type: 'tool', id: 'echo-2', toolId: 'echo-tool' },
+            ],
+            // One predicate for two branches — must be rejected at the HTTP
+            // boundary (400) instead of surfacing as a 500 from the save path.
+            predicates: [{ op: 'exists', path: 'inputData.value' }],
+          },
+        ],
+      });
+      expect(result.success).toBe(false);
+    });
+
     it('rejects a conditional entry with an unknown predicate op', () => {
       const result = upsertStoredWorkflowBodySchema.safeParse({
         ...validBody,
