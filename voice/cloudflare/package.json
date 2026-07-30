@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-cloudflare",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "Mastra Cloudflare AI voice integration",
   "type": "module",
   "files": [
@@ -23,16 +23,17 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsup --silent --config tsup.config.ts",
+    "build": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
-    "build:watch": "tsup --watch --silent --config tsup.config.ts",
+    "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
-    "lint": "eslint ."
+    "lint": "oxlint . && eslint .",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@cloudflare/workers-types": "^4.20260418.1",
+    "@cloudflare/workers-types": "^4.20260702.1",
     "cloudflare": "^5.2.0"
   },
   "devDependencies": {
@@ -42,8 +43,8 @@
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.4.1",
-    "tsup": "^8.5.1",
+    "eslint": "^10.7.0",
+    "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",

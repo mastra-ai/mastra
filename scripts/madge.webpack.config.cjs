@@ -9,8 +9,8 @@
  * what lets madge trace through the workspace at the source level.
  */
 
-const { readFileSync, readdirSync, existsSync } = require('fs');
-const { join, dirname } = require('path');
+const { readFileSync, readdirSync, existsSync } = require('node:fs');
+const { join, dirname } = require('node:path');
 
 const ROOT = join(__dirname, '..');
 

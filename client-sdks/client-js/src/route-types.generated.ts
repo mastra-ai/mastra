@@ -1036,6 +1036,7 @@ type Shared_Type_52 = {
   versions?: Shared_Type_44 | undefined;
   maxSteps?: number | undefined;
   stopWhen?: unknown | undefined;
+  model?: string | undefined;
   providerOptions?: Shared_Type_45 | undefined;
   modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
@@ -1305,6 +1306,11 @@ type Shared_Type_65 = {
       }
     | undefined;
   roles?: string[] | undefined;
+  metadata?:
+    | {
+        [key: string]: string | number | boolean | null;
+      }
+    | undefined;
 };
 
 type Shared_Type_66 = {
@@ -2616,6 +2622,8 @@ type Shared_Type_116 = {
   expectedTrajectory?: unknown | undefined;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
   toolMocks?: Shared_Type_114[] | undefined;
+  /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
+  unmockedToolPolicy?: ('allow' | 'deny') | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -2941,7 +2949,7 @@ type Shared_Type_133 = {
   }[];
   failure?:
     | {
-        code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED';
+        code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED' | 'TOOL_MOCK_NOT_DECLARED';
         toolName: string;
         args: unknown;
       }
@@ -2968,6 +2976,7 @@ type Shared_Type_134 = {
   traceId: string | null;
   status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
   tags?: (string[] | null) | undefined;
+  comment?: (string | null) | undefined;
   /** Diagnostic receipt for item-level tool mocks */
   toolMockReport?: (Shared_Type_133 | undefined) | null;
   createdAt: Date;
@@ -3195,9 +3204,9 @@ export type GetAgentsAgentId_PathParams = {
 };
 
 export type GetAgentsAgentId_QueryParams = {
-  /** Which stored config version to resolve: draft (latest, default) or published (active version). Mutually exclusive with versionId. */
+  /** Which stored config version to resolve: draft (latest version) or published (active version, default). When both status and versionId are provided, versionId takes precedence. */
   status?: ('draft' | 'published') | undefined;
-  /** Specific version ID to resolve. Mutually exclusive with status — if both are provided, versionId takes precedence. */
+  /** Specific version ID to resolve. Takes precedence over status when both are provided. */
   versionId?: string | undefined;
 };
 
@@ -3336,6 +3345,7 @@ export type PostAgentsAgentIdGenerate_Body = {
   versions?: Shared_Type_44 | undefined;
   maxSteps?: number | undefined;
   stopWhen?: unknown | undefined;
+  model?: string | undefined;
   providerOptions?: Shared_Type_45 | undefined;
   modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
@@ -3487,6 +3497,7 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
   versions?: Shared_Type_44 | undefined;
   maxSteps?: number | undefined;
   stopWhen?: unknown | undefined;
+  model?: string | undefined;
   providerOptions?: Shared_Type_45 | undefined;
   modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
@@ -3860,6 +3871,7 @@ export type PostAgentsAgentIdApproveToolCall_PathParams = GetAgentsAgentId_PathP
 
 export type PostAgentsAgentIdApproveToolCall_Body = {
   runId: string;
+  model?: string | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -4043,6 +4055,7 @@ export type PostAgentsAgentIdResumeStream_Body = {
   versions?: Shared_Type_44 | undefined;
   maxSteps?: number | undefined;
   stopWhen?: unknown | undefined;
+  model?: string | undefined;
   providerOptions?: Shared_Type_45 | undefined;
   modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
@@ -4235,6 +4248,7 @@ export type PostAgentsAgentIdApproveNetworkToolCall_PathParams = GetAgentsAgentI
 
 export type PostAgentsAgentIdApproveNetworkToolCall_Body = {
   runId: string;
+  model?: string | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -4316,6 +4330,7 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
   versions?: Shared_Type_44 | undefined;
   maxSteps?: number | undefined;
   stopWhen?: unknown | undefined;
+  model?: string | undefined;
   providerOptions?: Shared_Type_45 | undefined;
   modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
@@ -11579,6 +11594,7 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
   versions?: Shared_Type_44 | undefined;
   maxSteps?: number | undefined;
   stopWhen?: unknown | undefined;
+  model?: string | undefined;
   providerOptions?: Shared_Type_45 | undefined;
   modelSettings?: unknown | undefined;
   activeTools?: string[] | undefined;
@@ -12464,6 +12480,8 @@ export type PostStoredAgents_Body = {
     | undefined;
   /** Agent visibility: private (owner/admin only) or public (any reader) */
   visibility?: ('private' | 'public') | undefined;
+  /** Publish the initial version so the agent resolves at status="published". Defaults to true when omitted. Pass false to stage the agent as an unpublished draft — useful when overriding a code-defined agent, whose code definition keeps serving traffic until the override is published. */
+  autoPublish?: boolean | undefined;
   /** Name of the agent */
   name: string;
   /** Description of the agent */
@@ -12883,6 +12901,8 @@ export type PatchStoredAgentsStoredAgentId_Body = {
     | undefined;
   /** Optional message describing the changes for the auto-created version */
   changeMessage?: string | undefined;
+  /** Immediately activate the auto-created version. Defaults to false when omitted. */
+  autoPublish?: boolean | undefined;
 };
 
 export type PatchStoredAgentsStoredAgentId_Response =
@@ -17011,6 +17031,8 @@ export type PostDatasetsDatasetIdItems_Body = {
   expectedTrajectory?: (Shared_Type_131 | undefined) | null;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
   toolMocks?: Shared_Type_114[] | undefined;
+  /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
+  unmockedToolPolicy?: ('allow' | 'deny') | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -17062,6 +17084,8 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
     expectedTrajectory?: (Shared_Type_131 | undefined) | null;
     /** Ordered item-level static tool mocks served in place of executing the real tool */
     toolMocks?: Shared_Type_114[] | undefined;
+    /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
+    unmockedToolPolicy?: ('allow' | 'deny') | undefined;
     requestContext?:
       | {
           [key: string]: unknown;
@@ -17181,6 +17205,8 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
   expectedTrajectory?: (Shared_Type_131 | undefined) | null;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
   toolMocks?: Shared_Type_114[] | undefined;
+  /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
+  unmockedToolPolicy?: ('allow' | 'deny') | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -17300,6 +17326,8 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     expectedTrajectory?: unknown | undefined;
     /** Ordered item-level static tool mocks served in place of executing the real tool */
     toolMocks?: Shared_Type_114[] | undefined;
+    /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
+    unmockedToolPolicy?: ('allow' | 'deny') | undefined;
     metadata?:
       | {
           [key: string]: unknown;
@@ -17629,6 +17657,7 @@ export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_PathPar
 export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Body = {
   status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
   tags?: string[] | undefined;
+  comment?: (string | null) | undefined;
 };
 
 export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Response = Shared_Type_134;
@@ -19394,6 +19423,7 @@ export type PostAgentControllerControllerIdSessions_Body = {
         [key: string]: string;
       }
     | undefined;
+  threadId?: string | undefined;
   sessionScope?: string | undefined;
 };
 

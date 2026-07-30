@@ -20,7 +20,12 @@ export function registerEnvVarsCommands(env: Command): void {
     .argument('[environment]', 'Environment name, slug, or ID (optional when the project has exactly one)')
     .option('--project <project>', 'Project name, slug, or ID (default: linked project)')
     .option('-o, --output <file>', 'File to write (default: .env)')
+    .option('-f, --force', 'Overwrite an existing output file')
     .action(wrapAction(envVarsPullAction));
+}
+
+function isAlreadyExistsError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'EEXIST';
 }
 
 function pickEnvironment(environments: Environment[], envArg: string | undefined): Environment {
@@ -54,7 +59,7 @@ function pickEnvironment(environments: Environment[], envArg: string | undefined
  */
 export async function envVarsPullAction(
   envArg: string | undefined,
-  options: { project?: string; output?: string },
+  options: { project?: string; output?: string; force?: boolean },
 ): Promise<void> {
   const token = await getToken();
   const { orgId } = await resolveCurrentOrg(token);
@@ -77,7 +82,18 @@ export async function envVarsPullAction(
 
   const target = options.output ?? '.env';
   const outputPath = resolve(target);
-  await writeFile(outputPath, content, { encoding: 'utf-8', mode: 0o600 });
+  try {
+    await writeFile(outputPath, content, {
+      encoding: 'utf-8',
+      mode: 0o600,
+      flag: options.force ? 'w' : 'wx',
+    });
+  } catch (error) {
+    if (isAlreadyExistsError(error)) {
+      throw new Error(`Refusing to overwrite ${target}. Re-run with --force to replace it.`);
+    }
+    throw error;
+  }
   await chmod(outputPath, 0o600);
 
   if (written === 0) {

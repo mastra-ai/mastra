@@ -64,7 +64,11 @@ export const AgentLayout = ({ children }: { children: React.ReactNode }) => {
   return (
     <TracingSettingsProvider entityId={agentId!} entityType="agent">
       <SchemaRequestContextProvider>
-        <PlaygroundModelProvider defaultProvider={defaultProvider} defaultModel={defaultModel}>
+        <PlaygroundModelProvider
+          key={`${agentId}:${defaultProvider}/${defaultModel}`}
+          defaultProvider={defaultProvider}
+          defaultModel={defaultModel}
+        >
           <GenerationProvider>
             <ReviewQueueProvider>{content}</ReviewQueueProvider>
           </GenerationProvider>

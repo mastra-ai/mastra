@@ -231,7 +231,7 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
         className={cn(
           'flex h-full min-h-0 flex-col overflow-hidden',
           'transition-opacity duration-200 motion-reduce:transition-none',
-          isCollapsed ? 'px-2' : 'px-4',
+          'px-2',
           isHidden && 'pointer-events-none px-0 opacity-0',
         )}
       >

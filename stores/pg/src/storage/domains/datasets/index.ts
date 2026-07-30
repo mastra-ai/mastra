@@ -107,6 +107,7 @@ export class DatasetsPG extends DatasetsStorage {
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'organizationId', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'projectId', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'toolMocks', 'JSONB');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'unmockedToolPolicy', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'externalId', 'TEXT');
 
     await this.createDefaultIndexes();
@@ -228,6 +229,7 @@ export class DatasetsPG extends DatasetsStorage {
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
       expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
       toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : undefined,
+      unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
       requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       source: row.source ? safelyParseJSON(row.source) : undefined,
@@ -250,6 +252,7 @@ export class DatasetsPG extends DatasetsStorage {
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
       expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
       toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : undefined,
+      unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
       requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       source: row.source ? safelyParseJSON(row.source) : undefined,
@@ -640,7 +643,7 @@ export class DatasetsPG extends DatasetsStorage {
         parentProjectId = (row.projectId as string | null) ?? null;
 
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,false,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","unmockedToolPolicy","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,false,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
           [
             id,
             args.datasetId,
@@ -652,6 +655,7 @@ export class DatasetsPG extends DatasetsStorage {
             jsonbArg(args.groundTruth),
             jsonbArg(args.expectedTrajectory),
             jsonbArg(args.toolMocks),
+            args.unmockedToolPolicy ?? null,
             jsonbArg(args.requestContext),
             jsonbArg(args.metadata),
             jsonbArg(args.source),
@@ -678,6 +682,7 @@ export class DatasetsPG extends DatasetsStorage {
         groundTruth: args.groundTruth,
         expectedTrajectory: args.expectedTrajectory,
         toolMocks: args.toolMocks,
+        unmockedToolPolicy: args.unmockedToolPolicy,
         requestContext: args.requestContext,
         metadata: args.metadata,
         source: args.source,
@@ -734,6 +739,8 @@ export class DatasetsPG extends DatasetsStorage {
       const mergedExpectedTrajectory =
         args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
       const mergedToolMocks = args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks;
+      const mergedUnmockedToolPolicy =
+        args.unmockedToolPolicy !== undefined ? args.unmockedToolPolicy : existing.unmockedToolPolicy;
       const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
       const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
       const mergedSource = args.source !== undefined ? args.source : existing.source;
@@ -761,7 +768,7 @@ export class DatasetsPG extends DatasetsStorage {
         // 3. Insert new row with merged fields, preserving original createdAt;
         //    tenancy is re-inherited from parent dataset (Option B)
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,false,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","unmockedToolPolicy","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,false,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
           [
             args.id,
             args.datasetId,
@@ -773,6 +780,7 @@ export class DatasetsPG extends DatasetsStorage {
             jsonbArg(mergedGroundTruth),
             jsonbArg(mergedExpectedTrajectory),
             jsonbArg(mergedToolMocks),
+            mergedUnmockedToolPolicy ?? null,
             jsonbArg(mergedRequestContext),
             jsonbArg(mergedMetadata),
             jsonbArg(mergedSource),
@@ -799,6 +807,7 @@ export class DatasetsPG extends DatasetsStorage {
         groundTruth: mergedGroundTruth,
         expectedTrajectory: mergedExpectedTrajectory,
         toolMocks: mergedToolMocks,
+        unmockedToolPolicy: mergedUnmockedToolPolicy,
         requestContext: mergedRequestContext,
         metadata: mergedMetadata,
         source: mergedSource,
@@ -859,7 +868,7 @@ export class DatasetsPG extends DatasetsStorage {
         // 3. Insert tombstone (isDeleted=true, validTo=NULL — tombstone is the "current" terminal version);
         //    tenancy re-inherited from parent dataset
         await t.none(
-          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,true,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+          `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","unmockedToolPolicy","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,true,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
           [
             id,
             datasetId,
@@ -871,6 +880,7 @@ export class DatasetsPG extends DatasetsStorage {
             jsonbArg(existing.groundTruth),
             jsonbArg(existing.expectedTrajectory),
             jsonbArg(existing.toolMocks),
+            existing.unmockedToolPolicy ?? null,
             jsonbArg(existing.requestContext),
             jsonbArg(existing.metadata),
             jsonbArg(existing.source),
@@ -946,7 +956,7 @@ export class DatasetsPG extends DatasetsStorage {
           await t.none(`UPDATE ${datasetsTable} SET "version" = $2 WHERE "id" = $1`, [input.datasetId, newVersion]);
           for (const { id, item } of plan.inserts) {
             await t.none(
-              `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,false,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+              `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","unmockedToolPolicy","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,false,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
               [
                 id,
                 input.datasetId,
@@ -958,6 +968,7 @@ export class DatasetsPG extends DatasetsStorage {
                 jsonbArg(item.groundTruth),
                 jsonbArg(item.expectedTrajectory),
                 jsonbArg(item.toolMocks),
+                item.unmockedToolPolicy ?? null,
                 jsonbArg(item.requestContext),
                 jsonbArg(item.metadata),
                 jsonbArg(item.source),
@@ -978,6 +989,7 @@ export class DatasetsPG extends DatasetsStorage {
               groundTruth: item.groundTruth,
               expectedTrajectory: item.expectedTrajectory,
               toolMocks: item.toolMocks,
+              unmockedToolPolicy: item.unmockedToolPolicy,
               requestContext: item.requestContext,
               metadata: item.metadata,
               source: item.source,
@@ -1057,7 +1069,7 @@ export class DatasetsPG extends DatasetsStorage {
             [newVersion, item.id],
           );
           await t.none(
-            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,true,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+            `INSERT INTO ${itemsTable} ("id","datasetId","datasetVersion","externalId","organizationId","projectId","validTo","isDeleted","input","groundTruth","expectedTrajectory","toolMocks","unmockedToolPolicy","requestContext","metadata","source","createdAt","createdAtZ","updatedAt","updatedAtZ") VALUES ($1,$2,$3,$4,$5,$6,NULL,true,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
             [
               item.id,
               input.datasetId,
@@ -1069,6 +1081,7 @@ export class DatasetsPG extends DatasetsStorage {
               jsonbArg(item.groundTruth),
               jsonbArg(item.expectedTrajectory),
               jsonbArg(item.toolMocks),
+              item.unmockedToolPolicy ?? null,
               jsonbArg(item.requestContext),
               jsonbArg(item.metadata),
               jsonbArg(item.source),

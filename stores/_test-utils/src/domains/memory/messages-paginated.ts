@@ -1,6 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createSampleMessageV2 } from './data';
-import { resetRole, createSampleThread } from './data';
+import { createSampleMessageV2, resetRole, createSampleThread } from './data';
 import type { MastraStorage, MemoryStorage } from '@mastra/core/storage';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
 import { MessageList, TypeDetector } from '@mastra/core/agent';

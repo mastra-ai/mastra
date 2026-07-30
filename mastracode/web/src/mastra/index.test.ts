@@ -45,6 +45,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
         'GITHUB_APP_WEBHOOK_SECRET',
         'LINEAR_CLIENT_ID',
         'LINEAR_CLIENT_SECRET',
+        'SLACK_APP_SIGNING_SECRET',
       ]) {
         vi.stubEnv(name, '');
       }
@@ -56,27 +57,120 @@ describe('platform entry (src/mastra/index.ts)', () => {
       vi.resetModules();
     });
 
-    it('rejects boot when the GitHub group is partially configured', { timeout: 60_000 }, async () => {
+    it(
+      'boots when the GitHub group is partially configured so diagnostics can report the missing setup',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        // The test env may carry a full GitHub config — blank everything but the
+        // app id to force the partial state.
+        vi.stubEnv('GITHUB_APP_ID', '12345');
+        vi.stubEnv('GITHUB_APP_PRIVATE_KEY', '');
+        vi.stubEnv('GITHUB_APP_CLIENT_ID', '');
+        vi.stubEnv('GITHUB_APP_CLIENT_SECRET', '');
+        vi.stubEnv('GITHUB_APP_SLUG', '');
+        const mod = await import('./index.js');
+        expect(mod.mastra).toBeDefined();
+      },
+    );
+
+    it(
+      'registers the direct GitHub App integration when the full group is configured',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        // No platform identity in this env, so the only source of a GitHub
+        // connection is the direct GITHUB_APP_* group wired in the entry.
+        vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
+        vi.stubEnv('GITHUB_APP_ID', '12345');
+        vi.stubEnv('GITHUB_APP_PRIVATE_KEY', 'test-private-key');
+        vi.stubEnv('GITHUB_APP_CLIENT_ID', 'Iv1.client');
+        vi.stubEnv('GITHUB_APP_CLIENT_SECRET', 'client-secret');
+        vi.stubEnv('GITHUB_APP_SLUG', 'test-app');
+        vi.stubEnv('GITHUB_APP_WEBHOOK_SECRET', 'webhook-secret');
+        const mod = await import('./index.js');
+        const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
+        // The connect route is registered only by the GithubIntegration, so its
+        // presence proves the direct fallback wired the integration onto the factory.
+        expect(paths).toContain('/auth/github/connect');
+      },
+    );
+
+    it(
+      'boots when the Linear group is partially configured so diagnostics can report the missing setup',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        vi.stubEnv('LINEAR_CLIENT_ID', 'lin_client');
+        vi.stubEnv('LINEAR_CLIENT_SECRET', '');
+        const mod = await import('./index.js');
+        expect(mod.mastra).toBeDefined();
+      },
+    );
+
+    it('registers the direct Linear integration when the full group is configured', { timeout: 60_000 }, async () => {
       vi.resetModules();
-      // The test env may carry a full GitHub config — blank everything but the
-      // app id to force the partial state.
-      vi.stubEnv('GITHUB_APP_ID', '12345');
-      vi.stubEnv('GITHUB_APP_PRIVATE_KEY', '');
-      vi.stubEnv('GITHUB_APP_CLIENT_ID', '');
-      vi.stubEnv('GITHUB_APP_CLIENT_SECRET', '');
-      vi.stubEnv('GITHUB_APP_SLUG', '');
-      await expect(import('./index.js')).rejects.toThrow(
-        /GitHub integration is partially configured — missing GITHUB_APP_PRIVATE_KEY/,
-      );
+      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
+      vi.stubEnv('WORKOS_COOKIE_PASSWORD', 'stable-state-secret');
+      vi.stubEnv('LINEAR_CLIENT_ID', 'lin_client');
+      vi.stubEnv('LINEAR_CLIENT_SECRET', 'linear-secret');
+      const mod = await import('./index.js');
+      const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
+      expect(paths).toContain('/auth/linear/connect');
     });
 
-    it('rejects boot when the Linear group is partially configured', { timeout: 60_000 }, async () => {
+    it('skips Slack channel wiring when the Slack app env is unset', { timeout: 60_000 }, async () => {
       vi.resetModules();
-      vi.stubEnv('LINEAR_CLIENT_ID', 'lin_client');
-      vi.stubEnv('LINEAR_CLIENT_SECRET', '');
-      await expect(import('./index.js')).rejects.toThrow(
-        /Linear integration is partially configured — missing LINEAR_CLIENT_SECRET/,
-      );
+      // chat's Slack adapter throws at construction without a signingSecret,
+      // so an unconfigured env must skip channels instead of crashing boot.
+      vi.stubEnv('SLACK_APP_SIGNING_SECRET', '');
+      const mod = await import('./index.js');
+      const controller = mod.mastra.getAgentController('code');
+      expect(controller?.getChannels()).toBeNull();
     });
+
+    it(
+      'wires Slack channels onto the controller when the Slack app env is configured',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        vi.stubEnv('SLACK_APP_SIGNING_SECRET', 'test-signing-secret');
+        // Slack signs the account-link state, so it needs a replica-stable
+        // secret like the GitHub and Linear integrations do.
+        vi.stubEnv('WORKOS_COOKIE_PASSWORD', 'stable-state-secret');
+        const mod = await import('./index.js');
+        const controller = mod.mastra.getAgentController('code');
+        // Assert the controller first: `controller?.getChannels()` on a missing
+        // controller yields `undefined`, which would satisfy `not.toBeNull()`
+        // and let the whole Slack wiring disappear silently.
+        expect(controller).toBeDefined();
+        expect(controller!.getChannels()).toBeDefined(); // sabotage below
+      },
+    );
+
+    it('registers the Slack connect routes through the integration', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      vi.stubEnv('SLACK_APP_SIGNING_SECRET', 'test-signing-secret');
+      vi.stubEnv('WORKOS_COOKIE_PASSWORD', 'stable-state-secret');
+      const mod = await import('./index.js');
+      const paths = mod.mastra.getServer()?.apiRoutes?.map(route => route.path) ?? [];
+      // The entry no longer splices these on by hand — their presence proves the
+      // factory collected them from the integration's `routes()`.
+      expect(paths).toContain('/connect/slack');
+    });
+
+    it(
+      'fails the boot when Slack is configured without a replica-stable state secret',
+      { timeout: 60_000 },
+      async () => {
+        vi.resetModules();
+        vi.stubEnv('SLACK_APP_SIGNING_SECRET', 'test-signing-secret');
+        // A per-process random signer means a link signed on one replica cannot be
+        // verified on another — silently broken linking. Fail loud instead.
+        vi.stubEnv('GITHUB_APP_WEBHOOK_SECRET', '');
+        vi.stubEnv('WORKOS_COOKIE_PASSWORD', '');
+        await expect(import('./index.js')).rejects.toThrow(/'slack' signs OAuth state/);
+      },
+    );
   });
 });

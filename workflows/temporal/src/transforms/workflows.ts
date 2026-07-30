@@ -73,7 +73,7 @@ function createTemporalWorkflowHelperStatements(): t.Statement[] {
 
   const helperProgram = parse(temporalWorkflowRuntimeSource, {
     sourceType: 'module',
-    plugins: parserPlugins as any,
+    plugins: parserPlugins,
   }).program.body;
 
   return helperProgram.flatMap(statement => {
