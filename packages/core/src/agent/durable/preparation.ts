@@ -32,6 +32,7 @@ import type {
 } from '../types';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
+import { generateDurableThreadTitle } from './workflows/finalize-run';
 
 /**
  * JSON-safe snapshot of `requestContext.entries()` so durable steps (e.g.
@@ -685,58 +686,13 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // Thread title generation — mirrors the non-durable `#executeOnFinish` branch,
     // which was never ported to the durable finish step (so `generateTitle` never
     // fired for durable/evented agents). Parked here because the agent instance is
-    // in scope; the durable finish step invokes it after the run completes. No-op
-    // when the merged config has no `generateTitle` or the thread already has a
-    // title. Non-serializable — cross-process engines skip title generation.
+    // in scope; the durable finish step invokes it after the run completes. The
+    // shared implementation is also called directly (with agent + memory rebuilt
+    // from Mastra) by `runDurableFinishSideEffects` when this closure is absent —
+    // the cross-process worker case. No-op when the merged config has no
+    // `generateTitle` or the thread already has a title.
     generateThreadTitle: memory
-      ? async ({ threadId, resourceId, memoryConfig, messageListState, requestContext: rc, tracingContext }) => {
-          // Re-read the thread so a title written mid-run isn't regenerated, and so we only
-          // generate on the first turn (mirrors the non-durable `!thread.title` guard).
-          const thread = await memory.getThreadById?.({ threadId });
-          const mergedConfig = memory.getMergedThreadConfig?.(memoryConfig);
-          const { shouldGenerate, model, instructions, minMessages } = agent.resolveTitleGenerationConfig(
-            mergedConfig?.generateTitle as Parameters<typeof agent.resolveTitleGenerationConfig>[0],
-          );
-          if (!shouldGenerate || thread?.title) return;
-
-          const titleMessageList = new MessageList().deserialize(messageListState);
-          const uiMessages = titleMessageList.get.all.ui();
-          const coreMessages = titleMessageList.get.all.core();
-          if (coreMessages.length < (minMessages ?? 1)) return;
-
-          const userMessage = agent.getMostRecentUserMessage(uiMessages);
-          if (!userMessage) return;
-
-          const title = await agent.genTitle(
-            userMessage,
-            rc ?? new RequestContext(),
-            createObservabilityContext(tracingContext),
-            model,
-            instructions,
-            uiMessages,
-          );
-          if (!title) return;
-
-          // Title-only late write. Prefer updateThread when the thread record
-          // already exists so its original createdAt is preserved (createThread
-          // rebuilds the record with a fresh createdAt). Fall back to createThread
-          // for the first-turn case where the record may not be persisted yet.
-          if (thread) {
-            await memory.updateThread({
-              id: threadId,
-              title,
-              metadata: thread.metadata ?? {},
-              memoryConfig,
-            });
-          } else {
-            await memory.createThread({
-              threadId,
-              resourceId,
-              memoryConfig,
-              title,
-            });
-          }
-        }
+      ? async args => generateDurableThreadTitle({ agent: agent as any, memory, ...args })
       : undefined,
     // Signal messages already in the messageList at run start (from persisted
     // history). Echoed as data-signal parts on the first LLM step so the client

@@ -21,6 +21,7 @@ import type {
   DurableToolCallOutput,
   SerializableScorersConfig,
 } from '../types';
+import { runDurableFinishSideEffects } from './finalize-run';
 import {
   modelConfigSchema,
   modelListEntrySchema,
@@ -625,100 +626,6 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
           const finalText = lastStep?.text;
 
-          // Run output processors (processOutputResult) if available
-          const registryEntry = globalRunRegistry.get(state.runId);
-          if (registryEntry?.outputProcessors?.length) {
-            try {
-              const { ProcessorRunner } = await import('../../../processors/runner');
-              const runner = new ProcessorRunner({
-                inputProcessors: registryEntry.inputProcessors ?? [],
-                outputProcessors: registryEntry.outputProcessors,
-                errorProcessors: registryEntry.errorProcessors ?? [],
-                logger: logger as any,
-                agentName: initData.agentName ?? initData.agentId,
-                processorStates: registryEntry.processorStates,
-              });
-              const outputMessageList = new MessageList();
-              outputMessageList.deserialize(state.messageListState);
-              // Forward the step's tracingContext so processor_run spans parent
-              // to the AGENT_RUN ancestor via ProcessorRunner's findParent walk.
-              await runner.runOutputProcessors(
-                outputMessageList,
-                createObservabilityContext(tracingContext),
-                requestContext ?? new RequestContext(),
-                0,
-              );
-            } catch (error) {
-              logger?.warn?.(`[DurableAgent] Error running output processors: ${error}`);
-            }
-          }
-
-          // Memory persistence (executeOnFinish equivalent)
-          const durableState = initData.state;
-          if (
-            registryEntry?.saveQueueManager &&
-            registryEntry.memory &&
-            durableState?.threadId &&
-            durableState?.resourceId &&
-            !durableState.observationalMemory &&
-            // Respect readOnly memory config ("read memory but don't save new
-            // messages"). Mirrors the non-durable executeOnFinish `!readOnlyMemory`
-            // guard and the MessageHistory output processor's readOnly check.
-            !durableState.memoryConfig?.readOnly
-          ) {
-            try {
-              const memoryMessageList = new MessageList();
-              memoryMessageList.deserialize(state.messageListState);
-
-              if (!durableState.threadExists) {
-                await registryEntry.memory.createThread?.({
-                  threadId: durableState.threadId,
-                  resourceId: durableState.resourceId,
-                  memoryConfig: durableState.memoryConfig,
-                });
-              }
-
-              await registryEntry.saveQueueManager.flushMessages(
-                memoryMessageList,
-                durableState.threadId,
-                durableState.memoryConfig,
-              );
-            } catch (error) {
-              logger?.warn?.(`[DurableAgent] Error persisting messages: ${error}`);
-            }
-          }
-
-          // Thread title generation (executeOnFinish equivalent).
-          // The non-durable `#executeOnFinish` generates a thread title from the first user
-          // message when `memory.options.generateTitle` is set. That branch was never ported
-          // to the durable path, so `generateTitle` silently never fired for durable/evented
-          // agents (and Inngest). The `generateThreadTitle` closure — parked on the registry
-          // entry during preparation, where the agent instance is in scope — runs it here.
-          //
-          // Kept OUTSIDE the `!observationalMemory` guard above: OM handles its own message
-          // persistence, but title generation is orthogonal and should still run when OM is on.
-          // Non-serializable (a closure), so like the other registry closures it only fires for
-          // in-process durable runs; cross-process engines (Inngest after a restart) skip it.
-          if (
-            registryEntry?.generateThreadTitle &&
-            durableState?.threadId &&
-            durableState?.resourceId &&
-            !durableState.memoryConfig?.readOnly
-          ) {
-            try {
-              await registryEntry.generateThreadTitle({
-                threadId: durableState.threadId,
-                resourceId: durableState.resourceId,
-                memoryConfig: durableState.memoryConfig,
-                messageListState: state.messageListState,
-                requestContext,
-                tracingContext,
-              });
-            } catch (error) {
-              logger?.warn?.(`[DurableAgent] Error generating thread title: ${error}`);
-            }
-          }
-
           const finalOutput = {
             messageListState: state.messageListState,
             messageId: state.messageId,
@@ -735,12 +642,34 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             state: state.state,
           };
 
-          if (pubsub) {
-            await emitFinishEvent(pubsub, state.runId, {
-              output: finalOutput.output,
-              stepResult: finalOutput.stepResult,
-            });
-          }
+          // Finish-time side effects — output processors, memory persistence, thread
+          // title — shared with the other durable engines (@mastra/inngest). Includes
+          // the cross-process runtime-dependency rebuild, so it works when this
+          // terminal step runs in a different process than the one that called
+          // `stream()`. The finish event is emitted via the helper's `emitFinish`
+          // hook: after persistence (so a client refetching the thread on `finish`
+          // sees the messages) but before title generation (an LLM roundtrip that
+          // shouldn't hold the client stream open). See finalize-run.ts.
+          await runDurableFinishSideEffects({
+            runId: state.runId,
+            initData,
+            messageListState: state.messageListState,
+            mastra: mastra as Mastra | undefined,
+            requestContext,
+            tracingContext,
+            // Parent finish-time spans under the run's AGENT_RUN (the helper
+            // prefers the registry's resume override when one exists).
+            agentSpanData: initData.agentSpanData as ExportedSpan<SpanType.AGENT_RUN> | undefined,
+            emitFinish: pubsub
+              ? async () => {
+                  await emitFinishEvent(pubsub, state.runId, {
+                    output: finalOutput.output,
+                    stepResult: finalOutput.stepResult,
+                  });
+                }
+              : undefined,
+            logger,
+          });
 
           // End MODEL_GENERATION then AGENT_RUN once at completion. After a resume the
           // originals were ended as `suspended`, so end the *resume* spans (registry override).
