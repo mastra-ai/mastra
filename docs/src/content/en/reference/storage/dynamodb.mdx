@@ -10,7 +10,7 @@ packages:
 
 # DynamoDB storage
 
-The DynamoDB storage implementation provides a scalable and performant NoSQL database solution for Mastra, leveraging a single-table design pattern with [ElectroDB](https://electrodb.dev/).
+The DynamoDB storage implementation provides a high-capacity and performant NoSQL database solution for Mastra, using a single-table design pattern with [ElectroDB](https://electrodb.dev/).
 
 :::warning[Observability Not Supported]
 
@@ -149,7 +149,7 @@ For local development, you can use [DynamoDB Local](https://docs.aws.amazon.com/
 
 ## TTL (time to live) configuration
 
-DynamoDB TTL allows you to automatically delete items after a specified time period. This is useful for:
+DynamoDB TTL allows you to automatically delete items after a specified duration for these use cases:
 
 - **Cost optimization**: Automatically remove old data to reduce storage costs
 - **Data lifecycle management**: Implement retention policies for compliance
@@ -307,19 +307,19 @@ Before diving into the architectural details, keep these key points in mind when
 
 ## Architectural approach
 
-This storage adapter utilizes a **single-table design pattern** leveraging [ElectroDB](https://electrodb.dev/), a common and recommended approach for DynamoDB. This differs architecturally from relational database adapters (like `@mastra/pg` or `@mastra/libsql`) that typically use multiple tables, each dedicated to a specific entity (threads, messages, etc.).
+This storage adapter utilizes a **single-table design pattern** with [ElectroDB](https://electrodb.dev/), a common and recommended approach for DynamoDB. This differs architecturally from relational database adapters (like `@mastra/pg` or `@mastra/libsql`) that typically use multiple tables, each dedicated to a specific entity (threads, messages, etc.).
 
 Key aspects of this approach:
 
-- **DynamoDB Native:** The single-table design is optimized for DynamoDB's key-value and query capabilities, often leading to better performance and scalability compared to mimicking relational models.
+- **DynamoDB Native:** The single-table design is optimized for DynamoDB's key-value and query capabilities, often leading to better performance and capacity compared to mimicking relational models.
 - **External Table Management:** Unlike some adapters that might offer helper functions to create tables via code, this adapter **expects the DynamoDB table and its associated Global Secondary Indexes (GSIs) to be provisioned externally** before use. Please refer to [TABLE\_SETUP.md](https://github.com/mastra-ai/mastra/blob/main/stores/dynamodb/TABLE_SETUP.md) for detailed instructions using tools like AWS CloudFormation or CDK. The adapter focuses solely on interacting with the pre-existing table structure.
 - **Consistency via Interface:** While the underlying storage model differs, this adapter adheres to the same `MastraStorage` interface as other adapters, ensuring it can be used interchangeably within the Mastra `Memory` component.
 
 ### Mastra Data in the Single Table
 
-Within the single DynamoDB table, different Mastra data entities (such as Threads, Messages, Traces, Evals, and Workflows) are managed and distinguished using ElectroDB. ElectroDB defines specific models for each entity type, which include unique key structures and attributes. This allows the adapter to store and retrieve diverse data types efficiently within the same table.
+Within the single DynamoDB table, different Mastra data entities (such as Threads, Messages, Traces, Evals, and Workflows) are managed and distinguished using ElectroDB. ElectroDB defines specific models for each entity type, which include unique key structures and attributes. It allows the adapter to store and retrieve diverse data types efficiently within the same table.
 
-For example, a `Thread` item might have a primary key like `THREAD#<threadId>`, while a `Message` item belonging to that thread might use `THREAD#<threadId>` as a partition key and `MESSAGE#<messageId>` as a sort key. The Global Secondary Indexes (GSIs), detailed in `TABLE_SETUP.md`, are strategically designed to support common access patterns across these different entities, such as fetching all messages for a thread or querying traces associated with a particular workflow.
+For example, a `Thread` item might have a primary key like `THREAD#<threadId>`, while a `Message` item belonging to that thread might use `THREAD#<threadId>` as a partition key and `MESSAGE#<messageId>` as a sort key. The Global Secondary Indexes (GSIs), detailed in `TABLE_SETUP.md`, are strategically designed to support common access patterns across these different entities, such as fetching all messages for a thread or querying traces associated with a workflow.
 
 ### Advantages of Single-Table Design
 
@@ -327,6 +327,6 @@ This implementation uses a single-table design pattern with ElectroDB, which off
 
 1. **Lower cost (potentially):** Fewer tables can simplify Read/Write Capacity Unit (RCU/WCU) provisioning and management, especially with on-demand capacity.
 1. **Better performance:** Related data can be co-located or accessed efficiently through GSIs, enabling fast lookups for common access patterns.
-1. **Simplified administration:** Fewer distinct tables to monitor, back up, and manage.
+1. **Simplified administration:** Fewer distinct tables to monitor and back up, with less to manage.
 1. **Reduced complexity in access patterns:** ElectroDB helps manage the complexity of item types and access patterns on a single table.
 1. **Transaction support:** DynamoDB transactions can be used across different "entity" types stored within the same table if needed.

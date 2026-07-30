@@ -22,6 +22,7 @@ import { createLogger } from '../../utils/logger.js';
 import type { MastraPackageInfo } from '../../utils/mastra-packages.js';
 import { getMastraPackages } from '../../utils/mastra-packages.js';
 import { loadAndValidatePresets } from '../../utils/validate-presets.js';
+import { resolveFactoryUIDevDist } from '../build/factory-ui-build.js';
 
 import { acquireDevLock, releaseDevLock, updateDevLock } from './dev-lock';
 import { DevBundler } from './DevBundler';
@@ -69,6 +70,7 @@ interface StartOptions {
   https?: HTTPSOptions;
   mastraPackages?: MastraPackageInfo[];
   peerDepMismatches?: PeerDepMismatch[];
+  factory?: boolean;
 }
 
 type ProcessOptions = {
@@ -141,6 +143,15 @@ const startServer = async (
     }
 
     await mkdir(publicDir, { recursive: true });
+
+    // Factory dev: the SPA is not copied into public/ (that only happens during
+    // `mastra build`), so point the server at the UI bundled with the CLI unless
+    // the user has an explicit override or a locally built UI at public/factory.
+    const factoryUiDist =
+      startOptions.factory && !process.env.MASTRACODE_UI_DIST && !env.has('MASTRACODE_UI_DIST')
+        ? resolveFactoryUIDevDist(publicDir)
+        : undefined;
+
     currentServerProcess = execa(process.execPath, commands, {
       cwd: publicDir,
       env: {
@@ -149,7 +160,7 @@ const startServer = async (
         MASTRA_DEV: 'true',
         PORT: port.toString(),
         MASTRA_PACKAGES_FILE: packagesFilePath,
-        MASTRA_TELEMETRY_COMMAND: 'dev',
+        MASTRA_TELEMETRY_COMMAND: startOptions.factory ? 'factory dev' : 'dev',
         MASTRA_PROJECT_ROOT: resolve(dotMastraPath, '..'),
         ...(getAnalytics()?.getDistinctId() ? { MASTRA_CLI_DISTINCT_ID: getAnalytics()!.getDistinctId() } : {}),
         ...(startOptions?.https
@@ -158,6 +169,8 @@ const startServer = async (
               MASTRA_HTTPS_CERT: startOptions.https.cert.toString('base64'),
             }
           : {}),
+        ...(startOptions.factory ? { MASTRA_FACTORY_DEV: 'true' } : {}),
+        ...(factoryUiDist ? { MASTRACODE_UI_DIST: factoryUiDist } : {}),
       },
       stdio: ['inherit', 'pipe', 'pipe', 'ipc'],
       reject: false,
@@ -423,6 +436,7 @@ export async function dev({
   https,
   requestContextPresets,
   debug,
+  factory,
 }: {
   dir?: string;
   root?: string;
@@ -434,6 +448,7 @@ export async function dev({
   https?: boolean;
   requestContextPresets?: string;
   debug: boolean;
+  factory?: boolean;
 }) {
   const rootDir = root || process.cwd();
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
@@ -446,7 +461,7 @@ export async function dev({
   // file-based project), prepareFsAgentsEntry auto-constructs a Mastra instance.
   const userEntryFile = findMastraEntryFile(mastraDir);
 
-  const bundler = new DevBundler(env);
+  const bundler = new DevBundler(env, factory);
   bundler.__setLogger(createLogger(debug)); // Keep Pino logger for internal bundler operations
 
   // Discover fs-routed agents under agents/* and, if any exist, wrap the entry so
@@ -533,9 +548,14 @@ export async function dev({
     https: httpsOptions,
     mastraPackages,
     peerDepMismatches,
+    factory,
   };
 
   await bundler.prepare(dotMastraPath);
+
+  // Re-assert the lock after prepare() emptied the directory.
+  // The bundler preserves the lock, but this ensures the data is current.
+  await updateDevLock(dotMastraPath, hostToUse, Number(portToUse));
 
   // Write the generated fs-routed agents wrapper entry. Runs after `prepare()`
   // empties the output directory so the wrapper is not wiped before the watcher

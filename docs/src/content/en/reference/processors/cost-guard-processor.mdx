@@ -19,7 +19,7 @@ Supports three scoping modes:
 - **Resource scope** (default): Tracks cumulative cost per `resourceId` across runs
 - **Thread scope**: Tracks cumulative cost per `threadId` across runs
 
-> **Approximate cost guard.** Cost data is persisted asynchronously via buffered exporters in the observability pipeline. Fast-running agents may exceed the configured limit before metrics are available for query. Treat `maxCost` as a best-effort threshold, not a hard ceiling.
+> **Approximate cost guard.** Cost data is persisted asynchronously via buffered exporters in the observability pipeline. Fast-running agents may exceed the configured limit before metrics are available for query. Treat `maxCost` as an approximate threshold that fast-running agents may exceed.
 
 ## Usage example
 

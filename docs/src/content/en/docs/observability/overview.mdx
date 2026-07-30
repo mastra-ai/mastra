@@ -13,7 +13,7 @@ Mastra's observability system gives you visibility into every agent run, workflo
 - [**Storage**](/docs/observability/storage): Choose storage backends for persisted traces, logs, metrics aggregation, and feedback queries.
 - [**Tracing**](/docs/observability/tracing/overview): Records every operation as a hierarchical timeline of spans, capturing inputs, outputs, token usage, and timing.
 - [**Logging**](/docs/observability/logging): Forwards structured log entries from your application and Mastra internals to observability storage, correlated to traces automatically.
-- [**Metrics**](/docs/observability/metrics/overview): Extracts duration, token usage, and cost data from traces automatically, with no additional instrumentation required.
+- [**Metrics**](/docs/observability/metrics/overview): Extracts trace usage and cost data. No additional instrumentation is required.
 - [**Feedback**](/docs/observability/feedback): Stores ratings, comments, corrections, and other review signals linked to traces and spans.
 - [**Integrations**](/docs/observability/integrations/overview): Choose exporters, bridges, and span processors for Studio, hosted, or external observability workflows.
 
@@ -31,11 +31,11 @@ Tracing is the foundation. When observability is configured, every agent run, wo
 
 Metrics are derived from traces automatically. When a span ends, Mastra extracts duration, token counts, and cost estimates without any extra code. These metrics power the dashboards in [Studio](/docs/studio/observability).
 
-Logs are correlated to traces automatically. Every `logger.info()`, `logger.warn()`, or `logger.error()` call within a traced context is tagged with the current trace and span IDs. You can navigate from a log entry directly to the trace that produced it.
+Logs are correlated to traces automatically. Every `logger.info()`, `logger.warn()`, or `logger.error()` call within a traced context is tagged with the current trace and span IDs. You can move through from a log entry directly to the trace that produced it.
 
 Feedback records human review signals such as ratings, comments, and corrections. Feedback can be linked to traces and spans, then queried with the same observability store used for metrics.
 
-These signals share correlation IDs (trace ID, span ID, entity type, entity name), so you can jump between a metric spike, the traces behind it, logs within those traces, and related feedback.
+These signals share correlation IDs such as trace ID, span ID, entity type, and entity name. You can use them to move from a metric spike to its traces, logs, and related feedback.
 
 ## Quickstart
 
@@ -87,7 +87,7 @@ export const mastra = new Mastra({
 })
 ```
 
-This enables tracing, log forwarding, and metrics. Mastra also supports external tracing providers like Langfuse, Datadog, and any OpenTelemetry-compatible platform. Use [Configuration](/docs/observability/config), [Storage](/docs/observability/storage), and [Integrations overview](/docs/observability/integrations/overview) to set up observability.
+It enables tracing, log forwarding, and metrics. Mastra also supports external tracing providers like Langfuse, Datadog, and any OpenTelemetry-compatible platform. Use [Configuration](/docs/observability/config), [Storage](/docs/observability/storage), and [Integrations overview](/docs/observability/integrations/overview) to set up observability.
 
 ## Mastra platform
 

@@ -93,7 +93,7 @@ describe('Agent browser integration', () => {
   });
 
   describe('listTools', () => {
-    it('does not include browser tools (they are added at execution time)', () => {
+    it('does not include browser tools (they are added at execution time)', async () => {
       const agentTool = createTool({
         id: 'my_tool',
         description: 'Custom tool',
@@ -112,7 +112,7 @@ describe('Agent browser integration', () => {
         browser,
       });
 
-      const tools = agent.listTools() as Record<string, any>;
+      const tools = (await agent.listTools()) as Record<string, any>;
       // listTools only returns agent-configured tools
       expect(Object.keys(tools)).toContain('my_tool');
       // Browser tools are NOT included in listTools - they're added at execution time

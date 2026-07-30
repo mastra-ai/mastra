@@ -189,6 +189,9 @@ jobs:
         id: check_files
         shell: bash
         run: |
+          git fetch origin main
+          git merge --ff-only origin/main
+
           if [[ -f .changeset/pre.json ]]; then
             echo "files_exists=true" >> "$GITHUB_OUTPUT"
           else
@@ -222,20 +225,16 @@ jobs:
         run: |
           pnpm changeset-cli pre exit
           pnpm changeset-cli version
-          git pull
           git add -A
           git commit -m 'chore: version - exit prerelease mode' --no-verify
-          git push
           pnpm install
           pnpm build
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
 
       - name: Push version changes
-        if: ${{ !inputs.dry_run }}
-        run: |
-          git push
-          pnpm install
+        if: steps.check_files.outputs.files_exists == 'true' && !inputs.dry_run
+        run: git push origin HEAD:main
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
 
@@ -288,6 +287,7 @@ jobs:
         run: pnpm publish -r --dry-run --access public --no-git-checks
 
       - name: Add tags
+        if: ${{ !inputs.dry_run }}
         run: |
           pnpm changeset-cli tag
           git push origin --tags

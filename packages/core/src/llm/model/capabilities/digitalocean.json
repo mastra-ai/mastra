@@ -1,5 +1,8 @@
 {
   "attachment": [
+    "anthropic-claude-3-opus",
+    "anthropic-claude-3.5-sonnet",
+    "anthropic-claude-3.7-sonnet",
     "anthropic-claude-4.1-opus",
     "anthropic-claude-4.5-haiku",
     "anthropic-claude-4.5-sonnet",
@@ -41,6 +44,10 @@
   ],
   "temperature": [
     "alibaba-qwen3-32b",
+    "anthropic-claude-3-opus",
+    "anthropic-claude-3.5-haiku",
+    "anthropic-claude-3.5-sonnet",
+    "anthropic-claude-3.7-sonnet",
     "anthropic-claude-4.1-opus",
     "anthropic-claude-4.5-haiku",
     "anthropic-claude-4.5-sonnet",
@@ -68,6 +75,7 @@
     "ministral-3-8b-instruct-2512",
     "mistral-3-14B",
     "mistral-7b-instruct-v0.3",
+    "mistral-nemo-instruct-2407",
     "nemotron-3-nano-30b",
     "nemotron-3-nano-omni",
     "nemotron-3-ultra-550b",

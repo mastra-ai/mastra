@@ -89,13 +89,13 @@ The `MastraAuthFirebase` class can be configured through constructor options or 
 
 :::note
 
-When constructor options aren't provided, the class automatically reads these environment variables. This means you can call `new MastraAuthFirebase()` without any arguments if your environment variables are properly configured.
+When constructor options aren't provided, the class automatically reads these environment variables. As a result, you can call `new MastraAuthFirebase()` without any arguments if your environment variables are properly configured.
 
 :::
 
 ### User Authorization
 
-By default, `MastraAuthFirebase` uses Firestore to manage user access. It expects a collection named `user_access` with documents keyed by user UIDs. The presence of a document in this collection determines whether a user is authorized.
+By default, `MastraAuthFirebase` uses Firestore to manage user access. It expects a `user_access` collection with documents keyed by user UIDs. The presence of a document in this collection determines whether a user is authorized.
 
 ```text title="firestore-structure.txt"
 user_access/
