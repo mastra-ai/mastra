@@ -7,24 +7,68 @@
 /** @type {import('@docusaurus/plugin-content-docs').SidebarsConfig} */
 const sidebars = {
   docsSidebar: [
-    { type: 'doc', id: 'index', label: 'Get Started' },
-    { type: 'doc', id: 'agents', label: 'Agents' },
-    { type: 'doc', id: 'workflows', label: 'Workflows' },
-    { type: 'doc', id: 'harness', label: 'Harness' },
-    { type: 'doc', id: 'memory', label: 'Memory' },
-    { type: 'doc', id: 'extend', label: 'Extend' },
-    { type: 'doc', id: 'sandboxes', label: 'Sandboxes' },
-    { type: 'doc', id: 'browser', label: 'Browser' },
-    { type: 'doc', id: 'channels', label: 'Channels' },
-    { type: 'doc', id: 'subagents', label: 'Subagents' },
-    { type: 'doc', id: 'tools', label: 'Tools' },
-    { type: 'doc', id: 'mcp', label: 'MCP' },
-    { type: 'doc', id: 'develop-deploy', label: 'Develop / Deploy' },
-    { type: 'doc', id: 'deploy', label: 'Deploy' },
-    { type: 'doc', id: 'storage', label: 'Storage' },
-    { type: 'doc', id: 'observe', label: 'Observe' },
-    { type: 'doc', id: 'metrics', label: 'Metrics' },
-    { type: 'doc', id: 'evals', label: 'Evals' },
+    {
+      type: 'category',
+      label: 'Build',
+      collapsed: false,
+      collapsible: false,
+      customProps: {
+        displayAsGroup: true,
+      },
+      items: [
+        { type: 'doc', id: 'index', label: 'Get Started' },
+        { type: 'doc', id: 'agents', label: 'Agents' },
+        { type: 'doc', id: 'workflows', label: 'Workflows' },
+        { type: 'doc', id: 'harness', label: 'Harness' },
+        { type: 'doc', id: 'memory', label: 'Memory' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Extend',
+      collapsed: false,
+      collapsible: false,
+      customProps: {
+        displayAsGroup: true,
+      },
+      items: [
+        { type: 'doc', id: 'extend', label: 'Overview' },
+        { type: 'doc', id: 'sandboxes', label: 'Sandboxes' },
+        { type: 'doc', id: 'browser', label: 'Browser' },
+        { type: 'doc', id: 'channels', label: 'Channels' },
+        { type: 'doc', id: 'subagents', label: 'Subagents' },
+        { type: 'doc', id: 'tools', label: 'Tools' },
+        { type: 'doc', id: 'mcp', label: 'MCP' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Develop / Deploy',
+      collapsed: false,
+      collapsible: false,
+      customProps: {
+        displayAsGroup: true,
+      },
+      items: [
+        { type: 'doc', id: 'develop-deploy', label: 'Overview' },
+        { type: 'doc', id: 'deploy', label: 'Deploy' },
+        { type: 'doc', id: 'storage', label: 'Storage' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Observe',
+      collapsed: false,
+      collapsible: false,
+      customProps: {
+        displayAsGroup: true,
+      },
+      items: [
+        { type: 'doc', id: 'observe', label: 'Overview' },
+        { type: 'doc', id: 'metrics', label: 'Metrics' },
+        { type: 'doc', id: 'evals', label: 'Evals' },
+      ],
+    },
   ],
   platformSidebar: [
     {
