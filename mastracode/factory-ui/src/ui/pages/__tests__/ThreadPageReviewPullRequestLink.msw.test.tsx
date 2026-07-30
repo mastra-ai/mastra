@@ -183,6 +183,7 @@ describe('ThreadPage pull request link placement', () => {
       renderThreadRoute();
 
       const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      await within(factorySession).findByRole('link', { name: PULL_REQUEST_ACCESSIBLE_NAME });
       const pullRequestLinks = within(factorySession)
         .getAllByRole('link')
         .filter(link => link.getAttribute('href') === PULL_REQUEST_URL);

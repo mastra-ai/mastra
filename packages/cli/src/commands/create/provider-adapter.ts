@@ -4,6 +4,8 @@ import path from 'node:path';
 import type { PackageManager } from '../../utils/package-manager';
 import type { CreateLLMProvider } from './command';
 import { PNPM_WORKSPACE } from './utils';
+import type { ResolvedMastraVersions } from './version-resolver';
+import { resolveMastraPackageVersions } from './version-resolver';
 
 export interface ManagedProviderConfig {
   displayName: string;
@@ -107,10 +109,30 @@ function getDependencyMap(manifest: Record<string, unknown>, section: 'dependenc
   return value as Record<string, unknown>;
 }
 
+function collectMastraPackages(manifestSource: string): string[] {
+  let manifest: Record<string, unknown>;
+  try {
+    manifest = JSON.parse(manifestSource) as Record<string, unknown>;
+  } catch {
+    return [];
+  }
+  const names = new Set<string>();
+  for (const section of ['dependencies', 'devDependencies'] as const) {
+    const deps = manifest[section];
+    if (deps && typeof deps === 'object' && !Array.isArray(deps)) {
+      for (const name of Object.keys(deps as Record<string, unknown>)) {
+        if (name === 'mastra' || name.startsWith('@mastra/')) names.add(name);
+      }
+    }
+  }
+  return [...names];
+}
+
 function normalizeManagedManifest(
   content: string,
   provider: ManagedProviderConfig,
-  versionTag: string,
+  mastraVersions: ResolvedMastraVersions | undefined,
+  fallbackTag: string,
 ): { content: string; sdkVersion: string } {
   let manifest: Record<string, unknown>;
   try {
@@ -151,7 +173,9 @@ function normalizeManagedManifest(
 
   for (const section of dependencySections) {
     for (const packageName of Object.keys(section)) {
-      if (packageName === 'mastra' || packageName.startsWith('@mastra/')) section[packageName] = versionTag;
+      if (packageName === 'mastra' || packageName.startsWith('@mastra/')) {
+        section[packageName] = mastraVersions?.[packageName] ?? fallbackTag;
+      }
     }
   }
 
@@ -318,7 +342,14 @@ export async function adaptDefaultTemplate({
 
   const readmeSource = await fs.readFile(readmePath, 'utf8').catch(() => undefined);
   const nextAgent = adaptAgentSource(agentSource, provider, config);
-  const normalizedManifest = normalizeManagedManifest(packageJsonSource, config, versionTag);
+  const mastraPackages = collectMastraPackages(packageJsonSource);
+  const resolvedVersions = await resolveMastraPackageVersions(mastraPackages, versionTag);
+  if (resolvedVersions === undefined && mastraPackages.length > 0) {
+    console.warn(
+      `We could not resolve exact Mastra package versions for the "${versionTag}" channel, using the channel tag instead`,
+    );
+  }
+  const normalizedManifest = normalizeManagedManifest(packageJsonSource, config, resolvedVersions, versionTag);
   const nextEnvExample = replaceEnvKey(envExampleSource, config.apiKeyEnv);
   const nextEnv = apiKey ? setEnvValue(nextEnvExample, config.apiKeyEnv, apiKey) : undefined;
   const nextReadme =

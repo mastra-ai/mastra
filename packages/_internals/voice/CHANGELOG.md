@@ -1,5 +1,12 @@
 # @internal/voice
 
+## 0.0.19
+
+### Patch Changes
+
+- Updated dependencies:
+  - @internal/ai-sdk-v5@0.0.66
+
 ## 0.0.18
 
 ### Patch Changes

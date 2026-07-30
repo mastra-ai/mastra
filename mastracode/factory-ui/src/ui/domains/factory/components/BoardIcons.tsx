@@ -2,6 +2,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { CheckCircle2, CircleDot, CircleX, GitCompareArrows, GitPullRequest } from 'lucide-react';
 import type { ComponentType } from 'react';
 
+import { SlackLogo } from '../../../ui/SlackLogo';
 import type { WorkItemSource } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { IntakeIcon } from './IntakeIcon';
@@ -13,6 +14,7 @@ export const SOURCE_ICONS: Record<
   'github-issue': { icon: IssueSourceIcon, className: '' },
   'github-pr': { icon: GitCompareArrows, className: 'text-accent1' },
   'linear-issue': { icon: CircleDot, className: 'text-accent3' },
+  'slack-thread': { icon: SlackLogo, className: '' },
   manual: { icon: CircleDot, className: 'text-icon3' },
 };
 

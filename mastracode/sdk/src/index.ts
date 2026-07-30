@@ -52,7 +52,11 @@ import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveMod
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
 import { planMode } from './agents/modes/plan.js';
-import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-instructions.js';
+import {
+  createGitRefInstructionReader,
+  createGitRefReminderReader,
+  getStaticallyLoadedInstructionPaths,
+} from './agents/prompts/agent-instructions.js';
 // import { executeSubagent } from './agents/subagents/execute.js';
 // import { exploreSubagent } from './agents/subagents/explore.js';
 // import { planSubagent } from './agents/subagents/plan.js';
@@ -126,6 +130,19 @@ const TRANSIENT_SERVER_ERROR_MESSAGE_PATTERN = /internal server|server error|api
  * by `StreamErrorRetryProcessor.isRetryableStreamError`, which calls each
  * matcher at every level of the cause chain.
  */
+/**
+ * Read the session state fields the AgentsMDInjector callbacks need from the
+ * controller request context (set by hosts like the factory review flow).
+ */
+function getInjectorSessionState(
+  requestContext: { get: (key: string) => unknown } | undefined,
+): { untrustedCheckout?: boolean; baseRef?: string; projectPath?: string } | undefined {
+  const agentControllerContext = requestContext?.get('controller') as
+    | AgentControllerRequestContext<{ untrustedCheckout?: boolean; baseRef?: string; projectPath?: string }>
+    | undefined;
+  return agentControllerContext?.getState();
+}
+
 function isTransientConnectionError(error: unknown): boolean {
   if (!error) return false;
 
@@ -738,12 +755,31 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       ...(config?.inputProcessors ?? []),
       new PlanRejectionAbortProcessor(),
       new AgentsMDInjector({
+        // Untrusted checkouts (review sessions on PR branches) must not have
+        // the working tree's instruction files injected as system reminders —
+        // those files are attacker-writable content, not configuration. When
+        // the session carries a trusted base ref, reminders are served from
+        // that ref instead (see getReader); without one they are disabled.
+        isEnabled: ({ requestContext }) => {
+          const state = getInjectorSessionState(requestContext);
+          return state?.untrustedCheckout !== true || typeof state?.baseRef === 'string';
+        },
+        getReader: ({ requestContext }) => {
+          const state = getInjectorSessionState(requestContext);
+          if (state?.untrustedCheckout !== true || typeof state?.baseRef !== 'string') return undefined;
+          return createGitRefReminderReader(state?.projectPath ?? project.rootPath, state.baseRef);
+        },
         getIgnoredInstructionPaths: ({ requestContext }) => {
-          const agentControllerContext = requestContext?.get('controller') as
-            | AgentControllerRequestContext<{ projectPath?: string }>
-            | undefined;
-          const state = agentControllerContext?.getState();
-          return getStaticallyLoadedInstructionPaths(state?.projectPath ?? project.rootPath);
+          const state = getInjectorSessionState(requestContext);
+          const projectPath = state?.projectPath ?? project.rootPath;
+          // On untrusted checkouts the static prompt loads from the base ref,
+          // so compute the statically-loaded paths through the same reader to
+          // keep the dedup consistent.
+          const projectReader =
+            state?.untrustedCheckout === true && typeof state?.baseRef === 'string'
+              ? createGitRefInstructionReader(projectPath, state.baseRef)
+              : undefined;
+          return getStaticallyLoadedInstructionPaths(projectPath, undefined, projectReader);
         },
       }),
       new ProviderHistoryCompat(),

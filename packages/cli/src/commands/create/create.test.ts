@@ -510,6 +510,10 @@ describe('managed observability', () => {
       answer: 'yes',
       selection_method: 'interactive',
     });
+    expect(trackEvent).toHaveBeenCalledWith('cli_observability_outcome', {
+      command: 'create',
+      outcome: 'completed',
+    });
     expect(JSON.stringify(trackEvent.mock.calls)).not.toContain('auth-token');
     expect(JSON.stringify(trackEvent.mock.calls)).not.toContain('org-id');
     expect(JSON.stringify(trackEvent.mock.calls)).not.toContain('platform-project-id');
@@ -521,6 +525,7 @@ describe('managed observability', () => {
     const observability = await import('../init/observability-provision');
     const initUtils = await import('../init/utils.js');
     const { publishStagedProject } = await import('./utils');
+    const trackEvent = vi.fn();
 
     vi.mocked(prompts.select)
       .mockResolvedValueOnce('openai')
@@ -529,13 +534,21 @@ describe('managed observability', () => {
     vi.mocked(observability.provisionObservabilityProject).mockRejectedValueOnce(new Error('platform unavailable'));
 
     await expect(
-      create({ projectName: 'my-project', resolveVersionTag: vi.fn().mockResolvedValue('latest') }),
+      create({
+        projectName: 'my-project',
+        resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+        analytics: { trackEvent } as never,
+      }),
     ).resolves.toBeUndefined();
 
     expect(publishStagedProject).toHaveBeenCalledOnce();
     expect(initUtils.writeObservabilityEnv).toHaveBeenCalledWith({ projectPath: path.resolve('my-project') });
     expect(prompts.note).toHaveBeenCalledWith(expect.stringContaining('platform unavailable'));
     expect(prompts.note).toHaveBeenCalledWith(expect.stringContaining('projects.mastra.ai'));
+    expect(trackEvent).toHaveBeenCalledWith('cli_observability_outcome', {
+      command: 'create',
+      outcome: 'failed',
+    });
     expect(prompts.outro).toHaveBeenCalledOnce();
   });
 
@@ -544,16 +557,19 @@ describe('managed observability', () => {
     const prompts = await import('@clack/prompts');
     const credentials = await import('../auth/credentials.js');
     const observability = await import('../init/observability-provision');
+    const trackEvent = vi.fn();
 
     await create({
       projectName: 'my-project',
       llmProvider: 'anthropic',
       resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+      analytics: { trackEvent } as never,
     });
 
     expect(prompts.select).not.toHaveBeenCalled();
     expect(credentials.getToken).not.toHaveBeenCalled();
     expect(observability.provisionObservabilityProject).not.toHaveBeenCalled();
+    expect(trackEvent).not.toHaveBeenCalledWith('cli_observability_outcome', expect.anything());
   });
 
   it.each([
@@ -618,6 +634,7 @@ describe('managed observability', () => {
     const credentials = await import('../auth/credentials.js');
     const observability = await import('../init/observability-provision');
     const { publishStagedProject } = await import('./utils');
+    const trackEvent = vi.fn();
 
     vi.mocked(prompts.select)
       .mockResolvedValueOnce('openai')
@@ -629,6 +646,7 @@ describe('managed observability', () => {
       create({
         projectName: 'my-project',
         resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+        analytics: { trackEvent } as never,
       }),
     ).resolves.toBeUndefined();
 
@@ -637,6 +655,10 @@ describe('managed observability', () => {
     expect(publishStagedProject).toHaveBeenCalledOnce();
     expect(observability.provisionObservabilityProject).not.toHaveBeenCalled();
     expect(prompts.cancel).not.toHaveBeenCalled();
+    expect(trackEvent).toHaveBeenCalledWith('cli_observability_outcome', {
+      command: 'create',
+      outcome: 'skipped',
+    });
     expect(prompts.outro).toHaveBeenCalledOnce();
   });
 
@@ -648,6 +670,7 @@ describe('managed observability', () => {
     const commandUtils = await import('../utils.js');
     const { installDependencies } = await import('../../utils/clone-template');
     const { publishStagedProject } = await import('./utils');
+    const trackEvent = vi.fn();
     let finishInstall: (() => void) | undefined;
 
     vi.mocked(prompts.select)
@@ -670,6 +693,7 @@ describe('managed observability', () => {
     const createPromise = create({
       projectName: 'my-project',
       resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+      analytics: { trackEvent } as never,
     });
 
     await vi.waitFor(() => {
@@ -684,6 +708,10 @@ describe('managed observability', () => {
     expect(publishStagedProject).not.toHaveBeenCalled();
     expect(skills.installMastraSkills).not.toHaveBeenCalled();
     expect(commandUtils.gitInit).not.toHaveBeenCalled();
+    expect(trackEvent).toHaveBeenCalledWith('cli_observability_outcome', {
+      command: 'create',
+      outcome: 'cancelled',
+    });
     expect(prompts.outro).not.toHaveBeenCalled();
   });
 });

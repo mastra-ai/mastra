@@ -10,7 +10,7 @@ import {
 import type { ConnectedChannelAccount } from '../ui/domains/settings/services/channelAccounts';
 
 /**
- * The caller's linked channel accounts (Settings › Connected accounts), plus
+ * The caller's linked channel accounts (Settings › Connections), plus
  * whether the web-initiated Slack connect flow is available.
  */
 export function useChannelAccountsQuery() {

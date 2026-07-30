@@ -23,8 +23,10 @@ import {
   workSessionId,
 } from './fixtures/sessionHoverDetails';
 
-function stubSessionDetails(updatedAt: string) {
+function stubSessionDetails(updatedAt: string, { includeThreadTitles = true, slackWorkSession = false } = {}) {
   const fixtures = createSessionHoverDetailsFixtures(updatedAt);
+  if (!includeThreadTitles) fixtures.threadsResponse.threads = [];
+  if (slackWorkSession) fixtures.sessionsResponse.sessions[0]!.branch = 'slack/1785354600-536029';
 
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json(fixtures.projectsResponse)),
@@ -79,6 +81,14 @@ async function setupSessionRows() {
 }
 
 describe('Workspace session hover details', () => {
+  it('uses the work-item title when the session has no generated thread title', async () => {
+    stubSessionDetails(new Date().toISOString(), { includeThreadTitles: false, slackWorkSession: true });
+
+    renderSection();
+
+    expect(await screen.findByRole('button', { name: 'Authentication fails after token refresh' })).toBeInTheDocument();
+  });
+
   describe('when a work session is hovered', () => {
     it('shows the related work metadata', async () => {
       const { user, workRow } = await setupSessionRows();
