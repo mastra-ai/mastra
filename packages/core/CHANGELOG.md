@@ -1,5 +1,182 @@
 # @mastra/core
 
+## 1.56.0-alpha.0
+
+### Minor Changes
+
+- `RegexFilterProcessor` now reports what the `redact` strategy rewrote, through the existing `Processor.onViolation` callback. ([#20445](https://github.com/mastra-ai/mastra/pull/20445))
+
+  Redaction used to be silent. The processor found its matches, replaced the text, and dropped the match list, leaving nothing downstream to audit. It now reports once per redacted message, message part, or stream chunk, with offsets relative to that piece of text.
+
+  ```ts
+  const filter = new RegexFilterProcessor({
+    presets: ['pii'],
+    strategy: 'redact',
+  });
+
+  filter.onViolation = async ({ detail }) => {
+    const redaction = detail as RegexRedactionDetail;
+
+    for (const entry of redaction.redactions) {
+      await auditLog.write({
+        phase: redaction.phase, // processInput | processOutputStream | processOutputResult
+        messageId: redaction.messageId,
+        rule: entry.rule, // 'credit-card'
+        offset: entry.index,
+        length: entry.length,
+      });
+    }
+  };
+  ```
+
+  Async callbacks are awaited. When no callback is attached the redact path stays synchronous, so nothing changes for existing callers. When two rules match the same span, the winning rule is reported as `rule` and every rule that matched is listed in `overlappingRules`.
+
+  **Values are withheld by default**
+
+  Reports carry offsets and rule names, not the matched text. An audit trail that copies the data it protects widens the exposure it was added to narrow, which is why the `block` strategy already withholds matched text from its `TripWire` metadata. Set `includeRedactedValues: true` to add a `value` field when the destination is as protected as the original.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`7f4e26d`](https://github.com/mastra-ai/mastra/commit/7f4e26dd57bd9b23c278ea21235ab823a3810a6c))
+
+- Fixed `RegexFilterProcessor` leaving part of a matched value in the output when two rules match overlapping text. ([#20445](https://github.com/mastra-ai/mastra/pull/20445))
+
+  **What was wrong**
+
+  Rules were applied one at a time with `String.replace`, so an earlier rule could consume the start of a longer match and leave the rest in the clear. With the `pii` preset, `phone` runs before `credit-card`, so a card number written without separators lost only its first ten digits:
+
+  ```ts
+  const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' });
+
+  // Before: "card [PHONE]111111"
+  // After:  "card [CREDIT_CARD]"
+  ```
+
+  Overlapping matches are now combined into one region and replaced once, using the replacement of the longest match.
+
+  **Two smaller changes to redaction**
+
+  - A replacement that references capture groups (`$1`, `$&`) now falls back to the replacement string as written when the rule cannot match the text it matched in isolation, which happens with a lookbehind or lookahead. The region is still redacted.
+  - A rule that only matches empty strings no longer inserts its replacement between every character.
+
+## 1.55.0
+
+### Minor Changes
+
+- Added support for Code Mode transports that provide their own execution boundary. A transport can now declare `requiresSandbox: false` and `createCodeMode()` will run it without a workspace sandbox, which enables in-process transports such as `IsolatedVmCodeModeTransport` from `@mastra/isolated-vm`: ([#20359](https://github.com/mastra-ai/mastra/pull/20359))
+
+  ```typescript
+  import { createCodeMode } from '@mastra/core/tools';
+  import { IsolatedVmCodeModeTransport } from '@mastra/isolated-vm';
+
+  // No sandbox needed — the V8 isolate is the execution boundary
+  const { tool, instructions } = createCodeMode({ tools }, new IsolatedVmCodeModeTransport());
+  ```
+
+  Also fixed the generated Code Mode instructions to describe isolation accurately instead of always claiming the program runs fully sandboxed, since the actual boundary depends on the configured sandbox and transport. The `sanitizeToolId` helper used for `external_*` naming is now exported from `@mastra/core/tools` so transports can reuse it instead of duplicating it.
+
+- Added retry callbacks for stream error policies and ensured explicit matcher policies override provider retry metadata. ([#19724](https://github.com/mastra-ai/mastra/pull/19724))
+
+- Channel handlers can now contribute to the request context of the run they start. ([#20060](https://github.com/mastra-ai/mastra/pull/20060))
+
+  `ChannelHandlerContext` gains a `requestContext` field holding the `RequestContext` for the run the inbound message is about to start. It is constructed fresh for every message, and a handler may write to it before calling `defaultHandler`. Core then adds its own channel and render-context entries and dispatches with the same instance, so anything the handler wrote reaches the run.
+
+  ```ts
+  import { AgentControllerChannels } from '@mastra/core/channels';
+
+  const channels = new AgentControllerChannels({
+    adapters,
+    handlers: {
+      onDirectMessage: async (thread, message, defaultHandler, ctx) => {
+        ctx.requestContext.set('locale', 'en-GB');
+        await defaultHandler(thread, message);
+      },
+    },
+  });
+  ```
+
+  Anything a run reads from its request context can now be decided per inbound message — for example resolving which user a platform sender maps to, so the run uses that user's stored credentials.
+
+  **Contract change:** `ChannelHandler`'s 4th `ctx` parameter is now non-optional (`ctx: ChannelHandlerContext`, previously `ctx?: ChannelHandlerContext`). Core has always passed it, and requiring it means a handler writing `ctx.requestContext.set(...)` needs neither a non-null assertion nor a guard that would silently skip the write.
+
+  Handler _implementations_ are unaffected: TypeScript lets a function declaring fewer parameters satisfy a type declaring more, so existing three-parameter handlers — and anyone who wrote `ctx?.mastra` — keep compiling. Code that _calls_ a `ChannelHandler`-typed value with three arguments does need updating, and will fail with `Expected 4 arguments, but got 3` until the context is passed.
+
+- Added a built-in web search tool that resolves to provider-native search for supported models. ([#20345](https://github.com/mastra-ai/mastra/pull/20345))
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { webSearchTool } from '@mastra/core/tools';
+
+  export const agent = new Agent({
+    name: 'web-search-agent',
+    instructions: 'Use web search for current information.',
+    model: 'openai/gpt-5-mini',
+    tools: { webSearch: webSearchTool },
+  });
+  ```
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`3f472b4`](https://github.com/mastra-ai/mastra/commit/3f472b468892a1ff14ccb43cc0343b86f7d8fd7d))
+
+- Fixed Zod 4 installations reporting peer dependency warnings. ([#20313](https://github.com/mastra-ai/mastra/pull/20313))
+
+- Fixed channel tool approval actions so missing thread mappings cannot create conversations under the button clicker's identity. ([#20374](https://github.com/mastra-ai/mastra/pull/20374))
+
+- Fixed duplicate delegation prompts in sub-agent threads. When a supervisor agent delegated to a sub-agent without its own memory and a memory processor persisted messages during the run (such as observational memory), the delegation prompt was saved twice to the sub-agent's thread (once by the mid-run persistence and once by the delegation transcript save). The prompt now keeps a stable message ID across both writes so it is persisted exactly once. Delegation prompt rows are now stored with the default `v2` message type instead of `text`, consistent with other persisted messages. ([#20174](https://github.com/mastra-ai/mastra/pull/20174))
+
+- Review sessions now load project AGENTS.md/CLAUDE.md from the pull request's trusted base branch instead of skipping them entirely. The working-tree copies on an untrusted checkout remain excluded from the system prompt and reminder injection; content is served from the base ref via git, and sessions without a known base ref still skip project instruction files. ([#20372](https://github.com/mastra-ai/mastra/pull/20372))
+
+- Improved workflow and MCP tool-result formatting to avoid serializing large values during equality checks while preserving explicit model outputs. ([#20340](https://github.com/mastra-ai/mastra/pull/20340))
+
+- Review sessions no longer ingest AGENTS.md or CLAUDE.md from the checked-out pull request branch. A PR branch is third-party content, so its instruction files are treated as content under review instead of trusted configuration — closing a prompt-injection path into the reviewer agent. The reviewer also runs the PR's install/build/test commands with GitHub tokens stripped from the environment. ([#20372](https://github.com/mastra-ai/mastra/pull/20372))
+
+- Added an option to the instruction-file reminder processor that lets hosts disable injection entirely for a request, so instruction files from untrusted checkouts are never surfaced as reminders. ([#20372](https://github.com/mastra-ai/mastra/pull/20372))
+
+- Fixed the default workflow execution engine serializing the full RequestContext on every step and entry and then discarding the result. `serializeRequestContext` probes every stored value with `JSON.stringify` via `RequestContext.toJSON()`, but on the default engine the serialized object was never read — only engines with `requiresDurableContextSerialization()` (e.g. Inngest) restore context from serialized results. The step/entry return paths now skip serialization on the default engine; snapshot persistence is unaffected. ([#20369](https://github.com/mastra-ai/mastra/pull/20369))
+
+## 1.55.0-alpha.3
+
+### Patch Changes
+
+- Review sessions now load project AGENTS.md/CLAUDE.md from the pull request's trusted base branch instead of skipping them entirely. The working-tree copies on an untrusted checkout remain excluded from the system prompt and reminder injection; content is served from the base ref via git, and sessions without a known base ref still skip project instruction files. ([#20372](https://github.com/mastra-ai/mastra/pull/20372))
+
+- Review sessions no longer ingest AGENTS.md or CLAUDE.md from the checked-out pull request branch. A PR branch is third-party content, so its instruction files are treated as content under review instead of trusted configuration — closing a prompt-injection path into the reviewer agent. The reviewer also runs the PR's install/build/test commands with GitHub tokens stripped from the environment. ([#20372](https://github.com/mastra-ai/mastra/pull/20372))
+
+- Added an option to the instruction-file reminder processor that lets hosts disable injection entirely for a request, so instruction files from untrusted checkouts are never surfaced as reminders. ([#20372](https://github.com/mastra-ai/mastra/pull/20372))
+
+## 1.55.0-alpha.2
+
+### Minor Changes
+
+- Channel handlers can now contribute to the request context of the run they start. ([#20060](https://github.com/mastra-ai/mastra/pull/20060))
+
+  `ChannelHandlerContext` gains a `requestContext` field holding the `RequestContext` for the run the inbound message is about to start. It is constructed fresh for every message, and a handler may write to it before calling `defaultHandler`. Core then adds its own channel and render-context entries and dispatches with the same instance, so anything the handler wrote reaches the run.
+
+  ```ts
+  import { AgentControllerChannels } from '@mastra/core/channels';
+
+  const channels = new AgentControllerChannels({
+    adapters,
+    handlers: {
+      onDirectMessage: async (thread, message, defaultHandler, ctx) => {
+        ctx.requestContext.set('locale', 'en-GB');
+        await defaultHandler(thread, message);
+      },
+    },
+  });
+  ```
+
+  Anything a run reads from its request context can now be decided per inbound message — for example resolving which user a platform sender maps to, so the run uses that user's stored credentials.
+
+  **Contract change:** `ChannelHandler`'s 4th `ctx` parameter is now non-optional (`ctx: ChannelHandlerContext`, previously `ctx?: ChannelHandlerContext`). Core has always passed it, and requiring it means a handler writing `ctx.requestContext.set(...)` needs neither a non-null assertion nor a guard that would silently skip the write.
+
+  Handler _implementations_ are unaffected: TypeScript lets a function declaring fewer parameters satisfy a type declaring more, so existing three-parameter handlers — and anyone who wrote `ctx?.mastra` — keep compiling. Code that _calls_ a `ChannelHandler`-typed value with three arguments does need updating, and will fail with `Expected 4 arguments, but got 3` until the context is passed.
+
+### Patch Changes
+
+- Improved workflow and MCP tool-result formatting to avoid serializing large values during equality checks while preserving explicit model outputs. ([#20340](https://github.com/mastra-ai/mastra/pull/20340))
+
 ## 1.55.0-alpha.1
 
 ### Minor Changes

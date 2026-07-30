@@ -3,11 +3,16 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { execa } from 'execa';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CreateLLMProvider } from './command';
 import { adaptDefaultTemplate, MANAGED_PROVIDER_CONFIGS } from './provider-adapter';
 import { PNPM_WORKSPACE } from './utils';
+
+vi.mock('execa');
+
+const mockedExeca = vi.mocked(execa);
 
 const templatePath = fileURLToPath(new URL('../../../../../templates/template-agent-harness', import.meta.url));
 const temporaryDirectories: string[] = [];
@@ -38,6 +43,12 @@ afterEach(async () => {
   await Promise.all(
     temporaryDirectories.splice(0).map(directory => fs.rm(directory, { recursive: true, force: true })),
   );
+});
+
+beforeEach(() => {
+  mockedExeca.mockReset();
+  // Default: resolution fails so existing structural tests fall back to channel tags.
+  mockedExeca.mockRejectedValue(new Error('npm unavailable') as never);
 });
 
 const expectedAdaptations = {
@@ -76,6 +87,7 @@ const expectedAdaptations = {
 describe('adaptDefaultTemplate', () => {
   for (const provider of Object.keys(MANAGED_PROVIDER_CONFIGS) as CreateLLMProvider[]) {
     it(`adapts the default template completely for ${provider}`, async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       const projectPath = await createFixture();
       const agentPath = path.join(projectPath, 'src/mastra/agents/agent.ts');
       const manifestPath = path.join(projectPath, 'package.json');
@@ -151,6 +163,7 @@ describe('adaptDefaultTemplate', () => {
         expect(functionalFiles).not.toContain(otherConfig.apiKeyEnv);
         expect(functionalFiles).not.toContain(`${otherConfig.providerIdentifier}.tools`);
       }
+      errorSpy.mockRestore();
     });
   }
 
@@ -284,5 +297,83 @@ describe('adaptDefaultTemplate', () => {
     await expect(
       adaptFixture({ projectPath: noReadmeProject, provider: 'google', versionTag: 'latest' }),
     ).resolves.toBeDefined();
+  });
+
+  it('resolves each Mastra dependency to its independently exact version on success', async () => {
+    mockedExeca.mockImplementation(((_cmd: string, args: string[]) => {
+      const pkg = args?.[1];
+      if (pkg === '@mastra/core') return Promise.resolve({ stdout: '1.55.0-alpha.0\n' }) as never;
+      if (pkg === '@mastra/duckdb') return Promise.resolve({ stdout: '1.5.2-alpha.0\n' }) as never;
+      if (pkg === '@mastra/libsql') return Promise.resolve({ stdout: '1.18.0-alpha.1\n' }) as never;
+      if (pkg === 'mastra') return Promise.resolve({ stdout: '1.21.0-alpha.0\n' }) as never;
+      if (pkg === '@mastra/memory') return Promise.resolve({ stdout: '1.24.0-alpha.0\n' }) as never;
+      if (pkg === '@mastra/observability') return Promise.resolve({ stdout: '1.16.3-alpha.0\n' }) as never;
+      return Promise.reject(new Error('unexpected')) as never;
+    }) as never);
+
+    const projectPath = await createFixture();
+    const manifestPath = path.join(projectPath, 'package.json');
+
+    await adaptFixture({ projectPath, provider: 'openai', versionTag: 'alpha' });
+
+    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+    for (const section of [manifest.dependencies, manifest.devDependencies]) {
+      for (const [packageName, version] of Object.entries(section)) {
+        if (packageName === 'mastra' || packageName.startsWith('@mastra/')) {
+          expect(version).not.toBe('alpha');
+          expect(version).not.toBe('latest');
+        }
+      }
+    }
+    expect(manifest.dependencies['@mastra/core']).toBe('1.55.0-alpha.0');
+    expect(manifest.dependencies['@mastra/libsql']).toBe('1.18.0-alpha.1');
+    expect(manifest.dependencies['@mastra/duckdb']).toBe('1.5.2-alpha.0');
+    expect(manifest.dependencies['@mastra/memory']).toBe('1.24.0-alpha.0');
+    expect(manifest.dependencies['@mastra/observability']).toBe('1.16.3-alpha.0');
+    expect(manifest.devDependencies.mastra).toBe('1.21.0-alpha.0');
+  });
+
+  it('warns once and preserves the channel tag for all Mastra packages on resolution failure', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockedExeca.mockRejectedValue(new Error('npm error') as never);
+
+    const projectPath = await createFixture();
+    const manifestPath = path.join(projectPath, 'package.json');
+    const originalManifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+
+    await adaptFixture({ projectPath, provider: 'openai', versionTag: 'snapshot-channel' });
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
+
+    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+    for (const section of [manifest.dependencies, manifest.devDependencies]) {
+      for (const [packageName, version] of Object.entries(section)) {
+        if (packageName === 'mastra' || packageName.startsWith('@mastra/')) {
+          expect(version).toBe('snapshot-channel');
+        }
+      }
+    }
+    expect(manifest.dependencies.zod).toBe(originalManifest.dependencies.zod);
+  });
+
+  it('performs no resolver lookup and no warning when the manifest has no Mastra packages', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const projectPath = await createFixture();
+    const manifestPath = path.join(projectPath, 'package.json');
+    const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+
+    for (const section of ['dependencies', 'devDependencies'] as const) {
+      for (const key of Object.keys(manifest[section] ?? {})) {
+        if (key === 'mastra' || key.startsWith('@mastra/')) delete manifest[section][key];
+      }
+    }
+    await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+
+    await adaptFixture({ projectPath, provider: 'openai', versionTag: 'latest' });
+
+    expect(mockedExeca).not.toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 });

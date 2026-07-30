@@ -4958,7 +4958,8 @@ export const API_ROUTE_METADATA = {
       "metadata",
       "requestContext",
       "source",
-      "toolMocks"
+      "toolMocks",
+      "unmockedToolPolicy"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -5029,7 +5030,8 @@ export const API_ROUTE_METADATA = {
       "metadata",
       "requestContext",
       "source",
-      "toolMocks"
+      "toolMocks",
+      "unmockedToolPolicy"
     ],
     "hasQuery": false,
     "hasBody": true,

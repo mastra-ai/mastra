@@ -368,6 +368,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/greenpt',
+          label: 'GreenPT',
+        },
+        {
+          type: 'doc',
           id: 'providers/helicone',
           label: 'Helicone',
         },

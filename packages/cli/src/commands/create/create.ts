@@ -401,10 +401,16 @@ export const create = async (args: CreateOptions): Promise<void> => {
   process.removeListener('SIGINT', handleSigint);
   process.removeListener('SIGTERM', handleSigterm);
 
-  if (interruptionSignal === 'SIGINT') cancelCreate();
+  if (interruptionSignal === 'SIGINT') {
+    if (observabilityEnabled) {
+      analytics?.trackEvent('cli_observability_outcome', { command: 'create', outcome: 'cancelled' });
+    }
+    cancelCreate();
+  }
   if (interruptionSignal === 'SIGTERM') throw new Error('Operation terminated by SIGTERM');
   if (materializationError) throw materializationError;
   if (platformSetup?.status === 'cancelled') {
+    analytics?.trackEvent('cli_observability_outcome', { command: 'create', outcome: 'skipped' });
     p.log.info('Skipping Mastra platform setup.');
   } else if (observabilityEnabled) {
     p.log.success('Default template cloned and dependencies installed.');
@@ -444,12 +450,14 @@ export const create = async (args: CreateOptions): Promise<void> => {
       });
       platformEnvWritten = true;
       observabilitySummary = `${color.green('Mastra platform enabled.')}\n\nProject: ${color.cyan(result.projectName)} (${result.orgName})\nWrote ${color.cyan('MASTRA_PLATFORM_ACCESS_TOKEN')} and ${color.cyan('MASTRA_PROJECT_ID')} to ${color.cyan('.env')}.`;
+      analytics?.trackEvent('cli_observability_outcome', { command: 'create', outcome: 'completed' });
     } catch (error) {
       platformError = error;
     }
   }
 
   if (platformError !== undefined) {
+    analytics?.trackEvent('cli_observability_outcome', { command: 'create', outcome: 'failed' });
     const message = platformError instanceof Error ? platformError.message : 'Unknown error';
     try {
       await writeObservabilityEnv({ projectPath: targetPath });

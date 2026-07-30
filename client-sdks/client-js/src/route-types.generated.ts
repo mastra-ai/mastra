@@ -2820,6 +2820,8 @@ type Shared_Type_122 = {
   expectedTrajectory?: unknown | undefined;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
   toolMocks?: Shared_Type_120[] | undefined;
+  /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
+  unmockedToolPolicy?: ('allow' | 'deny') | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -3145,7 +3147,7 @@ type Shared_Type_139 = {
   }[];
   failure?:
     | {
-        code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED';
+        code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED' | 'TOOL_MOCK_NOT_DECLARED';
         toolName: string;
         args: unknown;
       }
@@ -17431,6 +17433,8 @@ export type PostDatasetsDatasetIdItems_Body = {
   expectedTrajectory?: (Shared_Type_137 | undefined) | null;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
   toolMocks?: Shared_Type_120[] | undefined;
+  /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
+  unmockedToolPolicy?: ('allow' | 'deny') | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -17482,6 +17486,8 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
     expectedTrajectory?: (Shared_Type_137 | undefined) | null;
     /** Ordered item-level static tool mocks served in place of executing the real tool */
     toolMocks?: Shared_Type_120[] | undefined;
+    /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
+    unmockedToolPolicy?: ('allow' | 'deny') | undefined;
     requestContext?:
       | {
           [key: string]: unknown;
@@ -17601,6 +17607,8 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
   expectedTrajectory?: (Shared_Type_137 | undefined) | null;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
   toolMocks?: Shared_Type_120[] | undefined;
+  /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
+  unmockedToolPolicy?: ('allow' | 'deny') | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -17720,6 +17728,8 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     expectedTrajectory?: unknown | undefined;
     /** Ordered item-level static tool mocks served in place of executing the real tool */
     toolMocks?: Shared_Type_120[] | undefined;
+    /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
+    unmockedToolPolicy?: ('allow' | 'deny') | undefined;
     metadata?:
       | {
           [key: string]: unknown;

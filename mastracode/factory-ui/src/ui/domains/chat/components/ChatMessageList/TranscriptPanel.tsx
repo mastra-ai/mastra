@@ -8,8 +8,11 @@ import { Transcript } from '../Transcript';
 import { EmptyThreadState } from './EmptyThreadState';
 import { WorkingIndicator } from './WorkingIndicator';
 
-const transcriptScrollClass =
-  'flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:min-w-0 [&>*]:max-w-[80ch]';
+// Inset on the scroller, not an ancestor — ancestor padding drags the scrollbar inward.
+const transcriptInsetClass =
+  'pr-[calc(0.75rem+var(--workspace-files-inset,0px))] md:pr-[calc(1.25rem+var(--workspace-files-inset,0px))] transition-[padding] duration-360 ease-out-custom motion-reduce:transition-none';
+
+const transcriptScrollClass = `flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:min-w-0 [&>*]:max-w-[var(--chat-column,80ch)] ${transcriptInsetClass}`;
 
 export function TranscriptPanel() {
   const { transcript, showWorkingIndicator, loadMore } = useChatTranscript();
@@ -36,7 +39,7 @@ export function TranscriptPanel() {
         <Button
           variant="default"
           size="icon-sm"
-          className="absolute bottom-20 left-1/2 z-40 -translate-x-1/2 rounded-full shadow-md"
+          className="absolute bottom-20 left-[calc(50%-var(--workspace-files-inset,0px)/2)] z-40 -translate-x-1/2 rounded-full shadow-md"
           onClick={() => scrollToBottom('smooth')}
           aria-label="Jump to latest message"
         >

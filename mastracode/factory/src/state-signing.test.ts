@@ -19,6 +19,18 @@ describe('sign/verify round-trip', () => {
     });
   });
 
+  it('round-trips an optional initiating Factory', () => {
+    const signer = createStateSigner('secret');
+    const state = signer.sign('orgA', 'user1', { factoryProjectId: 'fp-1' });
+
+    expect(signer.verify(state)).toEqual({
+      orgId: 'orgA',
+      userId: 'user1',
+      factoryProjectId: 'fp-1',
+      nonce: expect.stringMatching(/^[0-9a-f]{16}$/),
+    });
+  });
+
   it('rejects missing or malformed state', () => {
     const signer = createStateSigner('secret');
     expect(signer.verify(undefined)).toBeNull();
@@ -56,6 +68,17 @@ describe('sign/verify round-trip', () => {
     const forged = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
     forged.orgId = 'orgB';
     const forgedBody = Buffer.from(JSON.stringify(forged), 'utf8').toString('base64url');
+    expect(signer.verify(`${forgedBody}.${sig}`)).toBeNull();
+  });
+
+  it('rejects a tampered Factory return context', () => {
+    const signer = createStateSigner('secret');
+    const state = signer.sign('orgA', 'user1', { factoryProjectId: 'fp-1' });
+    const [body, sig] = state.split('.') as [string, string];
+    const forged = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    forged.factoryProjectId = 'fp-2';
+    const forgedBody = Buffer.from(JSON.stringify(forged), 'utf8').toString('base64url');
+
     expect(signer.verify(`${forgedBody}.${sig}`)).toBeNull();
   });
 

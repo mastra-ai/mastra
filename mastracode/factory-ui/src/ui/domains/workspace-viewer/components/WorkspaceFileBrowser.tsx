@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { File, FileCode, FileJson, FileText, Folder, FolderOpen, Image, NotepadText, RefreshCw } from 'lucide-react';
+import { File, FileCode, FileJson, FileText, Folder, FolderOpen, Image, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -159,9 +159,9 @@ interface WorkspaceFileBrowserProps {
   listing?: WorkspaceRenderedListing;
   isLoading: boolean;
   error?: Error;
+  onRefresh: () => void;
   onRenderedPathChange: (path: RenderedWorkspacePath) => void;
   onFileSelect: (filePath: string) => void;
-  onRefresh: () => void;
 }
 
 export function WorkspaceFileBrowser({
@@ -171,9 +171,9 @@ export function WorkspaceFileBrowser({
   listing,
   isLoading,
   error,
+  onRefresh,
   onRenderedPathChange,
   onFileSelect,
-  onRefresh,
 }: WorkspaceFileBrowserProps) {
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const nodes = buildTree(listing?.entries ?? []);
@@ -183,70 +183,64 @@ export function WorkspaceFileBrowser({
   };
 
   return (
-    <aside className="bg-surface1 flex h-full w-full min-w-0 flex-col" aria-label="Workspace files">
-      <div className="flex items-center justify-between gap-2 px-3 py-2 pl-4 lg:pr-12">
-        <div className="flex min-w-0 items-center gap-2">
-          <NotepadText size={15} className="text-icon4 shrink-0" />
-          <Txt variant="ui-sm" className="text-icon6 truncate font-medium">
-            Files
-          </Txt>
-        </div>
-        <Button size="sm" variant="ghost" onClick={onRefresh} aria-label="Refresh workspace files">
-          <RefreshCw size={14} />
-        </Button>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        <Tree
-          selectedId={selectedFilePath ? `${selectedPath.root}/${selectedFilePath}` : undefined}
-          onSelect={id => {
-            const selectedRootPrefix = `${selectedPath.root}/`;
-            if (id.startsWith(selectedRootPrefix)) onFileSelect(id.slice(selectedRootPrefix.length));
-          }}
-        >
-          {renderedPaths.map(path => {
-            const isSelectedRoot = path.id === selectedPath.id;
-            const isOpen = openFolders[path.root] ?? false;
-            return (
-              <Tree.Folder
-                key={path.id}
-                open={isOpen}
-                onOpenChange={(open: boolean) => {
-                  onRenderedPathChange(path);
-                  setFolderOpen(path.root, open);
-                }}
+    <aside className="h-full min-h-0 w-full min-w-0 overflow-y-auto p-2" aria-label="Workspace files">
+      <Tree
+        selectedId={selectedFilePath ? `${selectedPath.root}/${selectedFilePath}` : undefined}
+        onSelect={id => {
+          const selectedRootPrefix = `${selectedPath.root}/`;
+          if (id.startsWith(selectedRootPrefix)) onFileSelect(id.slice(selectedRootPrefix.length));
+        }}
+      >
+        {renderedPaths.map(path => {
+          const isSelectedRoot = path.id === selectedPath.id;
+          const isOpen = openFolders[path.root] ?? false;
+          return (
+            <Tree.Folder
+              key={path.id}
+              open={isOpen}
+              onOpenChange={(open: boolean) => {
+                onRenderedPathChange(path);
+                setFolderOpen(path.root, open);
+              }}
+            >
+              <Tree.FolderTrigger
+                actions={
+                  isSelectedRoot ? (
+                    <Button size="icon-xs" variant="ghost" onClick={onRefresh} aria-label="Refresh workspace files">
+                      <RefreshCw />
+                    </Button>
+                  ) : null
+                }
               >
-                <Tree.FolderTrigger>
-                  <Tree.Icon>{getFolderIcon(isOpen)}</Tree.Icon>
-                  <Tree.Label>{path.label}</Tree.Label>
-                </Tree.FolderTrigger>
-                {isSelectedRoot ? (
-                  <Tree.FolderContent>
-                    {isLoading ? <Txt className="text-icon3 px-2 py-3">Loading files…</Txt> : null}
-                    {error ? <Txt className="text-icon4 px-2 py-3">Unable to load files.</Txt> : null}
-                    {!isLoading && !error && nodes.length === 0 ? (
-                      <Txt className="text-icon3 px-2 py-3" variant="ui-sm">
-                        {emptyStateCopy(path)}
-                      </Txt>
-                    ) : null}
-                    {!isLoading && !error
-                      ? nodes.map(node => (
-                          <WorkspaceTreeItem
-                            key={node.path}
-                            node={node}
-                            root={selectedPath.root}
-                            openFolders={openFolders}
-                            onFolderOpenChange={setFolderOpen}
-                          />
-                        ))
-                      : null}
-                  </Tree.FolderContent>
-                ) : null}
-              </Tree.Folder>
-            );
-          })}
-        </Tree>
-      </div>
+                <Tree.Icon>{getFolderIcon(isOpen)}</Tree.Icon>
+                <Tree.Label>{path.label}</Tree.Label>
+              </Tree.FolderTrigger>
+              {isSelectedRoot ? (
+                <Tree.FolderContent>
+                  {isLoading ? <Txt className="text-icon3 px-2 py-3">Loading files…</Txt> : null}
+                  {error ? <Txt className="text-icon4 px-2 py-3">Unable to load files.</Txt> : null}
+                  {!isLoading && !error && nodes.length === 0 ? (
+                    <Txt className="text-icon3 px-2 py-3" variant="ui-sm">
+                      {emptyStateCopy(path)}
+                    </Txt>
+                  ) : null}
+                  {!isLoading && !error
+                    ? nodes.map(node => (
+                        <WorkspaceTreeItem
+                          key={node.path}
+                          node={node}
+                          root={selectedPath.root}
+                          openFolders={openFolders}
+                          onFolderOpenChange={setFolderOpen}
+                        />
+                      ))
+                    : null}
+                </Tree.FolderContent>
+              ) : null}
+            </Tree.Folder>
+          );
+        })}
+      </Tree>
     </aside>
   );
 }
