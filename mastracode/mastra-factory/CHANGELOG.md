@@ -1,5 +1,14 @@
 # create-factory
 
+## 0.1.4
+
+### Patch Changes
+
+- Improved contributor guidance for the Factory scaffolder. ([#20327](https://github.com/mastra-ai/mastra/pull/20327))
+
+- Updated dependencies [[`6b1e467`](https://github.com/mastra-ai/mastra/commit/6b1e46731b3062a3c26c1c5889299eb186bbf08c), [`1d3a2cf`](https://github.com/mastra-ai/mastra/commit/1d3a2cf9111d947c344c4168579fb244c52ee9f8), [`4b9dc7a`](https://github.com/mastra-ai/mastra/commit/4b9dc7a6a3e7d96831efc2a1e6a7fb0d7632ca82), [`c539a25`](https://github.com/mastra-ai/mastra/commit/c539a25b620eb27c92ac8585b2740981ba1c28bf)]:
+  - mastra@1.21.0
+
 ## 0.1.4-alpha.3
 
 ### Patch Changes

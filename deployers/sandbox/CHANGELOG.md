@@ -1,5 +1,35 @@
 # @mastra/deployer-sandbox
 
+## 0.2.0
+
+### Minor Changes
+
+- Run isolated non-HTTP workers with bounded input, separate byte-preserving output streams, cancellation, relaunch, and cleanup controls. ([#19641](https://github.com/mastra-ai/mastra/pull/19641))
+
+  ```ts
+  import { deployWorkerToSandbox } from '@mastra/deployer-sandbox';
+
+  const worker = await deployWorkerToSandbox({
+    sandbox,
+    dir: './dist/worker',
+    executionId: 'job-1',
+    command: 'node',
+    args: ['index.mjs'],
+    input: { type: 'stdin', data: request },
+  });
+
+  const stdout = await worker.readOutput('stdout');
+  await worker.cancel();
+  const retry = await worker.relaunch({ executionId: 'job-2' });
+  await retry.destroy();
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`3f472b4`](https://github.com/mastra-ai/mastra/commit/3f472b468892a1ff14ccb43cc0343b86f7d8fd7d), [`ba369f2`](https://github.com/mastra-ai/mastra/commit/ba369f2a0aaf998da0d6aa033d26f64f96bef8ac), [`35b929b`](https://github.com/mastra-ai/mastra/commit/35b929b7abc3d20d85c7985880960ac2d04a6c86), [`55c9e24`](https://github.com/mastra-ai/mastra/commit/55c9e248c27c1d72b5bb7e94ea6b8a3999eee49f), [`dcfed93`](https://github.com/mastra-ai/mastra/commit/dcfed93e1e256c6abfa792cbb7ca836f5d0e8638), [`2876e15`](https://github.com/mastra-ai/mastra/commit/2876e15b4d2f616a3bc1ed3af57d546c268384ce), [`9b3626a`](https://github.com/mastra-ai/mastra/commit/9b3626aeb1d16fcd34b0a8e94c114ddb80a3b240), [`4696963`](https://github.com/mastra-ai/mastra/commit/469696312ac4c618bc8475b0c5ed7949b8a3455e), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`07f5b4b`](https://github.com/mastra-ai/mastra/commit/07f5b4ba9d608d88865030732e580298296adf99), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`598080f`](https://github.com/mastra-ai/mastra/commit/598080f224edb3f0f5b801035b067fac50a56a03)]:
+  - @mastra/core@1.55.0
+  - @mastra/deployer@1.55.0
+
 ## 0.2.0-alpha.1
 
 ### Minor Changes
