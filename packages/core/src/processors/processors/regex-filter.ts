@@ -74,8 +74,12 @@ interface RedactionRegion {
   end: number;
   /** Longest match contributing to this region; supplies the replacement */
   owner: RuleMatch;
-  /** Every match merged into this region, including the owner */
-  matches: RuleMatch[];
+  /**
+   * Rule names of every match merged into this region, set only once a second
+   * match joins. Left undefined for the common one-match region so a region
+   * costs no extra allocation.
+   */
+  overlappingRules?: string[];
 }
 
 /**
@@ -335,7 +339,7 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
    * the clear, so overlapping ranges are unioned and redacted once.
    */
   private buildRedactionRegions(matches: RuleMatch[]): RedactionRegion[] {
-    const ordered = [...matches]
+    const ordered = matches
       .filter(match => matchLength(match) > 0)
       .sort((a, b) => a.start - b.start || matchLength(b) - matchLength(a));
 
@@ -344,12 +348,12 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
       const current = regions.at(-1);
       if (current && match.start < current.end) {
         current.end = Math.max(current.end, match.end);
-        current.matches.push(match);
+        (current.overlappingRules ??= [current.owner.rule.name]).push(match.rule.name);
         if (matchLength(match) > matchLength(current.owner)) {
           current.owner = match;
         }
       } else {
-        regions.push({ start: match.start, end: match.end, owner: match, matches: [match] });
+        regions.push({ start: match.start, end: match.end, owner: match });
       }
     }
     return regions;
@@ -369,7 +373,7 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
   private resolveReplacement(text: string, region: RedactionRegion): string {
     const { rule } = region.owner;
     const replacement = rule.replacement ?? '[REDACTED]';
-    if (region.matches.length > 1 || !replacement.includes('$')) return replacement;
+    if (region.overlappingRules || !replacement.includes('$')) return replacement;
 
     const matched = text.slice(region.start, region.end);
     const isolated = compilePattern(rule).exec(matched);
@@ -394,13 +398,13 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
       result += text.slice(cursor, region.start) + replacement;
       cursor = region.end;
 
-      const overlappingRules = [...new Set(region.matches.map(match => match.rule.name))];
+      const overlappingRules = region.overlappingRules && [...new Set(region.overlappingRules)];
       redactions.push({
         rule: region.owner.rule.name,
         index: region.start,
         length: region.end - region.start,
         replacement,
-        ...(overlappingRules.length > 1 ? { overlappingRules } : {}),
+        ...(overlappingRules && overlappingRules.length > 1 ? { overlappingRules } : {}),
         ...(this.includeRedactedValues ? { value: text.slice(region.start, region.end) } : {}),
       });
     }
