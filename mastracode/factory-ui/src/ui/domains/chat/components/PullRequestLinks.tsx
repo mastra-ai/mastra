@@ -43,7 +43,7 @@ function reviewSubscription(
   if (typeof reviewNumber !== 'number' && typeof reviewNumber !== 'string') return undefined;
 
   const normalizedReviewNumber = Number(reviewNumber);
-  if (!Number.isInteger(normalizedReviewNumber)) return undefined;
+  if (!Number.isInteger(normalizedReviewNumber) || normalizedReviewNumber <= 0) return undefined;
 
   return {
     id: `factory-work-item:${reviewItem.id}`,
@@ -69,7 +69,12 @@ function pullRequestLinks(
   return [...subscriptions, activeReview];
 }
 
-/** Pull requests subscribed to the active GitHub-backed thread. */
+/**
+ * Pull requests subscribed to the active GitHub-backed thread.
+ *
+ * Must render inside `ChatSessionBoundary` — `usePullRequestSubscriptions`
+ * reads the chat session and transcript contexts.
+ */
 export function PullRequestLinks({ repository, reviewItem, threadId, size = 'xs' }: PullRequestLinksProps) {
   const subscriptions = usePullRequestSubscriptions(repository?.projectRepositoryId, threadId);
   const activeReview = reviewSubscription(reviewItem, repository?.slug);
