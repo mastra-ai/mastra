@@ -91,6 +91,7 @@ export class SlackIntegration implements FactoryIntegration {
       accountLinks: ctx.storage.channelIdentity,
       projects: ctx.storage.projects,
       sourceControl: this.#config.sourceControl,
+      workItems: ctx.rules?.workItems,
     });
   }
 

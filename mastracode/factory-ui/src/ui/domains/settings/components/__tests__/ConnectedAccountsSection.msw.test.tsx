@@ -1,12 +1,10 @@
 /**
- * BDD coverage for Settings › General › Connected accounts.
- *
- * Drives the real channel-accounts service and React Query stack; only the
- * network is mocked with MSW.
+ * BDD coverage for the factory-scoped connections overview.
+ * Drives the real channel-accounts service and React Query stack through MSW.
  */
-import userEvent from '@testing-library/user-event';
-import { screen, waitFor } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -16,172 +14,83 @@ import { ConnectedAccountsSection } from '../ConnectedAccountsSection';
 
 const slackLink: ConnectedChannelAccount = {
   platform: 'slack',
-  externalTeamId: 'T06CB4A5FT9',
-  externalUserId: 'U095PUH0FKL',
-  linkedAt: '2026-07-23T17:57:43.368Z',
+  externalTeamId: 'T00000001',
+  externalUserId: 'U00000001',
+  externalTeamName: 'Example Workspace',
+  externalUserName: 'Test User',
+  linkedAt: '2026-01-15T12:00:00.000Z',
 };
 
 function mockAccounts(accounts: ConnectedChannelAccount[], canConnect = false) {
   server.use(http.get(`${TEST_BASE_URL}/web/channel-accounts`, () => HttpResponse.json({ accounts, canConnect })));
 }
 
-function mockFactories(factories: Array<{ id: string; name: string }>) {
-  server.use(
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: factories })),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/:id/source-control-connections`, () =>
-      HttpResponse.json({ connections: [] }),
-    ),
+function renderSection() {
+  return renderWithProviders(
+    <MemoryRouter initialEntries={['/factories/fp-1/settings/connections']}>
+      <Routes>
+        <Route path="/factories/:factoryId/settings/connections" element={<ConnectedAccountsSection />} />
+      </Routes>
+    </MemoryRouter>,
   );
 }
 
 describe('ConnectedAccountsSection', () => {
-  it('given no links and no OIDC config, when rendered, then it explains how linking starts from Slack', async () => {
-    mockAccounts([]);
+  // Without the Slack app env the integration never mounts, so the route is
+  // absent and the SPA's index.html answers instead. The old code fed that HTML
+  // to res.json() and rendered the parse error ("Unexpected token '<'").
+  it('given Slack is not configured on the server, when rendered, then it names the missing env instead of a parse error', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/channel-accounts`, () =>
+        HttpResponse.html('<!doctype html><html><body>app shell</body></html>'),
+      ),
+    );
 
-    renderWithProviders(<ConnectedAccountsSection />);
+    renderSection();
 
-    expect(await screen.findByText(/Message the bot in Slack/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Disconnect/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Connect Slack/ })).not.toBeInTheDocument();
+    expect(await screen.findByText('Not configured')).toBeInTheDocument();
+    expect(screen.getByText(/^Missing required environment variables: SLACK_APP_SIGNING_SECRET/)).toBeInTheDocument();
+    expect(screen.queryByText(/is not valid JSON/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Connect/ })).not.toBeInTheDocument();
   });
 
-  it('given no links and OIDC configured, when rendered, then it offers a Connect Slack button', async () => {
-    mockAccounts([], true);
-
-    renderWithProviders(<ConnectedAccountsSection />);
-
-    expect(await screen.findByRole('button', { name: 'Connect Slack' })).toBeInTheDocument();
-    expect(screen.queryByText(/Message the bot in Slack/)).not.toBeInTheDocument();
-  });
-
-  it('given a linked account and OIDC configured, when rendered, then it offers no connect button', async () => {
+  it('given a linked Slack account, when rendered, then it shows Slack as connected with a configure link', async () => {
     mockAccounts([slackLink], true);
 
-    renderWithProviders(<ConnectedAccountsSection />);
+    renderSection();
 
-    expect(await screen.findByText('Slack · U095PUH0FKL in T06CB4A5FT9')).toBeInTheDocument();
-    // A connected user must not be offered a connect affordance: one Slack app
-    // serves one workspace today, so re-running OIDC would re-link the same
-    // sender key. Disconnect stays available.
+    expect(await screen.findByText('Connected')).toBeInTheDocument();
+    const slackRow = screen.getByRole('link', { name: /Slack.*Connected.*Configure/ });
+    expect(slackRow).toHaveAttribute('href', '/factories/fp-1/settings/connections/slack');
+    expect(slackRow).toHaveTextContent(/Slack.*Connected.*Configure/);
     expect(screen.queryByRole('button', { name: /Connect/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Disconnect/ })).toBeInTheDocument();
   });
 
-  it('given a link with display names, when rendered, then it shows names instead of ids', async () => {
-    mockAccounts([{ ...slackLink, externalTeamName: 'Kepler', externalUserName: 'Caleb Barnes' }]);
+  it('given multiple linked Slack accounts, when rendered, then it shows the connected account count', async () => {
+    mockAccounts([slackLink, { ...slackLink, externalTeamId: 'T00000002', externalUserId: 'U00000002' }]);
 
-    renderWithProviders(<ConnectedAccountsSection />);
+    renderSection();
 
-    expect(await screen.findByText('Slack · Caleb Barnes in Kepler')).toBeInTheDocument();
-    expect(screen.queryByText(/U095PUH0FKL/)).not.toBeInTheDocument();
+    expect(await screen.findByText('2 connected')).toBeInTheDocument();
   });
 
-  it('given a linked Slack account, when rendered, then it shows the identity with a disconnect action', async () => {
-    mockAccounts([slackLink]);
+  it('given no link and OIDC configured, when rendered, then it offers Slack connection', async () => {
+    mockAccounts([], true);
 
-    renderWithProviders(<ConnectedAccountsSection />);
+    renderSection();
 
-    expect(await screen.findByText('Slack · U095PUH0FKL in T06CB4A5FT9')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Disconnect/ })).toBeInTheDocument();
+    expect(await screen.findByText('Not connected')).toBeInTheDocument();
+    const slackRow = screen.getByRole('button', { name: /Slack.*Not connected.*Connect/ });
+    expect(slackRow).toBeEnabled();
+    expect(slackRow).toHaveTextContent(/Slack.*Not connected.*Connect/);
   });
 
-  it('given a linked account, when disconnected, then the sender key is sent and the list refreshes empty', async () => {
-    let listCalls = 0;
-    let deleteBody: unknown;
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/channel-accounts`, () => {
-        listCalls += 1;
-        return HttpResponse.json({ accounts: listCalls === 1 ? [slackLink] : [], canConnect: false });
-      }),
-      http.delete(`${TEST_BASE_URL}/web/channel-accounts`, async ({ request }) => {
-        deleteBody = await request.json();
-        return HttpResponse.json({ deleted: true });
-      }),
-    );
+  it('given no link and no OIDC config, when rendered, then the connect action is unavailable', async () => {
+    mockAccounts([]);
 
-    renderWithProviders(<ConnectedAccountsSection />);
-    const user = userEvent.setup();
+    renderSection();
 
-    await user.click(await screen.findByRole('button', { name: /Disconnect/ }));
-
-    await waitFor(() =>
-      expect(deleteBody).toEqual({
-        platform: 'slack',
-        externalTeamId: 'T06CB4A5FT9',
-        externalUserId: 'U095PUH0FKL',
-      }),
-    );
-    // Refetch after invalidation renders the empty state.
-    expect(await screen.findByText(/No connected accounts/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Disconnect/ })).not.toBeInTheDocument();
-  });
-
-  it('given factories, when rendered, then each row offers a default-factory picker', async () => {
-    mockAccounts([{ ...slackLink, defaultFactoryProjectId: 'fp-2' }]);
-    mockFactories([
-      { id: 'fp-1', name: 'Mastra OSS' },
-      { id: 'fp-2', name: 'Kepler' },
-    ]);
-
-    renderWithProviders(<ConnectedAccountsSection />);
-
-    // The trigger shows the current default's name.
-    const trigger = await screen.findByRole('combobox', { name: /Default factory for/ });
-    expect(trigger).toHaveTextContent('Kepler');
-  });
-
-  it('given no default yet, when a factory is picked, then the PATCH carries the sender key and the list refreshes', async () => {
-    let listCalls = 0;
-    let patchBody: unknown;
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/channel-accounts`, () => {
-        listCalls += 1;
-        return HttpResponse.json({
-          accounts: [listCalls === 1 ? slackLink : { ...slackLink, defaultFactoryProjectId: 'fp-1' }],
-          canConnect: false,
-        });
-      }),
-      http.patch(`${TEST_BASE_URL}/web/channel-accounts/default-factory`, async ({ request }) => {
-        patchBody = await request.json();
-        return HttpResponse.json({ updated: true });
-      }),
-    );
-    mockFactories([
-      { id: 'fp-1', name: 'Mastra OSS' },
-      { id: 'fp-2', name: 'Kepler' },
-    ]);
-
-    renderWithProviders(<ConnectedAccountsSection />);
-    const user = userEvent.setup();
-
-    const trigger = await screen.findByRole('combobox', { name: /Default factory for/ });
-    expect(trigger).toHaveTextContent('Set default factory');
-    await user.click(trigger);
-    await user.click(await screen.findByRole('option', { name: 'Mastra OSS' }));
-
-    await waitFor(() =>
-      expect(patchBody).toEqual({
-        platform: 'slack',
-        externalTeamId: 'T06CB4A5FT9',
-        externalUserId: 'U095PUH0FKL',
-        factoryProjectId: 'fp-1',
-      }),
-    );
-    // Refetch after invalidation shows the new default.
-    await waitFor(() => expect(trigger).toHaveTextContent('Mastra OSS'));
-  });
-
-  it('given a delete that fails, when disconnected, then the row stays', async () => {
-    mockAccounts([slackLink]);
-    server.use(
-      http.delete(`${TEST_BASE_URL}/web/channel-accounts`, () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
-    );
-
-    renderWithProviders(<ConnectedAccountsSection />);
-    const user = userEvent.setup();
-
-    await user.click(await screen.findByRole('button', { name: /Disconnect/ }));
-
-    expect(await screen.findByText('Slack · U095PUH0FKL in T06CB4A5FT9')).toBeInTheDocument();
+    expect(await screen.findByText('Not connected')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Slack.*Not connected.*Connect/ })).toBeDisabled();
   });
 });

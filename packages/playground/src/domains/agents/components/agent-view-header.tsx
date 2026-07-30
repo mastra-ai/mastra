@@ -9,6 +9,7 @@ import { useAgent } from '../hooks/use-agent';
 import { AgentEntityHeader } from './agent-entity-header';
 import { useCanCreateAgent } from '@/domains/agent-builder/hooks/use-can-create-agent';
 import { useLinkComponent } from '@/lib/framework';
+import { withStudioBasePath } from '@/lib/studio-base-path';
 
 export interface AgentViewHeaderProps {
   agentId: string;
@@ -22,8 +23,7 @@ export function AgentViewHeader({ agentId, view }: AgentViewHeaderProps) {
   const { canCreateAgent } = useCanCreateAgent();
   const { Link: FrameworkLink, paths } = useLinkComponent();
 
-  const basePath = (window.MASTRA_STUDIO_BASE_PATH ?? '').replace(/\/$/, '');
-  const sessionUrl = `${window.location.origin}${basePath}/agents/${encodeURIComponent(agentId)}/session`;
+  const sessionUrl = `${window.location.origin}${withStudioBasePath(`/agents/${encodeURIComponent(agentId)}/session`)}`;
   const { handleCopy: handleShareLink, isCopied: isShareCopied } = useCopyToClipboard({
     text: sessionUrl,
     copyMessage: 'Session URL copied to clipboard!',

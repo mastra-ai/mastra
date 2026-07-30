@@ -27,6 +27,7 @@ import { hasAuthInit } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
+import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import type { FactoryAuthUser } from './auth.js';
 import {
@@ -40,6 +41,7 @@ import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools }
 import type { GithubIntegration } from './integrations/github/integration.js';
 import type { GithubIssueTriageInput, GithubIssueTriageResult } from './integrations/github/issue-triage.js';
 import { recordFactoryPullRequestProvenance } from './integrations/github/provenance.js';
+import { releaseWorkItemSandboxes } from './integrations/github/sandbox-release.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
@@ -514,8 +516,27 @@ export class MastraFactory {
       | GithubIntegration
       | undefined;
     const workItemsReady = storage.isDomainReady('work-items');
+    // Terminal work items release their session sandboxes back to the reuse
+    // pool so the next session for the same repository/user claims a warm VM
+    // instead of provisioning fresh. Remote providers only: local "sandboxes"
+    // are the host machine with per-session workdirs — nothing to pool.
+    const releaseTerminalSandboxes =
+      machine && !(machine instanceof LocalSandbox) && workItemsReady && storage.isDomainReady('source-control')
+        ? async ({ orgId, workItemId }: { orgId: string; workItemId: string }) =>
+            releaseWorkItemSandboxes({
+              workItems: workItemsStorage,
+              sourceControl: sourceControlStorage.forIntegration('github'),
+              fleet,
+              orgId,
+              workItemId,
+            })
+        : undefined;
     const transitionService = workItemsReady
-      ? new FactoryTransitionService({ rules, storage: workItemsStorage })
+      ? new FactoryTransitionService({
+          rules,
+          storage: workItemsStorage,
+          ...(releaseTerminalSandboxes ? { onTerminalStage: releaseTerminalSandboxes } : {}),
+        })
       : undefined;
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({

@@ -2126,7 +2126,9 @@ describe('MessageList V5 Support', () => {
       });
     });
 
-    it('should preserve explicit modelOutput over MCP-style raw content in llmPrompt', async () => {
+    it('should preserve explicit modelOutput without inspecting circular MCP-style raw content', async () => {
+      const circularContentPart: Record<string, unknown> = { type: 'resource' };
+      circularContentPart.self = circularContentPart;
       const list = new MessageList({ threadId, resourceId });
 
       list.add('Summarize tool output', 'input');
@@ -2148,10 +2150,7 @@ describe('MessageList V5 Support', () => {
                   state: 'result',
                   args: {},
                   result: {
-                    content: [
-                      { type: 'text', text: 'raw text' },
-                      { type: 'image', data: 'raw-base64', mimeType: 'image/png' },
-                    ],
+                    content: [circularContentPart, { type: 'image', data: 'raw-base64', mimeType: 'image/png' }],
                   },
                 },
                 providerMetadata: {
