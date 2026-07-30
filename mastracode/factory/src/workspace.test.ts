@@ -413,6 +413,11 @@ describe('getFactoryWorkspace', () => {
     expect(followUps).toContain(
       'a test gap that failed that gate is a requested change on the reviewed PR, never follow-up work',
     );
+    // Follow-up PR bodies satisfy repo automation (issue-reference bots, PR
+    // templates) without closing keywords that could close the parent issue.
+    expect(followUps).toContain("Write the body so the repository's automation accepts it");
+    expect(followUps).toContain('Follow-up to #<number>');
+    expect(followUps).toContain('never a closing keyword like `Fixes`');
 
     // Injection defense constrains execution: the security section conditions
     // running the PR's code on inspection, and Phase 3 execution is gated on
