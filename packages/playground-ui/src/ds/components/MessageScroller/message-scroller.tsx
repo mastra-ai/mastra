@@ -519,6 +519,7 @@ export function MessageScrollerProvider({
     prependAnchorRef.current = null;
     if (!anchor || !viewportElement || firstItemId === previousFirstItemId) return;
 
+    reachStartFiredRef.current = false;
     const grownBy = viewportElement.scrollHeight - anchor.scrollHeight;
     if (grownBy > 0) viewportElement.scrollTop = anchor.scrollTop + grownBy;
   }, [contentElement, itemsVersion, viewportElement]);
