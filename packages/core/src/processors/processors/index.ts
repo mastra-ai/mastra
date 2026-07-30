@@ -58,6 +58,8 @@ export {
   type RegexMatch,
   type RegexPreset,
   type RegexFilterTripwireMetadata,
+  type RegexRedaction,
+  type RegexRedactionDetail,
 } from './regex-filter';
 export { ToolCallFilter } from './tool-call-filter';
 

@@ -1,16 +1,16 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { CircleUserRound, Settings } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
-import { useApiConfig } from '../api/config';
-import { clearMastraCodeStorage, redirectToLogout, useFactoryAuth } from './domains/auth';
-import { FactorySection } from './domains/factory';
+import { SidebarAccountLink } from './domains/auth/components/SidebarAccountLink';
+import { FactorySection } from './domains/factory/components/FactorySection';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
 import { useCloseSettings } from './domains/settings/hooks/useCloseSettings';
 import { settingsSectionPath } from './domains/settings/settingsSections';
-import { FactorySwitcher, UserSessionsSection, WorkspacesSection } from './domains/workspaces';
+import { FactorySwitcher } from './domains/workspaces/components/FactorySwitcher';
+import { UserSessionsSection } from './domains/workspaces/components/UserSessionsSection';
+import { WorkspacesSection } from './domains/workspaces/components/WorkspacesSection';
 
 function useSettingsOpen() {
   const { pathname } = useLocation();
@@ -110,7 +110,7 @@ function SidebarFooter() {
 
   return (
     <MainSidebar.NavList>
-      <SidebarAuth />
+      <SidebarAccountLink />
       <MainSidebar.NavLink
         asChild
         link={{
@@ -132,50 +132,5 @@ function SidebarFooter() {
         </button>
       </MainSidebar.NavLink>
     </MainSidebar.NavList>
-  );
-}
-
-function SidebarAuth() {
-  const auth = useFactoryAuth();
-  const { baseUrl } = useApiConfig();
-
-  if (auth.isLoading) {
-    return (
-      <li role="status" aria-label="Checking sign-in" className="flex h-9 items-center gap-2 px-3">
-        <Skeleton className="size-4 rounded-full" />
-        <Skeleton className="h-3 w-24" />
-      </li>
-    );
-  }
-
-  // Unauthenticated sessions never reach the app (the router bounces them to
-  // `/signin`), so the sidebar only renders the signed-in identity.
-  const state = auth.data;
-  if (!state?.authEnabled || !state.authenticated) return null;
-
-  const identity = state.user?.name ?? state.user?.email ?? 'User';
-
-  return (
-    <MainSidebar.NavLink
-      asChild
-      link={{
-        name: 'User',
-        url: '#',
-        icon: <CircleUserRound />,
-      }}
-    >
-      <button
-        type="button"
-        onClick={() => {
-          clearMastraCodeStorage();
-          redirectToLogout(baseUrl);
-        }}
-        aria-label="Sign out"
-        title={identity}
-      >
-        <CircleUserRound />
-        <MainSidebar.NavLabel>{identity}</MainSidebar.NavLabel>
-      </button>
-    </MainSidebar.NavLink>
   );
 }
