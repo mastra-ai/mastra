@@ -30,12 +30,28 @@ import type { ProcessInputStepArgs, Processor } from '../index';
 // =============================================================================
 
 /**
+ * Options shared by both SkillsProcessor configuration shapes.
+ */
+interface SkillsProcessorBaseOptions {
+  format?: SkillFormat;
+  /**
+   * Override how a skill's `location` field is rendered in the injected
+   * metadata. Defaults to `${skill.path}/SKILL.md`, which is a path on the
+   * server running the agent. When the model's filesystem tools operate
+   * somewhere else (e.g. a sandbox workspace), that server path is
+   * meaningless to the model. Override this to advertise a location the
+   * model can actually reach, or a plain identifier.
+   */
+  formatLocation?: (skill: Skill) => string;
+}
+
+/**
  * Configuration options for SkillsProcessor.
  * Provide either `skills` (WorkspaceSkills directly) or `workspace` (skills resolved via workspace.skills), not both.
  */
 export type SkillsProcessorOptions =
-  | { skills: WorkspaceSkills; workspace?: never; format?: SkillFormat }
-  | { workspace: Workspace; skills?: never; format?: SkillFormat };
+  | ({ skills: WorkspaceSkills; workspace?: never } & SkillsProcessorBaseOptions)
+  | ({ workspace: Workspace; skills?: never } & SkillsProcessorBaseOptions);
 
 // =============================================================================
 // SkillsProcessor
@@ -56,9 +72,13 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
   /** Format for skill injection */
   private readonly _format: SkillFormat;
 
+  /** Optional override for rendering the location field */
+  private readonly _formatLocation: ((skill: Skill) => string) | undefined;
+
   constructor(opts: SkillsProcessorOptions) {
     this._skills = 'skills' in opts && opts.skills ? opts.skills : opts.workspace?.skills;
     this._format = opts.format ?? 'xml';
+    this._formatLocation = opts.formatLocation;
   }
 
   /**
@@ -90,7 +110,7 @@ export class SkillsProcessor implements Processor<'skills-processor'> {
    * Format skill location (path to SKILL.md file)
    */
   private formatLocation(skill: Skill): string {
-    return `${skill.path}/SKILL.md`;
+    return this._formatLocation ? this._formatLocation(skill) : `${skill.path}/SKILL.md`;
   }
 
   /**
@@ -216,6 +236,7 @@ ${skillsMd}`;
           'IMPORTANT: Skills are NOT tools. Do not call skill names directly as tool names. ' +
           'To use a skill, call the `skill` tool with the skill name as the "name" parameter. ' +
           'If multiple skills share the same name, use the skill path (shown in the location field) instead of the name to disambiguate. ' +
+          'The location field identifies a skill for the `skill` and `skill_read` tools; it is not guaranteed to exist on your workspace filesystem, so read skill files with `skill_read` rather than with filesystem tools. ' +
           'When a user asks about a topic covered by an available skill, activate it immediately without asking for permission first.',
       });
     }

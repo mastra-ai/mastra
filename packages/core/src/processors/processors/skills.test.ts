@@ -236,6 +236,41 @@ describe('SkillsProcessor', () => {
       );
     });
 
+    it('should render default location as skill path + SKILL.md', async () => {
+      await processor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      } as any);
+
+      expect(mockMessageList.addSystem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: 'system',
+          content: expect.stringContaining('<location>/skills/code-review/SKILL.md</location>'),
+        }),
+      );
+    });
+
+    it('should render location via formatLocation override', async () => {
+      const remappedProcessor = new SkillsProcessor({
+        workspace: mockWorkspace,
+        formatLocation: skill => `/mnt/bundle/${skill.name}/SKILL.md`,
+      });
+
+      await remappedProcessor.processInputStep({
+        messageList: mockMessageList as any,
+        tools: {},
+      } as any);
+
+      expect(mockMessageList.addSystem).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: 'system',
+          content: expect.stringContaining('<location>/mnt/bundle/code-review/SKILL.md</location>'),
+        }),
+      );
+      const contents = mockMessageList.addSystem.mock.calls.map(c => c[0].content).join('\n');
+      expect(contents).not.toContain('/skills/code-review/SKILL.md');
+    });
+
     it('should not inject skills when none are configured', async () => {
       const emptyMockSkills = {
         ...createMockWorkspaceSkills(),
