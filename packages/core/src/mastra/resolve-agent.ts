@@ -14,7 +14,9 @@ import type { Mastra } from '.';
  *   destructive action on it.
  */
 export type ResolveAgentByIdResult =
-  { status: 'found'; agent: Agent } | { status: 'missing' } | { status: 'error'; error: unknown };
+  | { status: 'found'; agent: Agent }
+  | { status: 'missing' }
+  | { status: 'error'; error: unknown };
 
 /**
  * Resolve an agent by id the same way server handlers do: in-memory registry
