@@ -33,7 +33,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/observability": "workspace:*",
-    "posthog-node": "^5.37.0"
+    "posthog-node": "^5.46.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

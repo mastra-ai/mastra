@@ -33,7 +33,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/observability": "workspace:*",
-    "dd-trace": "^5.108.0"
+    "dd-trace": "^5.117.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
