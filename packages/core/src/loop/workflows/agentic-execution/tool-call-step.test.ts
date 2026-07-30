@@ -443,6 +443,91 @@ describe('createToolCallStep tool approval workflow', () => {
     expectNoToolExecution();
   });
 
+  it('declines without a live requireToolApproval policy when suspendData marks approval (#20470)', async () => {
+    // Mirrors declineToolCall after agent-level requireToolApproval (boolean/function) gated
+    // the original suspend: resume helpers do not re-pass the policy, and function policies
+    // do not survive RequestContext serialization. The suspend payload still records the wait.
+    const inputData = makeInputData();
+    const toolsWithoutFlag = {
+      'test-tool': {
+        execute: vi.fn().mockResolvedValue({ leaked: true }),
+      },
+    };
+    const step = createToolCallStep({
+      tools: toolsWithoutFlag,
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+      // intentionally no requireToolApproval — lost on resume
+    });
+
+    const result = await step.execute(
+      makeExecuteParams({
+        inputData,
+        resumeData: { approved: false },
+        suspendData: {
+          requireToolApproval: {
+            toolCallId: inputData.toolCallId,
+            toolName: inputData.toolName,
+            args: inputData.args,
+          },
+        },
+      }),
+    );
+
+    expect(result).toEqual({
+      approval: {
+        id: inputData.toolCallId,
+        approved: false,
+        reason: 'Tool call was not approved by the user',
+      },
+      ...inputData,
+    });
+    expect(toolsWithoutFlag['test-tool'].execute).not.toHaveBeenCalled();
+  });
+
+  it('approves exactly once when live policy is gone but suspendData marks approval', async () => {
+    const inputData = makeInputData();
+    const toolResult = { success: true };
+    const toolsWithoutFlag = {
+      'test-tool': {
+        execute: vi.fn().mockResolvedValue(toolResult),
+      },
+    };
+    const step = createToolCallStep({
+      tools: toolsWithoutFlag,
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+    });
+
+    const result = await step.execute(
+      makeExecuteParams({
+        inputData,
+        resumeData: { approved: true },
+        suspendData: {
+          requireToolApproval: {
+            toolCallId: inputData.toolCallId,
+            toolName: inputData.toolName,
+            args: inputData.args,
+          },
+        },
+      }),
+    );
+
+    expect(toolsWithoutFlag['test-tool'].execute).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      result: toolResult,
+      ...inputData,
+      approval: {
+        id: inputData.toolCallId,
+        approved: true,
+      },
+    });
+  });
+
   it('should return inputData as-is for provider-executed tools (no client execution)', async () => {
     // Provider-executed tools are handled by the stream path (tool-call + tool-result chunks
     // in llm-execution-step), so tool-call-step just passes through inputData unchanged.
