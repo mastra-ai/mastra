@@ -402,9 +402,6 @@ beforeEach(() => {
   sourceControlStorage.sessionsRows = tables.sessions as any;
   featureEnabled = true;
   sandboxEnabled = true;
-  // No Postgres in these scenario tests: keep the project lock in-process.
-  // The in-process mutex still serializes same-replica callers (S2).
-  process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
   mintCount = 0;
   repositoryAccessCount = 0;
   pushImpl = async () => {};
@@ -419,7 +416,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete process.env.MASTRACODE_DISTRIBUTED_LOCK;
   vi.clearAllMocks();
 });
 
@@ -570,8 +566,8 @@ describe('S1: full write-back journey through the real route handlers', () => {
   });
 });
 
-// ── S2: concurrent push serialisation (per-project mutex) ─────────────────
-describe('S2: per-project mutex serialises concurrent pushes', () => {
+// ── S2: concurrent push serialisation (per-session mutex) ─────────────────
+describe('S2: concurrent pushes', () => {
   function seed(id: string, userId = 'u1', orgId = 'org1') {
     tables.projectRepositories.push(
       projectRepositoryRow({
@@ -610,42 +606,33 @@ describe('S2: per-project mutex serialises concurrent pushes', () => {
     });
   }
 
-  it('does not start the second push for the same project until the first resolves', async () => {
+  it('serializes pushes for the same project session', async () => {
     seed('p1');
     const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
 
-    const order: string[] = [];
     const gate = deferred();
     let active = 0;
     let maxConcurrent = 0;
     pushImpl = async () => {
       active++;
       maxConcurrent = Math.max(maxConcurrent, active);
-      order.push(`start:${active}`);
-      // First push blocks on the gate; both wait on the same deferred so the
-      // mutex (not wall-clock) determines ordering.
       await gate.promise;
       active--;
-      order.push('end');
     };
 
     const first = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/a', sessionId: 'session-p1' });
     const second = postJson(app, '/web/github/projects/p1/push', { branch: 'feat/b', sessionId: 'session-p1' });
 
-    // Let microtasks flush; only the first push body should have begun.
     await new Promise(r => setTimeout(r, 10));
     expect(pushBranch).toHaveBeenCalledTimes(1);
     expect(maxConcurrent).toBe(1);
 
-    // Release the gate → both complete, second runs only after the first ends.
     gate.resolve();
     const [r1, r2] = await Promise.all([first, second]);
     expect(r1.status).toBe(200);
     expect(r2.status).toBe(200);
     expect(pushBranch).toHaveBeenCalledTimes(2);
-    // The mutex never let two push bodies overlap.
     expect(maxConcurrent).toBe(1);
-    expect(order).toEqual(['start:1', 'end', 'start:1', 'end']);
   });
 
   it('allows pushes for different projects to overlap', async () => {

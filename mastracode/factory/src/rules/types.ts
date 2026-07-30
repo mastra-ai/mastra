@@ -15,6 +15,7 @@ export const FACTORY_GITHUB_EVENTS = [
   'pullRequestUpdated',
   'pullRequestReviewRequested',
   'pullRequestMerged',
+  'pullRequestClosed',
 ] as const;
 export type FactoryGithubEventName = (typeof FACTORY_GITHUB_EVENTS)[number];
 
@@ -22,7 +23,12 @@ export const FACTORY_LINEAR_EVENTS = ['issueObserved'] as const;
 export type FactoryLinearEventName = (typeof FACTORY_LINEAR_EVENTS)[number];
 
 export type FactoryRuleJsonValue =
-  null | boolean | number | string | FactoryRuleJsonValue[] | { [key: string]: FactoryRuleJsonValue };
+  | null
+  | boolean
+  | number
+  | string
+  | FactoryRuleJsonValue[]
+  | { [key: string]: FactoryRuleJsonValue };
 
 export interface FactoryRuleItemContext {
   id: string;
@@ -191,6 +197,12 @@ export interface FactoryTransitionDecision extends FactoryCommitDecisionBase {
   type: 'transition';
   board: FactoryRuleBoard;
   stage: FactoryRuleStage;
+  /**
+   * Delivered to the item's active session (waking it if idle) after the
+   * transition commits. Skipped when the item has no active run binding, so
+   * informational messages never fail the transition.
+   */
+  message?: { text: string; role?: string };
 }
 
 export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisionBase {

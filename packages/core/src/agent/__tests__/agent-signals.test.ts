@@ -11,6 +11,7 @@ import type { EventCallback } from '../../events/types';
 import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import { MAX_NOTIFICATION_DELIVERY_ATTEMPTS } from '../../notifications/delivery-policy';
 import { dispatchDueNotifications } from '../../notifications/dispatcher';
 import { InMemoryNotificationsStorage } from '../../notifications/storage';
 import { createNotificationInboxTool } from '../../notifications/tool';
@@ -1445,6 +1446,64 @@ describe('Agent signals', () => {
       const stored = await notifications.getNotification({ threadId: 'notification-thread', id: result.record.id });
       expect(stored).toMatchObject({ status: 'pending', deliveryAttempts: 1 });
       expect(stored?.deliveredSignalId).toBeUndefined();
+    } finally {
+      sendSignal.mockRestore();
+    }
+  });
+
+  it('keeps a rejected notification summary due for retry', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'rejected-summary-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'rejected-summary-agent',
+      name: 'Rejected Summary Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('unused'),
+      notifications: {
+        deliveryPolicy: {
+          decide: ({ now }) => ({ action: 'summarize', summaryAt: now, reason: 'test-summary-now' }),
+        },
+      },
+    });
+    const mastra = new Mastra({ agents: { rejectedSummaryAgent: agent }, storage, logger: false });
+    const rejectedAccepted = Promise.reject(new Error('summary rejected'));
+    rejectedAccepted.catch(() => {});
+    const sendSignal = vi.spyOn(agentThreadStreamRuntime, 'sendSignal').mockReturnValue({
+      accepted: rejectedAccepted,
+      signal: createSignal({ type: 'notification', tagName: 'notification-summary', contents: 'Rejected' }),
+    } as any);
+
+    try {
+      const result = await agent.sendNotificationSignal(
+        { source: 'github', kind: 'ci-status', priority: 'medium', summary: 'Rejected summary' },
+        { resourceId: 'summary-user', threadId: 'summary-thread' },
+      );
+
+      expect(result.record).toMatchObject({
+        status: 'pending',
+        deliveryAttempts: 1,
+        lastDeliveryError: 'summary rejected',
+      });
+      const stored = await notifications.getNotification({ threadId: 'summary-thread', id: result.record.id });
+      expect(stored?.summaryAt).toBeInstanceOf(Date);
+      await expect(notifications.listDueNotifications({ now: new Date() })).resolves.toMatchObject([
+        { id: result.record.id },
+      ]);
+
+      for (let attempt = 2; attempt <= MAX_NOTIFICATION_DELIVERY_ATTEMPTS; attempt++) {
+        await dispatchDueNotifications({ mastra, storage: notifications, now: new Date() });
+        await expect(
+          notifications.getNotification({ threadId: 'summary-thread', id: result.record.id }),
+        ).resolves.toMatchObject({ deliveryAttempts: attempt });
+      }
+
+      await expect(
+        notifications.getNotification({ threadId: 'summary-thread', id: result.record.id }),
+      ).resolves.toMatchObject({ status: 'failed', deliveryAttempts: MAX_NOTIFICATION_DELIVERY_ATTEMPTS });
+      await expect(notifications.listDueNotifications({ now: new Date() })).resolves.toEqual([]);
+
+      await dispatchDueNotifications({ mastra, storage: notifications, now: new Date() });
+      expect(sendSignal).toHaveBeenCalledTimes(MAX_NOTIFICATION_DELIVERY_ATTEMPTS);
     } finally {
       sendSignal.mockRestore();
     }

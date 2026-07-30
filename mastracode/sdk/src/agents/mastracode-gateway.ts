@@ -303,12 +303,16 @@ export class MastraCodeGateway extends MastraModelGateway {
     );
     if (customProvider?.apiKey) return true;
     return hasResolvedAuth(
-      MastraCodeGateway.resolveProviderAuth({
-        gatewayId: this.id,
-        providerId: parsed.providerId,
-        modelId: parsed.modelId,
-        routerId: modelId,
-      }),
+      MastraCodeGateway.resolveProviderAuth(
+        {
+          gatewayId: this.id,
+          providerId: parsed.providerId,
+          modelId: parsed.modelId,
+          routerId: modelId,
+        },
+        undefined,
+        this.#credentials,
+      ),
     );
   }
 
@@ -495,6 +499,7 @@ export class MastraCodeGateway extends MastraModelGateway {
 
     return new ModelRouterLanguageModel({
       id: `${args.providerId}/${args.modelId}` as `${string}/${string}`,
+      apiKey: args.apiKey,
       headers: args.headers,
     }) as unknown as GatewayLanguageModel;
   }

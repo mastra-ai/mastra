@@ -7,7 +7,7 @@ packages:
 
 # Control flow
 
-Workflows run a sequence of predefined tasks, and you can control how that flow is executed. Tasks are divided into **steps**, which can be executed in different ways depending on your requirements. They can run sequentially, in parallel, or follow different paths based on conditions.
+Workflows run a sequence of predefined tasks, and you can control how that flow is executed. Tasks are divided into **steps**, which can be executed in different ways depending on your requirements. They can run sequentially or in parallel, or alternatively follow different paths based on conditions.
 
 Each step connects to the next in the workflow through defined schemas that keep data controlled and consistent.
 
@@ -58,7 +58,7 @@ export const testWorkflow = createWorkflow({
 
 ## Simultaneous steps with `.parallel()`
 
-Use `.parallel()` to run steps at the same time. All parallel steps must complete before the workflow continues to the next step. Each step's `id` is used when defining a following step's `inputSchema` and becomes the key on the `inputData` object used to access the previous step's values. The outputs of parallel steps can then be referenced or combined by a following step.
+Use `.parallel()` to run steps simultaneously. All parallel steps must complete before the workflow continues to the next step. Each step's `id` is used when defining a following step's `inputSchema` and becomes the key on the `inputData` object used to access the previous step's values. The outputs of parallel steps can then be referenced or combined by a following step.
 
 ![Concurrent steps with .parallel()](/img/workflows/workflows-control-flow-parallel.jpg)
 
@@ -108,7 +108,7 @@ export const testWorkflow = createWorkflow({
 
 ### Output structure
 
-When steps run in parallel, the output is an object where each key is the step's `id` and the value is that step's output. This allows you to access each parallel step's result independently.
+When steps run in parallel, the output is an object where each key is the step's `id` and the value is that step's output. You can access each parallel step's result independently.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
@@ -173,7 +173,7 @@ export const testWorkflow = createWorkflow({
 
 ### Handling step failures
 
-If any parallel step throws an error, the entire parallel block fails. To build resilient parallel workflows where some steps may fail — for example, multiple research agents where one might have an expired auth token — handle errors inside the step itself using try/catch:
+If any parallel step throws an error, the entire parallel block fails. To build resilient parallel workflows where some steps may fail, for example, multiple research agents where one might have an expired auth token, handle errors inside the step itself using try/catch:
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const resilientStep = createStep({
@@ -510,7 +510,7 @@ export const testWorkflow = createWorkflow({
 
 #### Concurrency limits
 
-Use `concurrency` to control the number of array items processed at the same time. The default is `1`, which runs steps sequentially. Increasing the value allows `.foreach()` to process multiple items simultaneously.
+Use `concurrency` to control the number of array items processed. The default is `1`, which runs steps sequentially. Increasing the value allows `.foreach()` to process multiple items simultaneously.
 
 ```typescript prettier:false title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({...})
@@ -638,7 +638,7 @@ export const multiDocWorkflow = createWorkflow({...})
   .commit();
 ```
 
-**Option 2: Use foreach for documents, aggregate chunks, then foreach for embeddings**
+**Option 2: Use foreach for documents and aggregate chunks, plus then foreach for embeddings**
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const downloadStep = createStep({
@@ -781,7 +781,7 @@ const processDocWorkflow = createWorkflow({...})
 workflow.foreach(processDocWorkflow, { concurrency: 3 })
 ```
 
-This is cleaner than chaining `.foreach().foreach()`, which creates nested arrays.
+The single `.foreach()` keeps the result flat. Chaining `.foreach().foreach()` creates nested arrays.
 
 **Inside `.parallel()`** - when a parallel branch needs its own multi-step pipeline:
 
@@ -842,7 +842,9 @@ workflow.foreach(fetchDataStep, { concurrency: 10 })
 
 ## Loop management
 
-Loop conditions can be implemented in different ways depending on how you want the loop to end. Common patterns include checking values returned in `inputData`, setting a maximum number of iterations, or aborting execution when a limit is reached.
+Loop conditions can be implemented in different ways depending on how you want the loop to end.
+
+Common patterns check values returned in `inputData` and set a maximum number of iterations. They can also abort execution when a limit is reached.
 
 ### Aborting loops
 
