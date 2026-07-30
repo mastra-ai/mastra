@@ -322,7 +322,7 @@ export function SankeySignals({
           sentiment trace signals connect.
         </p>
         <p className="text-neutral4 mt-2 font-mono text-xs">
-          {entityId} · Snapshot {snapshot.ordinal} of {totalSnapshots} ·{' '}
+          {entityId} ·{' '}
           {snapshot.cutoffAt
             ? `state as of ${formatSnapshotCutoff(snapshot.cutoffAt)}`
             : formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)}
@@ -372,6 +372,14 @@ export function SankeySignals({
         />
       ) : (
         <>
+          <SnapshotTimeline
+            snapshots={snapshots}
+            selectedIndex={selectedSnapshotIndex}
+            totalSnapshots={totalSnapshots}
+            isPlaying={isPlaying}
+            onPlayingChange={handlePlayingChange}
+            onSnapshotChange={selectSnapshot}
+          />
           {drillIn ? (
             <nav aria-label="Active theme drill-in" className="text-neutral4 flex flex-wrap items-center gap-2 text-sm">
               <span className="text-neutral6 text-base font-semibold">{drillIn.label}</span>
@@ -420,14 +428,6 @@ export function SankeySignals({
               drillInDisabledReason={drillInDisabledReason}
             />
           )}
-          <SnapshotTimeline
-            snapshots={snapshots}
-            selectedIndex={selectedSnapshotIndex}
-            totalSnapshots={totalSnapshots}
-            isPlaying={isPlaying}
-            onPlayingChange={handlePlayingChange}
-            onSnapshotChange={selectSnapshot}
-          />
           {drillIn && (!drillInAvailable || pathsQuery.isPending || isDrilledEmpty) ? null : (
             <>
               {perspectiveMutation.isPending ? (

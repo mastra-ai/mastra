@@ -152,15 +152,17 @@ describe('SankeySignals compare mode', () => {
       }
     });
 
-    it('compares the first and last landmarks by default with their summaries', async () => {
+    it('compares the first and last landmarks by default with date-only summaries', async () => {
       renderSankeySignals();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
 
       fireEvent.click(screen.getByRole('button', { name: 'Compare' }));
 
       const comparison = await screen.findByRole('region', { name: 'Snapshot comparison' });
-      expect(within(comparison).getByText(/snapshot 3 of 4 · window Jun 24–Jul 1, 2026 · 40 traces/)).not.toBeNull();
-      expect(within(comparison).getByText(/snapshot 4 of 4 · window Jul 1–8, 2026 · 50 traces/)).not.toBeNull();
+      expect(within(comparison).getByText('Jun 24–Jul 1, 2026')).not.toBeNull();
+      expect(within(comparison).getByText('Jul 1–8, 2026')).not.toBeNull();
+      expect(within(comparison).queryByText(/snapshot \d/)).toBeNull();
+      expect(within(comparison).queryByText(/traces/)).toBeNull();
     });
 
     it('shows a gone theme with its share movement', async () => {

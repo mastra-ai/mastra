@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Pause, Play } from 'lucide-react';
 
 import { formatSnapshotCutoff, formatSnapshotWindow, traceLabel } from './signal-formatting';
-import { snapshotTickLabel, timelineTickPositions } from './snapshot-timeline-data';
+import { snapshotTickLabel, timelineDayLabels, timelineTickPositions } from './snapshot-timeline-data';
 import type { ThemeSnapshot } from './types';
 
 export type TimelineMarkerKind = 'selected' | 'compare-a' | 'compare-b';
@@ -21,7 +21,8 @@ const MARKER_BADGES: Partial<Record<TimelineMarkerKind, string>> = {
 /**
  * Time-axis landmark track shared by the flow timeline and compare mode. Each
  * landmark renders as a tick placed proportionally to when its snapshot became
- * the current state, so bursty capture times and quiet gaps stay legible.
+ * the current state, with a day label under the first tick of each new day, so
+ * bursty capture times and quiet gaps stay legible.
  */
 export function TimelineTrack({
   snapshots,
@@ -35,10 +36,11 @@ export function TimelineTrack({
   onTickSelect: (index: number) => void;
 }) {
   const positions = timelineTickPositions(snapshots);
+  const dayLabels = timelineDayLabels(snapshots);
 
   return (
-    <div aria-label="Snapshot landmarks" className="relative mx-2 h-8 min-w-40 flex-1" role="group">
-      <div aria-hidden="true" className="bg-border1 absolute inset-x-0 top-1/2 h-0.5 -translate-y-1/2 rounded-full" />
+    <div aria-label="Snapshot landmarks" className="relative mx-2 h-12 min-w-40 flex-1" role="group">
+      <div aria-hidden="true" className="bg-border1 absolute inset-x-0 top-4 h-0.5 -translate-y-1/2 rounded-full" />
       {snapshots.map((snapshot, index) => {
         const marker = markers.get(index);
         const badge = marker ? MARKER_BADGES[marker] : undefined;
@@ -47,7 +49,7 @@ export function TimelineTrack({
             key={snapshot.snapshotId}
             aria-current={marker === 'selected' ? 'true' : undefined}
             aria-label={snapshotTickLabel(snapshot, totalCount)}
-            className={`absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 transition-colors ${
+            className={`absolute top-4 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 transition-colors ${
               marker ? MARKER_TICK_CLASSES[marker] : 'bg-surface4 border-surface2 hover:bg-accent1/60'
             }`}
             data-marker={marker}
@@ -66,6 +68,18 @@ export function TimelineTrack({
           </button>
         );
       })}
+      {snapshots.map((snapshot, index) =>
+        dayLabels[index] ? (
+          <span
+            key={`day-${snapshot.snapshotId}`}
+            aria-hidden="true"
+            className="text-neutral3 absolute top-7 -translate-x-1/2 font-mono text-[10px] tabular-nums"
+            style={{ left: `${positions[index]}%` }}
+          >
+            {dayLabels[index]}
+          </span>
+        ) : null,
+      )}
     </div>
   );
 }
@@ -126,10 +140,8 @@ export function SnapshotTimeline({
           />
         </>
       ) : null}
-      <p
-        aria-live="polite"
-        className="text-neutral4 w-full text-left font-mono text-xs tabular-nums md:ml-auto md:w-auto md:min-w-72 md:text-right"
-      >
+      {/* Announced for assistive tech only; visible text here would resize the track on every tick change. */}
+      <p aria-live="polite" className="sr-only">
         {statusParts.join(' · ')}
       </p>
     </section>

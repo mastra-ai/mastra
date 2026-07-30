@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 import { useThemeFlows } from './hooks/use-theme-flows';
-import { formatSignalName, formatSnapshotCutoff, formatSnapshotWindow, traceLabel } from './signal-formatting';
+import { formatSignalName, formatSnapshotCutoff, formatSnapshotWindow } from './signal-formatting';
 import { SignalsFrameLoadingSkeleton } from './signals-loading-skeleton';
 import { TimelineTrack } from './snapshot-timeline';
 import type { TimelineMarkerKind } from './snapshot-timeline';
@@ -21,14 +21,10 @@ function deltaLabel(delta: number) {
   return `${points >= 0 ? '+' : ''}${points}pp`;
 }
 
-function markerSummary(snapshot: ThemeSnapshot, totalCount: number) {
-  const asOf = snapshot.cutoffAt ? formatSnapshotCutoff(snapshot.cutoffAt) : undefined;
-  return [
-    `snapshot ${snapshot.ordinal} of ${totalCount}`,
-    ...(asOf ? [asOf] : []),
-    `window ${formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)}`,
-    traceLabel(snapshot.traceCount),
-  ].join(' · ');
+function markerSummary(snapshot: ThemeSnapshot) {
+  return snapshot.cutoffAt
+    ? formatSnapshotCutoff(snapshot.cutoffAt)
+    : formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt);
 }
 
 function Sparkline({
@@ -209,11 +205,11 @@ export function ThemeCompare({
       <dl className="text-neutral4 flex flex-wrap gap-x-6 gap-y-1 font-mono text-xs tabular-nums">
         <div className="flex items-baseline gap-2">
           <dt className="font-bold text-amber-400">A</dt>
-          <dd>{markerSummary(snapshotA, totalSnapshots)}</dd>
+          <dd>{markerSummary(snapshotA)}</dd>
         </div>
         <div className="flex items-baseline gap-2">
           <dt className="font-bold text-blue-400">B</dt>
-          <dd>{markerSummary(snapshotB, totalSnapshots)}</dd>
+          <dd>{markerSummary(snapshotB)}</dd>
         </div>
       </dl>
       {aIndex === bIndex ? (

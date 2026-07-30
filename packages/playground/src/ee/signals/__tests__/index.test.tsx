@@ -276,7 +276,7 @@ describe('Signals page', () => {
 
       await waitFor(() => expect(screen.getByRole('button', { name: 'Last 14 days' })).not.toBeNull());
       await waitFor(() => expect(flowSnapshotIds).toEqual(['snapshot-1', 'billing-snapshot-1', 'billing-snapshot-2']));
-      expect(await screen.findByText(/Snapshot 2 of 2/)).not.toBeNull();
+      expect(await screen.findByRole('button', { name: /Snapshot 2 of 2/ })).not.toBeNull();
     });
   });
 

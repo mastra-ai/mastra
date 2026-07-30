@@ -492,7 +492,7 @@ describe('SankeySignals drill-in', () => {
           return HttpResponse.json(isOlder ? missingSelectedThemePathsResponse : allThemePathsResponse);
         }),
       );
-      const { container } = renderSignals();
+      renderSignals();
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       await screen.findByText('2 traces analyzed');
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
@@ -543,7 +543,7 @@ describe('SankeySignals drill-in', () => {
         </QueryClientProvider>,
       );
 
-      expect(await screen.findByText(/replacement-agent · Snapshot/)).not.toBeNull();
+      expect(await screen.findByText(/replacement-agent · /)).not.toBeNull();
       expect(screen.queryByLabelText('Active theme drill-in')).toBeNull();
       expect(replacementPathsRequests).toBe(0);
     });
@@ -687,7 +687,7 @@ describe('SankeySignals drill-in', () => {
           return HttpResponse.json(allThemePathsResponse);
         }),
       );
-      const { container } = renderSignals();
+      renderSignals();
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       await screen.findByText('2 traces analyzed');
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
@@ -724,7 +724,7 @@ describe('SankeySignals drill-in', () => {
           );
         }),
       );
-      const { container } = renderSignals();
+      renderSignals();
       fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Next examples' }));
       await screen.findByText('Save the transcript with the project.');
