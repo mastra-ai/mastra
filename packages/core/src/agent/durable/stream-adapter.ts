@@ -221,6 +221,79 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // surface it in onError when the FINISH event arrives with reason 'error'.
   let lastErrorMessage: string | undefined;
 
+  // Idle/liveness watchdog. A durable run whose driving process crashed stops
+  // emitting chunks but never publishes a terminal FINISH/ERROR/ABORT event, so
+  // a producerless topic would otherwise leave the stream open forever. When
+  // `idleTimeoutMs` is set we arm a timer that terminates the stream after that
+  // much silence — unless `isAlive` confirms a producer is still driving the run
+  // (e.g. a long tool call or a suspended HITL gate), in which case we re-arm and
+  // keep waiting.
+  //
+  // Declared BEFORE `handleEvent` (which re-arms on every event) so a synchronous
+  // replay delivered during `pubsub.subscribe*` in the ReadableStream `start()`
+  // can't reference these consts in their temporal dead zone. `onIdleTimeout`
+  // references `cleanup` (defined later) but only ever runs from a timer, long
+  // after `cleanup` is initialized.
+  //
+  // `idleGeneration` guards an async `isAlive()` race: a probe that resolves
+  // after a fresh event re-armed the timer (or after a terminal event) would
+  // otherwise close an active/finished stream. Every clear/re-arm bumps the
+  // generation; the probe captures it and bails if it no longer matches.
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  let idleGeneration = 0;
+  const clearIdleTimer = () => {
+    idleGeneration += 1;
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      idleTimer = undefined;
+    }
+  };
+  const onIdleTimeout = async (generation: number) => {
+    idleTimer = undefined;
+    if (cancelled || !controller || generation !== idleGeneration) return;
+    if (isAlive) {
+      let alive = true;
+      try {
+        alive = await isAlive();
+      } catch {
+        alive = true; // transient blip ⇒ assume alive
+      }
+      // A chunk (re-arm) or terminal event during the await bumps the generation —
+      // abandon this stale probe so it can't close a now-active or finished stream.
+      if (cancelled || !controller || generation !== idleGeneration) return;
+      if (alive) {
+        armIdleTimer(); // still driving ⇒ keep waiting
+        return;
+      }
+    }
+    // No probe (bare timeout) or provably dead ⇒ terminate with an error chunk,
+    // mirroring the ERROR-event path (enqueue error chunk + safeClose, NOT
+    // controller.error which MastraModelOutput swallows). Fire onError — for
+    // observe() that schedules registry + pubsub-topic cleanup, so an
+    // idle-terminated run doesn't retain state — then unsubscribe in finally.
+    const error = new Error(`Durable agent stream idle for ${idleTimeoutMs}ms with no live producer`);
+    safeEnqueue(controller, {
+      type: 'error',
+      payload: { error },
+    } as ChunkType<OUTPUT>);
+    safeClose(controller);
+    try {
+      await onError?.({ error });
+    } catch (callbackError) {
+      logError(`[DurableAgentStream] onError callback error:`, callbackError);
+    } finally {
+      cleanup();
+    }
+  };
+  const armIdleTimer = () => {
+    if (idleTimeoutMs === undefined || idleTimeoutMs <= 0 || cancelled || !controller) return;
+    clearIdleTimer();
+    const generation = idleGeneration;
+    idleTimer = setTimeout(() => {
+      void onIdleTimeout(generation);
+    }, idleTimeoutMs);
+  };
+
   const handleEvent = async (event: Event) => {
     if (!controller) return;
 
@@ -470,55 +543,6 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       });
     }
     controller = null;
-  };
-
-  // Idle/liveness watchdog. A durable run whose driving process crashed stops
-  // emitting chunks but never publishes a terminal FINISH/ERROR/ABORT event, so
-  // a producerless topic would otherwise leave the stream open forever. When
-  // `idleTimeoutMs` is set we arm a timer that terminates the stream after that
-  // much silence — unless `isAlive` confirms a producer is still driving the run
-  // (e.g. a long tool call or a suspended HITL gate), in which case we re-arm and
-  // keep waiting. Helpers are defined after `cleanup` because `onIdleTimeout`
-  // calls it; they only run asynchronously, so the ordering is safe.
-  let idleTimer: ReturnType<typeof setTimeout> | undefined;
-  const clearIdleTimer = () => {
-    if (idleTimer) {
-      clearTimeout(idleTimer);
-      idleTimer = undefined;
-    }
-  };
-  const onIdleTimeout = async () => {
-    idleTimer = undefined;
-    if (cancelled || !controller) return;
-    if (isAlive) {
-      let alive = true;
-      try {
-        alive = await isAlive();
-      } catch {
-        alive = true; // transient blip ⇒ assume alive
-      }
-      if (cancelled || !controller) return;
-      if (alive) {
-        armIdleTimer(); // still driving ⇒ keep waiting
-        return;
-      }
-    }
-    // No probe (bare timeout) or provably dead ⇒ terminate with an error chunk,
-    // mirroring the ERROR-event path (enqueue error chunk + safeClose, NOT
-    // controller.error which MastraModelOutput swallows). Then unsubscribe.
-    safeEnqueue(controller, {
-      type: 'error',
-      payload: { error: new Error(`Durable agent stream idle for ${idleTimeoutMs}ms with no live producer`) },
-    } as ChunkType<OUTPUT>);
-    safeClose(controller);
-    cleanup();
-  };
-  const armIdleTimer = () => {
-    if (idleTimeoutMs === undefined || idleTimeoutMs <= 0 || cancelled || !controller) return;
-    clearIdleTimer();
-    idleTimer = setTimeout(() => {
-      void onIdleTimeout();
-    }, idleTimeoutMs);
   };
 
   // Create the MastraModelOutput.

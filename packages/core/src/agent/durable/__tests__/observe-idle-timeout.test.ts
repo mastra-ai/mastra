@@ -204,4 +204,44 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
 
     cleanup();
   });
+
+  it('abandons a stale isAlive probe when activity resumes mid-probe', async () => {
+    // Locks in the async-`isAlive` race guard: a probe that resolves `false`
+    // AFTER a fresh chunk has re-armed the timer must NOT close the now-active
+    // stream. Without the idle-generation check this stale `false` would.
+    const runId = 'idle-race';
+    let aliveResult = false; // the first probe (captured at call time) returns false
+    // Capture `aliveResult` at CALL time, not resolve time, so the in-flight
+    // probe keeps its original verdict even after the flag is flipped below.
+    const isAlive = () => {
+      const captured = aliveResult;
+      return new Promise<boolean>(resolve => setTimeout(() => resolve(captured), IDLE));
+    };
+    const { output, cleanup, ready } = makeStream(runId, { idleTimeoutMs: IDLE, isAlive });
+    await ready;
+
+    const reader = readFullStream(output.fullStream as ReadableStream<any>);
+
+    await emitChunkEvent(pubsub, runId, textChunk('a')); // arms timer (generation G)
+    await delay(IDLE * 1.2); // timer fires; onIdleTimeout awaits the slow (false) probe
+
+    aliveResult = true; // later probes report alive
+    await emitChunkEvent(pubsub, runId, textChunk('b')); // re-arms (generation G+1) mid-probe
+
+    // The stale generation-G probe resolves `false` (~2×IDLE) but must be
+    // abandoned; the generation-G+1 timer's probe resolves `true` and re-arms.
+    // The stream must stay open across all of it.
+    await delay(IDLE * 4);
+    expect(reader.isClosed()).toBe(false);
+    expect(reader.chunks.filter(c => c.type === 'error')).toHaveLength(0);
+
+    // A real terminal event still closes cleanly.
+    await emitFinishEvent(pubsub, runId, finishData);
+    const result = await settleWithin(reader.done, IDLE * 20);
+    expect(result).toBe('done');
+    expect(reader.isClosed()).toBe(true);
+    expect(reader.chunks.filter(c => c.type === 'error')).toHaveLength(0);
+
+    cleanup();
+  });
 });
