@@ -33,7 +33,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const ITEM_NAME = 'Settings Path Application navigation /settings';
+// Spacing between the parts of a composed accessible name is not stable across environments
+const ITEM_NAME = /Settings\s*Path\s*Application navigation\s*\/settings/;
+const SCOPE_NAME = /Navigation\s*2/;
 
 function renderPalette() {
   const selectScope = vi.fn();
@@ -88,9 +90,9 @@ describe('CommandPalette', () => {
   it('marks the active scope pressed and reports scope and item selection to the application', () => {
     const { selectScope, selectItem } = renderPalette();
 
-    expect(screen.getByRole('button', { name: 'Navigation 2' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: SCOPE_NAME }).getAttribute('aria-pressed')).toBe('true');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Navigation 2' }));
+    fireEvent.click(screen.getByRole('button', { name: SCOPE_NAME }));
     fireEvent.click(screen.getByRole('option', { name: ITEM_NAME }));
 
     expect(selectScope).toHaveBeenCalledOnce();
