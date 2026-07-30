@@ -462,19 +462,34 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
         case AgentStreamEventTypes.SUSPENDED: {
           const data = streamEvent.data as AgentSuspendedEventData;
-          await onSuspended?.(data);
-          // By default we leave the stream open on suspend so a later resume
-          // can keep streaming chunks. `generate()`/`resumeGenerate()` opt
-          // into closing here so `getFullOutput()` can resolve.
+          // By default we leave the stream open on suspend so a later resume can
+          // keep streaming chunks (the watchdog stays armed; a suspended-but-live
+          // run reads as attachable via isAlive). `generate()`/`resumeGenerate()`
+          // opt into closing so `getFullOutput()` can resolve.
           if (closeOnSuspend) {
-            safeClose(controller);
+            // Mark terminal BEFORE awaiting onSuspended: handleEvent re-armed the
+            // watchdog at the top, and a slow callback (> idleTimeoutMs) would
+            // otherwise let it fire and emit a spurious idle error on an
+            // already-closing run. safeClose in `finally` so a throwing callback
+            // can't skip closure.
             markTerminated();
+            try {
+              await onSuspended?.(data);
+            } finally {
+              safeClose(controller);
+            }
+          } else {
+            await onSuspended?.(data);
           }
           break;
         }
 
         case AgentStreamEventTypes.ABORT: {
           const data = streamEvent.data as AgentAbortEventData;
+          // Mark terminal BEFORE awaiting onAbort, for the same reason as the
+          // closeOnSuspend path above — a slow callback must not let the re-armed
+          // watchdog fire against an already-aborted run.
+          markTerminated();
           try {
             await onAbort?.(data);
           } catch (callbackError) {
@@ -482,7 +497,6 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           }
           // Abort closes the stream — the run will not continue.
           safeClose(controller);
-          markTerminated();
           break;
         }
 

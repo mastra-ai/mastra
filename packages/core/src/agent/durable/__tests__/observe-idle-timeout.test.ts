@@ -6,6 +6,8 @@ import {
   createDurableAgentStream,
   emitChunkEvent,
   emitFinishEvent,
+  emitSuspendedEvent,
+  emitAbortEvent,
   type DurableAgentStreamResult,
 } from '../stream-adapter';
 
@@ -299,6 +301,52 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     // no stray idle-error chunk.
     await delay(IDLE * 4);
     expect(isAlive).not.toHaveBeenCalled();
+    expect(reader.chunks.filter(c => c.type === 'error')).toHaveLength(0);
+
+    cleanup();
+  });
+
+  it('does not emit a spurious idle error when a slow onSuspended closes the stream', async () => {
+    // Terminal state must be marked BEFORE awaiting a terminal callback. handleEvent
+    // re-arms the watchdog on every event; with closeOnSuspend + an onSuspended that
+    // runs longer than idleTimeoutMs, marking terminal only AFTER the await would let
+    // the re-armed timer fire against an already-closing run and emit a bogus idle error.
+    const runId = 'idle-suspend-slow';
+    const { output, cleanup, ready } = makeStream(runId, {
+      idleTimeoutMs: IDLE,
+      isAlive: () => false,
+      closeOnSuspend: true,
+      onSuspended: () => delay(IDLE * 3), // slower than the idle window
+    });
+    await ready;
+
+    const reader = readFullStream(output.fullStream as ReadableStream<any>);
+    await emitSuspendedEvent(pubsub, runId, {} as any);
+
+    const result = await settleWithin(reader.done, IDLE * 20);
+    expect(result).toBe('done');
+    expect(reader.isClosed()).toBe(true);
+    expect(reader.chunks.filter(c => c.type === 'error')).toHaveLength(0);
+
+    cleanup();
+  });
+
+  it('does not emit a spurious idle error when a slow onAbort ends the stream', async () => {
+    // Same invariant on the ABORT path: mark terminal before awaiting onAbort.
+    const runId = 'idle-abort-slow';
+    const { output, cleanup, ready } = makeStream(runId, {
+      idleTimeoutMs: IDLE,
+      isAlive: () => false,
+      onAbort: () => delay(IDLE * 3),
+    });
+    await ready;
+
+    const reader = readFullStream(output.fullStream as ReadableStream<any>);
+    await emitAbortEvent(pubsub, runId, {} as any);
+
+    const result = await settleWithin(reader.done, IDLE * 20);
+    expect(result).toBe('done');
+    expect(reader.isClosed()).toBe(true);
     expect(reader.chunks.filter(c => c.type === 'error')).toHaveLength(0);
 
     cleanup();
