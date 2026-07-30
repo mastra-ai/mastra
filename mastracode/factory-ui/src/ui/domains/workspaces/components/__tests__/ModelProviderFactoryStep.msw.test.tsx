@@ -81,6 +81,12 @@ describe('Model provider onboarding', () => {
       expect(screen.queryByRole('button', { name: 'Groq' })).not.toBeInTheDocument();
       // The sign-in section is a fixed top-level section — search never hides it.
       expect(screen.getByRole('button', { name: 'Continue with Anthropic' })).toBeInTheDocument();
+
+      await user.clear(screen.getByRole('searchbox', { name: 'Search model providers' }));
+      await user.type(screen.getByRole('searchbox', { name: 'Search model providers' }), 'no-such-provider');
+
+      expect(screen.getByText(/No providers match/)).toHaveTextContent('No providers match “no-such-provider”.');
+      expect(screen.queryByRole('button', { name: 'Amazon Bedrock' })).not.toBeInTheDocument();
     });
   });
 
