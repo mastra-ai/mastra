@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router';
 
+import { OverlaysProvider } from '../../../../lib/overlays';
 import { SettingsHeader } from '../../../settings/components/SettingsHeader';
 import { ChatHeader } from '../ChatHeader';
 
@@ -41,8 +42,10 @@ function renderMobileHeader() {
   render(
     <MemoryRouter initialEntries={['/settings/preferences']}>
       <MainSidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
-        <ChatHeader mobileContent={<SettingsHeader autoFocus placement="mobile" />} />
-        <SidebarStateProbe />
+        <OverlaysProvider>
+          <ChatHeader mobileContent={<SettingsHeader autoFocus placement="mobile" />} />
+          <SidebarStateProbe />
+        </OverlaysProvider>
       </MainSidebarProvider>
     </MemoryRouter>,
   );
@@ -55,6 +58,8 @@ describe('ChatHeader', () => {
     const mobileHeader = screen.getByRole('banner');
     expect(within(mobileHeader).getByRole('heading', { name: 'Preferences' })).toHaveFocus();
     expect(within(mobileHeader).getByRole('button', { name: 'Close settings' })).toBeInTheDocument();
+    expect(within(mobileHeader).getByRole('button', { name: 'Search and navigate' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
   });
 
   it('opens the design-system mobile sidebar', async () => {
@@ -75,18 +80,23 @@ describe('ChatHeader', () => {
         collapsedWidth={0}
         mobileBreakpoint={768}
       >
-        <ChatHeader />
-        <DesktopSidebarStateProbe />
+        <OverlaysProvider>
+          <ChatHeader />
+          <DesktopSidebarStateProbe />
+        </OverlaysProvider>
       </MainSidebarProvider>,
     );
 
     const trigger = screen.getByRole('button', { name: 'Toggle sidebar' });
+    expect(screen.getByRole('button', { name: 'Search and navigate' })).toBeInTheDocument();
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByTestId('desktop-sidebar-state')).toHaveTextContent('collapsed');
+    expect(screen.queryByLabelText('Open navigation menu')).not.toBeInTheDocument();
 
     await userEvent.click(trigger);
 
     expect(screen.getByTestId('desktop-sidebar-state')).toHaveTextContent('default');
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument();
   });
 });

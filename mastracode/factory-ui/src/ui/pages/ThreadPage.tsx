@@ -1,68 +1,62 @@
-import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
-import { useState } from 'react';
-import { useMatch, useParams } from 'react-router';
+import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import type { ReactNode } from 'react';
+import { useParams } from 'react-router';
 
 import { Sidebar } from '../Sidebar';
 import { ChatLayout } from '../layouts/ChatLayout';
-import { renderedPaths } from '../domains/workspace-viewer/config';
-import { WorkspaceViewerPanel } from '../domains/workspace-viewer/components/WorkspaceViewerPanel';
+import { useThreadWorkspacePath } from '../domains/workspace-viewer/hooks/useThreadWorkspacePath';
+import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
+import { WorkspaceFilesSurface } from '../domains/workspace-viewer/components/WorkspaceFilesSurface';
+import { chatColumnClass } from '../domains/workspace-viewer/layout';
+import { useInvalidateWorkspaceChangesOnRunCompletion } from '../domains/workspace-viewer/useInvalidateWorkspaceChangesOnRunCompletion';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { FactorySessionHeader } from '../domains/factory/components/RelatedFactorySessions';
-import { ChatMessageList } from '../domains/chat/components/ChatMessageList';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
+import { ConnectionNotice } from '../domains/chat/components/ConnectionNotice';
+import { EmptyThreadState } from '../domains/chat/components/EmptyThreadState';
+import { GoalPanel } from '../domains/chat/components/GoalPanel';
 import { TaskPanel } from '../domains/chat/components/TaskPanel';
+import { Transcript } from '../domains/chat/components/Transcript';
+import { TranscriptHistoryLoader } from '../domains/chat/components/TranscriptHistoryLoader';
+import { WorkingIndicator } from '../domains/chat/components/WorkingIndicator';
 import { ChatMessageBoundary, ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
+import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
 import { useRouteThreadSync } from '../../hooks/useRouteThreadSync';
 import { useThreadPageKickoffs } from '../domains/chat/hooks/useThreadPageKickoffs';
 import { useFactoryQuery } from '../../hooks/useFactories';
-import { useUserSessionQuery } from '../../hooks/useWorkspaces';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
-const threadComposerContainerClass = 'w-full p-3 md:p-5';
-const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
+// The docked workspace card claims room on the end edge; the shell pads its own
+// scroller by it, so the column stays centred on what is left.
+const threadShellClass = `flex-1 ${chatColumnClass} [--chat-inset-end:var(--workspace-files-inset,0px)] md:[--chat-gutter:1.25rem]`;
 
 export function ThreadPage() {
-  const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId?: string; threadId?: string }>();
-  const userThreadMatch = useMatch('/factories/:factoryId/user/threads/:threadId');
-  const isMobile = useIsMobile();
-  const [workspaceViewerExpanded, setWorkspaceViewerExpanded] = useState(false);
-  const [workspaceViewerVisible, setWorkspaceViewerVisible] = useState(true);
+  const { factoryId, threadId } = useParams<{ factoryId: string; threadId?: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
-  const userSessionQuery = useUserSessionQuery(userThreadMatch ? threadId : undefined);
-  const isUserThreadRoute = Boolean(userThreadMatch);
-  const workspaceFactory = factoryQuery.data;
-  const workspacePath = isUserThreadRoute ? userSessionQuery.data?.sessionId : sessionId;
+  const workspace = useThreadWorkspacePath();
 
-  const resolvingSession = factoryQuery.isPending || (isUserThreadRoute && userSessionQuery.isPending);
+  const resolvingSession = factoryQuery.isPending || workspace.isPending;
 
   return (
     <ChatLayout
       sidebar={<Sidebar />}
-      header={<ChatHeader />}
-      rightPanelExpanded={workspaceViewerExpanded}
-      rightPanelAvailable={Boolean(workspacePath)}
-      onRightPanelOpen={() => setWorkspaceViewerVisible(true)}
-      onRightPanelClose={() => setWorkspaceViewerVisible(false)}
-      rightPanel={
-        workspacePath && (workspaceViewerVisible || isMobile) ? (
-          <WorkspaceViewerPanel
-            workspacePath={workspacePath}
-            renderedPaths={renderedPaths}
-            title="Workspace files"
-            context={workspaceFactory?.name}
-            onExpandedChange={setWorkspaceViewerExpanded}
-          />
-        ) : undefined
-      }
       main={
         resolvingSession ? (
-          <div className="grid h-full min-h-0 place-items-center">
-            <Spinner aria-label="Loading session" className="text-icon3" />
-          </div>
+          // bare bar stands in — the session header needs WorkspaceFilesProvider
+          <ChatShell className="flex-1">
+            <ChatShell.Bar>
+              <ChatHeader />
+            </ChatShell.Bar>
+            <div className="grid min-h-0 flex-1 place-items-center">
+              <Spinner aria-label="Loading session" className="text-icon3" />
+            </div>
+          </ChatShell>
         ) : (
           <ChatSessionBoundary threadId={threadId}>
-            <ThreadPageMain />
+            <WorkspaceFilesProvider>
+              <ThreadPageMain workspacePath={workspace.workspacePath} />
+            </WorkspaceFilesProvider>
           </ChatSessionBoundary>
         )
       }
@@ -70,40 +64,75 @@ export function ThreadPage() {
   );
 }
 
-function ThreadPageMain() {
+function ThreadPageMain({ workspacePath }: { workspacePath: string | undefined }) {
   useGlobalShortcuts();
-
-  return (
-    <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto_auto] overflow-hidden">
-      <ChatMessageBoundary>
-        <ThreadPageContent />
-      </ChatMessageBoundary>
-      <TaskPanel />
-      <ThreadComposer />
-    </div>
-  );
-}
-
-function ThreadComposer() {
-  return (
-    <div className={threadComposerContainerClass}>
-      <div className={threadComposerInnerClass} role="region" aria-label="Thread composer">
-        <ComposerPanel />
-      </div>
-    </div>
-  );
-}
-
-function ThreadPageContent() {
   useRouteThreadSync();
   useThreadPageKickoffs();
 
   return (
-    <div className="flex min-h-0 flex-col">
-      <FactorySessionHeader />
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <ChatMessageList />
-      </div>
-    </div>
+    <ThreadShell workspacePath={workspacePath}>
+      <ChatShell.Bar>
+        <FactorySessionHeader />
+      </ChatShell.Bar>
+      <ChatShell.Bar>
+        <GoalPanel />
+      </ChatShell.Bar>
+      <ChatShell.Stage>
+        <ChatShell.Viewport>
+          <ChatShell.Content className="gap-0 pt-6">
+            <ChatShell.Column className="flex-1">
+              <ConnectionNotice />
+              <ChatMessageBoundary>
+                <ThreadTranscript />
+              </ChatMessageBoundary>
+            </ChatShell.Column>
+          </ChatShell.Content>
+          <ChatShell.Dock>
+            <ChatShell.ScrollButton aria-label="Jump to latest message" />
+            <ChatShell.Column className="gap-2">
+              <TaskPanel />
+              <div role="region" aria-label="Thread composer">
+                <ComposerPanel />
+              </div>
+            </ChatShell.Column>
+          </ChatShell.Dock>
+        </ChatShell.Viewport>
+        <WorkspaceFilesSurface />
+      </ChatShell.Stage>
+    </ThreadShell>
+  );
+}
+
+// Reads the transcript so its caller does not: the context republishes on every
+// streamed chunk, and children passed through keep their element identity.
+function ThreadShell({ workspacePath, children }: { workspacePath: string | undefined; children: ReactNode }) {
+  const { busy, loadMore } = useChatTranscript();
+  useInvalidateWorkspaceChangesOnRunCompletion(workspacePath, busy);
+  const canLoadMore = loadMore.hasMore && !loadMore.isLoading;
+
+  return (
+    <ChatShell
+      className={threadShellClass}
+      scroller={{
+        autoScroll: true,
+        preserveScrollOnPrepend: true,
+        onReachStart: canLoadMore ? loadMore.load : undefined,
+      }}
+    >
+      {children}
+    </ChatShell>
+  );
+}
+
+function ThreadTranscript() {
+  const { transcript, showWorkingIndicator } = useChatTranscript();
+
+  return (
+    <>
+      <TranscriptHistoryLoader />
+      {transcript.entries.length === 0 && <EmptyThreadState />}
+      <Transcript />
+      {showWorkingIndicator && <WorkingIndicator />}
+    </>
   );
 }

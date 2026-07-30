@@ -3,7 +3,7 @@ import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
 import type { DatasetTenancyFilters, TargetType, ExperimentStatus } from '../../storage/types';
-import type { ItemToolMock, ToolMockReport } from './tool-mocks';
+import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 
 /**
  * A single data item for inline experiment data.
@@ -48,6 +48,8 @@ export interface DataItem<I = unknown, E = unknown> {
    * real tool; calling a mocked tool with non-matching args fails the item.
    */
   toolMocks?: ItemToolMock[];
+  /** Overrides the experiment's handling of tool calls not declared in `toolMocks`. */
+  unmockedToolPolicy?: UnmockedToolPolicy;
 }
 
 /**
@@ -95,6 +97,8 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   itemTimeout?: number;
   /** Maximum retries per item on failure (default: 0 = no retries). Abort errors are never retried. */
   maxRetries?: number;
+  /** Default handling for agent tool calls not declared in an item's `toolMocks` (default: `allow`). */
+  unmockedToolPolicy?: UnmockedToolPolicy;
   /** Pre-created experiment ID (for async trigger — skips experiment creation). */
   experimentId?: string;
   /** Experiment name (used for display / grouping) */

@@ -2707,6 +2707,7 @@ export interface DatasetExperimentResult {
   traceId: string | null;
   status: 'needs-review' | 'reviewed' | 'complete' | null;
   tags: string[] | null;
+  comment?: string | null;
   toolMockReport?: ToolMockReport | null;
   scores: Array<{
     scorerId: string;
@@ -2724,6 +2725,7 @@ export interface UpdateExperimentResultParams {
   resultId: string;
   status?: 'needs-review' | 'reviewed' | 'complete' | null;
   tags?: string[];
+  comment?: string | null;
 }
 
 export interface CreateDatasetParams {

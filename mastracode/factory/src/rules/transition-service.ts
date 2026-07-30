@@ -97,6 +97,10 @@ function currentStage(stages: readonly string[]): FactoryRuleStage | undefined {
 function workItemSource(source: ExternalWorkItemSource | null) {
   if (!source) return 'manual' as const;
   if (source.integrationId === 'linear') return 'linear-issue' as const;
+  // Only GitHub and Linear have provider-specific rules. Anything else (a Slack
+  // thread, say) is treated as a plain work item rather than mislabeled as a
+  // GitHub issue, which would hand its rules a non-GitHub url.
+  if (source.integrationId !== 'github') return 'manual' as const;
   return source.type === 'pull-request' ? ('github-pr' as const) : ('github-issue' as const);
 }
 

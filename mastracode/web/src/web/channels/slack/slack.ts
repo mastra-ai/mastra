@@ -14,6 +14,7 @@ import type {
   ChannelAccountLinkKey,
   ChannelIdentityStorage,
   FactoryProjectsStorage,
+  WorkItemsStorage,
 } from '@mastra/factory';
 import { createSlackAdapter } from '@mastra/slack';
 import { Card, CardText, Actions, LinkButton } from 'chat';
@@ -53,6 +54,13 @@ interface SlackChannelDeps {
    * Absent (no GitHub App configured) → chat-only sessions as before.
    */
   sourceControl?: SlackSourceControl;
+  /**
+   * Factory work-items domain. When provided, a dispatched new-session thread
+   * (DM or mention) upserts a Work-board card in Building (`execute`) carrying
+   * the Slack thread as its external source and binding the repo-backed
+   * session. Best-effort — a failure never blocks the run. Unset → no card.
+   */
+  workItems?: WorkItemsStorage;
 }
 
 /**
@@ -228,8 +236,8 @@ export async function resolveLinkedSender({
 
 /**
  * The "connect your account" card. The link is deliberately identity-free —
- * `/connect/slack` sends the visitor to Connected accounts, where "Connect
- * Slack" runs the OIDC flow and Slack itself asserts the (team, user) pair.
+ * `/connect/slack` sends the visitor to Connections, where "Connect Slack"
+ * runs the OIDC flow and Slack itself asserts the (team, user) pair.
  */
 function buildConnectCard(publicUrl: string) {
   return Card({
@@ -253,7 +261,7 @@ type FactoryRouteResult =
   /** No factory resolved — prompt card posted (when possible), do not dispatch. */
   | { status: 'blocked' }
   /** The Factory project this sender's runs route to. */
-  | { status: 'resolved'; factoryProjectId: string };
+  | { status: 'resolved'; factoryProjectId: string; slackWorkItemsEnabled: boolean };
 
 /**
  * Decide which Factory project a linked sender's run belongs to:
@@ -287,14 +295,24 @@ export async function resolveFactoryForLink({
 
   if (link.defaultFactoryProjectId) {
     const existing = await projects.get({ orgId, id: link.defaultFactoryProjectId });
-    if (existing) return { status: 'resolved', factoryProjectId: existing.id };
+    if (existing) {
+      return {
+        status: 'resolved',
+        factoryProjectId: existing.id,
+        slackWorkItemsEnabled: existing.slackWorkItemsEnabled,
+      };
+    }
   }
 
   const factories = orgId ? await projects.list({ orgId }) : [];
   if (factories.length === 1) {
     const only = factories[0]!;
     await accountLinks.setDefaultFactory({ ...key, userId: link.userId, factoryProjectId: only.id });
-    return { status: 'resolved', factoryProjectId: only.id };
+    return {
+      status: 'resolved',
+      factoryProjectId: only.id,
+      slackWorkItemsEnabled: only.slackWorkItemsEnabled,
+    };
   }
 
   const publicUrl = webPublicUrl();
@@ -311,7 +329,7 @@ export async function resolveFactoryForLink({
           ),
           Actions([
             LinkButton({
-              url: `${publicUrl}/settings/connected-accounts`,
+              url: `${publicUrl}/settings/connections`,
               label: 'Open settings',
             }),
           ]),
@@ -454,7 +472,9 @@ async function gateDispatch(
   message: HandlerMessage,
   { accountLinks, projects }: SlackChannelDeps,
   ctx: ChannelHandlerContext,
-): Promise<{ routed?: { link: ChannelAccountLink; factoryProjectId: string } } | null> {
+): Promise<{
+  routed?: { link: ChannelAccountLink; factoryProjectId: string; slackWorkItemsEnabled: boolean };
+} | null> {
   const sender = await resolveLinkedSender({ thread, message, accountLinks });
   if (sender.status === 'blocked') return null;
   // Linked senders must also route to a Factory project before a run starts.
@@ -470,13 +490,84 @@ async function gateDispatch(
     const route = await resolveFactoryForLink({ thread, message, ...sender, accountLinks, projects });
     if (route.status === 'blocked') return null;
     if (route.status === 'resolved') {
-      return { routed: { link: sender.link, factoryProjectId: route.factoryProjectId } };
+      return {
+        routed: {
+          link: sender.link,
+          factoryProjectId: route.factoryProjectId,
+          slackWorkItemsEnabled: route.slackWorkItemsEnabled,
+        },
+      };
     }
   }
   return {};
 }
 
+/**
+ * Upsert the Work-board card for a dispatched Slack-thread run. Keyed on the
+ * thread via `externalSource` — the work-items domain's unique
+ * `(factory_project_id, source_key)` index makes repeat messages reuse the
+ * same card, and `reuseMode: 'preserve'` keeps a card a human already dragged
+ * across stages untouched. The card lands in Building (`execute`) for every
+ * dispatched thread (DM or mention) — there is deliberately no per-origin
+ * stage split; smart routing is a follow-up.
+ *
+ * The session id / branch / threadId and the workspace deep-link are resolved
+ * by the caller (which already looked up the internal thread), so this helper
+ * just shapes and writes. Best-effort: the run is already dispatched, so a
+ * failure logs instead of throwing — work-item creation must never abort a Slack run.
+ */
+export async function upsertThreadWorkItem({
+  workItems,
+  thread,
+  message,
+  link,
+  factoryProjectId,
+  session,
+  url,
+}: {
+  workItems: WorkItemsStorage;
+  thread: HandlerThread;
+  message: HandlerMessage;
+  link: ChannelAccountLink;
+  factoryProjectId: string;
+  /**
+   * The repo-backed Factory session to bind under the `chat` role, or
+   * `undefined` for a chat-only thread (no Factory session to bind).
+   */
+  session?: { sessionId: string; branch: string; threadId: string };
+  /** Workspace deep-link to the running session; omitted when no public URL. */
+  url?: string;
+}): Promise<void> {
+  try {
+    const title = message.text.length > 80 ? `${message.text.slice(0, 79)}…` : message.text;
+
+    await workItems.upsert({
+      orgId: link.orgId ?? '',
+      userId: link.userId,
+      factoryProjectId,
+      reuseMode: 'preserve',
+      input: {
+        title: title || 'Slack thread',
+        // `integrationId` is the platform ('slack'); `type` is a single
+        // constant (no DM/mention distinction); `externalId` is the stable
+        // platform thread id — together they form the idempotency key.
+        externalSource: {
+          integrationId: thread.adapter.name,
+          type: 'slack-thread',
+          externalId: thread.id,
+          ...(url ? { url } : {}),
+        },
+        stages: ['execute'],
+        ...(session ? { sessions: { chat: session } } : {}),
+      },
+    });
+  } catch (error) {
+    console.warn('[slack] work-item creation failed for thread', thread.id, error);
+  }
+}
+
 function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
+  const { workItems } = deps;
   return async (thread, message, defaultHandler, ctx) => {
     // Gate on the sender having linked their Slack account to a Mastra tenant.
     // Unlinked → post the ephemeral Connect card and stop; no session/run is
@@ -497,13 +588,10 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
 
     if (!isNewSession) return;
 
-    // The announcement card is only useful with a public origin to deep-link
-    // to — otherwise the link would be `undefined/threads/...`. Without one the
-    // session is still created; we skip the (broken) card and the lookup it
-    // needs entirely.
-
-    if (!process.env.MASTRACODE_PUBLIC_URL) return;
-
+    // The internal-thread lookup and deep-link are needed by BOTH the
+    // announcement card AND work-item creation, so they run BEFORE the
+    // card-only `MASTRACODE_PUBLIC_URL` gate — a deployment without a public
+    // origin should still create board cards, just without a clickable link.
     const internalThread = await findInternalThread(ctx.mastra, thread);
     if (!internalThread) {
       console.warn('[onMention] no internal thread found for', thread.id);
@@ -530,15 +618,46 @@ function createNewSessionChatHandler(deps: SlackChannelDeps): ChannelHandler {
     // ignores. Chat-only threads need it (their segment is the literal string
     // `channel`), and so does the unrouted fallback, which has no workspace
     // segment at all — `ChannelThreadRedirect` forwards the search through.
+    //
+    // One shared deep-link: the card's button and the work-item `url` read the
+    // SAME value so they can never drift. Undefined without a public origin —
+    // the card is then skipped, but the work item is still created (url omitted).
     const needsResourceParam = isChatOnly || !gate.routed;
-    const url = needsResourceParam
-      ? `${process.env.MASTRACODE_PUBLIC_URL}${threadPath}?resourceId=${encodeURIComponent(internalThread.resourceId)}`
-      : `${process.env.MASTRACODE_PUBLIC_URL}${threadPath}`;
+    const deepLink = process.env.MASTRACODE_PUBLIC_URL
+      ? needsResourceParam
+        ? `${process.env.MASTRACODE_PUBLIC_URL}${threadPath}?resourceId=${encodeURIComponent(internalThread.resourceId)}`
+        : `${process.env.MASTRACODE_PUBLIC_URL}${threadPath}`
+      : undefined;
+
+    // A dispatched, routed new-session thread becomes a Work-board card in
+    // Building. Only routed senders (linked → factory) have the org/user/factory
+    // a work item needs. Bind the repo-backed Factory session under the `chat`
+    // role; a chat-only `channel:` resourceId is NOT a session id, so bind
+    // nothing rather than a bad id. Best-effort (the helper swallows failures).
+    if (workItems && gate.routed?.slackWorkItemsEnabled) {
+      const session = isChatOnly
+        ? undefined
+        : { sessionId: internalThread.resourceId, branch: threadBranch(thread.id), threadId: internalThread.id };
+      await upsertThreadWorkItem({
+        workItems,
+        thread,
+        message,
+        link: gate.routed.link,
+        factoryProjectId: gate.routed.factoryProjectId,
+        session,
+        url: deepLink,
+      });
+    }
+
+    // The announcement card is only useful with a public origin to deep-link
+    // to — otherwise the link would be `undefined/threads/...`. Without one the
+    // session (and now the work item) still exist; we just skip the broken card.
+    if (!deepLink) return;
 
     await thread.post(
       Card({
         title: 'New session started',
-        children: [Actions([LinkButton({ url, label: 'View session' })])],
+        children: [Actions([LinkButton({ url: deepLink, label: 'View session' })])],
       }),
     );
   };
