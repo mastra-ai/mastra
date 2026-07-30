@@ -61,6 +61,8 @@ Submit one complete canonical WorkflowDefinition with submit-workflow-draft. Map
 - Preceding step output: { "step": "lookup-customer", "path": "customerId" }
 Use mapConfig as a JSON object whose output fields each contain exactly one source descriptor. If validation rejects the definition, correct the complete definition using every returned diagnostic and submit it again. Studio automatically makes valid definitions Ready; never persist them because only the user may explicitly Save.
 
+Agent steps take { prompt: string } and by default output { text: string }. Set outputSchema on an agent step to override that default for that step only. A foreach step needs a top-level array as its input; a mapping cannot build or unwrap an array root, so when the item array must be synthesized or reshaped, put an agent step with a top-level array outputSchema before the foreach (the bridge agent) and feed its array into the foreach.
+
 ## Current accepted workflow definition
 \`\`\`json
 ${JSON.stringify(authoringState.draft, null, 2)}

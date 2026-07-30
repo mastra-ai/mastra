@@ -116,7 +116,13 @@ describe('workflow draft client tools', () => {
         available: true,
         resources: [
           { type: 'tool', found: true, registryKey: 'lookupCustomer', runtimeId: 'lookup-customer' },
-          { type: 'agent', found: true, registryKey: 'supportAgent', runtimeId: 'support-agent' },
+          {
+            type: 'agent',
+            found: true,
+            registryKey: 'supportAgent',
+            runtimeId: 'support-agent',
+            outputContract: expect.stringContaining('outputSchema'),
+          },
           {
             type: 'workflow',
             found: true,
@@ -329,6 +335,77 @@ describe('workflow draft client tools', () => {
     });
   });
 
+  describe('when a graph entry is structurally malformed so the canonical schema cannot parse it', () => {
+    it('returns the schema issues as an actionable diagnostic instead of throwing an opaque tool error', async () => {
+      let candidate: WorkflowDraftCandidate | undefined;
+      const store = createStore({ context: validationContext, onCandidateChange: next => (candidate = next) });
+      // The exact wrong foreach shape a model guesses when it does not follow the
+      // canonical `{ type: "foreach", step: {...}, opts: {...} }` grammar. This
+      // fails the discriminated union in the canonical schema, which previously
+      // threw a raw ZodError out of execute — the model then saw an opaque
+      // failure with no hint about which keys were wrong.
+      const result = (await executeTool(store.tools['submit-workflow-draft'], {
+        ...validDefinition,
+        graph: [{ type: 'foreach', id: 'loop', items: 'x', itemWorkflow: 'greetingWorkflow' }],
+      })) as { success: boolean; error?: string; issues?: unknown[] };
+
+      expect(result.success).toBe(false);
+      // Studio routes structural failures through Core's own tool-input
+      // validation, so the model reads exactly what it would from a native Core
+      // tool: the standard preamble, one `- path: message` line per issue, and
+      // the arguments it actually sent.
+      expect(result.error).toContain('Tool input validation failed for submit-workflow-draft');
+      expect(result.error).toContain('Provided arguments:');
+      // The offending keys are named at their path, so the model can correct the
+      // shape instead of guessing key names.
+      expect(result.error).toContain('graph.0: Unrecognized keys: "id", "items", "itemWorkflow"');
+      // A malformed submission never became a candidate, so it must not clobber
+      // authoring state or the previously displayed draft.
+      expect(store.state).toMatchObject({ revision: 0, lifecycle: 'untouched' });
+      expect(candidate).toBeUndefined();
+    });
+
+    it('reports a non-array graph as a validation issue rather than escaping as a thrown normalization error', async () => {
+      let candidate: WorkflowDraftCandidate | undefined;
+      const store = createStore({ context: validationContext, onCandidateChange: next => (candidate = next) });
+      // Canonicalization refuses input it cannot normalize by throwing, and Zod
+      // does not catch throws out of `preprocess`. A model that wraps its graph
+      // in an object must still get a normal validation issue back.
+      const result = (await executeTool(store.tools['submit-workflow-draft'], {
+        ...validDefinition,
+        graph: { steps: [] },
+      })) as { success: boolean; error?: string };
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Tool input validation failed for submit-workflow-draft');
+      expect(result.error).toContain('graph:');
+      expect(store.state).toMatchObject({ revision: 0, lifecycle: 'untouched' });
+      expect(candidate).toBeUndefined();
+    });
+
+    it('rejects an unknown step type at its path without mutating authoring state', async () => {
+      let candidate: WorkflowDraftCandidate | undefined;
+      const store = createStore({ context: validationContext, onCandidateChange: next => (candidate = next) });
+      // The model used "map" instead of the canonical "mapping" — a bad
+      // discriminator value, so no union branch is even attempted.
+      const result = (await executeTool(store.tools['submit-workflow-draft'], {
+        ...validDefinition,
+        graph: [{ type: 'map', id: 'shape', mapConfig: {} }],
+      })) as { success: boolean; error?: string; issues?: unknown[] };
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Tool input validation failed for submit-workflow-draft');
+      // Core reports the bad discriminator at its own path and enumerates every
+      // legal step type, so the model can pick the canonical one directly.
+      expect(result.error).toContain('graph.0.type: Invalid discriminator value');
+      expect(result.error).toContain("'mapping'");
+      expect(result.error).toContain("'foreach'");
+      expect(result.error).toContain("'agent'");
+      expect(store.state).toMatchObject({ revision: 0, lifecycle: 'untouched' });
+      expect(candidate).toBeUndefined();
+    });
+  });
+
   describe('when a corrected complete definition replaces an invalid candidate', () => {
     it('accepts the replacement without model-facing repair or candidate-checkpoint choreography', async () => {
       const candidate = createWorkflowDraftCandidate(createWorkflowDraftAuthoringState('new-workflow'));
@@ -367,17 +444,20 @@ describe('workflow draft client tools', () => {
   });
 
   describe('when submit-workflow-draft is called with empty arguments', () => {
-    it('returns an actionable diagnostic that names the provider truncation failure mode instead of a raw TypeError', async () => {
+    it('returns an actionable diagnostic that tells the model to compose the definition before calling, instead of a raw TypeError', async () => {
       const store = createStore({ context: validationContext });
       const result = await executeTool(store.tools['submit-workflow-draft'], {});
 
       expect(result).toMatchObject({ success: false, reason: 'empty-arguments' });
       // A model that reads only `error` still learns what failed, how to retry,
       // and what not to do. Nothing actionable may live in a sibling field.
-      expect(result.error).toContain('No workflow definition arguments');
-      expect(result.error).toContain('provider may have truncated');
-      expect(result.error).toContain('complete WorkflowDefinition');
+      expect(result.error).toContain('with no arguments');
+      expect(result.error).toContain('Compose the complete WorkflowDefinition');
       expect(result.error).toContain('Do NOT');
+      // The old text blamed provider truncation, which misled the model into
+      // resending the same empty payload. The failure is the model calling
+      // before building the definition, so that guess must not resurface.
+      expect(result.error).not.toContain('truncated');
       expect(result.message).toBeUndefined();
       expect(store.state).toMatchObject({ revision: 0, lifecycle: 'untouched' });
     });

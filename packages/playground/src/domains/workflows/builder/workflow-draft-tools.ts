@@ -1,4 +1,5 @@
 import { createTool } from '@mastra/client-js';
+import { validateToolInput } from '@mastra/core/tools';
 import {
   normalizeWorkflowBuilderDefinition,
   workflowBuilderDefinitionInputSchema,
@@ -62,14 +63,44 @@ function toDraftDefinition(normalized: WorkflowBuilderDefinition) {
   };
 }
 
-function parseWorkflowDraftInput(input: unknown): WorkflowDraft {
-  const { dependencies, ...definition } = (input ?? {}) as { dependencies?: unknown[] };
-  const draft = toDraftDefinition(parseWorkflowDefinitionInput(definition));
-  if (!Array.isArray(dependencies) || dependencies.length === 0) return draft;
-  return {
-    ...draft,
-    dependencies: dependencies.map(dependency => toDraftDefinition(parseWorkflowDefinitionInput(dependency))),
+// Normalization is best-effort: it rejects input it cannot canonicalize (a
+// non-array `graph`, for example) by throwing, which Zod does not catch out of
+// `preprocess`. Hand such input to the schema untouched so the failure comes
+// back as a normal validation issue with a real path instead of escaping as an
+// opaque thrown client-tool error.
+function normalizeIfPossible(value: unknown): unknown {
+  try {
+    return normalizeWorkflowBuilderDefinition(value);
+  } catch {
+    return value;
+  }
+}
+
+// The same composition Core tools declare: normalize, then validate, as one
+// schema. Core's runner formats any failure identically for a native Core tool,
+// so a missed canonical shape reads the same here as it does in Mastra Code.
+const submittedDraftSchema = z.preprocess(
+  input => {
+    const { dependencies, ...definition } = (input ?? {}) as { dependencies?: unknown };
+    const root = normalizeIfPossible(definition) as Record<string, unknown>;
+    if (!Array.isArray(dependencies)) return root;
+    return { ...root, dependencies: dependencies.map(dependency => normalizeIfPossible(dependency)) };
+  },
+  workflowBuilderDefinitionSchema.extend({ dependencies: z.array(workflowBuilderDefinitionSchema).optional() }),
+);
+
+function parseWorkflowDraftInput(
+  input: unknown,
+): { draft: WorkflowDraft; error?: undefined } | { draft?: undefined; error: string } {
+  const { error, data } = validateToolInput(submittedDraftSchema, input, 'submit-workflow-draft');
+  if (error) return { error: error.message };
+
+  const { dependencies, ...definition } = data as WorkflowBuilderDefinition & {
+    dependencies?: WorkflowBuilderDefinition[];
   };
+  const draft = toDraftDefinition(definition);
+  if (!dependencies || dependencies.length === 0) return { draft };
+  return { draft: { ...draft, dependencies: dependencies.map(toDraftDefinition) } };
 }
 
 export interface WorkflowDraftToolResult {
@@ -120,7 +151,7 @@ function alreadyReadyError(revision: number): string {
 }
 
 const EMPTY_ARGUMENTS_ERROR =
-  'No workflow definition arguments were received. submit-workflow-draft was invoked without any arguments, so the provider may have truncated or dropped the tool call payload. Retry once by sending a single complete WorkflowDefinition object as the tool arguments (id, description, inputSchema, outputSchema, graph). Do NOT retry with the same empty payload, do NOT apologize, and do NOT claim the workflow is broken.';
+  'You invoked submit-workflow-draft with no arguments. Compose the complete WorkflowDefinition first, then send it as the tool arguments: a single object with id, description, inputSchema, outputSchema, and graph (plus dependencies if it nests helper workflows). Do NOT call the tool before the definition is built, do NOT retry with an empty payload, do NOT apologize, and do NOT claim the workflow is broken.';
 
 function isEmptyArguments(input: unknown): boolean {
   if (input === undefined || input === null) return true;
@@ -150,21 +181,17 @@ function makeSupersededResult(store: WorkflowDraftToolStore, input?: unknown) {
   const state = store.getState();
   if (state.lifecycle === 'ready') {
     if (input !== undefined) {
-      try {
-        const submitted = parseWorkflowDraftInput(input);
-        if (draftsStructurallyEqual(submitted, state.draft)) {
-          return {
-            success: true as const,
-            lifecycle: state.lifecycle,
-            revision: state.revision,
-            finalizedRevision: state.finalizedRevision,
-            baseAcceptedRevision: state.revision,
-            message: SUPERSEDED_NOOP_MESSAGE,
-            definition: structuredClone(state.draft),
-          };
-        }
-      } catch {
-        // Fall through to the already-ready rejection path below.
+      const submitted = parseWorkflowDraftInput(input);
+      if (submitted.draft && draftsStructurallyEqual(submitted.draft, state.draft)) {
+        return {
+          success: true as const,
+          lifecycle: state.lifecycle,
+          revision: state.revision,
+          finalizedRevision: state.finalizedRevision,
+          baseAcceptedRevision: state.revision,
+          message: SUPERSEDED_NOOP_MESSAGE,
+          definition: structuredClone(state.draft),
+        };
       }
     }
     return {
@@ -205,6 +232,9 @@ const resourceRequestSchema = z.object({
   registryKey: z.string().min(1),
 });
 
+const AGENT_OUTPUT_CONTRACT =
+  'An agent step takes a { prompt: string } input and by default outputs { text: string }. To make an agent emit a different shape — for example a top-level array to drive a foreach — set outputSchema on that agent step; it overrides the default for that step only.';
+
 function inspectResource(store: WorkflowDraftToolStore, request: z.infer<typeof resourceRequestSchema>) {
   const catalogName = request.type === 'tool' ? 'tools' : request.type === 'agent' ? 'agents' : 'workflows';
   const entry = store.validationContext?.[catalogName]?.[request.registryKey];
@@ -215,6 +245,7 @@ function inspectResource(store: WorkflowDraftToolStore, request: z.infer<typeof 
     runtimeId: entry.runtimeId,
     inputSchema: entry.inputSchema,
     outputSchema: entry.outputSchema,
+    ...(request.type === 'agent' ? { outputContract: AGENT_OUTPUT_CONTRACT } : {}),
     ...(request.type === 'workflow' ? { authoritativeWorkflowId: entry.runtimeId ?? request.registryKey } : {}),
   };
 }
@@ -226,7 +257,7 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
     'inspect-workflow-resources': createTool({
       id: 'inspect-workflow-resources',
       description:
-        'Batch-inspect authoritative registered tools, agents, and workflows. Returns registry keys, runtime IDs, normalized input/output JSON Schemas, nested workflow identity, and catalog availability.',
+        'Batch-inspect authoritative registered tools, agents, and workflows. Returns registry keys, runtime IDs, normalized input/output JSON Schemas, nested workflow identity, catalog availability, and — for agents — the default { prompt } -> { text } contract plus how a step outputSchema overrides it.',
       inputSchema: z.object({
         query: z.string().optional().describe('Optional case-insensitive registry-key or runtime-ID search.'),
         resources: z
@@ -275,7 +306,25 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
           });
         }
 
-        candidate.draft = parseWorkflowDraftInput(input);
+        // A structurally malformed submission (a foreach missing its inner
+        // `step`, unrecognized keys like `items`/`itemWorkflow`) fails the
+        // canonical schema before the semantic validator runs. Core's tool
+        // runner already turns that into actionable model-facing text, so use
+        // it verbatim rather than letting the failure escape as an opaque tool
+        // error. Such a submission never becomes a candidate, so authoring
+        // state is left untouched.
+        const parsed = parseWorkflowDraftInput(input);
+        if (parsed.error !== undefined) {
+          const state = store.getState();
+          return reportResult(store, 'submit-workflow-draft', {
+            success: false,
+            error: parsed.error,
+            candidateRevision: state.revision,
+            baseAcceptedRevision: state.revision,
+          });
+        }
+
+        candidate.draft = parsed.draft;
         candidate.revision += 1;
         candidate.issues = [];
         candidate.hasUncheckpointedChanges = true;
