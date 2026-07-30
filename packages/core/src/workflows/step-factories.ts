@@ -64,7 +64,7 @@ export function createStepFromAgent<TStepId extends string, TStepOutput>(
         prompt: z.string(),
       }),
     ),
-    outputSchema: toStandardSchema(outputSchema),
+    outputSchema,
     retries,
     scorers,
     metadata,

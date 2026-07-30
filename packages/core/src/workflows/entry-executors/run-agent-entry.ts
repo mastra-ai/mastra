@@ -56,6 +56,10 @@ export async function runAgentEntry(
     streamPromise.resolve = resolve;
     streamPromise.reject = reject;
   });
+  // The promise is awaited later (and sometimes not at all when structured
+  // output short-circuits); attach a no-op handler so an early rejection
+  // can't surface as an unhandled rejection before the await.
+  streamPromise.promise.catch(() => {});
 
   // Track structured output result
   let structuredResult: any = null;

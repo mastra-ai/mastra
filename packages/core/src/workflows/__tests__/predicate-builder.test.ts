@@ -109,10 +109,11 @@ describe('fluent builder — declarative predicate overloads', () => {
     expect(conditional.serializedConditions[0].fn).toBe(closure.toString());
     expect(conditional.serializedConditions[1].fn).toBe('inputData.value <= 10');
     // Predicates array is present because at least one tuple is declarative.
-    // The closure slot must be `undefined` so downstream serializers can tell
-    // which branch cannot be round-tripped.
+    // The closure slot must be `null` (matching the declared `(Predicate | null)[]`
+    // shape and JSON round-trips) so downstream serializers can tell which
+    // branch cannot be round-tripped.
     expect(conditional.predicates).toBeDefined();
-    expect(conditional.predicates[0]).toBeUndefined();
+    expect(conditional.predicates[0]).toBeNull();
     expect(conditional.predicates[1]).toEqual(pred);
   });
 
@@ -152,9 +153,9 @@ describe('fluent builder — declarative predicate overloads', () => {
     // Predicates array positions align: only slot 1 is populated.
     expect(conditional.predicates).toBeDefined();
     expect(conditional.predicates).toHaveLength(3);
-    expect(conditional.predicates[0]).toBeUndefined();
+    expect(conditional.predicates[0]).toBeNull();
     expect(conditional.predicates[1]).toEqual(pred);
-    expect(conditional.predicates[2]).toBeUndefined();
+    expect(conditional.predicates[2]).toBeNull();
 
     // Mixed graph still contains closures → must not be storable.
     expect(() => toStorableGraph(wf.stepGraph)).toThrow(/closure predicates do not round-trip/);

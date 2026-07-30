@@ -176,9 +176,10 @@ function walk(schema: JsonSchema, opts: JsonSchemaToZodOptions): z.ZodTypeAny {
         out = z.any();
         break;
       default:
-        throw new Error(
+        return unsupported(
           `Stored workflow schema uses unsupported JSON Schema type "${String(schema.type)}". ` +
             `This converter only supports object, array, string, number, integer, boolean, null, and enum.`,
+          opts,
         );
     }
   }

@@ -111,6 +111,9 @@ function applyGraphEntry(
         throw new Error(`Stored sleepUntil "${entry.id}" missing literal date.`);
       }
       const date = entry.date instanceof Date ? entry.date : new Date(entry.date);
+      if (Number.isNaN(date.getTime())) {
+        throw new Error(`Stored sleepUntil "${entry.id}" has an unparseable date: ${String(entry.date)}`);
+      }
       const live: StepFlowEntry = { type: 'sleepUntil', id: entry.id, date };
       wf.__pushStepFlowEntry(live, { type: 'sleepUntil', id: entry.id, date });
       return;
