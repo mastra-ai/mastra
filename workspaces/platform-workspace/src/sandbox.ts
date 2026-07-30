@@ -405,9 +405,9 @@ export class PlatformSandbox extends MastraSandbox {
 
     const started = Date.now();
     const fullCommand = buildCommand(command, args);
-    // Nullish check so an explicit `timeout: 0` is sent as `0` (interpreted as
-    // "no timeout" by the direct-exec transport) instead of being dropped by a
-    // truthy check.
+    // Nullish check so an explicit `timeout: 0` still overrides the instance
+    // default. `_runDirectExec` omits `timeoutMs` from the exec payload when
+    // the value is 0, which disables the client-side timer entirely.
     const effectiveTimeout = options?.timeout ?? this._timeout;
 
     // Direct-exec (WebSocket straight to Railway's tcp-proxy) is the only
@@ -474,11 +474,14 @@ export class PlatformSandbox extends MastraSandbox {
     let lastResult: Awaited<ReturnType<typeof execViaLease>> | undefined;
     let lastLease: (ExecLease & { expiresAtMs: number | null }) | undefined;
     let attemptsMade = 0;
-    // Two attempts: initial + one retry. On the second attempt we always
-    // drop the cached lease first so we don't reuse a JWT that may itself
-    // be the cause of the transport failure.
+    // Two attempts: initial + one retry. On the second attempt we drop the
+    // cached lease so we don't reuse a JWT that may itself be the cause of
+    // the transport failure — but only if the cache still holds the same
+    // lease we just failed against. A concurrent exec sharing this instance
+    // may have already cached a fresh, unrelated lease in between, and we
+    // must not discard that.
     for (let attempt = 0; attempt < 2; attempt++) {
-      if (attempt > 0) this._lease = null;
+      if (attempt > 0 && lastLease && this._lease === lastLease) this._lease = null;
       let lease: ExecLease & { expiresAtMs: number | null };
       try {
         lease = await this._ensureLease();
@@ -528,8 +531,10 @@ export class PlatformSandbox extends MastraSandbox {
     const lease = lastLease!;
     // The lease from the failed second attempt is still cached; drop it so
     // the next `executeCommand` doesn't waste its first attempt on the same
-    // implicated JWT before minting fresh.
-    this._lease = null;
+    // implicated JWT before minting fresh. Identity-check first so a
+    // concurrent exec that has already cached a fresh, unrelated lease
+    // isn't collateral-damaged.
+    if (this._lease === lease) this._lease = null;
     throw new SandboxExecTransportError(
       `Direct-exec transport failed for sandbox ${this._sandboxId ?? '(unknown)'} after ${attemptsMade} attempt(s)` +
         (result.closeCode !== undefined

@@ -576,8 +576,7 @@ describe('PlatformSandbox', () => {
       // Sandbox id must be cleared so the caller's next executeCommand
       // triggers a fresh ensureRunning + provision cycle instead of picking
       // up the stale id.
-      const info = await sandbox.getInfo();
-      expect(info.metadata?.sandboxId).toBeUndefined();
+      expect((sandbox as unknown as { _sandboxId: unknown })._sandboxId).toBeUndefined();
     });
 
     it('propagates non-410 errors from the exec-lease mint instead of falling back silently', async () => {
@@ -698,8 +697,7 @@ describe('PlatformSandbox', () => {
       // open a second socket.
       expect(sockets).toHaveLength(1);
       // Sandbox id cleared — same invariant as the initial-410 case.
-      const info = await sandbox.getInfo();
-      expect(info.metadata?.sandboxId).toBeUndefined();
+      expect((sandbox as unknown as { _sandboxId: unknown })._sandboxId).toBeUndefined();
     });
 
     it('throws SandboxExecTransportError when both WS attempts fail against a live sandbox', async () => {
@@ -863,6 +861,76 @@ describe('PlatformSandbox', () => {
       expect(fetchMock).toHaveBeenCalledTimes(3);
       expect(sockets).toHaveLength(3);
       expect(sockets[2]!.subprotocols[1]).toBe('jwt.second');
+    });
+
+    it('does not evict a concurrently-cached fresh lease when an older attempt fails late', async () => {
+      // Race scenario: exec A opens a WS with lease-1, exec B is scheduled
+      // after A retries and caches lease-2, THEN A's second-attempt WS fails
+      // late. A must clear only lease-1 (already gone); it must not blow
+      // away lease-2 which exec B legitimately cached. Without the identity
+      // guard on `_lease` eviction, A would null the cache and force the
+      // next exec into an avoidable extra `/exec-lease` mint.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.first' }))
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.second' }));
+      const sockets: FakeSocket[] = [];
+      // Hand out a socket that never closes on demand, so we can drive the
+      // race deterministically from the test body instead of via
+      // queueMicrotask.
+      const factory: DirectExecWebSocketFactory = (endpoint, subprotocols) => {
+        const socket = new FakeSocket(endpoint, subprotocols);
+        sockets.push(socket);
+        return socket;
+      };
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+      });
+
+      await sandbox._start();
+
+      // Kick off exec A. It mints lease-1 and opens sockets[0].
+      const execA = sandbox.executeCommand('echo A').catch(err => err);
+      await vi.waitFor(() => expect(sockets).toHaveLength(1));
+      // A's first WS fails. It will now mint lease-2 for its retry attempt.
+      sockets[0]!.onopen?.({});
+      sockets[0]!.onclose?.({ code: 1006, reason: 'abnormal' });
+      await vi.waitFor(() => expect(sockets).toHaveLength(2));
+      // At this point A has cached lease-2 in `_lease` and is holding
+      // sockets[1] open. Fail sockets[1] to trigger A's final eviction
+      // path — but before that, "exec B" has *effectively* cached lease-2
+      // by being the one that owns it. When A's transport-failure throw
+      // clears the cache, an identity check must preserve lease-2 (still
+      // the currently-cached lease) so B (the next exec) reuses it.
+      const lease2 = (sandbox as unknown as { _lease: { jwt: string } | null })._lease;
+      expect(lease2?.jwt).toBe('jwt.second');
+
+      // Fail A's retry WS -> throws SandboxExecTransportError, tries to
+      // clear _lease. With the identity guard AND the fact that the still-
+      // cached lease IS the one that just failed, the cache is cleared;
+      // this test intentionally exercises the safe-clear branch by making
+      // no OTHER lease exist. The negative-race case is covered by the
+      // guarded assertion below: we manually inject a "concurrent fresh"
+      // lease before A's throw runs its eviction, and confirm A does NOT
+      // discard it.
+      const freshLease = { jwt: 'jwt.fresh', expiresAtMs: Date.now() + 60_000 } as const;
+      (sandbox as unknown as { _lease: unknown })._lease = freshLease;
+      sockets[1]!.onopen?.({});
+      sockets[1]!.onclose?.({ code: 1006, reason: 'abnormal' });
+      const err = await execA;
+      const { SandboxExecTransportError } = await import('./sandbox.js');
+      expect(err).toBeInstanceOf(SandboxExecTransportError);
+      // The freshLease we injected must survive A's eviction, because it
+      // is not the lease A failed on. Without the identity guard, this
+      // would be null.
+      expect((sandbox as unknown as { _lease: unknown })._lease).toBe(freshLease);
     });
 
     it('coalesces concurrent lease mints on a cold cache into a single POST /exec-lease', async () => {
