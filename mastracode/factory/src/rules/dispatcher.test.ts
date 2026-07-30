@@ -10,12 +10,12 @@ import type { FactoryCommitDecision } from './types.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
-async function createItem(storage: WorkItemsStorage, sourceKey = 'github-issue:1') {
+async function createItem(storage: WorkItemsStorage, sourceKey = 'github-issue:1', factoryProjectId = PROJECT_ID) {
   return (
     await storage.upsert({
       orgId: 'org-1',
       userId: 'user-1',
-      factoryProjectId: PROJECT_ID,
+      factoryProjectId,
       input: {
         externalSource: { integrationId: 'github', type: 'issue', externalId: sourceKey },
         title: 'Fix issue',
@@ -79,9 +79,9 @@ function createSession(accepted?: Promise<unknown>) {
 async function queueDecision(
   storage: WorkItemsStorage,
   decision: FactoryCommitDecision,
-  options?: { sourceKey?: string; ingress?: string },
+  options?: { sourceKey?: string; ingress?: string; factoryProjectId?: string },
 ) {
-  const item = await createItem(storage, options?.sourceKey);
+  const item = await createItem(storage, options?.sourceKey, options?.factoryProjectId);
   const rules = defaultFactoryRules({
     version: 'rules-v1',
     overrides: { work: { execute: { issue: { onEnter: () => decision } } } },
@@ -89,7 +89,7 @@ async function queueDecision(
   const transitionService = new FactoryTransitionService({ storage, rules });
   const result = await transitionService.transition({
     orgId: 'org-1',
-    factoryProjectId: PROJECT_ID,
+    factoryProjectId: options?.factoryProjectId ?? PROJECT_ID,
     workItemId: item.id,
     board: 'work',
     stage: 'execute',
@@ -1018,6 +1018,159 @@ describe('FactoryDecisionDispatcher', () => {
       expect.objectContaining({
         ifActive: { behavior: 'deliver' },
         ifIdle: { behavior: 'wake' },
+      }),
+    );
+  });
+
+  it('does not re-send a rule-driven skill inline when the deferred decision fails after prepareBinding', async () => {
+    const { workItems: storage, projects } = await createFactoryStorageForTests();
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'triage',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-durable-kickoff',
+    });
+    // Make completeDeferredDecision return null on the first call so the
+    // dispatcher fails after prepareBinding created the pending start.
+    const realComplete = storage.completeDeferredDecision.bind(storage);
+    let completeCalls = 0;
+    storage.completeDeferredDecision = vi.fn(async (...args: Parameters<typeof realComplete>) => {
+      completeCalls += 1;
+      if (completeCalls === 1) return null;
+      return realComplete(...args);
+    });
+    const { controller, session } = createSession();
+    // First sendNotificationSignal call (cycle-1 preceding-message or kickoff
+    // attempt) throws so the dispatcher records a retry. Subsequent calls
+    // succeed normally.
+    const realSend = session.sendNotificationSignal;
+    let sendCalls = 0;
+    session.sendNotificationSignal = vi.fn(async (...args: Parameters<typeof realSend>) => {
+      sendCalls += 1;
+      if (sendCalls === 1) throw new Error('notification persist failed');
+      return realSend(...args);
+    });
+    const prepareBinding = vi.fn(async (input: { record: { id: string }; invocation?: { skillName: string } }) => {
+      const kickoffMessage = input.invocation ? `<skill name="${input.invocation.skillName}">\n</skill>` : null;
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: item.externalSource,
+            title: item.title,
+            stages: ['intake'],
+            sessions: {},
+            metadata: item.metadata,
+          },
+        },
+        role: 'triage',
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: input.record.id,
+        kickoffMessage,
+      });
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      projectsStorage: projects,
+      ownerId: 'worker-1',
+      prepareBinding,
+    });
+
+    // Cycle 1: invokeSkill → prepareBinding creates pending start → fails
+    // before completion. The decision enters retry.
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [recordAfterCycle1] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(recordAfterCycle1?.status).toBe('retry');
+    expect(session.sendSignal).not.toHaveBeenCalled();
+
+    // Cycle 2: claimPendingStarts picks up the pending start from cycle 1
+    // and dispatches it (delivering run-kickoff). Then the retry of
+    // invokeSkill runs: #requireOrPrepareBinding sees the pending start
+    // record for this kickoff key and returns prepared: true, so the
+    // dispatcher must NOT fall through to inline sendSignal().
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+
+    expect(session.sendSignal).not.toHaveBeenCalled();
+    expect(prepareBinding).toHaveBeenCalledTimes(1); // not called again
+
+    expect(session.sendNotificationSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'run-kickoff',
+        summary: expect.stringContaining('<skill name="understand-issue">'),
+      }),
+      expect.objectContaining({
+        ifActive: { behavior: 'deliver' },
+        ifIdle: { behavior: 'wake' },
+      }),
+    );
+
+    const [recordAfterCycle2] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(recordAfterCycle2?.status).toBe('succeeded');
+  });
+
+  it('passes the project default model to prepareBinding so rule-driven sessions use the configured default', async () => {
+    const { workItems: storage, projects } = await createFactoryStorageForTests();
+    const project = await projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Test project', defaultModelId: 'openai/gpt-5.6-sol' },
+    });
+    const { item, transitionService } = await queueDecision(
+      storage,
+      {
+        type: 'invokeSkill',
+        role: 'triage',
+        skillName: 'understand-issue',
+        idempotencyKey: 'skill-default-model',
+      },
+      { factoryProjectId: project.id },
+    );
+    const { controller } = createSession();
+    const prepareBinding = vi.fn(async (input: { record: { id: string }; invocation?: { skillName: string } }) => {
+      const kickoffMessage = input.invocation ? `<skill name="${input.invocation.skillName}">\n</skill>` : null;
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: item.externalSource,
+            title: item.title,
+            stages: ['intake'],
+            sessions: {},
+            metadata: item.metadata,
+          },
+        },
+        role: 'triage',
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: project.id,
+        kickoffKey: input.record.id,
+        kickoffMessage,
+      });
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      projectsStorage: projects,
+      ownerId: 'worker-1',
+      prepareBinding,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(prepareBinding).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultModelId: 'openai/gpt-5.6-sol',
+        invocation: { type: 'skill', skillName: 'understand-issue', arguments: '' },
       }),
     );
   });
