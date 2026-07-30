@@ -121,6 +121,20 @@ To get structured output instead of `{ text }`, add an `outputSchema`. Mastra wi
 
 Because agent steps require a `{ prompt }` object, use a `mapping` step before the agent to build the prompt from workflow data.
 
+Agent entries also accept an optional `description` and an `options` object with two persistable fields, `retries` and `metadata`:
+
+```json
+{
+  "type": "agent",
+  "id": "summarize",
+  "agentId": "support-agent",
+  "description": "Summarize the incoming request",
+  "options": { "retries": 2, "metadata": { "team": "support" } }
+}
+```
+
+Only `retries` and `metadata` round-trip through storage. Options that hold functions, such as `onFinish` or a function-valued `toolChoice`, are rejected with an error when a code-defined workflow is stored, and other agent call options don't persist.
+
 ### Tool steps
 
 A `tool` entry invokes a registered tool by ID. The tool's own input and output schemas apply; they're resolved from the registry when the workflow is registered:
@@ -133,6 +147,8 @@ A `tool` entry invokes a registered tool by ID. The tool's own input and output 
 }
 ```
 
+Tool entries accept the same optional `description` and `options` fields as agent entries, with the same `retries` and `metadata` limits.
+
 ### Mapping steps
 
 A `mapping` entry reshapes data. Its `mapConfig` is a JSON **string** (so it round-trips through storage unchanged) that encodes an object: each key becomes a key of the step's output, and its descriptor defines exactly one source:
@@ -144,6 +160,8 @@ A `mapping` entry reshapes data. Its `mapConfig` is a JSON **string** (so it rou
 | `{ "initData": true, "path": "a.b" }` | A value from the workflow input |
 | `{ "step": "step-id", "path": "a.b" }` | A value from a preceding step's output |
 | `{ "requestContextPath": "a.b" }` | A value from the request context |
+
+The `step` source also accepts an array of step IDs, such as `{ "step": ["escalate", "auto-reply"], "path": "text" }`. The first listed step with a non-empty result supplies the value, which selects the branch that ran after a `conditional` entry.
 
 Templates resolve placeholders against the roots `initData`, `inputData`, `state`, `requestContext`, and `stepResults.<step-id>`:
 
@@ -171,7 +189,7 @@ A `workflow` entry invokes another registered workflow, which can be code-define
 }
 ```
 
-The `id` is the call-site ID: the same nested workflow can appear multiple times in one graph under different IDs, and later steps address each result as `stepResults.<id>`.
+The `id` is the call-site ID: the same nested workflow can appear multiple times in one graph under different IDs, and later steps address each result as `stepResults.<id>`. Like agent and tool entries, a `workflow` entry accepts an optional `description`.
 
 ### Parallel and conditional
 
