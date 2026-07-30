@@ -1,5 +1,77 @@
 # @internal/playground
 
+## 1.21.1-alpha.1
+
+### Patch Changes
+
+- Fixed the Studio review tab losing comments on reload. Comments on experiment results are now saved to the database like tags, in both the dataset review view and the agent review queue (https://github.com/mastra-ai/mastra/issues/19857). ([#19865](https://github.com/mastra-ai/mastra/pull/19865))
+
+- Updated dependencies [[`c5e56ff`](https://github.com/mastra-ai/mastra/commit/c5e56ff3bcabdf062708f2d48744fec304df6792), [`c5e56ff`](https://github.com/mastra-ai/mastra/commit/c5e56ff3bcabdf062708f2d48744fec304df6792), [`b35ed6f`](https://github.com/mastra-ai/mastra/commit/b35ed6f7c257583eafbad6afa3320c88b26d8112), [`b6f36d7`](https://github.com/mastra-ai/mastra/commit/b6f36d77227c8a09f59f073cbd369e67686946d6), [`b6f36d7`](https://github.com/mastra-ai/mastra/commit/b6f36d77227c8a09f59f073cbd369e67686946d6), [`4e35a56`](https://github.com/mastra-ai/mastra/commit/4e35a56cdf8d74a5ff6d5eda01f2c1deaf6cc7be)]:
+  - @mastra/core@1.56.0-alpha.1
+  - @mastra/client-js@1.36.1-alpha.1
+  - @mastra/playground-ui@45.1.0-alpha.1
+  - @mastra/react@1.3.5-alpha.1
+
+## 1.21.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`7f4e26d`](https://github.com/mastra-ai/mastra/commit/7f4e26dd57bd9b23c278ea21235ab823a3810a6c), [`b582f7f`](https://github.com/mastra-ai/mastra/commit/b582f7fa2f9c1f87d19efc63d344fbe5dda2608c), [`b582f7f`](https://github.com/mastra-ai/mastra/commit/b582f7fa2f9c1f87d19efc63d344fbe5dda2608c)]:
+  - @mastra/core@1.56.0-alpha.0
+  - @mastra/client-js@1.36.1-alpha.0
+  - @mastra/react@1.3.5-alpha.0
+  - @mastra/playground-ui@45.0.1-alpha.0
+
+## 1.21.0
+
+### Patch Changes
+
+- Fixed the Studio chat scroll button position so it aligns with the message column at all viewport widths. ([#20338](https://github.com/mastra-ai/mastra/pull/20338))
+
+- Fixed the first saved override of a code-defined agent being published before the user explicitly publishes it. ([#20381](https://github.com/mastra-ai/mastra/pull/20381))
+
+- Theme and noise examples on the Trace Intelligence page now link to a trace insight view with the verbose trace summary and a link to the full trace. ([#20405](https://github.com/mastra-ai/mastra/pull/20405))
+
+- Updated dependencies [[`3f472b4`](https://github.com/mastra-ai/mastra/commit/3f472b468892a1ff14ccb43cc0343b86f7d8fd7d), [`ba369f2`](https://github.com/mastra-ai/mastra/commit/ba369f2a0aaf998da0d6aa033d26f64f96bef8ac), [`35b929b`](https://github.com/mastra-ai/mastra/commit/35b929b7abc3d20d85c7985880960ac2d04a6c86), [`55c9e24`](https://github.com/mastra-ai/mastra/commit/55c9e248c27c1d72b5bb7e94ea6b8a3999eee49f), [`dcfed93`](https://github.com/mastra-ai/mastra/commit/dcfed93e1e256c6abfa792cbb7ca836f5d0e8638), [`1fd7b96`](https://github.com/mastra-ai/mastra/commit/1fd7b96077752ea58973bd716354a825582073d5), [`e83473d`](https://github.com/mastra-ai/mastra/commit/e83473d63d6b48d78c229b52430a7b0be4189263), [`28d4d19`](https://github.com/mastra-ai/mastra/commit/28d4d19c23c3c2f8e87ba9e609f1850b6077dc0b), [`2876e15`](https://github.com/mastra-ai/mastra/commit/2876e15b4d2f616a3bc1ed3af57d546c268384ce), [`9b3626a`](https://github.com/mastra-ai/mastra/commit/9b3626aeb1d16fcd34b0a8e94c114ddb80a3b240), [`4696963`](https://github.com/mastra-ai/mastra/commit/469696312ac4c618bc8475b0c5ed7949b8a3455e), [`7a34274`](https://github.com/mastra-ai/mastra/commit/7a34274124c156b7303a18fb6d749f9f0b4b9bf8), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`07f5b4b`](https://github.com/mastra-ai/mastra/commit/07f5b4ba9d608d88865030732e580298296adf99), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`611cc8b`](https://github.com/mastra-ai/mastra/commit/611cc8b183d321cdf345e4a37182370ceeb65fd0), [`c1e4d83`](https://github.com/mastra-ai/mastra/commit/c1e4d83662bc692ec9deab83871931b9758a67d3), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`598080f`](https://github.com/mastra-ai/mastra/commit/598080f224edb3f0f5b801035b067fac50a56a03)]:
+  - @mastra/core@1.55.0
+  - @mastra/playground-ui@45.0.0
+  - @mastra/client-js@1.36.0
+  - @mastra/react@1.3.4
+
+## 1.21.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73)]:
+  - @mastra/core@1.55.0-alpha.3
+  - @mastra/client-js@1.36.0-alpha.3
+  - @mastra/react@1.3.4-alpha.3
+  - @mastra/playground-ui@45.0.0-alpha.3
+
+## 1.21.0-alpha.2
+
+### Patch Changes
+
+- Fixed the first saved override of a code-defined agent being published before the user explicitly publishes it. ([#20381](https://github.com/mastra-ai/mastra/pull/20381))
+
+- Theme and noise examples on the Trace Intelligence page now link to a trace insight view with the verbose trace summary and a link to the full trace. ([#20405](https://github.com/mastra-ai/mastra/pull/20405))
+
+- Updated dependencies [[`55c9e24`](https://github.com/mastra-ai/mastra/commit/55c9e248c27c1d72b5bb7e94ea6b8a3999eee49f), [`1fd7b96`](https://github.com/mastra-ai/mastra/commit/1fd7b96077752ea58973bd716354a825582073d5), [`e83473d`](https://github.com/mastra-ai/mastra/commit/e83473d63d6b48d78c229b52430a7b0be4189263), [`7a34274`](https://github.com/mastra-ai/mastra/commit/7a34274124c156b7303a18fb6d749f9f0b4b9bf8), [`07f5b4b`](https://github.com/mastra-ai/mastra/commit/07f5b4ba9d608d88865030732e580298296adf99), [`c1e4d83`](https://github.com/mastra-ai/mastra/commit/c1e4d83662bc692ec9deab83871931b9758a67d3)]:
+  - @mastra/core@1.55.0-alpha.2
+  - @mastra/playground-ui@45.0.0-alpha.2
+  - @mastra/client-js@1.36.0-alpha.2
+  - @mastra/react@1.3.4-alpha.2
+
+## 1.21.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`ba369f2`](https://github.com/mastra-ai/mastra/commit/ba369f2a0aaf998da0d6aa033d26f64f96bef8ac), [`dcfed93`](https://github.com/mastra-ai/mastra/commit/dcfed93e1e256c6abfa792cbb7ca836f5d0e8638), [`2876e15`](https://github.com/mastra-ai/mastra/commit/2876e15b4d2f616a3bc1ed3af57d546c268384ce), [`598080f`](https://github.com/mastra-ai/mastra/commit/598080f224edb3f0f5b801035b067fac50a56a03)]:
+  - @mastra/core@1.55.0-alpha.1
+  - @mastra/client-js@1.35.1-alpha.1
+  - @mastra/react@1.3.4-alpha.1
+  - @mastra/playground-ui@44.0.1-alpha.1
+
 ## 1.21.0-alpha.0
 
 ### Patch Changes

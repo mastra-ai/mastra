@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { CircleDot, CircleX, GitMerge } from 'lucide-react';
+import { GitMerge, GitPullRequest, GitPullRequestClosed } from 'lucide-react';
 
 import type { WorkItem } from '../../factory/services/workItems';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
@@ -7,12 +7,14 @@ import { usePullRequestSubscriptions } from '../hooks/usePullRequestSubscription
 import type { PullRequestSubscription } from '../services/pullRequestSubscriptions';
 
 function PullRequestIcon({ status }: { status: PullRequestSubscription['status'] }) {
-  if (status === 'merged') return <GitMerge size={13} aria-hidden />;
-  if (status === 'closed') return <CircleX size={13} aria-hidden />;
-  return <CircleDot size={13} aria-hidden />;
+  const className = statusIconColor(status);
+
+  if (status === 'merged') return <GitMerge size={13} className={className} aria-hidden />;
+  if (status === 'closed') return <GitPullRequestClosed size={13} className={className} aria-hidden />;
+  return <GitPullRequest size={13} className={className} aria-hidden />;
 }
 
-function statusColor(status: PullRequestSubscription['status']): string {
+function statusIconColor(status: PullRequestSubscription['status']): string {
   if (status === 'merged') return 'text-accent3';
   if (status === 'closed') return 'text-error';
   return 'text-accent1';
@@ -88,7 +90,7 @@ export function PullRequestLinks({ repository, reviewItem, threadId, size = 'xs'
           aria-label={`Open ${subscription.status} ${subscription.repoFullName} pull request ${subscription.pullRequestNumber}`}
         >
           <PullRequestIcon status={subscription.status} />
-          <span className={statusColor(subscription.status)}>PR #{subscription.pullRequestNumber}</span>
+          <span>PR #{subscription.pullRequestNumber}</span>
         </Button>
       ))}
     </div>

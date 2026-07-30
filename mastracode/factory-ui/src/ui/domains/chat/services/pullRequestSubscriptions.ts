@@ -6,10 +6,6 @@ export interface PullRequestSubscription {
   url: string;
 }
 
-interface PullRequestSubscriptionsResponse {
-  subscriptions: PullRequestSubscription[];
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -30,10 +26,6 @@ function isPullRequestSubscription(value: unknown): value is PullRequestSubscrip
   );
 }
 
-function isPullRequestSubscriptionsResponse(value: unknown): value is PullRequestSubscriptionsResponse {
-  return isRecord(value) && Array.isArray(value.subscriptions) && value.subscriptions.every(isPullRequestSubscription);
-}
-
 export async function fetchPullRequestSubscriptions(
   baseUrl: string,
   resourceId: string,
@@ -47,8 +39,9 @@ export async function fetchPullRequestSubscriptions(
   if (!response.ok) throw new Error(`Failed to load pull request subscriptions (${response.status}).`);
 
   const body: unknown = await response.json();
-  if (!isPullRequestSubscriptionsResponse(body)) {
+  if (!isRecord(body) || !Array.isArray(body.subscriptions)) {
     throw new Error('Pull request subscriptions returned an invalid response.');
   }
-  return body.subscriptions;
+  // one bad row must not hide every other pull request
+  return body.subscriptions.filter(isPullRequestSubscription);
 }

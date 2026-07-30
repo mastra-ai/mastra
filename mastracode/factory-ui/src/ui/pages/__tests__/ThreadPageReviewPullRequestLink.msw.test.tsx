@@ -86,7 +86,7 @@ function createWireWorkItem(type: 'pull-request' | 'issue') {
   };
 }
 
-function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscriptions: PullRequestSubscription[]) {
+function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscriptions: unknown[]) {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -197,7 +197,25 @@ describe('ThreadPage pull request link placement', () => {
       renderThreadRoute();
 
       const factorySession = await screen.findByRole('region', { name: 'Factory session' });
-      const links = await within(factorySession).findAllByRole('link', { name: PULL_REQUEST_ACCESSIBLE_NAME });
+      await within(factorySession).findByRole('link', { name: PULL_REQUEST_ACCESSIBLE_NAME });
+      const pullRequestLinks = within(factorySession)
+        .getAllByRole('link')
+        .filter(link => link.getAttribute('href') === PULL_REQUEST_URL);
+
+      expect(pullRequestLinks).toHaveLength(1);
+    });
+
+    it('keeps valid subscriptions when the API returns a malformed one', async () => {
+      stubThreadRoute(createWireWorkItem('pull-request'), [
+        { ...otherPullRequestSubscription, id: 'subscription-invalid', status: 'draft' },
+        otherPullRequestSubscription,
+      ]);
+      renderThreadRoute();
+
+      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      const links = await within(factorySession).findAllByRole('link', {
+        name: OTHER_PULL_REQUEST_ACCESSIBLE_NAME,
+      });
 
       expect(links).toHaveLength(1);
     });

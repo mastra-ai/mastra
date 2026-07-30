@@ -35,8 +35,8 @@ export function usePullRequestSubscriptions(projectRepositoryId: string | undefi
   const { baseUrl, resourceId, projectPath } = useChatSessionContext();
   const { transcript, busy } = useChatTranscript();
   const queryClient = useQueryClient();
-  const wasBusy = useRef(busy);
   const notificationIds = notificationKey(transcript.entries);
+  const previous = useRef({ busy, notificationIds });
 
   const query = useQuery({
     queryKey: pullRequestSubscriptionsQueryKey(resourceId, threadId, projectPath),
@@ -47,20 +47,16 @@ export function usePullRequestSubscriptions(projectRepositoryId: string | undefi
   });
 
   useEffect(() => {
-    if (!projectRepositoryId || !threadId || !notificationIds) return;
+    const runSettled = previous.current.busy && !busy;
+    const newNotification = previous.current.notificationIds !== notificationIds;
+    previous.current = { busy, notificationIds };
+
+    if (!runSettled && !newNotification) return;
+    if (!projectRepositoryId || !threadId) return;
     void queryClient.invalidateQueries({
       queryKey: pullRequestSubscriptionsQueryKey(resourceId, threadId, projectPath),
     });
-  }, [notificationIds, projectPath, projectRepositoryId, queryClient, resourceId, threadId]);
-
-  useEffect(() => {
-    if (wasBusy.current && !busy && projectRepositoryId && threadId) {
-      void queryClient.invalidateQueries({
-        queryKey: pullRequestSubscriptionsQueryKey(resourceId, threadId, projectPath),
-      });
-    }
-    wasBusy.current = busy;
-  }, [busy, projectPath, projectRepositoryId, queryClient, resourceId, threadId]);
+  }, [busy, notificationIds, projectPath, projectRepositoryId, queryClient, resourceId, threadId]);
 
   return query.data ?? [];
 }

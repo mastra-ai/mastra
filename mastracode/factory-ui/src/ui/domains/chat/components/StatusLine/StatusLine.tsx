@@ -23,7 +23,6 @@ export function StatusLine() {
   const repository = factory?.repositories.find(
     repo => repo.projectRepositoryId === factorySessionState?.projectRepositoryId,
   );
-  const projectRepositoryId = repository?.projectRepositoryId;
   const factoryProjectId = factorySessionState?.factoryProjectId;
   const factoryProjectKey = typeof factoryProjectId === 'string' ? factoryProjectId : undefined;
   const workItems = useWorkItemsQuery(factoryProjectKey);

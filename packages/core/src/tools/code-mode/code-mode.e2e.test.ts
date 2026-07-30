@@ -4,7 +4,7 @@ import { LocalSandbox } from '../../workspace/sandbox/local-sandbox';
 import { createTool } from '../tool';
 import { createCodeMode } from './code-mode';
 import { StdioCodeModeTransport } from './transport';
-import type { CodeModeToolResult } from './types';
+import type { CodeModeToolResult, CodeModeTransport } from './types';
 
 // Minimal execution context the tool needs (observe + abortSignal).
 const ctx = () => ({
@@ -159,5 +159,20 @@ describe('Code Mode e2e (LocalSandbox)', () => {
   it('throws when no sandbox is configured (no implicit host fallback)', async () => {
     const { tool } = createCodeMode({ tools: { getTopProducts } });
     await expect(run(tool, `return 1;`)).rejects.toThrow(/requires a sandbox/);
+  });
+
+  it('runs without a sandbox when the transport declares requiresSandbox: false', async () => {
+    const seen: { sandbox?: unknown } = {};
+    const transport: CodeModeTransport = {
+      requiresSandbox: false,
+      run: async opts => {
+        seen.sandbox = opts.sandbox;
+        return { success: true, result: 'isolate-ran', logs: [] };
+      },
+    };
+    const { tool } = createCodeMode({ tools: { getTopProducts } }, transport);
+    const result = await run(tool, `return 1;`);
+    expect(result).toEqual({ success: true, result: 'isolate-ran', logs: [] });
+    expect(seen.sandbox).toBeUndefined();
   });
 });
