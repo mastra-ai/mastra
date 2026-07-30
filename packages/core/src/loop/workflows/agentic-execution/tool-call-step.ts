@@ -513,14 +513,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // helpers typically only pass `{ runId, toolCallId }` — not the original option.
         // The suspend payload still records that this step waited for approval, so treat
         // that as authoritative for the resume decision (especially declines).
+        //
+        // Nested sub-agent/workflow approvals also write `requireToolApproval` on the
+        // outer suspend payload, but they additionally set `suspendedToolRunId`. Those
+        // must resume into the nested tool path — not the outer approval short-circuit.
         const suspendedForApproval = Boolean(
           suspendData &&
           typeof suspendData === 'object' &&
-          (suspendData as { requireToolApproval?: unknown }).requireToolApproval,
+          (suspendData as { requireToolApproval?: unknown }).requireToolApproval &&
+          !(suspendData as { suspendedToolRunId?: unknown }).suspendedToolRunId,
         );
         const isApprovalResume =
           resumeData != null && typeof resumeData === 'object' && 'approved' in (resumeData as Record<string, unknown>);
-        // Gate the resume branch on either a live policy or a prior approval suspend.
+        // Gate the resume branch on either a live policy or a prior outer approval suspend.
         // Without this, `declineToolCall` falls through to `execute` when the policy was
         // lost (#20470). Do not key only on `approved` in resumeData — generic tool
         // resumes can carry that field for unrelated reasons (same guard as durable).

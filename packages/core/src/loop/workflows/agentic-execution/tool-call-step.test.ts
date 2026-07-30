@@ -528,6 +528,53 @@ describe('createToolCallStep tool approval workflow', () => {
     });
   });
 
+  it('does not outer-gate decline when suspendData has suspendedToolRunId (delegated approval)', async () => {
+    // Nested sub-agent/workflow approval suspends also write requireToolApproval on the
+    // outer payload, but they set suspendedToolRunId. Decline must reach the nested tool
+    // (resumeData forwarded), not the outer output-denied short-circuit.
+    const inputData = makeInputData();
+    const toolsWithoutFlag = {
+      'test-tool': {
+        execute: vi.fn().mockResolvedValue({ forwarded: true }),
+      },
+    };
+    const step = createToolCallStep({
+      tools: toolsWithoutFlag,
+      messageList,
+      controller,
+      runId: 'test-run',
+      streamState,
+    });
+
+    const resumeData = { approved: false };
+    const result = await step.execute(
+      makeExecuteParams({
+        inputData,
+        resumeData,
+        suspendData: {
+          requireToolApproval: {
+            toolCallId: inputData.toolCallId,
+            toolName: inputData.toolName,
+            args: inputData.args,
+          },
+          suspendedToolRunId: 'nested-run-id',
+        },
+      }),
+    );
+
+    expect(result).toEqual({
+      result: { forwarded: true },
+      ...inputData,
+    });
+    expect(toolsWithoutFlag['test-tool'].execute).toHaveBeenCalledWith(
+      inputData.args,
+      expect.objectContaining({
+        toolCallId: inputData.toolCallId,
+        resumeData,
+      }),
+    );
+  });
+
   it('should return inputData as-is for provider-executed tools (no client execution)', async () => {
     // Provider-executed tools are handled by the stream path (tool-call + tool-result chunks
     // in llm-execution-step), so tool-call-step just passes through inputData unchanged.
