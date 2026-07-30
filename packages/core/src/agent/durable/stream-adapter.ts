@@ -300,7 +300,11 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     }
   };
   const armIdleTimer = () => {
-    if (idleTimeoutMs === undefined || idleTimeoutMs <= 0 || cancelled || terminated || !controller) {
+    // `!isSubscribed`: a synchronously-delivering PubSub can invoke handleEvent
+    // (which re-arms) DURING replay, before the subscribe promise resolves and
+    // sets isSubscribed — arming (and possibly expiring) the timer before the
+    // subscription exists. The post-subscribe `.then()` arms it once ready.
+    if (idleTimeoutMs === undefined || idleTimeoutMs <= 0 || cancelled || terminated || !isSubscribed || !controller) {
       return;
     }
     clearIdleTimer();
