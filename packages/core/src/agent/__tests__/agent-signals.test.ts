@@ -3102,6 +3102,37 @@ describe('Agent signals', () => {
     await pubsub.releaseLease(key, winnerRunId);
   });
 
+  it('preserves abort intent for a thread reserved by a signal wake before its run is prepared', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const resourceId = 'reservation-abort-resource';
+    const threadId = 'reservation-abort-thread';
+    const preparedAborted: boolean[] = [];
+    const agent = { id: 'reservation-abort-agent' } as Agent<any, any, any, any>;
+    agent.stream = vi.fn(async (_signal, options) => {
+      const prepared = runtime.prepareRunOptions(options as any, pubsub);
+      preparedAborted.push(prepared.abortSignal?.aborted ?? false);
+      if (prepared.abortSignal?.aborted) {
+        throw new Error('aborted before start');
+      }
+      return { runId: (options as any).runId } as any;
+    }) as any;
+
+    const result = runtime.sendSignal(
+      agent,
+      { type: 'user-message', contents: 'wake' },
+      { resourceId, threadId },
+      pubsub,
+    );
+    // The thread reservation is taken synchronously inside sendSignal; the lease
+    // acquire has not resolved yet, so the run is not in preparedRunsById.
+    expect(runtime.abortThread({ resourceId, threadId }, pubsub)).toBe(true);
+
+    await expect(result.accepted).rejects.toThrow('aborted before start');
+    expect(preparedAborted).toEqual([true]);
+    expect(runtime.getActiveThreadRunId({ resourceId, threadId }, pubsub)).toBeUndefined();
+  });
+
   it('keeps follow-ups attached while a continuation reserves its lease', async () => {
     const pubsub = new ControlledLeasePubSub();
     const runtime = new AgentThreadStreamRuntime();

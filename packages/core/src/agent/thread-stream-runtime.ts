@@ -690,6 +690,13 @@ export class AgentThreadStreamRuntime {
     const runId = this.getActiveThreadRunId(options, resolvedPubSub);
     if (!runId) return false;
     if (state.preparedRunsById.has(runId)) return this.abortRun(runId, resolvedPubSub);
+    if (state.threadKeysByRunId.get(runId) === key) {
+      // Reserved locally (a sendSignal wake that has not prepared its run yet):
+      // record the abort intent in abortedRunIds so prepareRunOptions aborts the
+      // run the moment it starts, instead of letting it run to completion.
+      this.abortRun(runId, resolvedPubSub);
+      return true;
+    }
     if (state.remoteThreadKeysByRunId.get(runId) !== key) return false;
     const streamId = state.activeThreadStreamIds.get(key);
     if (!streamId) return false;
