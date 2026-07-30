@@ -136,6 +136,15 @@ let _toJSONDepth = 0;
  * value would do — a value that fails the budget would also be pathological
  * to persist. 1M visits keeps the worst-case probe in the tens of
  * milliseconds while remaining far above any reasonable context value.
+ *
+ * Two caveats to that bound. The budget is per `JSON.stringify` call, and a
+ * nested value's `toJSON()` runs before the replacer sees it — so a stored
+ * graph that reaches a nested `RequestContext` through N shared paths
+ * re-runs that context's probes with a fresh budget on every visit
+ * (tracked in #20446). And `Buffer.prototype.toJSON` materializes a
+ * `{ type, data }` object before the replacer, so Buffers charge one budget
+ * unit per byte rather than the arithmetic typed-array fast path — a Buffer
+ * past the budget is filtered.
  */
 const SERIALIZATION_PROBE_BUDGET = 1_000_000;
 
