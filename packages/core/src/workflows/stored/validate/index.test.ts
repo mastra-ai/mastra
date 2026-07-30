@@ -666,6 +666,31 @@ describe('validateStoredWorkflow', () => {
       expect(issues).toEqual([]);
     });
 
+    it('accepts a whole-number constant flowing into a declared number field', () => {
+      const issues = validateStoredWorkflow(
+        def({
+          inputSchema: { type: 'object', properties: {} },
+          outputSchema: {
+            type: 'object',
+            properties: { enabled: { type: 'boolean' }, retries: { type: 'number' }, mode: { type: 'string' } },
+            required: ['enabled', 'retries', 'mode'],
+          },
+          graph: [
+            {
+              type: 'mapping',
+              id: 'emit-defaults',
+              mapConfig: JSON.stringify({
+                enabled: { value: true },
+                retries: { value: 3 },
+                mode: { value: 'safe' },
+              }),
+            },
+          ],
+        }),
+      );
+      expect(issues).toEqual([]);
+    });
+
     it('flags a workflow output schema the final step cannot satisfy', () => {
       const issues = validateStoredWorkflow(
         def({

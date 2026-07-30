@@ -3629,6 +3629,7 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [],
     "bodyParams": [
+      "dependencies",
       "description",
       "graph",
       "id",
