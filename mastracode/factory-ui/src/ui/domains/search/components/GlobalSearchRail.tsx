@@ -1,5 +1,5 @@
 import { CommandPaletteRail, CommandPaletteScope } from '@mastra/playground-ui/components/CommandPalette';
-import { Factory, GitBranch, GitPullRequest, Route, Search, SquareKanban } from 'lucide-react';
+import { Factory, GitBranch, GitPullRequest, Route, Search, SquareKanban, Ticket } from 'lucide-react';
 
 import type { GlobalSearchScope, GlobalSearchScopeCounts } from '../services/searchScopes';
 
@@ -41,6 +41,13 @@ export function GlobalSearchRail({
         count={counts.review}
         active={activeScope === 'review'}
         onSelect={() => onScopeChange('review')}
+      />
+      <CommandPaletteScope
+        icon={<Ticket />}
+        label="Work Items"
+        count={counts.items}
+        active={activeScope === 'items'}
+        onSelect={() => onScopeChange('items')}
       />
       <CommandPaletteScope
         icon={<GitBranch />}

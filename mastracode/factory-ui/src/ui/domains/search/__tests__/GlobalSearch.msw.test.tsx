@@ -16,6 +16,8 @@ import {
   factoryConnections,
   factoryProjects,
   FIRST_REPOSITORY_ID,
+  intakeIssues,
+  intakePullRequests,
   OTHER_FACTORY_ID,
   OTHER_REPOSITORY_ID,
   SECOND_REPOSITORY_ID,
@@ -33,6 +35,7 @@ const AGENT_CONTROLLER_API = `${TEST_BASE_URL}/api/agent-controller/code`;
 interface SearchRequestState {
   abortRequests: number;
   createSessionRequests: number;
+  intakeRequests: number;
   sessionRequests: Record<string, number>;
   workItemRequests: number;
 }
@@ -40,6 +43,7 @@ interface SearchRequestState {
 interface StubSearchOptions {
   activeFactoryHasRepositories?: boolean;
   failRepositories?: string[];
+  failIntake?: boolean;
   failWorkItems?: boolean;
   secondRepositoryGate?: Promise<void>;
   onSecondRepositoryAbort?: () => void;
@@ -56,6 +60,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
   const state: SearchRequestState = {
     abortRequests: 0,
     createSessionRequests: 0,
+    intakeRequests: 0,
     sessionRequests: {},
     workItemRequests: 0,
   };
@@ -107,12 +112,19 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/issues`, () =>
-      HttpResponse.json({ issues: [], nextPage: null }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/pulls`, () =>
-      HttpResponse.json({ pulls: [], nextPage: null }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/issues`, ({ params, request }) => {
+      state.intakeRequests += 1;
+      if (options.failIntake) return HttpResponse.json({ error: 'intake unavailable' }, { status: 500 });
+      const label = new URL(request.url).searchParams.get('label');
+      const serveFixtures = !label && String(params.projectRepositoryId) === FIRST_REPOSITORY_ID;
+      return HttpResponse.json({ issues: serveFixtures ? intakeIssues : [], nextPage: null });
+    }),
+    http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/prs`, ({ params }) => {
+      state.intakeRequests += 1;
+      if (options.failIntake) return HttpResponse.json({ error: 'intake unavailable' }, { status: 500 });
+      const serveFixtures = String(params.projectRepositoryId) === FIRST_REPOSITORY_ID;
+      return HttpResponse.json({ pullRequests: serveFixtures ? intakePullRequests : [], nextPage: null });
+    }),
     http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/sessions`, async ({ params, request }) => {
       const repositoryId = String(params.projectRepositoryId);
       state.sessionRequests[repositoryId] = (state.sessionRequests[repositoryId] ?? 0) + 1;
@@ -177,7 +189,17 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({ categories: { read: 'ask' }, tools: {} }),
     ),
-    http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
+    // Every thread a test routes to must be listed, or the chat falls back to another one and
+    // remounts the page frame under the open dialog.
+    http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads`, () =>
+      HttpResponse.json({
+        threads: ['thread-work-linked', 'thread-review-linked', 'session-unlinked', 'session-user'].map(id => ({
+          id,
+          title: id,
+          updatedAt: '2026-07-29T12:00:00.000Z',
+        })),
+      }),
+    ),
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads/:threadId/messages`, () =>
       HttpResponse.json({ messages: [] }),
     ),
@@ -426,7 +448,120 @@ describe('Global search', () => {
     renderSearchRoute();
     await openFromSidebar();
     expect(await screen.findByText('factory/pr-900')).toBeInTheDocument();
-    expect(await screen.findByText(/Session titles could not be loaded/)).toBeInTheDocument();
+    expect(await screen.findByText(/Board cards and GitHub intake could not be loaded/)).toBeInTheDocument();
+  });
+
+  it.each(['#900', '900', 'PR #900'])('finds the review session by GitHub identifier "%s"', async query => {
+    stubSearchApi();
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const dialog = await openFromSidebar();
+    await screen.findByText('Review command palette PR');
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), query);
+
+    expect(await screen.findByText('Review command palette PR')).toBeInTheDocument();
+    expect(within(dialog).getByText('#900')).toBeInTheDocument();
+    expect(screen.queryByText('Add universal command search')).not.toBeInTheDocument();
+  });
+
+  it('still finds the review session by identifier when work items fail to load', async () => {
+    stubSearchApi({ failWorkItems: true });
+    const user = userEvent.setup();
+    renderSearchRoute();
+    await openFromSidebar();
+    await screen.findByText('factory/pr-900');
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#900');
+
+    expect(await screen.findByText('factory/pr-900')).toBeInTheDocument();
+    expect(screen.queryByText('feature/offline-index')).not.toBeInTheDocument();
+  });
+
+  it('finds a board card with no session by identifier and opens its board', async () => {
+    const requests = stubSearchApi();
+    const user = userEvent.setup();
+    const { router } = renderSearchRoute();
+    const dialog = await openFromSidebar();
+    await screen.findByText('Review command palette PR');
+
+    const rail = screen.getByRole('complementary', { name: 'Search categories' });
+    expect(within(rail).getByRole('button', { name: 'Work Items 4' })).toBeInTheDocument();
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
+    const card = await screen.findByText('Bump the command palette dependencies');
+    const results = within(dialog).getByRole('region', { name: 'Search results' });
+    expect(within(results).getByText('Work Items')).toBeInTheDocument();
+    expect(screen.queryByText('Palette keyboard traps focus on mobile')).not.toBeInTheDocument();
+
+    await user.click(card);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${ACTIVE_FACTORY_ID}/review`));
+    expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
+    expect(requests.createSessionRequests).toBe(0);
+  });
+
+  it('scopes results to board cards with no session', async () => {
+    stubSearchApi();
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const dialog = await openFromSidebar();
+    await screen.findByText('Review command palette PR');
+
+    const rail = screen.getByRole('complementary', { name: 'Search categories' });
+    await user.click(within(rail).getByRole('button', { name: /Work Items/ }));
+
+    expect(within(dialog).getByText('Bump the command palette dependencies')).toBeInTheDocument();
+    expect(within(dialog).getByText('Palette keyboard traps focus on mobile')).toBeInTheDocument();
+    expect(within(dialog).getByText('Harden the review board drop target')).toBeInTheDocument();
+    expect(within(dialog).getByText('Rail scopes overflow on narrow viewports')).toBeInTheDocument();
+    expect(screen.queryByText('Review command palette PR')).not.toBeInTheDocument();
+    expect(screen.queryByText('research-notes')).not.toBeInTheDocument();
+  });
+
+  it('finds a pull request that has no card yet and opens the review board', async () => {
+    const requests = stubSearchApi();
+    const user = userEvent.setup();
+    const { router } = renderSearchRoute();
+    const dialog = await openFromSidebar();
+    await screen.findByText('Review command palette PR');
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#20454');
+    const candidate = await screen.findByText('Harden the review board drop target');
+    expect(within(dialog).getByText(/Intake · not filed/)).toBeInTheDocument();
+
+    await user.click(candidate);
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/factories/${ACTIVE_FACTORY_ID}/review`));
+    expect(requests.createSessionRequests).toBe(0);
+  });
+
+  it('lists a pull request already filed as a card only once', async () => {
+    stubSearchApi();
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const dialog = await openFromSidebar();
+    await screen.findByText('Review command palette PR');
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#900');
+
+    const results = within(dialog).getByRole('region', { name: 'Search results' });
+    await waitFor(() => expect(within(results).getAllByRole('option')).toHaveLength(1));
+    expect(within(results).getByText('Review Sessions')).toBeInTheDocument();
+  });
+
+  it('keeps board cards searchable when the GitHub intake feeds fail', async () => {
+    stubSearchApi({ failIntake: true });
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const dialog = await openFromSidebar();
+
+    expect(await screen.findByText('Bump the command palette dependencies')).toBeInTheDocument();
+    expect(await screen.findByText(/Board cards and GitHub intake could not be loaded/)).toBeInTheDocument();
+    expect(within(dialog).queryByText('Harden the review board drop target')).not.toBeInTheDocument();
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
+    expect(await screen.findByText('Bump the command palette dependencies')).toBeInTheDocument();
   });
 
   it('runs no session request for a Factory with no linked repository', async () => {
@@ -439,6 +574,7 @@ describe('Global search', () => {
     expect(within(results).getByText('Factories')).toBeInTheDocument();
     expect(Object.values(requests.sessionRequests)).toHaveLength(0);
     expect(requests.workItemRequests).toBe(0);
+    expect(requests.intakeRequests).toBe(0);
   });
 
   it('cancels a search-only repository request when the dialog closes', async () => {
@@ -525,7 +661,11 @@ describe('Global search', () => {
     const user = userEvent.setup();
     renderSearchRoute(`/factories/${ACTIVE_FACTORY_ID}/workspaces/session-work/threads/thread-work-linked`);
 
-    const navigation = await screen.findByRole('navigation', { name: 'Main' });
+    // Abort renders once the run reports itself live, so it also marks the point where the chat
+    // route has stopped swapping its frame — and a trigger captured mid-swap can never take focus.
+    await screen.findByRole('button', { name: 'Abort' }, { timeout: 5_000 });
+
+    const navigation = screen.getByRole('navigation', { name: 'Main' });
     const trigger = within(navigation).getByRole('button', { name: 'Search and navigate' });
     await user.click(trigger);
     expect(await screen.findByRole('dialog', { name: 'Global search' })).toBeInTheDocument();
@@ -533,10 +673,7 @@ describe('Global search', () => {
     await user.keyboard('{Escape}');
 
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument());
-    const restoredNavigation = await screen.findByRole('navigation', { name: 'Main' });
-    await waitFor(() =>
-      expect(within(restoredNavigation).getByRole('button', { name: 'Search and navigate' })).toHaveFocus(),
-    );
+    await waitFor(() => expect(trigger).toHaveFocus());
     expect(requests.abortRequests).toBe(0);
   });
 });

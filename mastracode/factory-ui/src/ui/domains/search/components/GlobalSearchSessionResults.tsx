@@ -36,6 +36,7 @@ export function GlobalSearchSessionResults({
           icon={sessionResultIcon(result.kind)}
           title={result.title}
           subtitle={result.context}
+          badge={result.identifier}
           value={result.value}
           onSelect={() => onSelect(result.path, result.preserveOrigin)}
         />

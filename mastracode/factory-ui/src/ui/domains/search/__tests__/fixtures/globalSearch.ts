@@ -1,3 +1,4 @@
+import type { GithubIssue, GithubPullRequest } from '../../../factory/services/factory';
 import type { WorkItem } from '../../../factory/services/workItems';
 import type { FactoryProjectPayload, FactoryUserSession } from '../../../workspaces/services/github';
 
@@ -92,7 +93,7 @@ export const workItems: WorkItem[] = [
     createdBy: 'user-search',
     githubProjectId: ACTIVE_FACTORY_ID,
     source: 'github-issue',
-    sourceKey: 'github:issue:321',
+    sourceKey: 'mastra-ai/mastra:321',
     parentWorkItemId: null,
     title: 'Add universal command search',
     url: 'https://github.com/mastra-ai/mastra/issues/321',
@@ -117,7 +118,7 @@ export const workItems: WorkItem[] = [
     createdBy: 'user-search',
     githubProjectId: ACTIVE_FACTORY_ID,
     source: 'github-pr',
-    sourceKey: 'github:pull-request:900',
+    sourceKey: 'mastra-ai/mastra:900',
     parentWorkItemId: null,
     title: 'Review command palette PR',
     url: 'https://github.com/mastra-ai/mastra/pull/900',
@@ -135,6 +136,80 @@ export const workItems: WorkItem[] = [
     revision: 1,
     createdAt: '2026-07-29T13:30:00.000Z',
     updatedAt: '2026-07-29T14:30:00.000Z',
+  },
+  {
+    id: 'work-item-unstarted-review',
+    orgId: 'org-search',
+    createdBy: 'user-search',
+    githubProjectId: ACTIVE_FACTORY_ID,
+    source: 'github-pr',
+    sourceKey: 'mastra-ai/mastra:4242',
+    parentWorkItemId: null,
+    title: 'Bump the command palette dependencies',
+    url: 'https://github.com/mastra-ai/mastra/pull/4242',
+    stages: ['intake'],
+    stageHistory: [],
+    sessions: {},
+    metadata: { number: 4242 },
+    revision: 1,
+    createdAt: '2026-07-29T09:00:00.000Z',
+    updatedAt: '2026-07-29T09:30:00.000Z',
+  },
+  {
+    id: 'work-item-unstarted-issue',
+    orgId: 'org-search',
+    createdBy: 'user-search',
+    githubProjectId: ACTIVE_FACTORY_ID,
+    source: 'github-issue',
+    sourceKey: 'mastra-ai/mastra:777',
+    parentWorkItemId: null,
+    title: 'Palette keyboard traps focus on mobile',
+    url: 'https://github.com/mastra-ai/mastra/issues/777',
+    stages: ['triage'],
+    stageHistory: [],
+    sessions: {},
+    metadata: { number: 777 },
+    revision: 1,
+    createdAt: '2026-07-29T08:00:00.000Z',
+    updatedAt: '2026-07-29T08:30:00.000Z',
+  },
+];
+
+/** Live GitHub intake for `FIRST_REPOSITORY_ID`: what the board's Intake column offers. */
+export const intakePullRequests: GithubPullRequest[] = [
+  {
+    number: 20454,
+    title: 'Harden the review board drop target',
+    url: 'https://github.com/mastra-ai/mastra/pull/20454',
+    author: 'ana',
+    baseBranch: 'main',
+    headBranch: 'fix/review-drop-target',
+    createdAt: '2026-07-30T09:00:00.000Z',
+    updatedAt: '2026-07-30T09:05:00.000Z',
+  },
+  {
+    // Already filed as `work-item-review`; the live feed still lists it, search must not double it.
+    number: 900,
+    title: 'Review command palette PR',
+    url: 'https://github.com/mastra-ai/mastra/pull/900',
+    author: 'ben',
+    baseBranch: 'main',
+    headBranch: 'feat/command-palette',
+    createdAt: '2026-07-29T13:00:00.000Z',
+    updatedAt: '2026-07-29T13:10:00.000Z',
+  },
+];
+
+export const intakeIssues: GithubIssue[] = [
+  {
+    number: 20455,
+    title: 'Rail scopes overflow on narrow viewports',
+    url: 'https://github.com/mastra-ai/mastra/issues/20455',
+    author: 'cleo',
+    labels: [],
+    comments: 0,
+    createdAt: '2026-07-30T08:00:00.000Z',
+    updatedAt: '2026-07-30T08:10:00.000Z',
   },
 ];
 
