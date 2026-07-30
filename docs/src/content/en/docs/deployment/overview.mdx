@@ -61,7 +61,7 @@ Use this option for auto-scaling, minimal infrastructure management, or when you
 
 Deploy a Mastra server into an ephemeral workspace sandbox (such as Vercel Sandbox or E2B) and get a live public URL in seconds.
 
-Use this option for instant previews, deploys from your CI pipeline, verifying agent-built apps, or running untrusted per-user instances. Read the [sandbox deployment guide](/ecosystem/deployment-patterns/sandbox).
+Use this option for instant previews, deploys from your CI pipeline, verifying agent-built apps, or running untrusted per-user instances. Read the [sandbox deployment guide](/docs/deployment/sandbox).
 
 ### Web Framework
 
@@ -69,16 +69,16 @@ When Mastra is integrated with a web framework, it deploys alongside your applic
 
 Use these guides when adding Mastra to an existing Next.js or Astro application.
 
-- [With Next.js on Vercel](/ecosystem/deployment-patterns/web-framework#with-nextjs-on-vercel)
-- [With Astro on Vercel](/ecosystem/deployment-patterns/web-framework#with-astro-on-vercel)
-- [With Astro on Netlify](/ecosystem/deployment-patterns/web-framework#with-astro-on-netlify)
+- [With Next.js on Vercel](/docs/deployment/web-framework#with-nextjs-on-vercel)
+- [With Astro on Vercel](/docs/deployment/web-framework#with-astro-on-vercel)
+- [With Astro on Netlify](/docs/deployment/web-framework#with-astro-on-netlify)
 
 ## Workflow runners
 
 Mastra workflows run using the built-in execution engine by default. For production workloads requiring managed infrastructure, workflows can also be deployed to specialized platforms like [Inngest](https://www.inngest.com) that provide step memoization, automatic retries, and real-time monitoring.
 
-Visit the [Workflow Runners guide](/ecosystem/deployment-patterns/workflow-runners) for execution options and the [Inngest deployment guide](/ecosystem/deployment-targets/inngest) for setup instructions.
+Visit the [Workflow Runners guide](/docs/deployment/workflow-runners) for execution options and the [Inngest deployment guide](/ecosystem/deployment-targets/inngest) for setup instructions.
 
 ## Workers
 
-For production deployments, Mastra can run workflow orchestration, cron scheduling, and background tool execution in dedicated worker processes separate from the API server. This lets you scale each concern independently and isolate failures. See [Workers](/ecosystem/deployment-patterns/workers) for details.
+For production deployments, Mastra can run workflow orchestration, cron scheduling, and background tool execution in dedicated worker processes separate from the API server. This lets you scale each concern independently and isolate failures. See [Workers](/docs/deployment/workers) for details.

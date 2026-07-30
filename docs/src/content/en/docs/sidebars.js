@@ -335,6 +335,71 @@ const sidebars = {
       items: [
         {
           type: 'category',
+          label: 'Workspaces',
+          items: [
+            {
+              type: 'doc',
+              id: 'workspace/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'workspace/filesystem',
+              label: 'Filesystem',
+            },
+            {
+              type: 'doc',
+              id: 'workspace/sandbox',
+              label: 'Sandbox',
+            },
+            {
+              type: 'doc',
+              id: 'workspace/lsp',
+              label: 'LSP Inspection',
+            },
+            {
+              type: 'doc',
+              id: 'workspace/skills',
+              label: 'Skills',
+            },
+            {
+              type: 'doc',
+              id: 'workspace/search',
+              label: 'Search and Indexing',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Browser',
+          items: [
+            {
+              type: 'doc',
+              id: 'browser/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'browser/agent-browser',
+              label: 'AgentBrowser',
+            },
+            {
+              type: 'doc',
+              id: 'browser/recording',
+              label: 'Recording',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'browser/browser-viewer',
+              label: 'BrowserViewer',
+            },
+          ],
+        },
+        {
+          type: 'category',
           label: 'Channels',
           items: [
             {
@@ -591,6 +656,50 @@ const sidebars = {
               id: 'server/mastra-client',
               label: 'Mastra Client',
             },
+            {
+              type: 'category',
+              label: 'Auth',
+              items: [
+                {
+                  type: 'doc',
+                  id: 'server/auth/index',
+                  label: 'Overview',
+                },
+                {
+                  type: 'doc',
+                  id: 'server/auth/composite-auth',
+                  label: 'Composite Auth',
+                },
+                {
+                  type: 'doc',
+                  id: 'server/auth/custom-auth-provider',
+                  label: 'Custom Auth Provider',
+                },
+                {
+                  type: 'doc',
+                  id: 'server/auth/fga',
+                  label: 'Fine-Grained Authorization',
+                },
+                {
+                  type: 'doc',
+                  id: 'server/auth/jwt',
+                  label: 'JSON Web Token',
+                },
+                {
+                  type: 'doc',
+                  id: 'server/auth/simple-auth',
+                  label: 'Simple Auth',
+                },
+                {
+                  type: 'doc',
+                  id: 'server/auth/workers',
+                  label: 'Workers',
+                  customProps: {
+                    tags: ['beta'],
+                  },
+                },
+              ],
+            },
           ],
         },
         {
@@ -648,6 +757,39 @@ const sidebars = {
                   id: 'observability/tracing/overview',
                   key: 'observability.tracing.overview',
                   label: 'Overview',
+                },
+              ],
+            },
+            {
+              type: 'category',
+              label: 'Integrations',
+              items: [
+                {
+                  type: 'category',
+                  label: 'Exporters',
+                  items: [
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/mastra-storage',
+                      label: 'Mastra Storage',
+                    },
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/exporters/mastra-platform',
+                      label: 'Mastra platform',
+                    },
+                  ],
+                },
+                {
+                  type: 'category',
+                  label: 'Processors',
+                  items: [
+                    {
+                      type: 'doc',
+                      id: 'observability/integrations/processors/sensitive-data-filter',
+                      label: 'SensitiveDataFilter',
+                    },
+                  ],
                 },
               ],
             },
@@ -733,6 +875,42 @@ const sidebars = {
               type: 'doc',
               id: 'deployment/monorepo',
               label: 'Monorepo',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/cloud-providers',
+              label: 'Cloud Providers',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/sandbox',
+              label: 'Sandbox',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/web-framework',
+              label: 'Web Framework',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/workflow-runners',
+              label: 'Workflow Runners',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/workers',
+              label: 'Workers',
+              customProps: {
+                tags: ['beta'],
+              },
+            },
+            {
+              type: 'doc',
+              id: 'deployment/mastra-workers',
+              label: 'Mastra Workers',
+              customProps: {
+                tags: ['beta'],
+              },
             },
           ],
         },

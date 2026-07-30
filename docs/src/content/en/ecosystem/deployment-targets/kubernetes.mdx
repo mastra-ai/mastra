@@ -13,7 +13,7 @@ import StepItem from "@site/src/components/StepItem";
 Run a Mastra application across multiple pods on [Kubernetes](https://kubernetes.io/), so it scales horizontally behind a load balancer. Because each pod is a separate process, the pods must share a pub/sub backend and a database, otherwise work started on one pod is invisible to the others.
 
 :::info
-This guide covers deploying the [Mastra server](/docs/server/mastra-server). If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/ecosystem/deployment-patterns/web-framework), deploy the way you normally would for that framework.
+This guide covers deploying the [Mastra server](/docs/server/mastra-server). If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
 :::
 
 :::warning
@@ -251,7 +251,7 @@ Register the durable agent with the `Mastra` instance above. Its run state now l
     A JSON list of your agents means the deployment is serving.
 
     :::warning
-    Set up [authentication](/ecosystem/auth-providers) before exposing your endpoints publicly.
+    Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
     :::
   </StepItem>
 </Steps>

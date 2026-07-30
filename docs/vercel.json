@@ -27,12 +27,12 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud",
-      "destination": "/ecosystem/observability-integrations/exporters/mastra-platform",
+      "destination": "/docs/observability/integrations/exporters/mastra-platform",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/exporters/default",
-      "destination": "/ecosystem/observability-integrations/exporters/mastra-storage",
+      "destination": "/docs/observability/integrations/exporters/mastra-storage",
       "permanent": true
     },
     {
@@ -432,12 +432,12 @@
     },
     {
       "source": "/docs/auth/index",
-      "destination": "/ecosystem/auth-providers/index",
+      "destination": "/docs/server/auth/index",
       "permanent": true
     },
     {
       "source": "/docs/auth/jwt",
-      "destination": "/ecosystem/auth-providers/jwt",
+      "destination": "/docs/server/auth/jwt",
       "permanent": true
     },
     {
@@ -617,7 +617,7 @@
     },
     {
       "source": "/guides/deployment",
-      "destination": "/ecosystem/deployment-patterns/cloud-providers",
+      "destination": "/docs/deployment/cloud-providers",
       "permanent": true
     },
     {
@@ -922,12 +922,12 @@
     },
     {
       "source": "/reference/workspace/vercel",
-      "destination": "/reference/workspace/vercel-serverless",
+      "destination": "/ecosystem/workspace-vendors/vercel-serverless",
       "permanent": true
     },
     {
       "source": "/reference/workspace/vercel-microvm-sandbox",
-      "destination": "/reference/workspace/vercel-sandbox",
+      "destination": "/ecosystem/workspace-vendors/vercel-sandbox",
       "permanent": true
     },
     {
@@ -1117,27 +1117,197 @@
     },
     {
       "source": "/docs/deployment/cloud-providers",
-      "destination": "/ecosystem/deployment-patterns/cloud-providers",
+      "destination": "/docs/deployment/cloud-providers",
       "permanent": true
     },
     {
       "source": "/docs/deployment/sandbox",
-      "destination": "/ecosystem/deployment-patterns/sandbox",
+      "destination": "/docs/deployment/sandbox",
       "permanent": true
     },
     {
       "source": "/docs/deployment/web-framework",
-      "destination": "/ecosystem/deployment-patterns/web-framework",
+      "destination": "/docs/deployment/web-framework",
       "permanent": true
     },
     {
       "source": "/docs/deployment/workflow-runners",
-      "destination": "/ecosystem/deployment-patterns/workflow-runners",
+      "destination": "/docs/deployment/workflow-runners",
       "permanent": true
     },
     {
       "source": "/docs/deployment/workers",
-      "destination": "/ecosystem/deployment-patterns/workers",
+      "destination": "/docs/deployment/workers",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/deployment-patterns/:path*",
+      "destination": "/docs/deployment/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/browser/:path*",
+      "destination": "/docs/browser/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/workspace/:path*",
+      "destination": "/docs/workspace/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/auth-providers/index",
+      "destination": "/docs/server/auth/index",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/auth-providers/composite-auth",
+      "destination": "/docs/server/auth/composite-auth",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/auth-providers/custom-auth-provider",
+      "destination": "/docs/server/auth/custom-auth-provider",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/auth-providers/fga",
+      "destination": "/docs/server/auth/fga",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/auth-providers/jwt",
+      "destination": "/docs/server/auth/jwt",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/auth-providers/simple-auth",
+      "destination": "/docs/server/auth/simple-auth",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/auth-providers/workers",
+      "destination": "/docs/server/auth/workers",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/observability-integrations/exporters/mastra-storage",
+      "destination": "/docs/observability/integrations/exporters/mastra-storage",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/observability-integrations/exporters/mastra-platform",
+      "destination": "/docs/observability/integrations/exporters/mastra-platform",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/stagehand",
+      "destination": "/ecosystem/browser-vendors/stagehand",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/firecrawl",
+      "destination": "/ecosystem/browser-vendors/firecrawl",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/agentcore-runtime-sandbox",
+      "destination": "/ecosystem/workspace-vendors/agentcore-runtime-sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/agentfs-filesystem",
+      "destination": "/ecosystem/workspace-vendors/agentfs-filesystem",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/apple-container-sandbox",
+      "destination": "/ecosystem/workspace-vendors/apple-container-sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/archil-filesystem",
+      "destination": "/ecosystem/workspace-vendors/archil-filesystem",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/azure-blob-filesystem",
+      "destination": "/ecosystem/workspace-vendors/azure-blob-filesystem",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/blaxel-sandbox",
+      "destination": "/ecosystem/workspace-vendors/blaxel-sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/daytona-sandbox",
+      "destination": "/ecosystem/workspace-vendors/daytona-sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/docker-sandbox",
+      "destination": "/ecosystem/workspace-vendors/docker-sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/e2b-sandbox",
+      "destination": "/ecosystem/workspace-vendors/e2b-sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/files-sdk-filesystem",
+      "destination": "/ecosystem/workspace-vendors/files-sdk-filesystem",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/gcs-filesystem",
+      "destination": "/ecosystem/workspace-vendors/gcs-filesystem",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/google-drive-filesystem",
+      "destination": "/ecosystem/workspace-vendors/google-drive-filesystem",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/mesa-filesystem",
+      "destination": "/ecosystem/workspace-vendors/mesa-filesystem",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/modal-sandbox",
+      "destination": "/ecosystem/workspace-vendors/modal-sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/railway-sandbox",
+      "destination": "/ecosystem/workspace-vendors/railway-sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/s3-filesystem",
+      "destination": "/ecosystem/workspace-vendors/s3-filesystem",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/vercel-sandbox",
+      "destination": "/ecosystem/workspace-vendors/vercel-sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/vercel-serverless",
+      "destination": "/ecosystem/workspace-vendors/vercel-serverless",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/observability-integrations/processors/sensitive-data-filter",
+      "destination": "/docs/observability/integrations/processors/sensitive-data-filter",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/deployment-targets/mastra-workers",
+      "destination": "/docs/deployment/mastra-workers",
       "permanent": true
     },
     {
@@ -1152,12 +1322,12 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud/llms.txt",
-      "destination": "/ecosystem/observability-integrations/exporters/mastra-platform/llms.txt",
+      "destination": "/docs/observability/integrations/exporters/mastra-platform/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/exporters/default/llms.txt",
-      "destination": "/ecosystem/observability-integrations/exporters/mastra-storage/llms.txt",
+      "destination": "/docs/observability/integrations/exporters/mastra-storage/llms.txt",
       "permanent": true
     },
     {
@@ -1402,12 +1572,12 @@
     },
     {
       "source": "/docs/auth/index/llms.txt",
-      "destination": "/ecosystem/auth-providers/index/llms.txt",
+      "destination": "/docs/server/auth/index/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/auth/jwt/llms.txt",
-      "destination": "/ecosystem/auth-providers/jwt/llms.txt",
+      "destination": "/docs/server/auth/jwt/llms.txt",
       "permanent": true
     },
     {
@@ -1547,7 +1717,7 @@
     },
     {
       "source": "/guides/deployment/llms.txt",
-      "destination": "/ecosystem/deployment-patterns/cloud-providers/llms.txt",
+      "destination": "/docs/deployment/cloud-providers/llms.txt",
       "permanent": true
     },
     {
@@ -1782,12 +1952,12 @@
     },
     {
       "source": "/reference/workspace/vercel/llms.txt",
-      "destination": "/reference/workspace/vercel-serverless/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/vercel-serverless/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/vercel-microvm-sandbox/llms.txt",
-      "destination": "/reference/workspace/vercel-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/vercel-sandbox/llms.txt",
       "permanent": true
     },
     {
@@ -1977,27 +2147,197 @@
     },
     {
       "source": "/docs/deployment/cloud-providers/llms.txt",
-      "destination": "/ecosystem/deployment-patterns/cloud-providers/llms.txt",
+      "destination": "/docs/deployment/cloud-providers/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/deployment/sandbox/llms.txt",
-      "destination": "/ecosystem/deployment-patterns/sandbox/llms.txt",
+      "destination": "/docs/deployment/sandbox/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/deployment/web-framework/llms.txt",
-      "destination": "/ecosystem/deployment-patterns/web-framework/llms.txt",
+      "destination": "/docs/deployment/web-framework/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/deployment/workflow-runners/llms.txt",
-      "destination": "/ecosystem/deployment-patterns/workflow-runners/llms.txt",
+      "destination": "/docs/deployment/workflow-runners/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/deployment/workers/llms.txt",
-      "destination": "/ecosystem/deployment-patterns/workers/llms.txt",
+      "destination": "/docs/deployment/workers/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/deployment-patterns/:path*/llms.txt",
+      "destination": "/docs/deployment/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/browser/:path*/llms.txt",
+      "destination": "/docs/browser/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/workspace/:path*/llms.txt",
+      "destination": "/docs/workspace/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/auth-providers/index/llms.txt",
+      "destination": "/docs/server/auth/index/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/auth-providers/composite-auth/llms.txt",
+      "destination": "/docs/server/auth/composite-auth/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/auth-providers/custom-auth-provider/llms.txt",
+      "destination": "/docs/server/auth/custom-auth-provider/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/auth-providers/fga/llms.txt",
+      "destination": "/docs/server/auth/fga/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/auth-providers/jwt/llms.txt",
+      "destination": "/docs/server/auth/jwt/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/auth-providers/simple-auth/llms.txt",
+      "destination": "/docs/server/auth/simple-auth/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/auth-providers/workers/llms.txt",
+      "destination": "/docs/server/auth/workers/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/observability-integrations/exporters/mastra-storage/llms.txt",
+      "destination": "/docs/observability/integrations/exporters/mastra-storage/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/observability-integrations/exporters/mastra-platform/llms.txt",
+      "destination": "/docs/observability/integrations/exporters/mastra-platform/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/stagehand/llms.txt",
+      "destination": "/ecosystem/browser-vendors/stagehand/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/firecrawl/llms.txt",
+      "destination": "/ecosystem/browser-vendors/firecrawl/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/agentcore-runtime-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/agentcore-runtime-sandbox/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/agentfs-filesystem/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/agentfs-filesystem/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/apple-container-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/apple-container-sandbox/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/archil-filesystem/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/archil-filesystem/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/azure-blob-filesystem/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/azure-blob-filesystem/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/blaxel-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/blaxel-sandbox/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/daytona-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/daytona-sandbox/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/docker-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/docker-sandbox/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/e2b-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/e2b-sandbox/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/files-sdk-filesystem/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/files-sdk-filesystem/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/gcs-filesystem/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/gcs-filesystem/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/google-drive-filesystem/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/google-drive-filesystem/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/mesa-filesystem/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/mesa-filesystem/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/modal-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/modal-sandbox/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/railway-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/railway-sandbox/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/s3-filesystem/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/s3-filesystem/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/vercel-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/vercel-sandbox/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/vercel-serverless/llms.txt",
+      "destination": "/ecosystem/workspace-vendors/vercel-serverless/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/observability-integrations/processors/sensitive-data-filter/llms.txt",
+      "destination": "/docs/observability/integrations/processors/sensitive-data-filter/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/deployment-targets/mastra-workers/llms.txt",
+      "destination": "/docs/deployment/mastra-workers/llms.txt",
       "permanent": true
     }
   ]
