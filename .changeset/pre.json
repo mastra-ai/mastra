@@ -175,6 +175,14 @@
     "@mastra/vercel": "1.3.0"
   },
   "changesets": [
-    "green-birds-knock"
+    "automated-provider-registry-20260730-073132",
+    "exact-channel-versions-create",
+    "exact-channel-versions-mastra",
+    "good-flowers-exist",
+    "green-birds-knock",
+    "observability-outcome-analytics",
+    "quiet-accounts-open",
+    "spicy-shoes-listen",
+    "sunny-friends-write"
   ]
 }

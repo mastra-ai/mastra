@@ -1,7 +1,20 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { File, FileCode, FileJson, FileText, Folder, FolderOpen, Image, RefreshCw } from 'lucide-react';
+import {
+  File,
+  FileCode,
+  FileDiff,
+  FileJson,
+  FileText,
+  Folder,
+  FolderOpen,
+  Image,
+  NotepadText,
+  RefreshCw,
+} from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -158,10 +171,12 @@ interface WorkspaceFileBrowserProps {
   selectedFilePath?: string;
   listing?: WorkspaceRenderedListing;
   isLoading: boolean;
+  isRefreshing: boolean;
   error?: Error;
   onRefresh: () => void;
   onRenderedPathChange: (path: RenderedWorkspacePath) => void;
   onFileSelect: (filePath: string) => void;
+  onShowChanges: () => void;
 }
 
 export function WorkspaceFileBrowser({
@@ -170,10 +185,12 @@ export function WorkspaceFileBrowser({
   selectedFilePath,
   listing,
   isLoading,
+  isRefreshing,
   error,
   onRefresh,
   onRenderedPathChange,
   onFileSelect,
+  onShowChanges,
 }: WorkspaceFileBrowserProps) {
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const nodes = buildTree(listing?.entries ?? []);
@@ -183,64 +200,92 @@ export function WorkspaceFileBrowser({
   };
 
   return (
-    <aside className="h-full min-h-0 w-full min-w-0 overflow-y-auto p-2" aria-label="Workspace files">
-      <Tree
-        selectedId={selectedFilePath ? `${selectedPath.root}/${selectedFilePath}` : undefined}
-        onSelect={id => {
-          const selectedRootPrefix = `${selectedPath.root}/`;
-          if (id.startsWith(selectedRootPrefix)) onFileSelect(id.slice(selectedRootPrefix.length));
-        }}
-      >
-        {renderedPaths.map(path => {
-          const isSelectedRoot = path.id === selectedPath.id;
-          const isOpen = openFolders[path.root] ?? false;
-          return (
-            <Tree.Folder
-              key={path.id}
-              open={isOpen}
-              onOpenChange={(open: boolean) => {
-                onRenderedPathChange(path);
-                setFolderOpen(path.root, open);
-              }}
-            >
-              <Tree.FolderTrigger
-                actions={
-                  isSelectedRoot ? (
-                    <Button size="icon-xs" variant="ghost" onClick={onRefresh} aria-label="Refresh workspace files">
-                      <RefreshCw />
-                    </Button>
-                  ) : null
-                }
+    <aside className="flex h-full min-h-0 w-full min-w-0 flex-col" aria-label="Workspace files">
+      <div className="border-border1 flex items-center border-b px-3 py-2">
+        <Tabs<'files' | 'changes'>
+          defaultTab="files"
+          value="files"
+          onValueChange={value => {
+            if (value === 'changes') onShowChanges();
+          }}
+        >
+          <TabList variant="pill-ghost">
+            <Tab value="files">
+              <NotepadText size={14} />
+              Files
+            </Tab>
+            <Tab value="changes">
+              <FileDiff size={14} />
+              Changes
+            </Tab>
+          </TabList>
+        </Tabs>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+        <Tree
+          selectedId={selectedFilePath ? `${selectedPath.root}/${selectedFilePath}` : undefined}
+          onSelect={id => {
+            const selectedRootPrefix = `${selectedPath.root}/`;
+            if (id.startsWith(selectedRootPrefix)) onFileSelect(id.slice(selectedRootPrefix.length));
+          }}
+        >
+          {renderedPaths.map(path => {
+            const isSelectedRoot = path.id === selectedPath.id;
+            const isOpen = openFolders[path.root] ?? false;
+            return (
+              <Tree.Folder
+                key={path.id}
+                open={isOpen}
+                onOpenChange={(open: boolean) => {
+                  onRenderedPathChange(path);
+                  setFolderOpen(path.root, open);
+                }}
               >
-                <Tree.Icon>{getFolderIcon(isOpen)}</Tree.Icon>
-                <Tree.Label>{path.label}</Tree.Label>
-              </Tree.FolderTrigger>
-              {isSelectedRoot ? (
-                <Tree.FolderContent>
-                  {isLoading ? <Txt className="text-icon3 px-2 py-3">Loading files…</Txt> : null}
-                  {error ? <Txt className="text-icon4 px-2 py-3">Unable to load files.</Txt> : null}
-                  {!isLoading && !error && nodes.length === 0 ? (
-                    <Txt className="text-icon3 px-2 py-3" variant="ui-sm">
-                      {emptyStateCopy(path)}
-                    </Txt>
-                  ) : null}
-                  {!isLoading && !error
-                    ? nodes.map(node => (
-                        <WorkspaceTreeItem
-                          key={node.path}
-                          node={node}
-                          root={selectedPath.root}
-                          openFolders={openFolders}
-                          onFolderOpenChange={setFolderOpen}
-                        />
-                      ))
-                    : null}
-                </Tree.FolderContent>
-              ) : null}
-            </Tree.Folder>
-          );
-        })}
-      </Tree>
+                <Tree.FolderTrigger
+                  actions={
+                    isSelectedRoot ? (
+                      <Button
+                        size="icon-xs"
+                        variant="ghost"
+                        onClick={onRefresh}
+                        disabled={isRefreshing}
+                        aria-label={isRefreshing ? 'Refreshing workspace files' : 'Refresh workspace files'}
+                      >
+                        {isRefreshing ? <Spinner size="sm" /> : <RefreshCw />}
+                      </Button>
+                    ) : null
+                  }
+                >
+                  <Tree.Icon>{getFolderIcon(isOpen)}</Tree.Icon>
+                  <Tree.Label>{path.label}</Tree.Label>
+                </Tree.FolderTrigger>
+                {isSelectedRoot ? (
+                  <Tree.FolderContent>
+                    {isLoading ? <Txt className="text-icon3 px-2 py-3">Loading files…</Txt> : null}
+                    {error ? <Txt className="text-icon4 px-2 py-3">Unable to load files.</Txt> : null}
+                    {!isLoading && !error && nodes.length === 0 ? (
+                      <Txt className="text-icon3 px-2 py-3" variant="ui-sm">
+                        {emptyStateCopy(path)}
+                      </Txt>
+                    ) : null}
+                    {!isLoading && !error
+                      ? nodes.map(node => (
+                          <WorkspaceTreeItem
+                            key={node.path}
+                            node={node}
+                            root={selectedPath.root}
+                            openFolders={openFolders}
+                            onFolderOpenChange={setFolderOpen}
+                          />
+                        ))
+                      : null}
+                  </Tree.FolderContent>
+                ) : null}
+              </Tree.Folder>
+            );
+          })}
+        </Tree>
+      </div>
     </aside>
   );
 }
