@@ -1,6 +1,7 @@
 import type { AgentSignalIfIdleOptions } from '../agent/types';
 import type { Event, EventCallback } from '../events/types';
 import type { Mastra } from '../mastra';
+import { resolveAgentById } from '../mastra/resolve-agent';
 import { RequestContext } from '../request-context';
 import type { ScheduleTarget } from '../storage/domains/schedules/base';
 import { PullTransport } from '../worker/transport/pull-transport';
@@ -251,32 +252,20 @@ export async function executeAgentSchedule(
   };
   const log = ctx.logger ?? mastra.getLogger?.();
 
-  let agent = (() => {
-    try {
-      return mastra.getAgentById(agentId);
-    } catch {
-      return null;
-    }
-  })();
-  if (!agent) {
-    // Stored (editor) agents aren't registered on the Mastra instance until
-    // they've been hydrated once in this process, so a registry miss doesn't
-    // mean the agent is gone. Fall back to the editor before self-cleaning —
-    // hydration re-registers the agent, so later fires take the fast path.
-    try {
-      agent = (await mastra.getEditor?.()?.agent.getById(agentId)) ?? null;
-    } catch (error) {
-      // A transient editor/storage failure does not prove the agent was
-      // removed. Preserve the schedule so a later fire can retry resolution.
-      log?.error?.('Failed to resolve stored agent for schedule', { scheduleId, agentId, error });
-      return {
-        status: 'agent-missing',
-        outcome: 'failed',
-        reason: `failed to resolve agent "${agentId}"`,
-      };
-    }
+  const resolved = await resolveAgentById(mastra, agentId);
+  if (resolved.status === 'error') {
+    // A transient editor/storage failure does not prove the agent was
+    // removed. Preserve the schedule so a later fire can retry resolution.
+    log?.error?.('Failed to resolve stored agent for schedule', { scheduleId, agentId, error: resolved.error });
+    return {
+      status: 'agent-missing',
+      outcome: 'failed',
+      reason: `failed to resolve agent "${agentId}"`,
+    };
   }
-  if (!agent) {
+  if (resolved.status === 'missing') {
+    // Confirmed miss: both the registry and the editor agree the agent is
+    // gone, so the schedule row is safe to reclaim.
     await selfClean(mastra, scheduleId);
     return {
       status: 'agent-missing',
@@ -284,6 +273,7 @@ export async function executeAgentSchedule(
       reason: `agent "${agentId}" no longer registered`,
     };
   }
+  const agent = resolved.agent;
 
   const hooks =
     (

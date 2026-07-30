@@ -1,4 +1,5 @@
 import type { IMastraLogger } from '../../logger';
+import { resolveAgentById } from '../../mastra/resolve-agent';
 import type { ScheduleTarget } from '../../storage/domains/schedules/base';
 import { Scheduler } from '../../workflows/scheduler/scheduler';
 import type { SchedulerConfig } from '../../workflows/scheduler/types';
@@ -56,21 +57,15 @@ export class SchedulerWorker extends MastraWorker {
             }
           }
           if (target.type === 'agent') {
-            try {
-              mastra.getAgentById(target.agentId);
-              return true;
-            } catch {
-              // Stored (editor) agents aren't registered until hydrated once
-              // in this process, so a registry miss doesn't mean the agent is
-              // gone. Confirm against the editor before burning a grace miss.
-              try {
-                return (await mastra.getEditor?.()?.agent.getById(target.agentId)) != null;
-              } catch {
-                // Transient editor/storage failure — don't count it as a miss
-                // toward deletion; the execute path will surface the error.
-                return true;
-              }
-            }
+            // Only a *confirmed* miss (registry AND editor agree the agent is
+            // gone) counts toward deletion. A transient editor/storage failure
+            // is treated as ready: the schedule fires, and the execute path
+            // retries resolution and records a failed trigger row without
+            // deleting the schedule. Trade-off: during a sustained editor
+            // outage each due tick publishes a fire that fails at execute
+            // time — noisy, but never destroys a schedule on ambiguity.
+            const resolved = await resolveAgentById(mastra, target.agentId);
+            return resolved.status !== 'missing';
           }
           return false;
         }
