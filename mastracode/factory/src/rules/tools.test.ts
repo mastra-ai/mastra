@@ -314,6 +314,24 @@ describe('factory_transition_work_item', () => {
     expect(setState).toHaveBeenCalledWith({ factoryProjectId: PROJECT_ID, untrustedCheckout: true });
   });
 
+  it('keeps untrustedCheckout when only the session lookup fails during enrichment', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepareBoundItem(storage, 'github-pr');
+    const setState = vi.fn(async () => {});
+    const getBySessionId = vi.fn(async () => Promise.reject(new Error('sessions down')));
+
+    const tools = await createFactoryTransitionTools({
+      requestContext: crashResumedContext(setState),
+      storage,
+      transitionService: { transition: vi.fn(async () => ({ status: 'accepted' as const })) } as never,
+      sessions: { getBySessionId },
+    });
+
+    expect(tools).toHaveProperty('factory_transition_work_item');
+    expect(getBySessionId).toHaveBeenCalled();
+    expect(setState).toHaveBeenCalledWith({ factoryProjectId: PROJECT_ID, untrustedCheckout: true });
+  });
+
   it('recovers a work binding without marking the checkout untrusted', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) });
