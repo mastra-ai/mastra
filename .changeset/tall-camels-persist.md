@@ -9,9 +9,24 @@
 '@mastra/cloudflare': patch
 ---
 
-`workflowDefinitions` storage domain across the SQL/document adapters.
+Stored workflow definitions now persist across restarts on every major database backend.
 
 Implement the `workflowDefinitions` storage domain for libsql, pg, mysql, mssql, mongodb, and spanner. Previously the stored-workflow persistence path (`POST /stored/workflows`, `Mastra.addStoredWorkflow`) only worked against `@mastra/core`'s in-memory store. Persistent adapters returned `undefined` from `storage.getStore('workflowDefinitions')` and threw when the HTTP handler tried to read/write a workflow.
+
+```ts
+const workflowDefinitions = await storage.getStore('workflowDefinitions');
+
+await workflowDefinitions.upsert({
+  id: 'greeting-workflow',
+  inputSchema: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] },
+  outputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+  graph: [{ type: 'agent', id: 'greet', agentId: 'greeter-agent' }],
+});
+
+const { definitions, total } = await workflowDefinitions.list({ status: 'active' });
+const definition = await workflowDefinitions.get('greeting-workflow');
+await workflowDefinitions.delete('greeting-workflow');
+```
 
 Each adapter now ships a `WorkflowDefinitions*` domain that:
 
