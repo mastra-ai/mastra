@@ -163,6 +163,7 @@ export class MastraTUI {
   private cleanupKeyHandlers?: () => void;
   private cleanupPluginReloadListener?: () => void;
   private cleanupPluginUpdateListener?: () => void;
+  private cleanupPluginUpdateFailedListener?: () => void;
   private lastStreamError: string | null = null;
 
   private static readonly DOUBLE_CTRL_C_MS = 500;
@@ -569,6 +570,11 @@ export class MastraTUI {
       this.cleanupPluginUpdateListener = undefined;
     }
 
+    if (this.cleanupPluginUpdateFailedListener) {
+      this.cleanupPluginUpdateFailedListener();
+      this.cleanupPluginUpdateFailedListener = undefined;
+    }
+
     if (this.state.unsubscribe) {
       this.state.unsubscribe();
     }
@@ -612,6 +618,19 @@ export class MastraTUI {
         if (pluginNames.length === 0) return;
         const label = pluginNames.length === 1 ? 'Plugin' : 'Plugins';
         showInfo(this.state, `${label} updated to the latest version: ${pluginNames.join(', ')}`);
+      });
+    }
+
+    if (this.state.pluginManager && !this.cleanupPluginUpdateFailedListener) {
+      this.cleanupPluginUpdateFailedListener = this.state.pluginManager.onGithubPluginUpdateFailed(failures => {
+        if (failures.length === 0) return;
+        const label = failures.length === 1 ? 'Plugin update failed for' : 'Plugin updates failed for';
+        const names = failures.map(failure => failure.pluginName).join(', ');
+        showError(this.state, `${label} ${names}; kept the previous working version.`);
+        for (const failure of failures) {
+          const msg = failure.error instanceof Error ? failure.error.message : String(failure.error);
+          process.stderr.write(`[plugin update failed] ${failure.pluginName}: ${msg}\n`);
+        }
       });
     }
 

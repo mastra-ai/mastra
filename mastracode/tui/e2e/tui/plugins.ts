@@ -18,6 +18,7 @@ const RESPONSE = 'Plugin tool availability verified.';
 let currentTui: unknown;
 let hotReloadPluginDir: string | undefined;
 let githubPollSourceDir: string | undefined;
+let githubPollFailureSourceDir: string | undefined;
 let githubPollManager: { pollGithubSourcesForUpdates: () => Promise<boolean> } | undefined;
 let githubInstallGhLogPath: string | undefined;
 let githubInstallGhPath: string | undefined;
@@ -29,6 +30,7 @@ function resetPluginScenarioState(): void {
   currentTui = undefined;
   hotReloadPluginDir = undefined;
   githubPollSourceDir = undefined;
+  githubPollFailureSourceDir = undefined;
   githubPollManager = undefined;
   githubInstallGhLogPath = undefined;
   githubInstallGhPath = undefined;
@@ -417,6 +419,29 @@ function pushGithubPollPluginUpdate(sourceDir: string): void {
   writeHotReloadPluginSource(sourceDir, 'version-two');
   git(sourceDir, ['add', '.']);
   git(sourceDir, ['commit', '-m', 'update plugin result']);
+  git(sourceDir, ['push']);
+}
+
+// Pushes a version-two update carrying a package.json whose packageManager fails
+// getPnpmVersion, so installPluginDependenciesForEntry throws during the poll and
+// the checkout is rolled back to version-one. The bad manifest ships only in this
+// pushed update — never in prepareGithubPollPlugin — so the baseline loads cleanly
+// and version-one is the version rollback preserves.
+function pushGithubPollPluginFailureUpdate(sourceDir: string): void {
+  writeHotReloadPluginSource(sourceDir, 'version-two');
+  writeFileSync(
+    join(sourceDir, 'package.json'),
+    JSON.stringify(
+      {
+        type: 'module',
+        packageManager: 'npm@10.0.0',
+      },
+      null,
+      2,
+    ),
+  );
+  git(sourceDir, ['add', '.']);
+  git(sourceDir, ['commit', '-m', 'update plugin result with failing package manager']);
   git(sourceDir, ['push']);
 }
 
@@ -836,6 +861,62 @@ export const pluginsGithubPollUpdateScenario: McE2eScenario = {
     }
     // The run() screen assertions wait for version-one and version-two, while the AIMock fixture responses deliberately
     // avoid those strings. That ensures the visible text comes from the plugin tool results, not mocked model prose.
+  },
+};
+
+export const pluginsGithubPollUpdateFailureScenario: McE2eScenario = {
+  name: 'plugins-github-poll-update-failure',
+  description:
+    'Polls a GitHub-installed plugin whose update fails to install, and surfaces the rollback failure in the chat stream.',
+  testName: 'surfaces a failed GitHub plugin update and keeps the previous version',
+  useOpenAIModel: true,
+  aimockFixture: 'plugins-github-poll-update-failure.json',
+  prepare({ projectDir }) {
+    resetPluginScenarioState();
+    githubPollFailureSourceDir = prepareGithubPollPlugin(projectDir);
+  },
+  async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
+    const manager = new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir });
+    githubPollManager = manager;
+    return startMastraCodeApp({
+      config: {
+        pluginManager: manager,
+      },
+    });
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    await runtime.waitForScreenText(/Resource ID:/i, terminal);
+
+    terminal.submit('Call the GitHub plugin before update.');
+    await runtime.waitForScreenText(/version-one/i, terminal, 10_000);
+
+    if (!githubPollFailureSourceDir) throw new Error('GitHub poll failure plugin source directory was not prepared');
+    if (!githubPollManager) throw new Error('GitHub poll plugin manager was not initialized');
+    pushGithubPollPluginFailureUpdate(githubPollFailureSourceDir);
+
+    // The poll must resolve (not reject): the per-plugin catch surfaces the failure via the
+    // failure listener and rolls the checkout back, so no plugin reloads and the poll reports
+    // no change.
+    const changed = await githubPollManager.pollGithubSourcesForUpdates();
+    if (changed) throw new Error('Expected the failed GitHub plugin poll to report no successful update');
+
+    await runtime.waitForScreenText(/Plugin update failed for E2E Local Plugin/i, terminal, 10_000);
+
+    // Rollback proof: the plugin still answers with the pre-update version-one result.
+    terminal.submit('Call the GitHub plugin after update.');
+    await runtime.waitForScreenText(/version-one/i, terminal, 10_000);
+
+    terminal.keyCtrlC();
+  },
+  verifyAimockRequests(requests) {
+    const names = getToolNames(requests);
+    if (!names.includes(TOOL_NAME)) {
+      throw new Error(
+        `Expected provider request to expose GitHub poll plugin tool ${TOOL_NAME}. Names: ${names.join(', ')}`,
+      );
+    }
   },
 };
 

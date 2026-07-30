@@ -68,6 +68,7 @@ export type ScenarioName =
   | 'plugins-github-install-missing-corepack'
   | 'plugins-github-install-invalid-package-manager'
   | 'plugins-github-poll-update'
+  | 'plugins-github-poll-update-failure'
   | 'plugins-blocked-config'
   | 'plugins-scaffold-install-tool'
   | 'plugins-assets-loading'
