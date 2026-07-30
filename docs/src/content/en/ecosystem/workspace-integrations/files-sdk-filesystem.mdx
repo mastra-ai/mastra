@@ -9,7 +9,7 @@ packages:
 
 Stores files in any storage backend supported by [FilesSDK](https://files-sdk.dev): a unified abstraction over S3, Cloudflare R2, Google Cloud Storage, Azure Blob, Vercel Blob, MinIO, the local filesystem, and more. For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
 
-Use `FilesSDKFilesystem` when you want a single adapter that can target multiple storage backends with the same code. Swap the underlying driver without changing the workspace setup. If you only target one backend and want first-class options for that backend, prefer the dedicated provider (for example [`S3Filesystem`](/ecosystem/workspace-vendors/s3-filesystem) or [`GCSFilesystem`](/ecosystem/workspace-vendors/gcs-filesystem)).
+Use `FilesSDKFilesystem` when you want a single adapter that can target multiple storage backends with the same code. Swap the underlying driver without changing the workspace setup. If you only target one backend and want first-class options for that backend, prefer the dedicated provider (for example [`S3Filesystem`](/ecosystem/workspace-integrations/s3-filesystem) or [`GCSFilesystem`](/ecosystem/workspace-integrations/gcs-filesystem)).
 
 ## Installation
 
@@ -205,7 +205,7 @@ const url = await filesystem.files.url('reports/q3.pdf')
 - **`mkdir`** is a no-op. Directories exist implicitly when keys with that prefix exist.
 - **`exists`** returns `true` only when an exact key is present as a file, or when the path is a prefix that contains at least one child key. Empty leftover directories on hierarchical adapters don't count.
 - **`deleteFile`** throws `FileNotFoundError` when the key doesn't exist, unless `{ force: true }` is passed.
-- **`deleteFile`** on a directory delegates to `rmdir({ recursive: true })`, matching the [`S3Filesystem`](/ecosystem/workspace-vendors/s3-filesystem) and [`GCSFilesystem`](/ecosystem/workspace-vendors/gcs-filesystem) behavior.
+- **`deleteFile`** on a directory delegates to `rmdir({ recursive: true })`, matching the [`S3Filesystem`](/ecosystem/workspace-integrations/s3-filesystem) and [`GCSFilesystem`](/ecosystem/workspace-integrations/gcs-filesystem) behavior.
 - **`moveFile`** is implemented as `copyFile` followed by `deleteFile`. It isn't **atomic**. If the source delete fails after a successful copy, the destination remains and the source isn't removed.
 - **`appendFile`** is a read-modify-write operation. Concurrent appends to the same key may overwrite each other. This is inherent to object storage and not specific to FilesSDK.
 - **`readdir({ recursive: true })`** emits intermediate directory entries (for example, `a/b` is emitted alongside `a/b/c.txt`).
@@ -213,8 +213,8 @@ const url = await filesystem.files.url('reports/q3.pdf')
 ## Related
 
 - [WorkspaceFilesystem interface](/reference/workspace/filesystem)
-- [S3Filesystem reference](/ecosystem/workspace-vendors/s3-filesystem)
-- [GCSFilesystem reference](/ecosystem/workspace-vendors/gcs-filesystem)
-- [AzureBlobFilesystem reference](/ecosystem/workspace-vendors/azure-blob-filesystem)
+- [S3Filesystem reference](/ecosystem/workspace-integrations/s3-filesystem)
+- [GCSFilesystem reference](/ecosystem/workspace-integrations/gcs-filesystem)
+- [AzureBlobFilesystem reference](/ecosystem/workspace-integrations/azure-blob-filesystem)
 - [Workspace overview](/docs/workspace/overview)
 - [FilesSDK documentation](https://files-sdk.dev)

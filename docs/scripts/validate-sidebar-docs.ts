@@ -65,6 +65,8 @@ const IGNORED_PATTERNS = [
   // Temp ignore for mastra-platform docs that are in the process of moving out of the docs
   /\/mastra-platform\/.*/,
   /\/agents\/networks/,
+  /\/guides\/guide\/.*/,
+  /\/guides\/migrations\/.*/,
   /\/license\.mdx$/,
 ]
 

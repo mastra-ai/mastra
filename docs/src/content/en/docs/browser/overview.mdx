@@ -16,8 +16,8 @@ Browser support enables agents to move through websites, interact with page elem
 Mastra supports three SDK providers and one CLI provider:
 
 - [**AgentBrowser**](/docs/browser/agent-browser): A Playwright-based provider with accessibility-first element targeting. Best for general web automation and scraping.
-- [**Stagehand**](/ecosystem/browser-vendors/stagehand): A Browserbase provider with AI-powered element detection. Best for complex interactions that benefit from natural language selectors.
-- [**FirecrawlBrowser**](/ecosystem/browser-vendors/firecrawl): A Firecrawl Browser Sandbox provider that runs AgentBrowser tools against hosted browser sessions. Best for running automation on hosted browser sessions without managing local browser infrastructure.
+- [**Stagehand**](/ecosystem/browser-integrations/stagehand): A Browserbase provider with AI-powered element detection. Best for complex interactions that benefit from natural language selectors.
+- [**FirecrawlBrowser**](/ecosystem/browser-integrations/firecrawl): A Firecrawl Browser Sandbox provider that runs AgentBrowser tools against hosted browser sessions. Best for running automation on hosted browser sessions without managing local browser infrastructure.
 - [**BrowserViewer**](/docs/browser/browser-viewer): A CLI provider that launches Chrome and injects CDP URLs into CLI tools like agent-browser, browser-use, and browse. Best for workspace agents that drive browsers through shell commands.
 - [**Browser recording (alpha)**](/docs/browser/recording): An opt-in tool layer that saves browser sessions as Motion-JPEG AVI videos with optional captions.
 
@@ -152,8 +152,8 @@ const browser = new AgentBrowser({
 ## Next steps
 
 - [AgentBrowser](/docs/browser/agent-browser)
-- [Stagehand](/ecosystem/browser-vendors/stagehand)
-- [Firecrawl](/ecosystem/browser-vendors/firecrawl)
+- [Stagehand](/ecosystem/browser-integrations/stagehand)
+- [Firecrawl](/ecosystem/browser-integrations/firecrawl)
 - [Browser recording (alpha)](/docs/browser/recording)
 - [BrowserViewer](/docs/browser/browser-viewer)
 - [MastraBrowser reference](/reference/browser/mastra-browser)

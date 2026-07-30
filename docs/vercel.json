@@ -922,12 +922,12 @@
     },
     {
       "source": "/reference/workspace/vercel",
-      "destination": "/ecosystem/workspace-vendors/vercel-serverless",
+      "destination": "/ecosystem/workspace-integrations/vercel-serverless",
       "permanent": true
     },
     {
       "source": "/reference/workspace/vercel-microvm-sandbox",
-      "destination": "/ecosystem/workspace-vendors/vercel-sandbox",
+      "destination": "/ecosystem/workspace-integrations/vercel-sandbox",
       "permanent": true
     },
     {
@@ -1202,102 +1202,102 @@
     },
     {
       "source": "/docs/browser/stagehand",
-      "destination": "/ecosystem/browser-vendors/stagehand",
+      "destination": "/ecosystem/browser-integrations/stagehand",
       "permanent": true
     },
     {
       "source": "/docs/browser/firecrawl",
-      "destination": "/ecosystem/browser-vendors/firecrawl",
+      "destination": "/ecosystem/browser-integrations/firecrawl",
       "permanent": true
     },
     {
       "source": "/reference/workspace/agentcore-runtime-sandbox",
-      "destination": "/ecosystem/workspace-vendors/agentcore-runtime-sandbox",
+      "destination": "/ecosystem/workspace-integrations/agentcore-runtime-sandbox",
       "permanent": true
     },
     {
       "source": "/reference/workspace/agentfs-filesystem",
-      "destination": "/ecosystem/workspace-vendors/agentfs-filesystem",
+      "destination": "/ecosystem/workspace-integrations/agentfs-filesystem",
       "permanent": true
     },
     {
       "source": "/reference/workspace/apple-container-sandbox",
-      "destination": "/ecosystem/workspace-vendors/apple-container-sandbox",
+      "destination": "/ecosystem/workspace-integrations/apple-container-sandbox",
       "permanent": true
     },
     {
       "source": "/reference/workspace/archil-filesystem",
-      "destination": "/ecosystem/workspace-vendors/archil-filesystem",
+      "destination": "/ecosystem/workspace-integrations/archil-filesystem",
       "permanent": true
     },
     {
       "source": "/reference/workspace/azure-blob-filesystem",
-      "destination": "/ecosystem/workspace-vendors/azure-blob-filesystem",
+      "destination": "/ecosystem/workspace-integrations/azure-blob-filesystem",
       "permanent": true
     },
     {
       "source": "/reference/workspace/blaxel-sandbox",
-      "destination": "/ecosystem/workspace-vendors/blaxel-sandbox",
+      "destination": "/ecosystem/workspace-integrations/blaxel-sandbox",
       "permanent": true
     },
     {
       "source": "/reference/workspace/daytona-sandbox",
-      "destination": "/ecosystem/workspace-vendors/daytona-sandbox",
+      "destination": "/ecosystem/workspace-integrations/daytona-sandbox",
       "permanent": true
     },
     {
       "source": "/reference/workspace/docker-sandbox",
-      "destination": "/ecosystem/workspace-vendors/docker-sandbox",
+      "destination": "/ecosystem/workspace-integrations/docker-sandbox",
       "permanent": true
     },
     {
       "source": "/reference/workspace/e2b-sandbox",
-      "destination": "/ecosystem/workspace-vendors/e2b-sandbox",
+      "destination": "/ecosystem/workspace-integrations/e2b-sandbox",
       "permanent": true
     },
     {
       "source": "/reference/workspace/files-sdk-filesystem",
-      "destination": "/ecosystem/workspace-vendors/files-sdk-filesystem",
+      "destination": "/ecosystem/workspace-integrations/files-sdk-filesystem",
       "permanent": true
     },
     {
       "source": "/reference/workspace/gcs-filesystem",
-      "destination": "/ecosystem/workspace-vendors/gcs-filesystem",
+      "destination": "/ecosystem/workspace-integrations/gcs-filesystem",
       "permanent": true
     },
     {
       "source": "/reference/workspace/google-drive-filesystem",
-      "destination": "/ecosystem/workspace-vendors/google-drive-filesystem",
+      "destination": "/ecosystem/workspace-integrations/google-drive-filesystem",
       "permanent": true
     },
     {
       "source": "/reference/workspace/mesa-filesystem",
-      "destination": "/ecosystem/workspace-vendors/mesa-filesystem",
+      "destination": "/ecosystem/workspace-integrations/mesa-filesystem",
       "permanent": true
     },
     {
       "source": "/reference/workspace/modal-sandbox",
-      "destination": "/ecosystem/workspace-vendors/modal-sandbox",
+      "destination": "/ecosystem/workspace-integrations/modal-sandbox",
       "permanent": true
     },
     {
       "source": "/reference/workspace/railway-sandbox",
-      "destination": "/ecosystem/workspace-vendors/railway-sandbox",
+      "destination": "/ecosystem/workspace-integrations/railway-sandbox",
       "permanent": true
     },
     {
       "source": "/reference/workspace/s3-filesystem",
-      "destination": "/ecosystem/workspace-vendors/s3-filesystem",
+      "destination": "/ecosystem/workspace-integrations/s3-filesystem",
       "permanent": true
     },
     {
       "source": "/reference/workspace/vercel-sandbox",
-      "destination": "/ecosystem/workspace-vendors/vercel-sandbox",
+      "destination": "/ecosystem/workspace-integrations/vercel-sandbox",
       "permanent": true
     },
     {
       "source": "/reference/workspace/vercel-serverless",
-      "destination": "/ecosystem/workspace-vendors/vercel-serverless",
+      "destination": "/ecosystem/workspace-integrations/vercel-serverless",
       "permanent": true
     },
     {
@@ -1952,12 +1952,12 @@
     },
     {
       "source": "/reference/workspace/vercel/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/vercel-serverless/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/vercel-serverless/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/vercel-microvm-sandbox/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/vercel-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/vercel-sandbox/llms.txt",
       "permanent": true
     },
     {
@@ -2232,102 +2232,102 @@
     },
     {
       "source": "/docs/browser/stagehand/llms.txt",
-      "destination": "/ecosystem/browser-vendors/stagehand/llms.txt",
+      "destination": "/ecosystem/browser-integrations/stagehand/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/browser/firecrawl/llms.txt",
-      "destination": "/ecosystem/browser-vendors/firecrawl/llms.txt",
+      "destination": "/ecosystem/browser-integrations/firecrawl/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/agentcore-runtime-sandbox/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/agentcore-runtime-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/agentcore-runtime-sandbox/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/agentfs-filesystem/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/agentfs-filesystem/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/agentfs-filesystem/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/apple-container-sandbox/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/apple-container-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/apple-container-sandbox/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/archil-filesystem/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/archil-filesystem/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/archil-filesystem/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/azure-blob-filesystem/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/azure-blob-filesystem/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/azure-blob-filesystem/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/blaxel-sandbox/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/blaxel-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/blaxel-sandbox/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/daytona-sandbox/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/daytona-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/daytona-sandbox/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/docker-sandbox/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/docker-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/docker-sandbox/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/e2b-sandbox/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/e2b-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/e2b-sandbox/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/files-sdk-filesystem/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/files-sdk-filesystem/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/files-sdk-filesystem/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/gcs-filesystem/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/gcs-filesystem/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/gcs-filesystem/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/google-drive-filesystem/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/google-drive-filesystem/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/google-drive-filesystem/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/mesa-filesystem/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/mesa-filesystem/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/mesa-filesystem/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/modal-sandbox/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/modal-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/modal-sandbox/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/railway-sandbox/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/railway-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/railway-sandbox/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/s3-filesystem/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/s3-filesystem/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/s3-filesystem/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/vercel-sandbox/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/vercel-sandbox/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/vercel-sandbox/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workspace/vercel-serverless/llms.txt",
-      "destination": "/ecosystem/workspace-vendors/vercel-serverless/llms.txt",
+      "destination": "/ecosystem/workspace-integrations/vercel-serverless/llms.txt",
       "permanent": true
     },
     {
