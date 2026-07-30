@@ -87,12 +87,26 @@ describe('evaluatePredicate', () => {
     ).toBe(true);
   });
 
-  it('exists / notExists distinguish missing from null', () => {
+  it('exists / notExists treat a null step result as missing (same as an absent step)', () => {
     expect(evaluatePredicate({ op: 'exists', path: 'stepResults.classify' }, ctx)).toBe(true);
-    expect(evaluatePredicate({ op: 'exists', path: 'stepResults.probe' }, ctx)).toBe(true);
+    // A null step result is indistinguishable from "no successful output" via the
+    // runtime accessor, so the map shape must agree: null → missing.
+    expect(evaluatePredicate({ op: 'exists', path: 'stepResults.probe' }, ctx)).toBe(false);
+    expect(evaluatePredicate({ op: 'notExists', path: 'stepResults.probe' }, ctx)).toBe(true);
     expect(evaluatePredicate({ op: 'notExists', path: 'stepResults.absent' }, ctx)).toBe(true);
     expect(evaluatePredicate({ op: 'exists', path: 'stepResults.absent' }, ctx)).toBe(false);
     expect(evaluatePredicate({ op: 'exists', path: 'stepResults.classify.missing.deep' }, ctx)).toBe(false);
+  });
+
+  it('exists evaluates identically for stepResults-map and accessor context shapes', () => {
+    const values: Record<string, unknown> = { classify: { tier: 'high' }, probe: null };
+    const mapCtx = { stepResults: values };
+    const accessorCtx = { getStepResult: (id: string) => values[id] ?? null };
+    for (const stepId of ['classify', 'probe', 'absent']) {
+      expect(evaluatePredicate({ op: 'exists', path: `stepResults.${stepId}` }, mapCtx)).toBe(
+        evaluatePredicate({ op: 'exists', path: `stepResults.${stepId}` }, accessorCtx),
+      );
+    }
   });
 
   it('falls back to getStepResult when no stepResults map is provided', () => {
