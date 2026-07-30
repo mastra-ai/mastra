@@ -7687,8 +7687,8 @@ importers:
   stores/spanner:
     dependencies:
       '@google-cloud/spanner':
-        specifier: ^8.9.0
-        version: 8.9.0
+        specifier: ^8.10.0
+        version: 8.10.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -8186,8 +8186,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/schema-compat
       google-auth-library:
-        specifier: ^10.9.0
-        version: 10.9.0
+        specifier: ^10.9.1
+        version: 10.9.1
       ws:
         specifier: ^8.21.0
         version: 8.21.0(bufferutil@4.1.0)
@@ -9284,7 +9284,7 @@ importers:
     dependencies:
       files-sdk:
         specifier: ^1.5.0
-        version: 1.6.0(@anthropic-ai/claude-agent-sdk@0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3))(@aws-sdk/client-s3@3.1059.0)(@aws-sdk/lib-storage@3.997.0(@aws-sdk/client-s3@3.1059.0))(@azure/core-auth@1.10.1)(@azure/identity@4.13.1)(@azure/storage-blob@12.31.0)(@cfworker/json-schema@4.1.1)(@google-cloud/storage@7.21.0(encoding@0.1.13))(@openai/agents@0.11.6(@cfworker/json-schema@4.1.1)(bufferutil@4.1.0)(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(@supabase/storage-js@2.111.0)(ai@6.0.230(zod@4.4.3))(convex@1.42.3(bufferutil@4.1.0)(react@19.2.7))(google-auth-library@10.9.0)(openai@6.41.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(zod@4.4.3)
+        version: 1.6.0(@anthropic-ai/claude-agent-sdk@0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3))(@aws-sdk/client-s3@3.1059.0)(@aws-sdk/lib-storage@3.997.0(@aws-sdk/client-s3@3.1059.0))(@azure/core-auth@1.10.1)(@azure/identity@4.13.1)(@azure/storage-blob@12.31.0)(@cfworker/json-schema@4.1.1)(@google-cloud/storage@7.21.0(encoding@0.1.13))(@openai/agents@0.11.6(@cfworker/json-schema@4.1.1)(bufferutil@4.1.0)(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(@supabase/storage-js@2.111.0)(ai@6.0.230(zod@4.4.3))(convex@1.42.3(bufferutil@4.1.0)(react@19.2.7))(google-auth-library@10.9.1)(openai@6.41.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(zod@4.4.3)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -13953,8 +13953,8 @@ packages:
     resolution: {integrity: sha512-xXAQBVVrFviWz8L8yDKEqv1ziVw/gMSpYHt3IxSYRSY0fTyjis+xOrKJILj8dd8PAUHGnGiAIYuTprflkE9jsQ==}
     engines: {node: '>=18'}
 
-  '@google-cloud/spanner@8.9.0':
-    resolution: {integrity: sha512-YUm+m92VB/3JopYclmu9flXrTa8ms7YpmGAYDFeYkrj8T6BfhRBMJrkpCYkPd/u2CJucfl99Jn6HuBaAIlUsOA==}
+  '@google-cloud/spanner@8.10.0':
+    resolution: {integrity: sha512-BvFYGKzvxZlLcJWBKuZagpcel6xIiu3Ai8K11OG4SddMA3eqWLCW958N+fZSFVCsnrZtL+zdAf3gIwhEl9k4IQ==}
     engines: {node: '>=18'}
 
   '@google-cloud/speech@6.7.1':
@@ -24564,8 +24564,8 @@ packages:
     engines: {node: '>=0.6.0'}
     hasBin: true
 
-  google-auth-library@10.9.0:
-    resolution: {integrity: sha512-xtvUqvINPhTaBm7nXqlYPcrMHJPm1lCNdSovxnKKhTm+4JsvQ+KGVYJViLoH9Yxu8w+T0Qv5HubzYT9BLrppJg==}
+  google-auth-library@10.9.1:
+    resolution: {integrity: sha512-i1ydyHrqcIxXkWh/uBmVkzCvIuq5yiK2ATndIe5XxKholrG/MTYP9xGYka4sQhrbIAgGjL2B6NOE7rFaiF3fXw==}
     engines: {node: '>=18'}
 
   google-auth-library@9.15.1:
@@ -31661,7 +31661,7 @@ snapshots:
       '@ai-sdk/openai-compatible': 1.0.39(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))(zod@4.4.3)
       '@ai-sdk/provider': 2.0.3
       '@ai-sdk/provider-utils': 3.0.25(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.23.1)(yaml@2.9.0))(zod@4.4.3)
-      google-auth-library: 10.9.0
+      google-auth-library: 10.9.1
       zod: 4.4.3
     transitivePeerDependencies:
       - '@edge-runtime/vm'
@@ -37288,7 +37288,7 @@ snapshots:
       arrify: 2.0.1
       duplexify: 4.1.3
       extend: 3.0.2
-      google-auth-library: 10.9.0
+      google-auth-library: 10.9.1
       html-entities: 2.6.0
       retry-request: 8.0.2
       teeny-request: 10.1.0
@@ -37354,7 +37354,7 @@ snapshots:
       '@opentelemetry/semantic-conventions': 1.39.0
       arrify: 2.0.1
       extend: 3.0.2
-      google-auth-library: 10.9.0
+      google-auth-library: 10.9.1
       google-gax: 5.0.6
       google-logging-utils: 1.1.3
       heap-js: 2.7.1
@@ -37365,7 +37365,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google-cloud/spanner@8.9.0':
+  '@google-cloud/spanner@8.10.0':
     dependencies:
       '@babel/core': 8.0.1
       '@babel/helpers': 7.27.6
@@ -37390,7 +37390,7 @@ snapshots:
       duplexify: 4.1.3
       events-intercept: 2.0.0
       extend: 3.0.2
-      google-auth-library: 10.9.0
+      google-auth-library: 10.9.1
       google-gax: 5.0.6
       grpc-gcp: 1.0.1
       lodash.snakecase: 4.1.1
@@ -37447,7 +37447,7 @@ snapshots:
 
   '@google/genai@1.52.0(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(bufferutil@4.1.0)':
     dependencies:
-      google-auth-library: 10.9.0
+      google-auth-library: 10.9.1
       p-retry: 4.6.2
       protobufjs: 7.6.5
       ws: 8.21.0(bufferutil@4.1.0)
@@ -48378,7 +48378,7 @@ snapshots:
   file-uri-to-path@1.0.0:
     optional: true
 
-  files-sdk@1.6.0(@anthropic-ai/claude-agent-sdk@0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3))(@aws-sdk/client-s3@3.1059.0)(@aws-sdk/lib-storage@3.997.0(@aws-sdk/client-s3@3.1059.0))(@azure/core-auth@1.10.1)(@azure/identity@4.13.1)(@azure/storage-blob@12.31.0)(@cfworker/json-schema@4.1.1)(@google-cloud/storage@7.21.0(encoding@0.1.13))(@openai/agents@0.11.6(@cfworker/json-schema@4.1.1)(bufferutil@4.1.0)(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(@supabase/storage-js@2.111.0)(ai@6.0.230(zod@4.4.3))(convex@1.42.3(bufferutil@4.1.0)(react@19.2.7))(google-auth-library@10.9.0)(openai@6.41.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(zod@4.4.3):
+  files-sdk@1.6.0(@anthropic-ai/claude-agent-sdk@0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3))(@aws-sdk/client-s3@3.1059.0)(@aws-sdk/lib-storage@3.997.0(@aws-sdk/client-s3@3.1059.0))(@azure/core-auth@1.10.1)(@azure/identity@4.13.1)(@azure/storage-blob@12.31.0)(@cfworker/json-schema@4.1.1)(@google-cloud/storage@7.21.0(encoding@0.1.13))(@openai/agents@0.11.6(@cfworker/json-schema@4.1.1)(bufferutil@4.1.0)(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(@supabase/storage-js@2.111.0)(ai@6.0.230(zod@4.4.3))(convex@1.42.3(bufferutil@4.1.0)(react@19.2.7))(google-auth-library@10.9.1)(openai@6.41.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(zod@4.4.3):
     dependencies:
       commander: 14.0.3
     optionalDependencies:
@@ -48394,7 +48394,7 @@ snapshots:
       '@supabase/storage-js': 2.111.0
       ai: 6.0.230(zod@4.4.3)
       convex: 1.42.3(bufferutil@4.1.0)(react@19.2.7)
-      google-auth-library: 10.9.0
+      google-auth-library: 10.9.1
       openai: 6.41.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3)
       zod: 4.4.3
     transitivePeerDependencies:
@@ -48505,7 +48505,7 @@ snapshots:
       '@firebase/database-types': 1.0.16
       farmhash-modern: 1.1.0
       fast-deep-equal: 3.1.3
-      google-auth-library: 10.9.0
+      google-auth-library: 10.9.1
       jsonwebtoken: 9.0.3
       jwks-rsa: 3.2.2
       node-forge: 1.4.0
@@ -48858,7 +48858,7 @@ snapshots:
     dependencies:
       minimist: 1.2.8
 
-  google-auth-library@10.9.0:
+  google-auth-library@10.9.1:
     dependencies:
       base64-js: 1.5.1
       ecdsa-sig-formatter: 1.0.11
@@ -48904,7 +48904,7 @@ snapshots:
       '@grpc/grpc-js': 1.14.4
       '@grpc/proto-loader': 0.8.1
       duplexify: 4.1.3
-      google-auth-library: 10.9.0
+      google-auth-library: 10.9.1
       google-logging-utils: 1.1.3
       node-fetch: 3.3.2
       object-hash: 3.0.0
