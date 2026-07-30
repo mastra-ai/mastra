@@ -120,7 +120,7 @@ const strategy = new HttpRemoteStrategy({
 })
 ```
 
-## Push-mode broker authentication
+## Push-mode broker auth
 
 When using a push-mode PubSub (like Google Cloud Pub/Sub), the broker POSTs events directly to the `/api/workflows/events` endpoint. The broker attaches its own credentials. For example, Google Cloud Pub/Sub sends a Google-signed OIDC token.
 
