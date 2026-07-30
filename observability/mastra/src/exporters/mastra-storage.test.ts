@@ -267,6 +267,34 @@ describe('MastraStorageExporter', () => {
           ]),
         });
       });
+
+      it('should store bridged root spans without their external parent', async () => {
+        mockObservabilityStore.observabilityStrategy = {
+          preferred: 'realtime',
+          supported: ['realtime', 'batch-with-updates', 'insert-only'],
+        };
+        const exporter = new MastraStorageExporter({ strategy: 'realtime', logger: mockLogger });
+        await exporter.init({ mastra: mockMastra });
+
+        const rootEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'root-span');
+        rootEvent.exportedSpan.isRootSpan = true;
+        rootEvent.exportedSpan.parentSpanId = 'external-parent';
+
+        const childEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'child-span');
+        childEvent.exportedSpan.isRootSpan = false;
+        childEvent.exportedSpan.parentSpanId = 'root-span';
+
+        await exporter.exportTracingEvent(rootEvent);
+        await exporter.exportTracingEvent(childEvent);
+
+        const records = mockObservabilityStore.batchCreateSpans.mock.calls.flatMap((call: any) => call[0].records);
+        expect(records).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ spanId: 'root-span', parentSpanId: null }),
+            expect.objectContaining({ spanId: 'child-span', parentSpanId: 'root-span' }),
+          ]),
+        );
+      });
     });
 
     describe('Batch-with-updates strategy', () => {
