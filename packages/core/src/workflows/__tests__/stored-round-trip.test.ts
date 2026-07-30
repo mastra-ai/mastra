@@ -186,6 +186,29 @@ describe('storage round-trip', () => {
     expect((rehydratedResult as any).result.message).toBe('Doubled value is 10');
   });
 
+  it('rehydrates workflow-level description and metadata from the stored definition', async () => {
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'double-tool': doubleTool } as any,
+      storage: new InMemoryStore({ id: 'metadata-hydration' }),
+    });
+
+    const { workflow } = await rehydrateWorkflow(
+      {
+        id: 'metadata-hydration',
+        description: 'carries metadata',
+        metadata: { owner: 'team-a', tags: ['stored'] },
+        inputSchema: { type: 'object', properties: { value: { type: 'number' } }, required: ['value'] },
+        outputSchema: { type: 'object', properties: { doubled: { type: 'number' } }, required: ['doubled'] },
+        graph: [{ type: 'tool', id: 'calculate', toolId: 'double-tool' }],
+      },
+      mastra,
+    );
+
+    expect(workflow.description).toBe('carries metadata');
+    expect(workflow.metadata).toEqual({ owner: 'team-a', tags: ['stored'] });
+  });
+
   it('rehydrates mappings by local tool step id when it differs from the registered tool id', async () => {
     const mastra = new Mastra({
       logger: false,

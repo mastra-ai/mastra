@@ -163,10 +163,14 @@ function resolveTemplatePlaceholder(rawExpr: string, template: string, idx: numb
       const stepId = innerDot === -1 ? rest : rest.slice(0, innerDot);
       const subPath = innerDot === -1 ? '' : rest.slice(innerDot + 1);
       const stepResult = ctx.getStepResult(stepId);
-      if (stepResult === null) {
+      // Nullish (not just null) so a step that "succeeded" with `undefined`
+      // output is reported as missing too — consistent with how predicates
+      // treat nullish step results. Nullish *path values inside* a present
+      // result still render as '' via stringifyTemplateValue.
+      if (stepResult == null) {
         throw new Error(
           `${label} references stepResults.${stepId} but step "${stepId}" has no successful output ` +
-            `(not run yet, not registered, or failed).`,
+            `(not run yet, not registered, failed, or produced no output).`,
         );
       }
       return stringifyTemplateValue(traverseMappingPath(stepResult, subPath, label), template, idx, rawExpr);

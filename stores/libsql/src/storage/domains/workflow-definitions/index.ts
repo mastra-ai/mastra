@@ -11,22 +11,25 @@ import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
 
-function parseJson<T = unknown>(val: unknown): T | undefined {
+function parseJson<T = unknown>(val: unknown, column: string, rowId: unknown): T | undefined {
   if (val == null) return undefined;
   if (typeof val === 'string') {
     try {
       return JSON.parse(val) as T;
     } catch {
-      return val as T;
+      // Surface corruption loudly — returning the raw string would hand
+      // callers a definition whose graph/schema is a string, failing much
+      // later (or silently) at rehydration time.
+      throw new Error(`Workflow definition row "${String(rowId)}" has malformed JSON in column "${column}".`);
     }
   }
   return val as T;
 }
 
 function rowToDefinition(row: Record<string, any>): WorkflowDefinition {
-  const inputSchema = parseJson(row.inputSchema);
-  const outputSchema = parseJson(row.outputSchema);
-  const graph = parseJson(row.graph);
+  const inputSchema = parseJson(row.inputSchema, 'inputSchema', row.id);
+  const outputSchema = parseJson(row.outputSchema, 'outputSchema', row.id);
+  const graph = parseJson(row.graph, 'graph', row.id);
   if (inputSchema === undefined || outputSchema === undefined || graph === undefined) {
     throw new Error(`Workflow definition row "${row.id}" is missing required JSON columns.`);
   }
@@ -41,11 +44,11 @@ function rowToDefinition(row: Record<string, any>): WorkflowDefinition {
     updatedAt: new Date(row.updatedAt),
   };
   if (row.description != null) def.description = String(row.description);
-  const metadata = parseJson<Record<string, unknown>>(row.metadata);
+  const metadata = parseJson<Record<string, unknown>>(row.metadata, 'metadata', row.id);
   if (metadata !== undefined) def.metadata = metadata;
-  const stateSchema = parseJson(row.stateSchema);
+  const stateSchema = parseJson(row.stateSchema, 'stateSchema', row.id);
   if (stateSchema !== undefined) def.stateSchema = stateSchema;
-  const requestContextSchema = parseJson(row.requestContextSchema);
+  const requestContextSchema = parseJson(row.requestContextSchema, 'requestContextSchema', row.id);
   if (requestContextSchema !== undefined) def.requestContextSchema = requestContextSchema;
   if (row.authorId != null) def.authorId = String(row.authorId);
   return def;

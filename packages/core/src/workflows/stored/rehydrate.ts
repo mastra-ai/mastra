@@ -65,6 +65,7 @@ export async function rehydrateWorkflow(
   const wf = createWorkflow({
     id: def.id,
     description: def.description,
+    metadata: def.metadata,
     inputSchema: inputSchema as any,
     outputSchema: outputSchema as any,
     stateSchema: stateSchema as any,

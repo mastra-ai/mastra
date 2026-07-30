@@ -73,6 +73,11 @@ describe('resolveTemplate', () => {
     expect(() => resolveTemplate('${stepResults.missing}', makeCtx())).toThrow(/has no successful output/);
   });
 
+  it('treats an undefined step result the same as a missing one', () => {
+    const ctx = makeCtx({ getStepResult: () => undefined });
+    expect(() => resolveTemplate('${stepResults.ghost}', ctx)).toThrow(/has no successful output/);
+  });
+
   it('throws when a path traverses into a non-object', () => {
     expect(() => resolveTemplate('${inputData.name.oops}', makeCtx())).toThrow(/Invalid path/);
   });

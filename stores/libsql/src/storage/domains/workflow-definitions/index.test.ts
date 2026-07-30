@@ -39,10 +39,11 @@ const graph: SerializedStepFlowEntry[] = [
 
 describe('WorkflowDefinitionsLibSQL', () => {
   let store: LibSQLStore;
+  let client: ReturnType<typeof createClient>;
 
   beforeEach(async () => {
     // Fresh in-memory db per test for full isolation.
-    const client = createClient({ url: ':memory:' });
+    client = createClient({ url: ':memory:' });
     store = new LibSQLStore({ id: 'wd-test', client, maxRetries: 1, initialBackoffMs: 10 });
     await store.init();
   });
@@ -145,6 +146,23 @@ describe('WorkflowDefinitionsLibSQL', () => {
     const byAuthor = await wd.list({ authorId: 'bob' });
     expect(byAuthor.total).toBe(1);
     expect(byAuthor.definitions[0]?.id).toBe('wf-b');
+  });
+
+  it('surfaces malformed JSON columns instead of returning the raw string', async () => {
+    const wd = (await store.getStore('workflowDefinitions'))!;
+    await wd.upsert({ id: 'wf-corrupt', inputSchema, outputSchema, graph });
+
+    // Corrupt the graph column directly, simulating storage-level damage.
+    await client.execute({
+      sql: `UPDATE "mastra_workflow_definitions" SET graph = ? WHERE id = ?`,
+      args: ['{not valid json', 'wf-corrupt'],
+    });
+
+    // Corruption must fail loudly at read time — never hydrate a definition
+    // whose graph is a raw string. The SQL-level json() wrapper catches JSONB
+    // corruption; the JS-level parseJson guard covers anything that slips
+    // past it (e.g. legacy TEXT rows read without the wrapper).
+    await expect(wd.get('wf-corrupt')).rejects.toThrow(/malformed JSON/i);
   });
 
   it('delete removes the row', async () => {
