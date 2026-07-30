@@ -292,6 +292,10 @@ Any [supported storage backend](/reference/workers/overview#supported-storage-ba
               targetPort: 5432
         ```
 
+        :::caution
+        The Postgres example above uses `emptyDir` for storage, which means data is lost when the pod restarts. In production, replace it with a `PersistentVolumeClaim` or use a managed database service.
+        :::
+
         ```yaml title="k8s/redis.yaml"
         apiVersion: apps/v1
         kind: Deployment
