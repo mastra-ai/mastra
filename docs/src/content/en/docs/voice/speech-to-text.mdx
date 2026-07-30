@@ -10,7 +10,7 @@ packages:
 # Speech-to-Text (STT)
 
 Speech-to-Text (STT) in Mastra provides a standardized interface for converting audio input into text across multiple service providers.
-STT helps create voice-enabled applications that can respond to human speech, enabling hands-free interaction, accessibility for users with disabilities, and more natural human-computer interfaces.
+STT lets voice-enabled applications respond to human speech. It supports hands-free interaction and improves accessibility for users with disabilities. It also provides a more natural interface.
 
 ## Configuration
 
@@ -20,7 +20,7 @@ To use STT in Mastra, you need to provide a `listeningModel` when initializing t
 - **`apiKey`**: Your API key for authentication.
 - **Provider-specific options**: Additional options that may be required or supported by the specific voice provider.
 
-**Note**: All of these parameters are optional. You can use the default settings provided by the voice provider, which will depend on the specific provider you are using.
+**Behavior**: All of these parameters are optional. You can use the default settings provided by the voice provider, which will depend on the specific provider you are using.
 
 ```typescript
 const voice = new OpenAIVoice({

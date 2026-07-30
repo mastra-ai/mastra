@@ -9,7 +9,7 @@ packages:
 
 The `ProviderHistoryCompat` processor handles provider-specific history incompatibilities. It can rewrite the outbound language model prompt before a provider call, or react to API errors and retry with repaired message history.
 
-Use it when an agent may switch between model providers, reuse message history across providers, or call a provider that rejects fields emitted by another provider.
+Use it when an agent may switch between model providers or reuse message history across providers. It also handles providers that reject fields emitted by another provider.
 
 ## Usage example
 

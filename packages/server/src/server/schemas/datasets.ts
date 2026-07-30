@@ -198,6 +198,11 @@ const toolMocksSchema = z
   .optional()
   .describe('Ordered item-level static tool mocks served in place of executing the real tool');
 
+const unmockedToolPolicySchema = z
+  .enum(['allow', 'deny'])
+  .optional()
+  .describe("Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item");
+
 // Diagnostic receipt for item-level tool mocks, persisted on experiment results.
 const toolMockReportSchema = z
   .object({
@@ -206,7 +211,7 @@ const toolMockReportSchema = z
     liveCalls: z.array(z.object({ toolName: z.string(), args: z.unknown() })),
     failure: z
       .object({
-        code: z.enum(['TOOL_MOCK_MISMATCH', 'TOOL_MOCK_EXHAUSTED']),
+        code: z.enum(['TOOL_MOCK_MISMATCH', 'TOOL_MOCK_EXHAUSTED', 'TOOL_MOCK_NOT_DECLARED']),
         toolName: z.string(),
         args: z.unknown(),
       })
@@ -303,6 +308,7 @@ export const addItemBodySchema = z.object({
   groundTruth: z.unknown().optional().describe('Expected output for comparison'),
   expectedTrajectory: trajectoryExpectationSchema,
   toolMocks: toolMocksSchema,
+  unmockedToolPolicy: unmockedToolPolicySchema,
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Request context preset for this item'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   source: datasetItemSourceSchema,
@@ -313,6 +319,7 @@ export const updateItemBodySchema = z.object({
   groundTruth: z.unknown().optional().describe('Expected output for comparison'),
   expectedTrajectory: trajectoryExpectationSchema,
   toolMocks: toolMocksSchema,
+  unmockedToolPolicy: unmockedToolPolicySchema,
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Request context preset for this item'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   source: datasetItemSourceSchema,
@@ -377,6 +384,7 @@ export const datasetItemResponseSchema = z.object({
   groundTruth: z.unknown().optional(),
   expectedTrajectory: z.unknown().optional(),
   toolMocks: toolMocksSchema,
+  unmockedToolPolicy: unmockedToolPolicySchema,
   requestContext: z.record(z.string(), z.unknown()).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   source: datasetItemSourceSchema,
@@ -438,6 +446,7 @@ export const experimentResultResponseSchema = z.object({
   traceId: z.string().nullable(),
   status: z.enum(['needs-review', 'reviewed', 'complete']).nullable().optional(),
   tags: z.array(z.string()).nullable().optional(),
+  comment: z.string().nullable().optional(),
   toolMockReport: toolMockReportSchema.nullable(),
   createdAt: z.coerce.date(),
 });
@@ -445,6 +454,7 @@ export const experimentResultResponseSchema = z.object({
 export const updateExperimentResultBodySchema = z.object({
   status: z.enum(['needs-review', 'reviewed', 'complete']).nullable().optional(),
   tags: z.array(z.string()).optional(),
+  comment: z.string().nullable().optional(),
 });
 
 // Comparison item schema (MVP shape)
@@ -560,6 +570,7 @@ export const itemVersionResponseSchema = z.object({
   groundTruth: z.unknown().optional(),
   expectedTrajectory: z.unknown().optional(),
   toolMocks: toolMocksSchema,
+  unmockedToolPolicy: unmockedToolPolicySchema,
   metadata: z.record(z.string(), z.unknown()).optional(),
   validTo: z.number().int().nullable(),
   isDeleted: z.boolean(),
@@ -596,6 +607,7 @@ export const batchInsertItemsBodySchema = z.object({
       groundTruth: z.unknown().optional(),
       expectedTrajectory: trajectoryExpectationSchema,
       toolMocks: toolMocksSchema,
+      unmockedToolPolicy: unmockedToolPolicySchema,
       requestContext: z.record(z.string(), z.unknown()).optional(),
       metadata: z.record(z.string(), z.unknown()).optional(),
       source: datasetItemSourceSchema,

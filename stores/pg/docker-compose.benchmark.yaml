@@ -9,6 +9,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    # pg_stat_statements powers the warm-mode statement counting in
+    # scripts/init-benchmark.ts. max is raised so the many distinct
+    # schema-qualified DDL statements the cold iterations generate don't
+    # evict entries between the warm-mode before/after snapshots.
+    command: postgres -c shared_preload_libraries=pg_stat_statements -c pg_stat_statements.max=10000
 
   # Toxiproxy sits between the benchmark client and Postgres so we can
   # measure init() at multiple round-trip latencies. The fix's worst case
