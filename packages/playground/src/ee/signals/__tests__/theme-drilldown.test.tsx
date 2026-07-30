@@ -495,10 +495,7 @@ describe('SankeySignals drill-in', () => {
       const { container } = renderSignals();
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       await screen.findByText('2 traces analyzed');
-      const sliderInput = container.querySelector('input[type="range"]');
-      if (!sliderInput) throw new Error('Snapshot slider input was not rendered');
-
-      fireEvent.change(sliderInput, { target: { value: '0' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
 
       expect(await screen.findByText(/This theme is not present in the selected snapshot/)).not.toBeNull();
       expect(screen.getByRole('button', { name: 'Clear filter' })).not.toBeNull();
@@ -693,10 +690,7 @@ describe('SankeySignals drill-in', () => {
       const { container } = renderSignals();
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
       await screen.findByText('2 traces analyzed');
-      const sliderInput = container.querySelector('input[type="range"]');
-      if (!sliderInput) throw new Error('Snapshot slider input was not rendered');
-
-      fireEvent.change(sliderInput, { target: { value: '0' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
       expect(
         await screen.findByText(/This drill-in is unavailable for snapshots with more than 2,000 traces/),
       ).not.toBeNull();
@@ -734,10 +728,7 @@ describe('SankeySignals drill-in', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Next examples' }));
       await screen.findByText('Save the transcript with the project.');
-      const sliderInput = container.querySelector('input[type="range"]');
-      if (!sliderInput) throw new Error('Snapshot slider input was not rendered');
-
-      fireEvent.change(sliderInput, { target: { value: '0' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
       await waitFor(() =>
         expect(observedExampleQueries).toContainEqual({ snapshotId: 'older-opaque-snapshot-cursor', offset: '0' }),
       );

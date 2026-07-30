@@ -25,15 +25,29 @@ export function themeFlowToSankeyData(flow: ThemeFlowResponse): {
   columns: SankeyChartColumn[];
   records: SankeyChartRecord[];
 } {
-  const columns = flow.stages.map(stage => ({
-    id: stage.signalName,
-    label: formatSignalName(stage.signalName),
-  }));
   const nodes = new Map<string, { signalName: TraceSignalName; node: ThemeNode }>();
 
   for (const stage of flow.stages) {
     for (const node of stage.nodes) nodes.set(node.nodeId, { signalName: stage.signalName, node });
   }
+
+  // Only stages that participate in links become chart columns. A stage with
+  // themes but no links (possible in real flows) would otherwise leave a
+  // phantom first column: the chart lays out linked columns across the full
+  // width but keeps anchoring labels as if the unlinked column still led.
+  const linkedSignalNames = new Set(
+    flow.links.flatMap(link => {
+      const source = nodes.get(link.sourceNodeId);
+      const target = nodes.get(link.targetNodeId);
+      return [...(source ? [source.signalName] : []), ...(target ? [target.signalName] : [])];
+    }),
+  );
+  const columns = flow.stages
+    .filter(stage => linkedSignalNames.has(stage.signalName))
+    .map(stage => ({
+      id: stage.signalName,
+      label: formatSignalName(stage.signalName),
+    }));
 
   const records: SankeyChartRecord[] = [];
   for (const link of flow.links) {

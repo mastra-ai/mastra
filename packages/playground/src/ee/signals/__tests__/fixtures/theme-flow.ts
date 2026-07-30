@@ -143,6 +143,7 @@ export const landmarkThemeSnapshotsResponse: ThemeSnapshotsResponse = {
       snapshotId: 'landmark-1',
       ordinal: 1,
       total: 230,
+      cutoffAt: '2026-07-01T04:00:00.000Z',
       startedAt: '2026-06-10T00:00:00.000Z',
       endedAt: '2026-07-01T04:00:00.000Z',
       traceCount: 30,
@@ -153,6 +154,7 @@ export const landmarkThemeSnapshotsResponse: ThemeSnapshotsResponse = {
       snapshotId: 'landmark-2',
       ordinal: 58,
       total: 230,
+      cutoffAt: '2026-07-02T18:00:00.000Z',
       startedAt: '2026-06-12T00:00:00.000Z',
       endedAt: '2026-07-02T18:00:00.000Z',
       traceCount: 34,
@@ -163,6 +165,7 @@ export const landmarkThemeSnapshotsResponse: ThemeSnapshotsResponse = {
       snapshotId: 'landmark-3',
       ordinal: 117,
       total: 230,
+      cutoffAt: '2026-07-04T09:00:00.000Z',
       startedAt: '2026-06-14T00:00:00.000Z',
       endedAt: '2026-07-04T09:00:00.000Z',
       traceCount: 41,
@@ -173,6 +176,8 @@ export const landmarkThemeSnapshotsResponse: ThemeSnapshotsResponse = {
       snapshotId: 'landmark-4',
       ordinal: 171,
       total: 230,
+      // Bursty cutoffs: landmarks 4 and 5 arrive close together after a gap.
+      cutoffAt: '2026-07-07T18:00:00.000Z',
       startedAt: '2026-06-16T00:00:00.000Z',
       endedAt: '2026-07-06T15:00:00.000Z',
       traceCount: 46,
@@ -183,6 +188,7 @@ export const landmarkThemeSnapshotsResponse: ThemeSnapshotsResponse = {
       snapshotId: 'landmark-5',
       ordinal: 230,
       total: 230,
+      cutoffAt: '2026-07-08T00:00:00.000Z',
       startedAt: '2026-06-18T00:00:00.000Z',
       endedAt: '2026-07-08T00:00:00.000Z',
       traceCount: 50,
@@ -569,6 +575,17 @@ export const reorderedFourStageThemeFlowResponse: ThemeFlowResponse = {
       targetShare: 8 / 21,
     },
   ],
+};
+
+/**
+ * Mirrors prod frames where the goal stage has themes but no goal→outcome
+ * links exist yet: only outcome→behavior→sentiment connect.
+ */
+export const unlinkedGoalStageThemeFlowResponse: ThemeFlowResponse = {
+  ...fourStageThemeFlowResponse,
+  links: fourStageThemeFlowResponse.links.filter(
+    link => !link.sourceNodeId.startsWith('goal-') && !link.targetNodeId.startsWith('goal-'),
+  ),
 };
 
 const metadataOnlyGoalNode: ThemeNode = {

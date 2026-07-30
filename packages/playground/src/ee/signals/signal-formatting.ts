@@ -8,6 +8,18 @@ export function traceLabel(count: number) {
   return `${count} ${count === 1 ? 'trace' : 'traces'}`;
 }
 
+export function formatSnapshotCutoff(cutoffAt: string) {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'UTC',
+  }).format(new Date(cutoffAt));
+}
+
 export function formatSnapshotWindow(startedAt: string, endedAt: string) {
   const start = new Date(startedAt);
   const end = new Date(endedAt);

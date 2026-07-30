@@ -29,6 +29,7 @@ import {
   singleStageThemeFlowResponse,
   themeFlowResponse,
   themeSnapshotsResponse,
+  unlinkedGoalStageThemeFlowResponse,
 } from './fixtures/theme-flow';
 import { server } from '@/test/msw-server';
 
@@ -266,6 +267,48 @@ describe('SankeySignals', () => {
 
       expect(await screen.findByText(/No cross-signal flow for this snapshot/)).not.toBeNull();
       expect(screen.queryByText('Select at least two columns with data to display a flow')).toBeNull();
+    });
+  });
+
+  describe('when a stage has themes but no links touch it', () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(unlinkedGoalStageThemeFlowResponse),
+        ),
+      );
+    });
+
+    it('drops the unlinked column from the chart so the first rendered column anchors the layout', async () => {
+      renderSankeySignals();
+
+      const flowRegion = await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      expect(within(flowRegion).queryByText('GOAL')).toBeNull();
+      expect(within(flowRegion).getByText('OUTCOME')).not.toBeNull();
+      expect(within(flowRegion).getByText('BEHAVIOR')).not.toBeNull();
+      expect(within(flowRegion).getByText('SENTIMENT')).not.toBeNull();
+
+      const labelAnchor = (label: string) =>
+        within(flowRegion)
+          .getAllByText(label)
+          .find(element => element.tagName === 'text')
+          ?.getAttribute('text-anchor');
+      // Outcome is now the leftmost column: its labels must use first-column
+      // anchoring so they don't extend past the chart's left edge.
+      expect(labelAnchor('Request resolved')).toBe('start');
+      // Sentiment is the last column: labels anchor to the right edge.
+      expect(labelAnchor('Frustrated user')).toBe('end');
+    });
+
+    it('keeps the unlinked signal in the distribution cards', async () => {
+      renderSankeySignals();
+
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      const distributions = screen.getByRole('region', { name: 'Trace signal distributions' });
+      expect(within(distributions).getByRole('article', { name: 'Goal distribution' })).not.toBeNull();
     });
   });
 
@@ -660,11 +703,9 @@ describe('SankeySignals', () => {
           return HttpResponse.json({ ...sourceFlow, snapshot });
         }),
       );
-      const { container } = renderSankeySignals();
+      renderSankeySignals();
       await screen.findByLabelText('Reorder Outcome');
-      const sliderInput = container.querySelector('input[type="range"]');
-      if (!sliderInput) throw new Error('Snapshot slider input was not rendered');
-      fireEvent.change(sliderInput, { target: { value: '0' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
       await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces');
 
       await reorderOutcomeAfterBehavior();
@@ -723,11 +764,13 @@ describe('SankeySignals', () => {
         }),
       );
       renderSankeySignals();
-      await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces');
+      await screen.findByRole('region', { name: 'Trace signal theme flow' });
+      fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
+      await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces');
 
       fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
 
-      await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces', undefined, { timeout: 2000 });
+      await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces', undefined, { timeout: 2000 });
       expect(screen.queryByRole('status', { name: 'Loading snapshot flow' })).toBeNull();
       expect(screen.getByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
     });
@@ -736,16 +779,36 @@ describe('SankeySignals', () => {
       renderSankeySignals();
 
       expect(await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces')).not.toBeNull();
-      expect(screen.getByRole('group', { name: 'Snapshot' })).not.toBeNull();
+      expect(screen.getByRole('group', { name: 'Snapshot landmarks' })).not.toBeNull();
     });
 
     it('scrubs to an earlier snapshot', async () => {
-      const { container } = renderSankeySignals();
+      renderSankeySignals();
 
-      await screen.findByRole('group', { name: 'Snapshot' });
-      const sliderInput = container.querySelector('input[type="range"]');
-      if (!sliderInput) throw new Error('Snapshot slider input was not rendered');
-      fireEvent.change(sliderInput, { target: { value: '0' } });
+      await screen.findByRole('group', { name: 'Snapshot landmarks' });
+      fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
+
+      expect(await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces')).not.toBeNull();
+    });
+
+    it('stops playback at the final snapshot instead of looping', async () => {
+      renderSankeySignals();
+      await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces');
+      fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
+      await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
+
+      await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces', undefined, { timeout: 2000 });
+      expect(await screen.findByRole('button', { name: 'Play snapshots' }, { timeout: 2000 })).not.toBeNull();
+      expect(screen.getByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces')).not.toBeNull();
+    });
+
+    it('restarts playback from the first snapshot when play is pressed at the end', async () => {
+      renderSankeySignals();
+      await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
 
       expect(await screen.findByText('Snapshot 3/4 · Jun 24–Jul 1, 2026 · 40 traces')).not.toBeNull();
     });
@@ -842,12 +905,37 @@ describe('SankeySignals', () => {
       );
       renderSankeySignals();
 
-      await screen.findByText('Snapshot 230/230 · Jun 18–Jul 8, 2026 · 50 traces');
+      await screen.findByText('Snapshot 230/230 · as of Jul 8, 2026, 00:00 · window Jun 18–Jul 8, 2026 · 50 traces');
       await waitFor(() =>
         expect([...new Set(flowSnapshotIds)].sort()).toEqual(['landmark-1', 'landmark-4', 'landmark-5']),
       );
       expect(flowSnapshotIds).not.toContain('landmark-2');
       expect(flowSnapshotIds).not.toContain('landmark-3');
+    });
+
+    it('places timeline ticks by snapshot cutoff time instead of even index spacing', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(landmarkThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          const snapshot = landmarkThemeSnapshotsResponse.snapshots.find(item => item.snapshotId === snapshotId);
+          if (!snapshot) return HttpResponse.json({ error: 'Unknown snapshot' }, { status: 400 });
+          return HttpResponse.json({ ...fourStageThemeFlowResponse, snapshot });
+        }),
+      );
+      renderSankeySignals();
+
+      const track = await screen.findByRole('group', { name: 'Snapshot landmarks' });
+      const ticks = within(track).getAllByRole('button');
+      const positions = ticks.map(tick => Number.parseFloat(tick.style.left));
+
+      // Range spans Jul 1 04:00 → Jul 8 00:00. Landmark 4 (Jul 7 18:00) sits in
+      // the final burst, so it must land near the end rather than at 75%.
+      expect(positions[0]).toBe(0);
+      expect(positions[positions.length - 1]).toBe(100);
+      expect(positions[3]).toBeGreaterThan(90);
     });
   });
 

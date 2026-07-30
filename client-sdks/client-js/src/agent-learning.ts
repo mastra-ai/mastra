@@ -14,6 +14,8 @@ export interface ThemeSnapshot {
   snapshotId: string;
   ordinal: number;
   total: number;
+  /** When this snapshot became the current cross-signal state. Drives time-axis placement. */
+  cutoffAt?: string;
   startedAt: string;
   endedAt: string;
   traceCount: number;

@@ -25,10 +25,11 @@ import {
   stabilizeThemeFlow,
 } from './sankey-signals-data';
 import { SignalDistributions } from './signal-distributions';
-import { formatSignalName, formatSnapshotWindow, traceLabel } from './signal-formatting';
+import { formatSignalName, formatSnapshotCutoff, formatSnapshotWindow, traceLabel } from './signal-formatting';
 import { SignalsErrorState } from './signals-error-state';
 import { SignalsFrameLoadingSkeleton, SignalsLoadingSkeleton } from './signals-loading-skeleton';
 import { SnapshotTimeline } from './snapshot-timeline';
+import { ThemeCompare } from './theme-compare';
 import { ThemeDetailPanel } from './theme-detail-panel';
 import { buildDrilledThemeFlow, findThemeSelection } from './theme-drilldown-data';
 import type { ThemeSelection } from './theme-drilldown-data';
@@ -134,15 +135,23 @@ export function SankeySignals({
   const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
   const [selectedSnapshotOrdinal, setSelectedSnapshotOrdinal] = useState<number>();
   const [isPlaying, setIsPlaying] = useState(false);
+  const [viewMode, setViewMode] = useState<'flow' | 'compare'>('flow');
   const [drillIn, setDrillIn] = useState<ThemeSelection>();
   const [detailSelection, setDetailSelection] = useState<ThemeSelection>();
   const [noiseSignalName, setNoiseSignalName] = useState<TraceSignalName>();
   const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.ordinal === selectedSnapshotOrdinal);
   const selectedSnapshotIndex = matchedSnapshotIndex >= 0 ? matchedSnapshotIndex : snapshots.length - 1;
   const snapshot = snapshots[selectedSnapshotIndex];
+  const totalSnapshots = snapshotsQuery.data?.totalSnapshots ?? snapshot?.total ?? 0;
   const selectSnapshot = (index: number) => setSelectedSnapshotOrdinal(snapshots[index]?.ordinal);
+  const handlePlayingChange = (nextIsPlaying: boolean) => {
+    // Restart from the first landmark when play is pressed at the end.
+    if (nextIsPlaying && selectedSnapshotIndex === snapshots.length - 1) selectSnapshot(0);
+    setIsPlaying(nextIsPlaying);
+  };
 
-  const nextSnapshotOrdinal = snapshots[(selectedSnapshotIndex + 1) % snapshots.length]?.ordinal;
+  // Undefined at the last landmark so playback stops instead of looping.
+  const nextSnapshotOrdinal = snapshots[selectedSnapshotIndex + 1]?.ordinal;
   const flowSnapshotIds = selectFlowSnapshotIds(snapshots, selectedSnapshotIndex);
   const flowQueries = useThemeFlows(entityId, entityType, signalNames, flowSnapshotIds);
   const flowQuery = flowQueries[flowSnapshotIds.indexOf(snapshot?.snapshotId ?? '')];
@@ -176,7 +185,13 @@ export function SankeySignals({
     isPlaying,
     isPlaybackBlocked: isFlowPending || hasFlowError || isPlaybackBlockedByDrillIn,
     nextSnapshot: nextSnapshotOrdinal,
-    onAdvance: setSelectedSnapshotOrdinal,
+    onAdvance: ordinal => {
+      if (ordinal === undefined) {
+        setIsPlaying(false);
+        return;
+      }
+      setSelectedSnapshotOrdinal(ordinal);
+    },
     snapshotCount: snapshots.length,
   });
 
@@ -242,8 +257,9 @@ export function SankeySignals({
         <SnapshotTimeline
           snapshots={snapshots}
           selectedIndex={selectedSnapshotIndex}
+          totalSnapshots={totalSnapshots}
           isPlaying={isPlaying}
-          onPlayingChange={setIsPlaying}
+          onPlayingChange={handlePlayingChange}
           onSnapshotChange={selectSnapshot}
         />
         <SignalsFrameLoadingSkeleton />
@@ -306,8 +322,10 @@ export function SankeySignals({
           sentiment trace signals connect.
         </p>
         <p className="text-neutral4 mt-2 font-mono text-xs">
-          {entityId} · Snapshot {snapshot.ordinal} of {snapshot.total} ·{' '}
-          {formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)}
+          {entityId} · Snapshot {snapshot.ordinal} of {totalSnapshots} ·{' '}
+          {snapshot.cutoffAt
+            ? `state as of ${formatSnapshotCutoff(snapshot.cutoffAt)}`
+            : formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)}
         </p>
         <ul aria-label="Trace intelligence metrics" className="mt-3 flex flex-wrap gap-2">
           <li className="border-border1 bg-surface2 text-neutral4 rounded-md border px-3 py-1.5 text-xs">
@@ -321,86 +339,122 @@ export function SankeySignals({
           </li>
         </ul>
       </header>
-      {drillIn ? (
-        <nav aria-label="Active theme drill-in" className="text-neutral4 flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-neutral6 text-base font-semibold">{drillIn.label}</span>
-          <Button
-            aria-label={`View theme details for ${drillIn.label}`}
-            onClick={() => {
-              setNoiseSignalName(undefined);
-              setDetailSelection(drillIn);
-            }}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            View theme details
-          </Button>
-          <Button onClick={() => setDrillIn(undefined)} size="sm" type="button" variant="ghost">
-            Clear filter
-          </Button>
-        </nav>
-      ) : null}
-      {drillIn && !drillInAvailable ? (
-        <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
-          This drill-in is unavailable for snapshots with more than 2,000 traces. Use the clear filter action above or
-          choose another snapshot.
-        </section>
-      ) : drillIn && pathsQuery.isPending ? (
-        <SignalsFrameLoadingSkeleton />
-      ) : isDrilledEmpty ? (
-        <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
-          This theme is not present in the selected snapshot. Use the clear filter action above to return to the full
-          flow.
-        </section>
-      ) : graphSummary.records.length === 0 ? (
-        <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
-          No cross-signal flow for this snapshot — its trace signals have not overlapped on shared traces yet. Pick
-          another snapshot from the timeline below.
-        </section>
-      ) : (
-        <FlowCard
-          columns={graphSummary.columns}
-          records={graphSummary.records}
-          stages={stages}
-          height={height}
-          onNodeClick={handleNodeClick}
-          isNodeClickable={isNodeClickable}
-          drillInDisabledReason={drillInDisabledReason}
+      <div aria-label="Signals view mode" className="flex gap-1" role="group">
+        <Button
+          aria-pressed={viewMode === 'flow'}
+          onClick={() => setViewMode('flow')}
+          size="sm"
+          type="button"
+          variant={viewMode === 'flow' ? 'outline' : 'ghost'}
+        >
+          Flow
+        </Button>
+        <Button
+          aria-pressed={viewMode === 'compare'}
+          onClick={() => {
+            setIsPlaying(false);
+            setViewMode('compare');
+          }}
+          size="sm"
+          type="button"
+          variant={viewMode === 'compare' ? 'outline' : 'ghost'}
+        >
+          Compare
+        </Button>
+      </div>
+      {viewMode === 'compare' ? (
+        <ThemeCompare
+          entityId={entityId}
+          entityType={entityType}
+          signalNames={signalNames}
+          snapshots={snapshots}
+          totalSnapshots={totalSnapshots}
         />
-      )}
-      <SnapshotTimeline
-        snapshots={snapshots}
-        selectedIndex={selectedSnapshotIndex}
-        isPlaying={isPlaying}
-        onPlayingChange={setIsPlaying}
-        onSnapshotChange={selectSnapshot}
-      />
-      {drillIn && (!drillInAvailable || pathsQuery.isPending || isDrilledEmpty) ? null : (
+      ) : (
         <>
-          {perspectiveMutation.isPending ? (
-            <p className="text-neutral3 font-mono text-xs" role="status">
-              Reloading snapshots for new signal perspective…
-            </p>
+          {drillIn ? (
+            <nav aria-label="Active theme drill-in" className="text-neutral4 flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-neutral6 text-base font-semibold">{drillIn.label}</span>
+              <Button
+                aria-label={`View theme details for ${drillIn.label}`}
+                onClick={() => {
+                  setNoiseSignalName(undefined);
+                  setDetailSelection(drillIn);
+                }}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                View theme details
+              </Button>
+              <Button onClick={() => setDrillIn(undefined)} size="sm" type="button" variant="ghost">
+                Clear filter
+              </Button>
+            </nav>
           ) : null}
-          {perspectiveMutation.isError ? (
-            <p className="text-xs text-red-500" role="alert">
-              Unable to load that signal perspective. Try reordering the columns again.
-            </p>
-          ) : null}
-          <SignalDistributions
-            disabled={perspectiveMutation.isPending}
-            stages={distributionStages}
-            onOrderChange={handleSignalOrderChange}
-            onViewThemeDetails={selection => {
-              setNoiseSignalName(undefined);
-              setDetailSelection(selection);
-            }}
-            onViewNoiseDetails={signalName => {
-              setDetailSelection(undefined);
-              setNoiseSignalName(signalName);
-            }}
+          {drillIn && !drillInAvailable ? (
+            <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
+              This drill-in is unavailable for snapshots with more than 2,000 traces. Use the clear filter action above
+              or choose another snapshot.
+            </section>
+          ) : drillIn && pathsQuery.isPending ? (
+            <SignalsFrameLoadingSkeleton />
+          ) : isDrilledEmpty ? (
+            <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
+              This theme is not present in the selected snapshot. Use the clear filter action above to return to the
+              full flow.
+            </section>
+          ) : graphSummary.records.length === 0 ? (
+            <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
+              No cross-signal flow for this snapshot — its trace signals have not overlapped on shared traces yet. Pick
+              another snapshot from the timeline below.
+            </section>
+          ) : (
+            <FlowCard
+              columns={graphSummary.columns}
+              records={graphSummary.records}
+              stages={stages}
+              height={height}
+              onNodeClick={handleNodeClick}
+              isNodeClickable={isNodeClickable}
+              drillInDisabledReason={drillInDisabledReason}
+            />
+          )}
+          <SnapshotTimeline
+            snapshots={snapshots}
+            selectedIndex={selectedSnapshotIndex}
+            totalSnapshots={totalSnapshots}
+            isPlaying={isPlaying}
+            onPlayingChange={handlePlayingChange}
+            onSnapshotChange={selectSnapshot}
           />
+          {drillIn && (!drillInAvailable || pathsQuery.isPending || isDrilledEmpty) ? null : (
+            <>
+              {perspectiveMutation.isPending ? (
+                <p className="text-neutral3 font-mono text-xs" role="status">
+                  Reloading snapshots for new signal perspective…
+                </p>
+              ) : null}
+              {perspectiveMutation.isError ? (
+                <p className="text-xs text-red-500" role="alert">
+                  Unable to load that signal perspective. Try reordering the columns again.
+                </p>
+              ) : null}
+              <SignalDistributions
+                disabled={perspectiveMutation.isPending}
+                stages={distributionStages}
+                onOrderChange={handleSignalOrderChange}
+                onViewThemeDetails={selection => {
+                  setNoiseSignalName(undefined);
+                  setDetailSelection(selection);
+                }}
+                onViewNoiseDetails={signalName => {
+                  setDetailSelection(undefined);
+                  setNoiseSignalName(signalName);
+                }}
+              />
+            </>
+          )}
         </>
       )}
       <ThemeDetailPanel
