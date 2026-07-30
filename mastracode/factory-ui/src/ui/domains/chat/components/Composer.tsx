@@ -157,12 +157,14 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     });
     if (accepted.length === 0) return;
     const additions = await Promise.all(
-      accepted.map(async (file): Promise<PendingImage> => ({
-        id: `pending-image-${pendingImageSeq++}`,
-        data: await readFileAsBase64(file),
-        mediaType: file.type,
-        filename: file.name || undefined,
-      })),
+      accepted.map(
+        async (file): Promise<PendingImage> => ({
+          id: `pending-image-${pendingImageSeq++}`,
+          data: await readFileAsBase64(file),
+          mediaType: file.type,
+          filename: file.name || undefined,
+        }),
+      ),
     );
     setImages(prev => [...prev, ...additions]);
   };
@@ -302,7 +304,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()} className="relative">
       {/* Rendered outside ComposerBox: its overflow-hidden clips anything above the box. */}
       {showSuggestions && (
-        <div className="border-border1 bg-surface3 absolute bottom-full left-0 right-0 z-20 mx-auto mb-2 w-full max-w-3xl rounded-md border p-1 shadow-lg">
+        <div className="border-border1 bg-surface3 absolute right-0 bottom-full left-0 z-20 mx-auto mb-2 w-full max-w-3xl rounded-md border p-1 shadow-lg">
           {suggestions.map((cmd, index) => (
             <button
               key={cmd.name}
