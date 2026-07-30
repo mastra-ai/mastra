@@ -379,12 +379,15 @@ describe('SankeySignals drill-in', () => {
       expect(await screen.findByText('Add transcript')).not.toBeNull();
       expect(screen.queryByText('Drill-in: Goal = "Add transcript"')).toBeNull();
       expect(await screen.findByText('2 traces analyzed')).not.toBeNull();
-      expect(screen.getAllByTitle('Other')).toHaveLength(2);
+      // Themes outside the drilled paths disappear instead of lingering as
+      // zero-count ghosts.
+      expect(screen.queryByTitle('Other')).toBeNull();
       expect(pathsRequestCount).toBe(2);
 
       fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
 
       expect(await screen.findByText('3 traces analyzed')).not.toBeNull();
+      expect(screen.getAllByTitle('Other').length).toBeGreaterThan(0);
       expect(screen.queryByLabelText('Active theme drill-in')).toBeNull();
     });
 

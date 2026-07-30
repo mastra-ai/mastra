@@ -84,40 +84,58 @@ export function selectFlowSnapshotIds(snapshots: Array<{ snapshotId: string }>, 
     });
 }
 
+/**
+ * Keeps node ordering and ribbon layout widths consistent across the playback
+ * window without inventing content: only nodes and links present in the
+ * current snapshot render (no zero-count ghosts from neighboring flows), but
+ * their order and layout weight come from the whole window so shared themes
+ * hold their position while scrubbing.
+ */
 export function stabilizeThemeFlow(flow: ThemeFlowResponse, windowFlows: ThemeFlowResponse[]): StableThemeFlowResponse {
   const stages = flow.stages.map(stage => {
-    const nodes = new Map<string, ThemeNode>();
-
+    const orderedNodeIds = new Map<string, number>();
     for (const windowFlow of windowFlows) {
       const windowStage = windowFlow.stages.find(candidate => candidate.signalName === stage.signalName);
       for (const node of windowStage?.nodes ?? []) {
-        nodes.set(node.nodeId, { ...node, traceCount: 0, stageShare: 0 });
+        if (!orderedNodeIds.has(node.nodeId)) orderedNodeIds.set(node.nodeId, orderedNodeIds.size);
       }
     }
-    for (const node of stage.nodes) nodes.set(node.nodeId, node);
 
-    return { ...stage, nodes: [...nodes.values()] };
+    const nodes = stage.nodes
+      .filter(node => node.traceCount > 0)
+      .sort(
+        (left, right) =>
+          (orderedNodeIds.get(left.nodeId) ?? Number.MAX_SAFE_INTEGER) -
+          (orderedNodeIds.get(right.nodeId) ?? Number.MAX_SAFE_INTEGER),
+      );
+    return { ...stage, nodes };
   });
 
-  const layoutLinks = new Map<string, ThemeFlowResponse['links'][number]>();
+  const keptNodeIds = new Set(stages.flatMap(stage => stage.nodes.map(node => node.nodeId)));
+  const layoutWeights = new Map<string, number>();
+  const orderedLinkKeys = new Map<string, number>();
   for (const windowFlow of windowFlows) {
     for (const link of windowFlow.links) {
       const key = `${link.sourceNodeId}\u0000${link.targetNodeId}`;
-      const existing = layoutLinks.get(key);
-      if (!existing || link.traceCount > existing.traceCount) layoutLinks.set(key, link);
+      layoutWeights.set(key, Math.max(layoutWeights.get(key) ?? 0, link.traceCount));
+      if (!orderedLinkKeys.has(key)) orderedLinkKeys.set(key, orderedLinkKeys.size);
     }
   }
-  const currentLinks = new Map(flow.links.map(link => [`${link.sourceNodeId}\u0000${link.targetNodeId}`, link]));
-  const stableLinks = [...layoutLinks.entries()].map(([key, layoutLink]): StableThemeFlowLink => {
-    const currentLink = currentLinks.get(key);
-    return {
-      ...(currentLink ?? layoutLink),
-      traceCount: currentLink?.traceCount ?? 0,
-      sourceShare: currentLink?.sourceShare ?? 0,
-      targetShare: currentLink?.targetShare ?? 0,
-      layoutTraceCount: Math.max(MINIMUM_LAYOUT_WEIGHT, layoutLink.traceCount),
-    };
-  });
+
+  const stableLinks = flow.links
+    .filter(link => link.traceCount > 0 && keptNodeIds.has(link.sourceNodeId) && keptNodeIds.has(link.targetNodeId))
+    .sort((left, right) => {
+      const leftKey = `${left.sourceNodeId}\u0000${left.targetNodeId}`;
+      const rightKey = `${right.sourceNodeId}\u0000${right.targetNodeId}`;
+      return (orderedLinkKeys.get(leftKey) ?? 0) - (orderedLinkKeys.get(rightKey) ?? 0);
+    })
+    .map((link): StableThemeFlowLink => {
+      const key = `${link.sourceNodeId}\u0000${link.targetNodeId}`;
+      return {
+        ...link,
+        layoutTraceCount: Math.max(MINIMUM_LAYOUT_WEIGHT, layoutWeights.get(key) ?? link.traceCount),
+      };
+    });
 
   return { ...flow, stages, links: stableLinks };
 }

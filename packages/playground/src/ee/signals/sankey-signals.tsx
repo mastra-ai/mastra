@@ -353,6 +353,11 @@ export function SankeySignals({
           This theme is not present in the selected snapshot. Use the clear filter action above to return to the full
           flow.
         </section>
+      ) : graphSummary.records.length === 0 ? (
+        <section className="border-border1 bg-surface2 text-neutral3 rounded-lg border p-6 text-sm">
+          No cross-signal flow for this snapshot — its trace signals have not overlapped on shared traces yet. Pick
+          another snapshot from the timeline below.
+        </section>
       ) : (
         <FlowCard
           columns={graphSummary.columns}

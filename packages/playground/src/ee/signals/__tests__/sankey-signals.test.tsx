@@ -177,6 +177,43 @@ describe('stabilizeThemeFlow', () => {
       expect(getLinkCounts(higherFrame)).toEqual(getLinkCounts(fourStageThemeFlowResponse));
     });
   });
+
+  describe('when neighboring window flows contain themes absent from the selected snapshot', () => {
+    it('omits neighbor-only nodes and links instead of rendering zero-count ghosts', () => {
+      const neighborOnlyNode = {
+        nodeId: 'goal-neighbor-only',
+        kind: 'theme' as const,
+        themeId: 'neighbor-only',
+        label: 'Neighbor only goal',
+        traceCount: 12,
+        stageShare: 0.3,
+      };
+      const neighborFlow = {
+        ...earlierThemeFlowResponse,
+        stages: earlierThemeFlowResponse.stages.map(stage =>
+          stage.signalName === 'goal' ? { ...stage, nodes: [...stage.nodes, neighborOnlyNode] } : stage,
+        ),
+        links: [
+          ...earlierThemeFlowResponse.links,
+          {
+            sourceNodeId: neighborOnlyNode.nodeId,
+            targetNodeId: earlierThemeFlowResponse.stages[1].nodes[0].nodeId,
+            traceCount: 12,
+            sourceShare: 1,
+            targetShare: 0.5,
+          },
+        ],
+      };
+
+      const stable = stabilizeThemeFlow(fourStageThemeFlowResponse, [neighborFlow, fourStageThemeFlowResponse]);
+
+      const nodeIds = stable.stages.flatMap(stage => stage.nodes.map(node => node.nodeId));
+      expect(nodeIds).not.toContain(neighborOnlyNode.nodeId);
+      expect(stable.stages.flatMap(stage => stage.nodes).every(node => node.traceCount > 0)).toBe(true);
+      expect(stable.links.map(link => link.sourceNodeId)).not.toContain(neighborOnlyNode.nodeId);
+      expect(stable.links.every(link => link.traceCount > 0)).toBe(true);
+    });
+  });
 });
 
 describe('SankeySignals', () => {
@@ -211,6 +248,24 @@ describe('SankeySignals', () => {
 
       expect(await screen.findByRole('status', { name: 'Loading trace intelligence' })).not.toBeNull();
       expect(screen.getByTestId('signals-loading-skeleton')).not.toBeNull();
+    });
+  });
+
+  describe('when the selected snapshot has no cross-signal links', () => {
+    it('explains the missing flow instead of rendering an empty chart', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json({ ...themeFlowResponse, links: [] }),
+        ),
+      );
+
+      renderSankeySignals();
+
+      expect(await screen.findByText(/No cross-signal flow for this snapshot/)).not.toBeNull();
+      expect(screen.queryByText('Select at least two columns with data to display a flow')).toBeNull();
     });
   });
 
@@ -651,11 +706,12 @@ describe('SankeySignals', () => {
       );
     });
 
-    it('keeps themes from every timeline snapshot visible in the latest Sankey frame', async () => {
+    it('renders only the selected snapshot themes, without zero-count ghosts from other snapshots', async () => {
       renderSankeySignals();
 
       const chart = await screen.findByRole('region', { name: 'Trace signal theme flow' });
-      expect(within(chart).getByLabelText('Legacy support request: 0 traces (0%)')).not.toBeNull();
+      expect(within(chart).queryByLabelText(/Legacy support request/)).toBeNull();
+      expect(within(chart).queryByText('0 (0%)')).toBeNull();
     });
 
     it('keeps the rendered frame visible while playback advances', async () => {
