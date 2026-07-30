@@ -322,12 +322,14 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
         // the budget arithmetically instead of materializing every element
         // through the replacer.
         if (ArrayBuffer.isView(probed)) {
-          // Detect BigInt element types via the cross-realm-safe brand tag —
-          // `instanceof` fails for views from another realm — and pass them
-          // through so the engine still throws TypeError on their BigInt
-          // elements, matching the unbudgeted probe's verdict.
-          const tag = Object.prototype.toString.call(probed);
-          if (tag === '[object BigInt64Array]' || tag === '[object BigUint64Array]') {
+          // Detect BigInt element types by reading element 0 — integer-indexed
+          // access on a typed array is unspoofable and realm-independent,
+          // unlike `instanceof` (fails cross-realm) or the brand tag (an own
+          // `Symbol.toStringTag` shadows it). Pass BigInt views through so the
+          // engine still throws TypeError on their elements, matching the
+          // unbudgeted probe's verdict. (An empty BigInt view has no elements
+          // to throw on and stringifies to '{}' either way.)
+          if (typeof (probed as ArrayLike<unknown>)[0] === 'bigint') {
             return probed;
           }
           budget -= (probed as { length?: number }).length ?? 0;

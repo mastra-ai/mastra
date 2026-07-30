@@ -309,6 +309,34 @@ describe('RequestContext', () => {
       expect(json).not.toHaveProperty('bigIntArray');
     });
 
+    it('should skip BigInt-element typed arrays whose brand tag is spoofed', () => {
+      // An own Symbol.toStringTag shadows the built-in typed-array tag, so
+      // detection must not rely on it — the elements are still BigInt and a
+      // real JSON.stringify still throws.
+      const spoofed = new BigInt64Array([1n]);
+      Object.defineProperty(spoofed, Symbol.toStringTag, { value: 'Uint8Array' });
+
+      const ctx = new RequestContext();
+      ctx.set('spoofedBigIntArray', spoofed);
+      ctx.set('serializable', 'value');
+
+      const json = ctx.toJSON();
+
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('spoofedBigIntArray');
+    });
+
+    it('should keep empty BigInt-element typed arrays, matching JSON.stringify', () => {
+      // No elements to throw on: JSON.stringify(new BigInt64Array(0)) is '{}',
+      // so the unbudgeted probe kept it and the budgeted probe must too.
+      const ctx = new RequestContext();
+      ctx.set('emptyBigIntArray', new BigInt64Array(0));
+
+      const json = ctx.toJSON();
+
+      expect(json).toHaveProperty('emptyBigIntArray');
+    });
+
     it('should skip BigInt-element typed arrays created in another realm', async () => {
       // A foreign-realm BigInt64Array passes ArrayBuffer.isView but fails
       // `instanceof BigInt64Array`, so the fast path must detect it via the
