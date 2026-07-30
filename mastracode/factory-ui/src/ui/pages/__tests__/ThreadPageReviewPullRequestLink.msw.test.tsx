@@ -18,6 +18,8 @@ const PULL_REQUEST_ACCESSIBLE_NAME = `Open open mastra-ai/mastra pull request ${
 const OTHER_PULL_REQUEST_NUMBER = 20339;
 const OTHER_PULL_REQUEST_URL = `https://github.com/mastra-ai/mastra/pull/${OTHER_PULL_REQUEST_NUMBER}`;
 const OTHER_PULL_REQUEST_ACCESSIBLE_NAME = `Open open mastra-ai/mastra pull request ${OTHER_PULL_REQUEST_NUMBER}`;
+const MALFORMED_PULL_REQUEST_NUMBER = 20340;
+const MALFORMED_PULL_REQUEST_URL = `https://github.com/mastra-ai/mastra/pull/${MALFORMED_PULL_REQUEST_NUMBER}`;
 const AC = `${TEST_BASE_URL}/api/agent-controller/code`;
 
 const workspaceSession = {
@@ -205,23 +207,34 @@ describe('ThreadPage pull request link placement', () => {
       expect(pullRequestLinks).toHaveLength(1);
     });
 
-    it('keeps valid subscriptions when the API returns a malformed one', async () => {
+    it('drops a malformed subscription and keeps the valid ones', async () => {
       stubThreadRoute(createWireWorkItem('pull-request'), [
-        { ...otherPullRequestSubscription, id: 'subscription-invalid', status: 'draft' },
+        {
+          ...otherPullRequestSubscription,
+          id: 'subscription-invalid',
+          pullRequestNumber: MALFORMED_PULL_REQUEST_NUMBER,
+          url: `https://github.com/mastra-ai/mastra/pull/${MALFORMED_PULL_REQUEST_NUMBER}`,
+          status: 'draft',
+        },
         otherPullRequestSubscription,
       ]);
       renderThreadRoute();
 
       const factorySession = await screen.findByRole('region', { name: 'Factory session' });
-      const links = await within(factorySession).findAllByRole('link', {
+      const validLinks = await within(factorySession).findAllByRole('link', {
         name: OTHER_PULL_REQUEST_ACCESSIBLE_NAME,
       });
 
-      expect(links).toHaveLength(1);
+      expect(validLinks).toHaveLength(1);
+      const malformedLinks = within(factorySession)
+        .queryAllByRole('link')
+        .filter(link => link.getAttribute('href') === MALFORMED_PULL_REQUEST_URL);
+      expect(malformedLinks).toHaveLength(0);
     });
 
     it('still shows the active review when the subscriptions request fails', async () => {
-      stubThreadRoute(createWireWorkItem('pull-request'), [otherPullRequestSubscription]);
+      // the subscriptions stub is overridden below — only the 500 matters here
+      stubThreadRoute(createWireWorkItem('pull-request'), []);
       server.use(http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => new HttpResponse(null, { status: 500 })));
       renderThreadRoute();
 
