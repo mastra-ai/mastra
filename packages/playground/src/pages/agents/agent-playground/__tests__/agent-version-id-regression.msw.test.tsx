@@ -76,43 +76,45 @@ afterEach(() => {
 });
 
 describe('AgentPlayground — test chat agent version id', () => {
-  it('sends the latest draft version id to test chat while viewing the latest version, not the published one', async () => {
-    registerBaselineHandlers();
+  describe('when viewing the latest version', () => {
+    it('sends the latest draft version id to test chat instead of the published one', async () => {
+      registerBaselineHandlers();
 
-    const sentRequestContexts: Array<Record<string, unknown> | undefined> = [];
-    server.use(
-      http.post(`${BASE_URL}/api/agents/${AGENT_ID}/send-message`, async ({ request }) => {
-        const body = (await request.json()) as {
-          ifIdle?: { streamOptions?: { requestContext?: Record<string, unknown> } };
-        };
-        sentRequestContexts.push(body.ifIdle?.streamOptions?.requestContext);
-        return HttpResponse.json({ accepted: true, runId: 'run-1' });
-      }),
-    );
+      const sentRequestContexts: Array<Record<string, unknown> | undefined> = [];
+      server.use(
+        http.post(`${BASE_URL}/api/agents/${AGENT_ID}/send-message`, async ({ request }) => {
+          const body = (await request.json()) as {
+            ifIdle?: { streamOptions?: { requestContext?: Record<string, unknown> } };
+          };
+          sentRequestContexts.push(body.ifIdle?.streamOptions?.requestContext);
+          return HttpResponse.json({ accepted: true, runId: 'run-1' });
+        }),
+      );
 
-    await act(async () => {
-      renderAgentPlayground();
+      await act(async () => {
+        renderAgentPlayground();
+      });
+
+      const textarea = await screen.findByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      await act(async () => {
+        fireEvent.change(textarea, { target: { value: 'what version are you?' } });
+      });
+
+      const sendButton = await screen.findByRole('button', { name: /send/i });
+      await act(async () => {
+        fireEvent.click(sendButton);
+      });
+
+      await waitFor(() => expect(sentRequestContexts.length).toBeGreaterThan(0));
+
+      // Regression: while viewing the latest version (no explicit selection of a
+      // previous version), test chat must resolve against the latest draft, not
+      // the published version and not omit the version id entirely. Before the
+      // fix, `agentVersionId` was `undefined` here, and the server would fall
+      // back to serving the published version instead of this draft.
+      expect(sentRequestContexts[0]?.agentVersionId).toBe(LATEST_DRAFT_VERSION_ID);
+      expect(sentRequestContexts[0]?.agentVersionId).not.toBe(PUBLISHED_VERSION_ID);
+      expect(sentRequestContexts[0]?.agentVersionId).not.toBeUndefined();
     });
-
-    const textarea = await screen.findByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
-    await act(async () => {
-      fireEvent.change(textarea, { target: { value: 'what version are you?' } });
-    });
-
-    const sendButton = await screen.findByRole('button', { name: /send/i });
-    await act(async () => {
-      fireEvent.click(sendButton);
-    });
-
-    await waitFor(() => expect(sentRequestContexts.length).toBeGreaterThan(0));
-
-    // Regression: while viewing the latest version (no explicit selection of a
-    // previous version), test chat must resolve against the latest draft, not
-    // the published version and not omit the version id entirely. Before the
-    // fix, `agentVersionId` was `undefined` here, and the server would fall
-    // back to serving the published version instead of this draft.
-    expect(sentRequestContexts[0]?.agentVersionId).toBe(LATEST_DRAFT_VERSION_ID);
-    expect(sentRequestContexts[0]?.agentVersionId).not.toBe(PUBLISHED_VERSION_ID);
-    expect(sentRequestContexts[0]?.agentVersionId).not.toBeUndefined();
   });
 });
