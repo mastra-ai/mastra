@@ -269,7 +269,7 @@ describe('Agent Learning theme drilldown hooks', () => {
   });
 
   describe('when a drill-in starts', () => {
-    it('fetches every paths page with the opaque snapshot and ordered signals', async () => {
+    it('fetches every paths page with the opaque snapshot and ordered trace signals', async () => {
       const observedOffsets: string[] = [];
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-paths`, ({ request }) => {
@@ -413,7 +413,7 @@ describe('SankeySignals drill-in', () => {
       fireEvent.click(detailsRow);
 
       expect(await screen.findByRole('dialog', { name: 'Add transcript' })).not.toBeNull();
-      expect(screen.getByRole('heading', { name: 'Understand what drives every agent interaction' })).not.toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Understand what drives every agent interaction' })).toBeNull();
       expect(await screen.findByText('Users want to add a transcript to their workspace.')).not.toBeNull();
       expect(await screen.findByText('Add this transcript to my workspace.')).not.toBeNull();
       expect(await screen.findByText(/^birth$/i)).not.toBeNull();
@@ -424,7 +424,7 @@ describe('SankeySignals drill-in', () => {
   });
 
   describe('when a Noise row is selected', () => {
-    it('shows Noise for every signal and opens its definition and summary examples', async () => {
+    it('shows Noise for every trace signal and opens its definition and summary examples', async () => {
       useFlowHandlers();
       server.use(
         http.get(`${BASE_URL}/api/learning/entities/support-agent/noise`, ({ request }) => {

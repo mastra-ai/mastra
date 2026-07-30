@@ -1,5 +1,14 @@
 export type TraceSignalName = 'goal' | 'sentiment' | 'behavior' | 'outcome';
 
+export type EntityLearningProgressStatus = 'collecting' | 'processing' | 'ready';
+
+export interface EntityLearningProgressResponse {
+  status: EntityLearningProgressStatus;
+  traceCount: number;
+  signals: Record<TraceSignalName, { generated: number; embedded: number }>;
+  availableSignals: TraceSignalName[];
+}
+
 export interface ThemeLearningEntity {
   entityId: string;
   entityType: string;
@@ -163,4 +172,22 @@ export interface NoiseResponse {
     traceCount: number;
     coverage: number;
   };
+}
+
+export interface TraceInsightSummary {
+  version: string;
+  summary: string;
+  observations: string[];
+  currentTask?: string;
+  degenerate?: boolean;
+  createdAt: string;
+}
+
+export interface TraceInsightResponse {
+  traceId: string;
+  summary?: TraceInsightSummary;
+  signals: Array<{
+    signalName: TraceSignalName;
+    signalText: string;
+  }>;
 }

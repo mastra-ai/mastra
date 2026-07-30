@@ -76,8 +76,12 @@ function createSession(accepted?: Promise<unknown>) {
   return { controller, session, delivered, sendNotificationSignal, consumeStream };
 }
 
-async function queueDecision(storage: WorkItemsStorage, decision: FactoryCommitDecision) {
-  const item = await createItem(storage);
+async function queueDecision(
+  storage: WorkItemsStorage,
+  decision: FactoryCommitDecision,
+  options?: { sourceKey?: string; ingress?: string },
+) {
+  const item = await createItem(storage, options?.sourceKey);
   const rules = defaultFactoryRules({
     version: 'rules-v1',
     overrides: { work: { execute: { issue: { onEnter: () => decision } } } },
@@ -91,7 +95,7 @@ async function queueDecision(storage: WorkItemsStorage, decision: FactoryCommitD
     stage: 'execute',
     expectedRevision: item.revision,
     actor: { type: 'human', id: 'user-1' },
-    ingress: { type: 'human', identity: 'move-1' },
+    ingress: { type: 'human', identity: options?.ingress ?? 'move-1' },
     cause: 'test',
   });
   expect(result.status).toBe('accepted');
@@ -385,6 +389,168 @@ describe('FactoryDecisionDispatcher', () => {
       accept({ action: 'wake', output: { consumeStream: vi.fn(async () => {}) } });
       await dispatch;
       expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps claiming newer decisions while a slow dispatch is still in flight', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+    try {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      // Decision A: delivery hangs until we release it (models a kickoff that
+      // consumes a long agent run).
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'sendMessage',
+        role: 'work',
+        message: 'Review completion.',
+        idempotencyKey: 'slow-1',
+      });
+      let accept!: (value: unknown) => void;
+      const accepted = new Promise<unknown>(resolve => {
+        accept = resolve;
+      });
+      const { controller } = createSession(accepted);
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+            title: 'Fix issue',
+            stages: ['execute'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'work',
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'kickoff-null',
+        kickoffMessage: null,
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+      });
+
+      dispatcher.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(
+        (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(d => d.idempotencyKey === 'slow-1'),
+      ).toMatchObject({ status: 'leased' });
+
+      // Decision B arrives while A is still hanging. The poll loop must claim
+      // and complete it instead of waiting for A.
+      await queueDecision(
+        storage,
+        {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: 'fast-1',
+          board: 'work',
+          source: 'github-issue',
+          sourceKey: 'github-issue:99',
+          title: 'Linked issue',
+          url: null,
+          stage: 'intake',
+        },
+        { sourceKey: 'github-issue:2', ingress: 'move-2' },
+      );
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      const decisions = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(decisions.find(d => d.idempotencyKey === 'fast-1')).toMatchObject({ status: 'succeeded' });
+      expect(decisions.find(d => d.idempotencyKey === 'slow-1')).toMatchObject({ status: 'leased' });
+
+      accept({ action: 'wake', output: { consumeStream: vi.fn(async () => {}) } });
+      await dispatcher.stop();
+      expect(
+        (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(d => d.idempotencyKey === 'slow-1'),
+      ).toMatchObject({ status: 'succeeded' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops claiming once the in-flight cap is reached and resumes when capacity frees up', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+    try {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueDecision(storage, {
+        type: 'sendMessage',
+        role: 'work',
+        message: 'Review completion.',
+        idempotencyKey: 'slow-1',
+      });
+      let accept!: (value: unknown) => void;
+      const accepted = new Promise<unknown>(resolve => {
+        accept = resolve;
+      });
+      const { controller } = createSession(accepted);
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+            title: 'Fix issue',
+            stages: ['execute'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'work',
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'kickoff-null',
+        kickoffMessage: null,
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        maxInFlight: 1,
+      });
+
+      dispatcher.start();
+      await vi.advanceTimersByTimeAsync(0);
+      await queueDecision(
+        storage,
+        {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: 'fast-1',
+          board: 'work',
+          source: 'github-issue',
+          sourceKey: 'github-issue:99',
+          title: 'Linked issue',
+          url: null,
+          stage: 'intake',
+        },
+        { sourceKey: 'github-issue:2', ingress: 'move-2' },
+      );
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      // Capacity is exhausted by the hanging dispatch, so the newer decision
+      // must remain unclaimed.
+      expect(
+        (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(d => d.idempotencyKey === 'fast-1'),
+      ).toMatchObject({ status: 'pending' });
+
+      accept({ action: 'wake', output: { consumeStream: vi.fn(async () => {}) } });
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(
+        (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(d => d.idempotencyKey === 'fast-1'),
+      ).toMatchObject({ status: 'succeeded' });
+      await dispatcher.stop();
     } finally {
       vi.useRealTimers();
     }

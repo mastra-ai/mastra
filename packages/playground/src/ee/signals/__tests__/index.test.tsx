@@ -13,6 +13,7 @@ import {
   firstThemeExamplesResponse,
   themeDetailResponse,
   themeHistoryResponse,
+  traceInsightResponse,
 } from './fixtures/theme-drilldown';
 import {
   billingThemeSnapshotsResponse,
@@ -22,6 +23,7 @@ import {
   multiAgentThemeEntitiesResponse,
   multiEligibleThemeEntitiesResponse,
   populatedThemeEntitiesResponse,
+  processingProgressResponse,
   themeFlowResponse,
   themeSnapshotsResponse,
 } from './fixtures/theme-flow';
@@ -65,9 +67,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('Signals page', () => {
+describe('Trace Intelligence page', () => {
   describe('when the entities request is pending', () => {
-    it('shows the Signals loading state', async () => {
+    it('shows the Trace Intelligence loading state', async () => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities`, async () => {
           await new Promise(() => {});
@@ -91,7 +93,7 @@ describe('Signals page', () => {
 
       renderSignalsPage();
 
-      expect(await screen.findByText('Unable to load trace intelligence entities.')).not.toBeNull();
+      expect(await screen.findByText('Unable to load trace signal entities.')).not.toBeNull();
     });
   });
 
@@ -115,7 +117,7 @@ describe('Signals page', () => {
 
       renderSignalsPage();
 
-      expect(await screen.findByText('Unable to load trace intelligence entities.')).not.toBeNull();
+      expect(await screen.findByText('Unable to load trace signal entities.')).not.toBeNull();
       fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
       expect(await screen.findByRole('combobox', { name: 'Agent' })).not.toBeNull();
@@ -124,12 +126,12 @@ describe('Signals page', () => {
   });
 
   describe('when no Agent Learning entities exist', () => {
-    it('shows that the analysis is waiting for traces', async () => {
+    it('shows that Trace Intelligence is collecting traces', async () => {
       server.use(http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(emptyThemeEntitiesResponse)));
 
       renderSignalsPage();
 
-      expect(await screen.findByText('Waiting for traces.')).not.toBeNull();
+      expect(await screen.findByText('Collecting traces for Trace Intelligence.')).not.toBeNull();
     });
   });
 
@@ -146,12 +148,11 @@ describe('Signals page', () => {
       );
     });
 
-    it('labels the populated analysis', async () => {
+    it('labels the populated analysis with snapshot context', async () => {
       renderSignalsPage();
 
-      expect(
-        await screen.findByRole('heading', { name: 'Understand what drives every agent interaction' }),
-      ).not.toBeNull();
+      expect(await screen.findByText(/support-agent · Snapshot 4 of 4/)).not.toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Understand what drives every agent interaction' })).toBeNull();
     });
 
     it('exposes the theme flow as a named region', async () => {
@@ -160,7 +161,7 @@ describe('Signals page', () => {
       expect(await screen.findByRole('region', { name: 'Trace signal theme flow' })).not.toBeNull();
     });
 
-    it('keeps exactly one trace intelligence documentation action across the shell and page', async () => {
+    it('keeps exactly one Trace intelligence documentation action across the shell and page', async () => {
       renderSignalsPageWithShell();
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
 
@@ -212,10 +213,13 @@ describe('Signals page', () => {
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
           HttpResponse.json(emptyThemeSnapshotsResponse),
         ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/progress`, () =>
+          HttpResponse.json(processingProgressResponse),
+        ),
       );
       renderSignalsPage();
 
-      expect(await screen.findByText('Waiting for traces.')).not.toBeNull();
+      expect(await screen.findByText('No Trace Intelligence themes in this date range.')).not.toBeNull();
       expect(screen.getByRole('button', { name: 'Last 7 days' })).not.toBeNull();
     });
   });
@@ -311,6 +315,40 @@ describe('Signals page', () => {
     });
   });
 
+  describe('when a theme example is opened from the page', () => {
+    it('reaches the trace insight view with a link to the full trace', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(populatedThemeEntitiesResponse)),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(themeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(drilldownThemeFlowResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/:themeId`, () =>
+          HttpResponse.json(themeDetailResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/:themeId/examples`, () =>
+          HttpResponse.json(firstThemeExamplesResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/themes/:themeId/history`, () =>
+          HttpResponse.json(themeHistoryResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/traces/trace-1/summary`, () => HttpResponse.json(traceInsightResponse)),
+      );
+      renderSignalsPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'View theme details for Add transcript' }));
+      await screen.findByRole('dialog', { name: 'Add transcript' });
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'View trace insight for Add this transcript to my workspace.' }),
+      );
+
+      expect(await screen.findByText('Add a transcript to the workspace.')).not.toBeNull();
+      expect(screen.getByRole('link', { name: 'Open full trace' }).getAttribute('href')).toBe('/traces/trace-1');
+    });
+  });
+
   describe('when a custom snapshot date range is applied', () => {
     it('requests snapshots with inclusive start and end timestamps', async () => {
       vi.spyOn(Date, 'now').mockReturnValue(new Date('2026-07-27T12:00:00.000Z').getTime());
@@ -343,7 +381,7 @@ describe('Signals page', () => {
     });
   });
 
-  describe('when a low-signal agent is returned before an eligible agent', () => {
+  describe('when a low-trace-signal agent is returned before an eligible agent', () => {
     it('defaults to the first agent that can render a flow', async () => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(lowSignalFirstThemeEntitiesResponse)),
@@ -362,7 +400,7 @@ describe('Signals page', () => {
     });
   });
 
-  describe('when multiple agents have different signal coverage', () => {
+  describe('when multiple agents have different trace signal coverage', () => {
     beforeEach(() => {
       server.use(
         http.get(`${BASE_URL}/api/learning/entities`, () => HttpResponse.json(multiAgentThemeEntitiesResponse)),
@@ -371,6 +409,9 @@ describe('Signals page', () => {
         ),
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
           HttpResponse.json(themeFlowResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/triage-agent/progress`, () =>
+          HttpResponse.json(processingProgressResponse),
         ),
       );
     });
@@ -393,9 +434,12 @@ describe('Signals page', () => {
       fireEvent.pointerDown(triageAgent, { pointerType: 'mouse' });
       fireEvent.click(triageAgent, { detail: 1 });
 
-      expect(await screen.findByText('Not enough trace signal data yet')).not.toBeNull();
-      expect(screen.getByText('Available trace signals: Goal')).not.toBeNull();
+      expect(await screen.findByText('Analyzing traces for Trace Intelligence.')).not.toBeNull();
+      expect(screen.getByText('87')).not.toBeNull();
+      expect(screen.getByText('1 of 4')).not.toBeNull();
       expect(screen.getByRole('combobox', { name: 'Agent' })).not.toBeNull();
+      expect(screen.queryByText('Snapshot date')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Last 7 days' })).toBeNull();
     });
   });
 
@@ -440,11 +484,14 @@ describe('Signals page', () => {
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
           HttpResponse.json({ snapshots: [] }),
         ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/progress`, () =>
+          HttpResponse.json(processingProgressResponse),
+        ),
       );
 
       renderSignalsPage();
 
-      expect(await screen.findByText('Waiting for traces.')).not.toBeNull();
+      expect(await screen.findByText('No Trace Intelligence themes in this date range.')).not.toBeNull();
     });
   });
 });

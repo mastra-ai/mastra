@@ -7,9 +7,9 @@ packages:
 
 # Modes
 
-Modes define the different behaviors an AgentController can run. Each mode layers its own instructions and tool overrides on top of a shared backing agent, so the same agent can act as a planner in one mode and an executor in another. The AgentController keeps exactly one mode active at a time, carries the thread and state across switches, and handles the transition between them.
+Modes define the different behaviors an AgentController can run. Each mode layers its own instructions and tool overrides on top of a shared backing agent, so the same agent can act as a planner in one mode and an executor in another. The AgentController keeps exactly one mode active at a time and carries the thread and state across switches, plus handles the transition between them.
 
-Every AgentController needs at least one mode — the `modes` array is required, and the AgentController throws at construction if it's empty. A single-purpose AgentController still defines one mode; multiple modes are how you give a session more than one behavior to switch between.
+Every AgentController needs at least one mode, the `modes` array is required, and the AgentController throws at construction if it's empty. A single-purpose AgentController still defines one mode. Multiple modes are how you give a session more than one behavior to switch between.
 
 A mode supplies three things that change how the agent behaves:
 
@@ -90,7 +90,7 @@ You can't set both `tools` and `additionalTools` on the same mode.
 
 ### Restricting tool visibility
 
-`tools` and `additionalTools` control which tools are **added** to a mode's run — they don't hide the backing agent's own tools. To restrict which of those tools the model can actually see and call, set `availableTools`:
+`tools` and `additionalTools` control which tools are **added** to a mode's run, they don't hide the backing agent's own tools. To restrict which of those tools the model can actually see and call, set `availableTools`:
 
 ```typescript title="src/mastra/agent-controller.ts"
 const reviewMode = {
@@ -103,11 +103,11 @@ const reviewMode = {
 
 `availableTools` is a per-mode visibility allowlist that matches each tool by its final exposed name:
 
-- **`undefined`** (default): no mode-level restriction — every tool is visible.
+- **`undefined`** (default): no mode-level restriction: every tool is visible.
 - **`[]`**: no tools are available for this mode.
 - A denied tool stays hidden even when the list includes it. Per-tool and per-category `deny` rules in your permission config always take precedence.
 
-Workspace tools use the same list as every other tool — reference them by their exposed names (`view`, `write_file`, `find_files`, etc.). Visibility is enforced at LLM-call time, so the model never sees — and can't attempt to call — a tool outside the allowlist.
+Workspace tools use the same list as every other tool, reference them by their exposed names (`view`, `write_file`, `find_files`, etc.). Visibility is enforced at LLM-call time, so the model never sees, and can't attempt to call, a tool outside the allowlist.
 
 ### Mode transitions
 
@@ -126,7 +126,7 @@ On plan approval, the AgentController automatically switches to `build` mode. On
 
 ## Switching modes
 
-The active mode lives on the Session, so call `agentController.session.mode.switch()` to change it. The switch aborts any in-progress generation, saves the current model to the outgoing mode, and emits a `mode_changed` event. It then resolves the incoming mode's model and, when one resolves, applies it and emits a `model_changed` event:
+The active mode lives on the Session, so call `agentController.session.mode.switch()` to change it. The switch aborts any in-progress generation and saves the current model to the outgoing mode, plus emits a `mode_changed` event. It then resolves the incoming mode's model and, when one resolves, applies it and emits a `model_changed` event:
 
 ```typescript
 await agentController.session.mode.switch({ modeId: 'build' })

@@ -32,7 +32,7 @@ Move conditional, large, or action-oriented guidance into [`tools/`](/reference/
 
 ## Dynamic instructions
 
-When the prompt needs to change per request, for example based on the current user or runtime context, set a dynamic `instructions` function in [`config.ts`](/reference/file-based-agents/config) instead of using `instructions.md`. A function `instructions` wins over `instructions.md`, so the static file is ignored when both are present.
+When the prompt needs to change per request, for example based on the current user or runtime context, set a runtime-defined `instructions` function in [`config.ts`](/reference/file-based-agents/config) instead of using `instructions.md`. A function `instructions` wins over `instructions.md`, so the static file is ignored when both are present.
 
 ```typescript title="src/mastra/agents/support/config.ts"
 import { agentConfig } from '@mastra/core/agent'
@@ -54,6 +54,6 @@ Mastra reads `instructions.md` and inlines its contents into the generated code 
 
 Instructions can come from `instructions.md` or from the `instructions` field in [`config.ts`](/reference/file-based-agents/config):
 
-- A dynamic (function) `instructions` in `config.ts` wins over `instructions.md`.
+- A runtime-defined (function) `instructions` in `config.ts` wins over `instructions.md`.
 - Otherwise `instructions.md` wins over a static `instructions` string.
 - If neither is present, the build fails and names the agent directory.

@@ -8,7 +8,7 @@ packages:
 
 # OpenTelemetry exporter
 
-The OpenTelemetry (OTEL) exporter sends your traces and logs to any OTEL-compatible observability platform using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, SigNoz, MLflow, Latitude, Dash0, Traceloop, Laminar, and more.
+The OpenTelemetry (OTEL) exporter sends your traces and logs to any OTEL-compatible observability platform using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, SigNoz, MLflow, Latitude, Dash0, Traceloop, Laminar, telemetry.dev, and more.
 
 :::info Looking for bidirectional OTEL integration?
 
@@ -20,7 +20,7 @@ If you have existing OpenTelemetry instrumentation and want Mastra traces to inh
 
 Each provider requires specific protocol packages. Install the base exporter plus the protocol package for your provider:
 
-### For HTTP/Protobuf Providers (SigNoz, New Relic, Laminar, MLflow, Latitude)
+### For HTTP/Protobuf Providers (SigNoz, New Relic, Laminar, MLflow, Latitude, telemetry.dev)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-proto
@@ -54,7 +54,7 @@ All providers support zero-config setup via environment variables. Set the appro
 
 ### MLflow
 
-[MLflow](https://mlflow.org/docs/latest/genai/tracing/integrations/listing/mastra) supports native Mastra tracing through its OTLP endpoint at `/v1/traces`. Use the `custom` provider with HTTP/Protobuf and include the experiment header so traces land in the correct MLflow experiment:
+[MLflow](https://mlflow.org/docs/latest/genai/tracing/integrations/listing/mastra) supports native Mastra tracing through its OTLP endpoint at `/v1/traces`. Use the `custom` provider with HTTP/Protobuf and include the experiment header so traces are routed to the correct MLflow experiment:
 
 ```typescript title="src/mastra/index.ts"
 new OtelExporter({
@@ -90,6 +90,28 @@ new OtelExporter({
 ```
 
 Sign up at [console.latitude.so](https://console.latitude.so/login), or self-host and point the endpoint at your own ingestion host.
+
+### telemetry.dev
+
+[telemetry.dev](https://telemetry.dev) ingests OTLP/HTTP protobuf traces and normalizes OpenTelemetry GenAI semantic conventions into model, provider, token, latency, and cost fields. Use the `custom` provider with your project API key:
+
+```bash title=".env"
+TELEMETRY_DEV_API_KEY=td_live_...
+```
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: 'https://ingest.telemetry.dev/v1/traces',
+      protocol: 'http/protobuf',
+      headers: {
+        Authorization: `Bearer ${process.env.TELEMETRY_DEV_API_KEY}`,
+      },
+    },
+  },
+})
+```
 
 ### Dash0
 
@@ -199,7 +221,7 @@ new OtelExporter({
 
 ### New Relic
 
-[New Relic](https://newrelic.com/) provides comprehensive observability with AI monitoring capabilities.
+[New Relic](https://newrelic.com/) provides complete observability with AI monitoring capabilities.
 
 #### Zero-Config Setup
 

@@ -60,14 +60,29 @@ export function ChatSessionConfigProvider({
   // (behavior settings, tool permissions) stay functional.
   const resourceId = userScoped ? threadId : (storedSession?.sessionId ?? sessionId ?? ensureQuery.data?.resourceId);
   const projectPath = undefined;
+  // A `?resourceId=` query param overrides the resolved factory resource so the
+  // whole chat session (transcript, messages, connection, thread switch) binds
+  // to a thread that lives under a different resource — e.g. a Slack channel
+  // session keyed `channel:slack:...`. This only applies to the non-user-scoped
+  // branch; user-scoped sessions derive identity from their stored session.
+  //
+  // Read once from the entry URL rather than via the router's `useSearchParams`:
+  // this is a deep-link entry param that the session binds to at mount and does
+  // not re-read on in-app navigation, and this config provider otherwise has no
+  // added router dependency.
+  const resourceOverride = userScoped
+    ? null
+    : new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('resourceId');
   const sessionEnabled = userScoped
     ? Boolean(storedSession) && !resolvingSession
-    : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
+    : resourceOverride
+      ? Boolean(resourceOverride)
+      : ensureQuery.isSuccess && Boolean(storedSession) && !resolvingSession;
   const sessionError = userScoped ? undefined : (ensureQuery.error ?? undefined);
   const value = {
-    resourceId: resourceId ?? '',
+    resourceId: resourceOverride ?? resourceId ?? '',
     sessionEnabled,
-    resourceEnabled: userScoped ? Boolean(resourceId) : ensureQuery.isSuccess,
+    resourceEnabled: userScoped ? Boolean(resourceId) : resourceOverride ? true : ensureQuery.isSuccess,
     sessionError,
     retrySession: sessionError ? () => void ensureQuery.refetch() : undefined,
     projectPath,
@@ -159,7 +174,7 @@ function ChatMessageFeedback({ threadId, isPending, error }: ChatThreadMessagesA
   // an eternal skeleton.
   if (sessionError) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col place-items-center gap-4 overflow-y-auto scroll-smooth px-3 pt-6 pb-2 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]">
+      <div className="flex flex-col items-stretch gap-4">
         <Notice variant="destructive">Failed to prepare the workspace: {sessionError.message}</Notice>
         {retrySession && (
           <div>
@@ -174,7 +189,7 @@ function ChatMessageFeedback({ threadId, isPending, error }: ChatThreadMessagesA
 
   if (threadId && isPending) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-smooth px-3 pt-6 pb-2 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]">
+      <div className="flex flex-col gap-4">
         <SkeletonRows label="Loading messages" rows={6} />
       </div>
     );
@@ -183,11 +198,9 @@ function ChatMessageFeedback({ threadId, isPending, error }: ChatThreadMessagesA
   if (threadId && error) {
     const errorMessage = error instanceof Error ? error.message : undefined;
     return (
-      <div className="flex min-h-0 flex-1 flex-col place-items-center gap-4 overflow-y-auto scroll-smooth px-3 pt-6 pb-2 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]">
-        <Notice variant="destructive">
-          {errorMessage ? `Failed to load messages: ${errorMessage}` : 'Failed to load messages.'}
-        </Notice>
-      </div>
+      <Notice variant="destructive">
+        {errorMessage ? `Failed to load messages: ${errorMessage}` : 'Failed to load messages.'}
+      </Notice>
     );
   }
 

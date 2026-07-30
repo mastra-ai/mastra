@@ -1,5 +1,5 @@
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, skipToken, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 
 import { useApiConfig } from '../api/config';
@@ -39,6 +39,42 @@ function splitSessions(sessions: FactoryUserSession[]): WorkspacesData {
   };
 }
 
+async function loadWorkspaces(baseUrl: string, projectRepositoryId: string, signal?: AbortSignal) {
+  return splitSessions(await listUserSessions(baseUrl, projectRepositoryId, signal));
+}
+
+export function workspacesQueryOptions(baseUrl: string, projectRepositoryId: string) {
+  return queryOptions({
+    queryKey: queryKeys.sessions(projectRepositoryId),
+    queryFn: ({ signal }): Promise<WorkspacesData> => loadWorkspaces(baseUrl, projectRepositoryId, signal),
+  });
+}
+
+/**
+ * Drop a deleted session from the cached list right away. Invalidation alone
+ * leaves every consumer rendering the session until the refetch lands — a
+ * window in which the board still offers to open a thread that died with its
+ * workspace. The refetch still runs behind this to reconcile.
+ *
+ * In-flight list fetches are cancelled first: one issued before the delete
+ * committed still carries the deleted session, and letting it settle would
+ * write it straight back over this removal.
+ */
+export function removeCachedSession(
+  queryClient: ReturnType<typeof useQueryClient>,
+  projectRepositoryId: string | undefined,
+  sessionId: string,
+) {
+  void queryClient.cancelQueries({ queryKey: queryKeys.sessions(projectRepositoryId) });
+  queryClient.setQueryData<WorkspacesData>(queryKeys.sessions(projectRepositoryId), current => {
+    if (!current) return current;
+    return {
+      workspaces: current.workspaces.filter(session => session.sessionId !== sessionId),
+      userSessions: current.userSessions.filter(session => session.sessionId !== sessionId),
+    };
+  });
+}
+
 function invalidateSessionQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   projectRepositoryId: string | undefined,
@@ -58,8 +94,16 @@ export function useWorkspacesQuery(projectRepositoryId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.sessions(projectRepositoryId),
-    queryFn: async (): Promise<WorkspacesData> => splitSessions(await listUserSessions(baseUrl, projectRepositoryId!)),
-    enabled: Boolean(projectRepositoryId),
+    queryFn: projectRepositoryId
+      ? ({ signal }): Promise<WorkspacesData> => loadWorkspaces(baseUrl, projectRepositoryId, signal)
+      : skipToken,
+  });
+}
+
+export function useFactoryWorkspacesQueries(projectRepositoryIds: string[]) {
+  const { baseUrl } = useApiConfig();
+  return useQueries({
+    queries: projectRepositoryIds.map(projectRepositoryId => workspacesQueryOptions(baseUrl, projectRepositoryId)),
   });
 }
 
@@ -67,8 +111,7 @@ export function useUserSessionQuery(sessionId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.userSession(sessionId),
-    queryFn: () => getUserSession(baseUrl, sessionId!),
-    enabled: Boolean(sessionId),
+    queryFn: sessionId ? () => getUserSession(baseUrl, sessionId) : skipToken,
   });
 }
 
@@ -124,13 +167,14 @@ export function useDeleteWorkspaceMutation(
             tags: { projectPath: workspace.sessionId },
           });
           if (threads.length === 0) break;
-          for (const thread of threads) await threadSession.deleteThread(thread.id);
+          await Promise.all(threads.map(thread => threadSession.deleteThread(thread.id)));
         }
       }
 
       return workspace;
     },
     onSuccess: workspace => {
+      removeCachedSession(queryClient, projectRepositoryId, workspace.sessionId);
       invalidateSessionQueries(queryClient, projectRepositoryId, scope, workspace.sessionId);
       void queryClient.invalidateQueries({ queryKey: queryKeys.userSession(workspace.sessionId) });
       void queryClient.invalidateQueries({

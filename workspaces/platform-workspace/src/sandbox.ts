@@ -197,7 +197,8 @@ export class PlatformSandbox extends MastraSandbox {
    * Tri-state feature detection for the platform's exec-lease endpoint:
    *   undefined — not yet tried (default; try direct on first exec)
    *   true      — endpoint present, use direct exec
-   *   false     — endpoint returned 404 or 501, fall back permanently to /exec
+   *   false     — endpoint absent (404/501) OR the WebSocket transport failed
+   *               once; fall back permanently to /exec for this sandbox
    * Sticky per instance so we make the fallback decision once per sandbox
    * lifetime instead of paying an extra round-trip on every exec.
    */
@@ -235,8 +236,15 @@ export class PlatformSandbox extends MastraSandbox {
    * (e.g. one per project).
    */
   clone(options: SandboxCloneOptions = {}): PlatformSandbox {
+    // The proxy hashes `body.id` on POST /sandbox to look up a prior
+    // checkpoint. A stable `checkpointName` is only useful if it round-trips
+    // to `body.id`, so route it through the sandbox id when the caller
+    // didn't pick one explicitly. Without this, every clone gets a random
+    // id and no boot ever hits its captured checkpoint (see
+    // issue-platform-sandbox-clone-drops-checkpoint-name.md).
+    const id = options.id ?? options.checkpointName;
     return new PlatformSandbox({
-      ...(options.id !== undefined && { id: options.id }),
+      ...(id !== undefined && { id }),
       accessToken: this._client.accessToken,
       projectId: this._client.projectId,
       fetch: this._client.fetch,
@@ -402,12 +410,26 @@ export class PlatformSandbox extends MastraSandbox {
     });
     // `null` exitCode without `timedOut` means the socket closed without an
     // exit frame — i.e. a transport failure (handshake stalled, mid-stream
-    // drop, expired token). Drop the cached lease so the next call re-mints,
-    // and return `null` to let the caller fall through to the proxy /exec
-    // path. Timed-out and normal-exit results still return synthesised /
-    // real exit codes as before.
+    // drop, expired token). Drop the cached lease AND flip the feature bit
+    // so we don't burn a fresh mint + failed WS handshake on every subsequent
+    // exec; fall back permanently to /exec for this sandbox. Log the close
+    // metadata so we can diagnose why Railway refused the WebSocket. Timed-out
+    // and normal-exit results still return synthesised / real exit codes as
+    // before.
     if (result.exitCode === null && !result.timedOut) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[platform-workspace] direct-exec transport failed; falling back to /exec permanently for this sandbox',
+        {
+          sandboxId: this._sandboxId,
+          opened: result.opened,
+          closeCode: result.closeCode,
+          closeReason: result.closeReason,
+          wsEndpoint: lease.wsEndpoint,
+        },
+      );
       this._lease = null;
+      this._directExecAvailable = false;
       return null;
     }
     const exitCode = result.exitCode ?? 124;
