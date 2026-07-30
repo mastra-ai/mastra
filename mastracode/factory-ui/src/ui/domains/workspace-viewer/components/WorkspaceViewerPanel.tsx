@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { useWorkspaceFile, useWorkspaceRenderedListing } from '../../../../hooks/use-fs';
 import type { RenderedWorkspacePath } from '../config';
+import { WorkspaceChangesPanel } from './WorkspaceChangesPanel';
 import { WorkspaceFileBrowser } from './WorkspaceFileBrowser';
 import { WorkspaceFileViewer } from './WorkspaceFileViewer';
 
@@ -16,11 +17,26 @@ export function WorkspaceViewerPanel({ workspacePath, renderedPaths, ...props }:
   const resetKey = [workspacePath, ...renderedPaths.map(path => `${path.id}:${path.root}`)].join('|');
 
   return (
-    <WorkspaceViewerPanelInner key={resetKey} workspacePath={workspacePath} renderedPaths={renderedPaths} {...props} />
+    <WorkspaceViewerPanelReset key={resetKey} workspacePath={workspacePath} renderedPaths={renderedPaths} {...props} />
   );
 }
 
-function WorkspaceViewerPanelInner({ workspacePath, renderedPaths, onExpandedChange }: WorkspaceViewerPanelProps) {
+function WorkspaceViewerPanelReset(props: WorkspaceViewerPanelProps) {
+  const [view, setView] = useState<'files' | 'changes'>('files');
+
+  if (view === 'changes') {
+    return <WorkspaceChangesPanel workspacePath={props.workspacePath} onShowFiles={() => setView('files')} />;
+  }
+
+  return <WorkspaceViewerPanelInner {...props} onShowChanges={() => setView('changes')} />;
+}
+
+function WorkspaceViewerPanelInner({
+  workspacePath,
+  renderedPaths,
+  onExpandedChange,
+  onShowChanges,
+}: WorkspaceViewerPanelProps & { onShowChanges: () => void }) {
   const [selectedRenderedPathId, setSelectedRenderedPathId] = useState(renderedPaths[0]?.id ?? '');
   const [selectedFilePath, setSelectedFilePath] = useState<string | undefined>();
   const [viewerOpen, setViewerOpenState] = useState(false);
@@ -29,6 +45,7 @@ function WorkspaceViewerPanelInner({ workspacePath, renderedPaths, onExpandedCha
   const selectedFileRequestPath = selectedFilePath ? `${selectedRenderedPath?.root}/${selectedFilePath}` : undefined;
   const listing = useWorkspaceRenderedListing(workspacePath, selectedRenderedPath?.root);
   const file = useWorkspaceFile(workspacePath, selectedFileRequestPath, { enabled: viewerOpen });
+  const selectedFile = file.data?.path === selectedFileRequestPath ? file.data : undefined;
 
   if (!selectedRenderedPath) return null;
 
@@ -41,9 +58,10 @@ function WorkspaceViewerPanelInner({ workspacePath, renderedPaths, onExpandedCha
     <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden" data-testid="workspace-viewer-panel">
       {viewerOpen ? (
         <WorkspaceFileViewer
+          key={selectedFileRequestPath}
           filePath={selectedFilePath}
-          file={file.data}
-          isLoading={file.isLoading}
+          file={selectedFile}
+          isLoading={file.isLoading || (file.isFetching && !selectedFile)}
           error={file.error instanceof Error ? file.error : undefined}
           onBack={() => setViewerOpen(false)}
         />
@@ -54,6 +72,7 @@ function WorkspaceViewerPanelInner({ workspacePath, renderedPaths, onExpandedCha
           selectedFilePath={selectedFilePath}
           listing={listing.data}
           isLoading={listing.isLoading}
+          isRefreshing={listing.isFetching}
           error={listing.error instanceof Error ? listing.error : undefined}
           onRefresh={() => listing.refetch()}
           onRenderedPathChange={path => {
@@ -65,6 +84,7 @@ function WorkspaceViewerPanelInner({ workspacePath, renderedPaths, onExpandedCha
             setSelectedFilePath(filePath);
             setViewerOpen(true);
           }}
+          onShowChanges={onShowChanges}
         />
       )}
     </div>
