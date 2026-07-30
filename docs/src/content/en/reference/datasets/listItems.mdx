@@ -9,16 +9,14 @@ packages:
 
 **Added in:** `@mastra/core@1.4.0`
 
-Lists items in the dataset. When only `version` is provided, returns a bare `DatasetItem[]` snapshot of every item at that version. In all other cases — no arguments, or `search` / `page` / `perPage` provided with or without `version` — returns a paginated `{ items, pagination }` shape.
+Lists items in the dataset. When only `version` is provided, returns a bare `DatasetItem[]` snapshot of every item at that version. In all other cases (no arguments, or `search` / `page` / `perPage` provided with or without `version`), it returns a paginated `{ items, pagination }` shape.
 
 ## Usage example
 
 ```typescript
 import { Mastra } from '@mastra/core'
 
-const mastra = new Mastra({
-  /* storage config */
-})
+const mastra = new Mastra({/* storage config */})
 
 const dataset = await mastra.datasets.get({ id: 'dataset-id' })
 

@@ -1,0 +1,11 @@
+extends: existence
+message: "Colon overuse pattern detected: '%s'"
+level: suggestion
+link: https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing
+tokens:
+  - ': including'
+  - ': such as'
+  - ': for example,'
+  - ': notably,'
+  - ': specifically,'
+  - ': particularly,'

@@ -66,11 +66,11 @@ const results = await pgVector.query({
 console.log('Similar chunks:', results)
 ```
 
-This example shows the essentials: initialize a document, create chunks, generate embeddings, store them, and query for similar content.
+This example shows the essentials. Initialize a document and create chunks, then generate and store embeddings before querying for similar content.
 
 ## Document processing
 
-The basic building block of RAG is document processing. Documents can be chunked using various strategies (recursive, sliding window, etc.) and enriched with metadata. See the [chunking and embedding doc](./chunking-and-embedding).
+The basic building block of RAG is document processing. Documents can be chunked using strategies (recursive, sliding window, etc.) and enriched with metadata. See the [chunking and embedding doc](./chunking-and-embedding).
 
 ## Vector storage
 

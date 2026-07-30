@@ -5,8 +5,10 @@ import { RequestContext } from '../di';
 import { MastraError, MastraNonRetryableError, ErrorDomain, ErrorCategory } from '../error';
 import type { PubSub } from '../events';
 import { EventEmitterPubSub } from '../events/event-emitter';
+import { createWorkflow } from './create';
 import { DefaultExecutionEngine } from './default';
 import type { FormattedWorkflowResult, StepResult } from './types';
+import { createStep } from './workflow';
 
 class TestableExecutionEngine extends DefaultExecutionEngine {
   async fmtReturnValuePublic(
@@ -1228,8 +1230,13 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
     expect(result.stepExecutionPath).toEqual(['step1']);
   });
 
-  it('should remove payload when it matches the previous step output', async () => {
+  it('should remove an identity-equal payload without serializing it', async () => {
     const sharedData = { value: 1 };
+    const toJSON = vi.fn(() => {
+      throw new Error('workflow payload must not be serialized for comparison');
+    });
+    Object.defineProperty(sharedData, 'toJSON', { value: toJSON });
+
     const stepResults: Record<string, StepResult<any, any, any, any>> = {
       input: sharedData as any,
       step1: { status: 'success', output: { value: 2 }, payload: sharedData, startedAt: 1, endedAt: 2 },
@@ -1241,6 +1248,7 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
 
     expect(result.steps.step1.payload).toBeUndefined();
     expect(result.steps.step2.payload).toBeUndefined();
+    expect(toJSON).not.toHaveBeenCalled();
   });
 
   it('should preserve payload when it does not match the previous step output', async () => {
@@ -1253,6 +1261,22 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
     const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
 
     expect(result.steps.step1.payload).toEqual({ different: true });
+  });
+
+  it('should preserve a circular payload when structural comparison cannot complete', async () => {
+    const input: Record<string, unknown> = { value: 1 };
+    input.self = input;
+    const payload: Record<string, unknown> = { value: 1 };
+    payload.self = payload;
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: input as any,
+      step1: { status: 'success', output: { value: 2 }, payload, startedAt: 1, endedAt: 2 },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+    expect(result.steps.step1.payload).toBe(payload);
   });
 
   it('should handle structural equality after deserialization', async () => {
@@ -1271,6 +1295,74 @@ describe('DefaultExecutionEngine.fmtReturnValue stepExecutionPath and payload de
     const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
 
     expect(result.steps.step1.payload).toBeUndefined();
+  });
+
+  it('should ignore object key order when comparing deserialized payloads', async () => {
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: JSON.parse('{"first":1,"second":2}'),
+      step1: {
+        status: 'success',
+        output: { value: 2 },
+        payload: JSON.parse('{"second":2,"first":1}'),
+        startedAt: 1,
+        endedAt: 2,
+      },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+    expect(result.steps.step1.payload).toBeUndefined();
+  });
+
+  it('should fully compare and remove a structurally equal 4 MiB payload without serializing it', async () => {
+    const input = { data: 'x'.repeat(4 * 1024 * 1024) };
+    const payload = { data: 'x'.repeat(4 * 1024 * 1024) };
+    const inputToJSON = vi.fn(() => {
+      throw new Error('workflow input must not be serialized for comparison');
+    });
+    const payloadToJSON = vi.fn(() => {
+      throw new Error('workflow payload must not be serialized for comparison');
+    });
+    Object.defineProperty(input, 'toJSON', { value: inputToJSON });
+    Object.defineProperty(payload, 'toJSON', { value: payloadToJSON });
+
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: input as any,
+      step1: { status: 'success', output: { value: 2 }, payload, startedAt: 1, endedAt: 2 },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+    expect(result.steps.step1.payload).toBeUndefined();
+    expect(inputToJSON).not.toHaveBeenCalled();
+    expect(payloadToJSON).not.toHaveBeenCalled();
+  });
+
+  it('should fully compare and preserve a distinct 4 MiB payload without serializing it', async () => {
+    const input = { data: `${'x'.repeat(4 * 1024 * 1024 - 1)}a` };
+    const payload = { data: `${'x'.repeat(4 * 1024 * 1024 - 1)}b` };
+    const inputToJSON = vi.fn(() => {
+      throw new Error('workflow input must not be serialized for comparison');
+    });
+    const payloadToJSON = vi.fn(() => {
+      throw new Error('workflow payload must not be serialized for comparison');
+    });
+    Object.defineProperty(input, 'toJSON', { value: inputToJSON });
+    Object.defineProperty(payload, 'toJSON', { value: payloadToJSON });
+
+    const stepResults: Record<string, StepResult<any, any, any, any>> = {
+      input: input as any,
+      step1: { status: 'success', output: { value: 2 }, payload, startedAt: 1, endedAt: 2 },
+    };
+    const lastOutput: StepResult<any, any, any, any> = stepResults.step1!;
+
+    const result = await engine.fmtReturnValuePublic(pubsub, stepResults, lastOutput, undefined, ['step1']);
+
+    expect(result.steps.step1.payload).toBe(payload);
+    expect(inputToJSON).not.toHaveBeenCalled();
+    expect(payloadToJSON).not.toHaveBeenCalled();
   });
 
   it('should not deduplicate when there is no input in stepResults', async () => {
@@ -1405,6 +1497,105 @@ describe('DefaultExecutionEngine.deserializeRequestContext', () => {
   });
 });
 
+describe('DefaultExecutionEngine.execute cancellation onFinish contract', () => {
+  it('should format returned steps and onFinish steps identically for canceled runs', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const requestContext = new RequestContext();
+    const abortController = new AbortController();
+
+    let onFinishResult: any = null;
+    const engine = new DefaultExecutionEngine({
+      mastra: undefined,
+      options: {
+        validateInputs: true,
+        shouldPersistSnapshot: () => false,
+        onFinish: (result: any) => {
+          onFinishResult = result;
+        },
+      } as any,
+    });
+
+    const persistSpy = vi.spyOn(engine as any, 'persistStepUpdate').mockResolvedValue(undefined);
+
+    // Inject metadata during step execution start to test stripping
+    vi.spyOn(engine, 'onStepExecutionStart').mockImplementation(async ({ stepInfo }) => {
+      stepInfo.metadata = { nestedRunId: 'nested-123', customField: 'keep-me' };
+    });
+
+    const step1 = {
+      id: 'step1',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async ({ inputData }: any) => {
+        // Trigger cancel during step 1 so step 2 is skipped and engine loop catches cancellation
+        abortController.abort();
+        // Return a payload matching input to test deduplication
+        return {
+          ...inputData,
+        };
+      },
+    };
+
+    const step2 = {
+      id: 'step2',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async () => {
+        return { data: 'should-not-run' };
+      },
+    };
+
+    const graph = {
+      id: 'test-graph',
+      steps: [
+        { type: 'step' as const, step: step1 },
+        { type: 'step' as const, step: step2 },
+      ],
+    };
+
+    const inputData = { data: 'test-input' };
+
+    const result = await engine.execute({
+      workflowId: 'test-workflow',
+      runId: 'test-run',
+      graph,
+      input: inputData,
+      serializedStepGraph: [],
+      pubsub,
+      requestContext,
+      abortController,
+      outputOptions: { includeState: true },
+    });
+
+    expect(result.status).toBe('canceled');
+    expect(result.runId).toBe('test-run');
+    expect(result.state).toBeDefined(); // Ensure state exists in output
+
+    // Top-level input is preserved
+    expect((result as any).input).toEqual(inputData);
+
+    expect(onFinishResult).toBeDefined();
+    expect(onFinishResult?.status).toBe('canceled');
+
+    // The returned steps and onFinish steps should be identically normalized
+    expect(result.steps).toEqual(onFinishResult?.steps);
+
+    // Payload deduplication: step1 output matches input, so payload should be removed
+    const step1Result = result.steps?.step1 as any;
+    expect(step1Result?.payload).toBeUndefined();
+
+    // Ensure raw nestedRunId is omitted from formatted steps, but other metadata is preserved
+    expect(step1Result?.metadata?.nestedRunId).toBeUndefined();
+    expect(step1Result?.metadata?.customField).toBe('keep-me');
+
+    // Verify raw persistence: persistStepUpdate receives the un-deduplicated payload and raw metadata
+    expect(persistSpy).toHaveBeenCalled();
+    const persistArgs = persistSpy.mock.calls[0][0] as any;
+    expect(persistArgs.stepResults.step1.payload).toEqual(inputData);
+    expect(persistArgs.stepResults.step1.metadata?.nestedRunId).toBe('nested-123');
+  });
+});
+
 describe('DefaultExecutionEngine.executeStepWithRetry', () => {
   it('does not retry when the step throws MastraNonRetryableError', async () => {
     const engine = new DefaultExecutionEngine({ mastra: undefined });
@@ -1444,6 +1635,81 @@ describe('DefaultExecutionEngine.executeStepWithRetry', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.nonRetryable).toBeUndefined();
+    }
+  });
+});
+
+describe('DefaultExecutionEngine — requestContext serialization gating', () => {
+  const ioSchema = z.object({ n: z.number() });
+  const buildStep = (id: string) =>
+    createStep({
+      id,
+      inputSchema: ioSchema,
+      outputSchema: ioSchema,
+      execute: async ({ inputData }) => ({ n: inputData.n + 1 }),
+    });
+
+  it('does not serialize the requestContext during execution on the default engine', async () => {
+    const spy = vi.spyOn(DefaultExecutionEngine.prototype, 'serializeRequestContext');
+    try {
+      const workflow = createWorkflow({
+        id: 'no-context-serialize-wf',
+        inputSchema: ioSchema,
+        outputSchema: ioSchema,
+        // Keep snapshot persistence (which legitimately serializes the
+        // context) out of the count — this test pins the execution path only.
+        options: { shouldPersistSnapshot: () => false },
+      })
+        .then(buildStep('step-1'))
+        .then(buildStep('step-2'))
+        .commit();
+
+      const requestContext = new RequestContext();
+      requestContext.set('userId', 'user-123');
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: { n: 0 }, requestContext });
+
+      expect(result.status).toBe('success');
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('serializes the requestContext for engines that require durable context serialization', async () => {
+    class DurableContextEngine extends DefaultExecutionEngine {
+      requiresDurableContextSerialization(): boolean {
+        return true;
+      }
+    }
+    const engine = new DurableContextEngine({
+      mastra: undefined,
+      options: { validateInputs: false, shouldPersistSnapshot: () => false },
+    });
+    const spy = vi.spyOn(engine, 'serializeRequestContext');
+
+    const workflow = createWorkflow({
+      id: 'durable-context-serialize-wf',
+      inputSchema: ioSchema,
+      outputSchema: ioSchema,
+      executionEngine: engine,
+      options: { shouldPersistSnapshot: () => false },
+    })
+      .then(buildStep('step-1'))
+      .then(buildStep('step-2'))
+      .commit();
+
+    const requestContext = new RequestContext();
+    requestContext.set('userId', 'user-123');
+
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: { n: 0 }, requestContext });
+
+    expect(result.status).toBe('success');
+    expect(spy).toHaveBeenCalled();
+    for (const call of spy.mock.results) {
+      expect(call.value).toMatchObject({ userId: 'user-123' });
     }
   });
 });

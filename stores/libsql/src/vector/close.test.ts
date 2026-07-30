@@ -27,7 +27,7 @@ describe('LibSQLVector.close()', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('checkpoints/truncates the WAL and closes the client for local file DBs', async () => {
+  it('closes the client without changing local database state', async () => {
     const dbPath = path.join(tmpDir, 'vectors.db');
     const vector = new LibSQLVector({ id: 'close-local', url: `file:${dbPath}` });
     await vector.createIndex({ indexName: 'close_test', dimension: 4 });
@@ -39,8 +39,8 @@ describe('LibSQLVector.close()', () => {
     await vector.close();
 
     const executedSql = executedSqlFrom(executeSpy);
-    expect(executedSql).toContain('PRAGMA wal_checkpoint(TRUNCATE);');
-    expect(executedSql).toContain('PRAGMA journal_mode=DELETE;');
+    expect(executedSql).not.toContain('PRAGMA wal_checkpoint(TRUNCATE);');
+    expect(executedSql).not.toContain('PRAGMA journal_mode=DELETE;');
     expect(closeSpy).toHaveBeenCalledTimes(1);
     expect(client.closed).toBe(true);
   });

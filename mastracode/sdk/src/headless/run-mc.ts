@@ -10,21 +10,25 @@
  * {@link MCRun} is async-iterable over controller events and also resolves to a
  * final result via `result`.
  */
-import type { AgentControllerEvent, AgentControllerMessage, Session } from '@mastra/core/agent-controller';
+import type { AgentControllerEvent, MastraDBMessage, MastraMessagePart, Session } from '@mastra/core/agent-controller';
+
+import { GoalManager } from '../goal-manager.js';
+import { createGoalReminderSignal } from '../goal-signal.js';
 
 import { autoApprovePolicy } from './policy.js';
 import type { MCRun, ResolutionPolicy, RunMCOptions, RunMCResult, RunMCStatus } from './types.js';
 
-function extractAssistantText(message: AgentControllerMessage): string {
-  return message.content
-    .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-    .map(c => c.text)
+function extractAssistantText(message: MastraDBMessage): string {
+  return message.content.parts
+    .filter((p): p is MastraMessagePart & { text: string } => p.type === 'text' && typeof p.text === 'string')
+    .map(p => p.text)
     .join('');
 }
 
 function exitCodeForStatus(status: RunMCStatus): number {
   switch (status) {
     case 'completed':
+    case 'done':
       return 0;
     case 'timeout':
       return 2;
@@ -155,7 +159,8 @@ class EventQueue<T> {
  * async-iterable over controller events and resolves to a {@link RunMCResult}.
  */
 export function runMC<TState extends Record<string, unknown>>(options: RunMCOptions<TState>): MCRun {
-  const { controller, session, prompt } = options;
+  const { controller, session } = options;
+  const goal = options.goal;
   const policy: ResolutionPolicy = options.policy ?? autoApprovePolicy;
 
   const queue = new EventQueue<AgentControllerEvent>();
@@ -174,7 +179,7 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
     resolveResult = resolve;
   });
 
-  function finish(status: RunMCStatus): void {
+  function finish(status: RunMCStatus, data: Partial<RunMCResult> = {}): void {
     if (settled) return;
     settled = true;
     if (timeoutId) clearTimeout(timeoutId);
@@ -190,6 +195,7 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
       threadId: acc.threadId ?? session.thread.getId() ?? undefined,
       error: acc.error,
       exitCode: exitCodeForStatus(status),
+      ...data,
     });
   }
 
@@ -213,14 +219,19 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
     }
   }
 
+  function armTimeout(): void {
+    if (!options.timeoutMs || settled) return;
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+      timedOut = true;
+      session.abort();
+      if (goal) finish('timeout');
+    }, options.timeoutMs);
+  }
+
   // Kick off the run asynchronously so the MCRun handle is returned synchronously.
   void (async () => {
-    if (options.timeoutMs) {
-      timeoutId = setTimeout(() => {
-        timedOut = true;
-        session.abort();
-      }, options.timeoutMs);
-    }
+    armTimeout();
 
     // --- Config resolution (model / mode / thinking) ---
     try {
@@ -258,6 +269,7 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
     // --- Subscribe ---
     unsubscribe = session.subscribe(event => {
       if (settled) return;
+      if (goal) armTimeout();
 
       if (event.type === 'tool_approval_required') {
         let decision: 'approve' | 'deny';
@@ -296,6 +308,11 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
       aggregate(event, acc);
       queue.push(event);
 
+      if (event.type === 'error' && goal) {
+        finish('error');
+        return;
+      }
+
       // Count agentic turns (one assistant response = one turn). When the cap is
       // reached, abort the run; agent_end then resolves as 'max_turns'.
       if (event.type === 'message_end' && event.message.role === 'assistant' && options.maxTurns !== undefined) {
@@ -306,8 +323,24 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
         }
       }
 
+      if (event.type === 'goal_evaluation' && goal && !event.payload.pending) {
+        if (event.payload.status === 'done' || event.payload.status === 'paused') {
+          finish(event.payload.status, {
+            objective: goal.objective,
+            goalEvent: event,
+            reason: event.payload.reason ?? event.payload.results?.[0]?.reason,
+            iterations: event.payload.iteration,
+            maxRuns: event.payload.maxRuns,
+          });
+        }
+        return;
+      }
+
       if (event.type === 'agent_end') {
         acc.finishReason = event.reason;
+        // Goal evaluations can arrive after the agent stream ends, so goal runs
+        // remain active until a terminal goal_evaluation is emitted.
+        if (goal) return;
         if (timedOut) {
           finish('timeout');
         } else if (event.reason === 'error') {
@@ -368,11 +401,39 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
       }
     }
 
-    // --- Send ---
+    // --- Start ---
     try {
-      await session.sendMessage({ content: prompt });
+      if (goal) {
+        const threadId = session.thread.getId();
+        if (!threadId || !(await session.thread.getById({ threadId }))) {
+          await session.thread.create();
+        }
+
+        const goalManager = goal.goalManager ?? new GoalManager();
+        const state = {
+          controller,
+          session,
+          goalManager,
+          pendingNewThread: false,
+          planStartedGoalId: undefined,
+        } as any;
+        const objective = await goalManager.setGoal(state, goal.objective, goal.judgeModelId, goal.maxRuns);
+        if (!objective) return fail('Failed to set goal.');
+
+        const agent = controller.getCurrentAgent(session);
+        const persisted = await agent.getObjective({ threadId: session.thread.getId()! });
+        if (!persisted || persisted.id !== objective.id) {
+          return fail('Failed to persist goal objective before sending goal signal.');
+        }
+
+        await goalManager.saveToThread(state);
+        if (!settled) await session.sendSignal(createGoalReminderSignal(objective)).accepted;
+      } else {
+        if (!options.prompt) return fail('A prompt or goal is required.');
+        await session.sendMessage({ content: options.prompt });
+      }
     } catch (err) {
-      return fail(`Failed to send message: ${(err as Error).message}`);
+      return fail(`Failed to start run: ${(err as Error).message}`);
     }
   })();
 

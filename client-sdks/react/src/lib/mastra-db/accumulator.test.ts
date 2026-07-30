@@ -1060,6 +1060,45 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
     });
   });
 
+  it('reconciled pending bubble keeps echoed binary attachment data', () => {
+    const pending: MastraDBMessage = {
+      id: 'client-1',
+      role: 'user',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'see this' },
+          // Optimistic bubble may start with empty file data before echoed contents merge in.
+          { type: 'file', mimeType: 'image/png', data: '' },
+        ],
+        metadata: { mode: 'stream', status: 'pending', [CLIENT_MESSAGE_ID_KEY]: 'corr-1' },
+      },
+    };
+
+    const out = reduce(
+      [
+        dataUserMessageChunk(
+          'server-1',
+          [
+            { type: 'text', text: 'see this' },
+            { type: 'file', data: 'data:image/png;base64,abc123', mediaType: 'image/png' },
+          ],
+          'user',
+          'corr-1',
+        ),
+      ],
+      streamMeta(),
+      [pending],
+    );
+
+    const user = out.find(m => m.role === 'user');
+    expect(user?.content.parts).toEqual([
+      { type: 'text', text: 'see this' },
+      { type: 'file', mimeType: 'image/png', data: 'data:image/png;base64,abc123' },
+    ]);
+  });
+
   it('keeps the correlation key but adopts the server id and clears pending on reconciliation', () => {
     // Regression guard for the streaming layout shift: the rendered row key
     // prefers `clientMessageId`, so it must survive the id swap unchanged while

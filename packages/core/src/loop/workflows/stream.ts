@@ -1,5 +1,6 @@
 import { ReadableStream } from 'node:stream/web';
 import type { ToolSet } from '@internal/ai-sdk-v5';
+import { beginGoalActivity, stopGoalActivity } from '../../agent/goal';
 import type { MastraDBMessage } from '../../agent/message-list';
 import { getErrorFromUnknown } from '../../error';
 import { ConsoleLogger } from '../../logger';
@@ -185,7 +186,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
         resumeContext,
-        messageId: messageId!,
+        messageId: messageId,
         models,
         _internal,
         modelSettings,
@@ -243,7 +244,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
       let keepRegisteredForResume = false;
       try {
         const initialData = {
-          messageId: messageId!,
+          messageId: messageId,
           messages: {
             all: messageList.get.all.aiV5.model(),
             user: messageList.get.input.aiV5.model(),
@@ -290,6 +291,17 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           // Clear any value left over from a prior call so a reused RequestContext can't leak a
           // stale function/`true` into a call where approval is no longer required.
           requestContext.delete('__mastra_requireToolApproval');
+        }
+
+        if (rest.goal) {
+          await beginGoalActivity({
+            mastra: rest.mastra,
+            agentId,
+            threadId: _internal?.threadId,
+            runId,
+            requestContext,
+            now: _internal?.now,
+          });
         }
 
         const executionResult = resumeContext
@@ -356,6 +368,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         safeClose(controller);
       } finally {
+        await stopGoalActivity({ agentId, runId, now: _internal?.now });
         if (!keepRegisteredForResume) {
           rest.mastra?.__unregisterInternalWorkflow(agenticLoopWorkflow.id, runId);
         }

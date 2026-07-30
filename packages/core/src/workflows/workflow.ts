@@ -633,6 +633,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
       workflowId,
       state,
       setState,
+      abortSignal,
       ...rest
     }) => {
       // BREAKING CHANGE v1.0: Pass raw input as first arg, context as second
@@ -641,6 +642,7 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
         mastra,
         requestContext,
         ...observabilityContext,
+        abortSignal,
         resumeData,
         workflow: {
           runId,
@@ -2219,9 +2221,9 @@ export class Workflow<
   }
 
   foreach<
-    TPrevIsArray extends TPrevSchema extends any[] ? true : false,
+    TPrevIsArray extends (TPrevSchema extends any[] ? true : false),
     TStepState,
-    TStepInputSchema extends TPrevSchema extends (infer TElement)[] ? TElement : never,
+    TStepInputSchema extends (TPrevSchema extends (infer TElement)[] ? TElement : never),
     TStepId extends string,
     TSchemaOut,
     TStepRC,

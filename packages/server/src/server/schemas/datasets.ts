@@ -12,15 +12,15 @@ const jsonSchemaObject: z.ZodType<Record<string, unknown>> = z.lazy(() => z.reco
 const jsonSchemaField = z.union([jsonSchemaObject, z.null()]).optional();
 
 // ============================================================================
-// Trajectory Expectation Schema (2 levels deep, children at level 2 use z.any())
+// Trajectory Expectation Schema (2 levels deep, children at level 2 use z.unknown())
 // ============================================================================
 
-// Shared base fields for expected steps (level 2 — children typed as z.any())
+// Shared base fields for expected steps (level 2 — children typed as z.unknown())
 const expectedStepBase = {
   name: z.string().describe('Step name to match'),
   durationMs: z.number().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-  children: z.any().optional().describe('Nested trajectory expectation (untyped at this depth)'),
+  children: z.unknown().optional().describe('Nested trajectory expectation (untyped at this depth)'),
 };
 
 // Typed step variants keyed by stepType

@@ -12,7 +12,7 @@ import {
 import type { RunMCResult } from './types.js';
 
 function textMessage(text: string) {
-  return { role: 'assistant' as const, content: [{ type: 'text' as const, text }] };
+  return { role: 'assistant' as const, content: { format: 2 as const, parts: [{ type: 'text' as const, text }] } };
 }
 
 describe('truncate', () => {
@@ -58,7 +58,10 @@ describe('formatHuman', () => {
     const state = createHumanFormatState();
     const userEcho = {
       type: 'message_end' as const,
-      message: { role: 'user' as const, content: [{ type: 'text' as const, text: 'Do the thing.' }] },
+      message: {
+        role: 'user' as const,
+        content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Do the thing.' }] },
+      },
     };
     expect(formatHuman(userEcho as AgentControllerEvent, state)).toEqual({});
     // The cursor must remain untouched so a subsequent assistant turn streams correctly.

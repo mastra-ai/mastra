@@ -59,6 +59,7 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
 
   const mockSandbox = {
     sandboxId: 'mock-sandbox-id',
+    getHost: vi.fn((port: number) => `${port}-mock-sandbox-id.e2b.app`),
     commands: {
       run: createDefaultRunMock(),
       list: vi.fn().mockResolvedValue([]),
@@ -70,6 +71,7 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
       list: vi.fn().mockResolvedValue([]),
     },
     kill: vi.fn().mockResolvedValue(undefined),
+    pause: vi.fn().mockResolvedValue(true),
   };
 
   // Create a mock template builder with chainable methods
@@ -101,6 +103,8 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
       list: vi.fn().mockReturnValue({
         nextItems: vi.fn().mockResolvedValue([]),
       }),
+      pause: vi.fn().mockResolvedValue(true),
+      kill: vi.fn().mockResolvedValue(true),
     },
     Template: createMockTemplate(),
   });
@@ -118,6 +122,8 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
     (Sandbox.list as any).mockReturnValue({
       nextItems: vi.fn().mockResolvedValue([]),
     });
+    ((Sandbox as any).pause as any).mockResolvedValue(true);
+    ((Sandbox as any).kill as any).mockResolvedValue(true);
     (Template.exists as any).mockResolvedValue(false);
     (Template.build as any).mockResolvedValue({ templateId: 'mock-template-id' });
     // Default run mock handles both foreground and background modes
@@ -134,6 +140,7 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
     mockSandbox.files.read.mockResolvedValue('');
     mockSandbox.files.list.mockResolvedValue([]);
     mockSandbox.kill.mockResolvedValue(undefined);
+    mockSandbox.getHost.mockImplementation((port: number) => `${port}-mock-sandbox-id.e2b.app`);
     nextMockPid = 1000;
   };
 
@@ -405,6 +412,64 @@ describe('E2BSandbox', () => {
   });
 
   describe('Stop/Destroy', () => {
+    it('stop pauses the sandbox (snapshot-stop)', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      await sandbox._stop();
+
+      expect(mockSandbox.pause).toHaveBeenCalled();
+      expect(mockSandbox.kill).not.toHaveBeenCalled();
+      expect(sandbox.status).toBe('stopped');
+    });
+
+    it('stop propagates pause failure so callers do not assume the sandbox stopped', async () => {
+      mockSandbox.pause.mockRejectedValueOnce(new Error('pause failed'));
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      await expect(sandbox._stop()).rejects.toThrow('pause failed');
+    });
+
+    it('stop pauses a detached running sandbox by identity without resuming', async () => {
+      const { Sandbox } = await import('e2b');
+      (Sandbox.list as any).mockReturnValue({
+        nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-sandbox-id', state: 'running' }]),
+      });
+
+      const sandbox = new E2BSandbox({ id: 'my-preview' });
+      await sandbox.stop();
+
+      expect((Sandbox as any).pause).toHaveBeenCalledWith('existing-sandbox-id', expect.any(Object));
+      expect(Sandbox.connect).not.toHaveBeenCalled();
+    });
+
+    it('stop skips a detached sandbox that is already paused', async () => {
+      const { Sandbox } = await import('e2b');
+      (Sandbox.list as any).mockReturnValue({
+        nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-sandbox-id', state: 'paused' }]),
+      });
+
+      const sandbox = new E2BSandbox({ id: 'my-preview' });
+      await sandbox.stop();
+
+      expect((Sandbox as any).pause).not.toHaveBeenCalled();
+      expect(Sandbox.connect).not.toHaveBeenCalled();
+    });
+
+    it('destroy kills a detached sandbox by identity without resuming', async () => {
+      const { Sandbox } = await import('e2b');
+      (Sandbox.list as any).mockReturnValue({
+        nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-sandbox-id', state: 'paused' }]),
+      });
+
+      const sandbox = new E2BSandbox({ id: 'my-preview' });
+      await sandbox.destroy();
+
+      expect((Sandbox as any).kill).toHaveBeenCalledWith('existing-sandbox-id', expect.any(Object));
+      expect(Sandbox.connect).not.toHaveBeenCalled();
+    });
+
     it('destroy kills sandbox', async () => {
       const sandbox = new E2BSandbox();
       await sandbox._start();
@@ -413,6 +478,14 @@ describe('E2BSandbox', () => {
 
       expect(mockSandbox.kill).toHaveBeenCalled();
       expect(sandbox.status).toBe('destroyed');
+    });
+
+    it('destroy propagates kill failure so callers do not assume cleanup completed', async () => {
+      mockSandbox.kill.mockRejectedValueOnce(new Error('kill failed'));
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      await expect(sandbox._destroy()).rejects.toThrow('kill failed');
     });
   });
 
@@ -2433,6 +2506,91 @@ describe('E2BSandbox Self-Hosted Connection Options', () => {
   });
 });
 
+describe('networking', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await resetMockDefaults();
+  });
+
+  it('getPortUrl returns an https URL built from getHost', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    await expect(sandbox.networking.getPortUrl(3000)).resolves.toBe('https://3000-mock-sandbox-id.e2b.app');
+    expect(mockSandbox.getHost).toHaveBeenCalledWith(3000);
+  });
+
+  it('getPortUrl returns null before the sandbox is started', async () => {
+    const sandbox = new E2BSandbox();
+    await expect(sandbox.networking.getPortUrl(3000)).resolves.toBeNull();
+  });
+
+  it('getPortUrl derives the URL by identity lookup when detached, without connecting', async () => {
+    const { Sandbox } = await import('e2b');
+    (Sandbox.list as any).mockReturnValue({
+      nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'existing-sandbox-id', state: 'paused' }]),
+    });
+
+    const sandbox = new E2BSandbox({ id: 'my-preview' });
+
+    await expect(sandbox.networking.getPortUrl(4111)).resolves.toBe('https://4111-existing-sandbox-id.e2b.app');
+    expect(Sandbox.connect).not.toHaveBeenCalled();
+  });
+
+  it('getPortUrl returns null when getHost throws', async () => {
+    mockSandbox.getHost.mockImplementation(() => {
+      throw new Error('no host');
+    });
+
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    await expect(sandbox.networking.getPortUrl(3000)).resolves.toBeNull();
+  });
+});
+
+describe('writeFiles()', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    await resetMockDefaults();
+  });
+
+  it('forwards string files to the SDK bulk write', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+    await sandbox.writeFiles([
+      { path: '/app/index.mjs', content: 'export {}' },
+      { path: '/app/package.json', content: '{}' },
+    ]);
+
+    expect(mockSandbox.files.write).toHaveBeenCalledTimes(1);
+    expect(mockSandbox.files.write).toHaveBeenCalledWith([
+      { path: '/app/index.mjs', data: 'export {}' },
+      { path: '/app/package.json', data: '{}' },
+    ]);
+  });
+
+  it('converts Buffer content to a Blob', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+    await sandbox.writeFiles([{ path: '/app/data.bin', content: Buffer.from([1, 2, 3]) }]);
+
+    const entries = mockSandbox.files.write.mock.calls[0]![0];
+    expect(entries[0].path).toBe('/app/data.bin');
+    expect(entries[0].data).toBeInstanceOf(Blob);
+    expect(new Uint8Array(await entries[0].data.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]));
+  });
+
+  it('starts the sandbox if not already running', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox.writeFiles([{ path: '/app/a.txt', content: 'hi' }]);
+
+    const { Sandbox } = await import('e2b');
+    expect(Sandbox.create as any).toHaveBeenCalledTimes(1);
+    expect(mockSandbox.files.write).toHaveBeenCalled();
+  });
+});
+
 /**
  * Shared conformance tests from _test-utils.
  * These validate that E2BSandbox conforms to the WorkspaceSandbox contract.
@@ -2468,4 +2626,46 @@ describe('E2BSandbox Shared Conformance', () => {
 
   createSandboxLifecycleTests(getContext);
   createMountOperationsTests(getContext);
+});
+
+describe('E2BSandbox.clone', () => {
+  it('constructs an unstarted sibling without any I/O', () => {
+    const template = new E2BSandbox({ apiKey: 'e2b-key', template: 'base-tpl', timeout: 120_000 });
+
+    const child = template.clone({ id: 'mc-project-1' });
+
+    expect(child).toBeInstanceOf(E2BSandbox);
+    expect(child).not.toBe(template);
+    expect(child.id).toBe('mc-project-1');
+    expect(child.status).toBe('pending');
+  });
+
+  it('inherits template config and applies env override', () => {
+    const template = new E2BSandbox({ apiKey: 'e2b-key', template: 'base-tpl', env: { BASE: '1' } });
+
+    const child = template.clone({ env: { GITHUB_TOKEN: 'ghs_abc' } });
+
+    expect(child['_constructorOptions']).toMatchObject({
+      apiKey: 'e2b-key',
+      template: 'base-tpl',
+      env: { GITHUB_TOKEN: 'ghs_abc' },
+    });
+  });
+
+  it('maps idleTimeoutMinutes to the E2B timeout in milliseconds', () => {
+    const template = new E2BSandbox({ apiKey: 'e2b-key', timeout: 120_000 });
+
+    const child = template.clone({ idleTimeoutMinutes: 15 });
+
+    expect(child['_constructorOptions']).toMatchObject({ timeout: 900_000 });
+  });
+
+  it('inherits template defaults when no overrides are passed', () => {
+    const template = new E2BSandbox({ apiKey: 'e2b-key', timeout: 120_000, env: { BASE: '1' } });
+
+    const child = template.clone();
+
+    expect(child.id).not.toBe(template.id);
+    expect(child['_constructorOptions']).toMatchObject({ apiKey: 'e2b-key', timeout: 120_000, env: { BASE: '1' } });
+  });
 });

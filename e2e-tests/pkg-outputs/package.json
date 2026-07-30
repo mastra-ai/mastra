@@ -12,6 +12,6 @@
     "test": "vitest"
   },
   "dependencies": {
-    "form-data": "^2.5.6"
+    "form-data": "^4.0.6"
   }
 }
