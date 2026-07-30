@@ -386,6 +386,13 @@ describe('RegexFilterProcessor', () => {
       );
     });
 
+    it('falls back when the pattern covers less of the region on its own', () => {
+      const text = redactWith([{ name: 'lead', pattern: /\d+(?=\d)/g, replacement: '<$&>' }], '1234');
+
+      expect(text).toBe('<$&>4');
+      expect(text).not.toContain('12');
+    });
+
     it('leaves text untouched for a rule that only matches empty strings', () => {
       expect(redactWith([{ name: 'empty', pattern: /x*/g, replacement: '[Z]' }], 'abc')).toBe('abc');
     });

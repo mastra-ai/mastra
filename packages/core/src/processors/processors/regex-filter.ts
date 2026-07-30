@@ -359,11 +359,12 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
    * Resolve the text that replaces a region.
    *
    * Replacements containing `$` may reference capture groups, so those are
-   * resolved by re-running the rule against the matched slice. That only works
-   * when the pattern still matches in isolation — a rule anchored on its
-   * surroundings (lookbehind, lookahead) will not — and a merged region no
-   * longer corresponds to a single pattern at all. Both fall back to the
-   * replacement string as written, so a region is always redacted.
+   * resolved by re-running the rule against the matched slice. That requires the
+   * pattern to still cover the whole slice on its own, which it will not when the
+   * rule is anchored on its surroundings or when its match length depended on
+   * text outside the region. A merged region does not correspond to a single
+   * pattern at all. Every one of those falls back to the replacement string as
+   * written, so the region is replaced whole and no part of it survives.
    */
   private resolveReplacement(text: string, region: RedactionRegion): string {
     const { rule } = region.owner;
@@ -371,7 +372,8 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
     if (region.matches.length > 1 || !replacement.includes('$')) return replacement;
 
     const matched = text.slice(region.start, region.end);
-    if (!compilePattern(rule).test(matched)) return replacement;
+    const isolated = compilePattern(rule).exec(matched);
+    if (!isolated || isolated.index !== 0 || isolated[0].length !== matched.length) return replacement;
 
     return matched.replace(compilePattern(rule), replacement);
   }
