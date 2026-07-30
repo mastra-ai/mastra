@@ -19,6 +19,7 @@ import type {
   ListExperimentsOutput,
   TargetType,
   UpdateDatasetInput,
+  UpdateDatasetItemInput,
   UpdateExperimentResultInput,
 } from '../storage/types.js';
 import { runExperiment } from './experiment/index.js';
@@ -284,7 +285,9 @@ export class Dataset {
    * Update an existing item in the dataset. Only the provided payload fields
    * are patched.
    */
-  async updateItem(input: { itemId: string } & Partial<Omit<DatasetItemPayload, 'externalId'>>): Promise<DatasetItem> {
+  async updateItem(
+    input: { itemId: string } & Omit<UpdateDatasetItemInput, 'id' | 'datasetId' | 'filters'>,
+  ): Promise<DatasetItem> {
     const store = await this.#getDatasetsStore();
     const { itemId, ...rest } = input;
     return store.updateItem({ id: itemId, datasetId: this.id, ...rest, filters: this.#scope });
