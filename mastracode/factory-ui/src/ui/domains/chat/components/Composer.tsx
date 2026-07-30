@@ -301,7 +301,29 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const disabled = status !== 'ready';
 
   return (
-    <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
+    <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()} className="relative">
+      {/* Rendered outside ComposerBox: its overflow-hidden clips anything above the box. */}
+      {showSuggestions && (
+        <div className="border-border1 bg-surface3 absolute right-0 bottom-full left-0 z-20 mx-auto mb-2 w-full max-w-3xl rounded-md border p-1 shadow-lg">
+          {suggestions.map((cmd, index) => (
+            <button
+              key={cmd.name}
+              type="button"
+              className={cn(
+                'flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-ui-sm',
+                index === activeSuggestion ? 'bg-surface4 text-icon6' : 'text-icon3',
+              )}
+              onMouseDown={e => {
+                e.preventDefault();
+                applyCommand(cmd.name);
+              }}
+            >
+              <span>/{cmd.name}</span>
+              <span>{cmd.description}</span>
+            </button>
+          ))}
+        </div>
+      )}
       <ComposerBox ref={spotlightRef} className={cn('composer-spotlight', modeColorClass)}>
         <div aria-hidden="true" className="composer-spotlight-surface" />
         {images.length > 0 && (
@@ -340,27 +362,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
           aria-label="Message"
           aria-keyshortcuts="Shift+Tab"
         />
-        {showSuggestions && (
-          <div className="border-border1 bg-surface3 absolute bottom-full mb-2 w-full rounded-md border p-1 shadow-lg">
-            {suggestions.map((cmd, index) => (
-              <button
-                key={cmd.name}
-                type="button"
-                className={cn(
-                  'flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-ui-sm',
-                  index === activeSuggestion ? 'bg-surface4 text-icon6' : 'text-icon3',
-                )}
-                onMouseDown={e => {
-                  e.preventDefault();
-                  applyCommand(cmd.name);
-                }}
-              >
-                <span>/{cmd.name}</span>
-                <span>{cmd.description}</span>
-              </button>
-            ))}
-          </div>
-        )}
         <input
           ref={fileInputRef}
           type="file"

@@ -778,5 +778,43 @@ describe('PlatformSandbox', () => {
         env: { BASE: '1' },
       });
     });
+
+    it('forwards checkpointName as the create body id so the platform keys recovery on it', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_child', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const template = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+
+      const child = template.clone({ checkpointName: 'mastra-recovery-session-42' });
+      await child._start();
+
+      const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+      // Recovery-key stability is the whole point: the proxy hashes body.id to
+      // look up prior checkpoints, so a session-stable checkpointName MUST
+      // round-trip to body.id on start().
+      expect(body.id).toBe('mastra-recovery-session-42');
+      expect(child.id).toBe('mastra-recovery-session-42');
+    });
+
+    it('prefers an explicit id over checkpointName when both are passed to clone', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_child', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const template = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+      });
+
+      const child = template.clone({ id: 'explicit-id', checkpointName: 'ignored-name' });
+      await child._start();
+
+      const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
+      expect(body.id).toBe('explicit-id');
+    });
   });
 });
