@@ -8,6 +8,24 @@ const execaMock = vi.hoisted(() => vi.fn());
 
 vi.mock('execa', () => ({ execa: execaMock }));
 
+// Override hook for installPluginDependenciesForEntry. Defaults to the real implementation so the
+// existing success tests (which assert the real `corepack pnpm install` execa call) are unaffected;
+// individual tests set installForEntryOverride to induce a deterministic install failure.
+const installForEntryOverride = vi.hoisted(() => ({
+  fn: undefined as ((...args: unknown[]) => Promise<void>) | undefined,
+}));
+
+vi.mock('../dependencies.js', async () => {
+  const actual = await vi.importActual<typeof import('../dependencies.js')>('../dependencies.js');
+  return {
+    ...actual,
+    installPluginDependenciesForEntry: (...args: unknown[]) =>
+      installForEntryOverride.fn
+        ? installForEntryOverride.fn(...args)
+        : (actual.installPluginDependenciesForEntry as (...a: unknown[]) => Promise<void>)(...args),
+  };
+});
+
 import { PluginManager } from '../manager.js';
 import { findMastraCodePackageRoot } from '../package-link.js';
 import { loadPluginRegistry } from '../registry.js';
@@ -18,6 +36,7 @@ let tempDir: string | undefined;
 
 afterEach(() => {
   vi.clearAllMocks();
+  installForEntryOverride.fn = undefined;
   if (tempDir) {
     fs.rmSync(tempDir, { recursive: true, force: true });
     tempDir = undefined;
@@ -335,6 +354,132 @@ describe('PluginManager', () => {
     expect(updateListener).toHaveBeenCalledWith(['acme.one', 'acme.two']);
   });
 
+  it('notifies failure listeners and rolls back when a plugin update install fails', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-plugin');
+    writePlugin(checkoutDir, 'acme.github', 'github_tool', 'first');
+    fs.writeFileSync(path.join(checkoutDir, 'package.json'), JSON.stringify({ packageManager: 'pnpm@10.0.0' }));
+    fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, '.mastracode/plugins'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.mastracode/plugins/plugins.json'),
+      JSON.stringify({
+        plugins: {
+          'acme.github': {
+            enabled: true,
+            source: 'github',
+            specifier: 'https://github.com/acme/plugin',
+            path: 'sources/github/acme-plugin',
+            entry: 'src/index.ts',
+          },
+        },
+      }),
+    );
+    const installError = new Error('install boom');
+    installForEntryOverride.fn = () => Promise.reject(installError);
+    execaMock.mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') return { stdout: 'old' };
+      if (args[0] === 'rev-parse') return { stdout: 'origin/main' };
+      if (args[0] === 'rev-list') return { stdout: '0\t1' };
+      if (args[0] === 'status') return { stdout: '' };
+      if (args[0] === 'reset') writePlugin(checkoutDir, 'acme.github', 'github_tool', 'second');
+      return { stdout: '' };
+    });
+
+    const manager = new PluginManager({ projectRoot, homeDir });
+    const updateListener = vi.fn();
+    const failureListener = vi.fn();
+    manager.onGithubPluginsUpdated(updateListener);
+    manager.onGithubPluginUpdateFailed(failureListener);
+    await manager.reload();
+
+    // The poll resolves (does not reject) despite the install throwing — the per-plugin catch owns it.
+    await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(false);
+
+    expect(failureListener).toHaveBeenCalledTimes(1);
+    expect(failureListener).toHaveBeenCalledWith([{ pluginName: 'acme.github', error: installError }]);
+    expect(updateListener).not.toHaveBeenCalled();
+    // Rollback: checkout reset back to the previous head after the failed install.
+    expect(execaMock).toHaveBeenCalledWith(
+      'git',
+      ['reset', '--hard', 'old'],
+      expect.objectContaining({ cwd: checkoutDir }),
+    );
+  });
+
+  it('keeps updating a healthy plugin when a sibling plugin update fails', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const badCheckout = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-bad');
+    const goodCheckout = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-good');
+    writePlugin(badCheckout, 'acme.bad', 'bad_tool', 'first');
+    writePlugin(goodCheckout, 'acme.good', 'good_tool', 'first');
+    fs.writeFileSync(path.join(badCheckout, 'package.json'), JSON.stringify({ packageManager: 'pnpm@10.0.0' }));
+    fs.writeFileSync(path.join(goodCheckout, 'package.json'), JSON.stringify({ packageManager: 'pnpm@10.0.0' }));
+    fs.mkdirSync(path.join(badCheckout, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(goodCheckout, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, '.mastracode/plugins'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.mastracode/plugins/plugins.json'),
+      JSON.stringify({
+        plugins: {
+          'acme.bad': {
+            enabled: true,
+            source: 'github',
+            specifier: 'https://github.com/acme/bad',
+            path: 'sources/github/acme-bad',
+            entry: 'src/index.ts',
+          },
+          'acme.good': {
+            enabled: true,
+            source: 'github',
+            specifier: 'https://github.com/acme/good',
+            path: 'sources/github/acme-good',
+            entry: 'src/index.ts',
+          },
+        },
+      }),
+    );
+    // Fail the install only for the bad checkout; let the good checkout install for real.
+    const actualDeps = await vi.importActual<typeof import('../dependencies.js')>('../dependencies.js');
+    installForEntryOverride.fn = ((pluginRoot: string, entry: string) => {
+      if (pluginRoot === badCheckout) return Promise.reject(new Error('install boom'));
+      return actualDeps.installPluginDependenciesForEntry(pluginRoot, entry);
+    }) as (...args: unknown[]) => Promise<void>;
+    execaMock.mockImplementation(async (cmd: string, args: string[], options: { cwd?: string } = {}) => {
+      if (cmd === 'corepack') return { stdout: '' };
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') return { stdout: 'old' };
+      if (args[0] === 'rev-parse') return { stdout: 'origin/main' };
+      if (args[0] === 'rev-list') return { stdout: '0\t1' };
+      if (args[0] === 'status') return { stdout: '' };
+      if (args[0] === 'reset' && args[2] === 'origin/main' && options.cwd === goodCheckout) {
+        writePlugin(goodCheckout, 'acme.good', 'good_tool', 'second');
+      }
+      return { stdout: '' };
+    });
+
+    const manager = new PluginManager({ projectRoot, homeDir });
+    const pluginTools = manager.getPluginTools();
+    const updateListener = vi.fn();
+    const failureListener = vi.fn();
+    manager.onGithubPluginsUpdated(updateListener);
+    manager.onGithubPluginUpdateFailed(failureListener);
+    await manager.reload();
+    expect(pluginTools.good_tool?.description).toBe('first');
+
+    await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
+
+    // Healthy sibling updated and was announced; failed plugin surfaced separately.
+    expect(pluginTools.good_tool?.description).toBe('second');
+    expect(updateListener).toHaveBeenCalledTimes(1);
+    expect(updateListener).toHaveBeenCalledWith(['acme.good']);
+    expect(failureListener).toHaveBeenCalledTimes(1);
+    expect(failureListener).toHaveBeenCalledWith([expect.objectContaining({ pluginName: 'acme.bad' })]);
+  });
+
   it('installs dependencies for nested GitHub entry package roots during updates', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');
@@ -566,7 +711,7 @@ describe('PluginManager', () => {
     );
   });
 
-  it('rejects update polling without reloading when dependency installation fails', async () => {
+  it('surfaces the failure without reloading or rejecting when dependency installation fails', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');
     const homeDir = path.join(tempDir, 'home');
@@ -607,7 +752,15 @@ describe('PluginManager', () => {
     await manager.reload();
     expect(manager.getPluginTools().github_tool?.description).toBe('first');
 
-    await expect(manager.pollGithubSourcesForUpdates()).rejects.toThrow(installError);
+    const failureListener = vi.fn();
+    manager.onGithubPluginUpdateFailed(failureListener);
+
+    await expect(manager.pollGithubSourcesForUpdates()).resolves.not.toThrow();
+
+    expect(failureListener).toHaveBeenCalledTimes(1);
+    expect(failureListener).toHaveBeenCalledWith([
+      expect.objectContaining({ pluginName: 'acme.github', error: installError }),
+    ]);
 
     expect(manager.getPluginTools().github_tool?.description).toBe('first');
     expect(execaMock).toHaveBeenCalledWith(

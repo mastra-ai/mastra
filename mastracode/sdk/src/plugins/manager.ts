@@ -41,6 +41,9 @@ export class PluginManager {
   private reloadInFlight: Promise<LoadedPlugin[]> | undefined;
   private readonly reloadListeners = new Set<(plugins: LoadedPlugin[]) => void | Promise<void>>();
   private readonly githubUpdateListeners = new Set<(pluginNames: string[]) => void | Promise<void>>();
+  private readonly githubUpdateFailureListeners = new Set<
+    (failures: { pluginName: string; error: unknown }[]) => void | Promise<void>
+  >();
 
   constructor(private readonly options: PluginManagerOptions) {}
 
@@ -53,6 +56,14 @@ export class PluginManager {
   onGithubPluginsUpdated(listener: (pluginNames: string[]) => void | Promise<void>): () => void {
     this.githubUpdateListeners.add(listener);
     return () => this.githubUpdateListeners.delete(listener);
+  }
+
+  /** Notified when a GitHub plugin's background auto-update failed and its checkout was rolled back. */
+  onGithubPluginUpdateFailed(
+    listener: (failures: { pluginName: string; error: unknown }[]) => void | Promise<void>,
+  ): () => void {
+    this.githubUpdateFailureListeners.add(listener);
+    return () => this.githubUpdateFailureListeners.delete(listener);
   }
 
   async reload(): Promise<LoadedPlugin[]> {
@@ -234,17 +245,26 @@ export class PluginManager {
   private async pollGithubSourcesForUpdatesOnce(): Promise<boolean> {
     const changedCheckouts = new Set<string>();
     const seen = new Set<string>();
+    const failures: { pluginName: string; error: unknown }[] = [];
     for (const plugin of this.loadedPlugins) {
       if (plugin.source !== 'github' || plugin.status === 'inactive' || plugin.status === 'blocked') continue;
       const checkoutPath = this.resolvePluginSourcePath(plugin);
       if (seen.has(checkoutPath) || !fs.existsSync(path.join(checkoutPath, '.git'))) continue;
       seen.add(checkoutPath);
 
-      const before = await this.readGitHead(checkoutPath);
-      const checkoutChanged = await this.refreshGithubCheckout(plugin, checkoutPath, before);
-      const after = await this.readGitHead(checkoutPath);
-      if (checkoutChanged || before !== after) changedCheckouts.add(checkoutPath);
+      try {
+        const before = await this.readGitHead(checkoutPath);
+        const checkoutChanged = await this.refreshGithubCheckout(plugin, checkoutPath, before);
+        const after = await this.readGitHead(checkoutPath);
+        if (checkoutChanged || before !== after) changedCheckouts.add(checkoutPath);
+      } catch (error) {
+        // refreshGithubCheckout already rolled the checkout back to its previous head and rethrew.
+        // Capture the failure per-plugin so one plugin's failure does not abort the poll for the rest.
+        failures.push({ pluginName: plugin.name ?? plugin.id, error });
+      }
     }
+
+    if (failures.length > 0) await this.notifyGithubUpdateFailureListeners(failures);
 
     if (changedCheckouts.size === 0) return false;
 
@@ -266,6 +286,10 @@ export class PluginManager {
 
   private async notifyGithubUpdateListeners(pluginNames: string[]): Promise<void> {
     await Promise.all([...this.githubUpdateListeners].map(listener => Promise.resolve(listener(pluginNames))));
+  }
+
+  private async notifyGithubUpdateFailureListeners(failures: { pluginName: string; error: unknown }[]): Promise<void> {
+    await Promise.all([...this.githubUpdateFailureListeners].map(listener => Promise.resolve(listener(failures))));
   }
 
   private async refreshGithubCheckout(
