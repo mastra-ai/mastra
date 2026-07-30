@@ -4,7 +4,7 @@ import * as p from '@clack/prompts';
 // `mastra/internal/auth` is the CLI's internal barrel — drives the browser-auth
 // flow and reuses persisted credentials + org resolution rather than duplicating
 // them here.
-import { fetchOrgs, getToken, loadCredentials, resolveCurrentOrg } from 'mastra/internal/auth';
+import { fetchOrgs, getToken, loadCredentials, LoginCancelledError, resolveCurrentOrg } from 'mastra/internal/auth';
 import color from 'picocolors';
 import { x } from 'tinyexec';
 
@@ -136,6 +136,7 @@ export async function create(args: CreateArgs): Promise<void> {
   // ── Platform provisioning ────────────────────────────────────────────────
   let platformResult: PlatformProvisionResult | null = null;
   let platformError: string | null = null;
+  let platformSkipped = false;
   if (!args.noPlatform) {
     try {
       platformResult = await runPlatformProvisioning({
@@ -145,8 +146,13 @@ export async function create(args: CreateArgs): Promise<void> {
         org: args.org,
       });
     } catch (err) {
-      platformError = err instanceof Error ? err.message : String(err);
-      p.log.warn(`Platform provisioning failed: ${platformError}`);
+      if (err instanceof LoginCancelledError) {
+        platformSkipped = true;
+        p.log.info('Skipping Mastra platform setup.');
+      } else {
+        platformError = err instanceof Error ? err.message : String(err);
+        p.log.warn(`Platform provisioning failed: ${platformError}`);
+      }
     }
   }
 
@@ -207,6 +213,10 @@ export async function create(args: CreateArgs): Promise<void> {
       '',
       `Manage your project at ${color.underline('https://projects.mastra.ai')}`,
     );
+  } else if (platformSkipped) {
+    lines.push(
+      `${color.yellow('Skipped Mastra platform setup.')} Configure ${color.cyan('.env')} manually before running.`,
+    );
   } else if (args.noPlatform) {
     lines.push(
       `${color.yellow('Skipped platform provisioning (--no-platform).')} Configure ${color.cyan('.env')} manually before running.`,
@@ -247,9 +257,9 @@ async function runPlatformProvisioning({
   };
 
   try {
-    // 1. Auth — triggers the browser-auth flow if no cached credential.
-    //    When that flow is about to open (no env token, no cached credential),
-    //    pause first so the browser doesn't pop open unannounced.
+    // 1. Auth — announce the browser-auth flow before opening it when there is
+    //    no cached credential. Once the browser is open, any key skips platform
+    //    provisioning; Ctrl+C remains the process-level cancellation signal.
     const willOpenAuthFlow = !process.env.MASTRA_API_TOKEN && !(await loadCredentials());
     if (willOpenAuthFlow) {
       const proceed = await p.text({
@@ -257,11 +267,12 @@ async function runPlatformProvisioning({
         defaultValue: '',
       });
       if (p.isCancel(proceed)) {
-        throw new Error('Sign-in cancelled.');
+        p.cancel('Operation cancelled');
+        process.exit(0);
       }
     }
     p.log.info('Signing in to Mastra…');
-    const token = await getToken();
+    const token = await getToken(undefined, { skipOnInput: true });
 
     // 2. Org — `--org <id-or-name>` skips the picker; otherwise prompt every
     //    time so the user consciously chooses which org owns the new factory

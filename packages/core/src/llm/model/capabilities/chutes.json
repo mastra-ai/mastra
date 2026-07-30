@@ -4,7 +4,8 @@
     "Qwen/Qwen3.6-27B-TEE",
     "google/gemma-4-31B-turbo-TEE",
     "moonshotai/Kimi-K2.5-TEE",
-    "moonshotai/Kimi-K2.6-TEE"
+    "moonshotai/Kimi-K2.6-TEE",
+    "moonshotai/Kimi-K3-TEE"
   ],
   "temperature": [
     "MiniMaxAI/MiniMax-M2.5-TEE",
@@ -17,6 +18,7 @@
     "google/gemma-4-31B-turbo-TEE",
     "moonshotai/Kimi-K2.5-TEE",
     "moonshotai/Kimi-K2.6-TEE",
+    "moonshotai/Kimi-K3-TEE",
     "unsloth/Mistral-Nemo-Instruct-2407-TEE",
     "zai-org/GLM-5-TEE",
     "zai-org/GLM-5.1-TEE",
@@ -32,6 +34,7 @@
     "google/gemma-4-31B-turbo-TEE",
     "moonshotai/Kimi-K2.5-TEE",
     "moonshotai/Kimi-K2.6-TEE",
+    "moonshotai/Kimi-K3-TEE",
     "zai-org/GLM-5-TEE",
     "zai-org/GLM-5.1-TEE",
     "zai-org/GLM-5.2-TEE"

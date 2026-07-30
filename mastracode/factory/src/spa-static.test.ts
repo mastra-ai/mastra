@@ -115,6 +115,18 @@ describe('createSpaStaticMiddleware – path traversal', () => {
     expect(c._resHeaders['Content-Type']).toBe('text/javascript; charset=utf-8');
   });
 
+  it('serves web app manifests with their standard MIME type', async () => {
+    vi.mocked(readFile).mockResolvedValue(Buffer.from('{}'));
+    vi.mocked(stat).mockResolvedValue({ isFile: () => true } as any);
+
+    const middleware = createSpaStaticMiddleware('/app/ui');
+    const c = mockContext('GET', '/manifest.webmanifest');
+    await middleware(c, async () => {});
+
+    expect(readFile).toHaveBeenCalledWith('/app/ui/manifest.webmanifest');
+    expect(c._resHeaders['Content-Type']).toBe('application/manifest+json');
+  });
+
   it('sets immutable cache for hashed assets', async () => {
     vi.mocked(readFile).mockResolvedValue(Buffer.from('js'));
     vi.mocked(stat).mockResolvedValue({ isFile: () => true } as any);
@@ -140,7 +152,7 @@ describe('createSpaStaticMiddleware – path traversal', () => {
 
   it('passes through server-owned prefixes', async () => {
     const middleware = createSpaStaticMiddleware('/app/ui');
-    for (const prefix of ['/api/foo', '/web/bar', '/auth/callback']) {
+    for (const prefix of ['/api/foo', '/web/bar', '/auth/callback', '/connect/slack']) {
       const c = mockContext('GET', prefix);
       let calledNext = false;
       await middleware(c, async () => {
