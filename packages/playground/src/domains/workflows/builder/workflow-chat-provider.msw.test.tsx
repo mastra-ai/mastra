@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { WorkflowChatProvider } from './workflow-chat-provider';
 import type { WorkflowGenerationFailure } from './workflow-chat-provider';
-import { createWorkflowDraftAuthoringState } from './workflow-draft';
+import { createLoadedWorkflowDraftAuthoringState, createWorkflowDraftAuthoringState } from './workflow-draft';
 import type { WorkflowDraftToolResult } from './workflow-draft-tools';
 import { createWorkflowDraftTools } from './workflow-draft-tools';
 import { useStreamMessages, useStreamSend } from '@/domains/agent-builder/contexts/stream-chat-context';
@@ -290,6 +290,68 @@ describe('WorkflowChatProvider', () => {
       });
 
       expect(failure ?? null).toBeNull();
+    });
+  });
+
+  describe('when a workflow that already has a complete definition is reopened', () => {
+    // A draft loaded from a stored workflow is ready at revision 0, so the
+    // canvas shows "Ready to save" while nothing has been edited this session.
+    async function renderReopenedHarness() {
+      // Closes immediately so `onSendComplete` fires within the test.
+      server.use(
+        http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+        http.post(`${BASE_URL}/api/editor/workflow-builder/stream`, async () => {
+          return new HttpResponse(
+            new ReadableStream({
+              start(controller) {
+                controller.close();
+              },
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          );
+        }),
+      );
+      const captured: {
+        failure?: WorkflowGenerationFailure | null;
+      } = {};
+
+      render(
+        <Providers>
+          <WorkflowChatProvider
+            threadId="workflow-builder-reopened"
+            authoringState={createLoadedWorkflowDraftAuthoringState({
+              id: 'reopened-workflow',
+              graph: [{ type: 'mapping', id: 'echo', mapConfig: '{"message":{"initData":true,"path":"message"}}' }],
+              inputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
+              outputSchema: { type: 'object', properties: { message: { type: 'string' } }, required: ['message'] },
+            })}
+            initialMessages={[]}
+            createTools={(_isCurrent, onResult) => {
+              // The model attempts a submission during the turn and it fails.
+              onResult?.({
+                toolId: 'submit-workflow-draft',
+                result: { success: false, error: 'Invalid definition', issues: [] },
+              });
+              return {};
+            }}
+            onGenerationFailure={next => (captured.failure = next)}
+          >
+            <Composer message="loop through all 50 states" />
+          </WorkflowChatProvider>
+        </Providers>,
+      );
+
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 40));
+      });
+      return captured;
+    }
+
+    it('never claims there is no accepted draft when a complete one is on the canvas', async () => {
+      const harness = await renderReopenedHarness();
+
+      expect(harness.failure?.code).not.toBe('no-accepted-draft');
+      expect(harness.failure?.message ?? '').not.toContain('without creating an accepted draft');
     });
   });
 

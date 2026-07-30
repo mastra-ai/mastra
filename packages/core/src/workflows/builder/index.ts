@@ -229,6 +229,7 @@ A mapping step's \`mapConfig\` is a **JSON-encoded string** of an object (yes, e
 - \`{ "value": <constant> }\` — embed a literal JSON value.
 - \`{ "initData": true, "path": "<field.path>" }\` — pluck a field from the workflow's original input. This is the canonical direct source form; do not emit \`{ "initData": "<field>" }\`, \`{ "initData": true }\` without \`path\`, or combine it with \`step\`.
 - \`{ "step": "<stepId>", "path": "<field.path>" }\` — pluck a single field from a prior step's output. Dotted paths drill into nested objects. This source must not also include \`initData\`.
+- \`{ "requestContextPath": "<field.path>" }\` — read a field from the run's request context (per-run ambient values such as a caller id or tenant, supplied at run time rather than in the workflow input). Note the shape: the path is the VALUE of \`requestContextPath\`, with no separate \`path\` key. Use it only for values the caller genuinely passes as request context; if the value belongs in the workflow's own input, use \`initData\` instead. Declare \`requestContextSchema\` on the workflow so the field can be validated.
 
 Canonical direct-source examples:
 
@@ -285,6 +286,35 @@ These four types are top-level entries in \`graph\`. They can NOT nest inside ea
 \`\`\`
 
 The parallel step's output is \`{ "summarise": { "text": "..." }, "count-lines": <its outputSchema> }\`. It contains the complete output of **every** child under that child's id; never replace child outputs with only the input values used to call them. Downstream steps that need one branch's result pluck it via \`stepResults.<parallelId>.<childId>.<field>\` in a mapping.
+
+**Giving parallel branches different inputs.** Every child of a \`parallel\` receives the SAME value — the preceding step's output — and children have no per-child input mapping. That does not mean branches must all consume the same thing. There are two patterns; pick by whether the branches need different FIELDS or different VALUES OF THE SAME FIELD.
+
+*Pattern A — one shared object, each branch reads its own field.* Put a \`mapping\` BEFORE the \`parallel\` that builds one object containing every field the branches need, then let each branch consume the field that satisfies its own input schema. This is the default and needs no helper workflows.
+
+\`\`\`json
+[
+  { "type": "mapping", "id": "prepare-inputs", "mapConfig": "{\\"prompt\\":{\\"initData\\":true,\\"path\\":\\"question\\"},\\"path\\":{\\"initData\\":true,\\"path\\":\\"filePath\\"}}" },
+  { "type": "parallel", "steps": [
+    { "type": "agent", "id": "answer", "agentId": "<discovered-agent-id>" },
+    { "type": "tool", "id": "read-file", "toolId": "<discovered-tool-id>" }
+  ] }
+]
+\`\`\`
+
+Here the shared object is \`{ prompt, path }\`: the agent branch is satisfied by \`prompt\`, the tool branch by \`path\`. Extra fields a branch doesn't need are harmless — a branch only requires that the shared object SATISFIES its input schema.
+
+*Pattern B — two branches call the SAME resource on different values.* Pattern A cannot express this. If both branches are the same tool requiring \`{ email }\`, one shared object has only one \`email\`, so both branches would look up the same value. The fix is a small **nested helper workflow per branch**: each helper accepts the shared object, maps ITS OWN field into the resource's input, and calls it. Helpers are ordinary workflows, so their first step may be a mapping — the restriction against mappings applies to container children, not to the inside of a nested workflow.
+
+\`\`\`json
+{ "type": "parallel", "steps": [
+  { "type": "workflow", "id": "lookup-first", "workflowId": "lookup-first-customer" },
+  { "type": "workflow", "id": "lookup-second", "workflowId": "lookup-second-customer" }
+] }
+\`\`\`
+
+…where \`lookup-first-customer\` is \`[ mapping \`{"email":{"initData":true,"path":"email1"}}\`, tool \`lookup-customer\` ]\` and \`lookup-second-customer\` is the same with \`email2\`. Merge the results afterwards with a mapping reading \`{ "step": "lookup-first", "path": "customerId" }\`, using the call-site \`id\`.
+
+Pattern B requires those helper workflows to exist as registered workflows. Whether you may create them yourself, and how, is defined by your surface policy below — do NOT assume it is forbidden, and do NOT invent per-child \`inputMapping\`, \`input\`, or \`with\` fields on container children. They do not exist and will be rejected.
 
 **\`foreach\` — run the same step over every item in an array.** THIS IS THE ONLY WAY to run a step per-item. If the user says "for each", "for every", "on each", "one per", "iterate over", "run X on all the Ys", "map over" — the answer is \`foreach\`. Do not try to fake it with an agent that "loops internally"; do not try to unroll the array into N sibling steps. Emit:
 
@@ -614,7 +644,9 @@ Rule of thumb: for the workflow's original input, \`initData\` is always safe. \
 
 - Any \`sleep\` / \`sleepUntil\` with a function-form duration/date.
 - \`conditional\` / \`loop\` with a JS-closure condition. Use the declarative predicate DSL above instead. If the condition genuinely cannot be expressed as a predicate (e.g. requires an LLM decision), fall back to an \`agent\` step that decides internally and returns \`{ text }\` naming the branch.
-- Any \`mapping\` with an \`fn\` source. Only declarative sources (\`template\`, \`value\`, \`step\`, \`initData\`, \`requestContextPath\`) round-trip.`;
+- Any \`mapping\` with an \`fn\` source. Only declarative sources (\`template\`, \`value\`, \`step\`, \`initData\`, \`requestContextPath\`) round-trip.
+- Human-in-the-loop **suspend / resume**. There is no graph entry that suspends a run to collect input and resumes it later, and no step field that requests one. If the user asks the workflow to pause for approval, wait for a confirmation, or ask a human mid-run, say plainly that persisted workflows cannot suspend, and offer the closest supported design: split the work into two workflows the caller runs on either side of its own approval step, or use an \`agent\` step that decides without human input. Do NOT emit \`suspend\`, \`resume\`, \`suspendSchema\`, or \`resumeSchema\` fields, and do NOT silently drop the requirement — the user must learn the pause is not there.
+- Writes to workflow \`state\`. State is **read-only** to the graph you author: you may READ it (\`\${state.<field>}\` in a template, against a \`stateSchema\` you declare), but no mapping, predicate, or container entry can SET it. Only a tool's own implementation can write state, through the \`setState\` handle the engine passes into that tool at execution time. So "remember this between steps" is satisfiable only when a discovered tool already writes the value itself; otherwise carry the value forward explicitly with \`initData\` / \`stepResults\` mappings rather than claiming state persistence you cannot author.`;
 
 function normalizeJsonValue(value: unknown, path: string, seen: Set<object>): WorkflowBuilderJsonValue {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;

@@ -37,6 +37,16 @@ export function WorkflowChatProvider(props: WorkflowChatProviderProps) {
   return <WorkflowChatSession key={hydrationKey} {...props} />;
 }
 
+/**
+ * Whether a complete, finalized definition is currently on the canvas. A draft
+ * loaded from a stored workflow starts at revision 0, so `revision > 0` only
+ * means "edited during this session" and must never be used to decide whether
+ * an accepted draft exists.
+ */
+function hasAcceptedDraft(state: WorkflowDraftAuthoringState) {
+  return state.lifecycle === 'ready' && state.finalizedRevision === state.revision;
+}
+
 function WorkflowChatSession({
   threadId,
   authoringState,
@@ -91,7 +101,7 @@ function WorkflowChatSession({
         ? existingCandidate
         : createWorkflowDraftCandidate(acceptedState);
     generationStateRef.current = {
-      accepted: acceptedState.revision > 0,
+      accepted: hasAcceptedDraft(acceptedState),
       finalized: false,
       rejected: 0,
       rejectionSignature: '',
@@ -155,14 +165,26 @@ function WorkflowChatSession({
   const handleSendComplete = useCallback(() => {
     const state = generationStateRef.current;
     if (state.stopped || state.finalized) return;
-    // Follow-up chat turns never call submit-workflow-draft. Only classify a
-    // turn as a failed generation when the model actually attempted a
-    // submission this turn, or when we have never accepted a draft at all.
-    if (!state.submissionAttempted && state.accepted) return;
+    // Read the authoritative draft rather than the snapshot taken when the turn
+    // started: a submission may have gone Ready during this turn.
+    const accepted = state.accepted || hasAcceptedDraft(authoringStateRef.current);
+    // Follow-up chat turns never call submit-workflow-draft. A turn that never
+    // attempted a submission is a conversation, not a failed generation.
+    if (!state.submissionAttempted) {
+      if (accepted) return;
+      failGeneration({
+        code: 'no-accepted-draft',
+        message:
+          'Workflow generation ended without creating an accepted draft. Retry with more specific workflow steps.',
+      });
+      return;
+    }
+    // A submission was attempted and the turn ended without finalizing. Never
+    // claim there is no accepted draft while a complete one is on the canvas.
     failGeneration({
-      code: state.accepted ? 'generation-failed' : 'no-accepted-draft',
-      message: state.accepted
-        ? 'Workflow generation ended before the draft was ready. The last accepted draft was preserved.'
+      code: accepted ? 'generation-failed' : 'no-accepted-draft',
+      message: accepted
+        ? 'Workflow generation ended before applying the requested change. The accepted draft is unchanged.'
         : 'Workflow generation ended without creating an accepted draft. Retry with more specific workflow steps.',
     });
   }, [failGeneration]);

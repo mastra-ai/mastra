@@ -27,6 +27,12 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** True when both types are numeric, i.e. some mix of `integer` and `number`. */
+function isNumeric(sourceType: string, destinationType: string): boolean {
+  const numeric = new Set(['integer', 'number']);
+  return numeric.has(sourceType) && numeric.has(destinationType);
+}
+
 /**
  * Structural compatibility of `source` output feeding a `destination` input.
  * Recurses through array items and object properties; a destination `required`
@@ -37,7 +43,11 @@ export function schemaCompatibility(source: unknown, destination: unknown): Sche
   const sourceType = typeof source.type === 'string' ? source.type : undefined;
   const destinationType = typeof destination.type === 'string' ? destination.type : undefined;
   if (!sourceType || !destinationType) return 'unknown';
-  if (sourceType !== destinationType) return 'incompatible';
+  // `integer` is a subtype of `number`, so a whole-number source satisfies a
+  // `number` destination. The reverse isn't provably wrong either: a `number`
+  // source can hold whole values at runtime, and this function only reports
+  // incompatibilities it can prove.
+  if (sourceType !== destinationType && !isNumeric(sourceType, destinationType)) return 'incompatible';
   if (destinationType === 'array') return schemaCompatibility(source.items, destination.items);
   if (destinationType !== 'object') return 'compatible';
 

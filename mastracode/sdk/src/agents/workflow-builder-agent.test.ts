@@ -15,6 +15,11 @@ describe('workflowBuilderAgent', () => {
     expect(instructions).toContain('# Mastra Code execution and response protocol');
     expect(instructions).toContain('Success means exactly that `save-workflow` returned');
     expect(instructions).toContain('/workflows run <id> {…}');
+    // Helper workflows may be saved before the requested one, in dependency
+    // order — the single-save rule constrains the requested workflow, not its
+    // dependencies.
+    expect(instructions).toContain('save each helper FIRST, one complete definition per call, in dependency order');
+    expect(instructions).toContain('permanent, user-visible registry entries');
     expect(instructions).not.toContain('# Studio authoring policy');
     expect(instructions).not.toContain('submit-workflow-draft');
   });

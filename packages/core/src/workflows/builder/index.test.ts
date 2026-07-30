@@ -57,8 +57,21 @@ describe('workflow builder authoring contract', () => {
       '# Worked example: foreach — run an agent on each item of a list',
     );
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Definition quality');
+    // Both parallel branch-input patterns, the capability boundaries the model
+    // must not paper over, and the mapping source that was previously untaught.
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('**Giving parallel branches different inputs.**');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain(
+      '*Pattern A — one shared object, each branch reads its own field.*',
+    );
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain(
+      '*Pattern B — two branches call the SAME resource on different values.*',
+    );
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('{ "requestContextPath": "<field.path>" }');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('Human-in-the-loop **suspend / resume**');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('State is **read-only** to the graph you author');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Out of scope — do NOT emit these');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).not.toContain('submit-workflow-draft');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).not.toContain('save-workflow');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).not.toContain('save-workflow exactly once');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).not.toContain('superseded');
   });

@@ -29,7 +29,9 @@ export const workflowBuilderAgent = createWorkflowBuilderAgent({
   },
   surfaceInstructions: `# Mastra Code authoring policy
 
-Your job: turn the user's verbatim plain-language request into one complete static workflow definition and persist it by calling save-workflow exactly once. Success means save-workflow returned \`{ ok: true, id }\`; do not claim success before that result.
+Your job: turn the user's verbatim plain-language request into a complete static workflow definition and persist it with save-workflow. Success means save-workflow returned \`{ ok: true, id }\` for the workflow the user asked for; do not claim success before that result.
+
+Save each definition **exactly once**: one save per distinct workflow, never a second save of the same workflow. The workflow the user asked for is always saved LAST. You may save other workflows before it **only** when they are helper workflows the requested workflow references as \`{ type: "workflow" }\` entries — never to retry, probe the schema, or split one workflow into pieces the user did not ask for.
 
 Use list-available-agents, list-available-tools, and list-available-workflows for authoritative discovery. Discover every referenced resource before composition, use the exact registry keys and schemas returned, and never infer availability from names mentioned by the user.
 
@@ -51,10 +53,11 @@ When the workflow needs a **specific, deterministic** operation (like \`execute_
 # Mastra Code execution and response protocol
 
 1. Complete discovery, composition, and the shared pre-action check before calling \`save-workflow\`.
-2. Call \`save-workflow\` with one complete \`{ id, description, inputSchema, outputSchema, graph }\` definition. There are no incremental setter tools and no parallel save attempts.
-3. Wait for the tool result. Success means exactly that \`save-workflow\` returned \`{ ok: true, id }\`; at that point the workflow is persisted and live-registered.
-4. If the tool rejects the definition, do not claim success. Use the returned diagnostics and authoritative discovery to correct every named issue, rerun the shared pre-action check, and make one sequential corrected complete save attempt. Do not rationalize a registry mismatch as a missing engine feature.
-5. After success, follow the shared summary rules and end with the concrete run command \`/workflows run <id> {…}\`. The parent code-agent will relay that factual summary to the user.
+2. If the design needs helper workflows (for example, per-branch wrappers so \`parallel\` branches can consume different fields — see the shared nested-workflow guidance), save each helper FIRST, one complete definition per call, in dependency order. Each \`save-workflow\` success live-registers that helper, which makes it a valid \`workflowId\` for the next definition. Confirm with \`list-available-workflows\` before referencing it, and give each helper a real \`id\` and \`description\` — helpers are permanent, user-visible registry entries, not scratch space.
+3. Call \`save-workflow\` with one complete \`{ id, description, inputSchema, outputSchema, graph }\` definition for the requested workflow. There are no incremental setter tools and no parallel save attempts.
+4. Wait for the tool result. Success means exactly that \`save-workflow\` returned \`{ ok: true, id }\`; at that point the workflow is persisted and live-registered.
+5. If the tool rejects the definition, do not claim success. Use the returned diagnostics and authoritative discovery to correct every named issue, rerun the shared pre-action check, and make one sequential corrected complete save attempt. Do not rationalize a registry mismatch as a missing engine feature.
+6. After success, follow the shared summary rules and end with the concrete run command \`/workflows run <id> {…}\` for the requested workflow. If you saved helper workflows, name them so the user knows they now exist in the registry.
 `,
   // Same dynamic model resolver mastracode's main code-agent uses — picks up
   // the user's configured provider/model from session state. When the parent
