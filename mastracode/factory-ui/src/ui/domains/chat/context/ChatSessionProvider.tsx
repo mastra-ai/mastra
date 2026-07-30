@@ -174,7 +174,7 @@ function ChatMessageFeedback({ threadId, isPending, error }: ChatThreadMessagesA
   // an eternal skeleton.
   if (sessionError) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col place-items-center gap-4 overflow-y-auto scroll-smooth px-3 pt-6 pb-2 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[var(--chat-column,80ch)]">
+      <div className="flex flex-col items-stretch gap-4">
         <Notice variant="destructive">Failed to prepare the workspace: {sessionError.message}</Notice>
         {retrySession && (
           <div>
@@ -189,7 +189,7 @@ function ChatMessageFeedback({ threadId, isPending, error }: ChatThreadMessagesA
 
   if (threadId && isPending) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-smooth px-3 pt-6 pb-2 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[var(--chat-column,80ch)]">
+      <div className="flex flex-col gap-4">
         <SkeletonRows label="Loading messages" rows={6} />
       </div>
     );
@@ -198,11 +198,9 @@ function ChatMessageFeedback({ threadId, isPending, error }: ChatThreadMessagesA
   if (threadId && error) {
     const errorMessage = error instanceof Error ? error.message : undefined;
     return (
-      <div className="flex min-h-0 flex-1 flex-col place-items-center gap-4 overflow-y-auto scroll-smooth px-3 pt-6 pb-2 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[var(--chat-column,80ch)]">
-        <Notice variant="destructive">
-          {errorMessage ? `Failed to load messages: ${errorMessage}` : 'Failed to load messages.'}
-        </Notice>
-      </div>
+      <Notice variant="destructive">
+        {errorMessage ? `Failed to load messages: ${errorMessage}` : 'Failed to load messages.'}
+      </Notice>
     );
   }
 
