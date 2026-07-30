@@ -158,6 +158,50 @@ describe('WorkflowEventProcessor retry budget (Sig D)', () => {
     await mastra.shutdown();
   });
 
+  it('does not republish workflow.fail when a workflow.fail event itself exhausts its budget', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { wf: makeWorkflow('wf') } as any,
+      pubsub,
+    });
+
+    const failEvents: Event[] = [];
+    await pubsub.subscribe('workflows', async event => {
+      if (event.type === 'workflow.fail') failEvents.push(event);
+    });
+
+    const processor = new AlwaysThrowsProcessor({ mastra });
+    // Simulate a workflow.fail event arriving while storage is persistently
+    // broken (e.g. workflows table missing). Exhausting its budget must NOT
+    // publish another workflow.fail — each publish gets a fresh event id, so
+    // republishing here would loop forever.
+    const failEvent: Event = {
+      id: 'fail-event-id-1',
+      type: 'workflow.fail',
+      runId: 'run-fail-loop',
+      createdAt: new Date(),
+      data: {
+        workflowId: 'wf',
+        runId: 'run-fail-loop',
+        executionPath: [],
+        stepResults: {},
+        prevResult: { status: 'failed', error: 'boom' },
+        activeStepsPath: {},
+        requestContext: {},
+      },
+    } as Event;
+
+    expect(await processor.handle(failEvent)).toEqual({ ok: false, retry: true });
+    expect(await processor.handle(failEvent)).toEqual({ ok: false, retry: true });
+    expect(await processor.handle(failEvent)).toEqual({ ok: false, retry: false });
+
+    expect(failEvents.length).toBe(0);
+
+    await mastra.shutdown();
+  });
+
   it('clears the counter on success so a later transient failure gets a fresh budget', async () => {
     const pubsub = new EventEmitterPubSub();
     const mastra = new Mastra({

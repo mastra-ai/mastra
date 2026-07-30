@@ -31,8 +31,8 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'getting-started/project-structure',
-          label: 'Project Structure',
+          id: 'what-is-mastra',
+          label: 'What is Mastra?',
         },
         {
           type: 'doc',
@@ -43,6 +43,19 @@ const sidebars = {
           type: 'doc',
           id: 'getting-started/build-with-ai',
           label: 'Build with AI',
+        },
+        {
+          type: 'doc',
+          id: 'storage/overview',
+          label: 'Storage',
+        },
+        {
+          type: 'doc',
+          id: 'getting-started/file-based-agents',
+          label: 'File-based Agents',
+          customProps: {
+            tags: ['beta'],
+          },
         },
       ],
     },
@@ -91,11 +104,6 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'agents/channels',
-              label: 'Channels',
-            },
-            {
-              type: 'doc',
               id: 'agents/guardrails',
               label: 'Guardrails',
             },
@@ -103,14 +111,6 @@ const sidebars = {
               type: 'doc',
               id: 'agents/processors',
               label: 'Processors',
-            },
-            {
-              type: 'doc',
-              id: 'agents/file-based-agents',
-              label: 'File-based Agents',
-              customProps: {
-                tags: ['beta'],
-              },
             },
             {
               type: 'doc',
@@ -228,11 +228,6 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'memory/storage',
-              label: 'Storage',
-            },
-            {
-              type: 'doc',
               id: 'memory/message-history',
               label: 'Message History',
             },
@@ -290,9 +285,6 @@ const sidebars = {
             {
               type: 'category',
               label: 'Agent Builder',
-              customProps: {
-                tags: ['new'],
-              },
               items: [
                 { type: 'doc', id: 'agent-builder/overview', label: 'Overview' },
                 { type: 'doc', id: 'agent-builder/configuration', label: 'Configuration' },
@@ -398,6 +390,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'browser/firecrawl',
+              label: 'Firecrawl',
+            },
+            {
+              type: 'doc',
               id: 'browser/recording',
               label: 'Recording',
               customProps: {
@@ -408,6 +405,47 @@ const sidebars = {
               type: 'doc',
               id: 'browser/browser-viewer',
               label: 'BrowserViewer',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Channels',
+          items: [
+            {
+              type: 'doc',
+              id: 'capabilities/channels/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/slack',
+              label: 'Slack',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/teams',
+              label: 'Microsoft Teams',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/discord',
+              label: 'Discord',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/telegram',
+              label: 'Telegram',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/whatsapp',
+              label: 'WhatsApp',
+            },
+            {
+              type: 'doc',
+              id: 'capabilities/channels/other-adapters',
+              label: 'More',
             },
           ],
         },
@@ -468,8 +506,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'voice/livekit',
-              label: 'LiveKit',
+              id: 'voice/realtime-voice',
+              label: 'Realtime Voice',
             },
           ],
         },
@@ -565,6 +603,11 @@ const sidebars = {
               type: 'doc',
               id: 'agent-controller/tool-approvals',
               label: 'Tool Approvals',
+            },
+            {
+              type: 'doc',
+              id: 'agent-controller/channels',
+              label: 'Channels',
             },
           ],
         },
@@ -696,6 +739,14 @@ const sidebars = {
                   type: 'doc',
                   id: 'server/auth/workos',
                   label: 'WorkOS',
+                },
+                {
+                  type: 'doc',
+                  id: 'server/auth/workers',
+                  label: 'Workers',
+                  customProps: {
+                    tags: ['beta'],
+                  },
                 },
               ],
             },
@@ -891,6 +942,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'evals/multi-turn',
+              label: 'Multi-turn Evals',
+            },
+            {
+              type: 'doc',
               id: 'evals/custom-scorers',
               label: 'Custom Scorers',
             },
@@ -948,6 +1004,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'deployment/sandbox',
+              label: 'Sandbox',
+            },
+            {
+              type: 'doc',
               id: 'deployment/web-framework',
               label: 'Web Framework',
             },
@@ -955,6 +1016,14 @@ const sidebars = {
               type: 'doc',
               id: 'deployment/workflow-runners',
               label: 'Workflow Runners',
+            },
+            {
+              type: 'doc',
+              id: 'deployment/workers',
+              label: 'Workers',
+              customProps: {
+                tags: ['beta'],
+              },
             },
           ],
         },
@@ -973,8 +1042,40 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'mastra-platform/deploy',
+          label: 'Deploy',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/environments',
+          label: 'Environments',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/regions',
+          label: 'Regions',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'mastra-platform/observability',
           label: 'Observability',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/trace-intelligence',
+          label: 'Trace Intelligence',
+          customProps: {
+            tags: ['beta'],
+          },
         },
         {
           type: 'doc',
@@ -990,14 +1091,19 @@ const sidebars = {
           type: 'doc',
           id: 'mastra-platform/github',
           label: 'GitHub integration',
-          customProps: {
-            tags: ['new'],
-          },
         },
         {
           type: 'doc',
           id: 'mastra-platform/database',
           label: 'Hosted databases',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/workspace',
+          label: 'Workspace',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',

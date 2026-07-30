@@ -170,7 +170,7 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
         account_id: this.accountId,
       });
 
-      return res?.result?.map(index => index.name!) || [];
+      return res?.result?.map((index: { name?: string }) => index.name!) || [];
     } catch (error) {
       throw new MastraError(
         {

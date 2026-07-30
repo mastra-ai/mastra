@@ -57,6 +57,7 @@
     "meta-llama/llama-4-scout",
     "meta-llama/llama-guard-4-12b",
     "minimax/minimax-01",
+    "minimax/minimax-m3",
     "mistralai/ministral-14b-2512",
     "mistralai/ministral-3b-2512",
     "mistralai/ministral-8b-2512",
@@ -292,6 +293,7 @@
     "minimax/minimax-m2.1",
     "minimax/minimax-m2.5",
     "minimax/minimax-m2.7",
+    "minimax/minimax-m3",
     "mistralai/codestral-2508",
     "mistralai/devstral-2512",
     "mistralai/devstral-medium",
@@ -468,5 +470,12 @@
     "~google/gemini-flash-latest",
     "~google/gemini-pro-latest",
     "~moonshotai/kimi-latest"
+  ],
+  "structuredOutput": [
+    "microsoft/phi-4-mini-instruct",
+    "mistralai/mistral-medium-3-5",
+    "moonshotai/kimi-k2.6",
+    "openai/gpt-chat-latest",
+    "openrouter/owl-alpha"
   ]
 }

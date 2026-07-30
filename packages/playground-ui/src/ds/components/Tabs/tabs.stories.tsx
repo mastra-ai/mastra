@@ -17,20 +17,20 @@ type Story = StoryObj<typeof Tabs>;
 
 export const Recommended: Story = {
   render: () => (
-    <Tabs defaultTab="tab1" className="w-[400px]">
+    <Tabs defaultTab="tab1" className="w-100">
       <TabList variant="pill">
         <Tab value="tab1">Overview</Tab>
         <Tab value="tab2">Details</Tab>
         <Tab value="tab3">Settings</Tab>
       </TabList>
       <TabContent value="tab1">
-        <div className="p-4 text-neutral5">Overview content goes here</div>
+        <div className="text-neutral5 p-4">Overview content goes here</div>
       </TabContent>
       <TabContent value="tab2">
-        <div className="p-4 text-neutral5">Details content goes here</div>
+        <div className="text-neutral5 p-4">Details content goes here</div>
       </TabContent>
       <TabContent value="tab3">
-        <div className="p-4 text-neutral5">Settings content goes here</div>
+        <div className="text-neutral5 p-4">Settings content goes here</div>
       </TabContent>
     </Tabs>
   ),
@@ -38,20 +38,20 @@ export const Recommended: Story = {
 
 export const LegacyLineFallback: Story = {
   render: () => (
-    <Tabs defaultTab="tab1" className="w-[400px]">
+    <Tabs defaultTab="tab1" className="w-100">
       <TabList>
         <Tab value="tab1">Overview</Tab>
         <Tab value="tab2">Details</Tab>
         <Tab value="tab3">Settings</Tab>
       </TabList>
       <TabContent value="tab1">
-        <div className="p-4 text-neutral5">Line fallback content goes here</div>
+        <div className="text-neutral5 p-4">Line fallback content goes here</div>
       </TabContent>
       <TabContent value="tab2">
-        <div className="p-4 text-neutral5">Details content goes here</div>
+        <div className="text-neutral5 p-4">Details content goes here</div>
       </TabContent>
       <TabContent value="tab3">
-        <div className="p-4 text-neutral5">Settings content goes here</div>
+        <div className="text-neutral5 p-4">Settings content goes here</div>
       </TabContent>
     </Tabs>
   ),
@@ -65,10 +65,10 @@ export const TwoTabs: Story = {
         <Tab value="output">Output</Tab>
       </TabList>
       <TabContent value="input">
-        <div className="p-4 text-neutral5">Input content</div>
+        <div className="text-neutral5 p-4">Input content</div>
       </TabContent>
       <TabContent value="output">
-        <div className="p-4 text-neutral5">Output content</div>
+        <div className="text-neutral5 p-4">Output content</div>
       </TabContent>
     </Tabs>
   ),
@@ -76,7 +76,7 @@ export const TwoTabs: Story = {
 
 export const ManyTabs: Story = {
   render: () => (
-    <Tabs defaultTab="tab1" className="w-[500px]">
+    <Tabs defaultTab="tab1" className="w-125">
       <TabList>
         <Tab value="tab1">Overview</Tab>
         <Tab value="tab2">Usage Metrics</Tab>
@@ -85,19 +85,19 @@ export const ManyTabs: Story = {
         <Tab value="tab5">Advanced Settings</Tab>
       </TabList>
       <TabContent value="tab1">
-        <div className="p-4 text-neutral5">Content 1</div>
+        <div className="text-neutral5 p-4">Content 1</div>
       </TabContent>
       <TabContent value="tab2">
-        <div className="p-4 text-neutral5">Content 2</div>
+        <div className="text-neutral5 p-4">Content 2</div>
       </TabContent>
       <TabContent value="tab3">
-        <div className="p-4 text-neutral5">Content 3</div>
+        <div className="text-neutral5 p-4">Content 3</div>
       </TabContent>
       <TabContent value="tab4">
-        <div className="p-4 text-neutral5">Content 4</div>
+        <div className="text-neutral5 p-4">Content 4</div>
       </TabContent>
       <TabContent value="tab5">
-        <div className="p-4 text-neutral5">Content 5</div>
+        <div className="text-neutral5 p-4">Content 5</div>
       </TabContent>
     </Tabs>
   ),
@@ -105,20 +105,20 @@ export const ManyTabs: Story = {
 
 export const PillVariant: Story = {
   render: () => (
-    <Tabs defaultTab="overview" className="w-[500px]">
+    <Tabs defaultTab="overview" className="w-125">
       <TabList variant="pill">
         <Tab value="overview">Overview</Tab>
         <Tab value="projects">Projects</Tab>
         <Tab value="account">Account</Tab>
       </TabList>
       <TabContent value="overview">
-        <div className="p-4 text-neutral5">Overview content</div>
+        <div className="text-neutral5 p-4">Overview content</div>
       </TabContent>
       <TabContent value="projects">
-        <div className="p-4 text-neutral5">Projects content</div>
+        <div className="text-neutral5 p-4">Projects content</div>
       </TabContent>
       <TabContent value="account">
-        <div className="p-4 text-neutral5">Account content</div>
+        <div className="text-neutral5 p-4">Account content</div>
       </TabContent>
     </Tabs>
   ),
@@ -126,20 +126,20 @@ export const PillVariant: Story = {
 
 export const PillGhostVariant: Story = {
   render: () => (
-    <Tabs defaultTab="overview" className="w-[500px]">
+    <Tabs defaultTab="overview" className="w-125">
       <TabList variant="pill-ghost">
         <Tab value="overview">Overview</Tab>
         <Tab value="projects">Projects</Tab>
         <Tab value="account">Account</Tab>
       </TabList>
       <TabContent value="overview">
-        <div className="p-4 text-neutral5">Overview content</div>
+        <div className="text-neutral5 p-4">Overview content</div>
       </TabContent>
       <TabContent value="projects">
-        <div className="p-4 text-neutral5">Projects content</div>
+        <div className="text-neutral5 p-4">Projects content</div>
       </TabContent>
       <TabContent value="account">
-        <div className="p-4 text-neutral5">Account content</div>
+        <div className="text-neutral5 p-4">Account content</div>
       </TabContent>
     </Tabs>
   ),
@@ -148,37 +148,37 @@ export const PillGhostVariant: Story = {
 export const CustomIndicatorColor: Story = {
   render: () => (
     <div className="flex flex-col gap-8">
-      <Tabs defaultTab="tab1" className="w-[400px]">
+      <Tabs defaultTab="tab1" className="w-100">
         <TabList style={{ '--tab-indicator-color': 'var(--accent5)' } as React.CSSProperties}>
           <Tab value="tab1">Overview</Tab>
           <Tab value="tab2">Details</Tab>
           <Tab value="tab3">Settings</Tab>
         </TabList>
         <TabContent value="tab1">
-          <div className="p-4 text-neutral5">Line variant with accent indicator</div>
+          <div className="text-neutral5 p-4">Line variant with accent indicator</div>
         </TabContent>
         <TabContent value="tab2">
-          <div className="p-4 text-neutral5">Details content</div>
+          <div className="text-neutral5 p-4">Details content</div>
         </TabContent>
         <TabContent value="tab3">
-          <div className="p-4 text-neutral5">Settings content</div>
+          <div className="text-neutral5 p-4">Settings content</div>
         </TabContent>
       </Tabs>
 
-      <Tabs defaultTab="overview" className="w-[400px]">
+      <Tabs defaultTab="overview" className="w-100">
         <TabList variant="pill" style={{ '--tab-indicator-color': 'var(--accent5)' } as React.CSSProperties}>
           <Tab value="overview">Overview</Tab>
           <Tab value="projects">Projects</Tab>
           <Tab value="account">Account</Tab>
         </TabList>
         <TabContent value="overview">
-          <div className="p-4 text-neutral5">Pill variant with accent indicator</div>
+          <div className="text-neutral5 p-4">Pill variant with accent indicator</div>
         </TabContent>
         <TabContent value="projects">
-          <div className="p-4 text-neutral5">Projects content</div>
+          <div className="text-neutral5 p-4">Projects content</div>
         </TabContent>
         <TabContent value="account">
-          <div className="p-4 text-neutral5">Account content</div>
+          <div className="text-neutral5 p-4">Account content</div>
         </TabContent>
       </Tabs>
     </div>
@@ -187,7 +187,7 @@ export const CustomIndicatorColor: Story = {
 
 export const WithClosableTabs: Story = {
   render: () => (
-    <Tabs defaultTab="file1" className="w-[400px]">
+    <Tabs defaultTab="file1" className="w-100">
       <TabList>
         <Tab value="file1" onClose={() => console.log('Close file1')}>
           index.ts
@@ -200,13 +200,13 @@ export const WithClosableTabs: Story = {
         </Tab>
       </TabList>
       <TabContent value="file1">
-        <div className="p-4 text-neutral5">index.ts content</div>
+        <div className="text-neutral5 p-4">index.ts content</div>
       </TabContent>
       <TabContent value="file2">
-        <div className="p-4 text-neutral5">utils.ts content</div>
+        <div className="text-neutral5 p-4">utils.ts content</div>
       </TabContent>
       <TabContent value="file3">
-        <div className="p-4 text-neutral5">types.ts content</div>
+        <div className="text-neutral5 p-4">types.ts content</div>
       </TabContent>
     </Tabs>
   ),

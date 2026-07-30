@@ -9,6 +9,7 @@ import type {
   ChunkType,
   MastraOnFinishCallback,
   MastraOnStepFinishCallback,
+  MastraStreamTransformOptions,
   LanguageModelUsage,
 } from '../../stream/types';
 import { MessageList } from '../message-list';
@@ -98,6 +99,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   /** Output processors to run in MastraModelOutput's stream pipeline */
   outputProcessors?: OutputProcessorOrWorkflow[];
+  /** Experimental transforms applied whenever the returned full stream is consumed. */
+  experimentalTransform?: MastraStreamTransformOptions<OUTPUT>;
   /**
    * Optional external MessageList to use instead of creating a fresh empty one.
    * When provided (e.g. the registry's live MessageList), MastraModelOutput can
@@ -148,6 +151,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     closeOnSuspend = false,
     structuredOutput,
     outputProcessors,
+    experimentalTransform,
     messageList: externalMessageList,
   } = options;
 
@@ -279,6 +283,18 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               });
             } catch (callbackError) {
               logError(`[DurableAgentStream] onFinish callback error:`, callbackError);
+            }
+          }
+
+          // When the finish reason is 'abort', also fire onAbort so
+          // consumers see it — the abort was handled gracefully (clean
+          // return from llm-execution) rather than crashing the workflow,
+          // so the separate ABORT event never fires.
+          if (onAbort && (data.stepResult?.reason as string) === 'abort') {
+            try {
+              await onAbort({ steps: (data.output?.steps ?? []) as unknown[] });
+            } catch (callbackError) {
+              logError(`[DurableAgentStream] onAbort (from FINISH) callback error:`, callbackError);
             }
           }
 
@@ -456,6 +472,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       isLLMExecutionStep: true,
       resolveFinalPromises: true,
       outputProcessors,
+      experimentalTransform,
     },
   });
 

@@ -14,10 +14,10 @@ export interface ReasoningStreamingLineProps {
 export const ReasoningStreamingLine = ({ text }: ReasoningStreamingLineProps) => (
   <Txt
     variant="ui-md"
-    className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%] flex items-center gap-2"
+    className="text-neutral4 flex max-w-[80%] items-center gap-2 leading-relaxed whitespace-pre-wrap"
     as="div"
   >
-    <Loader2 className="animate-spin size-4 text-neutral3" />
+    <Loader2 className="text-neutral3 size-4 animate-spin" />
     <Shimmer>{text}</Shimmer>
   </Txt>
 );

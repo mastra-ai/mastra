@@ -16,6 +16,7 @@ packages:
   - "@mastra/s3vectors"
   - "@mastra/upstash"
   - "@mastra/vectorize"
+  - "@mastra/voyageai"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -23,7 +24,7 @@ import TabItem from "@theme/TabItem";
 
 # Storing embeddings in a vector database
 
-After generating embeddings, you need to store them in a database that supports vector similarity search. Mastra provides a consistent interface for storing and querying embeddings across various vector databases.
+After generating embeddings, you need to store them in a database that supports vector similarity search. Mastra provides a consistent interface for storing and querying embeddings across vector databases.
 
 ## Supported databases
 
@@ -35,7 +36,7 @@ After generating embeddings, you need to store them in a database that supports 
     const store = new MongoDBVector({
       id: 'mongodb-vector',
       uri: process.env.MONGODB_URI,
-      dbName: process.env.MONGODB_DATABASE,
+      dbName: process.env.MONGODB_DB_NAME,
     })
     await store.createIndex({
       indexName: 'myCollection',
@@ -48,9 +49,30 @@ After generating embeddings, you need to store them in a database that supports 
     })
     ```
 
-    <h3>Using MongoDB Atlas Vector search</h3>
+    <h3>Using MongoDB Atlas Vector Search</h3>
 
     For detailed setup instructions and best practices, see the [official MongoDB Atlas Vector Search documentation](https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-overview/?utm_campaign=devrel\&utm_source=third-party-content\&utm_medium=cta\&utm_content=mastra-docs).
+
+    <h3>Using VoyageAI with MongoDB</h3>
+
+    MongoDB works seamlessly with VoyageAI's embedding models, which are optimized for retrieval tasks. For complete examples and specialized models, see the [VoyageAI embeddings documentation](/models/embeddings#voyageai) and [MongoDB vector reference](/reference/vectors/mongodb).
+
+    <h3>Hybrid Search (Vector + Full-Text)</h3>
+
+    MongoDB supports hybrid search that fuses vector similarity with BM25 full-text search using server-side `$rankFusion` (requires MongoDB >= 8.0; generally available from 8.1, and enabled on Atlas 8.0.x). This is useful when you want to combine semantic and keyword-based retrieval:
+
+    ```ts
+    await store.createSearchIndex({ indexName: 'myCollection', fields: ['text'] })
+    const results = await store.hybridQuery({
+      indexName: 'myCollection',
+      queryVector: embedding,
+      query: 'search terms',
+      paths: ['text'],
+      topK: 10,
+    })
+    ```
+
+    See the [MongoDB vector reference](/reference/vectors/mongodb) for details on `createSearchIndex()`, `textQuery()`, and `hybridQuery()`.
   </TabItem>
 
   <TabItem value="pg-vector" label="PgVector">
@@ -384,6 +406,7 @@ The dimension size must match the output dimension of your chosen embedding mode
 
 - `OpenAI text-embedding-3-small`: 1536 dimensions (or custom, e.g., 256)
 - `Cohere embed-multilingual-v3`: 1024 dimensions
+- `VoyageAI voyage-3.5`: 1024 dimensions (or custom: 256, 512, 1024, 2048)
 - `Google gemini-embedding-001`: 768 dimensions (or custom)
 
 :::warning
@@ -565,7 +588,7 @@ The upsert operation:
 Vector stores support rich metadata (any JSON-serializable fields) for filtering and organization. Since metadata is stored with no fixed schema, use consistent field naming to avoid unexpected query results.
 
 :::warning
-Metadata is crucial for vector storage - without it, you'd only have numerical embeddings with no way to return the original text or filter results. Always store at least the source text as metadata.
+Metadata is important for vector storage. Without it, you'd only have numerical embeddings with no way to return the original text or filter results. Always store at least the source text as metadata.
 :::
 
 ```ts

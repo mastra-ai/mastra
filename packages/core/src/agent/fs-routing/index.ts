@@ -1,4 +1,5 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
+import type { MastraScorer, MastraScorerEntry, MastraScorers } from '../../evals';
 import type { MastraMemory } from '../../memory/memory';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../../processors';
 import type { InlineSkill, SkillInput } from '../../skills/types';
@@ -42,6 +43,17 @@ export function agentConfig(config: FsAgentConfig): FsAgentConfig {
 export interface FsAgentToolEntry {
   key: string;
   tool: ToolsInput[string];
+}
+
+/**
+ * A single scorer discovered under `agents/<name>/scorers/`. `key` defaults to
+ * the filename slug. `scorer` is the module's default export, which may be a
+ * bare `MastraScorer` (it is wrapped into `{ scorer }`) or an explicit
+ * `{ scorer, sampling }` entry.
+ */
+export interface FsAgentScorerEntry {
+  key: string;
+  scorer: MastraScorer<any, any, any, any> | MastraScorerEntry;
 }
 
 export interface FsAgentEntry {
@@ -90,6 +102,13 @@ export interface FsAgentEntry {
    * Merged with `config.outputProcessors`; config takes precedence on collision.
    */
   outputProcessors?: OutputProcessorOrWorkflow[];
+  /**
+   * Scorers discovered under `agents/<name>/scorers/`, already loaded. Each
+   * entry's `scorer` is either a bare `MastraScorer` (the default export of the
+   * scorer module) or a `{ scorer, sampling }` entry. Merged into
+   * `config.scorers`; config takes precedence on key collision.
+   */
+  scorers?: FsAgentScorerEntry[];
   /**
    * Declared subagents discovered under `agents/<name>/subagents/<childId>/`.
    * Each entry is assembled into its own `Agent` and wired into the parent's
@@ -149,6 +168,7 @@ function assembleAtDepth(entry: FsAgentEntry, depth: number, options?: { onWarn?
     skills = [],
     inputProcessors = [],
     outputProcessors = [],
+    scorers = [],
     workspace,
     memory,
     defaultWorkspaceBasePath,
@@ -191,6 +211,11 @@ function assembleAtDepth(entry: FsAgentEntry, depth: number, options?: { onWarn?
         `Agent "${name}": config.ts exports a new Agent(), so discovered output processors under agents/${name}/processors/output/ are ignored.`,
       );
     }
+    if (scorers.length > 0) {
+      onWarn(
+        `Agent "${name}": config.ts exports a new Agent(), so discovered scorers under agents/${name}/scorers/ are ignored.`,
+      );
+    }
     if (subagents.length > 0) {
       onWarn(
         `Agent "${name}": config.ts exports a new Agent(), so discovered subagents under agents/${name}/subagents/ are ignored. Set 'agents' in the Agent config instead.`,
@@ -218,6 +243,7 @@ function assembleAtDepth(entry: FsAgentEntry, depth: number, options?: { onWarn?
   const mergedAgents = mergeSubAgents(name, subagents, config.agents, mergedTools, depth, options);
   const mergedInputProcessors = mergeProcessors(name, 'input', inputProcessors, config.inputProcessors, onWarn);
   const mergedOutputProcessors = mergeProcessors(name, 'output', outputProcessors, config.outputProcessors, onWarn);
+  const mergedScorers = mergeScorers(name, scorers, config.scorers, onWarn);
 
   const assembled = {
     ...config,
@@ -231,6 +257,7 @@ function assembleAtDepth(entry: FsAgentEntry, depth: number, options?: { onWarn?
     ...(mergedAgents !== undefined ? { agents: mergedAgents } : {}),
     ...(mergedInputProcessors !== undefined ? { inputProcessors: mergedInputProcessors } : {}),
     ...(mergedOutputProcessors !== undefined ? { outputProcessors: mergedOutputProcessors } : {}),
+    ...(mergedScorers !== undefined ? { scorers: mergedScorers } : {}),
   } as AgentConfig;
 
   return new Agent(assembled);
@@ -508,6 +535,58 @@ function mergeProcessors<T extends InputProcessorOrWorkflow | OutputProcessorOrW
   const fromConfig = Array.isArray(configProcessors) ? configProcessors : [];
   const merged = [...fromConfig, ...fsProcessors];
   return merged.length > 0 ? merged : undefined;
+}
+
+/**
+ * Normalize a discovered scorer default export into a `MastraScorerEntry`. A
+ * bare `MastraScorer` is wrapped into `{ scorer }`; an existing
+ * `{ scorer, sampling }` entry is used as-is.
+ */
+function toScorerEntry(value: FsAgentScorerEntry['scorer']): MastraScorerEntry {
+  return 'scorer' in value ? value : { scorer: value };
+}
+
+/**
+ * Merge filesystem-discovered scorers with config-defined ones.
+ *
+ * Precedence:
+ * - A dynamic (function) `config.scorers` wins wholesale — discovered scorers
+ *   are ignored with a warning.
+ * - Otherwise discovered scorers (keyed by filename slug) are merged with
+ *   `config.scorers`; on key collision `config.scorers` wins with a warning.
+ * - If neither source provides scorers, returns `undefined`.
+ */
+function mergeScorers(
+  name: string,
+  fsScorers: FsAgentScorerEntry[],
+  configScorers: FsAgentConfig['scorers'],
+  onWarn: (message: string) => void,
+): DynamicArgument<MastraScorers> | undefined {
+  // Dynamic config.scorers (a function) can't be statically merged; it wins
+  // wholesale and discovered scorers are ignored with a warning.
+  if (typeof configScorers === 'function') {
+    if (fsScorers.length > 0) {
+      onWarn(
+        `Agent "${name}": config.scorers is a function, so discovered scorers under agents/${name}/scorers/ are ignored.`,
+      );
+    }
+    return configScorers;
+  }
+
+  const fromFs: MastraScorers = {};
+  for (const { key, scorer } of fsScorers) {
+    fromFs[key] = toScorerEntry(scorer);
+  }
+
+  const fromConfig = (configScorers ?? {}) as MastraScorers;
+  for (const key of Object.keys(fromConfig)) {
+    if (key in fromFs) {
+      onWarn(`Agent "${name}": scorer "${key}" defined in both config.scorers and scorers/; config.scorers wins.`);
+    }
+  }
+
+  const merged: MastraScorers = { ...fromFs, ...fromConfig };
+  return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
 /**

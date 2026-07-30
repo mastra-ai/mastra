@@ -32,7 +32,7 @@ npx @mastra/codemod@latest v1/mastra-plural-apis .
 
 ### `runExperiment` to `runEvals`
 
-The `runExperiment()` function has been renamed to `runEvals()`. This change provides clearer naming that better describes the evaluation functionality.
+The `runExperiment()` function has been renamed to `runEvals()` to identify that it runs evaluations.
 
 To migrate, update function calls from `runExperiment` to `runEvals`.
 
@@ -171,7 +171,7 @@ To migrate, update scorer implementations to use `MastraDBMessage` types and acc
 
 ### Message content structure to nested format
 
-Tool invocations and text content are now accessed through a nested `content` object structure instead of being flat properties on the message. This change provides better type safety and aligns with the database message format.
+Tool invocations and text content are now accessed through a nested `content` object instead of flat message properties. The nested structure matches the database message format and its types.
 
 To migrate, access tool invocations via `message.content.toolInvocations` and text via `message.content.content` or use the `getTextContentFromMastraDBMessage()` helper.
 

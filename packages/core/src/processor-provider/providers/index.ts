@@ -18,7 +18,9 @@ import { UnicodeNormalizer } from '../../processors/processors/unicode-normalize
 import type { ProcessorProvider, ProcessorPhase } from '../types';
 
 // Reusable schema fragments
-const structuredOutputOptionsSchema = z.object({ jsonPromptInjection: z.boolean().optional() }).optional();
+const structuredOutputOptionsSchema = z
+  .object({ jsonPromptInjection: z.union([z.boolean(), z.enum(['system', 'inline', 'auto'])]).optional() })
+  .optional();
 const providerOptionsSchema = z.record(z.string(), z.any()).optional();
 
 // ---------------------------------------------------------------------------

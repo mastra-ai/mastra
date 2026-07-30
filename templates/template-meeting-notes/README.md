@@ -3,7 +3,7 @@
 Turns a Zoom cloud recording into structured meeting notes — attendees, decisions, action items, topics — and optionally ships them to Notion or Linear via MCP.
 
 - **Zoom Server-to-Server OAuth** — one-time setup, no per-user OAuth dance.
-- **`ingest-meeting` workflow** — pulls the Zoom-generated VTT transcript, summarizes it with `gpt-5.4` via the Mastra Gateway, returns structured JSON.
+- **`ingest-meeting` workflow** — pulls the Zoom-generated VTT transcript, summarizes it with `gpt-5.4` via Mastra's Gateway, returns structured JSON.
 - **Optional exports** to Notion and Linear via MCP, gated on env vars.
 - **`POST /meetings/upload`** — API route for non-Zoom sources (Google Meet, Riverside, Loom, plain text).
 
@@ -13,7 +13,7 @@ This demo runs in Mastra Studio. Open the `meetingNotesAgent` and ask it to summ
 
 ## Prerequisites
 
-- A [Mastra Gateway API key](https://mastra.ai/docs/models/gateways/mastra).
+- A [Gateway API key](https://mastra.ai/docs/models/gateways/mastra).
 - A [Turso](https://turso.tech) database URL + auth token.
 - A Zoom **Server-to-Server OAuth** app. See setup below.
 - (Optional) A [Linear](https://linear.app) API key to create issues from action items.

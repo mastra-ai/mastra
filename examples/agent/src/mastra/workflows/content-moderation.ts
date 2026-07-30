@@ -31,6 +31,7 @@ import {
   PIIDetectionProcessor,
   ToxicityCheckProcessor,
 } from '../processors/index.js';
+import { createDurableAgent } from '@mastra/core/agent/durable';
 
 // =============================================================================
 // Approach 1: Individual Processors
@@ -305,6 +306,12 @@ export const agentWithProcessorWorkflow = new Agent({
   outputProcessors: [stepLoggerProcessor],
 
   maxProcessorRetries: 2,
+});
+
+export const durableAgentWithProcessorWorkflow = createDurableAgent({
+  agent: agentWithProcessorWorkflow,
+  id: 'durable-agent-with-processor-workflow',
+  name: 'Durable Agent with Processor Workflow',
 });
 
 /**

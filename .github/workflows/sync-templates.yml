@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Initial checkout
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           # Use default GITHUB_TOKEN for initial checkout
           # This is needed to access the .github/actions/app-auth action
@@ -36,7 +36,7 @@ jobs:
           permission-administration: write
 
       - name: Checkout repository
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node

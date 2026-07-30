@@ -180,16 +180,16 @@ When creating the tool, pay special attention to the tool's name and description
 
 This is particularly useful when:
 
-- Your agent needs to dynamically decide what information to retrieve
+- Your agent needs to decide at runtime what information to retrieve
 - The retrieval process requires complex decision-making
 - You want the agent to combine multiple retrieval strategies based on context
 
 #### Database-Specific Configurations
 
-The Vector Query Tool supports database-specific configurations that enable you to leverage unique features and optimizations of different vector stores.
+The Vector Query Tool supports database-specific configurations that enable you to use unique features and optimizations of different vector stores.
 
 :::note
-These configurations are for **query-time options** like namespaces, performance tuning, and filtering—not for database connection setup.
+These configurations are for **query-time options** like namespaces, performance tuning, and filtering, not for database connection setup.
 
 Connection credentials (URLs, auth tokens) are configured when you instantiate the vector store class (e.g., `new LibSQLVector({ url: '...' })`).
 :::
@@ -257,7 +257,7 @@ const lanceQueryTool = createVectorQueryTool({
 - **pgVector optimization**: Control search accuracy and speed with ef/probes parameters
 - **Quality filtering**: Set minimum similarity thresholds to improve result relevance
 - **LanceDB tables**: Separate data into tables for better organization and performance
-- **Runtime flexibility**: Override configurations dynamically based on context
+- **Runtime flexibility**: Override configurations at runtime based on context
 
 **Common Use Cases:**
 
@@ -480,10 +480,10 @@ When implementing filtering, these prompts are required in the agent's instructi
 
 ### Re-ranking
 
-Initial vector similarity search can sometimes miss nuanced relevance. Re-ranking is a more computationally expensive process, but more accurate algorithm that improves results by:
+Initial vector similarity search can sometimes miss detailed relevance. Re-ranking is a more computationally expensive process, but more accurate algorithm that improves results by:
 
 - Considering word order and exact matches
-- Applying more sophisticated relevance scoring
+- Applying more advanced relevance scoring
 - Using a method called cross-attention between query and documents
 
 Here's how to use re-ranking:

@@ -15,6 +15,7 @@ import {
   normalizePerPage,
   safelyParseJSON,
   ensureDate,
+  hasErrorCode,
 } from '@mastra/core/storage';
 import type {
   DatasetRecord,
@@ -41,6 +42,7 @@ import type {
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
+import { withClientWriteLock } from '../../db/write-lock';
 import { tenancyWhere } from '../utils';
 
 /** Serialize a value for a jsonb column. Returns null for null/undefined. */
@@ -81,6 +83,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'organizationId', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'projectId', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'toolMocks', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'unmockedToolPolicy', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'externalId', 'TEXT');
 
     // T3.24/T3.25 — idempotent indexes
     await this.#client.batch(
@@ -91,6 +95,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
         },
         {
           sql: `CREATE INDEX IF NOT EXISTS idx_dataset_items_dataset_version ON "${TABLE_DATASET_ITEMS}" ("datasetId", "datasetVersion")`,
+          args: [],
+        },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_dataset_items_dataset_externalid_version ON "${TABLE_DATASET_ITEMS}" ("datasetId", "externalId", "datasetVersion")`,
           args: [],
         },
         {
@@ -178,12 +186,14 @@ export class DatasetsLibSQL extends DatasetsStorage {
       id: row.id as string,
       datasetId: row.datasetId as string,
       datasetVersion: row.datasetVersion as number,
+      externalId: (row.externalId as string | null | undefined) ?? null,
       organizationId: (row.organizationId as string | null | undefined) ?? null,
       projectId: (row.projectId as string | null | undefined) ?? null,
       input: safelyParseJSON(row.input),
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
       expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
       toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : undefined,
+      unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
       requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       source: row.source ? safelyParseJSON(row.source as string) : undefined,
@@ -197,6 +207,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
       id: row.id as string,
       datasetId: row.datasetId as string,
       datasetVersion: row.datasetVersion as number,
+      externalId: (row.externalId as string | null | undefined) ?? null,
       organizationId: (row.organizationId as string | null | undefined) ?? null,
       projectId: (row.projectId as string | null | undefined) ?? null,
       validTo: row.validTo as number | null,
@@ -205,6 +216,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
       expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
       toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : undefined,
+      unmockedToolPolicy: row.unmockedToolPolicy ?? undefined,
       requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       source: row.source ? safelyParseJSON(row.source as string) : undefined,
@@ -226,11 +238,12 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
-      const id = crypto.randomUUID();
+      const id = input.id ?? crypto.randomUUID();
+      if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const now = new Date();
       const nowIso = now.toISOString();
 
-      await this.#db.insert({
+      await this.#db.insertOnly({
         tableName: TABLE_DATASETS,
         record: {
           id,
@@ -273,6 +286,14 @@ export class DatasetsLibSQL extends DatasetsStorage {
         updatedAt: now,
       };
     } catch (error) {
+      if (
+        input.id !== undefined &&
+        hasErrorCode(error, new Set(['SQLITE_CONSTRAINT', 'SQLITE_CONSTRAINT_PRIMARYKEY', 'SQLITE_CONSTRAINT_UNIQUE']))
+      ) {
+        const existing = await this.getDatasetById({ id: input.id });
+        if (existing) return this.resolveExistingDataset(existing, { ...input, id: input.id });
+      }
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'CREATE_DATASET', 'FAILED'),
@@ -558,17 +579,19 @@ export class DatasetsLibSQL extends DatasetsStorage {
             args: [args.datasetId],
           },
           {
-            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, organizationId, projectId, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT organizationId FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT projectId FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, externalId, organizationId, projectId, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, unmockedToolPolicy, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), ?, (SELECT organizationId FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT projectId FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
             args: [
               id,
               args.datasetId,
               args.datasetId,
+              args.externalId ?? null,
               args.datasetId,
               args.datasetId,
               jsonbArg(args.input)!,
               jsonbArg(args.groundTruth),
               jsonbArg(args.expectedTrajectory),
               jsonbArg(args.toolMocks),
+              args.unmockedToolPolicy ?? null,
               jsonbArg(args.requestContext),
               jsonbArg(args.metadata),
               jsonbArg(args.source),
@@ -590,12 +613,14 @@ export class DatasetsLibSQL extends DatasetsStorage {
         id,
         datasetId: args.datasetId,
         datasetVersion: newVersion,
+        externalId: args.externalId ?? null,
         organizationId: dataset?.organizationId ?? null,
         projectId: dataset?.projectId ?? null,
         input: args.input,
         groundTruth: args.groundTruth,
         expectedTrajectory: args.expectedTrajectory,
         toolMocks: args.toolMocks,
+        unmockedToolPolicy: args.unmockedToolPolicy,
         requestContext: args.requestContext,
         metadata: args.metadata,
         source: args.source,
@@ -648,6 +673,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
       const mergedExpectedTrajectory =
         args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
       const mergedToolMocks = args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks;
+      const mergedUnmockedToolPolicy =
+        args.unmockedToolPolicy !== undefined ? args.unmockedToolPolicy : existing.unmockedToolPolicy;
       const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
       const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
       const mergedSource = args.source !== undefined ? args.source : existing.source;
@@ -664,17 +691,19 @@ export class DatasetsLibSQL extends DatasetsStorage {
             args: [args.datasetId, args.id],
           },
           {
-            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, organizationId, projectId, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT organizationId FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT projectId FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, externalId, organizationId, projectId, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, unmockedToolPolicy, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), ?, (SELECT organizationId FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT projectId FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
             args: [
               args.id,
               args.datasetId,
               args.datasetId,
+              existing.externalId ?? null,
               args.datasetId,
               args.datasetId,
               jsonbArg(mergedInput)!,
               jsonbArg(mergedGroundTruth),
               jsonbArg(mergedExpectedTrajectory),
               jsonbArg(mergedToolMocks),
+              mergedUnmockedToolPolicy ?? null,
               jsonbArg(mergedRequestContext),
               jsonbArg(mergedMetadata),
               jsonbArg(mergedSource),
@@ -701,6 +730,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
         groundTruth: mergedGroundTruth,
         expectedTrajectory: mergedExpectedTrajectory,
         toolMocks: mergedToolMocks,
+        unmockedToolPolicy: mergedUnmockedToolPolicy,
         requestContext: mergedRequestContext,
         metadata: mergedMetadata,
         source: mergedSource,
@@ -748,17 +778,19 @@ export class DatasetsLibSQL extends DatasetsStorage {
             args: [datasetId, id],
           },
           {
-            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, organizationId, projectId, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT organizationId FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT projectId FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 1, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, externalId, organizationId, projectId, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, unmockedToolPolicy, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), ?, (SELECT organizationId FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT projectId FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 1, jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
             args: [
               id,
               datasetId,
               datasetId,
+              existing.externalId ?? null,
               datasetId,
               datasetId,
               jsonbArg(existing.input)!,
               jsonbArg(existing.groundTruth),
               jsonbArg(existing.expectedTrajectory),
               jsonbArg(existing.toolMocks),
+              existing.unmockedToolPolicy ?? null,
               jsonbArg(existing.requestContext),
               jsonbArg(existing.metadata),
               jsonbArg(existing.source),
@@ -1077,78 +1109,98 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   protected async _doBatchInsertItems(input: BatchInsertItemsInput): Promise<DatasetItem[]> {
     try {
-      const dataset = await this.getDatasetById({ id: input.datasetId });
-      if (!dataset) {
-        throw new MastraError({
-          id: createStorageErrorId('LIBSQL', 'BULK_ADD_ITEMS', 'DATASET_NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { datasetId: input.datasetId },
-        });
-      }
-
-      const now = new Date();
-      const nowIso = now.toISOString();
-      const versionId = crypto.randomUUID();
-
-      // T3.19 — single version increment for all items
-      const statements: { sql: string; args: InValue[] }[] = [
-        {
-          sql: `UPDATE ${TABLE_DATASETS} SET version = version + 1 WHERE id = ? RETURNING version`,
-          args: [input.datasetId],
-        },
-      ];
-
-      const items: { id: string; input: BatchInsertItemsInput['items'][number] }[] = [];
-      for (const itemInput of input.items) {
-        const id = crypto.randomUUID();
-        items.push({ id, input: itemInput });
-        statements.push({
-          sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, organizationId, projectId, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), ?, ?, NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
-          args: [
-            id,
-            input.datasetId,
-            input.datasetId,
-            dataset.organizationId ?? null,
-            dataset.projectId ?? null,
-            jsonbArg(itemInput.input)!,
-            jsonbArg(itemInput.groundTruth),
-            jsonbArg(itemInput.expectedTrajectory),
-            jsonbArg(itemInput.toolMocks),
-            jsonbArg(itemInput.requestContext),
-            jsonbArg(itemInput.metadata),
-            jsonbArg(itemInput.source),
-            nowIso,
-            nowIso,
-          ],
-        });
-      }
-
-      // T3.11 — single dataset_version for the bulk operation
-      statements.push({
-        sql: `INSERT INTO ${TABLE_DATASET_VERSIONS} (id, datasetId, version, createdAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), ?)`,
-        args: [versionId, input.datasetId, input.datasetId, nowIso],
+      if (input.items.length === 0) return [];
+      return await withClientWriteLock(this.#client, async () => {
+        const tx = await this.#client.transaction('write');
+        try {
+          const datasetResult = await tx.execute({
+            sql: `SELECT version, organizationId, projectId FROM ${TABLE_DATASETS} WHERE id = ?`,
+            args: [input.datasetId],
+          });
+          const dataset = datasetResult.rows[0];
+          if (!dataset)
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'BULK_ADD_ITEMS', 'DATASET_NOT_FOUND'),
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              details: { datasetId: input.datasetId },
+            });
+          const externalIds = [...new Set(input.items.flatMap(item => (item.externalId ? [item.externalId] : [])))];
+          const historyResult = externalIds.length
+            ? await tx.execute({
+                sql: `SELECT id, datasetId, datasetVersion, externalId, organizationId, projectId, validTo, isDeleted, json(input) AS input, json(groundTruth) AS groundTruth, json(expectedTrajectory) AS expectedTrajectory, json(toolMocks) AS toolMocks, unmockedToolPolicy, json(requestContext) AS requestContext, json(metadata) AS metadata, json(source) AS source, createdAt, updatedAt FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ? AND externalId IN (${externalIds.map(() => '?').join(',')}) ORDER BY datasetVersion`,
+                args: [input.datasetId, ...externalIds],
+              })
+            : { rows: [] };
+          const plan = this.planDatasetItemBatch(
+            input.items,
+            historyResult.rows.map(row => this.transformItemRowFull(row)),
+            () => crypto.randomUUID(),
+          );
+          const resolved = new Map<string, DatasetItem>(
+            [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
+          );
+          if (plan.inserts.length > 0) {
+            const newVersion = Number(dataset.version) + 1;
+            const now = new Date();
+            const nowIso = now.toISOString();
+            await tx.execute({
+              sql: `UPDATE ${TABLE_DATASETS} SET version = ? WHERE id = ?`,
+              args: [newVersion, input.datasetId],
+            });
+            for (const { id, item } of plan.inserts) {
+              await tx.execute({
+                sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, externalId, organizationId, projectId, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, unmockedToolPolicy, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+                args: [
+                  id,
+                  input.datasetId,
+                  newVersion,
+                  item.externalId ?? null,
+                  dataset.organizationId ?? null,
+                  dataset.projectId ?? null,
+                  jsonbArg(item.input)!,
+                  jsonbArg(item.groundTruth),
+                  jsonbArg(item.expectedTrajectory),
+                  jsonbArg(item.toolMocks),
+                  item.unmockedToolPolicy ?? null,
+                  jsonbArg(item.requestContext),
+                  jsonbArg(item.metadata),
+                  jsonbArg(item.source),
+                  nowIso,
+                  nowIso,
+                ],
+              });
+              resolved.set(id, {
+                id,
+                datasetId: input.datasetId,
+                datasetVersion: newVersion,
+                externalId: item.externalId ?? null,
+                organizationId: dataset.organizationId as string | null,
+                projectId: dataset.projectId as string | null,
+                input: item.input,
+                groundTruth: item.groundTruth,
+                expectedTrajectory: item.expectedTrajectory,
+                toolMocks: item.toolMocks,
+                unmockedToolPolicy: item.unmockedToolPolicy,
+                requestContext: item.requestContext,
+                metadata: item.metadata,
+                source: item.source,
+                createdAt: now,
+                updatedAt: now,
+              });
+            }
+            await tx.execute({
+              sql: `INSERT INTO ${TABLE_DATASET_VERSIONS} (id, datasetId, version, createdAt) VALUES (?, ?, ?, ?)`,
+              args: [crypto.randomUUID(), input.datasetId, newVersion, nowIso],
+            });
+          }
+          await tx.commit();
+          return plan.resolvedIds.map(id => resolved.get(id)!);
+        } catch (error) {
+          if (!tx.closed) await tx.rollback();
+          throw error;
+        }
       });
-
-      const results = await this.#client.batch(statements, 'write');
-      const newVersion = Number(results[0]!.rows[0]!.version);
-
-      return items.map(({ id, input: itemInput }) => ({
-        id,
-        datasetId: input.datasetId,
-        datasetVersion: newVersion,
-        organizationId: dataset.organizationId ?? null,
-        projectId: dataset.projectId ?? null,
-        input: itemInput.input,
-        groundTruth: itemInput.groundTruth,
-        expectedTrajectory: itemInput.expectedTrajectory,
-        toolMocks: itemInput.toolMocks,
-        requestContext: itemInput.requestContext,
-        metadata: itemInput.metadata,
-        source: itemInput.source,
-        createdAt: now,
-        updatedAt: now,
-      }));
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -1204,17 +1256,19 @@ export class DatasetsLibSQL extends DatasetsStorage {
         });
         // Insert tombstone
         statements.push({
-          sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, organizationId, projectId, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), ?, ?, NULL, 1, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+          sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, externalId, organizationId, projectId, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, unmockedToolPolicy, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), ?, ?, ?, NULL, 1, jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
           args: [
             item.id,
             input.datasetId,
             input.datasetId,
+            item.externalId ?? null,
             dataset.organizationId ?? null,
             dataset.projectId ?? null,
             jsonbArg(item.input)!,
             jsonbArg(item.groundTruth),
             jsonbArg(item.expectedTrajectory),
             jsonbArg(item.toolMocks),
+            item.unmockedToolPolicy ?? null,
             jsonbArg(item.requestContext),
             jsonbArg(item.metadata),
             jsonbArg(item.source),

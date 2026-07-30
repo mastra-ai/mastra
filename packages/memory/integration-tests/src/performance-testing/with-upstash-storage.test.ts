@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +21,17 @@ const removePerfRedisContainers = (env: NodeJS.ProcessEnv) => {
   return $({ cwd: dockerCwd, env })`docker compose rm --stop --force --volumes perf-serverless-redis-http perf-redis`;
 };
 
+async function getAvailablePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.listen(0, () => {
+      const { port } = server.address() as { port: number };
+      server.close(() => resolve(port));
+    });
+    server.on('error', reject);
+  });
+}
+
 describe('Memory with UpstashStore Performance', () => {
   let dbPath: string;
   let perfPort = process.env.PERF_SERVERLESS_REDIS_HTTP_PORT ?? '8080';
@@ -28,7 +40,7 @@ describe('Memory with UpstashStore Performance', () => {
 
   beforeAll(async () => {
     dbPath = await mkdtemp(join(tmpdir(), `perf-test-`));
-    perfPort = process.env.PERF_SERVERLESS_REDIS_HTTP_PORT ?? '8080';
+    perfPort = process.env.PERF_SERVERLESS_REDIS_HTTP_PORT ?? String(await getAvailablePort());
     perfUrl = `http://localhost:${perfPort}`;
 
     const dockerEnv = {

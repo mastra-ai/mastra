@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
-import { MastraFGAPermissions } from '../../../auth/ee';
+import { stopGoalActivity } from '../../../agent/goal';
 import { createBackgroundTask } from '../../../background-tasks/create';
 import { resolveBackgroundConfig } from '../../../background-tasks/resolve-config';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
@@ -33,6 +33,7 @@ import {
   GENERATE_ID_KEY,
   MEMORY_CONFIG_KEY,
   MEMORY_KEY,
+  NOW_KEY,
   RESOURCE_ID_KEY,
   SAVE_QUEUE_MANAGER_KEY,
   STEP_ACTIVE_TOOLS_KEY,
@@ -217,6 +218,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             args: transformedArgs,
             type,
             runId: suspendedToolRunId ?? runId, // Store the runId so we can resume after page refresh
+            ...(suspendedToolRunId && suspendedToolRunId !== runId ? { parentRunId: runId } : {}),
             ...(type === 'suspension' ? { suspendPayload: transformedSuspendPayload } : {}),
             resumeSchema,
             ...(toolStateTransformMetadata ? { metadata: toolStateTransformMetadata } : {}),
@@ -512,6 +514,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         if (toolRequiresApproval) {
           if (!resumeData) {
+            await stopGoalActivity({
+              agentId,
+              runId,
+              now: readScoped(scopeCtx, NOW_KEY, 'now'),
+            });
             const approvalChunk = await transformChunk(
               {
                 type: 'tool-call-approval',
@@ -623,6 +630,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           })(),
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             if (options?.requireToolApproval) {
+              await stopGoalActivity({
+                agentId,
+                runId,
+                now: readScoped(scopeCtx, NOW_KEY, 'now'),
+              });
               const approvalChunk = await transformChunk(
                 {
                   type: 'tool-call-approval',
@@ -842,20 +854,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
-        // FGA authorization check before tool execution
-        const toolFgaProvider = mastra?.getServer?.()?.fga;
-        if (toolFgaProvider) {
-          const fgaUser = requestContext?.get('user');
-          const { checkFGA } = await import('../../../auth/ee/fga-check');
-          await checkFGA({
-            fgaProvider: toolFgaProvider,
-            user: fgaUser,
-            resource: { type: 'tool', id: inputData.toolName },
-            permission: MastraFGAPermissions.TOOLS_EXECUTE,
-            requestContext,
-            actor,
-          });
-        }
+        // Tool-level FGA (TOOLS_EXECUTE) is enforced inside the tool wrapper
+        // (`createExecute` in tools/tool-builder/builder.ts), which runs on every
+        // execution path — inline, background dispatch, and durable steps — using
+        // the canonical resource id (`<agentId>:<toolName>`, the MCP id, or the
+        // standalone name). Checking here as well would authorize a bare,
+        // non-canonical id that the durable path never checks, so it is not
+        // duplicated (keeps regular and durable authorization identical).
 
         const llmBgOverrides =
           typeof args === 'object' && args !== null && '_background' in args ? args._background : undefined;
@@ -1231,8 +1236,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               // bubbles up through the AI-SDK-v5 tool builder and gets
               // wrapped as `TOOL_EXECUTION_FAILED: Invalid state:
               // Controller is already closed`.
-              safeEnqueue(controller, {
-                type: 'background-task-started' as any,
+              const backgroundTaskStartedChunk = {
+                type: 'background-task-started' as const,
                 runId,
                 from: ChunkFrom.AGENT,
                 payload: {
@@ -1240,7 +1245,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolName: inputData.toolName,
                   toolCallId: inputData.toolCallId,
                 },
-              });
+              };
+              safeEnqueue(controller, backgroundTaskStartedChunk);
+              try {
+                await options?.onChunk?.(backgroundTaskStartedChunk);
+              } catch (error) {
+                logger?.warn?.('Error invoking onChunk for background-task-started', {
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  error,
+                  errorMessage: error instanceof Error ? error.message : undefined,
+                  errorStack: error instanceof Error ? error.stack : undefined,
+                });
+              }
 
               // Return placeholder result so the LLM can continue
               return {

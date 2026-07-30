@@ -176,8 +176,5 @@ describeForAllEngines(
       expect(requests.length).toBeLessThanOrEqual(2);
     });
   },
-  // RC4: abortSignal is not forwarded to the durable workflow engine — the workflow
-  // ignores the external AbortController, so tools keep executing and the loop
-  // continues to maxSteps. Requires durable-level abort plumbing.
-  { skip: ['durable'] },
+  {},
 );

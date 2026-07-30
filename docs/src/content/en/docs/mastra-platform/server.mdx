@@ -13,6 +13,10 @@ Server on Mastra platform is a production deployment target that runs your Mastr
 You get a stable API endpoint, environment variable management, custom domain support, and deploy history out of the box.
 
 :::note
+`mastra server deploy` is the earlier split deploy path. New projects should use the unified [`mastra deploy`](/docs/mastra-platform/deploy) command, which adds preflight validation, environments, and CLI-managed databases.
+:::
+
+:::note
 
 Server deploy provisions hosted storage automatically. If you override storage with [LibSQLStore](/reference/storage/libsql) and a file URL, switch to a remotely hosted database because Mastra platform uses an ephemeral filesystem.
 
@@ -133,7 +137,7 @@ Call `unref()` on the diagnostic interval so the helper itself doesn't keep the 
 
 ### Keep a service running
 
-Some applications genuinely need the connections or tasks described above, such as a persistent database connection for low first-request latency, a background scheduler, or a long-lived stream. If your app requires any of these, don't force the service to sleep. Use the **Persistent Server add-on** to keep the service running continuously instead.
+Some applications actually need the connections or tasks described above, such as a persistent database connection for low first-request latency, a background scheduler, or a long-lived stream. If your app requires any of these, don't force the service to sleep. Use the **Persistent Server add-on** to keep the service running continuously instead.
 
 With the **Persistent Server add-on** enabled, the service stays awake even with no traffic, so persistent connections, scheduled tasks, and open streams keep working without being interrupted by idle sleep.
 

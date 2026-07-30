@@ -91,10 +91,7 @@ async function readNextRun(iterator: AsyncIterator<any>) {
 describeForAllEngines('AIMock scenario: signal sendMessage integration', engine => {
   const getMock = useLoopScenarioAimock();
 
-  // RC16: sendMessage-wake hangs because DurableAgent.stream() doesn't complete
-  // through the AgentThreadStreamRuntime subscribe path. Signal drain within a
-  // run works — this is a separate integration gap.
-  it.skipIf(engine === 'durable')('subscribes to thread and receives sendMessage response', async () => {
+  it('subscribes to thread and receives sendMessage response', async () => {
     const pubsub = new InMemoryPubSub();
     const mock = getMock();
 

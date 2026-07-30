@@ -244,7 +244,9 @@ export class SchedulesSpanner extends SchedulesStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),
@@ -486,7 +488,9 @@ export class SchedulesSpanner extends SchedulesStorage {
             });
             await tx.commit();
           } catch (err) {
-            await tx.rollback().catch(() => {});
+            await tx.rollback().catch(rollbackErr => {
+              throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+            });
             throw err;
           }
         }),

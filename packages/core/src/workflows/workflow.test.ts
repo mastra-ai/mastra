@@ -10,6 +10,7 @@ import type {
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
+import { MastraNonRetryableError } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
@@ -573,6 +574,141 @@ describe('Workflow (Default Engine Specifics)', () => {
       // Clean up spy
       consoleErrorSpy.mockRestore();
     });
+  });
+
+  describe('non-retryable workflow failures', () => {
+    it('does not retry workflow steps that throw MastraNonRetryableError', async () => {
+      let calls = 0;
+
+      const fatalStep = createStep({
+        id: 'fatal-step',
+        execute: async () => {
+          calls++;
+          throw new MastraNonRetryableError('permanent failure');
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'non-retryable-fatal-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retryConfig: { attempts: 3, delay: 0 },
+        steps: [fatalStep],
+      });
+      workflow.then(fatalStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'non-retryable-fatal-workflow': workflow },
+      });
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(calls).toBe(1);
+
+      const stepResult = result.steps['fatal-step'];
+      expect(stepResult?.status).toBe('failed');
+      expect(stepResult?.nonRetryable).toBe(true);
+    });
+
+    it('retries workflow steps that throw transient errors until attempts are exhausted', async () => {
+      let calls = 0;
+
+      const transientStep = createStep({
+        id: 'transient-step',
+        execute: async () => {
+          calls++;
+          throw new Error('transient failure');
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'retryable-transient-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retryConfig: { attempts: 3, delay: 0 },
+        steps: [transientStep],
+      });
+      workflow.then(transientStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'retryable-transient-workflow': workflow },
+      });
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(calls).toBe(4);
+
+      const stepResult = result.steps['transient-step'];
+      expect(stepResult?.status).toBe('failed');
+      expect(stepResult?.nonRetryable).toBeUndefined();
+    });
+  });
+
+  describe('tool step cancellation', () => {
+    it('forwards abortSignal to tool-wrapped steps so run.cancel() can stop cooperative tools', async () => {
+      let capturedAbortSignal: AbortSignal | undefined;
+      let toolStoppedEarly = false;
+
+      const cooperativeTool = createTool({
+        id: 'cooperative-tool',
+        description: 'Polls abortSignal until canceled',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ completed: z.boolean() }),
+        execute: async (_input, context) => {
+          capturedAbortSignal = context.abortSignal;
+          const deadline = Date.now() + 5_000;
+          while (Date.now() < deadline) {
+            if (context.abortSignal?.aborted) {
+              toolStoppedEarly = true;
+              return { completed: false };
+            }
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+          return { completed: true };
+        },
+      });
+
+      const toolStep = createStep(cooperativeTool);
+      const workflow = createWorkflow({
+        id: 'tool-cancel-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ completed: z.boolean() }),
+        steps: [toolStep],
+      });
+      workflow.then(toolStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'tool-cancel-workflow': workflow },
+      });
+
+      const run = await workflow.createRun();
+      const startedAt = Date.now();
+      const startPromise = run.start({ inputData: {} });
+
+      await new Promise(resolve => setTimeout(resolve, 1_000));
+      await run.cancel();
+
+      const result = await startPromise;
+
+      expect(result.status).toBe('canceled');
+      expect(capturedAbortSignal).toBeInstanceOf(AbortSignal);
+      expect(toolStoppedEarly).toBe(true);
+      expect(Date.now() - startedAt).toBeLessThan(3_000);
+    }, 10_000);
   });
 
   describe('Tracing Context Persistence', () => {

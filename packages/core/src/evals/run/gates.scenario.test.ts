@@ -172,6 +172,47 @@ describe('Gates & Verdict — scenario tests via runEvals + AIMock', () => {
       expect(result.gateResults![0]!.passed).toBe(true);
       expect(result.gateResults![1]!.passed).toBe(false);
     });
+
+    it('allows gate-only runs when scorers is omitted', async () => {
+      const agent = textAgent('Sunny and 72°F in Brooklyn.');
+
+      const result = await runEvals({
+        data: [{ input: 'What is the weather?' }],
+        gates: [passingGate],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('passed');
+      expect(result.gateResults).toHaveLength(1);
+      expect(result.gateResults![0]!.passed).toBe(true);
+      expect(result.scores).toEqual({});
+    });
+
+    it('fails a gate-only run when the gate scores below 1.0', async () => {
+      const agent = textAgent('Some response.');
+
+      const result = await runEvals({
+        data: [{ input: 'Test' }],
+        gates: [failingGate],
+        target: agent,
+      });
+
+      expect(result.verdict).toBe('failed');
+      expect(result.gateResults).toHaveLength(1);
+      expect(result.gateResults![0]!.passed).toBe(false);
+    });
+
+    it('throws when neither scorers nor gates are provided', async () => {
+      const agent = textAgent('Some response.');
+
+      await expect(
+        // @ts-expect-error — at least one of scorers/gates is required
+        runEvals({
+          data: [{ input: 'Test' }],
+          target: agent,
+        }),
+      ).rejects.toThrow('At least one scorer or gate must be provided');
+    });
   });
 
   describe('verdict with thresholds only', () => {

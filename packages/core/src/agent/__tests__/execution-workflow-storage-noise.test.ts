@@ -61,13 +61,14 @@ describe('agent execution-workflow storage noise (issue #17137)', () => {
   it('gives the internal execution-workflow access to storage (no "storage is not initialized" branch)', async () => {
     // The buggy execution-workflow used its own un-registered logger, so spying on the Mastra
     // logger does not see the noise. Instead, assert the root cause directly: when
-    // getWorkflowRunById runs for the execution-workflow it now has storage, so the
-    // no-storage debug branch is unreachable.
+    // createRun runs for the execution-workflow it now has storage, so the
+    // no-storage debug branch is unreachable. (createRun is used rather than
+    // getWorkflowRunById because #19028 skips the lookup entirely for transient
+    // workflows that don't persist snapshots.)
     const seen: Array<{ id: string; hasStorage: boolean }> = [];
-    const original = (Workflow.prototype as unknown as { getWorkflowRunById: (...a: unknown[]) => unknown })
-      .getWorkflowRunById;
+    const original = (Workflow.prototype as unknown as { createRun: (...a: unknown[]) => unknown }).createRun;
     const spy = vi
-      .spyOn(Workflow.prototype as unknown as Record<string, any>, 'getWorkflowRunById')
+      .spyOn(Workflow.prototype as unknown as Record<string, any>, 'createRun')
       .mockImplementation(async function (this: any, ...args: unknown[]) {
         seen.push({ id: this.id, hasStorage: Boolean(this.mastra?.getStorage?.()) });
         return original.apply(this, args);
@@ -80,9 +81,9 @@ describe('agent execution-workflow storage noise (issue #17137)', () => {
       spy.mockRestore();
     }
 
-    const executionWorkflowLookups = seen.filter(s => s.id === 'execution-workflow');
-    expect(executionWorkflowLookups.length).toBeGreaterThan(0);
-    expect(executionWorkflowLookups.every(s => s.hasStorage)).toBe(true);
+    const executionWorkflowRuns = seen.filter(s => s.id === 'execution-workflow');
+    expect(executionWorkflowRuns.length).toBeGreaterThan(0);
+    expect(executionWorkflowRuns.every(s => s.hasStorage)).toBe(true);
   });
 
   it('does not persist a snapshot for the internal execution-workflow on generate', async () => {

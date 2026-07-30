@@ -27,6 +27,7 @@ import {
   durableAgenticOutputSchema,
   baseIterationStateSchema,
   createBaseIterationStateUpdate,
+  resolveDurableToolCallConcurrency,
 } from './shared';
 import {
   createDurableBackgroundTaskCheckStep,
@@ -128,8 +129,9 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
   const goalStep = createDurableGoalStep();
 
   // Create the single iteration workflow (LLM -> Tool Calls -> Mapping)
-  // Note: foreach runs with concurrency: 1 (sequential) because tool approval
-  // and suspension require sequential execution to properly handle suspend/resume.
+  // Note: tool-call foreach concurrency is resolved per run at execution time
+  // (see resolveDurableToolCallConcurrency) — approval/suspend flows force
+  // sequential execution; otherwise the run's `toolCallConcurrency` applies.
   // The workflow is created once at startup and reused for all runs.
   const singleIterationWorkflow = createWorkflow({
     id: DurableStepIds.AGENTIC_EXECUTION,
@@ -137,14 +139,23 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
     outputSchema: iterationStateSchema,
     options: {
       shouldPersistSnapshot: params => {
-        // We need a persisted snapshot record to support `resumeStream()`.
-        // - Create the initial record early ("pending")
-        // - Update it when execution is suspended ("paused"/"suspended")
-        // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+        // We need a persisted snapshot record to support both:
+        //  - `resumeStream()` after a suspend (records with status
+        //    `pending` / `paused` / `suspended`)
+        //  - boot-time recovery of orphaned RUNNING runs after a process
+        //    restart, via `DurableAgent.recoverActiveRuns()` — this requires
+        //    the row to actually be stamped `running` while the loop is
+        //    in-flight (issue #19056).
+        //
+        // The engine's persist path guards against overwriting a `suspended`
+        // / `paused` snapshot with a later `running` update from the same
+        // run (see `persistStepUpdate` in workflows/handlers/entry.ts), so
+        // it is safe to return true for `running` here.
         return (
           params.workflowStatus === 'pending' ||
           params.workflowStatus === 'paused' ||
-          params.workflowStatus === 'suspended'
+          params.workflowStatus === 'suspended' ||
+          params.workflowStatus === 'running'
         );
       },
       // Agent-loop snapshots are pure resume artifacts — strip everything a
@@ -194,8 +205,22 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       },
       { id: 'extract-tool-calls' },
     )
-    // Step 3: Execute each tool call individually (with suspend support)
-    .foreach(toolCallStep)
+    // Step 3: Execute each tool call individually (with suspend support).
+    // Concurrency is resolved per run from the serialized iteration state:
+    // approval/suspend-capable tool sets run sequentially, everything else
+    // honors the run's `toolCallConcurrency` (default 10). The workflow graph
+    // is shared across runs, so this must be a resolver — never a mutated
+    // shared options object.
+    .foreach(toolCallStep, {
+      concurrency: ({ inputData, getInitData }) => {
+        const state = getInitData() as IterationState | undefined;
+        return resolveDurableToolCallConcurrency({
+          options: state?.options,
+          toolsMetadata: state?.toolsMetadata,
+          toolCalls: inputData as DurableToolCallInput[],
+        });
+      },
+    })
     // Step 4: Collect tool results and bundle with LLM output for mapping step
     .map(
       async ({ inputData, getStepResult, getInitData }) => {
@@ -263,14 +288,14 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       outputSchema: durableAgenticOutputSchema,
       options: {
         shouldPersistSnapshot: params => {
-          // We need a persisted snapshot record to support `resumeStream()`.
-          // - Create the initial record early ("pending")
-          // - Update it when execution is suspended ("paused"/"suspended")
-          // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+          // See the singleIterationWorkflow comment above — same policy for
+          // the outer loop. The persist path guards against overwriting a
+          // suspended snapshot with running.
           return (
             params.workflowStatus === 'pending' ||
             params.workflowStatus === 'paused' ||
-            params.workflowStatus === 'suspended'
+            params.workflowStatus === 'suspended' ||
+            params.workflowStatus === 'running'
           );
         },
         // Agent-loop snapshots are pure resume artifacts — strip everything a
@@ -309,6 +334,22 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         const initData = params.getInitData() as DurableAgenticWorkflowInput;
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
         const registryEntry = globalRunRegistry.get(state.runId);
+
+        // ── Abort check ────────────────────────────────────────────────
+        // If the abort signal has fired, stop the loop immediately.
+        // The llm-execution step may have already emitted the ABORT event
+        // and returned a clean output, but the signal may also have fired
+        // between steps (e.g. inside a tool). Override the stepResult
+        // reason so the FINISH event carries 'abort' and the client sees
+        // the correct finishReason.
+        if (registryEntry?.abortSignal?.aborted) {
+          if (state.lastStepResult) {
+            state.lastStepResult.reason = 'abort';
+            state.lastStepResult.isContinued = false;
+          }
+          return false;
+        }
+
         // Two-phase stop: if onIterationComplete returned { continue: false, feedback }
         // on the previous iteration, we allowed one more LLM turn with that feedback.
         // Now that the turn has completed, stop the loop unconditionally.
@@ -644,6 +685,37 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
               );
             } catch (error) {
               logger?.warn?.(`[DurableAgent] Error persisting messages: ${error}`);
+            }
+          }
+
+          // Thread title generation (executeOnFinish equivalent).
+          // The non-durable `#executeOnFinish` generates a thread title from the first user
+          // message when `memory.options.generateTitle` is set. That branch was never ported
+          // to the durable path, so `generateTitle` silently never fired for durable/evented
+          // agents (and Inngest). The `generateThreadTitle` closure — parked on the registry
+          // entry during preparation, where the agent instance is in scope — runs it here.
+          //
+          // Kept OUTSIDE the `!observationalMemory` guard above: OM handles its own message
+          // persistence, but title generation is orthogonal and should still run when OM is on.
+          // Non-serializable (a closure), so like the other registry closures it only fires for
+          // in-process durable runs; cross-process engines (Inngest after a restart) skip it.
+          if (
+            registryEntry?.generateThreadTitle &&
+            durableState?.threadId &&
+            durableState?.resourceId &&
+            !durableState.memoryConfig?.readOnly
+          ) {
+            try {
+              await registryEntry.generateThreadTitle({
+                threadId: durableState.threadId,
+                resourceId: durableState.resourceId,
+                memoryConfig: durableState.memoryConfig,
+                messageListState: state.messageListState,
+                requestContext,
+                tracingContext,
+              });
+            } catch (error) {
+              logger?.warn?.(`[DurableAgent] Error generating thread title: ${error}`);
             }
           }
 

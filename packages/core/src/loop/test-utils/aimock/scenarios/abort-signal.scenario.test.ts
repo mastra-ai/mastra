@@ -95,8 +95,5 @@ describeForAllEngines(
       expect(finishReason).toMatch(/abort|cancelled|error|tripwire/i);
     });
   },
-  // RC4: abortSignal is not forwarded to the durable workflow engine — the workflow
-  // ignores the external AbortController, so the loop runs to maxSteps and
-  // finishReason is 'stop' instead of 'abort'. Requires durable-level abort plumbing.
-  { skip: ['durable'] },
+  {},
 );
