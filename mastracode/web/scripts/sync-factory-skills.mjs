@@ -25,7 +25,5 @@ if (!fs.existsSync(sourceDir)) {
 fs.rmSync(destDir, { recursive: true, force: true });
 fs.cpSync(sourceDir, destDir, { recursive: true });
 
-const skillCount = fs
-  .readdirSync(destDir, { withFileTypes: true })
-  .filter(entry => entry.isDirectory()).length;
+const skillCount = fs.readdirSync(destDir, { withFileTypes: true }).filter(entry => entry.isDirectory()).length;
 console.log(`synced ${skillCount} factory skills -> ${path.relative(webRoot, destDir)}`);

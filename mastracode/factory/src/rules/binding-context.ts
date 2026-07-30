@@ -109,17 +109,22 @@ async function healRecoveredSessionState(options: {
 }): Promise<void> {
   const { binding } = options;
   const updates: FactorySessionState = { factoryProjectId: binding.factoryProjectId };
+  // Security posture first, from the binding row alone (no I/O): review-bound
+  // sessions run against attacker-writable checkouts, so `untrustedCheckout`
+  // must survive even if the enrichment lookups below fail transiently.
+  if (binding.role === 'review') {
+    updates.untrustedCheckout = true;
+  }
   // Best-effort enrichment mirroring the start coordinator's original seed:
-  // review-bound / PR-sourced sessions run against attacker-writable
-  // checkouts, so `untrustedCheckout` (and the trusted `baseRef`) must come
-  // back with the rest of the state.
+  // PR-sourced work items are untrusted regardless of role, and `baseRef`
+  // restores the trusted instruction source for untrusted checkouts.
   try {
     const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
     const sourceSession = (await options.sessions?.getBySessionId(binding.sessionId)) ?? null;
     if (sourceSession && sourceSession.orgId === binding.orgId) {
       updates.projectRepositoryId = sourceSession.projectRepositoryId;
     }
-    const untrusted = binding.role === 'review' || item?.externalSource?.type === 'pull-request';
+    const untrusted = updates.untrustedCheckout === true || item?.externalSource?.type === 'pull-request';
     if (untrusted) {
       updates.untrustedCheckout = true;
       const metadataBaseBranch = item?.metadata?.baseBranch;

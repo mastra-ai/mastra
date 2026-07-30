@@ -297,6 +297,23 @@ describe('factory_transition_work_item', () => {
     );
   });
 
+  it('keeps untrustedCheckout on recovered review bindings when enrichment lookups fail', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepareBoundItem(storage, 'github-pr');
+    const setState = vi.fn(async () => {});
+    vi.spyOn(storage, 'get').mockRejectedValue(new Error('transient storage outage'));
+
+    const tools = await createFactoryTransitionTools({
+      requestContext: crashResumedContext(setState),
+      storage,
+      transitionService: { transition: vi.fn(async () => ({ status: 'accepted' as const })) } as never,
+      sessions: { getBySessionId: vi.fn(async () => Promise.reject(new Error('sessions down'))) },
+    });
+
+    expect(tools).toHaveProperty('factory_transition_work_item');
+    expect(setState).toHaveBeenCalledWith({ factoryProjectId: PROJECT_ID, untrustedCheckout: true });
+  });
+
   it('recovers a work binding without marking the checkout untrusted', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) });
