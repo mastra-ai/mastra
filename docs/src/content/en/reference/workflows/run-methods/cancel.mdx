@@ -60,7 +60,7 @@ Steps that check the `abortSignal` parameter can respond to cancellation:
 - Steps can check if already aborted: `if (abortSignal.aborted) { ... }`
 - Useful for cancelling timeouts, network requests, or long-running operations
 
-**Note:** Steps must actively check the abort signal to be canceled mid-execution. Steps that don't check the signal will run to completion, but subsequent steps won't execute.
+Steps must actively check the abort signal to be canceled mid-execution; otherwise, the current step runs to completion and subsequent steps don't execute.
 
 ## Extended usage examples
 

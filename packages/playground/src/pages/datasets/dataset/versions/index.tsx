@@ -70,7 +70,7 @@ function DatasetCompareVersionsPage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-neutral4 text-center py-8">
+          <div className="text-neutral4 py-8 text-center">
             <p>Select at least two versions to compare.</p>
           </div>
         </MainContentContent>
@@ -93,7 +93,7 @@ function DatasetCompareVersionsPage() {
   return (
     <MainContentLayout>
       <div className="h-full overflow-hidden px-[3vw] pb-4">
-        <div className="grid gap-6 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full">
+        <div className="mx-auto grid h-full max-w-[140rem] grid-rows-[auto_1fr] gap-6">
           <MainHeader>
             <MainHeader.Column>
               <MainHeader.Title>

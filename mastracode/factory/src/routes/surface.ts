@@ -10,23 +10,25 @@ import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import { ensureFactoryRuleSession } from '../integrations/github/factory-session.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
-import { FactoryGithubEventService } from '../rules/github-service.js';
-import { FactoryLinearIssueService } from '../rules/linear-service.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
+import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
+import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { ModelPacksStorage } from '../storage/domains/model-packs/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import type { SourceControlStorage } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { ConfigRoutes } from './config.js';
+import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
 import { IntakeRoutes } from './intake.js';
 import { OAuthRoutes } from './oauth.js';
@@ -61,10 +63,13 @@ export interface FactoryApiRoutesDeps {
   domains: {
     intake: IntakeStorage;
     modelCredentials: ModelCredentialsStorage;
+    memorySettings: MemorySettingsStorage;
+    customProviders: CustomProvidersStorage;
     modelPacks: ModelPacksStorage;
     projects: FactoryProjectsStorage;
     queueHealth: QueueHealthStorage;
     workItems: WorkItemsStorage;
+    channelIdentity: ChannelIdentityStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
@@ -200,7 +205,9 @@ export function buildIntegrationContext(
   > & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
-    domains: Pick<FactoryApiRoutesDeps['domains'], 'projects' | 'intake'>;
+    rules: FactoryRules;
+    factoryReady: boolean;
+    domains: Pick<FactoryApiRoutesDeps['domains'], 'projects' | 'intake' | 'workItems' | 'channelIdentity'>;
   },
   integrationId: string,
 ): IntegrationContext {
@@ -216,7 +223,9 @@ export function buildIntegrationContext(
       sourceControl: deps.sourceControlStorage.forIntegration(integrationId),
       projects: deps.domains.projects,
       intake: deps.domains.intake,
+      channelIdentity: deps.domains.channelIdentity,
     },
+    ...(deps.factoryReady ? { rules: { config: deps.rules, workItems: deps.domains.workItems } } : {}),
     ...(deps.emitAudit ? { hooks: { emitAudit: deps.emitAudit } } : {}),
   };
 }
@@ -284,42 +293,13 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   const emitAudit: AuditEmitter['emit'] = args => deps.audit.emit(args);
   const registrations = deps.integrations ?? [];
   const githubRegistration = registrations.find(({ integration }) => integration.id === 'github');
-  const linearRegistration = registrations.find(({ integration }) => integration.id === 'linear');
   const githubStorage = githubRegistration ? deps.sourceControlStorage.forIntegration('github') : undefined;
   const githubIntegration = githubRegistration?.integration as GithubIntegration | undefined;
-  const workItems = deps.factoryReady ? deps.domains.workItems : undefined;
-  const githubEventService =
-    githubIntegration && githubStorage && workItems
-      ? new FactoryGithubEventService({
-          github: githubIntegration,
-          sourceControl: githubStorage,
-          integrationStorage: deps.integrationStorage.forIntegration('github'),
-          storage: workItems,
-          rules: deps.rules,
-        })
-      : undefined;
-  const linearIssueService =
-    linearRegistration && workItems
-      ? new FactoryLinearIssueService({
-          projects: deps.domains.projects,
-          storage: workItems,
-          rules: deps.rules,
-        })
-      : undefined;
 
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration } = registration;
     if (!deps.stateSigner) return disabledIntegrationStatusRoutes(deps, integration.id, true);
     const context = buildIntegrationContext({ ...deps, stateSigner: deps.stateSigner, emitAudit }, integration.id);
-    if (integration.id === 'github') {
-      context.hooks = {
-        ...context.hooks,
-        ...(githubEventService ? { ingestGithubEvent: event => githubEventService.ingest(event) } : {}),
-      };
-    }
-    if (integration.id === 'linear' && linearIssueService) {
-      context.hooks = { ...context.hooks, ingestLinearIssues: input => linearIssueService.ingest(input) };
-    }
     return guardIntegrationRoutes({ ...registration, routes: integration.routes(context) });
   });
   // Absent known integrations still get their disabled-status stub.
@@ -337,6 +317,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         deps.domains.workItems,
         transitionService,
         githubIntegration?.sourceControlStorage,
+        deps.domains.memorySettings,
       )
     : undefined;
   if (transitionService && startCoordinator) {
@@ -352,14 +333,24 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   }
 
   return [
-    ...buildFsRoutes({ root: deps.fsRoot }),
+    ...buildFsRoutes({
+      root: deps.fsRoot,
+      sessionFs: {
+        auth: deps.auth,
+        fleet: deps.fleet,
+        sessions: deps.sourceControlStorage.forIntegration('github').sessions,
+      },
+    }),
     ...new ConfigRoutes({
       auth: deps.auth,
       controller: deps.controller,
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
       modelPacks: deps.domains.modelPacks,
+      memorySettings: deps.domains.memorySettings,
+      customProviders: deps.domains.customProviders,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
+      onCustomProvidersChanged: invalidateCustomProvidersSnapshots,
     }).routes(),
     ...new OAuthRoutes({
       auth: deps.auth,

@@ -27,7 +27,7 @@ export function MainSidebarTrigger({ className, onClick, ...props }: MainSidebar
             }}
             className={cn(
               'flex items-center justify-center rounded-md text-neutral3',
-              'size-9',
+              'size-7',
               isCollapsed ? 'mx-auto' : 'ml-auto',
               'hover:bg-sidebar-nav-hover hover:text-neutral6',
               'duration-normal transition-all ease-out-custom',

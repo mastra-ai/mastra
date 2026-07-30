@@ -380,7 +380,9 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
    */
   async #resolveProject(
     c: Context,
-  ): Promise<{ orgId: string; userId: string; factoryProjectId: string } | { response: Response }> {
+  ): Promise<
+    { orgId: string; userId: string; factoryProjectId: string; defaultModelId: string | null } | { response: Response }
+  > {
     const tenant = await this.#resolveTenant(c);
     if ('response' in tenant) return tenant;
 
@@ -394,7 +396,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
     if (!project) {
       return { response: c.json({ error: 'Project not found' }, 404) };
     }
-    return { ...tenant, factoryProjectId: projectId };
+    return { ...tenant, factoryProjectId: projectId, defaultModelId: project.defaultModelId };
   }
 
   /**
@@ -711,6 +713,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const input = parseStartBody(await readJson(loose(c)), resolved, resolved.factoryProjectId);
           if (!input) return c.json({ error: 'invalid_factory_start' }, 400);
           input.requestContext = loose(c).get('requestContext');
+          input.defaultModelId = resolved.defaultModelId ?? undefined;
           if (
             !input.workItem.id &&
             ((input.workItem.input.stages ?? ['intake']).length !== 1 ||

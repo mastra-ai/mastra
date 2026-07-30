@@ -72,7 +72,7 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
     isOptional: true,
     defaultValue: 'true',
     description:
-      'Include channel-specific tools (`add_reaction`, `remove_reaction`). Set to `false` for models that do not support function calling.',
+      'Whether `getTools()` returns the channel-specific tools (`add_reaction`, `remove_reaction`). Set to `false` for models that do not support function calling. Channel tools are never added to the agent automatically — pass them explicitly via `tools: { ...channels.getTools() }`.',
   },
   {
     name: 'state',
@@ -111,6 +111,13 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
     isOptional: true,
     description:
       'Decide which `resourceId` owns resource-level memory for a channel thread, separately from who sent the message. Runs only when a new thread is created; reused threads keep their stored owner and never call the hook. Return `ctx.defaultResourceId` (`${platform}:${message.author.userId}`) to keep the built-in behavior.',
+  },
+  {
+    name: 'resolveThreadId',
+    type: '(ctx: ResolveThreadIdContext) => string | Promise<string>',
+    isOptional: true,
+    description:
+      'Decide the internal Mastra thread id for a channel thread. Runs after `resolveResourceId` with the resolved owner on the context, and only when a new thread is created; reused threads keep their stored id and never call the hook. The returned id must be unique across the memory store — on collision a generated id is used instead. Return `ctx.defaultThreadId` (a random UUID) to keep the built-in behavior.',
   },
   {
     name: 'waitUntil',
@@ -242,7 +249,7 @@ Block Kit, useful for platforms that don't render cards well.
 `'timeline'` and `'grouped'` stream tool state as inline `task_update` chunks
 alongside the agent's text. These modes require `streaming: true` and rely on
 the chat adapter to render the chunks. Slack supports both natively; other
-adapters may render a placeholder until they ship support. If `streaming` is
+adapters may render a placeholder until they add support. If `streaming` is
 disabled, the channel logs a one-time warning and falls back to `'cards'`.
 
 `'hidden'` executes tools silently. Only the typing status indicates work in
@@ -377,8 +384,34 @@ type ChannelHandler = (
   thread: Thread,
   message: Message,
   defaultHandler: (thread: Thread, message: Message) => Promise<void>,
+  ctx: ChannelHandlerContext,
 ) => Promise<void>
+
+type ChannelHandlerContext = {
+  mastra?: Mastra
+  requestContext: RequestContext
+}
 ```
+
+`ctx.mastra` is the resolved `mastra` instance, so a handler can reach storage or other registered primitives without being passed an external accessor:
+
+```typescript
+onDirectMessage: async (thread, message, defaultHandler, ctx) => {
+  const store = await ctx.mastra?.getStorage()?.getStore('memory')
+  await defaultHandler(thread, message)
+}
+```
+
+`ctx.requestContext` is the [`RequestContext`](/docs/server/request-context) for the run this message is about to start, built fresh for every message. Write to it before calling `defaultHandler` and the value reaches the run, alongside the channel entries Mastra adds afterward:
+
+```typescript
+onDirectMessage: async (thread, message, defaultHandler, ctx) => {
+  ctx.requestContext.set('locale', 'en-GB')
+  await defaultHandler(thread, message)
+}
+```
+
+Anything the run reads from its request context can be decided per message this way, such as which user a platform sender maps to.
 
 ## Resource ID resolution
 
@@ -436,6 +469,69 @@ The `ResolveResourceIdContext` passed to the function:
     type: 'string',
     description:
       'The built-in default (`${platform}:${message.author.userId}`). Return this to keep the current behavior.',
+  },
+]}
+/>
+
+## Thread ID resolution
+
+By default a new channel thread gets a random UUID as its internal Mastra thread id. Pass `resolveThreadId` to pick the id yourself: for example, give the thread the same id as the session it belongs to, matching how your app names threads it creates itself.
+
+The hook runs after `resolveResourceId`, so the resolved owner is available on the context. Like `resolveResourceId` it runs only when a new thread is created: reused threads keep their stored id and never call the hook. The returned id must be unique across the memory store. If it already belongs to an existing thread, Mastra logs a warning and uses a generated id instead so the existing thread is never overwritten. Return `ctx.defaultThreadId` to keep the built-in behavior.
+
+```typescript title="src/mastra/agents/session-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+const agent = new Agent({
+  id: 'session-agent',
+  name: 'Session Agent',
+  instructions: '...',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+    // Owner: a session id resolved from the sender's linked account
+    resolveResourceId: async ctx => resolveSessionId(ctx),
+    // Thread id: align with the session id so app URLs that address
+    // threads by session id resolve channel-created threads too
+    resolveThreadId: ({ resourceId, defaultThreadId }) => {
+      return isSessionId(resourceId) ? resourceId : defaultThreadId
+    },
+  },
+})
+```
+
+The `ResolveThreadIdContext` passed to the function:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'platform',
+    type: 'string',
+    description: 'Platform name (e.g. `slack`, `discord`).',
+  },
+  {
+    name: 'thread',
+    type: 'Thread',
+    description:
+      'The channel thread the message arrived on. Use `thread.isDM` to tell DMs apart from group/channel threads.',
+  },
+  {
+    name: 'message',
+    type: 'Message',
+    description: 'The incoming message.',
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'The resolved memory `resourceId` the new thread will belong to (after `resolveResourceId`).',
+  },
+  {
+    name: 'defaultThreadId',
+    type: 'string',
+    description: 'The built-in default (a random UUID). Return this to keep the current behavior.',
   },
 ]}
 />

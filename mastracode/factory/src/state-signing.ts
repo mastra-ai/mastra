@@ -1,7 +1,8 @@
 /**
  * Shared OAuth/install `state` signing for web integrations.
  *
- * Both the GitHub and Linear OAuth flows round-trip a signed `state` value
+ * The GitHub, Linear, and Slack OAuth/OIDC flows each round-trip a signed `state`
+ * value
  * through the third party to bind the callback to the `(orgId, userId)` tenant
  * that initiated it (CSRF protection + tenant routing). The signer is a system
  * facility: `MastraFactory` creates ONE signer at boot and hands it to every
@@ -24,16 +25,24 @@
 
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
-/** Verified `(orgId, userId)` tenant carried by a signed `state`. */
+/** Verified tenant and optional Factory context carried by a signed `state`. */
 export interface StateTenant {
   orgId: string;
   userId: string;
+  /** Factory that initiated the integration flow, when the caller supplied one. */
+  factoryProjectId?: string;
+  /**
+   * Per-`state` random value. A signed `state` stays valid for its whole
+   * lifetime, so a flow that must not run twice off one `state` (account
+   * binding, for instance) can key single-use bookkeeping on this.
+   */
+  nonce: string;
 }
 
-/** Signs and verifies OAuth `state` values bound to a `(orgId, userId)` tenant. */
+/** Signs and verifies OAuth `state` values bound to a tenant and optional Factory. */
 export interface StateSigner {
-  /** Build a signed `state` bound to the tenant. */
-  sign(orgId: string, userId: string): string;
+  /** Build a signed `state` bound to the tenant and optional initiating Factory. */
+  sign(orgId: string, userId: string, context?: { factoryProjectId?: string }): string;
   /** Verify a signed `state`; returns the bound tenant, or `null` if invalid. */
   verify(state: string | undefined): StateTenant | null;
   /**
@@ -47,6 +56,7 @@ export interface StateSigner {
 interface StatePayload {
   orgId: string;
   userId: string;
+  factoryProjectId?: string;
   nonce: string;
   issuedAt: number;
 }
@@ -64,10 +74,11 @@ export function createStateSigner(secret?: string): StateSigner {
   const key = stable ? secret : randomBytes(32).toString('hex');
   return {
     stable,
-    sign(orgId: string, userId: string): string {
+    sign(orgId: string, userId: string, context?: { factoryProjectId?: string }): string {
       const payload: StatePayload = {
         orgId,
         userId,
+        ...(context?.factoryProjectId ? { factoryProjectId: context.factoryProjectId } : {}),
         nonce: randomBytes(8).toString('hex'),
         issuedAt: Date.now(),
       };
@@ -91,9 +102,21 @@ export function createStateSigner(secret?: string): StateSigner {
         const parsed = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as StatePayload;
         if (typeof parsed.orgId !== 'string' || typeof parsed.userId !== 'string') return null;
         if (typeof parsed.issuedAt !== 'number' || !Number.isFinite(parsed.issuedAt)) return null;
+        if (typeof parsed.nonce !== 'string' || parsed.nonce.length === 0) return null;
+        if (
+          parsed.factoryProjectId !== undefined &&
+          (typeof parsed.factoryProjectId !== 'string' || parsed.factoryProjectId.length === 0)
+        ) {
+          return null;
+        }
         const age = Date.now() - parsed.issuedAt;
         if (age < 0 || age > STATE_MAX_AGE_MS) return null;
-        return { orgId: parsed.orgId, userId: parsed.userId };
+        return {
+          orgId: parsed.orgId,
+          userId: parsed.userId,
+          ...(parsed.factoryProjectId ? { factoryProjectId: parsed.factoryProjectId } : {}),
+          nonce: parsed.nonce,
+        };
       } catch {
         return null;
       }

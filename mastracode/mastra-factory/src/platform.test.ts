@@ -22,7 +22,7 @@ const cliAuth = vi.hoisted(() => ({
 
 vi.mock('mastra/internal/auth', () => cliAuth);
 
-import { attachNeonDatabase, PlatformApiError, waitForDatabaseReady } from './platform.js';
+import { attachNeonDatabase, createServerProject, PlatformApiError, waitForDatabaseReady } from './platform.js';
 
 /**
  * Build a fresh Response every time — a `Response` body is single-use, and
@@ -44,14 +44,66 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe('createServerProject', () => {
+  it('marks projects as factory-enabled', async () => {
+    cliAuth.platformFetch.mockImplementationOnce(
+      async () =>
+        new Response(JSON.stringify({ project: { id: 'proj_1', slug: 'my-factory', name: 'My Factory' } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    );
+
+    await createServerProject({ token: 'wos-token', orgId: 'org_123', name: 'My Factory', region: 'eu' });
+
+    expect(cliAuth.platformFetch).toHaveBeenCalledWith(
+      'https://platform.example.test/v1/server/projects',
+      expect.objectContaining({
+        body: JSON.stringify({ name: 'My Factory', region: 'eu', factoryEnabled: true }),
+      }),
+    );
+  });
+});
+
 describe('attachNeonDatabase', () => {
+  it('passes the selected Neon region to the database endpoint', async () => {
+    cliAuth.platformFetch.mockImplementationOnce(
+      async () =>
+        new Response(JSON.stringify({ database: { id: 'db_1', status: 'provisioning' } }), {
+          status: 201,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    );
+
+    await attachNeonDatabase({
+      token: 'wos-token',
+      orgId: 'org_123',
+      projectId: 'proj_1',
+      name: 'my-factory',
+      regionId: 'aws-eu-central-1',
+    });
+
+    expect(cliAuth.platformFetch).toHaveBeenCalledWith(
+      'https://platform.example.test/v1/server/projects/proj_1/databases',
+      expect.objectContaining({
+        body: JSON.stringify({ kind: 'neon', name: 'my-factory', regionId: 'aws-eu-central-1' }),
+      }),
+    );
+  });
+
   it('surfaces the admin-role hint when the platform returns 403', async () => {
     cliAuth.platformFetch.mockImplementationOnce(
       async () => new Response(JSON.stringify({ detail: 'forbidden' }), { status: 403 }),
     );
 
     await expect(
-      attachNeonDatabase({ token: 'wos-token', orgId: 'org_123', projectId: 'proj_1', name: 'my-factory' }),
+      attachNeonDatabase({
+        token: 'wos-token',
+        orgId: 'org_123',
+        projectId: 'proj_1',
+        name: 'my-factory',
+        regionId: 'aws-us-west-2',
+      }),
     ).rejects.toMatchObject({
       status: 403,
       message: expect.stringContaining('admin role'),

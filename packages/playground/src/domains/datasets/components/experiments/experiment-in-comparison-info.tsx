@@ -2,9 +2,10 @@ import type { DatasetExperiment } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Chip } from '@mastra/playground-ui/components/Chip';
 import type { ChipProps } from '@mastra/playground-ui/components/Chip';
-import { TextAndIcon } from '@mastra/playground-ui/components/Text';
+import { getShortId, TextAndIcon } from '@mastra/playground-ui/components/Text';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { format } from 'date-fns';
-import { LayersIcon, TargetIcon, CalendarIcon, ArrowRightIcon, ArrowLeftIcon } from 'lucide-react';
+import { LayersIcon, TargetIcon, CalendarIcon, ArrowRightIcon, ArrowLeftIcon, HashIcon } from 'lucide-react';
 import { useLinkComponent } from '@/lib/framework';
 
 const typeConfig: Record<
@@ -38,10 +39,18 @@ export function ExperimentInComparisonInfo({ datasetId, experiment, type }: Expe
   }
 
   const createdAt = experiment.createdAt ? new Date(experiment.createdAt) : null;
+  const shortId = getShortId(experiment.id) ?? experiment.id;
+  const displayName = experiment.name || shortId;
+
+  const experimentLink = (
+    <Button as={Link} href={`/datasets/${datasetId}/experiments/${experiment.id}`}>
+      <span className="min-w-0 truncate">{displayName}</span>
+    </Button>
+  );
 
   return (
-    <div className={`grid border-2 border-border1 rounded-lg p-5 gap-3 ${customStyle}`}>
-      <div className="flex items-center gap-3 w-full overflow-clip">
+    <div className={`border-border1 grid gap-3 rounded-lg border-2 p-5 ${customStyle}`}>
+      <div className="flex w-full items-center gap-3 overflow-clip">
         {type === 'contender' && (
           <Chip size="small" color={color}>
             {label}
@@ -49,9 +58,14 @@ export function ExperimentInComparisonInfo({ datasetId, experiment, type }: Expe
           </Chip>
         )}
 
-        <Button as={Link} href={`/datasets/${datasetId}/experiments/${experiment.id}`}>
-          <span className="truncate min-w-0">{experiment.id}</span>
-        </Button>
+        {experiment.description ? (
+          <Tooltip>
+            <TooltipTrigger asChild>{experimentLink}</TooltipTrigger>
+            <TooltipContent>{experiment.description}</TooltipContent>
+          </Tooltip>
+        ) : (
+          experimentLink
+        )}
 
         {type === 'baseline' && (
           <Chip size="small" color={color}>
@@ -60,7 +74,12 @@ export function ExperimentInComparisonInfo({ datasetId, experiment, type }: Expe
         )}
       </div>
 
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-ui-sm text-neutral3">
+      <div className="text-ui-sm text-neutral3 flex flex-wrap gap-x-4 gap-y-1">
+        {experiment.name && (
+          <TextAndIcon>
+            <HashIcon /> {shortId}
+          </TextAndIcon>
+        )}
         <TextAndIcon>
           <TargetIcon /> {experiment.targetType} / {experiment.targetId}
         </TextAndIcon>

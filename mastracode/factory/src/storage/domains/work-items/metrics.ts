@@ -75,18 +75,30 @@ export interface FactoryMetrics {
   }[];
 }
 
-/** Parse an untrusted `from`/`to` query param (ISO date or datetime) to epoch ms. */
-function parseRangeParam(value: unknown): number | undefined {
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+/** Datetime carrying an explicit `Z` or `±HH:MM` offset. */
+const ZONED_DATETIME_RE = /(?:[Zz]|[+-]\d{2}:?\d{2})$/;
+
+function parseRangeParam(value: unknown, boundary: 'from' | 'to'): number | undefined {
   if (typeof value !== 'string' || value.length === 0) return undefined;
+  const dateOnly = DATE_ONLY_RE.test(value);
+  // Timezone-less datetimes are parsed as server-local by Date.parse, so the
+  // window would shift by deployment region — reject them as invalid.
+  if (!dateOnly && !ZONED_DATETIME_RE.test(value)) return undefined;
   const time = Date.parse(value);
-  return Number.isNaN(time) ? undefined : time;
+  if (Number.isNaN(time)) return undefined;
+  return boundary === 'to' && dateOnly ? time + DAY_MS : time;
+}
+
+function utcDayStart(time: number): number {
+  return Date.parse(`${utcDay(time)}T00:00:00Z`);
 }
 
 /**
- * Resolve untrusted `from`/`to` query params into a bounded epoch-ms window.
- * Defaults to the last {@link DEFAULT_METRICS_WINDOW} days, clamps the end to
- * `now`, falls back to the default span when the ordering is invalid, and caps
- * the span at {@link MAX_METRICS_WINDOW} days so the throughput array stays bounded.
+ * Resolve untrusted `from`/`to` into a bounded half-open UTC window. A date-only
+ * `to` covers the whole day; an open/future end resolves to the end of the
+ * current UTC day (not `now`) so an event at this instant stays inside the
+ * window instead of on its excluded edge.
  */
 export function parseMetricsRange(
   fromParam: unknown,
@@ -94,11 +106,14 @@ export function parseMetricsRange(
   now: Date,
 ): { windowStart: number; windowEnd: number } {
   const nowMs = now.getTime();
-  const windowEnd = Math.min(parseRangeParam(toParam) ?? nowMs, nowMs);
-  const parsedFrom = parseRangeParam(fromParam);
-  const defaultStart = windowEnd - DEFAULT_METRICS_WINDOW * DAY_MS;
+  const endOfToday = utcDayStart(nowMs) + DAY_MS;
+  const requestedEnd = parseRangeParam(toParam, 'to') ?? endOfToday;
+  const windowEnd = Math.min(requestedEnd, endOfToday);
+  const lastIncludedDay = utcDayStart(windowEnd - 1);
+  const defaultStart = lastIncludedDay - (DEFAULT_METRICS_WINDOW - 1) * DAY_MS;
+  const parsedFrom = parseRangeParam(fromParam, 'from');
   let windowStart = parsedFrom !== undefined && parsedFrom < windowEnd ? parsedFrom : defaultStart;
-  const earliestStart = windowEnd - MAX_METRICS_WINDOW * DAY_MS;
+  const earliestStart = lastIncludedDay - (MAX_METRICS_WINDOW - 1) * DAY_MS;
   if (windowStart < earliestStart) windowStart = earliestStart;
   return { windowStart, windowEnd };
 }
@@ -154,19 +169,16 @@ export function computeFactoryMetrics(
   const earliestItemAt = Number.isFinite(earliest) ? new Date(earliest).toISOString() : null;
 
   // ── Throughput + cycle time (completed in window) ─────────────────────────
-  // Gap-fill one bucket per whole UTC day covered by the window. Start at the
-  // first midnight at or after `windowStart` so a rolling "last N days" yields N
-  // buckets (the partial opening day isn't a full day and is dropped).
+  // Gap-fill every UTC calendar date intersecting the half-open window.
   const throughputByDay = new Map<string, number>();
-  let firstDay = Date.parse(`${utcDay(windowStart)}T00:00:00Z`);
-  if (firstDay < windowStart) firstDay += DAY_MS;
-  for (let day = firstDay; day <= windowEnd; day += DAY_MS) {
+  const firstDay = utcDayStart(windowStart);
+  for (let day = firstDay; day < windowEnd; day += DAY_MS) {
     throughputByDay.set(utcDay(day), 0);
   }
   const cycleSamples: number[] = [];
   for (const item of items) {
     const doneAt = completedAt(item);
-    if (doneAt === undefined || doneAt < windowStart || doneAt > windowEnd) continue;
+    if (doneAt === undefined || doneAt < windowStart || doneAt >= windowEnd) continue;
     const day = utcDay(doneAt);
     throughputByDay.set(day, (throughputByDay.get(day) ?? 0) + 1);
     cycleSamples.push(Math.max(0, doneAt - item.createdAt.getTime()));
@@ -178,7 +190,7 @@ export function computeFactoryMetrics(
     for (const entry of item.stageHistory) {
       if (entry.exitedAt === undefined || TERMINAL_STAGES.has(entry.stage)) continue;
       const exited = parseTime(entry.exitedAt);
-      if (exited < windowStart || exited > windowEnd) continue;
+      if (exited < windowStart || exited >= windowEnd) continue;
       const duration = Math.max(0, exited - parseTime(entry.enteredAt));
       const samples = durationsByStage.get(entry.stage) ?? [];
       samples.push(duration);
@@ -220,7 +232,7 @@ export function computeFactoryMetrics(
   let transitionsTotal = 0;
   let transitionsHuman = 0;
   for (const item of items) {
-    if (item.createdAt.getTime() >= windowStart) {
+    if (item.createdAt.getTime() >= windowStart && item.createdAt.getTime() < windowEnd) {
       const source = item.externalSource
         ? `${item.externalSource.integrationId}:${item.externalSource.type}`
         : 'manual';
@@ -228,7 +240,7 @@ export function computeFactoryMetrics(
     }
     for (const entry of item.stageHistory) {
       const entered = parseTime(entry.enteredAt);
-      if (entered < windowStart || entered > windowEnd) continue;
+      if (entered < windowStart || entered >= windowEnd) continue;
       transitionsTotal += 1;
       if (!isAutomationActor(entry.by)) transitionsHuman += 1;
     }
@@ -245,7 +257,7 @@ export function computeFactoryMetrics(
       const entry = item.stageHistory[i]!;
       if (entry.exitedAt === undefined || TERMINAL_STAGES.has(entry.stage)) continue;
       const exited = parseTime(entry.exitedAt);
-      if (exited < windowStart || exited > nowMs) continue;
+      if (exited < windowStart || exited >= windowEnd) continue;
       let row = automationByStage.get(entry.stage);
       if (!row) {
         row = {
@@ -272,7 +284,7 @@ export function computeFactoryMetrics(
   }
 
   return {
-    windowDays: Math.round((windowEnd - windowStart) / DAY_MS),
+    windowDays: throughputByDay.size,
     earliestItemAt,
     throughput: [...throughputByDay.entries()]
       .map(([date, count]) => ({ date, count }))

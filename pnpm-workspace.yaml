@@ -2,6 +2,7 @@ packages:
   - mastracode/sdk
   - mastracode/tui
   - mastracode/factory
+  - mastracode/factory-ui
   - mastracode/mastra-factory
   - docs
   - packages/_vendored/*
@@ -45,11 +46,11 @@ catalog:
   vitest: 4.1.10
   zod: ^4.4.3
   tsx: ^4.23.1
+  oxfmt: 0.59.0
 
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
   '@earendil-works/pi-tui@0.80.6': patches/@earendil-works__pi-tui@0.80.6.patch
-  tsup@8.5.1: patches/tsup@8.5.1.patch
 
 packageExtensions:
   '@ai-sdk/provider-utils@3.0.25':
@@ -140,6 +141,10 @@ minimumReleaseAgeExclude:
   - svgo@3.3.4
   # Renovate security update: @hono/node-server@2.0.10
   - "@hono/node-server@2.0.10"
+  # Renovate security update: brace-expansion@2.1.2
+  - brace-expansion@2.1.2
+  # Renovate security update: react-router@7.18.0
+  - react-router@7.18.0
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
@@ -155,6 +160,8 @@ trustPolicyExclude:
   # without the trusted-publisher evidence that older @mesadev/sdk versions had.
   - '@mesadev/sdk@0.38.0'
 overrides:
+  # Temporarily pinning to 7.2.0; will unpin shortly.
+  bson: 7.2.0
   typescript: ^6.0.3
   '@types/node': 22.19.15
   # Capped below 2: cookie@2 renamed parse/serialize to parseCookie/stringifyCookie,
@@ -200,8 +207,8 @@ overrides:
   form-data@<2.5.6: 2.5.6
   form-data@>=4.0.0 <4.0.6: 4.0.6
   brace-expansion@<1.1.13: 1.1.13
-  brace-expansion@>=2.0.0 <2.0.3: 2.0.3
-  '@clerk/shared@>=3.0.0 <3.47.5': 3.47.7
+  brace-expansion@>=2.0.0 <2.0.3: 2.1.2
+  '@clerk/shared@>=3.0.0 <3.47.5': 3.47.8
   js-cookie@>=3.0.0 <3.0.7: 3.0.7
   path-to-regexp@<0.1.13: 0.1.13
   joi@>=17.0.0 <17.13.4: 17.13.4
@@ -363,3 +370,4 @@ allowBuilds:
   node-liblzma: false
   workerd: false
   braintrust: false
+  isolated-vm: true

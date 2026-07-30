@@ -8,13 +8,15 @@ import { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
 import { buildProviderAccess, listModelPacks } from '@mastra/factory/routes/config';
+import type { PackContext } from '@mastra/factory/routes/config';
 
 /**
  * The web settings panel surfaces model packs through the same primitives the
  * TUI's `/models-pack` command uses: provider-access derivation +
- * `getAvailableModePacks`, and `customModelPacks` in global settings. These
- * tests exercise the server-side bridge against fakes and an isolated settings
- * file so the user's real settings are never touched.
+ * `getAvailableModePacks`. Custom packs live in the model-packs storage domain
+ * (the TUI keeps `customModelPacks` in global settings). These tests exercise
+ * the server-side bridge against fakes and an isolated settings file so the
+ * user's real settings are never touched.
  */
 describe('web model packs (TUI /models-pack parity)', () => {
   const catalog = (models: { provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }[]) => ({
@@ -60,10 +62,11 @@ describe('web model packs (TUI /models-pack parity)', () => {
     // Sanity: anthropic is reachable, so the built-in anthropic pack must list.
     expect(access.anthropic).toBe('apikey');
 
+    const emptyPackStorage = { list: async () => [] } as unknown as PackContext['storage'];
     const packs = await listModelPacks({
       controller: catalog([{ provider: 'anthropic', hasApiKey: true }]),
       authStorage: auth,
-      packContext: { mode: 'local' },
+      packContext: { storage: emptyPackStorage, orgId: 'local', userId: 'local' },
       activePackId: null,
     });
     const anthropic = packs.find(p => p.id === 'anthropic');

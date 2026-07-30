@@ -5,12 +5,12 @@ import { cn } from '@/lib/utils';
 const navItemVariants = cva('flex min-w-0 cursor-pointer items-center rounded-lg whitespace-nowrap text-neutral3', {
   variants: {
     size: {
-      default: 'h-9 text-ui-md',
-      sm: 'h-8 text-ui-sm',
+      default: 'h-8 text-ui-md',
+      sm: 'h-7 text-ui-sm',
     },
   },
   defaultVariants: {
-    size: 'default',
+    size: 'sm',
   },
 });
 

@@ -71,6 +71,10 @@ function parseUpdateInput(value: unknown): UpdateFactoryProjectInput | null {
     if (defaultModelId === false) return null;
     patch.defaultModelId = defaultModelId ?? null;
   }
+  if (input.slackWorkItemsEnabled !== undefined) {
+    if (typeof input.slackWorkItemsEnabled !== 'boolean') return null;
+    patch.slackWorkItemsEnabled = input.slackWorkItemsEnabled;
+  }
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
@@ -315,6 +319,14 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
                 orgId: tenant.orgId,
                 id: connection.installationId,
               });
+              // Skip orphaned connections whose installation was pruned (e.g.
+              // the user uninstalled the GitHub App). Otherwise
+              // `projectRepositories.list` throws `requireConnection` and the
+              // whole endpoint 500s, which hangs the web UI on the page
+              // loader for every project. New code cascade-deletes these on
+              // installation removal, but this defensive skip lets already-
+              // orphaned rows in existing databases self-heal on read.
+              if (!installation) continue;
               const links = await handle.projectRepositories.list({ orgId: tenant.orgId, connectionId: connection.id });
               connections.push({
                 ...connection,
