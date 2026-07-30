@@ -131,6 +131,9 @@ export function useStartFactoryRun() {
           queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, sessionId, undefined),
         }),
         queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryId) }),
+        // The run just minted a session. Without this the sidebar keeps serving
+        // its cached list and the session only appears once some later
+        // navigation happens to refetch it.
         queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository.projectRepositoryId) }),
       ]);
       void navigate(`/factories/${factoryId}/workspaces/${sessionId}/threads/${prepared.threadId}`);

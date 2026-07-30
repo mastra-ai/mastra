@@ -39,7 +39,7 @@ afterEach(() => {
 function renderMobileHeader() {
   mockMobileViewport(true);
   render(
-    <MemoryRouter initialEntries={['/settings/general']}>
+    <MemoryRouter initialEntries={['/settings/preferences']}>
       <MainSidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
         <ChatHeader mobileContent={<SettingsHeader autoFocus placement="mobile" />} />
         <SidebarStateProbe />
@@ -53,8 +53,9 @@ describe('ChatHeader', () => {
     renderMobileHeader();
 
     const mobileHeader = screen.getByRole('banner');
-    expect(within(mobileHeader).getByRole('heading', { name: 'General' })).toHaveFocus();
+    expect(within(mobileHeader).getByRole('heading', { name: 'Preferences' })).toHaveFocus();
     expect(within(mobileHeader).getByRole('button', { name: 'Close settings' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
   });
 
   it('opens the design-system mobile sidebar', async () => {
@@ -83,10 +84,12 @@ describe('ChatHeader', () => {
     const trigger = screen.getByRole('button', { name: 'Toggle sidebar' });
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByTestId('desktop-sidebar-state')).toHaveTextContent('collapsed');
+    expect(screen.queryByLabelText('Open navigation menu')).not.toBeInTheDocument();
 
     await userEvent.click(trigger);
 
     expect(screen.getByTestId('desktop-sidebar-state')).toHaveTextContent('default');
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument();
   });
 });

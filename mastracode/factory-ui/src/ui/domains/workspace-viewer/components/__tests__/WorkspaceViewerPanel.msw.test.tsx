@@ -82,12 +82,11 @@ describe('WorkspaceViewerPanel', () => {
 
     renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} renderedPaths={renderedPaths} />);
 
-    expect(await screen.findByText('Files')).toBeInTheDocument();
     await userEvent.click(await screen.findByRole('button', { name: 'Artifacts' }));
     expect(await screen.findByText('No artifacts yet. Session files created will appear here.')).toBeInTheDocument();
   });
 
-  it('expands folders inline and opens the selected file viewer left of the browser', async () => {
+  it('expands folders inline and swaps the browser for the selected file viewer', async () => {
     const fileRequests = installHandlers();
     const user = userEvent.setup();
     renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} renderedPaths={renderedPaths} />);
@@ -115,7 +114,7 @@ describe('WorkspaceViewerPanel', () => {
     const viewer = await screen.findByLabelText('Workspace file viewer');
     expect(viewer).toBeInTheDocument();
     expect(await screen.findByText('Notes')).toBeInTheDocument();
-    expect(screen.getByLabelText('Workspace files')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Workspace files')).not.toBeInTheDocument();
     expect(fileRequests).toContain('.artifacts/understand-pr/HISTORY.md');
     expect(fileRequests).not.toContain('understand-pr/HISTORY.md');
   });
