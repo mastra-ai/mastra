@@ -46,7 +46,7 @@ The plan must be executable by someone with no access to this conversation beyon
 
 End the run with a single `factory_transition_work_item` call. Take the current stage and `expectedRevision` from the `factory-phase` signal.
 
-Request `stage: "execute"` (work board) with `rationale` (max 1000 chars) — a few sentences: what the plan delivers and why this approach.
+Request `stage: "execute"` (work board) with `rationale` — a few sentences: what the plan delivers and why this approach. Keep it brief; overly long rationales are truncated.
 
 Do not call `submit_plan` — that is the interactive planning gate; in the Factory, the plan message in this conversation is the handoff.
 

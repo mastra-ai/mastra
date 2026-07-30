@@ -10,11 +10,21 @@ import type { FactoryTransitionService } from './transition-service.js';
 import { FACTORY_RULE_STAGES } from './types.js';
 import type { FactoryRuleBoard } from './types.js';
 
+const MAX_RATIONALE_LENGTH = 1_000;
+
 const transitionInputSchema = z
   .object({
     stage: z.enum(FACTORY_RULE_STAGES),
     expectedRevision: z.number().int().positive(),
-    rationale: z.string().trim().min(1).max(1_000),
+    // Providers strip maxLength from the JSON schema and models can't count characters, so a
+    // hard cap invites overshoot-retry loops at the end of every run. Accept and clamp instead.
+    rationale: z
+      .string()
+      .trim()
+      .min(1)
+      .transform(value =>
+        value.length <= MAX_RATIONALE_LENGTH ? value : `${value.slice(0, MAX_RATIONALE_LENGTH - 1)}…`,
+      ),
   })
   .strict();
 

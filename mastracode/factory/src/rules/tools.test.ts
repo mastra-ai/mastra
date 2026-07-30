@@ -414,8 +414,33 @@ describe('factory_transition_work_item', () => {
     expect(
       schema.safeParse({ stage: 'planning', expectedRevision: 1, rationale: 'Ready.', workItemId: 'forged' }).success,
     ).toBe(false);
-    expect(schema.safeParse({ stage: 'planning', expectedRevision: 1, rationale: 'x'.repeat(1_001) }).success).toBe(
-      false,
-    );
+    expect(schema.safeParse({ stage: 'planning', expectedRevision: 1, rationale: '   ' }).success).toBe(false);
+  });
+
+  it('accepts and clamps an overlong rationale instead of rejecting it', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepareBoundItem(storage);
+    const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) });
+    const tools = await createFactoryTransitionTools({
+      requestContext: requestContext(),
+      storage,
+      transitionService: service,
+    });
+    const schema = (tools.factory_transition_work_item as ExecutableTool).inputSchema;
+
+    const overlong = schema.safeParse({ stage: 'planning', expectedRevision: 1, rationale: 'x'.repeat(1_792) }) as {
+      success: boolean;
+      data?: { rationale: string };
+    };
+    expect(overlong.success).toBe(true);
+    expect(overlong.data?.rationale).toHaveLength(1_000);
+    expect(overlong.data?.rationale.endsWith('…')).toBe(true);
+
+    const exact = schema.safeParse({ stage: 'planning', expectedRevision: 1, rationale: 'y'.repeat(1_000) }) as {
+      success: boolean;
+      data?: { rationale: string };
+    };
+    expect(exact.success).toBe(true);
+    expect(exact.data?.rationale).toBe('y'.repeat(1_000));
   });
 });

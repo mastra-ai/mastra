@@ -64,7 +64,7 @@ Then make your terminal `factory_transition_work_item` call. Take the current st
 - **Issue is valid and actionable** → `stage: "planning"` (work board).
 - **Issue should be closed** (duplicate, working-as-designed, not reproducible, invalid) → `stage: "done"` with the close rationale.
 
-`rationale` (max 1000 chars) — the triage verdict and headline understanding in a few sentences (e.g. "Genuine regression from <commit>; root cause understood; ready to plan a fix").
+`rationale` — the triage verdict and headline understanding in a few sentences (e.g. "Genuine regression from <commit>; root cause understood; ready to plan a fix"). Keep it brief; overly long rationales are truncated.
 
 The transition is governed by the server's rules. If it is rejected, read the stated reason, address it (re-check the revision from the latest `factory-phase` signal, adjust the verdict if the rejection contests it), and retry once corrected. Once the transition succeeds, report the verdict and stop.
 
