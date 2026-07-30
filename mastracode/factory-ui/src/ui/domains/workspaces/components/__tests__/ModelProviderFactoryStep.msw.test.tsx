@@ -57,10 +57,11 @@ describe('Model provider onboarding', () => {
   });
 
   describe('when the provider catalog contains sign-in and API-key providers', () => {
-    it('keeps sign-in providers on top and finds API-key providers through search', async () => {
+    it('shows API-key providers by default and filters them through search', async () => {
       const providers: ProviderInfo[] = [
         { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: [] } },
         { provider: 'amazon-bedrock', source: 'none' },
+        { provider: 'groq', source: 'none' },
       ];
       registerAuthHandler();
       server.use(
@@ -72,11 +73,12 @@ describe('Model provider onboarding', () => {
       renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={vi.fn()} />);
 
       expect(await screen.findByRole('button', { name: 'Continue with Anthropic' })).toBeInTheDocument();
-      // Unconnected API-key providers stay hidden until searched for.
-      expect(screen.queryByRole('button', { name: 'Amazon Bedrock' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Amazon Bedrock' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Groq' })).toBeInTheDocument();
       await user.type(screen.getByRole('searchbox', { name: 'Search model providers' }), 'bedrock');
 
-      expect(await screen.findByRole('button', { name: 'Amazon Bedrock' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Amazon Bedrock' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Groq' })).not.toBeInTheDocument();
       // The sign-in section is a fixed top-level section — search never hides it.
       expect(screen.getByRole('button', { name: 'Continue with Anthropic' })).toBeInTheDocument();
     });
@@ -195,9 +197,8 @@ describe('Model provider onboarding', () => {
 
       renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={onComplete} />);
 
-      // The unconnected provider only appears through search; picking its
+      // Unconnected providers are browseable without searching; picking the
       // badge opens the API key dialog directly.
-      await user.type(await screen.findByRole('searchbox', { name: 'Search model providers' }), 'openai');
       await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
       const dialog = within(screen.getByRole('dialog'));
       await user.type(dialog.getByLabelText('API key for OpenAI'), 'sk-test');
