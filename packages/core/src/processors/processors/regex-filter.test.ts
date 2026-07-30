@@ -399,6 +399,205 @@ describe('RegexFilterProcessor', () => {
     });
   });
 
+  describe('onViolation reporting', () => {
+    function createFilter(options: Partial<Record<string, unknown>> = {}) {
+      const violations: any[] = [];
+      const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact', ...options } as any);
+      filter.onViolation = violation => {
+        violations.push(violation);
+      };
+      return { filter, violations };
+    }
+
+    it('reports the rule, offset, length, and replacement', async () => {
+      const { filter, violations } = createFilter();
+
+      await filter.processInput(createInputArgs([createMessage('Contact user@example.com please')]));
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].processorId).toBe('regex-filter');
+      expect(violations[0].message).toContain('email');
+      expect(violations[0].detail).toMatchObject({ strategy: 'redact', phase: 'processInput' });
+      expect(violations[0].detail.redactions).toEqual([
+        { rule: 'email', index: 8, length: 16, replacement: '[EMAIL]' },
+      ]);
+    });
+
+    it('reports offsets into the original text, in document order', async () => {
+      const { filter, violations } = createFilter();
+
+      const text = 'ssn 123-45-6789 mail a@b.com';
+      await filter.processInput(createInputArgs([createMessage(text)]));
+
+      const [first, second] = violations[0].detail.redactions;
+      expect(first.rule).toBe('ssn');
+      expect(text.slice(first.index, first.index + first.length)).toBe('123-45-6789');
+      expect(second.rule).toBe('email');
+      expect(text.slice(second.index, second.index + second.length)).toBe('a@b.com');
+    });
+
+    it('lists the overlapping rules for a merged region', async () => {
+      const { filter, violations } = createFilter();
+
+      await filter.processInput(createInputArgs([createMessage('card 4111111111111111')]));
+
+      const [redaction] = violations[0].detail.redactions;
+      expect(redaction.rule).toBe('credit-card');
+      expect(redaction.overlappingRules).toEqual(expect.arrayContaining(['phone', 'credit-card']));
+    });
+
+    it('omits overlappingRules when only one rule matched', async () => {
+      const { filter, violations } = createFilter();
+
+      await filter.processInput(createInputArgs([createMessage('mail a@b.com')]));
+
+      expect(violations[0].detail.redactions[0]).not.toHaveProperty('overlappingRules');
+    });
+
+    it('omits the redacted value by default', async () => {
+      const { filter, violations } = createFilter();
+
+      await filter.processInput(createInputArgs([createMessage('mail a@b.com')]));
+
+      expect(violations[0].detail.redactions[0]).not.toHaveProperty('value');
+    });
+
+    it('includes the redacted value when opted in', async () => {
+      const { filter, violations } = createFilter({ includeRedactedValues: true });
+
+      await filter.processInput(createInputArgs([createMessage('mail a@b.com')]));
+
+      expect(violations[0].detail.redactions[0].value).toBe('a@b.com');
+    });
+
+    it('identifies the message and part a redaction came from', async () => {
+      const { filter, violations } = createFilter();
+
+      const message: MastraDBMessage = {
+        id: 'msg-fixed',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text' as const, text: 'clean text' },
+            { type: 'text' as const, text: 'mail a@b.com' },
+          ],
+        },
+        createdAt: new Date(),
+      } as MastraDBMessage;
+
+      await filter.processInput(createInputArgs([message]));
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].detail.messageId).toBe('msg-fixed');
+      expect(violations[0].detail.partIndex).toBe(1);
+    });
+
+    it('identifies the message but no part for string content', async () => {
+      const { filter, violations } = createFilter();
+
+      const message = { ...createMessage('placeholder'), id: 'msg-string', content: 'mail a@b.com' } as any;
+      await filter.processInput(createInputArgs([message]));
+
+      expect(violations[0].detail.messageId).toBe('msg-string');
+      expect(violations[0].detail).not.toHaveProperty('partIndex');
+    });
+
+    it('reports stream chunks without a message or part', async () => {
+      const { filter, violations } = createFilter();
+
+      const part = {
+        type: 'text-delta',
+        runId: 'r',
+        from: 'AGENT',
+        payload: { id: 't1', text: 'mail a@b.com' },
+      } as unknown as ChunkType;
+      await filter.processOutputStream(createStreamArgs(part));
+
+      expect(violations[0].detail.phase).toBe('processOutputStream');
+      expect(violations[0].detail).not.toHaveProperty('messageId');
+      expect(violations[0].detail).not.toHaveProperty('partIndex');
+    });
+
+    it('reports output results with the matching phase', async () => {
+      const { filter, violations } = createFilter();
+
+      await filter.processOutputResult(createOutputResultArgs([createMessage('mail a@b.com', 'assistant')]));
+
+      expect(violations[0].detail.phase).toBe('processOutputResult');
+    });
+
+    it('waits for an async callback before returning', async () => {
+      const order: string[] = [];
+      const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' });
+      filter.onViolation = async () => {
+        await new Promise(resolve => setTimeout(resolve, 5));
+        order.push('callback');
+      };
+
+      await filter.processInput(createInputArgs([createMessage('mail a@b.com')]));
+      order.push('after');
+
+      expect(order).toEqual(['callback', 'after']);
+    });
+
+    it('stays synchronous when no callback is attached', () => {
+      const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' });
+
+      const result = filter.processInput(createInputArgs([createMessage('mail a@b.com')]));
+
+      expect(result).not.toBeInstanceOf(Promise);
+      expect(((result as MastraDBMessage[])[0].content as any).parts[0].text).toBe('mail [EMAIL]');
+    });
+
+    it('is not called by the processor for the warn strategy', () => {
+      const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const { filter, violations } = createFilter({ strategy: 'warn' });
+
+      filter.processInput(createInputArgs([createMessage('mail a@b.com')]));
+
+      expect(violations).toHaveLength(0);
+      spy.mockRestore();
+    });
+
+    it('is not called by the processor for the block strategy', () => {
+      const { filter, violations } = createFilter({ strategy: 'block' });
+
+      expect(() => filter.processInput(createInputArgs([createMessage('mail a@b.com')]))).toThrow(TripWire);
+      expect(violations).toHaveLength(0);
+    });
+
+    it('is not called when nothing matched', async () => {
+      const { filter, violations } = createFilter();
+
+      await filter.processInput(createInputArgs([createMessage('nothing sensitive here')]));
+
+      expect(violations).toHaveLength(0);
+    });
+
+    it('still redacts when the callback throws', async () => {
+      const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' });
+      filter.onViolation = () => {
+        throw new Error('audit sink down');
+      };
+
+      const result = (await filter.processInput(createInputArgs([createMessage('mail a@b.com')]))) as MastraDBMessage[];
+
+      expect((result[0].content as any).parts[0].text).toBe('mail [EMAIL]');
+    });
+
+    it('still redacts when an async callback rejects', async () => {
+      const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' });
+      filter.onViolation = async () => {
+        throw new Error('audit sink down');
+      };
+
+      const result = (await filter.processInput(createInputArgs([createMessage('mail a@b.com')]))) as MastraDBMessage[];
+
+      expect((result[0].content as any).parts[0].text).toBe('mail [EMAIL]');
+    });
+  });
+
   describe('processInput - warn strategy', () => {
     it('logs warning and passes through', () => {
       const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
