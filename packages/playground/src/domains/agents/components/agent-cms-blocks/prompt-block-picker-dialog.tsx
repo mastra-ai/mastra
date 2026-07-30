@@ -1,3 +1,4 @@
+import { DataList } from '@mastra/playground-ui/components/DataList';
 import {
   Dialog,
   DialogContent,
@@ -14,6 +15,8 @@ import { useState } from 'react';
 
 import { useStoredPromptBlocks } from '@/domains/prompt-blocks';
 
+const PROMPT_BLOCKS_PER_PAGE = 50;
+
 interface PromptBlockPickerDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -22,9 +25,11 @@ interface PromptBlockPickerDialogProps {
 
 export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: PromptBlockPickerDialogProps) {
   const [search, setSearch] = useState('');
-  const { data, isLoading } = useStoredPromptBlocks();
+  const [page, setPage] = useState(0);
+  const { data, isLoading } = useStoredPromptBlocks({ page, perPage: PROMPT_BLOCKS_PER_PAGE });
 
   const blocks = data?.promptBlocks ?? [];
+  const hasMore = data?.hasMore ?? false;
   const filtered = search
     ? blocks.filter(
         b =>
@@ -37,13 +42,20 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
     onSelect(blockId);
     onOpenChange(false);
     setSearch('');
+    setPage(0);
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) {
       setSearch('');
+      setPage(0);
     }
     onOpenChange(nextOpen);
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setPage(0);
   };
 
   return (
@@ -60,7 +72,7 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
               <input
                 type="text"
                 value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={e => handleSearchChange(e.target.value)}
                 placeholder="Search prompt blocks..."
                 className="text-ui-sm text-neutral6 placeholder:text-neutral3 flex-1 bg-transparent outline-hidden"
               />
@@ -99,6 +111,15 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
                   </button>
                 ))}
               </div>
+            )}
+
+            {(page > 0 || hasMore) && (
+              <DataList.Pagination
+                currentPage={page}
+                hasMore={hasMore}
+                onNextPage={() => setPage(p => p + 1)}
+                onPrevPage={() => setPage(p => Math.max(0, p - 1))}
+              />
             )}
           </div>
         </DialogBody>
