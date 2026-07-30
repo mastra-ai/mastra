@@ -6,6 +6,7 @@
 '@mastra/mongodb': minor
 '@mastra/spanner': minor
 '@mastra/client-js': minor
+'@mastra/react': minor
 '@mastra/server': minor
 '@mastra/inngest': patch
 '@mastra/memory': patch
@@ -170,6 +171,16 @@ await stored.delete();
 ```
 
 Workflow list/detail responses also gain an `origin` field (`'code' | 'stored'`) indicating how the workflow entered the live registry.
+
+---
+
+## `@mastra/react` — `WorkflowStepFactory` understands the new step entries
+
+`WorkflowStepFactory` resolves and renders the new serialized entry types:
+
+- New resolved kinds `agent-step` and `tool-step` with matching `AgentStep` / `ToolStep` renderer slots. Entries without a dedicated renderer still fall back to `UnknownStep`.
+- `map-step` now resolves from the dedicated `type: 'mapping'` entry (previously a generic `type: 'step'` entry carrying `mapConfig`), so `MapStep` renderers receive the mapping entry directly.
+- `nested-workflow-step` now also resolves from the first-class `type: 'workflow'` entry emitted for `.then(subWorkflow)`, which carries `workflowId` and the nested `serializedStepFlow`.
 
 ---
 
