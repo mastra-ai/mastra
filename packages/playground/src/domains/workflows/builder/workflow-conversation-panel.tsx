@@ -4,6 +4,7 @@ import { ChatComposer } from '@/domains/agent-builder/components/chat-primitives
 import { MessageList } from '@/domains/agent-builder/components/chat-primitives/message-list';
 import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
 import {
+  useStreamCancel,
   useStreamMessages,
   useStreamRunning,
   useStreamRunningDebounced,
@@ -42,6 +43,7 @@ function WorkflowConversationMessages() {
 function WorkflowConversationComposer() {
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const send = useStreamSend();
+  const cancel = useStreamCancel();
   const isRunning = useStreamRunningDebounced();
   const { draft, setDraft, trimmed, handleFormSubmit, handleKeyDown } = useChatDraft({
     onSubmit: message => {
@@ -59,10 +61,12 @@ function WorkflowConversationComposer() {
         onKeyDown={handleKeyDown}
         disabled={isRunning}
         isRunning={isRunning}
+        onCancel={cancel}
         canSubmit={trimmed.length > 0 && !isRunning}
         placeholder={hasSubmitted ? 'Ask for another change…' : 'Describe your workflow…'}
         inputTestId="workflow-builder-conversation-input"
         submitTestId="workflow-builder-conversation-submit"
+        cancelTestId="workflow-builder-conversation-cancel"
       />
     </div>
   );

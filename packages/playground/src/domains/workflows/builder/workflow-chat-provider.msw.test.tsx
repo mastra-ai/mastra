@@ -12,7 +12,11 @@ import type { WorkflowGenerationFailure } from './workflow-chat-provider';
 import { createLoadedWorkflowDraftAuthoringState, createWorkflowDraftAuthoringState } from './workflow-draft';
 import type { WorkflowDraftToolResult } from './workflow-draft-tools';
 import { createWorkflowDraftTools } from './workflow-draft-tools';
-import { useStreamMessages, useStreamSend } from '@/domains/agent-builder/contexts/stream-chat-context';
+import {
+  useStreamCancel,
+  useStreamMessages,
+  useStreamSend,
+} from '@/domains/agent-builder/contexts/stream-chat-context';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -39,6 +43,14 @@ function SendCapture({ onReady }: { onReady: (send: (message: string) => void) =
 function MessageCount() {
   const messages = useStreamMessages();
   return <div>{messages.length} messages</div>;
+}
+
+function CancelCapture({ onReady }: { onReady: (cancel: () => void) => void }) {
+  const cancel = useStreamCancel();
+  useEffect(() => {
+    onReady(cancel);
+  }, [cancel, onReady]);
+  return null;
 }
 
 function Providers({ children }: { children: ReactNode }) {
@@ -418,6 +430,114 @@ describe('WorkflowChatProvider', () => {
       const followUp = JSON.stringify(bodies[1]);
       expect(followUp).toContain('Original workflow request');
       expect(followUp).toContain('Loop through all 50 US states and greet each one');
+    });
+  });
+
+  describe('when the user stops a generation that is still streaming', () => {
+    async function renderStoppedHarness() {
+      // Stays open so the run is genuinely in flight when cancel is pressed.
+      registerStreamingHandlers();
+      const captured: { failure?: WorkflowGenerationFailure | null } = {};
+      let send: ((message: string) => void) | undefined;
+      let cancel: (() => void) | undefined;
+
+      render(
+        <Providers>
+          <WorkflowChatProvider
+            threadId="workflow-builder-stopped"
+            authoringState={createWorkflowDraftAuthoringState('stopped')}
+            initialMessages={[]}
+            createTools={() => ({})}
+            onGenerationFailure={next => (captured.failure = next)}
+          >
+            <SendCapture onReady={fn => (send = fn)} />
+            <CancelCapture onReady={fn => (cancel = fn)} />
+          </WorkflowChatProvider>
+        </Providers>,
+      );
+
+      await act(async () => {
+        send?.('Build a workflow that loops through every US state');
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      await act(async () => {
+        cancel?.();
+        await new Promise(resolve => setTimeout(resolve, 40));
+      });
+      return captured;
+    }
+
+    it('reports that the user stopped it rather than diagnosing the draft', async () => {
+      const harness = await renderStoppedHarness();
+
+      expect(harness.failure?.code).toBe('stopped-by-user');
+      expect(harness.failure?.message).toContain('You stopped this generation');
+    });
+
+    it('never blames the model for a run the user ended', async () => {
+      const harness = await renderStoppedHarness();
+
+      expect(harness.failure?.code).not.toBe('no-accepted-draft');
+      expect(harness.failure?.code).not.toBe('generation-failed');
+      expect(harness.failure?.message ?? '').not.toContain('Retry with more specific workflow steps');
+    });
+
+    it('does not let the stopped run report a failure against the next turn', async () => {
+      // The abort can settle at any time. If that late settle is still treated
+      // as the current turn ending, it fails a turn the user already restarted.
+      const controllers: ReadableStreamDefaultController[] = [];
+      server.use(
+        http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+        http.post(`${BASE_URL}/api/editor/workflow-builder/stream`, () => {
+          return new HttpResponse(
+            new ReadableStream({
+              start: controller => {
+                controllers.push(controller);
+              },
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          );
+        }),
+      );
+
+      const captured: { failure?: WorkflowGenerationFailure | null } = {};
+      let send: ((message: string) => void) | undefined;
+      let cancel: (() => void) | undefined;
+
+      render(
+        <Providers>
+          <WorkflowChatProvider
+            threadId="workflow-builder-stopped-stale"
+            authoringState={createWorkflowDraftAuthoringState('stopped-stale')}
+            initialMessages={[]}
+            createTools={() => ({})}
+            onGenerationFailure={next => (captured.failure = next)}
+          >
+            <SendCapture onReady={fn => (send = fn)} />
+            <CancelCapture onReady={fn => (cancel = fn)} />
+          </WorkflowChatProvider>
+        </Providers>,
+      );
+
+      await act(async () => {
+        send?.('Build a workflow that loops through every US state');
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      await act(async () => {
+        cancel?.();
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      // The user retries, then the abandoned first stream finally settles.
+      await act(async () => {
+        send?.('try again, keep it simpler');
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      await act(async () => {
+        controllers[0]?.close();
+        await new Promise(resolve => setTimeout(resolve, 40));
+      });
+
+      expect(captured.failure?.code ?? null).not.toBe('no-accepted-draft');
     });
   });
 

@@ -19,6 +19,10 @@ export interface ApprovalContextValue {
   declineToolCall: (toolCallId: string) => void;
 }
 
+export interface CancelContextValue {
+  cancel: () => void;
+}
+
 export const StreamRunningContext = createContext<RunningContextValue>({ isRunning: false });
 export const StreamMessagesContext = createContext<MessagesContextValue>({ messages: [] });
 export const StreamSendContext = createContext<SendContextValue>({ send: () => {} });
@@ -26,6 +30,7 @@ export const StreamApprovalContext = createContext<ApprovalContextValue>({
   approveToolCall: () => {},
   declineToolCall: () => {},
 });
+export const StreamCancelContext = createContext<CancelContextValue>({ cancel: () => {} });
 
 export const useStreamRunning = (): boolean => useContext(StreamRunningContext).isRunning;
 
@@ -38,6 +43,12 @@ export const useStreamRunningDebounced = (): boolean => useDebouncedRunning(useS
 export const useStreamMessages = (): MastraDBMessage[] => useContext(StreamMessagesContext).messages;
 export const useStreamSend = (): ((message: string) => void) => useContext(StreamSendContext).send;
 export const useStreamApproval = (): ApprovalContextValue => useContext(StreamApprovalContext);
+
+/**
+ * Aborts the in-flight run. Lives in its own context so mounting a stop control
+ * does not subscribe that component to message or running updates.
+ */
+export const useStreamCancel = (): (() => void) => useContext(StreamCancelContext).cancel;
 
 /**
  * Returns a callback that resubmits the most recent user prompt against the

@@ -7,12 +7,14 @@ import type { ReactNode } from 'react';
 import { useDebounce } from 'use-debounce';
 import {
   StreamApprovalContext,
+  StreamCancelContext,
   StreamMessagesContext,
   StreamRunningContext,
   StreamSendContext,
 } from './stream-chat-context';
 import type {
   ApprovalContextValue,
+  CancelContextValue,
   MessagesContextValue,
   RunningContextValue,
   SendContextValue,
@@ -50,6 +52,12 @@ export interface StreamChatProviderProps {
   onSendStart?: (message: string) => void;
   onSendComplete?: () => void;
   onSendError?: (error: Error) => void;
+  /**
+   * Fires instead of `onSendComplete`/`onSendError` when the run was cancelled
+   * by the user. Aborting resolves or rejects the in-flight send like any other
+   * ending, so consumers would otherwise report a stopped run as a failed one.
+   */
+  onSendCancel?: () => void;
   children: ReactNode;
 }
 
@@ -69,10 +77,11 @@ export const StreamChatProvider = ({
   onSendStart,
   onSendComplete,
   onSendError,
+  onSendCancel,
   children,
 }: StreamChatProviderProps) => {
   const threadSignalsEnabled = enableThreadSignals ?? window.MASTRA_AGENT_SIGNALS !== 'false';
-  const { messages, isRunning, sendMessage, approveToolCall, declineToolCall } = useChat({
+  const { messages, isRunning, sendMessage, approveToolCall, declineToolCall, cancelRun } = useChat({
     agentId,
     initialMessages,
     enableThreadSignals: threadSignalsEnabled,
@@ -89,6 +98,15 @@ export const StreamChatProvider = ({
   clientToolsRef.current = clientTools;
   const instructionsRef = useRef(extraInstructions);
   instructionsRef.current = extraInstructions;
+  const cancelRunRef = useRef(cancelRun);
+  cancelRunRef.current = cancelRun;
+  const onSendCancelRef = useRef(onSendCancel);
+  onSendCancelRef.current = onSendCancel;
+  // Identifies the run a settled `sendMessage` belongs to, so a cancellation
+  // only suppresses the send it actually aborted.
+  const sendRunRef = useRef(0);
+  const inFlightRunRef = useRef<number | undefined>(undefined);
+  const cancelledRunRef = useRef<number | undefined>(undefined);
 
   const send = useCallback(
     (message: string) => {
@@ -129,10 +147,20 @@ export const StreamChatProvider = ({
         payload.modelSettings = { ...payload.modelSettings, instructions };
       }
 
+      const run = ++sendRunRef.current;
+      inFlightRunRef.current = run;
+      // A cancelled run already reported itself at cancel time; an abort can
+      // settle late or not at all, so nothing here may speak for it again.
+      const settle = (report: () => void) => {
+        if (inFlightRunRef.current === run) inFlightRunRef.current = undefined;
+        if (cancelledRunRef.current === run) return;
+        report();
+      };
+
       onSendStart?.(message);
       void sendMessage(payload)
-        .then(() => onSendComplete?.())
-        .catch(error => onSendError?.(error instanceof Error ? error : new Error(String(error))));
+        .then(() => settle(() => onSendComplete?.()))
+        .catch(error => settle(() => onSendError?.(error instanceof Error ? error : new Error(String(error)))));
     },
     [
       sendMessage,
@@ -177,11 +205,24 @@ export const StreamChatProvider = ({
     [approve, decline],
   );
 
+  const cancel = useCallback(() => {
+    // A run that already settled has nothing to abort, and marking it cancelled
+    // would misreport the next send.
+    if (inFlightRunRef.current === undefined) return;
+    cancelledRunRef.current = inFlightRunRef.current;
+    inFlightRunRef.current = undefined;
+    cancelRunRef.current();
+    onSendCancelRef.current?.();
+  }, []);
+  const cancelValue = useMemo<CancelContextValue>(() => ({ cancel }), [cancel]);
+
   return (
     <StreamRunningContext.Provider value={runningValue}>
       <StreamMessagesContext.Provider value={messagesValue}>
         <StreamApprovalContext.Provider value={approvalValue}>
-          <StreamSendContext.Provider value={sendValue}>{children}</StreamSendContext.Provider>
+          <StreamCancelContext.Provider value={cancelValue}>
+            <StreamSendContext.Provider value={sendValue}>{children}</StreamSendContext.Provider>
+          </StreamCancelContext.Provider>
         </StreamApprovalContext.Provider>
       </StreamMessagesContext.Provider>
     </StreamRunningContext.Provider>

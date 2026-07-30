@@ -10,7 +10,7 @@ import type { WorkflowDraftCandidate, WorkflowDraftToolResult } from './workflow
 import { StreamChatProvider } from '@/domains/agent-builder/contexts/stream-chat-provider';
 
 export interface WorkflowGenerationFailure {
-  code: 'repair-budget-exhausted' | 'no-accepted-draft' | 'generation-failed';
+  code: 'repair-budget-exhausted' | 'no-accepted-draft' | 'generation-failed' | 'stopped-by-user';
   message: string;
 }
 
@@ -203,6 +203,15 @@ function WorkflowChatSession({
     [failGeneration],
   );
 
+  const handleSendCancel = useCallback(() => {
+    // The user aborted deliberately, so this reports what happened rather than
+    // diagnosing the draft. Whatever was accepted before the stop is untouched.
+    failGeneration({
+      code: 'stopped-by-user',
+      message: 'You stopped this generation. Send another message to pick up where it left off.',
+    });
+  }, [failGeneration]);
+
   return (
     <StreamChatProvider
       agentId="workflow-builder"
@@ -223,6 +232,7 @@ function WorkflowChatSession({
       onSendStart={captureOriginalRequest}
       onSendComplete={handleSendComplete}
       onSendError={handleSendError}
+      onSendCancel={handleSendCancel}
     >
       {children}
     </StreamChatProvider>

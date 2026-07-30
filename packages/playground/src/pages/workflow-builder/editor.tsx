@@ -289,7 +289,14 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
               </div>
             ) : null}
             {generationFailure ? (
-              <ErrorState title="Workflow generation stopped" message={generationFailure.message} />
+              <ErrorState
+                title={
+                  generationFailure.code === 'stopped-by-user'
+                    ? 'You stopped workflow generation'
+                    : 'Workflow generation stopped'
+                }
+                message={generationFailure.message}
+              />
             ) : null}
             {workflowDraft.saveError ? (
               <ErrorState title="Workflow save failed" message={workflowDraft.saveError.message} />
