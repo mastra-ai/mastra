@@ -34,7 +34,55 @@ function getTopLevelYamlKey(line: string) {
   return match?.[1];
 }
 
-export function copyPnpmWorkspaceSettings(source: string, options: ArchitectureOptions = {}) {
+/**
+ * Parses the `patchedDependencies:` block of a pnpm-workspace.yaml into a map of
+ * `<dependency spec>` -> `<patch file path>`. Uses the same line-based approach as
+ * {@link copyPnpmWorkspaceSettings} so the deployer stays free of a YAML dependency.
+ *
+ * Keys and values may be quoted (scoped specs such as `'@scope/pkg@1.2.3'` require it);
+ * surrounding single/double quotes are stripped.
+ */
+export function extractPnpmPatchedDependencies(source: string): Record<string, string> {
+  const lines = source.split(/\r?\n/);
+  const patches: Record<string, string> = {};
+
+  const stripQuotes = (value: string) => value.replace(/^['"]|['"]$/g, '');
+
+  for (let index = 0; index < lines.length;) {
+    const key = getTopLevelYamlKey(lines[index] ?? '');
+    if (key !== 'patchedDependencies') {
+      index += 1;
+      continue;
+    }
+
+    index += 1;
+    while (index < lines.length && !getTopLevelYamlKey(lines[index] ?? '')) {
+      const entry = lines[index] ?? '';
+      // Match `  <spec>: <path>` where <spec> may be quoted and contain a colon.
+      const match = /^\s+(?:(['"])(.*?)\1|([^:]+)):\s*(.+?)\s*$/.exec(entry);
+      if (match) {
+        const spec = stripQuotes((match[2] ?? match[3] ?? '').trim());
+        const patchPath = stripQuotes((match[4] ?? '').trim());
+        if (spec && patchPath) {
+          patches[spec] = patchPath;
+        }
+      }
+      index += 1;
+    }
+  }
+
+  return patches;
+}
+
+interface PnpmWorkspaceSettingsOptions extends ArchitectureOptions {
+  /**
+   * Patched dependencies to emit in the generated workspace file. Paths are written
+   * verbatim, so callers are responsible for rewriting them relative to the output dir.
+   */
+  patchedDependencies?: Record<string, string>;
+}
+
+export function copyPnpmWorkspaceSettings(source: string, options: PnpmWorkspaceSettingsOptions = {}) {
   const hasArchitecture = Boolean(options.os?.length || options.cpu?.length || options.libc?.length);
   const lines = source.split(/\r?\n/);
   const blocks: string[] = [];
@@ -60,6 +108,20 @@ export function copyPnpmWorkspaceSettings(source: string, options: ArchitectureO
     if (block) {
       blocks.push(block);
     }
+  }
+
+  const patchedDependencies = options.patchedDependencies ?? {};
+  const patchEntries = Object.entries(patchedDependencies);
+  if (patchEntries.length > 0) {
+    const patchedBlock = [
+      'patchedDependencies:',
+      ...patchEntries.map(([spec, patchPath]) => `  '${spec}': ${patchPath}`),
+    ];
+    blocks.push(patchedBlock.join('\n'));
+    // The bundled output only installs the app's runtime dependencies, so a copied
+    // patch may target a package that is no longer in the tree. pnpm treats unused
+    // patches as a hard error by default, which would fail the deploy install.
+    blocks.push('allowUnusedPatches: true');
   }
 
   if (hasArchitecture) {
@@ -173,11 +235,59 @@ export class Deps extends MastraBase {
       ? await fsPromises.readFile(sourceWorkspaceYamlPath, 'utf-8')
       : '';
 
+    const patchedDependencies = sourceWorkspaceYamlPath
+      ? await this.copyPatchedDependencies(sourceWorkspaceYamlPath, sourceWorkspaceYaml, dir)
+      : {};
+
     await fsPromises.writeFile(
       path.join(dir, 'pnpm-workspace.yaml'),
-      copyPnpmWorkspaceSettings(sourceWorkspaceYaml, options),
+      copyPnpmWorkspaceSettings(sourceWorkspaceYaml, { ...options, patchedDependencies }),
       'utf-8',
     );
+  }
+
+  /**
+   * Copies the patch files referenced by `patchedDependencies` in the source workspace
+   * into `<dir>/patches/` so the bundled output is self-contained, and returns a map of
+   * dependency spec -> output-relative patch path suitable for the generated workspace file.
+   */
+  private async copyPatchedDependencies(
+    sourceWorkspaceYamlPath: string,
+    sourceWorkspaceYaml: string,
+    dir: string,
+  ): Promise<Record<string, string>> {
+    const patchedDependencies = extractPnpmPatchedDependencies(sourceWorkspaceYaml);
+    const entries = Object.entries(patchedDependencies);
+    if (entries.length === 0) {
+      return {};
+    }
+
+    const sourceRoot = path.dirname(sourceWorkspaceYamlPath);
+    const patchesDir = path.join(dir, 'patches');
+    const rewritten: Record<string, string> = {};
+    const usedNames = new Map<string, string>();
+
+    for (const [spec, patchPath] of entries) {
+      const sourcePatchPath = path.resolve(sourceRoot, patchPath);
+      if (!fs.existsSync(sourcePatchPath)) {
+        this.logger.warn(`Skipping patch for "${spec}": patch file not found at ${sourcePatchPath}`);
+        continue;
+      }
+
+      // Avoid collisions when two patches share a basename (e.g. from nested workspaces).
+      let destName = path.basename(sourcePatchPath);
+      const existing = usedNames.get(destName);
+      if (existing && existing !== sourcePatchPath) {
+        destName = `${spec.replace(/[^\w.-]+/g, '_')}-${destName}`;
+      }
+      usedNames.set(destName, sourcePatchPath);
+
+      await ensureFile(path.join(patchesDir, destName));
+      await fsPromises.copyFile(sourcePatchPath, path.join(patchesDir, destName));
+      rewritten[spec] = `patches/${destName}`;
+    }
+
+    return rewritten;
   }
 
   private async writeYarnConfig(dir: string, options: ArchitectureOptions) {
