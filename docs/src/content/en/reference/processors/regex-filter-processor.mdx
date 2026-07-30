@@ -185,3 +185,18 @@ When the `block` strategy is active (default), `RegexFilterProcessor` throws a `
 | `pii` | Emails, phone numbers, SSNs, credit card numbers | `[EMAIL]`, `[PHONE]`, `[SSN]`, `[CREDIT_CARD]` |
 | `secrets` | API keys, bearer tokens, AWS access keys | `[API_KEY]`, `[BEARER_TOKEN]`, `[AWS_KEY]` |
 | `urls` | HTTP/HTTPS URLs | `[URL]` |
+
+## Redaction behavior
+
+Every rule is matched independently, so two rules can claim text that overlaps. A card number written without separators matches both `phone` and `credit-card`, for example. Overlapping matches are combined into a single region and replaced once, using the replacement of the longest match.
+
+```typescript
+const filter = new RegexFilterProcessor({
+  presets: ['pii'],
+  strategy: 'redact',
+})
+
+// "Charge 4111111111111111 today" becomes "Charge [CREDIT_CARD] today"
+```
+
+A replacement string can reference capture groups with `$1` or `$&`. Those references resolve for a single match whose pattern also matches the matched text on its own. In a combined region, or for a rule anchored on its surroundings with a lookbehind or lookahead, the replacement string is inserted as written. The region is redacted either way.

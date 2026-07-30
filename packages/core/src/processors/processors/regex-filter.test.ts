@@ -208,6 +208,197 @@ describe('RegexFilterProcessor', () => {
     });
   });
 
+  describe('overlapping matches - redact strategy', () => {
+    function redactedText(text: string): string {
+      const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' });
+      const result = filter.processInput(createInputArgs([createMessage(text)])) as MastraDBMessage[];
+      return (result[0].content as any).parts[0].text;
+    }
+
+    it('does not leave part of a bare card number in the clear', () => {
+      const text = redactedText('card 4111111111111111');
+
+      expect(text).toBe('card [CREDIT_CARD]');
+      expect(text).not.toContain('1111');
+    });
+
+    it('redacts a bare card number surrounded by text', () => {
+      expect(redactedText('pay 4111111111111111 now')).toBe('pay [CREDIT_CARD] now');
+    });
+
+    it('still redacts a separated card number', () => {
+      expect(redactedText('card 4111-1111-1111-1111')).toBe('card [CREDIT_CARD]');
+      expect(redactedText('card 4111 1111 1111 1111')).toBe('card [CREDIT_CARD]');
+    });
+
+    it('redacts non-overlapping matches independently', () => {
+      expect(redactedText('ssn 123-45-6789 card 4111111111111111')).toBe('ssn [SSN] card [CREDIT_CARD]');
+    });
+
+    it('redacts a contained match as a single region', () => {
+      const filter = new RegexFilterProcessor({ presets: ['pii', 'urls'], strategy: 'redact' });
+      const result = filter.processInput(
+        createInputArgs([createMessage('see https://x.com/u/a@b.com now')]),
+      ) as MastraDBMessage[];
+
+      expect((result[0].content as any).parts[0].text).toBe('see [URL] now');
+    });
+
+    it('redacts overlapping matches in streaming chunks', async () => {
+      const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' });
+      const part = {
+        type: 'text-delta',
+        runId: 'r',
+        from: 'AGENT',
+        payload: { id: 't1', text: 'card 4111111111111111' },
+      } as unknown as ChunkType;
+      const result = await filter.processOutputStream(createStreamArgs(part));
+
+      expect((result as any).payload.text).toBe('card [CREDIT_CARD]');
+    });
+
+    it('keeps capture groups in custom replacements', () => {
+      const filter = new RegexFilterProcessor({
+        rules: [{ name: 'order', pattern: /ID-(\d+)/g, replacement: '<$1>' }],
+        strategy: 'redact',
+      });
+
+      const result = filter.processInput(createInputArgs([createMessage('Your order ID-12345')])) as MastraDBMessage[];
+
+      expect((result[0].content as any).parts[0].text).toBe('Your order <12345>');
+    });
+
+    it('merges a partial overlap and keeps the longest rule', () => {
+      const filter = new RegexFilterProcessor({
+        rules: [
+          { name: 'short', pattern: /ab/g, replacement: '[SHORT]' },
+          { name: 'long', pattern: /bcdef/g, replacement: '[LONG]' },
+        ],
+        strategy: 'redact',
+      });
+
+      const result = filter.processInput(createInputArgs([createMessage('xabcdefy')])) as MastraDBMessage[];
+
+      expect((result[0].content as any).parts[0].text).toBe('x[LONG]y');
+    });
+
+    it('does not merge matches that only touch', () => {
+      const filter = new RegexFilterProcessor({
+        rules: [
+          { name: 'first', pattern: /ab/g, replacement: '[A]' },
+          { name: 'second', pattern: /cd/g, replacement: '[B]' },
+        ],
+        strategy: 'redact',
+      });
+
+      const result = filter.processInput(createInputArgs([createMessage('abcd')])) as MastraDBMessage[];
+
+      expect((result[0].content as any).parts[0].text).toBe('[A][B]');
+    });
+
+    it('redacts several overlap groups in one message', () => {
+      expect(redactedText('card 4111111111111111 and card 4222222222222222')).toBe(
+        'card [CREDIT_CARD] and card [CREDIT_CARD]',
+      );
+    });
+
+    it('keeps offsets correct after multi-byte characters', () => {
+      expect(redactedText('💳 4111111111111111 ✅')).toBe('💳 [CREDIT_CARD] ✅');
+    });
+
+    it('reports every overlapping match when blocking', () => {
+      const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'block' });
+
+      try {
+        filter.processInput(createInputArgs([createMessage('card 4111111111111111')]));
+        expect.fail('Expected TripWire');
+      } catch (error) {
+        const rules = (error as TripWire<any>).options.metadata.matches.map((m: any) => m.rule);
+        expect(rules).toContain('phone');
+        expect(rules).toContain('credit-card');
+      }
+    });
+
+    it('redacts overlapping matches in output results', () => {
+      const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' });
+      const result = filter.processOutputResult(
+        createOutputResultArgs([createMessage('card 4111111111111111', 'assistant')]),
+      ) as MastraDBMessage[];
+
+      expect((result[0].content as any).parts[0].text).toBe('card [CREDIT_CARD]');
+    });
+
+    it('redacts overlapping matches in string-form content', () => {
+      const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' });
+      const message = { ...createMessage('placeholder'), content: 'card 4111111111111111' } as any;
+      const result = filter.processInput(createInputArgs([message])) as MastraDBMessage[];
+
+      expect(result[0].content).toBe('card [CREDIT_CARD]');
+    });
+
+    it('redacts each text part independently', () => {
+      const filter = new RegexFilterProcessor({ presets: ['pii'], strategy: 'redact' });
+      const message: MastraDBMessage = {
+        id: 'msg-parts',
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text' as const, text: 'card 4111111111111111' },
+            { type: 'text' as const, text: 'clean text' },
+            { type: 'text' as const, text: 'ssn 123-45-6789' },
+          ],
+        },
+        createdAt: new Date(),
+      } as MastraDBMessage;
+
+      const result = filter.processInput(createInputArgs([message])) as MastraDBMessage[];
+      const parts = (result[0].content as any).parts;
+
+      expect(parts[0].text).toBe('card [CREDIT_CARD]');
+      expect(parts[1].text).toBe('clean text');
+      expect(parts[2].text).toBe('ssn [SSN]');
+    });
+  });
+
+  describe('replacement resolution', () => {
+    function redactWith(rules: any[], text: string): string {
+      const filter = new RegexFilterProcessor({ rules, strategy: 'redact' });
+      const result = filter.processInput(createInputArgs([createMessage(text)])) as MastraDBMessage[];
+      return (result[0].content as any).parts[0].text;
+    }
+
+    it('expands the whole-match reference', () => {
+      expect(redactWith([{ name: 'order', pattern: /ID-\d+/g, replacement: '<$&>' }], 'order ID-12345')).toBe(
+        'order <ID-12345>',
+      );
+    });
+
+    it('redacts a rule anchored on its surroundings', () => {
+      expect(redactWith([{ name: 'ctx', pattern: /(?<=card )\d{4}/g, replacement: '[X]' }], 'card 1234')).toBe(
+        'card [X]',
+      );
+    });
+
+    it('falls back to the literal replacement when a match cannot be re-resolved', () => {
+      expect(redactWith([{ name: 'ctx', pattern: /(?<=card )\d{4}/g, replacement: '<$&>' }], 'card 1234')).toBe(
+        'card <$&>',
+      );
+    });
+
+    it('leaves text untouched for a rule that only matches empty strings', () => {
+      expect(redactWith([{ name: 'empty', pattern: /x*/g, replacement: '[Z]' }], 'abc')).toBe('abc');
+    });
+
+    it('redacts only the first match for a non-global pattern', () => {
+      expect(redactWith([{ name: 'num', pattern: /\d+/, replacement: '[N]' }], 'a1 b2')).toBe('a[N] b2');
+    });
+
+    it('uses the default replacement when a rule omits one', () => {
+      expect(redactWith([{ name: 'num', pattern: /\d+/g }], 'a1 b2')).toBe('a[REDACTED] b[REDACTED]');
+    });
+  });
+
   describe('processInput - warn strategy', () => {
     it('logs warning and passes through', () => {
       const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});

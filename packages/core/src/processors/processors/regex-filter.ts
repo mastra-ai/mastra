@@ -35,6 +35,49 @@ export interface RegexMatch {
 }
 
 /**
+ * Internal match that keeps a reference to the originating rule and both
+ * offsets. `RegexMatch` only carries the rule name, which is ambiguous when two
+ * rules share a name, and no end offset.
+ */
+interface RuleMatch {
+  /** The rule that produced this match */
+  rule: RegexRule;
+  /** Start offset of the match in the text */
+  start: number;
+  /** End offset (exclusive) of the match in the text */
+  end: number;
+}
+
+/**
+ * Width of a match in characters, used to pick the winner among overlaps.
+ */
+function matchLength(match: RuleMatch): number {
+  return match.end - match.start;
+}
+
+/**
+ * Rules are matched with a fresh RegExp each time so a `lastIndex` left over
+ * from a previous pass can never skip part of the next text.
+ */
+function compilePattern(rule: RegexRule): RegExp {
+  return new RegExp(rule.pattern.source, rule.pattern.flags);
+}
+
+/**
+ * A span of text to replace, built by unioning overlapping matches.
+ */
+interface RedactionRegion {
+  /** Start offset of the region in the text */
+  start: number;
+  /** End offset (exclusive) of the region in the text */
+  end: number;
+  /** Longest match contributing to this region; supplies the replacement */
+  owner: RuleMatch;
+  /** How many matches were merged into this region */
+  mergedCount: number;
+}
+
+/**
  * Metadata attached to the TripWire when the regex filter blocks
  */
 export interface RegexFilterTripwireMetadata {
@@ -193,13 +236,18 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
     this.phase = options.phase ?? 'all';
   }
 
-  private findMatches(text: string): RegexMatch[] {
-    const matches: RegexMatch[] = [];
+  /**
+   * Run every rule over the text and collect all matches, grouped by rule in
+   * declaration order. Matches may overlap; callers that rewrite text must
+   * de-overlap them first.
+   */
+  private collectMatches(text: string): RuleMatch[] {
+    const matches: RuleMatch[] = [];
     for (const rule of this.rules) {
-      const regex = new RegExp(rule.pattern.source, rule.pattern.flags);
+      const regex = compilePattern(rule);
       let m: RegExpExecArray | null;
       while ((m = regex.exec(text)) !== null) {
-        matches.push({ rule: rule.name, match: m[0], index: m.index });
+        matches.push({ rule, start: m.index, end: m.index + m[0].length });
         if (!regex.global) break;
         if (m[0].length === 0) {
           regex.lastIndex++;
@@ -209,13 +257,80 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
     return matches;
   }
 
-  private redactText(text: string): string {
-    let result = text;
-    for (const rule of this.rules) {
-      const regex = new RegExp(rule.pattern.source, rule.pattern.flags);
-      result = result.replace(regex, rule.replacement ?? '[REDACTED]');
+  /**
+   * Public-shaped view of the matches, used for block and warn reporting.
+   */
+  private findMatches(text: string): RegexMatch[] {
+    return this.collectMatches(text).map(({ rule, start, end }) => ({
+      rule: rule.name,
+      match: text.slice(start, end),
+      index: start,
+    }));
+  }
+
+  /**
+   * Collapses the raw matches into disjoint regions, merging any that overlap.
+   * Each rule is matched independently, so two rules can claim intersecting
+   * ranges (a bare 16-digit card number matches both `phone` and `credit-card`).
+   * Replacing them one rule at a time leaves the tail of the longer match in
+   * the clear, so overlapping ranges are unioned and redacted once.
+   */
+  private buildRedactionRegions(matches: RuleMatch[]): RedactionRegion[] {
+    const ordered = [...matches]
+      .filter(match => matchLength(match) > 0)
+      .sort((a, b) => a.start - b.start || matchLength(b) - matchLength(a));
+
+    const regions: RedactionRegion[] = [];
+    for (const match of ordered) {
+      const current = regions.at(-1);
+      if (current && match.start < current.end) {
+        current.end = Math.max(current.end, match.end);
+        current.mergedCount += 1;
+        if (matchLength(match) > matchLength(current.owner)) {
+          current.owner = match;
+        }
+      } else {
+        regions.push({ start: match.start, end: match.end, owner: match, mergedCount: 1 });
+      }
     }
-    return result;
+    return regions;
+  }
+
+  /**
+   * Resolve the text that replaces a region.
+   *
+   * Replacements containing `$` may reference capture groups, so those are
+   * resolved by re-running the rule against the matched slice. That only works
+   * when the pattern still matches in isolation — a rule anchored on its
+   * surroundings (lookbehind, lookahead) will not — and a merged region no
+   * longer corresponds to a single pattern at all. Both fall back to the
+   * replacement string as written, so a region is always redacted.
+   */
+  private resolveReplacement(text: string, region: RedactionRegion): string {
+    const { rule } = region.owner;
+    const replacement = rule.replacement ?? '[REDACTED]';
+    if (region.mergedCount > 1 || !replacement.includes('$')) return replacement;
+
+    const matched = text.slice(region.start, region.end);
+    if (!compilePattern(rule).test(matched)) return replacement;
+
+    return matched.replace(compilePattern(rule), replacement);
+  }
+
+  /**
+   * Replace every matched region of the text with its rule's replacement.
+   */
+  private redactText(text: string): string {
+    const regions = this.buildRedactionRegions(this.collectMatches(text));
+    if (regions.length === 0) return text;
+
+    let result = '';
+    let cursor = 0;
+    for (const region of regions) {
+      result += text.slice(cursor, region.start) + this.resolveReplacement(text, region);
+      cursor = region.end;
+    }
+    return result + text.slice(cursor);
   }
 
   private extractSegments(messages: MastraDBMessage[]): string[] {
