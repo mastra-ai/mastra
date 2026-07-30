@@ -755,7 +755,8 @@ describe('PluginManager', () => {
     const failureListener = vi.fn();
     manager.onGithubPluginUpdateFailed(failureListener);
 
-    await expect(manager.pollGithubSourcesForUpdates()).resolves.not.toThrow();
+    // The poll resolves to false (does not reject) despite the install throwing — the per-plugin catch owns it.
+    await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(false);
 
     expect(failureListener).toHaveBeenCalledTimes(1);
     expect(failureListener).toHaveBeenCalledWith([
