@@ -74,7 +74,6 @@ import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { buildMessagesFromChunks } from './build-messages-from-chunks';
 import type { CollectedChunk } from './build-messages-from-chunks';
-import { processSignalInput } from './process-signal-input';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 
@@ -1060,19 +1059,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // so each becomes its own turn.
             const preRunSignals =
               readScoped(scopeCtx, DRAIN_PENDING_SIGNALS_KEY, 'drainPendingSignals')?.(runId, 'pre-run') ?? [];
-            const approvedSignals = await processSignalInput({
-              signals: preRunSignals,
-              inputProcessors,
-              logger,
-              agentId,
-              agent: owningAgent,
-              processorStates,
-              requestContext,
-            });
-            if (approvedSignals.length > 0) {
+            if (preRunSignals.length > 0) {
               currentMessageId = rotateLoopResponseMessageId();
             }
-            for (const preRunSignal of approvedSignals) {
+            for (const preRunSignal of preRunSignals) {
               const signalForTranscript = messageList.addSignal(preRunSignal);
               safeEnqueue(controller, signalForTranscript.toDataPart());
             }
