@@ -2403,13 +2403,14 @@ describe('Memory', () => {
     });
   });
 
-  describe('processors skip when no thread context', () => {
-    // Regression: ephemeral invocations (e.g. workflow agent steps launched via
-    // the run-workflow tool) run without a Mastra memory thread/resource on
-    // requestContext. Thread-scoped processors like observational-memory and
-    // working-memory-state must no-op instead of throwing "requires
-    // resourceId/threadId" — otherwise every ephemeral agent call trips the
-    // tripwire even when the caller has no need for persistence.
+  describe('thread-scoped processors attach without thread context', () => {
+    // Processor attachment must be permissive: `MastraMemory` may not be
+    // populated on requestContext at discovery time (agent processor discovery
+    // can run before thread preparation), and direct `getInputProcessors()`
+    // calls pass no context at all. Threadless safety lives at runtime instead:
+    // observational-memory no-ops when `getThreadContext` resolves no thread,
+    // and the processor runner skips `computeStateSignal` when no
+    // threadId/resourceId resolves (e.g. ephemeral workflow agent steps).
 
     function memoryWithOMAndWMState() {
       return new Memory({
@@ -2421,27 +2422,32 @@ describe('Memory', () => {
       });
     }
 
-    it('omits observational-memory input processor when requestContext has no MastraMemory', async () => {
+    it('attaches observational-memory input processor when requestContext has no MastraMemory', async () => {
       const memory = memoryWithOMAndWMState();
       const rc = new RequestContext();
       const processors = await memory.getInputProcessors([], rc);
-      expect(processors.find(p => p.id === 'observational-memory')).toBeUndefined();
+      expect(processors.find(p => p.id === 'observational-memory')).toBeDefined();
     });
 
-    it('omits observational-memory output processor when requestContext has no MastraMemory', async () => {
+    it('attaches observational-memory output processor when requestContext has no MastraMemory', async () => {
       const memory = memoryWithOMAndWMState();
       const rc = new RequestContext();
       const processors = await memory.getOutputProcessors([], rc);
-      expect(processors.find(p => p.id === 'observational-memory')).toBeUndefined();
+      expect(processors.find(p => p.id === 'observational-memory')).toBeDefined();
     });
 
-    it('omits working-memory-state processor when requestContext has no MastraMemory', async () => {
+    it('attaches working-memory-state processor when requestContext has no MastraMemory', async () => {
       const memory = memoryWithOMAndWMState();
       const rc = new RequestContext();
       const inputs = await memory.getInputProcessors([], rc);
-      const outputs = await memory.getOutputProcessors([], rc);
-      expect(inputs.find(p => p.id === 'working-memory-state')).toBeUndefined();
-      expect(outputs.find(p => p.id === 'working-memory-state')).toBeUndefined();
+      expect(inputs.find(p => p.id === 'working-memory-state')).toBeDefined();
+    });
+
+    it('attaches both processors when no requestContext is passed at all', async () => {
+      const memory = memoryWithOMAndWMState();
+      const processors = await memory.getInputProcessors();
+      expect(processors.find(p => p.id === 'observational-memory')).toBeDefined();
+      expect(processors.find(p => p.id === 'working-memory-state')).toBeDefined();
     });
   });
 
