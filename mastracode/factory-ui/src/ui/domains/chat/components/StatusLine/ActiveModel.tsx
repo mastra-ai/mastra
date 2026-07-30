@@ -1,5 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useState } from 'react';
 
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
@@ -51,9 +52,9 @@ export function ActiveModel() {
   }
 
   const selectedModelId = pendingModelId ?? activeModelId;
-  const label = activeModelId ? formatModelName(activeModelId) : 'No model';
+  const label = selectedModelId ? formatModelName(selectedModelId) : 'No model';
   const notConfigured =
-    Boolean(activeModelId) && modelsQuery.isSuccess && !modelsQuery.data.some(model => model.id === activeModelId);
+    Boolean(selectedModelId) && modelsQuery.isSuccess && !modelsQuery.data.some(model => model.id === selectedModelId);
 
   if (kind === 'factory' && modelsQuery.data?.length) {
     return (
@@ -65,19 +66,26 @@ export function ActiveModel() {
           setPendingModelId(modelId);
           void setModel(modelId).then(
             () => setPendingModelId(undefined),
-            () => setPendingModelId(undefined),
+            (cause: unknown) => {
+              setPendingModelId(undefined);
+              // failed switch must be loud — label alone just snaps back
+              toast.error(cause instanceof Error ? cause.message : 'Failed to switch model');
+            },
           );
         }}
       >
         <SelectTrigger
           variant="ghost"
           size="xs"
-          aria-label="Session model"
+          aria-label={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
           aria-busy={Boolean(pendingModelId)}
           className={notConfigured ? 'text-accent2 w-auto' : 'text-neutral3 w-auto'}
-          title={activeModelId}
+          title={selectedModelId}
         >
-          {selectedModelId ? formatModelName(selectedModelId) : 'No model'}
+          <span>
+            {label}
+            {notConfigured ? ' · not configured' : null}
+          </span>
         </SelectTrigger>
         <SelectContent>
           {modelsQuery.data.map(model => (

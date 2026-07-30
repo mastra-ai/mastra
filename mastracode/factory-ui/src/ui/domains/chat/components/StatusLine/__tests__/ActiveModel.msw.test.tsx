@@ -5,6 +5,7 @@
  * "No model" label; once connected it renders the formatted model name and
  * flags models whose provider has no usable credentials.
  */
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -43,6 +44,7 @@ function renderActiveModel({
       <ChatConnectionContext.Provider value={{ status }}>
         <ChatModelsContext.Provider value={{ activeModelId, setModel }}>
           <ActiveModel />
+          <Toaster position="bottom-right" />
         </ChatModelsContext.Provider>
       </ChatConnectionContext.Provider>
     </ChatSessionContext.Provider>,
@@ -53,7 +55,10 @@ function stubModelCatalog(ids: string[]) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/config/models`, () =>
       HttpResponse.json({
-        models: ids.map(id => ({ id, provider: id.split('/')[0], modelName: id, hasApiKey: true })),
+        models: ids.map(id => {
+          const [provider, modelName] = id.split('/');
+          return { id, provider, modelName, hasApiKey: true };
+        }),
       }),
     ),
   );
@@ -110,7 +115,7 @@ describe('ActiveModel', () => {
       });
 
       await user.click(await screen.findByLabelText('Session model'));
-      await user.click(await screen.findByRole('option', { name: 'openai / openai/gpt-5.6-sol' }));
+      await user.click(await screen.findByRole('option', { name: 'openai / gpt-5.6-sol' }));
 
       expect(setModel).toHaveBeenCalledWith('openai/gpt-5.6-sol');
     });
@@ -128,10 +133,40 @@ describe('ActiveModel', () => {
 
       const trigger = await screen.findByLabelText('Session model');
       await user.click(trigger);
-      await user.click(await screen.findByRole('option', { name: 'openai / openai/gpt-5.6-sol' }));
+      await user.click(await screen.findByRole('option', { name: 'openai / gpt-5.6-sol' }));
 
       expect(trigger).toHaveAttribute('aria-busy', 'true');
       expect(trigger).toBeDisabled();
+    });
+
+    it('surfaces a failed switch and keeps the control usable', async () => {
+      const user = userEvent.setup();
+      const setModel = vi
+        .fn<(modelId: string) => Promise<void>>()
+        .mockRejectedValue(new Error('Provider is unavailable'));
+      stubModelCatalog(['anthropic/claude-sonnet-4-5', 'openai/gpt-5.6-sol']);
+      renderActiveModel({
+        activeModelId: 'anthropic/claude-sonnet-4-5',
+        status: 'ready',
+        kind: 'factory',
+        setModel,
+      });
+
+      const trigger = await screen.findByLabelText('Session model');
+      await user.click(trigger);
+      await user.click(await screen.findByRole('option', { name: 'openai / gpt-5.6-sol' }));
+
+      expect(await screen.findByText('Provider is unavailable')).toBeInTheDocument();
+      expect(trigger).toBeEnabled();
+      expect(trigger).toHaveTextContent('Claude Sonnet 4.5');
+    });
+
+    it('flags an active model the catalog no longer credentials', async () => {
+      stubModelCatalog(['openai/gpt-5.6-sol']);
+      renderActiveModel({ activeModelId: 'anthropic/claude-sonnet-4-5', status: 'ready', kind: 'factory' });
+
+      const trigger = await screen.findByLabelText('Session model, Claude Sonnet 4.5 is not configured');
+      expect(trigger).toHaveTextContent('not configured');
     });
   });
 });
