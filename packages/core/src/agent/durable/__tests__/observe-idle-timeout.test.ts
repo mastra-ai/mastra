@@ -321,7 +321,7 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     await ready;
 
     const reader = readFullStream(output.fullStream as ReadableStream<any>);
-    await emitSuspendedEvent(pubsub, runId, {} as any);
+    await emitSuspendedEvent(pubsub, runId, { type: 'suspension' });
 
     const result = await settleWithin(reader.done, IDLE * 20);
     expect(result).toBe('done');
@@ -342,7 +342,7 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     await ready;
 
     const reader = readFullStream(output.fullStream as ReadableStream<any>);
-    await emitAbortEvent(pubsub, runId, {} as any);
+    await emitAbortEvent(pubsub, runId, { steps: [] });
 
     const result = await settleWithin(reader.done, IDLE * 20);
     expect(result).toBe('done');
