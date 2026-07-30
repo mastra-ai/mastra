@@ -173,6 +173,15 @@ export interface WorkflowBuilderOptions {
   modelPolicy?: BuilderModelPolicy;
   /** Model used by the hidden workflow builder agent. Defaults to the built-in model when omitted. */
   model?: MastraModelConfig;
+  /**
+   * How many recent messages the workflow builder agent recalls. Default: 100.
+   *
+   * Authoring turns are tool-heavy — a single request can persist dozens of
+   * inspection and submission records — so the memory default of 10 is far too
+   * small here. Raise it for models that need longer repair conversations, or
+   * lower it to cut token cost on a smaller context window.
+   */
+  lastMessages?: number;
 }
 
 export interface IWorkflowBuilder {

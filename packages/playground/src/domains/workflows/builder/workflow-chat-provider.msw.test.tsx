@@ -28,6 +28,14 @@ function Composer({ message }: { message: string }) {
   return null;
 }
 
+function SendCapture({ onReady }: { onReady: (send: (message: string) => void) => void }) {
+  const send = useStreamSend();
+  useEffect(() => {
+    onReady(send);
+  }, [send, onReady]);
+  return null;
+}
+
 function MessageCount() {
   const messages = useStreamMessages();
   return <div>{messages.length} messages</div>;
@@ -352,6 +360,64 @@ describe('WorkflowChatProvider', () => {
 
       expect(harness.failure?.code).not.toBe('no-accepted-draft');
       expect(harness.failure?.message ?? '').not.toContain('without creating an accepted draft');
+    });
+  });
+
+  describe('when the request is first typed into an already-open chat', () => {
+    it('pins that request to every later turn', async () => {
+      const bodies: Record<string, unknown>[] = [];
+      server.use(
+        http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+        http.post(`${BASE_URL}/api/editor/workflow-builder/stream`, async ({ request }) => {
+          bodies.push((await request.json()) as Record<string, unknown>);
+          return new HttpResponse(
+            new ReadableStream({
+              start: controller => controller.close(),
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          );
+        }),
+      );
+
+      let send: ((message: string) => void) | undefined;
+      const captureSend = (fn: (message: string) => void) => {
+        send = fn;
+      };
+
+      // A workflow created from the editor opens with no starter message and no
+      // history, which is exactly the case that used to leave the pin empty.
+      render(
+        <Providers>
+          <WorkflowChatProvider
+            threadId="workflow-builder-pin"
+            authoringState={createWorkflowDraftAuthoringState('pin')}
+            initialMessages={[]}
+            createTools={() => ({})}
+          >
+            <SendCapture onReady={captureSend} />
+          </WorkflowChatProvider>
+        </Providers>,
+      );
+
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+
+      await act(async () => {
+        send?.('Loop through all 50 US states and greet each one');
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      await act(async () => {
+        send?.('keep going');
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+
+      expect(bodies).toHaveLength(2);
+      // The opening turn carries the request as the message itself.
+      expect(JSON.stringify(bodies[0])).not.toContain('Original workflow request');
+      const followUp = JSON.stringify(bodies[1]);
+      expect(followUp).toContain('Original workflow request');
+      expect(followUp).toContain('Loop through all 50 US states and greet each one');
     });
   });
 

@@ -353,15 +353,15 @@ describe('workflow draft client tools', () => {
       expect(result).toMatchObject({
         success: false,
         reason: 'generation-stopped',
-        error: 'Workflow generation was stopped before this submission was evaluated.',
         lifecycle: 'untouched',
         baseAcceptedRevision: 0,
       });
       // Nothing was accepted, so the response must never imply otherwise.
-      expect(result.message).not.toContain('earlier call');
-      expect(result.message).not.toContain('was accepted first');
-      expect(result.message).toContain('Nothing has been accepted');
-      expect(result.message).toContain('Do NOT apologize');
+      expect(result.error).not.toContain('earlier call');
+      expect(result.error).not.toContain('was accepted first');
+      // Recovery guidance rides on `error`, the field models actually act on.
+      expect(result.error).toContain('Nothing has been accepted');
+      expect(result.error).toContain('Do NOT apologize');
       expect(store.state.revision).toBe(0);
     });
   });
@@ -372,10 +372,13 @@ describe('workflow draft client tools', () => {
       const result = await executeTool(store.tools['submit-workflow-draft'], {});
 
       expect(result).toMatchObject({ success: false, reason: 'empty-arguments' });
+      // A model that reads only `error` still learns what failed, how to retry,
+      // and what not to do. Nothing actionable may live in a sibling field.
       expect(result.error).toContain('No workflow definition arguments');
-      expect(result.message).toContain('provider may have truncated');
-      expect(result.message).toContain('complete WorkflowDefinition');
-      expect(result.message).toContain('Do NOT');
+      expect(result.error).toContain('provider may have truncated');
+      expect(result.error).toContain('complete WorkflowDefinition');
+      expect(result.error).toContain('Do NOT');
+      expect(result.message).toBeUndefined();
       expect(store.state).toMatchObject({ revision: 0, lifecycle: 'untouched' });
     });
   });
@@ -437,11 +440,10 @@ describe('workflow draft client tools', () => {
         lifecycle: 'ready',
         finalizedRevision: live.state.finalizedRevision,
       });
-      expect(result.error).toContain('already');
-      // Short, actionable, no long apology block.
-      expect(result.message ?? '').toMatch(/already Ready/i);
-      expect(result.message ?? '').toMatch(/wait for the user/i);
-      expect((result.message ?? '').length).toBeLessThan(400);
+      // Short, actionable, no long apology block — and self-contained in `error`.
+      expect(result.error ?? '').toMatch(/already Ready/i);
+      expect(result.error ?? '').toMatch(/wait for the user/i);
+      expect((result.error ?? '').length).toBeLessThan(400);
       // The rejected submission must not become the reported definition.
       expect(result.definition).toEqual(live.state.draft);
       expect((result.definition as { graph: unknown[] }).graph).toHaveLength(1);

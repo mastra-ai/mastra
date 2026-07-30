@@ -106,19 +106,21 @@ export interface WorkflowDraftToolStore {
   onCandidateChange?: (candidate: WorkflowDraftCandidate) => void;
 }
 
-const GENERATION_STOPPED_MESSAGE =
+// Every rejection states what happened AND what to do about it in `error`.
+// Models anchor on `error` and act on it before reading sibling fields, so
+// recovery guidance kept anywhere else is guidance they will not follow.
+const GENERATION_STOPPED_ERROR =
   'Workflow generation was stopped for this turn, so this submission was not evaluated. Nothing has been accepted and nothing is broken. Do NOT apologize, do NOT claim the workflow is broken, and do NOT invent a reason. Wait for the user.';
 
 const SUPERSEDED_NOOP_MESSAGE =
   'This submission structurally matched the earlier accepted revision for this workflow; treating it as a no-op confirmation. The workflow is Ready and awaiting the user’s explicit Save. Do NOT resubmit, apologize, or claim the workflow is broken.';
 
-function alreadyReadyMessage(revision: number): string {
-  return `The workflow is already Ready as revision ${revision}. Stop and wait for the user; do NOT resubmit.`;
+function alreadyReadyError(revision: number): string {
+  return `Workflow is already Ready as revision ${revision}. The accepted definition is authoritative. Stop and wait for the user; do NOT resubmit, apologize, or claim the workflow is broken.`;
 }
 
-const EMPTY_ARGUMENTS_ERROR = 'No workflow definition arguments were received.';
-const EMPTY_ARGUMENTS_MESSAGE =
-  'submit-workflow-draft was invoked without any arguments. The provider may have truncated or dropped the tool call payload. Retry once by sending a single complete WorkflowDefinition object as the tool arguments (id, description, inputSchema, outputSchema, graph). Do NOT retry with the same empty payload, do NOT apologize, and do NOT claim the workflow is broken.';
+const EMPTY_ARGUMENTS_ERROR =
+  'No workflow definition arguments were received. submit-workflow-draft was invoked without any arguments, so the provider may have truncated or dropped the tool call payload. Retry once by sending a single complete WorkflowDefinition object as the tool arguments (id, description, inputSchema, outputSchema, graph). Do NOT retry with the same empty payload, do NOT apologize, and do NOT claim the workflow is broken.';
 
 function isEmptyArguments(input: unknown): boolean {
   if (input === undefined || input === null) return true;
@@ -168,8 +170,7 @@ function makeSupersededResult(store: WorkflowDraftToolStore, input?: unknown) {
     return {
       success: false as const,
       reason: 'already-ready' as const,
-      error: `Workflow is already Ready as revision ${state.finalizedRevision ?? state.revision}.`,
-      message: alreadyReadyMessage(state.finalizedRevision ?? state.revision),
+      error: alreadyReadyError(state.finalizedRevision ?? state.revision),
       lifecycle: state.lifecycle,
       finalizedRevision: state.finalizedRevision,
       baseAcceptedRevision: state.revision,
@@ -179,8 +180,7 @@ function makeSupersededResult(store: WorkflowDraftToolStore, input?: unknown) {
   return {
     success: false as const,
     reason: 'generation-stopped' as const,
-    error: 'Workflow generation was stopped before this submission was evaluated.',
-    message: GENERATION_STOPPED_MESSAGE,
+    error: GENERATION_STOPPED_ERROR,
     lifecycle: state.lifecycle,
     finalizedRevision: state.finalizedRevision,
     baseAcceptedRevision: state.revision,
@@ -269,7 +269,6 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
             success: false as const,
             reason: 'empty-arguments' as const,
             error: EMPTY_ARGUMENTS_ERROR,
-            message: EMPTY_ARGUMENTS_MESSAGE,
             lifecycle: state.lifecycle,
             finalizedRevision: state.finalizedRevision,
             baseAcceptedRevision: state.revision,

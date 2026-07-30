@@ -45,6 +45,16 @@ describe('EditorWorkflowBuilder', () => {
     expect((await fallback.getAgent().getModel()).modelId).toBe('gpt-5.5');
   });
 
+  it('recalls a long authoring conversation by default and honours a configured window', async () => {
+    const fallback = new EditorWorkflowBuilder();
+    const configured = new EditorWorkflowBuilder({ lastMessages: 25 });
+
+    // The memory default of 10 is far too small for tool-heavy authoring turns:
+    // it evicts the user's original request mid-build.
+    expect((await fallback.getAgent().getMemory())?.getMergedThreadConfig({}).lastMessages).toBe(100);
+    expect((await configured.getAgent().getMemory())?.getMergedThreadConfig({}).lastMessages).toBe(25);
+  });
+
   it('preserves the configured model policy', () => {
     const modelPolicy = {
       active: true,

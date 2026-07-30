@@ -7,17 +7,24 @@ import { Memory } from '@mastra/memory';
 
 export const DEFAULT_WORKFLOW_BUILDER_MODEL = 'openai/gpt-5.5';
 
-export function createWorkflowBuilderAgent(model?: MastraModelConfig): Agent<'workflow-builder-agent'> {
+/**
+ * Authoring turns are tool-heavy: a single request can persist dozens of
+ * inspection and submission records. The memory default of 10 evicts the user's
+ * original request long before the workflow is finished, which reads as the
+ * agent forgetting what it was asked to build.
+ */
+export const DEFAULT_WORKFLOW_BUILDER_LAST_MESSAGES = 100;
+
+export function createWorkflowBuilderAgent(
+  model?: MastraModelConfig,
+  lastMessages: number = DEFAULT_WORKFLOW_BUILDER_LAST_MESSAGES,
+): Agent<'workflow-builder-agent'> {
   return createSharedWorkflowBuilderAgent({
     id: 'workflow-builder-agent',
     name: 'Workflow Builder',
     description: 'Builds persisted workflow definitions through constrained client tools',
     model: model ?? DEFAULT_WORKFLOW_BUILDER_MODEL,
-    // Authoring turns are tool-heavy: a single request can persist dozens of
-    // inspection and submission records. The default 10-message recall window
-    // evicts the user's original request long before the workflow is finished,
-    // which reads as the agent forgetting what it was asked to build.
-    memory: new Memory({ options: { lastMessages: 100 } }),
+    memory: new Memory({ options: { lastMessages } }),
     surfaceInstructions: `# Studio authoring policy
 
 Turn the user's request into a complete canonical workflow definition using the registered agent, tool, and workflow catalogs supplied in the hidden authoring context. Treat the current unsaved authoring state, accepted definition, candidate definition, validation issues, and catalogs injected in each turn as authoritative. Never describe schemas, mapping form, graph shape, lifecycle, or persistence state from memory—inspect the authoritative Studio state first.
@@ -46,7 +53,7 @@ export class EditorWorkflowBuilder implements IWorkflowBuilder {
   constructor(options: WorkflowBuilderOptions = {}, mastra?: Mastra) {
     this.enabled = options.enabled !== false;
     this.modelPolicy = options.modelPolicy;
-    this.agent = createWorkflowBuilderAgent(options.model);
+    this.agent = createWorkflowBuilderAgent(options.model, options.lastMessages);
     if (mastra) {
       this.agent.__registerMastra(mastra);
       this.agent.__registerPrimitives({ logger: mastra.getLogger(), storage: mastra.getStorage() });

@@ -46,7 +46,8 @@ export interface StreamChatProviderProps {
   enableThreadSignals?: boolean;
   debounceTime?: number;
   maxSteps?: number;
-  onSendStart?: () => void;
+  /** Receives the outgoing message text, before the stream is opened. */
+  onSendStart?: (message: string) => void;
   onSendComplete?: () => void;
   onSendError?: (error: Error) => void;
   children: ReactNode;
@@ -128,7 +129,7 @@ export const StreamChatProvider = ({
         payload.modelSettings = { ...payload.modelSettings, instructions };
       }
 
-      onSendStart?.();
+      onSendStart?.(message);
       void sendMessage(payload)
         .then(() => onSendComplete?.())
         .catch(error => onSendError?.(error instanceof Error ? error : new Error(String(error))));

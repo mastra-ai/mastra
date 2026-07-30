@@ -60,7 +60,16 @@ function WorkflowChatSession({
   children,
 }: WorkflowChatProviderProps) {
   const [hydrationMessages] = useState(initialMessages);
-  const [originalRequest] = useState(() => initialUserMessage ?? getOriginalWorkflowRequest(initialMessages));
+  // Seeded from a starter message or rehydrated history when either exists. A
+  // workflow created from the editor has neither: the request is only typed
+  // once the chat is already open, so it has to be captured from the first
+  // live send or the pin stays empty for the life of the session.
+  const [originalRequest, setOriginalRequest] = useState(
+    () => initialUserMessage ?? getOriginalWorkflowRequest(initialMessages),
+  );
+  const captureOriginalRequest = useCallback((message: string) => {
+    setOriginalRequest(current => current ?? message);
+  }, []);
   const [candidateSnapshot, setCandidateSnapshot] = useState<WorkflowDraftCandidate>();
   const candidateRef = useRef<WorkflowDraftCandidate | undefined>(undefined);
   const authoringStateRef = useRef(authoringState);
@@ -211,6 +220,7 @@ function WorkflowChatSession({
       enableThreadSignals={false}
       debounceTime={debounceTime}
       maxSteps={1000}
+      onSendStart={captureOriginalRequest}
       onSendComplete={handleSendComplete}
       onSendError={handleSendError}
     >
