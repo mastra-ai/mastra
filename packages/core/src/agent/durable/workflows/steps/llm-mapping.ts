@@ -211,11 +211,16 @@ export function createDurableLLMMappingStep() {
                 modelOutput = normalizeModelOutput(modelOutput);
                 mappingSpan?.end({ output: modelOutput });
 
-                const existingMastra = (toolResult.providerMetadata as any)?.mastra;
-                providerMetadata = {
-                  ...toolResult.providerMetadata,
-                  mastra: { ...existingMastra, modelOutput },
-                };
+                // Skip nullish modelOutput (e.g. a text-only result): persisting
+                // `mastra: { modelOutput: undefined }` poisons the stored message.
+                // Mirrors the non-durable llm-mapping-step.
+                if (modelOutput != null) {
+                  const existingMastra = (toolResult.providerMetadata as any)?.mastra;
+                  providerMetadata = {
+                    ...toolResult.providerMetadata,
+                    mastra: { ...existingMastra, modelOutput },
+                  };
+                }
               } catch (err) {
                 mappingSpan?.error({ error: err as Error, endSpan: true });
                 // toModelOutput errors are non-fatal — the tool result is still usable
