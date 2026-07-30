@@ -2,22 +2,11 @@
 '@mastra/platform-workspace': patch
 ---
 
-Fixed `PlatformSandbox.clone()` silently dropping `checkpointName`, which prevented every sandbox from restoring from its captured checkpoint. `clone({ checkpointName })` now stabilizes the clone's sandbox id (the recovery key the platform hashes on `POST /sandbox`), so subsequent boots of the same session hit their prior checkpoint instead of always paying a fresh template build.
-
-**Before**
-
-```ts
-// checkpointName was accepted but never stored — cloned sandbox got a
-// random id, so the platform never found a matching checkpoint.
-const child = template.clone({ checkpointName: 'mastra-recovery-session-42' });
-await child.start(); // body.id: 'platform-sandbox-<random>' → 30–60 s build every time
-```
-
-**After**
+Fixed `PlatformSandbox.clone()` silently ignoring `checkpointName`. Clones created with `clone({ checkpointName })` now reuse a matching captured checkpoint on `start()` instead of always provisioning a fresh sandbox, so repeated boots of the same session start much faster.
 
 ```ts
 const child = template.clone({ checkpointName: 'mastra-recovery-session-42' });
-await child.start(); // body.id: 'mastra-recovery-session-42' → 5–10 s checkpoint restore
+await child.start(); // Reuses the captured checkpoint when one is available.
 ```
 
-An explicit `id` still wins over `checkpointName` when both are passed.
+An explicit `id` still takes precedence over `checkpointName` when both are passed.
