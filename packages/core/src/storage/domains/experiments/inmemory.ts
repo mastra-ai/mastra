@@ -177,6 +177,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       traceId: input.traceId ?? null,
       status: input.status ?? null,
       tags: input.tags ?? null,
+      comment: null,
       toolMockReport: input.toolMockReport ?? null,
       organizationId: input.organizationId ?? null,
       projectId: input.projectId ?? null,
@@ -198,6 +199,7 @@ export class ExperimentsInMemory extends ExperimentsStorage {
       ...existing,
       status: input.status !== undefined ? input.status : existing.status,
       tags: input.tags !== undefined ? input.tags : existing.tags,
+      comment: input.comment !== undefined ? input.comment : existing.comment,
     };
     this.db.experimentResults.set(input.id, updated);
     return updated;

@@ -189,9 +189,9 @@ const restrictedTestMockSelectors = [
 
 /** @type {import("eslint").Linter.Config[]} */
 export default [
-  // Only the Playwright spec files under e2e/tests are linted (for BDD
-  // structure enforcement below). The kitchen-sink app, test utils, config,
-  // scripts, and build output under e2e remain unlinted as before.
+  // Only Playwright spec files are linted under e2e (for BDD structure
+  // enforcement below). The kitchen-sink app, test utils, config, scripts,
+  // and build output under e2e remain unlinted as before.
   {
     ignores: [
       'e2e/kitchen-sink/**',
@@ -199,6 +199,7 @@ export default [
       'e2e/playwright-report/**',
       'e2e/test-results/**',
       'e2e/playwright.config.ts',
+      'e2e/playwright.studio-base.config.ts',
       'e2e/tests/__utils__/**',
     ],
   },
@@ -224,7 +225,7 @@ export default [
   {
     // Playwright E2E specs and their adjacent typed fixtures are not part of
     // the type-aware tsconfig program, so lint them without the project service.
-    files: ['e2e/tests/**/*.{js,jsx,ts,tsx}'],
+    files: ['e2e/{tests,studio-base-tests}/**/*.{js,jsx,ts,tsx}'],
     languageOptions: {
       parserOptions: {
         projectService: false,
@@ -239,7 +240,7 @@ export default [
   {
     // Playwright E2E specs: enforce the BDD structure described in the
     // e2e-tests-studio skill (every test()/it() nested in a describe('when …')).
-    files: ['e2e/tests/**/*.spec.{js,jsx,ts,tsx}'],
+    files: ['e2e/{tests,studio-base-tests}/**/*.spec.{js,jsx,ts,tsx}'],
     plugins: {
       'e2e-bdd': e2eBddPlugin,
     },

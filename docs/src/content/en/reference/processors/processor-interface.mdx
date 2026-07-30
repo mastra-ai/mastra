@@ -646,7 +646,7 @@ processLLMRequest?(
     name: 'writer',
     type: 'ProcessorStreamWriter',
     description:
-      'Stream writer for emitting custom data chunks during streaming. Use `writer.custom()` to send transient UI signals.',
+      'Stream writer for emitting custom data chunks during streaming. Call `writer.custom()` to emit a `data-*` chunk.',
     isOptional: true,
   },
   {
@@ -865,7 +865,7 @@ processAPIError?(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | voi
     name: 'writer',
     type: 'ProcessorStreamWriter',
     description:
-      'Stream writer for emitting custom data chunks during streaming. Use `writer.custom()` to send transient UI signals.',
+      'Stream writer for emitting custom data chunks during streaming. Call `writer.custom()` to emit a `data-*` chunk.',
     isOptional: true,
   },
   {
@@ -1501,6 +1501,18 @@ await writer.custom({
   data: { level: 'warn', reason: 'Possibly unsafe' },
 })
 ```
+
+When memory is configured, custom `data-*` chunks emitted from `processOutputStream` or `processOutputResult` are saved as parts of the assistant message. Set `transient: true` on the chunk object to stream it without saving it to memory:
+
+```typescript {4}
+await writer.custom({
+  type: 'data-progress',
+  data: { status: 'Processing' },
+  transient: true,
+})
+```
+
+Pass `transient` as a property of the chunk, not as the second argument to `writer.custom()`. The second argument contains writer options such as `messageId`.
 
 By default, processors **don't** see `data-*` chunks in `processOutputStream` so they don't accidentally process tool telemetry or their own output. Opt in by setting `processDataParts: true` on the processor:
 

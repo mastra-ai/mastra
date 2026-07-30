@@ -2,9 +2,9 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Logo } from '@mastra/playground-ui/components/Logo';
 import { ChevronDown } from 'lucide-react';
 import { useParams } from 'react-router';
-import { useFactoryQuery } from '../../../../../hooks/useFactories';
-import { useChatCommands } from '../../context/ChatCommandsProvider';
-import { useChatSessionContext } from '../../context/useChatSessionContext';
+import { useFactoryQuery } from '../../../../hooks/useFactories';
+import { useChatCommands } from '../context/ChatCommandsProvider';
+import { useChatSessionContext } from '../context/useChatSessionContext';
 
 const emptyThreadClass =
   'flex w-full min-w-0 max-w-full flex-1 flex-col items-center justify-center px-6 py-12 text-center';
