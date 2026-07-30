@@ -73,6 +73,35 @@ describe('resolveWorkflowGraphStep', () => {
     expect((tool.flow as Extract<SerializedStepFlowEntry, { type: 'tool' }>).toolId).toBe('double-tool');
   });
 
+  it('preserves mapConfig and declarative fields for entries nested in foreach / loop', () => {
+    // Regression: the foreach/loop inner-entry shim used to be `{ id } as never`,
+    // dropping mapConfig/description so nested `.map()` steps rendered empty.
+    const foreachMapping = resolveWorkflowGraphStep({
+      type: 'foreach',
+      step: { type: 'mapping', id: 'map-each', mapConfig: 'return input' },
+      opts: { concurrency: 1 },
+    });
+    expect(foreachMapping.kind).toBe('foreach-step');
+    expect(foreachMapping.step?.mapConfig).toBe('return input');
+
+    const loopAgent = resolveWorkflowGraphStep({
+      type: 'loop',
+      step: { type: 'agent', id: 'writer', agentId: 'writer-agent', description: 'writes things' },
+      serializedCondition: { id: 'loop-condition', fn: 'true' },
+      loopType: 'dountil',
+    });
+    expect(loopAgent.kind).toBe('loop-step');
+    expect(loopAgent.step?.description).toBe('writes things');
+
+    const foreachWorkflow = resolveWorkflowGraphStep({
+      type: 'foreach',
+      step: { type: 'workflow', id: 'call-child', workflowId: 'child-wf', serializedStepFlow: [stepEntry('inner')] },
+      opts: { concurrency: 1 },
+    });
+    expect(foreachWorkflow.step?.component).toBe('WORKFLOW');
+    expect(foreachWorkflow.step?.serializedStepFlow).toHaveLength(1);
+  });
+
   it('resolves agent / tool children nested in a parallel entry', () => {
     const parallel: SerializedStepFlowEntry = {
       type: 'parallel',

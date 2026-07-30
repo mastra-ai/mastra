@@ -5,6 +5,7 @@ import { MarkerType } from '@xyflow/react';
 import type { WorkflowDataEdgeModel } from './workflow-data-edge';
 import {
   resolveWorkflowGraphStep,
+  unwrapInnerEntry,
   WORKFLOW_BOUNDARY_NODE_TYPE,
   WORKFLOW_STEP_NODE_TYPE,
 } from './workflow-step-node-utils';
@@ -187,30 +188,6 @@ const getSingleStepFlowId = (flow: SerializedStepFlowEntry): string => {
     if ('step' in inner) return inner.step.id;
   }
   return '';
-};
-
-type SerializedStepInner = Extract<SerializedStepFlowEntry, { type: 'step' }>['step'];
-type SerializedStepLike = Pick<SerializedStepInner, 'id' | 'description' | 'component'> &
-  Partial<Pick<SerializedStepInner, 'serializedStepFlow' | 'mapConfig' | 'canSuspend' | 'metadata'>>;
-
-/**
- * `foreach.step` / `loop.step` widened to `SerializedSingleStepEntry`
- * (agent | tool | step | mapping | workflow). For the `type: 'step'` variant,
- * forward the wrapped step directly; for agent/tool/mapping variants,
- * synthesize an id-only shim so downstream reads (`.id`, `.description`,
- * `.component`, ...) don't blow up.
- */
-const unwrapInnerEntry = (inner: Extract<SerializedStepFlowEntry, { type: 'foreach' }>['step']): SerializedStepLike => {
-  if (inner.type === 'step') return inner.step;
-  if (inner.type === 'workflow') {
-    return {
-      id: inner.id,
-      description: inner.description,
-      component: 'WORKFLOW',
-      serializedStepFlow: inner.serializedStepFlow,
-    };
-  }
-  return { id: inner.id, description: undefined, component: undefined };
 };
 
 const getStepNodeAndEdge = ({
