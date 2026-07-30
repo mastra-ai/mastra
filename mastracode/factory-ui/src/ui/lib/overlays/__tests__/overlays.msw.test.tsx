@@ -2,7 +2,7 @@
  * BDD coverage for the cross-cutting overlay open-state context
  * (`src/ui/lib/overlays`).
  *
- * Overlay visibility (sidebar, shortcuts) is
+ * Overlay visibility (search, sidebar, shortcuts) is
  * platform-level UI plumbing shared by unrelated components, so it lives in a
  * dedicated provider instead of being prop-drilled through the layout tree.
  */
@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { OverlaysProvider, useOverlays } from '../overlays';
 import type { OverlayName } from '../overlays';
 
-const OVERLAY_NAMES: OverlayName[] = ['sidebar', 'shortcuts'];
+const OVERLAY_NAMES: OverlayName[] = ['search', 'sidebar', 'shortcuts'];
 
 function Probe() {
   const overlays = useOverlays();

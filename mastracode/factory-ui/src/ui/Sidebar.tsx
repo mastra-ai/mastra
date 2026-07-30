@@ -5,12 +5,16 @@ import { CircleUserRound, Settings } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../api/config';
-import { clearMastraCodeStorage, redirectToLogout, useFactoryAuth } from './domains/auth';
-import { FactorySection } from './domains/factory';
+import { useFactoryAuth } from '../hooks/useFactoryAuth';
+import { clearMastraCodeStorage, redirectToLogout } from './domains/auth/services/auth';
+import { FactorySection } from './domains/factory/components/FactorySection';
+import { SidebarGlobalSearchButton } from './domains/search/components/SidebarGlobalSearchButton';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
 import { useCloseSettings } from './domains/settings/hooks/useCloseSettings';
 import { settingsSectionPath } from './domains/settings/settingsSections';
-import { FactorySwitcher, UserSessionsSection, WorkspacesSection } from './domains/workspaces';
+import { FactorySwitcher } from './domains/workspaces/components/FactorySwitcher';
+import { UserSessionsSection } from './domains/workspaces/components/UserSessionsSection';
+import { WorkspacesSection } from './domains/workspaces/components/WorkspacesSection';
 
 function useSettingsOpen() {
   const { pathname } = useLocation();
@@ -68,6 +72,7 @@ export function Sidebar() {
           <LogoWithoutText aria-label="Mastra" role="img" className="text-icon6 h-4 w-auto" />
           <AlphaBadge />
         </div>
+        <SidebarGlobalSearchButton />
         {settingsOpen ? (
           <SettingsNavigation />
         ) : (

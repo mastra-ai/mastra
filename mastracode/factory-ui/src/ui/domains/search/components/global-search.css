@@ -1,0 +1,126 @@
+.global-search-popup[data-open] {
+  animation: none !important;
+}
+
+.global-search-popup[data-closed] {
+  animation: global-search-popup-hold 260ms linear both !important;
+}
+
+.global-search-surface {
+  --global-search-enter-delay: 0ms;
+  --global-search-exit-delay: 0ms;
+  transform-origin: center;
+  will-change: opacity, transform;
+}
+
+.global-search-surface-input {
+  --global-search-enter-delay: 20ms;
+  --global-search-exit-delay: 80ms;
+}
+
+.global-search-surface-rail {
+  --global-search-enter-delay: 60ms;
+  --global-search-exit-delay: 40ms;
+}
+
+.global-search-surface-results {
+  --global-search-enter-delay: 100ms;
+  --global-search-exit-delay: 0ms;
+}
+
+.global-search-results-panel {
+  --global-search-footer-height: 4.75rem;
+  isolation: isolate;
+}
+
+.global-search-results-panel::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  height: var(--global-search-footer-height);
+  pointer-events: none;
+  content: '';
+  background: linear-gradient(
+    to top,
+    var(--surface2) 0%,
+    var(--surface2) 28%,
+    color-mix(in oklab, var(--surface2) 94%, transparent) 68%,
+    transparent 100%
+  );
+  border-bottom-right-radius: 1rem;
+  border-bottom-left-radius: 1rem;
+}
+
+.global-search-list {
+  padding: 0.5rem 0.5rem var(--global-search-footer-height);
+}
+
+.global-search-scroll-viewport {
+  scroll-padding-bottom: var(--global-search-footer-height);
+}
+
+.global-search-footer {
+  min-height: calc(var(--global-search-footer-height) - 1.25rem);
+  border-bottom-right-radius: 1rem;
+  border-bottom-left-radius: 1rem;
+}
+
+.global-search-popup[data-open] .global-search-surface {
+  animation: global-search-surface-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--global-search-enter-delay);
+}
+
+.global-search-popup[data-closed] .global-search-surface {
+  animation: global-search-surface-out 180ms cubic-bezier(0.5, 0, 0.75, 0) both;
+  animation-delay: var(--global-search-exit-delay);
+}
+
+@keyframes global-search-surface-in {
+  from {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes global-search-surface-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(1.01);
+  }
+}
+
+@keyframes global-search-popup-hold {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .global-search-popup[data-open],
+  .global-search-popup[data-closed],
+  .global-search-popup[data-open] .global-search-surface,
+  .global-search-popup[data-closed] .global-search-surface {
+    animation: none !important;
+  }
+
+  .global-search-surface {
+    opacity: 1;
+    transform: none;
+  }
+}
