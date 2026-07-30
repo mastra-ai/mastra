@@ -1,0 +1,16 @@
+{
+  "name": "@inner/subpath-only",
+  "version": "1.0.0",
+  "description": "Workspace package that can only be imported through subpaths - its exports map has no \".\" entry.",
+  "type": "module",
+  "exports": {
+    "./greeting": "./src/greeting.ts",
+    "./sub/*": "./src/sub/*.ts"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0"
+}

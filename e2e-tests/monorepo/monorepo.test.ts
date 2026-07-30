@@ -1,20 +1,50 @@
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
-import { join } from 'path';
+import { join, relative } from 'path';
 import { setupMonorepo } from './prepare';
 import { mkdtemp, mkdir, rm, readFile, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import getPort from 'get-port';
 import { execa, execaNode } from 'execa';
+import { glob } from 'tinyglobby';
 
 const timeout = 5 * 60 * 1000;
 
 const activeProcesses: Array<{ controller: AbortController; proc: ReturnType<typeof execa | typeof execaNode> }> = [];
 
+/**
+ * `npm run dev` / `npm run start` spawn the actual `mastra` process as a child, so signalling the
+ * npm wrapper alone leaves that child orphaned. An orphaned `mastra dev` keeps its file watcher
+ * alive and rebuilds into `.mastra/output`, which then races the next suite's `mastra build` and
+ * fails it with `ENOTEMPTY: directory not empty, rmdir '.../.mastra/output'`. Kill the whole
+ * process group instead, and wait for it to actually be gone before the next suite starts.
+ *
+ * Requires the process to have been spawned with `detached` so it leads its own group.
+ */
+async function killProcessTree(proc: ReturnType<typeof execa> | undefined) {
+  if (!proc) {
+    return;
+  }
+
+  try {
+    if (process.platform !== 'win32' && proc.pid) {
+      process.kill(-proc.pid, 'SIGKILL');
+    } else {
+      proc.kill('SIGKILL');
+    }
+  } catch {
+    try {
+      proc.kill('SIGKILL');
+    } catch {}
+  }
+
+  await proc.catch(() => {});
+}
+
 async function cleanupAllProcesses() {
   for (const { controller, proc } of activeProcesses) {
     try {
       controller.abort();
-      await proc.catch(() => {});
+      await killProcessTree(proc);
     } catch {}
   }
   activeProcesses.length = 0;
@@ -62,8 +92,11 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
   afterAll(async () => {
     try {
+      // `recursive` is required - without it this silently fails on the populated fixture and
+      // leaks a few hundred MB of node_modules into the temp dir on every run.
       await rm(fixturePath, {
         force: true,
+        recursive: true,
       });
     } catch {}
   });
@@ -96,6 +129,18 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(body).toEqual({ value: 'a -> b -> c' });
     });
 
+    // @inner/subpath-mid imports @inner/subpath-only/greeting and @inner/subpath-only/sub/counter
+    // from its own source. The app never depends on @inner/subpath-only, and that package declares
+    // no "." export at all. Both the static subpath and the wildcard subpath have to survive to
+    // runtime - if either leaks out of the bundle as a bare specifier this 500s with
+    // ERR_MODULE_NOT_FOUND instead of failing at build time.
+    it('should resolve transitive workspace subpath imports', async () => {
+      const res = await fetch(`http://localhost:${port}/workspace-subpath`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body).toEqual({ value: 'hello from subpath-only + counted via wildcard subpath' });
+    });
+
     it('should return tools from the api', async () => {
       const res = await fetch(`http://localhost:${port}/api/tools`);
       const body = await res.json();
@@ -118,6 +163,8 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         cwd: inputFile,
         cancelSignal,
         gracefulCancel: true,
+        // Lead its own process group so afterAll can take the `mastra dev` child down with it.
+        detached: process.platform !== 'win32',
         env: {
           OPENAI_API_KEY: process.env.OPENAI_API_KEY,
           MASTRA_PORT: port.toString(),
@@ -149,16 +196,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     }, timeout);
 
     afterAll(async () => {
-      if (proc) {
-        try {
-          proc.kill('SIGKILL');
-        } catch (err) {
-          // @ts-expect-error - isCanceled is not typed
-          if (!err.killed) {
-            console.log('failed to kill build proc', err);
-          }
-        }
-      }
+      await killProcessTree(proc);
     }, timeout);
 
     runApiTests(port);
@@ -260,6 +298,8 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         cwd: inputFile,
         cancelSignal,
         gracefulCancel: true,
+        // Lead its own process group so afterAll can take the `mastra start` child down with it.
+        detached: process.platform !== 'win32',
         env: {
           OPENAI_API_KEY: process.env.OPENAI_API_KEY,
           MASTRA_PORT: port.toString(),
@@ -291,16 +331,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     }, timeout);
 
     afterAll(async () => {
-      if (proc) {
-        try {
-          proc.kill('SIGKILL');
-        } catch (err) {
-          // @ts-expect-error - isCanceled is not typed
-          if (!err.isCanceled) {
-            console.log('failed to kill start proc', err);
-          }
-        }
-      }
+      await killProcessTree(proc);
     }, timeout);
 
     runApiTests(port);
@@ -398,6 +429,142 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           expect(dependencies[pkg]).toMatch(/^[\d^~>=<]/);
         }
       }
+    });
+  });
+
+  /**
+   * `bundler: { externals: true }` is the mode consumers are pushed into when they ship native
+   * `.node` addons (realtime voice SDKs, sqlite drivers, sharp). It switches the deployer into
+   * noBundling mode, where workspace packages are the only thing still compiled - which is why
+   * workspace resolution bugs surface here and nowhere else. Every other suite in this file runs
+   * with `externals: ['bcrypt']` or no bundler config at all, so this path is otherwise untested.
+   */
+  describe.sequential('build with externals: true', async () => {
+    let originalConfig: string;
+    let port = await getPort();
+    let proc: ReturnType<typeof execaNode> | undefined;
+    const controller = new AbortController();
+    const cancelSignal = controller.signal;
+    const mastraConfigPath = () => join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
+    const outputDir = () => join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+
+    async function readBundleFiles() {
+      const files = await glob('**/*.{mjs,js}', {
+        cwd: outputDir(),
+        ignore: ['**/node_modules/**'],
+        absolute: true,
+      });
+      expect(files.length).toBeGreaterThan(0);
+
+      return Promise.all(files.map(async file => ({ file, content: await readFile(file, 'utf-8') })));
+    }
+
+    beforeAll(async () => {
+      originalConfig = await readFile(mastraConfigPath(), 'utf-8');
+
+      const modifiedConfig = originalConfig.replace(
+        /bundler:\s*\{\s*externals:\s*\[[^\]]*\],?\s*\}/m,
+        'bundler: {\n    externals: true,\n  }',
+      );
+      // Guard against the fixture drifting out from under the regex - a silent no-op replace
+      // would quietly turn this suite into a duplicate of the default build suite.
+      if (modifiedConfig === originalConfig || !modifiedConfig.includes('externals: true')) {
+        throw new Error('failed to rewrite the fixture mastra config to `externals: true`');
+      }
+      await writeFile(mastraConfigPath(), modifiedConfig);
+
+      // A workspace package with a subpath-only exports map used to crash the analyze step here
+      // with `Missing "." specifier in "@inner/subpath-only" package`, so this build succeeding
+      // is itself the assertion for that regression.
+      await runBuild(fixturePath);
+
+      proc = execaNode('index.mjs', {
+        cwd: outputDir(),
+        cancelSignal,
+        env: {
+          OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+          MASTRA_PORT: port.toString(),
+        },
+      });
+
+      activeProcesses.push({ controller, proc });
+
+      await new Promise<void>((resolve, reject) => {
+        proc!.stderr?.on('data', data => {
+          const errMsg = data?.toString();
+          if (errMsg && errMsg.includes('punycode')) {
+            return;
+          }
+          if (errMsg && errMsg.includes('falling back to an in-memory store')) {
+            return;
+          }
+
+          reject(new Error('failed to start with externals: true: ' + errMsg));
+        });
+        proc!.stdout?.on('data', data => {
+          console.log(data?.toString());
+          if (data?.toString()?.includes(`http://localhost:${port}`)) {
+            resolve();
+          }
+        });
+      });
+    }, timeout);
+
+    afterAll(async () => {
+      if (proc) {
+        try {
+          setImmediate(() => controller.abort());
+          await proc;
+        } catch (err) {
+          // @ts-expect-error - isCanceled is not typed
+          if (!err.isCanceled) {
+            console.log('failed to kill build with externals proc', err);
+          }
+        }
+      }
+
+      // Restore original config
+      await writeFile(mastraConfigPath(), originalConfig);
+    }, timeout);
+
+    runApiTests(port);
+
+    /**
+     * The output has to be self-contained. Workspace packages are deliberately kept out of the
+     * generated package.json, so a workspace specifier that survives into the bundle is neither
+     * compiled nor installable. The build still exits 0, which is what makes this class of bug
+     * silent - it only shows up as ERR_MODULE_NOT_FOUND once the output is run somewhere else.
+     */
+    it('should not leak workspace specifiers into the bundle', async () => {
+      const bundleFiles = await readBundleFiles();
+
+      const leaks: string[] = [];
+      for (const { file, content } of bundleFiles) {
+        // Bare `@inner/*` specifiers in import/export statements or dynamic imports. Anything
+        // matching was left unresolved by the bundler instead of being compiled inline.
+        for (const match of content.matchAll(/(?:from|import|require)\s*\(?\s*['"](@inner\/[^'"]+)['"]/g)) {
+          leaks.push(`${relative(outputDir(), file)}: ${match[1]}`);
+        }
+      }
+
+      expect(leaks).toEqual([]);
+    });
+
+    it('should not register workspace packages as installable dependencies', async () => {
+      const packageJson = JSON.parse(await readFile(join(outputDir(), 'package.json'), 'utf-8'));
+      const dependencies = Object.keys(packageJson.dependencies || {});
+
+      expect(dependencies.filter(dep => dep.startsWith('@inner/'))).toEqual([]);
+    });
+
+    it('should inline transitive workspace subpath sources into the bundle', async () => {
+      const bundleFiles = await readBundleFiles();
+      const bundle = bundleFiles.map(({ content }) => content).join('\n');
+
+      // Both the static subpath export ("./greeting") and the wildcard one ("./sub/*") have to be
+      // compiled in, not merely resolvable at runtime.
+      expect(bundle).toContain('hello from subpath-only');
+      expect(bundle).toContain('counted via wildcard subpath');
     });
   });
 });

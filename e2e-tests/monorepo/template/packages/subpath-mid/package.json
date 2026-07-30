@@ -1,0 +1,16 @@
+{
+  "name": "@inner/subpath-mid",
+  "version": "1.0.0",
+  "description": "Intermediate workspace package - the app depends on this, never on @inner/subpath-only directly.",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@inner/subpath-only": "workspace:*"
+  }
+}
