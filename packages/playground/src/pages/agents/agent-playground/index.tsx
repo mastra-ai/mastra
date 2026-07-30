@@ -160,7 +160,7 @@ function AgentPlayground() {
         agentId={agentId!}
         agentName={codeAgent?.name}
         modelVersion={codeAgent?.modelVersion}
-        agentVersionId={isViewingPreviousVersion ? (selectedVersionId ?? undefined) : undefined}
+        agentVersionId={selectedVersionId ?? latestVersion?.id}
         hasMemory={hasMemory}
         activeVersionId={activeVersionId}
         selectedVersionId={selectedVersionId ?? undefined}
