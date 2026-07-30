@@ -124,7 +124,7 @@ Run the same build artifact in multiple containers, each with a different [`MAST
 
 Split deployments require a distributed PubSub backend ([`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub)), a shared [storage backend](/reference/workers/overview#supported-storage-backends), and network connectivity between the orchestration worker and the API.
 
-The [worker deployment guide](/guides/deployment/mastra-workers) walks through this setup with a Docker Compose example.
+The [worker deployment guide](/guides/deployment/mastra-workers) walks through this setup with Docker Compose and Kubernetes examples.
 
 ## Network architecture
 
@@ -147,7 +147,7 @@ All three worker types (orchestration, scheduler, background task) sit behind th
 
 ## Related
 
-- [Worker deployment guide](/guides/deployment/mastra-workers): Docker Compose example and topology options
+- [Worker deployment guide](/guides/deployment/mastra-workers): Docker Compose and Kubernetes examples
 - [Worker authentication](/docs/server/auth/workers): Secure worker-to-API communication
 - [Workers reference](/reference/workers/overview): Environment variables, worker types, and storage backends
 - [CLI reference](/reference/cli/mastra#mastra-worker-build): `mastra worker build` and `mastra worker start`
