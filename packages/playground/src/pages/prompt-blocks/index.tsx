@@ -19,13 +19,20 @@ export default function PromptBlocks() {
   const { isCmsAvailable } = useIsCmsAvailable();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
-  const { data, isLoading, error } = useStoredPromptBlocks({ page, perPage: PROMPT_BLOCKS_PER_PAGE });
+  const { data, isLoading, error, isPlaceholderData } = useStoredPromptBlocks({
+    page,
+    perPage: PROMPT_BLOCKS_PER_PAGE,
+  });
 
   const promptBlocks = data?.promptBlocks ?? [];
   const hasMore = data?.hasMore ?? false;
 
-  const handleNextPage = useCallback(() => setPage(p => p + 1), []);
-  const handlePrevPage = useCallback(() => setPage(p => Math.max(0, p - 1)), []);
+  const handleNextPage = useCallback(() => {
+    if (!isPlaceholderData) setPage(p => p + 1);
+  }, [isPlaceholderData]);
+  const handlePrevPage = useCallback(() => {
+    if (!isPlaceholderData) setPage(p => Math.max(0, p - 1));
+  }, [isPlaceholderData]);
   const handleSearchChange = useCallback((value: string) => {
     setSearch(value);
     setPage(0);

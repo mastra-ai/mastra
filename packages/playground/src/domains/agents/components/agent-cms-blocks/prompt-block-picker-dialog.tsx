@@ -26,10 +26,17 @@ interface PromptBlockPickerDialogProps {
 export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: PromptBlockPickerDialogProps) {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
-  const { data, isLoading } = useStoredPromptBlocks({ page, perPage: PROMPT_BLOCKS_PER_PAGE });
+  const { data, isLoading, isPlaceholderData } = useStoredPromptBlocks({ page, perPage: PROMPT_BLOCKS_PER_PAGE });
 
   const blocks = data?.promptBlocks ?? [];
   const hasMore = data?.hasMore ?? false;
+
+  const handleNextPage = () => {
+    if (!isPlaceholderData) setPage(p => p + 1);
+  };
+  const handlePrevPage = () => {
+    if (!isPlaceholderData) setPage(p => Math.max(0, p - 1));
+  };
   const filtered = search
     ? blocks.filter(
         b =>
@@ -117,8 +124,8 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
               <DataList.Pagination
                 currentPage={page}
                 hasMore={hasMore}
-                onNextPage={() => setPage(p => p + 1)}
-                onPrevPage={() => setPage(p => Math.max(0, p - 1))}
+                onNextPage={handleNextPage}
+                onPrevPage={handlePrevPage}
               />
             )}
           </div>
