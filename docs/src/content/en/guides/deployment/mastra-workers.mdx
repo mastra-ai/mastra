@@ -107,6 +107,8 @@ Any [supported storage backend](/reference/workers/overview#supported-storage-ba
 
     The API sets `MASTRA_WORKERS: "false"` to disable all event processing. The orchestration worker sets `MASTRA_STEP_EXECUTION_URL` to point step execution requests at the API's internal URL. See [step execution URL](#step-execution-url) for details.
 
+    All services share a `MASTRA_WORKER_AUTH_TOKEN`. Workers include this token in requests to the API so the API can verify the caller is a trusted internal service. See [worker authentication](/docs/server/auth/workers) for details.
+
     <Tabs>
       <TabItem value="docker-compose" label="Docker Compose">
         ```yaml title="docker-compose.yml"
@@ -145,6 +147,7 @@ Any [supported storage backend](/reference/workers/overview#supported-storage-ba
               DATABASE_URL: postgres://mastra:${POSTGRES_PASSWORD}@postgres:5432/mastra
               REDIS_URL: redis://redis:6379
               MASTRA_WORKERS: 'false'
+              MASTRA_WORKER_AUTH_TOKEN: ${MASTRA_WORKER_AUTH_TOKEN}
             depends_on:
               postgres:
                 condition: service_healthy
@@ -163,6 +166,7 @@ Any [supported storage backend](/reference/workers/overview#supported-storage-ba
               REDIS_URL: redis://redis:6379
               MASTRA_WORKERS: orchestration
               MASTRA_STEP_EXECUTION_URL: http://api:4111/api
+              MASTRA_WORKER_AUTH_TOKEN: ${MASTRA_WORKER_AUTH_TOKEN}
             depends_on:
               api:
                 condition: service_healthy
@@ -173,6 +177,7 @@ Any [supported storage backend](/reference/workers/overview#supported-storage-ba
               DATABASE_URL: postgres://mastra:${POSTGRES_PASSWORD}@postgres:5432/mastra
               REDIS_URL: redis://redis:6379
               MASTRA_WORKERS: scheduler
+              MASTRA_WORKER_AUTH_TOKEN: ${MASTRA_WORKER_AUTH_TOKEN}
             depends_on:
               api:
                 condition: service_healthy
@@ -183,6 +188,7 @@ Any [supported storage backend](/reference/workers/overview#supported-storage-ba
               DATABASE_URL: postgres://mastra:${POSTGRES_PASSWORD}@postgres:5432/mastra
               REDIS_URL: redis://redis:6379
               MASTRA_WORKERS: backgroundTasks
+              MASTRA_WORKER_AUTH_TOKEN: ${MASTRA_WORKER_AUTH_TOKEN}
             depends_on:
               api:
                 condition: service_healthy
@@ -195,6 +201,7 @@ Any [supported storage backend](/reference/workers/overview#supported-storage-ba
 
         ```bash title=".env"
         POSTGRES_PASSWORD=your-secure-password
+        MASTRA_WORKER_AUTH_TOKEN=your-shared-secret-token
         ```
 
         :::note
@@ -215,6 +222,7 @@ Any [supported storage backend](/reference/workers/overview#supported-storage-ba
         ```bash
         kubectl apply -f k8s/namespace.yaml
         kubectl create secret generic mastra-secrets -n mastra-workers \
+          --from-literal=POSTGRES_PASSWORD='your-password' \
           --from-literal=DATABASE_URL='postgresql://mastra:your-password@postgres:5432/mastra' \
           --from-literal=REDIS_URL='redis://redis:6379' \
           --from-literal=MASTRA_WORKER_AUTH_TOKEN='your-shared-token'
@@ -258,7 +266,10 @@ Any [supported storage backend](/reference/workers/overview#supported-storage-ba
                     - name: POSTGRES_USER
                       value: mastra
                     - name: POSTGRES_PASSWORD
-                      value: your-password
+                      valueFrom:
+                        secretKeyRef:
+                          name: mastra-secrets
+                          key: POSTGRES_PASSWORD
                     - name: POSTGRES_DB
                       value: mastra
                   volumeMounts:

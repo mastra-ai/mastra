@@ -118,7 +118,7 @@ To run workers in their own processes, configure a distributed [PubSub](/docs/se
   </TabItem>
 </Tabs>
 
-Any [supported storage backend](/reference/workers/overview#supported-storage-backends) works. Swap the storage adapter for your preferred database.
+Any [supported storage backend](/reference/workers/overview#supported-storage-backends) works for orchestration and background tasks. If you use the scheduler worker, the backend must also support the `schedules` domain. See the [storage compatibility table](/reference/workers/overview#supported-storage-backends) for details.
 
 Run the same build artifact in multiple containers, each with a different [`MASTRA_WORKERS`](/reference/workers/overview#mastra_workers) value to control which worker starts in each process.
 

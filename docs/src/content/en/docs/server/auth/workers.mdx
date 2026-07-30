@@ -130,7 +130,7 @@ Your auth provider's `authenticateToken` callback must recognize whatever creden
 
 - **Use different tokens for different worker types.** This lets you revoke access to one worker without affecting others.
 - **Rotate tokens on a schedule.** Update the `WORKER_TOKEN` environment variable and restart the affected containers.
-- **Use TLS in production.** Worker-to-API communication should go over HTTPS to protect tokens in transit. Within a private network (Docker bridge, Kubernetes cluster), plain HTTP is acceptable.
+- **Use TLS in production.** Worker-to-API communication should go over HTTPS to protect tokens in transit. This applies to all environments, including Kubernetes clusters and Docker networks. Use a service mesh (e.g., Istio, Linkerd) or TLS-terminating ingress to encrypt internal traffic.
 - **Restrict network access.** The step execution and event endpoints are internal. If possible, keep them off the public internet using network policies or firewall rules.
 
 ## Related

@@ -189,13 +189,25 @@ mastra worker build [options]
 
 ### Flags
 
-| Flag | Description |
-| - | - |
-| `--dir <path>` | Path to your Mastra source directory (default: `src/mastra`) |
-| `--root <path>` | Project root directory (default: current directory) |
-| `--tools <paths>` | Comma-separated tool paths to include |
-| `--output-dir <path>` | Custom output directory (default: `.mastra/output`) |
-| `--debug` | Enable debug logging |
+#### `--dir`
+
+Path to your Mastra source directory. Defaults to `src/mastra`.
+
+#### `--root`
+
+Project root directory. Defaults to the current directory.
+
+#### `--tools`
+
+Comma-separated tool paths to include in the bundle.
+
+#### `--output-dir`
+
+Custom output directory. Defaults to `.mastra/output`.
+
+#### `--debug`
+
+Enable debug logging during the build.
 
 ## `mastra worker start`
 
@@ -205,17 +217,21 @@ You need to run `mastra worker build` or `mastra build` before using `mastra wor
 
 :::
 
-Starts a worker process from a previously built bundle.
+Starts a worker process from a previously built bundle. The optional `name` argument sets `MASTRA_WORKERS` in the spawned process, controlling which worker starts.
 
 ```bash
 mastra worker start [name] [options]
 ```
 
-| Argument/Flag | Description |
-| - | - |
-| `name` | Worker name to start. Sets `MASTRA_WORKERS` in the spawned process. |
-| `--dir <path>` | Path to the build output (default: `.mastra/output`) |
-| `--env <path>` | Path to environment file (default: `.env.production`, then `.env`) |
+### Flags
+
+#### `--dir`
+
+Path to the build output directory. Defaults to `.mastra/output`.
+
+#### `--env`
+
+Path to the environment file. Defaults to `.env.production`, falling back to `.env`.
 
 ### Examples
 
