@@ -9,7 +9,7 @@ packages:
 
 # Workers
 
-For usage patterns and deployment topologies, see [Workers](/docs/deployment/workers).
+For usage patterns and deployment topologies, see [Workers](/ecosystem/deployment-patterns/workers).
 
 ## Environment variables
 
@@ -44,7 +44,7 @@ ${MASTRA_STEP_EXECUTION_URL}/workflows/:workflowId/runs/:runId/steps/execute
 
 ### `MASTRA_WORKER_AUTH_TOKEN`
 
-A bearer token sent by the orchestration worker when calling the API's step execution endpoint. The API's configured auth provider must recognize this token. See [Worker authentication](/docs/server/auth/workers).
+A bearer token sent by the orchestration worker when calling the API's step execution endpoint. The API's configured auth provider must recognize this token. See [Worker authentication](/ecosystem/auth-providers/workers).
 
 ```
 MASTRA_WORKER_AUTH_TOKEN=sk-worker-secret-token

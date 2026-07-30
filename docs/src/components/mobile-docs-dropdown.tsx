@@ -32,6 +32,12 @@ const docsTabs = [
     basePath: '/reference',
   },
   {
+    id: 'Ecosystem',
+    label: 'Ecosystem',
+    href: '/ecosystem/',
+    basePath: '/ecosystem',
+  },
+  {
     id: 'Learn',
     label: 'Learn',
     href: '/learn/',

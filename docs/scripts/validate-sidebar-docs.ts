@@ -45,6 +45,12 @@ const SECTIONS: SectionConfig[] = [
     sidebarKey: 'guidesSidebar',
   },
   {
+    name: 'ecosystem',
+    contentDir: 'src/content/en/ecosystem',
+    sidebarPath: 'src/content/en/ecosystem/sidebars.js',
+    sidebarKey: 'ecosystemSidebar',
+  },
+  {
     name: 'reference',
     contentDir: 'src/content/en/reference',
     sidebarPath: 'src/content/en/reference/sidebars.js',

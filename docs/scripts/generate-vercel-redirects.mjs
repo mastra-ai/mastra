@@ -16,7 +16,7 @@ const docsDir = new URL('..', import.meta.url)
 const sourcePath = new URL('../vercel.redirects.json', import.meta.url)
 const outputPath = new URL('../vercel.json', import.meta.url)
 
-const INTERNAL_PREFIXES = ['/docs', '/guides', '/models', '/reference']
+const INTERNAL_PREFIXES = ['/docs', '/guides', '/models', '/ecosystem', '/reference']
 
 const HEADERS = [
   {

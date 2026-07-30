@@ -12,27 +12,27 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud",
-      "destination": "/docs/observability/integrations/exporters/mastra-platform",
+      "destination": "/ecosystem/observability-integrations/exporters/mastra-platform",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/exporters/default",
-      "destination": "/docs/observability/integrations/exporters/mastra-storage",
+      "destination": "/ecosystem/observability-integrations/exporters/mastra-storage",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/exporters/:path*",
-      "destination": "/docs/observability/integrations/exporters/:path*",
+      "destination": "/ecosystem/observability-integrations/exporters/:path*",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/bridges/:path*",
-      "destination": "/docs/observability/integrations/bridges/:path*",
+      "destination": "/ecosystem/observability-integrations/bridges/:path*",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/processors/:path*",
-      "destination": "/docs/observability/integrations/processors/:path*",
+      "destination": "/ecosystem/observability-integrations/processors/:path*",
       "permanent": true
     },
     {
@@ -77,7 +77,7 @@
     },
     {
       "source": "/examples/agents/ai-sdk-v5-integration",
-      "destination": "/guides/getting-started/next-js",
+      "destination": "/ecosystem/app-frameworks/next-js",
       "permanent": true
     },
     {
@@ -147,17 +147,17 @@
     },
     {
       "source": "/docs/frameworks/agentic-uis/ai-sdk",
-      "destination": "/guides/build-your-ui/ai-sdk-ui",
+      "destination": "/ecosystem/agent-frameworks-and-ui/ai-sdk-ui",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/agentic-uis/assistant-ui",
-      "destination": "/guides/build-your-ui/assistant-ui",
+      "destination": "/ecosystem/agent-frameworks-and-ui/assistant-ui",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/agentic-uis/copilotkit",
-      "destination": "/guides/build-your-ui/copilotkit/overview",
+      "destination": "/ecosystem/agent-frameworks-and-ui/copilotkit/overview",
       "permanent": true
     },
     {
@@ -167,27 +167,27 @@
     },
     {
       "source": "/docs/frameworks/web-frameworks/astro",
-      "destination": "/guides/getting-started/astro",
+      "destination": "/ecosystem/app-frameworks/astro",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/web-frameworks/next-js",
-      "destination": "/guides/getting-started/next-js",
+      "destination": "/ecosystem/app-frameworks/next-js",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/web-frameworks/sveltekit",
-      "destination": "/guides/getting-started/sveltekit",
+      "destination": "/ecosystem/app-frameworks/sveltekit",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/web-frameworks/vite-react",
-      "destination": "/guides/getting-started/vite-react",
+      "destination": "/ecosystem/app-frameworks/vite-react",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/servers/express",
-      "destination": "/guides/getting-started/express",
+      "destination": "/ecosystem/app-frameworks/express",
       "permanent": true
     },
     {
@@ -202,7 +202,7 @@
     },
     {
       "source": "/guides/quickstarts/nextjs",
-      "destination": "/guides/getting-started/next-js",
+      "destination": "/ecosystem/app-frameworks/next-js",
       "permanent": true
     },
     {
@@ -412,42 +412,42 @@
     },
     {
       "source": "/docs/auth",
-      "destination": "/docs/server/auth",
+      "destination": "/ecosystem/auth-providers",
       "permanent": true
     },
     {
       "source": "/docs/auth/index",
-      "destination": "/docs/server/auth/index",
+      "destination": "/ecosystem/auth-providers/index",
       "permanent": true
     },
     {
       "source": "/docs/auth/jwt",
-      "destination": "/docs/server/auth/jwt",
+      "destination": "/ecosystem/auth-providers/jwt",
       "permanent": true
     },
     {
       "source": "/docs/auth/clerk",
-      "destination": "/docs/server/auth/clerk",
+      "destination": "/ecosystem/auth-providers/clerk",
       "permanent": true
     },
     {
       "source": "/docs/auth/supabase",
-      "destination": "/docs/server/auth/supabase",
+      "destination": "/ecosystem/auth-providers/supabase",
       "permanent": true
     },
     {
       "source": "/docs/auth/firebase",
-      "destination": "/docs/server/auth/firebase",
+      "destination": "/ecosystem/auth-providers/firebase",
       "permanent": true
     },
     {
       "source": "/docs/auth/workos",
-      "destination": "/docs/server/auth/workos",
+      "destination": "/ecosystem/auth-providers/workos",
       "permanent": true
     },
     {
       "source": "/docs/auth/auth0",
-      "destination": "/docs/server/auth/auth0",
+      "destination": "/ecosystem/auth-providers/auth0",
       "permanent": true
     },
     {
@@ -507,37 +507,37 @@
     },
     {
       "source": "/docs/deployment/cloud-providers/amazon-ec2",
-      "destination": "/guides/deployment/amazon-ec2",
+      "destination": "/ecosystem/deployment-targets/amazon-ec2",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/aws-lambda",
-      "destination": "/guides/deployment/aws-lambda",
+      "destination": "/ecosystem/deployment-targets/aws-lambda",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/azure-app-services",
-      "destination": "/guides/deployment/azure-app-services",
+      "destination": "/ecosystem/deployment-targets/azure-app-services",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/cloudflare-deployer",
-      "destination": "/guides/deployment/cloudflare",
+      "destination": "/ecosystem/deployment-targets/cloudflare",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/digital-ocean",
-      "destination": "/guides/deployment/digital-ocean",
+      "destination": "/ecosystem/deployment-targets/digital-ocean",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/netlify-deployer",
-      "destination": "/guides/deployment/netlify",
+      "destination": "/ecosystem/deployment-targets/netlify",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/vercel-deployer",
-      "destination": "/guides/deployment/vercel",
+      "destination": "/ecosystem/deployment-targets/vercel",
       "permanent": true
     },
     {
@@ -547,7 +547,7 @@
     },
     {
       "source": "/docs/workflows/inngest-workflow",
-      "destination": "/guides/deployment/inngest",
+      "destination": "/ecosystem/deployment-targets/inngest",
       "permanent": true
     },
     {
@@ -602,7 +602,7 @@
     },
     {
       "source": "/guides/deployment",
-      "destination": "/docs/deployment/cloud-providers",
+      "destination": "/ecosystem/deployment-patterns/cloud-providers",
       "permanent": true
     },
     {
@@ -661,13 +661,13 @@
       "permanent": true
     },
     {
-      "source": "/guides/deployment/netlify-deployer",
-      "destination": "/guides/deployment/netlify",
+      "source": "/ecosystem/deployment-targets/netlify-deployer",
+      "destination": "/ecosystem/deployment-targets/netlify",
       "permanent": true
     },
     {
-      "source": "/guides/deployment/vercel-deployer",
-      "destination": "/guides/deployment/vercel",
+      "source": "/ecosystem/deployment-targets/vercel-deployer",
+      "destination": "/ecosystem/deployment-targets/vercel",
       "permanent": true
     },
     {
@@ -696,8 +696,8 @@
       "permanent": true
     },
     {
-      "source": "/guides/deployment/cloudflare-deployer",
-      "destination": "/guides/deployment/cloudflare",
+      "source": "/ecosystem/deployment-targets/cloudflare-deployer",
+      "destination": "/ecosystem/deployment-targets/cloudflare",
       "permanent": true
     },
     {
@@ -916,8 +916,8 @@
       "permanent": true
     },
     {
-      "source": "/guides/build-your-ui/copilotkit",
-      "destination": "/guides/build-your-ui/copilotkit/overview",
+      "source": "/ecosystem/agent-frameworks-and-ui/copilotkit",
+      "destination": "/ecosystem/agent-frameworks-and-ui/copilotkit/overview",
       "permanent": true
     },
     {
@@ -1013,6 +1013,116 @@
     {
       "source": "/docs/guide/tools",
       "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/:path*",
+      "destination": "/ecosystem/browser/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/:path*",
+      "destination": "/ecosystem/workspace/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth",
+      "destination": "/ecosystem/auth-providers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth/:path*",
+      "destination": "/ecosystem/auth-providers/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/:path*",
+      "destination": "/ecosystem/observability-integrations/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/build-your-ui/:path*",
+      "destination": "/ecosystem/agent-frameworks-and-ui/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/:path*",
+      "destination": "/ecosystem/deployment-targets/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/next-js",
+      "destination": "/ecosystem/app-frameworks/next-js",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/vite-react",
+      "destination": "/ecosystem/app-frameworks/vite-react",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/astro",
+      "destination": "/ecosystem/app-frameworks/astro",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/sveltekit",
+      "destination": "/ecosystem/app-frameworks/sveltekit",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/nuxt",
+      "destination": "/ecosystem/app-frameworks/nuxt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/express",
+      "destination": "/ecosystem/app-frameworks/express",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/nestjs",
+      "destination": "/ecosystem/app-frameworks/nestjs",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/hono",
+      "destination": "/ecosystem/app-frameworks/hono",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/electron",
+      "destination": "/ecosystem/app-frameworks/electron",
+      "permanent": true
+    },
+    {
+      "source": "/guides/agent-frameworks/ai-sdk",
+      "destination": "/ecosystem/agent-frameworks-and-ui/ai-sdk",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers",
+      "destination": "/ecosystem/deployment-patterns/cloud-providers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/sandbox",
+      "destination": "/ecosystem/deployment-patterns/sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/web-framework",
+      "destination": "/ecosystem/deployment-patterns/web-framework",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/workflow-runners",
+      "destination": "/ecosystem/deployment-patterns/workflow-runners",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/workers",
+      "destination": "/ecosystem/deployment-patterns/workers",
       "permanent": true
     }
   ]

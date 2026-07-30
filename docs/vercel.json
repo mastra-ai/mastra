@@ -27,27 +27,27 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud",
-      "destination": "/docs/observability/integrations/exporters/mastra-platform",
+      "destination": "/ecosystem/observability-integrations/exporters/mastra-platform",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/exporters/default",
-      "destination": "/docs/observability/integrations/exporters/mastra-storage",
+      "destination": "/ecosystem/observability-integrations/exporters/mastra-storage",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/exporters/:path*",
-      "destination": "/docs/observability/integrations/exporters/:path*",
+      "destination": "/ecosystem/observability-integrations/exporters/:path*",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/bridges/:path*",
-      "destination": "/docs/observability/integrations/bridges/:path*",
+      "destination": "/ecosystem/observability-integrations/bridges/:path*",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/processors/:path*",
-      "destination": "/docs/observability/integrations/processors/:path*",
+      "destination": "/ecosystem/observability-integrations/processors/:path*",
       "permanent": true
     },
     {
@@ -92,7 +92,7 @@
     },
     {
       "source": "/examples/agents/ai-sdk-v5-integration",
-      "destination": "/guides/getting-started/next-js",
+      "destination": "/ecosystem/app-frameworks/next-js",
       "permanent": true
     },
     {
@@ -162,17 +162,17 @@
     },
     {
       "source": "/docs/frameworks/agentic-uis/ai-sdk",
-      "destination": "/guides/build-your-ui/ai-sdk-ui",
+      "destination": "/ecosystem/agent-frameworks-and-ui/ai-sdk-ui",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/agentic-uis/assistant-ui",
-      "destination": "/guides/build-your-ui/assistant-ui",
+      "destination": "/ecosystem/agent-frameworks-and-ui/assistant-ui",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/agentic-uis/copilotkit",
-      "destination": "/guides/build-your-ui/copilotkit/overview",
+      "destination": "/ecosystem/agent-frameworks-and-ui/copilotkit/overview",
       "permanent": true
     },
     {
@@ -182,27 +182,27 @@
     },
     {
       "source": "/docs/frameworks/web-frameworks/astro",
-      "destination": "/guides/getting-started/astro",
+      "destination": "/ecosystem/app-frameworks/astro",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/web-frameworks/next-js",
-      "destination": "/guides/getting-started/next-js",
+      "destination": "/ecosystem/app-frameworks/next-js",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/web-frameworks/sveltekit",
-      "destination": "/guides/getting-started/sveltekit",
+      "destination": "/ecosystem/app-frameworks/sveltekit",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/web-frameworks/vite-react",
-      "destination": "/guides/getting-started/vite-react",
+      "destination": "/ecosystem/app-frameworks/vite-react",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/servers/express",
-      "destination": "/guides/getting-started/express",
+      "destination": "/ecosystem/app-frameworks/express",
       "permanent": true
     },
     {
@@ -217,7 +217,7 @@
     },
     {
       "source": "/guides/quickstarts/nextjs",
-      "destination": "/guides/getting-started/next-js",
+      "destination": "/ecosystem/app-frameworks/next-js",
       "permanent": true
     },
     {
@@ -427,42 +427,42 @@
     },
     {
       "source": "/docs/auth",
-      "destination": "/docs/server/auth",
+      "destination": "/ecosystem/auth-providers",
       "permanent": true
     },
     {
       "source": "/docs/auth/index",
-      "destination": "/docs/server/auth/index",
+      "destination": "/ecosystem/auth-providers/index",
       "permanent": true
     },
     {
       "source": "/docs/auth/jwt",
-      "destination": "/docs/server/auth/jwt",
+      "destination": "/ecosystem/auth-providers/jwt",
       "permanent": true
     },
     {
       "source": "/docs/auth/clerk",
-      "destination": "/docs/server/auth/clerk",
+      "destination": "/ecosystem/auth-providers/clerk",
       "permanent": true
     },
     {
       "source": "/docs/auth/supabase",
-      "destination": "/docs/server/auth/supabase",
+      "destination": "/ecosystem/auth-providers/supabase",
       "permanent": true
     },
     {
       "source": "/docs/auth/firebase",
-      "destination": "/docs/server/auth/firebase",
+      "destination": "/ecosystem/auth-providers/firebase",
       "permanent": true
     },
     {
       "source": "/docs/auth/workos",
-      "destination": "/docs/server/auth/workos",
+      "destination": "/ecosystem/auth-providers/workos",
       "permanent": true
     },
     {
       "source": "/docs/auth/auth0",
-      "destination": "/docs/server/auth/auth0",
+      "destination": "/ecosystem/auth-providers/auth0",
       "permanent": true
     },
     {
@@ -522,37 +522,37 @@
     },
     {
       "source": "/docs/deployment/cloud-providers/amazon-ec2",
-      "destination": "/guides/deployment/amazon-ec2",
+      "destination": "/ecosystem/deployment-targets/amazon-ec2",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/aws-lambda",
-      "destination": "/guides/deployment/aws-lambda",
+      "destination": "/ecosystem/deployment-targets/aws-lambda",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/azure-app-services",
-      "destination": "/guides/deployment/azure-app-services",
+      "destination": "/ecosystem/deployment-targets/azure-app-services",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/cloudflare-deployer",
-      "destination": "/guides/deployment/cloudflare",
+      "destination": "/ecosystem/deployment-targets/cloudflare",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/digital-ocean",
-      "destination": "/guides/deployment/digital-ocean",
+      "destination": "/ecosystem/deployment-targets/digital-ocean",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/netlify-deployer",
-      "destination": "/guides/deployment/netlify",
+      "destination": "/ecosystem/deployment-targets/netlify",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/vercel-deployer",
-      "destination": "/guides/deployment/vercel",
+      "destination": "/ecosystem/deployment-targets/vercel",
       "permanent": true
     },
     {
@@ -562,7 +562,7 @@
     },
     {
       "source": "/docs/workflows/inngest-workflow",
-      "destination": "/guides/deployment/inngest",
+      "destination": "/ecosystem/deployment-targets/inngest",
       "permanent": true
     },
     {
@@ -617,7 +617,7 @@
     },
     {
       "source": "/guides/deployment",
-      "destination": "/docs/deployment/cloud-providers",
+      "destination": "/ecosystem/deployment-patterns/cloud-providers",
       "permanent": true
     },
     {
@@ -676,13 +676,13 @@
       "permanent": true
     },
     {
-      "source": "/guides/deployment/netlify-deployer",
-      "destination": "/guides/deployment/netlify",
+      "source": "/ecosystem/deployment-targets/netlify-deployer",
+      "destination": "/ecosystem/deployment-targets/netlify",
       "permanent": true
     },
     {
-      "source": "/guides/deployment/vercel-deployer",
-      "destination": "/guides/deployment/vercel",
+      "source": "/ecosystem/deployment-targets/vercel-deployer",
+      "destination": "/ecosystem/deployment-targets/vercel",
       "permanent": true
     },
     {
@@ -711,8 +711,8 @@
       "permanent": true
     },
     {
-      "source": "/guides/deployment/cloudflare-deployer",
-      "destination": "/guides/deployment/cloudflare",
+      "source": "/ecosystem/deployment-targets/cloudflare-deployer",
+      "destination": "/ecosystem/deployment-targets/cloudflare",
       "permanent": true
     },
     {
@@ -931,8 +931,8 @@
       "permanent": true
     },
     {
-      "source": "/guides/build-your-ui/copilotkit",
-      "destination": "/guides/build-your-ui/copilotkit/overview",
+      "source": "/ecosystem/agent-frameworks-and-ui/copilotkit",
+      "destination": "/ecosystem/agent-frameworks-and-ui/copilotkit/overview",
       "permanent": true
     },
     {
@@ -1031,6 +1031,116 @@
       "permanent": true
     },
     {
+      "source": "/docs/browser/:path*",
+      "destination": "/ecosystem/browser/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/:path*",
+      "destination": "/ecosystem/workspace/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth",
+      "destination": "/ecosystem/auth-providers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth/:path*",
+      "destination": "/ecosystem/auth-providers/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/:path*",
+      "destination": "/ecosystem/observability-integrations/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/build-your-ui/:path*",
+      "destination": "/ecosystem/agent-frameworks-and-ui/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/:path*",
+      "destination": "/ecosystem/deployment-targets/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/next-js",
+      "destination": "/ecosystem/app-frameworks/next-js",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/vite-react",
+      "destination": "/ecosystem/app-frameworks/vite-react",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/astro",
+      "destination": "/ecosystem/app-frameworks/astro",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/sveltekit",
+      "destination": "/ecosystem/app-frameworks/sveltekit",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/nuxt",
+      "destination": "/ecosystem/app-frameworks/nuxt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/express",
+      "destination": "/ecosystem/app-frameworks/express",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/nestjs",
+      "destination": "/ecosystem/app-frameworks/nestjs",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/hono",
+      "destination": "/ecosystem/app-frameworks/hono",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/electron",
+      "destination": "/ecosystem/app-frameworks/electron",
+      "permanent": true
+    },
+    {
+      "source": "/guides/agent-frameworks/ai-sdk",
+      "destination": "/ecosystem/agent-frameworks-and-ui/ai-sdk",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers",
+      "destination": "/ecosystem/deployment-patterns/cloud-providers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/sandbox",
+      "destination": "/ecosystem/deployment-patterns/sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/web-framework",
+      "destination": "/ecosystem/deployment-patterns/web-framework",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/workflow-runners",
+      "destination": "/ecosystem/deployment-patterns/workflow-runners",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/workers",
+      "destination": "/ecosystem/deployment-patterns/workers",
+      "permanent": true
+    },
+    {
       "source": "/docs/agents/channels/llms.txt",
       "destination": "/docs/capabilities/channels/overview/llms.txt",
       "permanent": true
@@ -1042,27 +1152,27 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud/llms.txt",
-      "destination": "/docs/observability/integrations/exporters/mastra-platform/llms.txt",
+      "destination": "/ecosystem/observability-integrations/exporters/mastra-platform/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/exporters/default/llms.txt",
-      "destination": "/docs/observability/integrations/exporters/mastra-storage/llms.txt",
+      "destination": "/ecosystem/observability-integrations/exporters/mastra-storage/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/exporters/:path*/llms.txt",
-      "destination": "/docs/observability/integrations/exporters/:path*/llms.txt",
+      "destination": "/ecosystem/observability-integrations/exporters/:path*/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/bridges/:path*/llms.txt",
-      "destination": "/docs/observability/integrations/bridges/:path*/llms.txt",
+      "destination": "/ecosystem/observability-integrations/bridges/:path*/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/processors/:path*/llms.txt",
-      "destination": "/docs/observability/integrations/processors/:path*/llms.txt",
+      "destination": "/ecosystem/observability-integrations/processors/:path*/llms.txt",
       "permanent": true
     },
     {
@@ -1147,17 +1257,17 @@
     },
     {
       "source": "/docs/frameworks/agentic-uis/ai-sdk/llms.txt",
-      "destination": "/guides/build-your-ui/ai-sdk-ui/llms.txt",
+      "destination": "/ecosystem/agent-frameworks-and-ui/ai-sdk-ui/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/agentic-uis/assistant-ui/llms.txt",
-      "destination": "/guides/build-your-ui/assistant-ui/llms.txt",
+      "destination": "/ecosystem/agent-frameworks-and-ui/assistant-ui/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/agentic-uis/copilotkit/llms.txt",
-      "destination": "/guides/build-your-ui/copilotkit/overview/llms.txt",
+      "destination": "/ecosystem/agent-frameworks-and-ui/copilotkit/overview/llms.txt",
       "permanent": true
     },
     {
@@ -1167,27 +1277,27 @@
     },
     {
       "source": "/docs/frameworks/web-frameworks/astro/llms.txt",
-      "destination": "/guides/getting-started/astro/llms.txt",
+      "destination": "/ecosystem/app-frameworks/astro/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/web-frameworks/next-js/llms.txt",
-      "destination": "/guides/getting-started/next-js/llms.txt",
+      "destination": "/ecosystem/app-frameworks/next-js/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/web-frameworks/sveltekit/llms.txt",
-      "destination": "/guides/getting-started/sveltekit/llms.txt",
+      "destination": "/ecosystem/app-frameworks/sveltekit/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/web-frameworks/vite-react/llms.txt",
-      "destination": "/guides/getting-started/vite-react/llms.txt",
+      "destination": "/ecosystem/app-frameworks/vite-react/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/servers/express/llms.txt",
-      "destination": "/guides/getting-started/express/llms.txt",
+      "destination": "/ecosystem/app-frameworks/express/llms.txt",
       "permanent": true
     },
     {
@@ -1202,7 +1312,7 @@
     },
     {
       "source": "/guides/quickstarts/nextjs/llms.txt",
-      "destination": "/guides/getting-started/next-js/llms.txt",
+      "destination": "/ecosystem/app-frameworks/next-js/llms.txt",
       "permanent": true
     },
     {
@@ -1287,42 +1397,42 @@
     },
     {
       "source": "/docs/auth/llms.txt",
-      "destination": "/docs/server/auth/llms.txt",
+      "destination": "/ecosystem/auth-providers/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/auth/index/llms.txt",
-      "destination": "/docs/server/auth/index/llms.txt",
+      "destination": "/ecosystem/auth-providers/index/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/auth/jwt/llms.txt",
-      "destination": "/docs/server/auth/jwt/llms.txt",
+      "destination": "/ecosystem/auth-providers/jwt/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/auth/clerk/llms.txt",
-      "destination": "/docs/server/auth/clerk/llms.txt",
+      "destination": "/ecosystem/auth-providers/clerk/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/auth/supabase/llms.txt",
-      "destination": "/docs/server/auth/supabase/llms.txt",
+      "destination": "/ecosystem/auth-providers/supabase/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/auth/firebase/llms.txt",
-      "destination": "/docs/server/auth/firebase/llms.txt",
+      "destination": "/ecosystem/auth-providers/firebase/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/auth/workos/llms.txt",
-      "destination": "/docs/server/auth/workos/llms.txt",
+      "destination": "/ecosystem/auth-providers/workos/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/auth/auth0/llms.txt",
-      "destination": "/docs/server/auth/auth0/llms.txt",
+      "destination": "/ecosystem/auth-providers/auth0/llms.txt",
       "permanent": true
     },
     {
@@ -1347,37 +1457,37 @@
     },
     {
       "source": "/docs/deployment/cloud-providers/amazon-ec2/llms.txt",
-      "destination": "/guides/deployment/amazon-ec2/llms.txt",
+      "destination": "/ecosystem/deployment-targets/amazon-ec2/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/aws-lambda/llms.txt",
-      "destination": "/guides/deployment/aws-lambda/llms.txt",
+      "destination": "/ecosystem/deployment-targets/aws-lambda/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/azure-app-services/llms.txt",
-      "destination": "/guides/deployment/azure-app-services/llms.txt",
+      "destination": "/ecosystem/deployment-targets/azure-app-services/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/cloudflare-deployer/llms.txt",
-      "destination": "/guides/deployment/cloudflare/llms.txt",
+      "destination": "/ecosystem/deployment-targets/cloudflare/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/digital-ocean/llms.txt",
-      "destination": "/guides/deployment/digital-ocean/llms.txt",
+      "destination": "/ecosystem/deployment-targets/digital-ocean/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/netlify-deployer/llms.txt",
-      "destination": "/guides/deployment/netlify/llms.txt",
+      "destination": "/ecosystem/deployment-targets/netlify/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/deployment/cloud-providers/vercel-deployer/llms.txt",
-      "destination": "/guides/deployment/vercel/llms.txt",
+      "destination": "/ecosystem/deployment-targets/vercel/llms.txt",
       "permanent": true
     },
     {
@@ -1387,7 +1497,7 @@
     },
     {
       "source": "/docs/workflows/inngest-workflow/llms.txt",
-      "destination": "/guides/deployment/inngest/llms.txt",
+      "destination": "/ecosystem/deployment-targets/inngest/llms.txt",
       "permanent": true
     },
     {
@@ -1437,7 +1547,7 @@
     },
     {
       "source": "/guides/deployment/llms.txt",
-      "destination": "/docs/deployment/cloud-providers/llms.txt",
+      "destination": "/ecosystem/deployment-patterns/cloud-providers/llms.txt",
       "permanent": true
     },
     {
@@ -1471,13 +1581,13 @@
       "permanent": true
     },
     {
-      "source": "/guides/deployment/netlify-deployer/llms.txt",
-      "destination": "/guides/deployment/netlify/llms.txt",
+      "source": "/ecosystem/deployment-targets/netlify-deployer/llms.txt",
+      "destination": "/ecosystem/deployment-targets/netlify/llms.txt",
       "permanent": true
     },
     {
-      "source": "/guides/deployment/vercel-deployer/llms.txt",
-      "destination": "/guides/deployment/vercel/llms.txt",
+      "source": "/ecosystem/deployment-targets/vercel-deployer/llms.txt",
+      "destination": "/ecosystem/deployment-targets/vercel/llms.txt",
       "permanent": true
     },
     {
@@ -1506,8 +1616,8 @@
       "permanent": true
     },
     {
-      "source": "/guides/deployment/cloudflare-deployer/llms.txt",
-      "destination": "/guides/deployment/cloudflare/llms.txt",
+      "source": "/ecosystem/deployment-targets/cloudflare-deployer/llms.txt",
+      "destination": "/ecosystem/deployment-targets/cloudflare/llms.txt",
       "permanent": true
     },
     {
@@ -1681,8 +1791,8 @@
       "permanent": true
     },
     {
-      "source": "/guides/build-your-ui/copilotkit/llms.txt",
-      "destination": "/guides/build-your-ui/copilotkit/overview/llms.txt",
+      "source": "/ecosystem/agent-frameworks-and-ui/copilotkit/llms.txt",
+      "destination": "/ecosystem/agent-frameworks-and-ui/copilotkit/overview/llms.txt",
       "permanent": true
     },
     {
@@ -1778,6 +1888,116 @@
     {
       "source": "/docs/guide/tools/llms.txt",
       "destination": "/docs/agents/using-tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/:path*/llms.txt",
+      "destination": "/ecosystem/browser/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workspace/:path*/llms.txt",
+      "destination": "/ecosystem/workspace/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth/llms.txt",
+      "destination": "/ecosystem/auth-providers/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/auth/:path*/llms.txt",
+      "destination": "/ecosystem/auth-providers/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/:path*/llms.txt",
+      "destination": "/ecosystem/observability-integrations/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/build-your-ui/:path*/llms.txt",
+      "destination": "/ecosystem/agent-frameworks-and-ui/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/deployment/:path*/llms.txt",
+      "destination": "/ecosystem/deployment-targets/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/next-js/llms.txt",
+      "destination": "/ecosystem/app-frameworks/next-js/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/vite-react/llms.txt",
+      "destination": "/ecosystem/app-frameworks/vite-react/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/astro/llms.txt",
+      "destination": "/ecosystem/app-frameworks/astro/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/sveltekit/llms.txt",
+      "destination": "/ecosystem/app-frameworks/sveltekit/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/nuxt/llms.txt",
+      "destination": "/ecosystem/app-frameworks/nuxt/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/express/llms.txt",
+      "destination": "/ecosystem/app-frameworks/express/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/nestjs/llms.txt",
+      "destination": "/ecosystem/app-frameworks/nestjs/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/hono/llms.txt",
+      "destination": "/ecosystem/app-frameworks/hono/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/electron/llms.txt",
+      "destination": "/ecosystem/app-frameworks/electron/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/agent-frameworks/ai-sdk/llms.txt",
+      "destination": "/ecosystem/agent-frameworks-and-ui/ai-sdk/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/cloud-providers/llms.txt",
+      "destination": "/ecosystem/deployment-patterns/cloud-providers/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/sandbox/llms.txt",
+      "destination": "/ecosystem/deployment-patterns/sandbox/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/web-framework/llms.txt",
+      "destination": "/ecosystem/deployment-patterns/web-framework/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/workflow-runners/llms.txt",
+      "destination": "/ecosystem/deployment-patterns/workflow-runners/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/workers/llms.txt",
+      "destination": "/ecosystem/deployment-patterns/workers/llms.txt",
       "permanent": true
     }
   ]
