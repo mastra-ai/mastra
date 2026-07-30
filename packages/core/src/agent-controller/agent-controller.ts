@@ -4,6 +4,7 @@ import { Agent } from '../agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
+import { AgentControllerChannels } from '../channels/agent-controller-channels';
 import { getErrorFromUnknown } from '../error';
 import { GatewayManager } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
@@ -212,6 +213,8 @@ export class AgentController<TState = {}> {
   #externalMastra: Mastra | undefined = undefined;
   #gatewayManager: GatewayManager | undefined = undefined;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
+  /** Chat channels running this controller inside messaging threads (from `config.channels`). */
+  #channels: AgentControllerChannels | null = null;
 
   constructor(config: AgentControllerConfig<TState>) {
     validateModes(config.modes);
@@ -219,6 +222,10 @@ export class AgentController<TState = {}> {
     this.id = config.id;
     this.config = config;
     this.#instructions = config.instructions;
+    if (config.channels) {
+      this.#channels = new AgentControllerChannels(config.channels);
+      this.#channels.__setController(this);
+    }
     // Gateway manager merges configured gateways with the router defaults
     // (custom takes precedence). Shared by listAvailableModels,
     // getCurrentModelAuthStatus, and the OM model resolver.
@@ -282,7 +289,7 @@ export class AgentController<TState = {}> {
       setState: updates => void session.state.set(updates as Partial<TState>),
       setSetting: ({ key, value }) => session.thread.setSetting({ key, value }),
     });
-    session.thread.connect(this.createThreadDataStore(), session as Session);
+    session.thread.connect(this.createThreadDataStore(session), session as Session);
     session.setMachinery({
       getAgent: () => this.getCurrentAgent(session),
       subscribeToThread: ({ resourceId, threadId }) =>
@@ -337,6 +344,7 @@ export class AgentController<TState = {}> {
     id,
     scope,
     tags,
+    threadId,
     workspace,
     browser,
     requestContext,
@@ -362,6 +370,8 @@ export class AgentController<TState = {}> {
      * changing the API. Falls back to `initialState` when omitted.
      */
     tags?: Record<string, string>;
+    /** Exact thread id to bind during session creation. Existing threads are resumed; missing threads are created with this id. */
+    threadId?: string;
     workspace?: Workspace;
     browser?: MastraBrowser;
     requestContext?: RequestContext;
@@ -379,11 +389,31 @@ export class AgentController<TState = {}> {
     // resource+scope resolve to one session.
     const existing = this.#sessionsByResource.get(registryKey);
     if (existing) {
-      return existing;
+      const session = await existing;
+      // An exact thread binding is part of the createSession contract
+      // ("existing threads are resumed; missing threads are created with this
+      // id"), so honor it on cached sessions too. Without this, whichever
+      // request creates the session first wins: a thread-agnostic caller (SSE
+      // subscribe, message listing) racing ahead of an exact-thread create
+      // would leave the session bound to a different thread and the requested
+      // thread never created.
+      if (threadId && session.thread.getId() !== threadId) {
+        const existingThread = await session.thread.getById({ threadId });
+        if (existingThread) {
+          if (existingThread.resourceId !== effectiveResourceId) {
+            throw new Error(`Thread not found: ${threadId}`);
+          }
+          await session.thread.switch({ threadId });
+        } else {
+          await session.thread.create({ id: threadId });
+        }
+      }
+      return session;
     }
 
     const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId, tags, {
       scope,
+      threadId,
       workspace,
       browser,
       requestContext,
@@ -409,6 +439,7 @@ export class AgentController<TState = {}> {
     tags?: Record<string, string>,
     overrides?: {
       scope?: string;
+      threadId?: string;
       workspace?: Workspace;
       browser?: MastraBrowser;
       requestContext?: RequestContext;
@@ -512,38 +543,53 @@ export class AgentController<TState = {}> {
       }
     }
 
-    // Bring the session online with a current thread. Selection is tag-aware so
-    // worktrees sharing a resourceId each resume their own thread without
-    // claiming threads owned by another scope. A thread is a candidate only when
-    // its metadata matches every provided tag; with no tags every thread
-    // qualifies. Tags default to the controller-global state when omitted.
-    const selectionTags: Record<string, string> = {};
-    if (tags && Object.keys(tags).length > 0) {
-      Object.assign(selectionTags, tags);
+    if (overrides?.threadId) {
+      const existingThread = await session.thread.getById({ threadId: overrides.threadId });
+      if (existingThread) {
+        if (existingThread.resourceId !== effectiveResourceId) {
+          throw new Error(`Thread not found: ${overrides.threadId}`);
+        }
+        await this.config.threadLock?.acquire(existingThread.id);
+        session.thread.set({ threadId: existingThread.id });
+        await session.thread.loadMetadata();
+        await session.thread.ensureCurrentSubscription();
+      } else {
+        await session.thread.create({ id: overrides.threadId });
+      }
     } else {
-      const projectPath = (this.config.initialState as any)?.projectPath as string | undefined;
-      if (projectPath) selectionTags.projectPath = projectPath;
-    }
-    const tagEntries = Object.entries(selectionTags);
+      // Bring the session online with a current thread. Selection is tag-aware so
+      // worktrees sharing a resourceId each resume their own thread without
+      // claiming threads owned by another scope. A thread is a candidate only when
+      // its metadata matches every provided tag; with no tags every thread
+      // qualifies. Tags default to the controller-global state when omitted.
+      const selectionTags: Record<string, string> = {};
+      if (tags && Object.keys(tags).length > 0) {
+        Object.assign(selectionTags, tags);
+      } else {
+        const projectPath = (this.config.initialState as any)?.projectPath as string | undefined;
+        if (projectPath) selectionTags.projectPath = projectPath;
+      }
+      const tagEntries = Object.entries(selectionTags);
 
-    const threads = await session.thread.list();
-    const candidates =
-      tagEntries.length > 0
-        ? threads.filter(t => {
-            const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
-            return tagEntries.every(([key, value]) => metadata[key] === value);
-          })
-        : threads;
+      const threads = await session.thread.list();
+      const candidates =
+        tagEntries.length > 0
+          ? threads.filter(t => {
+              const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
+              return tagEntries.every(([key, value]) => metadata[key] === value);
+            })
+          : threads;
 
-    // Resume the most recent same-resource candidate, or create a new thread.
-    if (candidates.length === 0) {
-      await session.thread.create();
-    } else {
-      const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
-      await this.config.threadLock?.acquire(mostRecent.id);
-      session.thread.set({ threadId: mostRecent.id });
-      await session.thread.loadMetadata();
-      await session.thread.ensureCurrentSubscription();
+      // Resume the most recent same-resource candidate, or create a new thread.
+      if (candidates.length === 0) {
+        await session.thread.create();
+      } else {
+        const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
+        await this.config.threadLock?.acquire(mostRecent.id);
+        session.thread.set({ threadId: mostRecent.id });
+        await session.thread.loadMetadata();
+        await session.thread.ensureCurrentSubscription();
+      }
     }
 
     return session;
@@ -656,22 +702,6 @@ export class AgentController<TState = {}> {
    */
   #resolveStorage(): MastraCompositeStore | undefined {
     return this.#externalMastra?.getStorage() ?? this.config.storage;
-  }
-
-  private async resolveConfiguredMemory(): Promise<MastraMemory | undefined> {
-    const configuredMemory = this.config.memory;
-    if (!configuredMemory) return undefined;
-
-    const memory =
-      typeof configuredMemory === 'function'
-        ? await configuredMemory({ requestContext: new RequestContext(), mastra: this.getMastra() })
-        : configuredMemory;
-
-    if (!memory) {
-      throw new Error('Dynamic memory factory returned empty value');
-    }
-
-    return memory;
   }
 
   /**
@@ -793,10 +823,11 @@ export class AgentController<TState = {}> {
 
   /**
    * The shared-host storage gateway the Session's thread domain reads/writes
-   * through. The Session owns the thread-domain logic; this adapter just maps
-   * raw storage rows to AgentController types — it does not call back into Session.
+   * through. The Session owns the thread-domain logic; this adapter maps raw
+   * storage rows to AgentController types and uses the active session only when
+   * resolving configured memory for a clone.
    */
-  private createThreadDataStore(): ThreadDataStore {
+  private createThreadDataStore(session: Session<TState>): ThreadDataStore {
     return {
       listThreads: ({ resourceId, includeForkedSubagents, metadata }) =>
         this.queryThreads({ resourceId, includeForkedSubagents, metadata }),
@@ -810,7 +841,7 @@ export class AgentController<TState = {}> {
       saveThread: ({ thread }) => this.persistThreadRow(thread),
       deleteThread: ({ threadId }) => this.deleteThreadRow(threadId),
       cloneThread: ({ sourceThreadId, resourceId, title, metadata }) =>
-        this.cloneThreadRow({ sourceThreadId, resourceId, title, metadata }),
+        this.cloneThreadRow({ session, sourceThreadId, resourceId, title, metadata }),
       acquireLock: threadId => this.config.threadLock?.acquire(threadId) ?? Promise.resolve(),
       releaseLock: threadId => this.config.threadLock?.release(threadId) ?? Promise.resolve(),
       getModeIds: () => this.config.modes.map(m => m.id),
@@ -842,18 +873,24 @@ export class AgentController<TState = {}> {
 
   /** Clone a thread (and messages) via the host's memory (gateway primitive for the Session thread domain). */
   private async cloneThreadRow({
+    session,
     sourceThreadId,
     resourceId,
     title,
     metadata,
   }: {
+    session: Session<TState>;
     sourceThreadId: string;
     resourceId: string;
     title?: string;
     metadata?: Record<string, unknown>;
   }): Promise<AgentControllerThread> {
     const storage = this.#resolveStorage();
-    const memory = storage ? await storage.getStore('memory') : await this.resolveConfiguredMemory();
+    const memory = this.config.memory
+      ? await this.resolveMemory(session)
+      : storage
+        ? await storage.getStore('memory')
+        : undefined;
     if (!memory) {
       throw new Error(
         storage ? 'Storage does not have a memory domain configured' : 'Memory is not configured on this Harness',
@@ -1072,7 +1109,65 @@ export class AgentController<TState = {}> {
       agent.setBrowser(this.browser);
     }
 
+    // Propagate controller channels onto the resolved (possibly lazily-built)
+    // mode agent so its run renders back through the controller's adapters.
+    // Unconditional: a controller's mode agents never carry their own channels,
+    // and `Agent.setChannels` is idempotent for the same instance. There is no
+    // `hasOwnChannels()` guard equivalent to `hasOwnBrowser()`.
+    if (this.#channels && agent.getChannels() !== this.#channels) {
+      agent.setChannels(this.#channels);
+    }
+
     return agent;
+  }
+
+  /**
+   * Chat channels configured on this controller (from `config.channels`),
+   * or null when the controller has no channels.
+   */
+  getChannels(): AgentControllerChannels | null {
+    return this.#channels;
+  }
+
+  /**
+   * Sets the AgentControllerChannels instance for this controller and
+   * propagates it onto every backing agent so their runs render back through
+   * the controller's adapters. Used by ChannelProvider implementations (e.g.
+   * SlackProvider) to inject channels they create for dynamic installations.
+   * Mirrors {@link setBrowser}: the instance is attached to the shared backing
+   * agent plus any per-mode agents via `Agent.setChannels`, and lazily-built
+   * mode agents pick it up on their first run via
+   * `propagateRuntimeServicesToAgent`.
+   *
+   * Replacing an existing instance is expected on provider reconnect (the
+   * provider rebuilds channels as a superset merge rather than mutating the
+   * live instance), so it logs at debug level only. Note the replaced
+   * instance's in-memory `autoApproveResourceIds` tracking is discarded with
+   * it — harmless, since it is refreshed on every inbound message.
+   * @internal
+   */
+  setChannels(channels: AgentControllerChannels): void {
+    if (this.#channels && this.#channels !== channels) {
+      this.getMastra()?.getLogger()?.debug(`[AgentController:${this.id}] Replacing existing AgentControllerChannels`);
+    }
+    this.#channels = channels;
+    channels.__setController(this);
+
+    // Attach to every already-constructed backing agent: shared backing agent
+    // + any deprecated per-mode agent instances. Lazily-built mode agents
+    // receive channels on first run via `propagateRuntimeServicesToAgent`.
+    const agents = new Set<Agent<any, any, any, any>>();
+    if (this.config.agent) {
+      agents.add(this.config.agent);
+    }
+    for (const mode of this.config.modes) {
+      if (mode.agent || !this.config.agent) {
+        agents.add(this.getAgentForMode(mode));
+      }
+    }
+    for (const agent of agents) {
+      agent.setChannels(channels);
+    }
   }
 
   private getAgentForMode(mode: AgentControllerMode): Agent<any, any, any, any> {
@@ -1567,10 +1662,15 @@ export class AgentController<TState = {}> {
    */
   private buildSharedRunOptions(session: Session<TState>): Record<string, unknown> {
     const isYolo = (session.state.get() as Record<string, unknown>).yolo === true;
+    // Channel sessions on adapters that can't render approval buttons must
+    // auto-approve tools — a required approval would park the run forever on
+    // a card nobody can answer. Tracked on the channels instance rather than
+    // session state so the controller's `stateSchema` never sees it.
+    const channelAutoApprove = this.#channels?.__isAutoApproveResource(session.identity.getResourceId()) === true;
     const shared: Record<string, unknown> = {
       maxSteps: CONTROLLER_MAX_STEPS,
       savePerStep: false,
-      requireToolApproval: !isYolo,
+      requireToolApproval: !isYolo && !channelAutoApprove,
     };
 
     // Auto-enable Anthropic server-side fallbacks for fable-5 so a classifier

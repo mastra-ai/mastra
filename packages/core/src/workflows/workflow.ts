@@ -2221,9 +2221,9 @@ export class Workflow<
   }
 
   foreach<
-    TPrevIsArray extends TPrevSchema extends any[] ? true : false,
+    TPrevIsArray extends (TPrevSchema extends any[] ? true : false),
     TStepState,
-    TStepInputSchema extends TPrevSchema extends (infer TElement)[] ? TElement : never,
+    TStepInputSchema extends (TPrevSchema extends (infer TElement)[] ? TElement : never),
     TStepId extends string,
     TSchemaOut,
     TStepRC,

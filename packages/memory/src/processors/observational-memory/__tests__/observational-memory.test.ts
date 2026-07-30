@@ -10563,104 +10563,101 @@ describe('Full Async Buffering Flow', () => {
   // activate(). The core hint-propagation behavior is covered by the direct test below:
   // "should clear stale thread continuation hints after buffered activation when latest
   // activated chunk has no hints"
-  it.todo(
-    'should clear stale thread continuation hints on sync observation when latest output omits them',
-    async () => {
-      // Use enough messages and a low threshold so that two activation rounds can
-      // succeed sequentially.  The first observer response includes continuation
-      // hints; the second omits them.  After the second activation, the stale
-      // hints from the first round must be cleared (written as undefined).
-      const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
-        messageTokens: 1000,
-        bufferTokens: 500,
-        bufferActivation: 0.7,
-        reflectionObservationTokens: 50000,
-        messageCount: 10,
-        observerResponses: [
-          // Call 1 (async buffering from step 0): hints are parsed from the mock
-          // response and stored in the buffered chunk.
-          // Note: closing tags must be on their own line — the parser regex
-          // requires `^<\/current-task>` (start-of-line anchor with /m flag).
-          '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>\nImplement sync path\n</current-task>\n<suggested-response>\nContinue with step 2\n</suggested-response>',
-          // Call 2 (async buffering from step 2): no hints → activation clears them.
-          '<observations>\n- 🟡 Follow-up observation without hints\n</observations>',
-        ],
-      });
+  it.todo('should clear stale thread continuation hints on sync observation when latest output omits them', async () => {
+    // Use enough messages and a low threshold so that two activation rounds can
+    // succeed sequentially.  The first observer response includes continuation
+    // hints; the second omits them.  After the second activation, the stale
+    // hints from the first round must be cleared (written as undefined).
+    const { storage, threadId, resourceId, step, waitForAsyncOps } = await setupAsyncBufferingScenario({
+      messageTokens: 1000,
+      bufferTokens: 500,
+      bufferActivation: 0.7,
+      reflectionObservationTokens: 50000,
+      messageCount: 10,
+      observerResponses: [
+        // Call 1 (async buffering from step 0): hints are parsed from the mock
+        // response and stored in the buffered chunk.
+        // Note: closing tags must be on their own line — the parser regex
+        // requires `^<\/current-task>` (start-of-line anchor with /m flag).
+        '<observations>\n- 🔴 Initial observation\n</observations>\n<current-task>\nImplement sync path\n</current-task>\n<suggested-response>\nContinue with step 2\n</suggested-response>',
+        // Call 2 (async buffering from step 2): no hints → activation clears them.
+        '<observations>\n- 🟡 Follow-up observation without hints\n</observations>',
+      ],
+    });
 
-      // Step 0 triggers async buffering. After waiting, save fresh messages
-      // so the threshold is met, then a fresh step 0 activates the buffered chunk,
-      // propagating continuation hints to thread metadata.
-      await step(0);
-      await waitForAsyncOps();
+    // Step 0 triggers async buffering. After waiting, save fresh messages
+    // so the threshold is met, then a fresh step 0 activates the buffered chunk,
+    // propagating continuation hints to thread metadata.
+    await step(0);
+    await waitForAsyncOps();
 
-      // Add messages so unobserved token count meets the threshold on the next turn
-      const round1Filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
-      const round1Messages = Array.from({ length: 10 }, (_, i) => ({
-        id: `round1-msg-${i}`,
-        threadId,
-        resourceId,
-        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-        content: {
-          format: 2 as const,
-          parts: [{ type: 'text' as const, text: `Round1 ${i}: ${round1Filler}` }],
-        },
-        type: 'text',
-        createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
-      }));
-      await storage.saveMessages({ messages: round1Messages });
+    // Add messages so unobserved token count meets the threshold on the next turn
+    const round1Filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    const round1Messages = Array.from({ length: 10 }, (_, i) => ({
+      id: `round1-msg-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Round1 ${i}: ${round1Filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+    }));
+    await storage.saveMessages({ messages: round1Messages });
 
-      await step(0, { freshState: true });
-      await waitForAsyncOps();
-      const threadAfterFirstObservation = await storage.getThreadById({ threadId });
-      const firstOM = ((threadAfterFirstObservation?.metadata as any)?.mastra?.om ?? {}) as any;
-      expect(firstOM.currentTask).toBe('Implement sync path');
-      expect(firstOM.suggestedResponse).toBe('Continue with step 2');
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+    const threadAfterFirstObservation = await storage.getThreadById({ threadId });
+    const firstOM = ((threadAfterFirstObservation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(firstOM.currentTask).toBe('Implement sync path');
+    expect(firstOM.suggestedResponse).toBe('Continue with step 2');
 
-      // Save fresh messages so the threshold is exceeded again on the next round.
-      const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
-      const freshMessages = Array.from({ length: 10 }, (_, i) => ({
-        id: `sync-clear-msg-${i}`,
-        threadId,
-        resourceId,
-        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-        content: {
-          format: 2 as const,
-          parts: [{ type: 'text' as const, text: `Follow-up ${i}: ${filler}` }],
-        },
-        type: 'text',
-        createdAt: new Date(Date.UTC(2025, 0, 1, 13, i)),
-      }));
-      await storage.saveMessages({ messages: freshMessages });
+    // Save fresh messages so the threshold is exceeded again on the next round.
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    const freshMessages = Array.from({ length: 10 }, (_, i) => ({
+      id: `sync-clear-msg-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Follow-up ${i}: ${filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 13, i)),
+    }));
+    await storage.saveMessages({ messages: freshMessages });
 
-      // New step 0 triggers another async buffering round (observer call 2, no hints).
-      // After waiting, another step 0 with fresh messages activates the new chunk,
-      // clearing the stale hints.
-      await step(0, { freshState: true });
-      await waitForAsyncOps();
+    // New step 0 triggers another async buffering round (observer call 2, no hints).
+    // After waiting, another step 0 with fresh messages activates the new chunk,
+    // clearing the stale hints.
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
 
-      // Add more messages for the final activation round
-      const round3Messages = Array.from({ length: 10 }, (_, i) => ({
-        id: `round3-msg-${i}`,
-        threadId,
-        resourceId,
-        role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-        content: {
-          format: 2 as const,
-          parts: [{ type: 'text' as const, text: `Round3 ${i}: ${filler}` }],
-        },
-        type: 'text',
-        createdAt: new Date(Date.UTC(2025, 0, 1, 15, i)),
-      }));
-      await storage.saveMessages({ messages: round3Messages });
+    // Add more messages for the final activation round
+    const round3Messages = Array.from({ length: 10 }, (_, i) => ({
+      id: `round3-msg-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Round3 ${i}: ${filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 15, i)),
+    }));
+    await storage.saveMessages({ messages: round3Messages });
 
-      await step(0, { freshState: true });
-      await waitForAsyncOps();
-      const threadAfterSecondObservation = await storage.getThreadById({ threadId });
-      const secondOM = ((threadAfterSecondObservation?.metadata as any)?.mastra?.om ?? {}) as any;
-      expect(secondOM.currentTask).toBeUndefined();
-      expect(secondOM.suggestedResponse).toBeUndefined();
-    },
-  );
+    await step(0, { freshState: true });
+    await waitForAsyncOps();
+    const threadAfterSecondObservation = await storage.getThreadById({ threadId });
+    const secondOM = ((threadAfterSecondObservation?.metadata as any)?.mastra?.om ?? {}) as any;
+    expect(secondOM.currentTask).toBeUndefined();
+    expect(secondOM.suggestedResponse).toBeUndefined();
+  });
 
   it('should clear stale thread continuation hints after buffered activation when latest activated chunk has no hints', async () => {
     // Use enough messages so that pending tokens exceed blockAfter (1.2 × 1000 = 1200).

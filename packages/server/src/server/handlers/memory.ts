@@ -1106,6 +1106,13 @@ export const LIST_MESSAGES_ROUTE = createRoute({
       if (agent && (await isGatewayAgentAsync(agent))) {
         const gwClient = getGatewayClient();
         if (gwClient) {
+          if (filter?.metadata && Object.keys(filter.metadata).length > 0) {
+            throw new HTTPException(501, {
+              message:
+                'Gateway memory message metadata filters are not supported by this gateway endpoint. Remove filter.metadata or query a local memory store.',
+            });
+          }
+
           // Validate thread ownership before returning messages
           const threadResult = await gwClient.getThread(effectiveThreadId);
           if (threadResult) {

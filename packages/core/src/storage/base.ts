@@ -515,13 +515,24 @@ export class MastraCompositeStore extends MastraBase {
    * cover, so we never double-init the same domain instance.
    */
   async init(): Promise<void> {
-    // to prevent race conditions, await any current init
-    if (this.shouldCacheInit && (await this.hasInitialized)) {
+    if (!this.shouldCacheInit) {
+      await this.#runInit();
       return;
     }
 
-    this.hasInitialized = this.#runInit();
-    await this.hasInitialized;
+    if (this.hasInitialized) {
+      await this.hasInitialized;
+      return;
+    }
+
+    const initPromise = this.#runInit().catch(error => {
+      if (this.hasInitialized === initPromise) {
+        this.hasInitialized = null;
+      }
+      throw error;
+    });
+    this.hasInitialized = initPromise;
+    await initPromise;
   }
 
   async #runInit(): Promise<boolean> {

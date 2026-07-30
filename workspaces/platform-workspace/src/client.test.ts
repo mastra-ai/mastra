@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PlatformApiError } from './client.js';
-import { PlatformClient } from './client.js';
+import { PlatformClient, resolvePlatformOptions } from './client.js';
 
 function response(body: string, init?: ResponseInit) {
   return new Response(body, init);
@@ -27,6 +27,28 @@ describe('PlatformClient', () => {
     expect(String(url)).toBe('https://proxy.test/v1/projects/proj_123/sandbox?dryRun=true');
     expect((init.headers as Headers).get('authorization')).toBe('Bearer sk_test');
     expect(init.method).toBe('POST');
+  });
+
+  it('reads the access token from MASTRA_PLATFORM_SECRET_KEY', () => {
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+
+    expect(resolvePlatformOptions({}).accessToken).toBe('sk_secret');
+  });
+
+  it('prefers MASTRA_PLATFORM_SECRET_KEY over the deprecated MASTRA_PLATFORM_ACCESS_TOKEN', () => {
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', 'sk_secret');
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_legacy');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+
+    expect(resolvePlatformOptions({}).accessToken).toBe('sk_secret');
+  });
+
+  it('falls back to the deprecated MASTRA_PLATFORM_ACCESS_TOKEN', () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'sk_legacy');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+
+    expect(resolvePlatformOptions({}).accessToken).toBe('sk_legacy');
   });
 
   it('throws PlatformApiError for non-2xx responses', async () => {

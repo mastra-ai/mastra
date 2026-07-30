@@ -7,6 +7,7 @@ import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
 import type { ObservabilityContext, Span, SpanType, TracingPolicy } from '../observability';
 import { createObservabilityContext } from '../observability';
+import { deepEqual } from '../utils/deep-equal';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
 import type {
@@ -581,10 +582,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         if (hasPreviousOutput) {
           try {
             payloadMatchesPrevious =
-              optimizedStep.payload === previousOutput ||
-              JSON.stringify(optimizedStep.payload) === JSON.stringify(previousOutput);
+              optimizedStep.payload === previousOutput || deepEqual(optimizedStep.payload, previousOutput);
           } catch {
-            // non-serializable payload — treat as not matching
+            // Values that cannot be structurally compared are treated as not matching.
           }
         }
         if (payloadMatchesPrevious) {
@@ -806,6 +806,66 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     let lastExecutionContext: ExecutionContext | undefined;
     let currentRequestContext = params.requestContext;
     for (let i = startIdx; i < steps.length; i++) {
+      if (params.abortController.signal.aborted) {
+        await this.persistStepUpdate({
+          workflowId,
+          runId,
+          resourceId,
+          stepResults,
+          serializedStepGraph: params.serializedStepGraph,
+          executionContext: lastExecutionContext || {
+            workflowId,
+            runId,
+            executionPath: [i],
+            stepExecutionPath,
+            activeStepsPath: {},
+            suspendedPaths: {},
+            resumeLabels: {},
+            retryConfig: { attempts, delay },
+            format: params.format,
+            state: lastState ?? initialState,
+            tracingIds: params.tracingIds,
+          },
+          workflowStatus: 'canceled',
+          requestContext: currentRequestContext,
+        });
+
+        workflowSpan?.end({
+          attributes: {
+            status: 'canceled',
+          },
+        });
+
+        const formattedResult = await this.fmtReturnValue<any>(
+          params.pubsub,
+          stepResults,
+          { status: 'canceled' } as any,
+          undefined,
+          stepExecutionPath,
+        );
+
+        await this.invokeLifecycleCallbacks({
+          status: 'canceled',
+          result: undefined,
+          error: undefined,
+          steps: formattedResult.steps,
+          tripwire: undefined,
+          runId,
+          workflowId,
+          resourceId,
+          input,
+          requestContext: currentRequestContext,
+          state: lastState,
+          stepExecutionPath,
+        });
+
+        return {
+          ...formattedResult,
+          runId,
+          ...(params.outputOptions?.includeState ? { state: lastState } : {}),
+        } as any;
+      }
+
       const entry = steps[i]!;
 
       const executionContext: ExecutionContext = {
@@ -946,6 +1006,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         return {
           ...result,
+          runId,
           ...(lastOutput.result.status === 'suspended' && params.outputOptions?.includeResumeLabels
             ? { resumeLabels: lastOutput.mutableContext.resumeLabels }
             : {}),
@@ -967,7 +1028,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           resourceId,
           stepResults: lastOutput.stepResults,
           serializedStepGraph: params.serializedStepGraph,
-          executionContext: lastExecutionContext!,
+          executionContext: lastExecutionContext,
           workflowStatus: 'paused',
           requestContext: currentRequestContext,
         });
@@ -986,7 +1047,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         delete result.result;
 
-        return { ...result, status: 'paused', ...(params.outputOptions?.includeState ? { state: lastState } : {}) };
+        return {
+          ...result,
+          runId,
+          status: 'paused',
+          ...(params.outputOptions?.includeState ? { state: lastState } : {}),
+        };
       }
     }
 
@@ -1043,9 +1109,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     if (params.outputOptions?.includeState) {
-      return { ...result, state: lastState };
+      return { ...result, runId, state: lastState };
     }
-    return result;
+    return { ...result, runId };
   }
 
   getStepOutput(stepResults: Record<string, any>, step?: StepFlowEntry): any {

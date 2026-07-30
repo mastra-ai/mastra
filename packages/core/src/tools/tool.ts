@@ -9,6 +9,7 @@ import type {
   MCPToolProperties,
   NeedsApprovalFn,
   ToolAction,
+  ToolExecuteFunction,
   ToolExecutionContext,
   ToolPayloadTransform,
 } from './types';
@@ -273,7 +274,14 @@ export class Tool<
    * });
    * ```
    */
-  constructor(opts: ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>) {
+  constructor(
+    opts: Omit<
+      ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>,
+      'execute'
+    > & {
+      execute?: ToolExecuteFunction<TSchemaIn, TSchemaOut, TContext, TRequestContext>;
+    },
+  ) {
     (this as any)[MASTRA_TOOL_MARKER] = true;
     this.id = opts.id;
     this.description = opts.description;
@@ -565,12 +573,13 @@ type CreateToolOpts<
     TId,
     TRequestContext
   >,
-  'inputSchema' | 'outputSchema' | 'suspendSchema' | 'resumeSchema'
+  'inputSchema' | 'outputSchema' | 'suspendSchema' | 'resumeSchema' | 'execute'
 > & {
   inputSchema?: TInputSchema;
   outputSchema?: TOutputSchema;
   suspendSchema?: TSuspendSchema;
   resumeSchema?: TResumeSchema;
+  execute?: ToolExecuteFunction<InferSchema<TInputSchema>, InferSchema<TOutputSchema>, TContext, TRequestContext>;
 };
 export function createTool<
   TId extends string = string,

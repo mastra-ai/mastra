@@ -1,5 +1,5 @@
 import type { Agent } from '../agent';
-import type { MastraDBMessage } from '../agent/message-list/state/types';
+import type { MastraDBMessage, MastraProviderMetadata } from '../agent/message-list/state/types';
 import { createSignal } from '../agent/signals';
 import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type {
@@ -518,13 +518,13 @@ export class SessionThread {
   }
 
   /** Create a new thread, bind the session to it, and rebind the agent stream. */
-  async create({ title }: { title?: string } = {}): Promise<AgentControllerThread> {
+  async create({ title, id }: { title?: string; id?: string } = {}): Promise<AgentControllerThread> {
     const session = this.#owner;
     const store = this.#store;
     this.cleanupSubscription();
     const now = new Date();
     const thread: AgentControllerThread = {
-      id: session.machinery.generateId(),
+      id: id ?? session.machinery.generateId(),
       resourceId: session.identity.getResourceId(),
       title: title || '',
       createdAt: now,
@@ -3014,8 +3014,33 @@ export class Session<TState = unknown> {
           tracingContext?: TracingContext;
           tracingOptions?: TracingOptions;
           requestContext?: RequestContext;
+          /**
+           * Provider options attached to the resulting prompt turn. Surfaces as
+           * `providerOptions` on the `UserModelMessage` sent to the model and as
+           * `content.providerMetadata` on the persisted DB message (see
+           * {@link AgentSignalInput.providerOptions}).
+           */
+          providerOptions?: MastraProviderMetadata;
         },
-  ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true; runId?: string }> } {
+    options?: {
+      tracingContext?: TracingContext;
+      tracingOptions?: TracingOptions;
+      requestContext?: RequestContext;
+      /**
+       * When true, the returned `accepted` promise awaits the agent's real
+       * acceptance decision (`wake`/`deliver`/…) and propagates routing or
+       * stream-setup failures as rejections instead of resolving on the next
+       * tick. Callers that need delivery guarantees (e.g. the Factory rule
+       * dispatcher) use this so a failed wake is retried rather than silently
+       * treated as sent.
+       */
+      requireDelivery?: boolean;
+    },
+  ): {
+    id: string;
+    type: AgentSignalInput['type'];
+    accepted: Promise<{ accepted: true; runId?: string; action?: SendAgentSignalAccepted['action'] }>;
+  } {
     const settleRunId = async <T>(result: {
       accepted: Promise<SendAgentSignalAccepted<T>>;
     }): Promise<string | undefined> => {
@@ -3025,7 +3050,11 @@ export class Session<TState = unknown> {
       const settled = await result.accepted.catch(() => undefined);
       return settled && 'runId' in settled ? settled.runId : undefined;
     };
-    const { tracingContext, tracingOptions, requestContext: requestContextInput } = 'content' in input ? input : {};
+    const contentOptions = 'content' in input ? input : undefined;
+    const tracingContext = options?.tracingContext ?? contentOptions?.tracingContext;
+    const tracingOptions = options?.tracingOptions ?? contentOptions?.tracingOptions;
+    const requestContextInput = options?.requestContext ?? contentOptions?.requestContext;
+    const requireDelivery = options?.requireDelivery ?? false;
     const ifActive = 'content' in input ? input.ifActive : undefined;
     const ifIdle = 'content' in input ? input.ifIdle : undefined;
     const submittedRunId = this.run.getRunId();
@@ -3041,7 +3070,9 @@ export class Session<TState = unknown> {
     // run to fully idle before starting a new run.
     const submittedAbortRequested = this.run.isAbortRequested();
     const signal = createSignal(
-      'content' in input ? { type: 'user', tagName: 'user', contents: input.content } : input,
+      'content' in input
+        ? { type: 'user', tagName: 'user', contents: input.content, providerOptions: input.providerOptions }
+        : input,
     );
     const accepted = Promise.resolve().then(async () => {
       if (!this.thread.getId()) {
@@ -3067,6 +3098,14 @@ export class Session<TState = unknown> {
           ifActive,
           ifIdle,
         });
+        if (requireDelivery) {
+          const settled = await result.accepted;
+          return {
+            accepted: true as const,
+            runId: 'runId' in settled ? settled.runId : undefined,
+            action: settled.action,
+          };
+        }
         return { accepted: true as const, runId: await settleRunId(result) };
       }
 
@@ -3094,6 +3133,16 @@ export class Session<TState = unknown> {
         ifActive,
         ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
       });
+      if (requireDelivery) {
+        // Delivery-guaranteed path: surface the real acceptance decision and
+        // propagate routing/stream-setup failures to the caller.
+        const settled = await result.accepted;
+        return {
+          accepted: true as const,
+          runId: 'runId' in settled ? settled.runId : undefined,
+          action: settled.action,
+        };
+      }
       try {
         await Promise.race([
           result.accepted.then(() => undefined),

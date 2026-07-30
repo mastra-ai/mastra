@@ -41,6 +41,7 @@ export function useSaveAgent({
 
       try {
         const updated = await updateStoredAgent.mutateAsync({
+          autoPublish: true,
           name: params.name,
           description: params.description,
           instructions: params.instructions,

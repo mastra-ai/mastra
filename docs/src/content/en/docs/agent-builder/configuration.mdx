@@ -12,7 +12,7 @@ packages:
 The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
 :::
 
-The Agent Builder is configured through `MastraEditor.builder`. Two top-level keys control its behavior: `features` toggles UI visibility and `configuration` pins admin-controlled defaults onto every new agent.
+The Agent Builder is configured through `MastraEditor.builder`. Top-level keys control its behavior: `features` toggles UI visibility and `configuration` pins admin-controlled defaults onto every new agent.
 
 ## Quickstart
 
@@ -63,7 +63,7 @@ new MastraEditor({
 })
 ```
 
-The shipping UI consumes these `AgentFeatures` keys: `tools`, `agents`, `workflows`, `scorers`, `skills`, `memory`, `variables`, `favorites`, `avatarUpload`, `model`, and `browser`. See the [AgentBuilderOptions reference](/reference/editor/agent-builder/agent-builder-options) for the full schema.
+The UI consumes these `AgentFeatures` keys: `tools`, `agents`, `workflows`, `scorers`, `skills`, `memory`, `variables`, `favorites`, `avatarUpload`, `model`, and `browser`. See the [AgentBuilderOptions reference](/reference/editor/agent-builder/agent-builder-options) for the full schema.
 
 ## Admin defaults
 
@@ -103,7 +103,7 @@ export const mastra = new Mastra({
 
 With no `configuration.agent.tools.allowed` set, both `weather-info` and `web-search` appear in the Builder's tool picker. End users can attach either tool to any agent they create.
 
-Entries match on `tool.id`, `Agent.id`, or `workflow.id` — the string the entity reports at runtime, not the export name.
+Entries match on `tool.id`, `Agent.id`, or `workflow.id`, the string the entity reports at runtime, not the export name.
 
 MCP tools work the same way: load them via `MCPClient.getTools()` and spread the result into the `tools` map.
 
