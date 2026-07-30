@@ -20,9 +20,10 @@ import { fileURLToPath } from 'node:url';
 import { DefaultStorage } from '@mastra/libsql';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { INNGEST_PORT, startConnectInngestDevServer, stopInngestDevServer } from './durable-agent.test.utils';
+
 vi.setConfig({ testTimeout: 180_000, hookTimeout: 120_000 });
 
-const INNGEST_PORT = 4100;
 const AGENT_ID = 'suspend-meta-agent';
 const DB_PATH = `/tmp/mastra-suspend-meta-${Date.now()}.db`;
 const DB_URL = `file:${DB_PATH}`;
@@ -31,6 +32,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const WORKER = path.join(here, 'fixtures', 'suspend-metadata-worker.ts');
 
 let worker: ChildProcess | undefined;
+let devServer: ChildProcess | null = null;
 
 /** Start the connect worker and wait until it reports READY. */
 function startWorker(): Promise<ChildProcess> {
@@ -59,6 +61,10 @@ function startWorker(): Promise<ChildProcess> {
 
 describe('durable agent suspend metadata persistence (cross-process worker)', () => {
   beforeAll(async () => {
+    // The worker dials the dev server's connect gateway outbound, so the dev server must exist
+    // before the worker starts. This file owns its own dev server: it runs no HTTP app server, and
+    // depending on another test file's infrastructure would make it order-dependent.
+    devServer = await startConnectInngestDevServer();
     worker = await startWorker();
     // Give Inngest a moment to register the worker's functions.
     await new Promise(r => setTimeout(r, 3000));
@@ -68,6 +74,8 @@ describe('durable agent suspend metadata persistence (cross-process worker)', ()
     worker?.kill('SIGTERM');
     await new Promise(r => setTimeout(r, 500));
     if (worker && !worker.killed) worker.kill('SIGKILL');
+    await stopInngestDevServer(devServer);
+    devServer = null;
   });
 
   it('persists suspendedTools when the loop runs on a separate worker process', async () => {
