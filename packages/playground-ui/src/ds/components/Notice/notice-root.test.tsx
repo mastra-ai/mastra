@@ -42,6 +42,8 @@ describe('NoticeRoot', () => {
     const title = 'A title long enough to outgrow the notice width on its own';
     render(<Notice variant="warning" title={title} />);
 
-    expect(classesOf(screen.getByText(title), 'the title')).toContain('truncate');
+    const titleElement = screen.getByText(title);
+    expect(classesOf(titleElement, 'the title')).toContain('truncate');
+    expect(classesOf(titleElement.parentElement, 'the title row')).toContain('min-w-0');
   });
 });
