@@ -1,7 +1,18 @@
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ArrowLeft, Bot, Building2, Cable, GitBranch, Inbox, Palette, Search, SlidersHorizontal } from 'lucide-react';
+import {
+  ArrowLeft,
+  Bot,
+  Building2,
+  Cable,
+  CircleUserRound,
+  GitBranch,
+  Inbox,
+  Palette,
+  Search,
+  SlidersHorizontal,
+} from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
@@ -26,6 +37,12 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
   {
     id: 'preferences',
     items: [
+      {
+        id: 'account',
+        label: SETTINGS_SECTION_LABELS.account,
+        icon: CircleUserRound,
+        searchText: 'my account profile identity email authentication session log out sign out user',
+      },
       {
         id: 'preferences',
         label: SETTINGS_SECTION_LABELS.preferences,
