@@ -2657,6 +2657,39 @@ describe('Tracing', () => {
       span.end();
     });
 
+    it('attaches environment and serviceName to log events emitted without a span', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+        logging: { level: 'info' },
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      observability.getLoggerContext().info('span-less log');
+
+      expect(testExporter.logEvents).toHaveLength(1);
+      expect(testExporter.logEvents[0]!.log.correlationContext?.environment).toBe('production');
+      expect(testExporter.logEvents[0]!.log.correlationContext?.serviceName).toBe('test-service');
+    });
+
+    it('attaches environment and serviceName to metric events emitted without a span', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      observability.__setMastraEnvironment('production');
+
+      observability.getMetricsContext().emit('user_metric', 1, { status: 'ok' });
+
+      const userMetric = testExporter.metricEvents.find(e => e.metric.name === 'user_metric');
+      expect(userMetric?.metric.correlationContext?.environment).toBe('production');
+      expect(userMetric?.metric.correlationContext?.serviceName).toBe('test-service');
+    });
+
     it('attaches environment to score events when correlationContext comes from a live span', async () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',

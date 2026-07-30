@@ -469,6 +469,7 @@
     "openai/o3-mini",
     "openai/o3-pro",
     "openai/o4-mini",
+    "sakana/fugu-ultra",
     "xai/grok-4.3",
     "xai/grok-4.5",
     "xai/grok-build-0.1",

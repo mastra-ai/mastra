@@ -24,6 +24,7 @@ import type {
   AnyExportedSpan,
   TraceState,
   TracingOptions,
+  CorrelationContext,
   LoggerContext,
   MetricsContext,
   ObservabilityEvent,
@@ -409,6 +410,18 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
   // ============================================================================
 
   /**
+   * Minimal correlation context for span-less logger and metrics contexts,
+   * so their signals still carry the Mastra-level environment and serviceName
+   * instead of persisting null.
+   */
+  private buildFallbackCorrelationContext(): CorrelationContext {
+    return {
+      environment: this.#mastraEnvironment,
+      serviceName: this.config.serviceName,
+    };
+  }
+
+  /**
    * Get a LoggerContext correlated to a span.
    * Called by the context-factory in core (deriveLoggerContext) so that
    * `observabilityContext.loggerVNext` is a real logger instead of no-op.
@@ -418,7 +431,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       return noOpLoggerContext;
     }
 
-    const correlationContext = span?.getCorrelationContext?.();
+    const correlationContext = span?.getCorrelationContext?.() ?? this.buildFallbackCorrelationContext();
     const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
 
     return new LoggerContextImpl({
@@ -437,7 +450,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * `observabilityContext.metrics` is a real metrics context instead of no-op.
    */
   getMetricsContext(span?: AnySpan): MetricsContext {
-    const correlationContext = span?.getCorrelationContext?.();
+    const correlationContext = span?.getCorrelationContext?.() ?? this.buildFallbackCorrelationContext();
     const metadata: Record<string, unknown> | undefined = span?.metadata ? structuredClone(span.metadata) : undefined;
 
     return new MetricsContextImpl({
@@ -776,6 +789,25 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     if (exportedSpan) {
       const event: TracingEvent = { type: TracingEventType.SPAN_ENDED, exportedSpan };
       this.emitTracingEvent(event);
+      return;
+    }
+
+    // The span ended but was filtered out, so no bridge will see its end event.
+    // Tell the bridge directly so it can drop the state it created for this span.
+    this.releaseBridgeSpan(span);
+  }
+
+  /**
+   * Release bridge state for a span that ended without being exported.
+   */
+  private releaseBridgeSpan(span: AnySpan): void {
+    const bridge = this.getBridge();
+    if (!bridge?.releaseSpan) return;
+
+    try {
+      bridge.releaseSpan(span.id, span.traceId);
+    } catch (error) {
+      this.logger.error(`[Observability] Bridge releaseSpan error [spanId=${span.id}]`, error);
     }
   }
 

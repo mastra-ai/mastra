@@ -1343,6 +1343,7 @@ export type ProviderModelsMap = {
     'kimi-k2.6',
     'kimi-k2.7-code',
     'kimi-k3',
+    'kimi-k3-eco',
     'mimo-v2.5-pro',
     'minimax-m2.5',
     'qwen3.5-397b-a17b',
@@ -2521,6 +2522,7 @@ export type ProviderModelsMap = {
     'qwen3-5-9b',
     'qwen3-5-plus',
     'qwen3-6-27b',
+    'qwen3-6-35b-a3b',
     'qwen3-6-flash',
     'qwen3-6-max-preview',
     'qwen3-6-plus',
@@ -2597,8 +2599,6 @@ export type ProviderModelsMap = {
   ];
   readonly scaleway: readonly [
     'bge-multilingual-gemma2',
-    'devstral-2-123b-instruct-2512',
-    'gemma-3-27b-it',
     'gemma-4-26b-a4b-it',
     'glm-5.2',
     'gpt-oss-120b',
@@ -2611,7 +2611,6 @@ export type ProviderModelsMap = {
     'qwen3-embedding-8b',
     'qwen3.5-397b-a17b',
     'qwen3.6-35b-a3b',
-    'voxtral-small-24b-2507',
     'whisper-large-v3',
   ];
   readonly togetherai: readonly [
@@ -2859,6 +2858,8 @@ export type ProviderModelsMap = {
   readonly neuralwatt: readonly [
     'Qwen/Qwen3.5-397B-A17B-FP8',
     'Qwen/Qwen3.6-35B-A3B',
+    'deepseek-v4-flash',
+    'gemma-4-31b',
     'glm-5.2',
     'glm-5.2-fast',
     'glm-5.2-flex',
@@ -3567,6 +3568,7 @@ export type ProviderModelsMap = {
     'kimi-k2.5',
     'kimi-k2.6',
     'kimi-k2.7-code',
+    'kimi-k3',
     'llama-3.3-70b-instruct',
     'llama-4-maverick-17b-128e-instruct-fp8',
     'minimax-m2.7',
@@ -3575,6 +3577,7 @@ export type ProviderModelsMap = {
     'qwen3.6-flash',
     'qwen3.6-max',
     'qwen3.6-plus',
+    'qwen3.7-flash',
     'qwen3.7-max',
     'qwen3.7-plus',
   ];
@@ -3979,6 +3982,7 @@ export type ProviderModelsMap = {
     'xai/grok-stt',
     'xai/grok-tts',
     'xai/grok-voice-think-fast-1.0',
+    'xai/grok-voice-think-fast-2.0',
     'xiaomi/mimo-v2.5',
     'xiaomi/mimo-v2.5-pro',
     'zai/glm-4.5',
@@ -4577,6 +4581,8 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-20b',
     'stepfun-ai/Step-3.5-Flash',
     'stepfun-ai/Step-3.7-Flash',
+    'tencent/Hy3',
+    'thinkingmachines/Inkling',
     'zai-org/GLM-4.5',
     'zai-org/GLM-4.5-Air',
     'zai-org/GLM-4.5V',

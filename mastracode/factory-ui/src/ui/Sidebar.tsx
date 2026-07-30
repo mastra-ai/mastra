@@ -5,6 +5,7 @@ import { useLocation, useNavigate, useParams } from 'react-router';
 
 import { SidebarAccountLink } from './domains/auth/components/SidebarAccountLink';
 import { FactorySection } from './domains/factory/components/FactorySection';
+import { SidebarGlobalSearchButton } from './domains/search/components/SidebarGlobalSearchButton';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
 import { useCloseSettings } from './domains/settings/hooks/useCloseSettings';
 import { settingsSectionPath } from './domains/settings/settingsSections';
@@ -64,9 +65,10 @@ export function Sidebar() {
   return (
     <MainSidebar className="h-full">
       <MainSidebar.Nav aria-label={settingsOpen ? 'Settings sections' : 'Main'}>
-        <div className="mt-1 mb-2 flex items-center justify-between gap-2 px-3 pt-1">
+        <div className="mt-1 mb-2 flex items-center gap-2 pt-1 pl-3">
           <LogoWithoutText aria-label="Mastra" role="img" className="text-icon6 h-4 w-auto" />
           <AlphaBadge />
+          <SidebarGlobalSearchButton />
         </div>
         {settingsOpen ? (
           <SettingsNavigation />

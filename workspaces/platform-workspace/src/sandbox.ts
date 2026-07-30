@@ -236,8 +236,15 @@ export class PlatformSandbox extends MastraSandbox {
    * (e.g. one per project).
    */
   clone(options: SandboxCloneOptions = {}): PlatformSandbox {
+    // The proxy hashes `body.id` on POST /sandbox to look up a prior
+    // checkpoint. A stable `checkpointName` is only useful if it round-trips
+    // to `body.id`, so route it through the sandbox id when the caller
+    // didn't pick one explicitly. Without this, every clone gets a random
+    // id and no boot ever hits its captured checkpoint (see
+    // issue-platform-sandbox-clone-drops-checkpoint-name.md).
+    const id = options.id ?? options.checkpointName;
     return new PlatformSandbox({
-      ...(options.id !== undefined && { id: options.id }),
+      ...(id !== undefined && { id }),
       accessToken: this._client.accessToken,
       projectId: this._client.projectId,
       fetch: this._client.fetch,

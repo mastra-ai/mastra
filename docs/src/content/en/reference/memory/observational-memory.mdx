@@ -105,6 +105,13 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     defaultValue: 'false',
   },
   {
+    name: 'hooks',
+    type: 'ObserveHooks',
+    description:
+      "Lifecycle hooks fired for every observation/reflection cycle — the manual `observe()`/`reflect()` APIs, turn-driven synchronous observation, and fire-and-forget async buffering. Callbacks receive `threadId`/`resourceId`/`trigger` call context (`'manual' | 'turn-sync' | 'async-buffer'`), and the end hooks (`onObservationEnd`/`onReflectionEnd`) additionally receive the OM model call's token `usage` and `providerMetadata` (where providers such as the AI Gateway report per-call cost), so apps can account for OM model spend without wrapping the observer/reflector models in middleware. Failed async-buffered cycles never throw; they report through the end hook's `error` field. Errors thrown by these hooks are caught and logged — they never fail the cycle.",
+    isOptional: true,
+  },
+  {
     name: 'observation',
     type: 'ObservationalMemoryObservationConfig',
     description: 'Configuration for the observation step. Controls when the Observer agent runs and how it behaves.',

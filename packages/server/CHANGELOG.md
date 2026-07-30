@@ -1,5 +1,48 @@
 # @mastra/server
 
+## 1.56.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`322daa6`](https://github.com/mastra-ai/mastra/commit/322daa6d90552909204044790d850958f6745fed), [`cadaa13`](https://github.com/mastra-ai/mastra/commit/cadaa1372e1077c8e85eb64c5499ba8803caa323), [`06000d7`](https://github.com/mastra-ai/mastra/commit/06000d73712911572e913b8a83339270296d0a22), [`3de0188`](https://github.com/mastra-ai/mastra/commit/3de0188bfaf9a9c09c95fe322b53838cf52c70b6)]:
+  - @mastra/core@1.56.0-alpha.2
+
+## 1.56.0-alpha.1
+
+### Minor Changes
+
+- Added dataset API support for storing per-item undeclared tool policies and reporting denied tool calls. ([#19643](https://github.com/mastra-ai/mastra/pull/19643))
+
+  ```typescript
+  await fetch(`/api/datasets/${datasetId}/items`, {
+    method: 'POST',
+    body: JSON.stringify({
+      input: 'What is the weather?',
+      unmockedToolPolicy: 'deny',
+    }),
+  });
+
+  const failureCode = experimentResult.toolMockReport?.failure?.code;
+  ```
+
+### Patch Changes
+
+- Added comment support to the experiment result API. The PATCH experiment result endpoint and the client updateDatasetExperimentResult method now accept and return a comment field, so review comments persist server-side instead of being lost on reload (https://github.com/mastra-ai/mastra/issues/19857). ([#19865](https://github.com/mastra-ai/mastra/pull/19865))
+
+  ```ts
+  const result = await client.updateDatasetExperimentResult({
+    datasetId,
+    experimentId,
+    resultId,
+    comment: 'Agent hallucinated an API that does not exist',
+  });
+  ```
+
+- Prevent background workflow recovery failures from terminating the server. ([#19639](https://github.com/mastra-ai/mastra/pull/19639))
+
+- Updated dependencies [[`c5e56ff`](https://github.com/mastra-ai/mastra/commit/c5e56ff3bcabdf062708f2d48744fec304df6792), [`4e35a56`](https://github.com/mastra-ai/mastra/commit/4e35a56cdf8d74a5ff6d5eda01f2c1deaf6cc7be)]:
+  - @mastra/core@1.56.0-alpha.1
+
 ## 1.56.0-alpha.0
 
 ### Patch Changes

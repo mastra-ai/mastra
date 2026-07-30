@@ -359,6 +359,7 @@ export interface ModelChunkAttributes extends AIBaseAttributes {
 export interface ToolCallAttributes extends AIBaseAttributes {
   toolType?: string;
   toolDescription?: string;
+  toolCallId?: string;
   success?: boolean;
 }
 
@@ -411,6 +412,7 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
   serverVersion?: string;
   /** Tool description */
   toolDescription?: string;
+  toolCallId?: string;
   /** Whether tool execution was successful */
   success?: boolean;
 }
