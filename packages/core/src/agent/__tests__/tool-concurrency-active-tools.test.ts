@@ -90,7 +90,7 @@ async function runAgent({
   tools: Record<string, unknown>;
   activeTools?: string[];
   prepareStep?: (args: { tools?: Record<string, unknown> }) => unknown;
-  toolCallConcurrency?: number;
+  toolCallConcurrency?: number | { limit?: number; strategy?: 'available' | 'called' };
   requireToolApproval?: boolean;
   toolNames?: string[];
 }) {
@@ -194,5 +194,41 @@ describe('active tool concurrency', () => {
 
     expect(safeTracker.peak).toBe(2);
     expect(sequentialTracker.peak).toBe(1);
+  });
+
+  describe("'called' strategy", () => {
+    it('runs safe calls concurrently when an approval tool is available but not called this step', async () => {
+      const tracker: ConcurrencyTracker = { running: 0, peak: 0, completed: [] };
+
+      await runAgent({
+        tools: {
+          'tool-1': createTrackedTool('tool-1', tracker),
+          'tool-2': createTrackedTool('tool-2', tracker),
+          'approval-tool': createApprovalTool(),
+        },
+        // No activeTools: approval-tool is available (would force sequential under the
+        // default 'available' strategy), but the batch only calls the safe tools.
+        toolCallConcurrency: { strategy: 'called', limit: 8 },
+        toolNames: ['tool-1', 'tool-2'],
+      });
+
+      expect(tracker.peak).toBe(2);
+      expect(tracker.completed).toEqual(expect.arrayContaining(['tool-1', 'tool-2']));
+    });
+
+    it('serializes when the batch actually calls a suspending tool', async () => {
+      const tracker: ConcurrencyTracker = { running: 0, peak: 0, completed: [] };
+
+      await runAgent({
+        tools: {
+          'tool-1': createTrackedTool('tool-1', tracker),
+          'suspending-tool': createTrackedTool('suspending-tool', tracker, { suspendable: true }),
+        },
+        toolCallConcurrency: { strategy: 'called', limit: 8 },
+        toolNames: ['tool-1', 'suspending-tool'],
+      });
+
+      expect(tracker.peak).toBe(1);
+    });
   });
 });

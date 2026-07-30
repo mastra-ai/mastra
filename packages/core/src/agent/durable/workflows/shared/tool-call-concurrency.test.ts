@@ -11,8 +11,8 @@ function tool(overrides: Partial<SerializableToolMetadata> & { name: string }): 
   };
 }
 
-function call(_toolName: string, activeTools?: string[] | null): Pick<DurableToolCallInput, 'activeTools'> {
-  return activeTools !== undefined ? { activeTools } : {};
+function call(toolName: string, activeTools?: string[] | null): Pick<DurableToolCallInput, 'activeTools' | 'toolName'> {
+  return { toolName, ...(activeTools !== undefined ? { activeTools } : {}) };
 }
 
 describe('resolveDurableToolCallConcurrency', () => {
@@ -146,5 +146,64 @@ describe('resolveDurableToolCallConcurrency', () => {
         toolCalls: [call('a')],
       }),
     ).toBe(4);
+  });
+
+  it('extracts the limit from the object config form', () => {
+    expect(
+      resolveDurableToolCallConcurrency({
+        options: { toolCallConcurrency: { limit: 6 } },
+        toolsMetadata: [tool({ name: 'plain' })],
+      }),
+    ).toBe(6);
+  });
+
+  describe("'called' strategy", () => {
+    const meta = [
+      tool({ name: 'generate_video' }),
+      tool({ name: 'request_approval', hasSuspendSchema: true }),
+      tool({ name: 'delete_record', requireApproval: true }),
+    ];
+
+    it('stays concurrent when the batch calls only safe tools, even with an approval tool available', () => {
+      // activeTools undefined ⇒ whole set available; request_approval/delete_record
+      // are available but uncalled ⇒ cannot suspend this step.
+      expect(
+        resolveDurableToolCallConcurrency({
+          options: { toolCallConcurrency: { limit: 8, strategy: 'called' } },
+          toolsMetadata: meta,
+          toolCalls: [call('generate_video'), call('generate_video')],
+        }),
+      ).toBe(8);
+    });
+
+    it('forces sequential when the batch actually calls a suspending tool', () => {
+      expect(
+        resolveDurableToolCallConcurrency({
+          options: { toolCallConcurrency: { limit: 8, strategy: 'called' } },
+          toolsMetadata: meta,
+          toolCalls: [call('generate_video'), call('request_approval')],
+        }),
+      ).toBe(1);
+    });
+
+    it('forces sequential when the batch actually calls an approval tool', () => {
+      expect(
+        resolveDurableToolCallConcurrency({
+          options: { toolCallConcurrency: { limit: 8, strategy: 'called' } },
+          toolsMetadata: meta,
+          toolCalls: [call('delete_record')],
+        }),
+      ).toBe(1);
+    });
+
+    it('still forces sequential under a global approval policy', () => {
+      expect(
+        resolveDurableToolCallConcurrency({
+          options: { requireToolApproval: true, toolCallConcurrency: { limit: 8, strategy: 'called' } },
+          toolsMetadata: meta,
+          toolCalls: [call('generate_video')],
+        }),
+      ).toBe(1);
+    });
   });
 });

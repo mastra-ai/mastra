@@ -154,8 +154,8 @@ export interface InngestAgentStreamOptions<OUTPUT = undefined> {
   requireToolApproval?: AgentExecutionOptions<OUTPUT>['requireToolApproval'];
   /** Automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;
-  /** Maximum concurrent tool calls */
-  toolCallConcurrency?: number;
+  /** Maximum concurrent tool calls (number) or `{ limit?, strategy? }`. See {@link AgentExecutionOptions.toolCallConcurrency}. */
+  toolCallConcurrency?: AgentExecutionOptions<OUTPUT>['toolCallConcurrency'];
   /** Include raw chunks in output */
   includeRawChunks?: boolean;
   /** Maximum processor retries */
