@@ -6,5 +6,5 @@ export type ColumnsProps = {
 };
 
 export function Columns({ children, className }: ColumnsProps) {
-  return <div className={cn(`grid w-full h-full grid-cols-1 overflow-y-auto`, className)}>{children}</div>;
+  return <div className={cn(`grid size-full grid-cols-1 overflow-y-auto`, className)}>{children}</div>;
 }

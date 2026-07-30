@@ -1,0 +1,17 @@
+export type {
+  EntityLearningProgressResponse,
+  NoiseExamplesResponse,
+  NoiseResponse,
+  ThemeDetailResponse,
+  ThemeEntitiesResponse,
+  ThemeExamplesResponse,
+  ThemeFlowResponse,
+  ThemeHistoryResponse,
+  ThemeLearningEntity,
+  ThemeNode,
+  ThemePathsResponse,
+  ThemeSnapshot,
+  ThemeSnapshotsResponse,
+  TraceInsightResponse,
+  TraceSignalName,
+} from '@mastra/client-js';

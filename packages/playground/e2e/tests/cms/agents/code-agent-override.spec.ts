@@ -38,21 +38,27 @@ test.describe('code-mode agent override', () => {
 
       const initialVersionCount = await getVersionCount();
 
-      await page.getByRole('button', { name: /System Prompt/i }).click();
+      await page.getByRole('tab', { name: /System Prompt/i }).click();
       await page.locator('.cm-content').first().click();
       await page.keyboard.type('\nLocal filesystem save from e2e.');
       await expect(saveToFilesystemButton).toBeEnabled();
       await saveToFilesystemButton.click();
 
-      // Code mode treats local saves as commit-less drafts: each save should
-      // overwrite the rolling snapshot rather than grow version history.
-      await expect.poll(getVersionCount).toBe(initialVersionCount);
+      // Code mode treats local saves as a rolling filesystem snapshot: the first
+      // save may create that snapshot, but later saves must not grow history.
+      await expect
+        .poll(async () => {
+          const count = await getVersionCount();
+          return count >= initialVersionCount && count <= initialVersionCount + 1;
+        })
+        .toBe(true);
+      const savedVersionCount = await getVersionCount();
 
       await page.locator('.cm-content').first().click();
       await page.keyboard.type(' Another tweak.');
       await saveToFilesystemButton.click();
 
-      await expect.poll(getVersionCount).toBe(initialVersionCount);
+      await expect.poll(getVersionCount).toBe(savedVersionCount);
 
       const downloadPromise = page.waitForEvent('download');
       await downloadButton.click();
@@ -113,15 +119,14 @@ test.describe('code-mode agent override', () => {
 
       // The user-facing Editor tab must be read-only and hide block-level edit controls.
       await expect(page.getByText(/Read-only/i)).toBeVisible();
-      await page.getByRole('button', { name: /System Prompt/i }).click();
+      await page.getByRole('tab', { name: /System Prompt/i }).click();
       await expect(page.getByRole('button', { name: /Save as prompt block/i })).toHaveCount(0);
       await expect(page.getByRole('button', { name: /Delete block/i })).toHaveCount(0);
 
-      // Tools tab must show the same locked messaging as System Prompt and
-      // hide add/remove controls — tools are code-owned for editor: false agents.
-      await page.getByRole('button', { name: /^Tools$/i }).click();
-      await expect(page.getByText(/Tools are owned by code/i)).toBeVisible();
+      // Tools tab must hide add/remove controls — tools are code-owned for editor: false agents.
+      await page.getByRole('tab', { name: /^Tools$/i }).click();
       await expect(page.getByRole('button', { name: /Add Tools/i })).toHaveCount(0);
+      await expect(page.getByLabel(/^Remove /)).toHaveCount(0);
     });
   });
 

@@ -29,7 +29,7 @@ export const DataListTopCells = forwardRef<HTMLDivElement, DataListTopCellsProps
       <div
         ref={ref}
         className={cn(
-          'grid grid-cols-subgrid gap-8 px-5 pointer-events-none [&>*]:pointer-events-auto',
+          'pointer-events-none grid grid-cols-subgrid gap-8 px-5 [&>*]:pointer-events-auto',
           !colStart && 'col-span-full',
           flushLeft && 'pl-0!',
           className,

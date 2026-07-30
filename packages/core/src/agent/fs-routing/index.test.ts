@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
+import { createScorer } from '../../evals';
+import type { MastraScorer } from '../../evals';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { createSkill } from '../../skills';
@@ -18,6 +20,10 @@ function makeTool(id: string): FsAgentToolEntry {
       execute: async () => ({ ok: true }),
     }),
   };
+}
+
+function makeScorer(id: string): MastraScorer<any, any, any, any> {
+  return createScorer({ id, name: id, description: `scorer ${id}` }).generateScore(() => 1);
 }
 
 function makeSkill(name: string): InlineSkill {
@@ -593,6 +599,96 @@ describe('assembleAgentFromFsEntry', () => {
 
       expect(agent.hasOwnMemory()).toBe(false);
       expect(await agent.getMemory()).toBeUndefined();
+    });
+  });
+
+  describe('scorers', () => {
+    it('wires discovered scorers keyed by filename slug into the agent', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'weather',
+        config: { model: 'openai/gpt-4o' },
+        instructionsMd: 'hi',
+        scorers: [
+          { key: 'relevance', scorer: makeScorer('relevance') },
+          { key: 'accuracy', scorer: makeScorer('accuracy') },
+        ],
+      });
+
+      const scorers = await agent.listScorers();
+      expect(Object.keys(scorers).sort()).toEqual(['accuracy', 'relevance']);
+      expect(scorers.relevance.scorer.id).toBe('relevance');
+    });
+
+    it('accepts a { scorer, sampling } entry as the discovered default export', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'weather',
+        config: { model: 'openai/gpt-4o' },
+        instructionsMd: 'hi',
+        scorers: [
+          { key: 'relevance', scorer: { scorer: makeScorer('relevance'), sampling: { type: 'ratio', rate: 0.5 } } },
+        ],
+      });
+
+      const scorers = await agent.listScorers();
+      expect(scorers.relevance.scorer.id).toBe('relevance');
+      expect(scorers.relevance.sampling).toEqual({ type: 'ratio', rate: 0.5 });
+    });
+
+    it('config.scorers wins on key collision with a warning', async () => {
+      const onWarn = vi.fn();
+      const fromConfig = makeScorer('relevance');
+      const agent = assembleAgentFromFsEntry(
+        {
+          name: 'weather',
+          config: { model: 'openai/gpt-4o', scorers: { relevance: { scorer: fromConfig } } },
+          instructionsMd: 'hi',
+          scorers: [{ key: 'relevance', scorer: makeScorer('relevance') }],
+        },
+        { onWarn },
+      );
+
+      const scorers = await agent.listScorers();
+      expect(scorers.relevance.scorer).toBe(fromConfig);
+      expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('config.scorers wins'));
+    });
+
+    it('a dynamic (function) config.scorers wins wholesale and discovered scorers are ignored', async () => {
+      const onWarn = vi.fn();
+      const dynamicScorer = makeScorer('dynamic');
+      const agent = assembleAgentFromFsEntry(
+        {
+          name: 'weather',
+          config: {
+            model: 'openai/gpt-4o',
+            scorers: () => ({ dynamic: { scorer: dynamicScorer } }),
+          },
+          instructionsMd: 'hi',
+          scorers: [{ key: 'relevance', scorer: makeScorer('relevance') }],
+        },
+        { onWarn },
+      );
+
+      const scorers = await agent.listScorers();
+      expect(Object.keys(scorers)).toEqual(['dynamic']);
+      expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('config.scorers is a function'));
+    });
+
+    it('warns and ignores scorers/ when config.ts exports a new Agent()', () => {
+      const onWarn = vi.fn();
+      const coded = new Agent({
+        id: 'support',
+        name: 'support',
+        instructions: 'Code-defined.',
+        model: 'openai/gpt-4o',
+      });
+
+      const result = assembleAgentFromFsEntry(
+        { name: 'support', config: coded, scorers: [{ key: 'relevance', scorer: makeScorer('relevance') }] },
+        { onWarn },
+      );
+
+      expect(result).toBe(coded);
+      expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('scorers/ are ignored'));
     });
   });
 });

@@ -1,7 +1,6 @@
 import ErrorBoundary from '@docusaurus/ErrorBoundary'
 import Head from '@docusaurus/Head'
 import { PageMetadata, SkipToContentFallbackId, ThemeClassNames } from '@docusaurus/theme-common'
-import { useKeyboardNavigation } from '@docusaurus/theme-common/internal'
 import { useLocation } from '@docusaurus/router'
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext'
 import AnnouncementBar from '@theme/AnnouncementBar'
@@ -24,8 +23,6 @@ export default function Layout(props: Props): ReactNode {
     title,
     description,
   } = props
-
-  useKeyboardNavigation()
 
   const location = useLocation()
   const { siteConfig } = useDocusaurusContext()

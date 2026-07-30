@@ -8,7 +8,7 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -482,12 +482,13 @@ describe('DurableAgent background tasks via stream()', () => {
     });
 
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-    new Mastra({
+    const localMastra = new Mastra({
       logger: false,
       storage,
       backgroundTasks: { enabled: true },
       agents: { 'bg-loop-agent': durableAgent as any },
     });
+    await localMastra.startWorkers();
 
     const chunks: any[] = [];
     let finished = false;
@@ -498,15 +499,21 @@ describe('DurableAgent background tasks via stream()', () => {
       },
     });
 
-    await new Promise(r => setTimeout(r, 2000));
-
-    expect(finished).toBe(true);
+    // Poll until the workflow finishes instead of a fixed sleep
+    await vi.waitFor(
+      () => {
+        expect(finished).toBe(true);
+      },
+      { timeout: 10_000, interval: 100 },
+    );
 
     const textDeltas = chunks.filter(c => c.type === 'text-delta');
     expect(textDeltas.length).toBeGreaterThanOrEqual(1);
 
     cleanup();
-  });
+    await localMastra.backgroundTaskManager?.shutdown();
+    await localMastra.stopWorkers();
+  }, 15_000);
 });
 
 // ============================================================================

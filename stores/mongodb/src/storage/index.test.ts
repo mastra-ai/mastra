@@ -83,8 +83,9 @@ const createMockConnectorHandler = (): ConnectorHandler => {
   };
 };
 
-// Run the shared test suite
-createTestSuite(new MongoDBStore(TEST_CONFIG));
+// Run the shared test suite. The default test topology is standalone MongoDB,
+// where identity-aware dataset item writes intentionally fail before mutation.
+createTestSuite(new MongoDBStore(TEST_CONFIG), { datasetItemIdentity: false });
 
 // Configuration validation tests
 createConfigValidationTests({

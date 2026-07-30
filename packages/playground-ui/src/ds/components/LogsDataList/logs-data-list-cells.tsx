@@ -1,4 +1,3 @@
-import { EntityType } from '@mastra/core/observability';
 import { DataListCell, DataListMonoCell } from '../DataList/data-list-cells';
 type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
@@ -27,7 +26,7 @@ export function LogsDataListLevelCell({ level }: LogsDataListLevelCellProps) {
 
   return (
     <DataListCell height="compact">
-      <span className="uppercase text-ui-sm font-semibold" style={{ color: config.color }}>
+      <span className="text-ui-sm font-semibold uppercase" style={{ color: config.color }}>
         {config.label}
       </span>
     </DataListCell>
@@ -43,12 +42,12 @@ function EntityTypeIcon({ entityType, className }: { entityType: string; classNa
   const normalizedEntityType = entityType.toLowerCase();
 
   switch (normalizedEntityType) {
-    case EntityType.AGENT:
+    case 'agent':
       return <AgentIcon className={iconClass} aria-hidden />;
     case 'workflow':
-    case EntityType.WORKFLOW_RUN:
+    case 'workflow_run':
       return <WorkflowIcon className={iconClass} aria-hidden />;
-    case EntityType.TOOL:
+    case 'tool':
       return <ToolsIcon className={iconClass} aria-hidden />;
     default:
       return null;
@@ -66,7 +65,7 @@ export function LogsDataListEntityCell({ entityType, entityName }: LogsDataListE
   return (
     <DataListCell height="compact" className="flex min-w-0 items-center gap-2">
       <EntityTypeIcon entityType={type} />
-      {entityName ? <span className="min-w-0 text-ui-smd truncate">{entityName}</span> : '-'}
+      {entityName ? <span className="text-ui-smd min-w-0 truncate">{entityName}</span> : '-'}
     </DataListCell>
   );
 }
@@ -81,7 +80,7 @@ export interface LogsDataListMessageCellProps {
 
 export function LogsDataListMessageCell({ message }: LogsDataListMessageCellProps) {
   return (
-    <DataListCell height="compact" className="text-neutral4 text-ui-smd min-w-0 truncate font-mono">
+    <DataListCell height="compact" className="text-ui-smd text-neutral4 min-w-0 truncate font-mono">
       {message}
     </DataListCell>
   );

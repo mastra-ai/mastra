@@ -55,6 +55,7 @@ describe('generated module evaluation', () => {
         tools: [{ key: 'get_weather', path: join(agentDir, 'tools', 'get_weather.mjs') }],
         inputProcessors: [],
         outputProcessors: [],
+        scorers: [],
         skills: [],
         subagents: [],
       },
@@ -114,6 +115,7 @@ describe('generated module evaluation', () => {
         tools: [],
         inputProcessors: [],
         outputProcessors: [],
+        scorers: [],
         skills: [
           {
             kind: 'packaged',
@@ -183,6 +185,7 @@ describe('generated module evaluation', () => {
         tools: [],
         inputProcessors: [],
         outputProcessors: [],
+        scorers: [],
         skills: [],
         subagents: [
           {
@@ -193,6 +196,7 @@ describe('generated module evaluation', () => {
             tools: [],
             inputProcessors: [],
             outputProcessors: [],
+            scorers: [],
             skills: [],
             subagents: [],
           },

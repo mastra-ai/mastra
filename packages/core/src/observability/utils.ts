@@ -198,6 +198,7 @@ export function getEntityTypeForSpan(span: {
       return EntityType.WORKFLOW_STEP;
     case SpanType.TOOL_CALL:
     case SpanType.MCP_TOOL_CALL:
+    case SpanType.PROVIDER_TOOL_CALL:
       return EntityType.TOOL;
     case SpanType.PROCESSOR_RUN:
       return EntityType.OUTPUT_PROCESSOR;

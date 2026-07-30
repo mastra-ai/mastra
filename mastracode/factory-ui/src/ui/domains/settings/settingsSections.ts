@@ -1,0 +1,26 @@
+export type SettingsSection =
+  | 'preferences'
+  | 'factory'
+  | 'connections'
+  | 'repositories'
+  | 'intake'
+  | 'models'
+  | 'behavior';
+
+export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
+  preferences: 'Preferences',
+  factory: 'Factory',
+  connections: 'Connections',
+  repositories: 'Repositories',
+  intake: 'Work Intake',
+  models: 'Models',
+  behavior: 'Behavior',
+};
+
+export function isSettingsSection(value: unknown): value is SettingsSection {
+  return typeof value === 'string' && value in SETTINGS_SECTION_LABELS;
+}
+
+export function settingsSectionPath(factoryId: string, section: SettingsSection): string {
+  return `/factories/${factoryId}/settings/${section}`;
+}

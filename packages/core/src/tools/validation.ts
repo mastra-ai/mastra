@@ -20,6 +20,10 @@ function safeValidate<T>(
     if (result instanceof Promise) {
       throw new Error('Your schema is async, which is not supported. Please use a sync schema.');
     }
+    // Prioritise issues over value: Valibot returns both on failure (typed: false).
+    if ('issues' in result && Array.isArray(result.issues) && result.issues.length > 0) {
+      return { issues: result.issues as readonly StandardSchemaIssue[] };
+    }
     return result as { value: T } | { issues: readonly StandardSchemaIssue[] };
   } catch (err) {
     // Catch Zod internal errors like "Cannot read properties of undefined (reading 'run')"
@@ -159,7 +163,9 @@ export function validateToolSuspendData<T = unknown>(
   }
 
   // Validation failed, return error
-  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues
+    .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
+    .join('\n');
 
   const error: ValidationError<T> = {
     error: true,
@@ -557,7 +563,9 @@ export function validateToolInput<T = unknown>(
 
   // All attempts failed - return the original (non-stripped) error since it's
   // more informative about what the schema actually expects
-  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues
+    .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
+    .join('\n');
 
   const error: ValidationError<T> = {
     error: true,
@@ -595,7 +603,9 @@ export function validateToolOutput<T = unknown>(
   }
 
   // Validation failed, return error
-  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues
+    .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
+    .join('\n');
 
   const error: ValidationError<T> = {
     error: true,
@@ -675,7 +685,9 @@ export function validateRequestContext<T = any>(
   }
 
   // Validation failed, return error
-  const errorMessages = validation.issues.map(e => `- ${e.path?.join('.') || 'root'}: ${e.message}`).join('\n');
+  const errorMessages = validation.issues
+    .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
+    .join('\n');
 
   // Redact sensitive keys before including in error message
   const redactedContext = redactSensitiveKeys(contextValues);

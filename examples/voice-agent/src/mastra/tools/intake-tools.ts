@@ -1,7 +1,24 @@
+import { createEndCallTool } from '@mastra/livekit';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { checkServiceArea as checkServiceAreaBackend, reconcileIntake } from '../backend';
 import type { TradeId } from '../data';
+
+// NOTE: the default Meridian agent is deliberately permissive — no consent capture here. The
+// runtime consent tool (`createConsentTool`) belongs to the regulated line: see
+// tools/compliance-tools.ts and voice-worker-regulated.ts, which demonstrate every safeguard.
+
+/**
+ * Lets the agent hang up once the call is done — the companion to the worker's
+ * `configuration.endCall`. The tool only SIGNALS the intent (it can't reach the LiveKit room from
+ * inside the agent loop); the worker waits for the goodbye to play out, then disconnects. `onEndCall`
+ * is optional bookkeeping — here we just log the reason and caller.
+ */
+export const endCall = createEndCallTool({
+  onEndCall: ({ reason, resourceId }) => {
+    console.info('[call-center] agent ended the call', { reason, resourceId });
+  },
+});
 
 const tradeSchema = z.enum(['plumbing', 'electrical', 'roofing', 'carpentry', 'painting']);
 

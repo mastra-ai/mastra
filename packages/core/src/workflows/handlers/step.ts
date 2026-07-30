@@ -135,6 +135,18 @@ export async function executeStep(
   let suspendDataToUse =
     stepResults[step.id]?.status === 'suspended' ? stepResults[step.id]?.suspendPayload : undefined;
 
+  // A suspended foreach step's step-level suspendPayload only carries the FIRST suspended
+  // iteration's payload. When resuming a specific iteration, use that iteration's own payload
+  // from `__workflow_meta.foreachOutput` so parallel suspensions don't read a sibling's data
+  // (e.g. another tool call's suspended run id).
+  const foreachIndex = executionContext.foreachIndex;
+  if (suspendDataToUse && foreachIndex !== undefined) {
+    const iterationResult = suspendDataToUse.__workflow_meta?.foreachOutput?.[foreachIndex];
+    if (iterationResult?.status === 'suspended' && iterationResult.suspendPayload) {
+      suspendDataToUse = iterationResult.suspendPayload;
+    }
+  }
+
   // Filter out internal workflow metadata before exposing to step code
   if (suspendDataToUse && '__workflow_meta' in suspendDataToUse) {
     const { __workflow_meta, ...userSuspendData } = suspendDataToUse;
@@ -255,7 +267,12 @@ export async function executeStep(
         result: stepResult,
         stepResults: { [step.id]: stepResult },
         mutableContext: engine.buildMutableContext(executionContext),
-        requestContext: engine.serializeRequestContext(requestContext),
+        // Serialize requestContext only for engines that restore it from
+        // serialized results (Inngest memoization); the default engine keeps
+        // the original reference and never reads this field.
+        requestContext: engine.requiresDurableContextSerialization()
+          ? engine.serializeRequestContext(requestContext)
+          : undefined,
       };
     }
   }
@@ -530,7 +547,13 @@ export async function executeStep(
         ? (stepRetryResult.result.contextMutations.stateUpdate ?? executionContext.state)
         : executionContext.state,
     }),
-    requestContext: engine.serializeRequestContext(requestContext),
+    // Serialize requestContext only for engines that restore it from
+    // serialized results (Inngest memoization); the default engine keeps
+    // the original reference and never reads this field, so serializing
+    // here would probe every stored value with JSON.stringify on every step.
+    requestContext: engine.requiresDurableContextSerialization()
+      ? engine.serializeRequestContext(requestContext)
+      : undefined,
   };
 }
 

@@ -1,4 +1,3 @@
-import { EntityType } from '@mastra/core/observability';
 import { CornerDownRightIcon, ListTreeIcon } from 'lucide-react';
 import { DataListCell, DataListMonoCell } from '../data-list-cells';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
@@ -30,7 +29,7 @@ export function TracesDataListNameCell({ name, parentSpanId, showLevelTooltip }:
     </span>
   );
   return (
-    <DataListCell height="compact" className="text-neutral4 text-ui-smd min-w-0 flex items-center gap-2">
+    <DataListCell height="compact" className="text-ui-smd text-neutral4 flex min-w-0 items-center gap-2">
       {showLevelTooltip ? (
         <Tooltip>
           <TooltipTrigger asChild>{icon}</TooltipTrigger>
@@ -65,10 +64,10 @@ function EntityTypeIcon({ entityType, className }: { entityType: string; classNa
   const normalizedEntityType = entityType.toLowerCase();
 
   switch (normalizedEntityType) {
-    case EntityType.AGENT:
+    case 'agent':
       return <AgentIcon className={iconClass} aria-hidden />;
     case 'workflow':
-    case EntityType.WORKFLOW_RUN:
+    case 'workflow_run':
       return <WorkflowIcon className={iconClass} aria-hidden />;
     default:
       return null;
@@ -86,7 +85,7 @@ export function TracesDataListEntityCell({ entityType, entityName }: TracesDataL
   return (
     <DataListCell height="compact" className="flex min-w-0 items-center gap-2">
       <EntityTypeIcon entityType={type} />
-      {entityName ? <span className="min-w-0 text-ui-smd truncate">{entityName}</span> : '-'}
+      {entityName ? <span className="text-ui-smd min-w-0 truncate">{entityName}</span> : '-'}
     </DataListCell>
   );
 }
@@ -114,7 +113,7 @@ export function TracesDataListStatusCell({ status }: TracesDataListStatusCellPro
 
   return (
     <DataListCell height="compact">
-      <span className="uppercase text-ui-sm font-semibold" style={{ color: config.color }}>
+      <span className="text-ui-sm font-semibold uppercase" style={{ color: config.color }}>
         {config.label}
       </span>
     </DataListCell>

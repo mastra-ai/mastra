@@ -3,82 +3,48 @@
  * It is in a separate file to avoid including local-pkg in runtime code.
  */
 
-import { existsSync, statSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { statSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readJSON } from 'fs-extra/esm';
 import { getPackageInfo } from 'local-pkg';
 import { getPackageName } from './utils';
 
-const moduleRequire = createRequire(import.meta.url);
-
-async function findPackageRootPath(resolvedPath: string, packageName: string): Promise<string | null> {
-  let currentDir = dirname(resolvedPath);
-
-  while (currentDir !== dirname(currentDir)) {
-    try {
-      const pkgJson = await readJSON(join(currentDir, 'package.json'));
-      if (!packageName || pkgJson.name === packageName) {
-        return currentDir;
-      }
-    } catch {
-      // Keep walking up until we find the package boundary.
-    }
-
-    currentDir = dirname(currentDir);
-  }
-
-  return null;
-}
-
-async function resolvePackageRootPath(packageName: string, parentPath?: string): Promise<string | null> {
-  try {
-    const requestedPackageName = getPackageName(packageName);
-    const resolveBasePath = parentPath ? getResolveBasePath(parentPath) : null;
-    if (resolveBasePath && !existsSync(resolveBasePath)) {
-      return null;
-    }
-
-    const resolver = resolveBasePath
-      ? createRequire(pathToFileURL(join(resolveBasePath, '__mastra_resolve__.js')))
-      : moduleRequire;
-    const resolvedPath = resolver.resolve(packageName);
-
-    return findPackageRootPath(resolvedPath, requestedPackageName ?? packageName);
-  } catch {
-    return null;
-  }
-}
-
-function getResolveBasePath(parentPath: string): string {
-  const filePath = parentPath.startsWith('file://') ? fileURLToPath(parentPath) : parentPath;
+/**
+ * Normalize a resolution base path to a directory file URL.
+ *
+ * Callers often pass a module file path (e.g. a rollup module id like
+ * `node_modules/@mastra/core/dist/chunk-XYZ.js`) as the parent path. mlly (used by local-pkg)
+ * also treats each resolution base as a directory candidate (`<base>/_index.js`), which makes it
+ * try to read `<file>/package.json`. That fails with ENOTDIR, which mlly does not tolerate
+ * (only ENOENT) and local-pkg then logs the raw error to the console. Using the file's directory
+ * as the base avoids this while resolving identically.
+ */
+function toParentDirectoryUrl(parentPath: string): string {
+  let fsPath = parentPath.startsWith('file://') ? fileURLToPath(parentPath) : parentPath;
 
   try {
-    return statSync(filePath).isDirectory() ? filePath : dirname(filePath);
+    if (statSync(fsPath).isFile()) {
+      fsPath = dirname(fsPath);
+    }
   } catch {
-    return dirname(filePath);
+    // non-existent paths are used as-is
   }
+
+  return pathToFileURL(fsPath).href;
 }
 
 /**
  * Get package root path
  */
 export async function getPackageRootPath(packageName: string, parentPath?: string): Promise<string | null> {
-  let rootPath = await resolvePackageRootPath(packageName, parentPath);
-  if (rootPath) {
-    return rootPath;
-  }
+  let rootPath: string | null;
 
   try {
     let options: { paths?: string[] } | undefined = undefined;
     if (parentPath) {
-      if (!parentPath.startsWith('file://')) {
-        parentPath = pathToFileURL(parentPath).href;
-      }
-
       options = {
-        paths: [parentPath],
+        paths: [toParentDirectoryUrl(parentPath)],
       };
     }
 

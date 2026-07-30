@@ -26,7 +26,7 @@ export function FieldOptional({
   );
 
   return (
-    <label className={cn('flex items-center gap-2 text-ui-sm text-neutral3 cursor-pointer', labelClassName)}>
+    <label className={cn('flex cursor-pointer items-center gap-2 text-ui-sm text-neutral3', labelClassName)}>
       <Checkbox {...props} className={className} checked={field.optional} onCheckedChange={handleCheckedChange} />
       {label}
     </label>

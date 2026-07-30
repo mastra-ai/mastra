@@ -7,13 +7,20 @@
   "scripts": {
     "dev": "mastra dev",
     "worker": "node --env-file=.env --import tsx src/mastra/voice-worker.ts dev",
+    "worker:demo": "node --env-file=.env --import tsx src/mastra/voice-worker.ts dev --log-level info",
     "worker:workflow": "node --env-file=.env --import tsx src/mastra/voice-worker-workflow.ts dev",
+    "worker:regulated": "node --env-file=.env --import tsx src/mastra/voice-worker-regulated.ts dev",
+    "worker:regulated:demo": "node --env-file=.env --import tsx src/mastra/voice-worker-regulated.ts dev --log-level info",
+    "worker:plugin": "node --env-file=.env --import tsx src/mastra/voice-worker-plugin.ts dev",
     "worker:download-files": "pnpm --dir ../../integrations/livekit exec livekit-agents download-files",
     "dev:ui": "concurrently --kill-others-on-fail --names mastra,studio \"mastra dev\" \"pnpm --dir ../.. dev:playground\"",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf .mastra *.db"
   },
   "dependencies": {
+    "@livekit/agents": "^1.4.5",
+    "@livekit/agents-plugin-livekit": "^1.4.5",
+    "@livekit/agents-plugin-silero": "^1.4.5",
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",
     "@mastra/livekit": "link:../../integrations/livekit",
@@ -29,6 +36,9 @@
   },
   "pnpm": {
     "overrides": {
+      "@livekit/agents": "link:../../integrations/livekit/node_modules/@livekit/agents",
+      "@livekit/agents-plugin-livekit": "link:../../integrations/livekit/node_modules/@livekit/agents-plugin-livekit",
+      "@livekit/agents-plugin-silero": "link:../../integrations/livekit/node_modules/@livekit/agents-plugin-silero",
       "@mastra/core": "link:../../packages/core",
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/livekit": "link:../../integrations/livekit",

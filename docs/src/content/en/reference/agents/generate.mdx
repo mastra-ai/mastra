@@ -438,10 +438,10 @@ const result = await agent.generate('message for agent')
                 parameters: [
                   {
                     name: 'jsonPromptInjection',
-                    type: 'boolean',
+                    type: "boolean | 'system' | 'inline' | 'auto'",
                     isOptional: true,
                     description:
-                      'Injects system prompt into the main agent instructing it to return structured output, useful for when a model does not natively support structured outputs.',
+                      "Controls how the JSON schema reaches the model. Set to 'auto' to use native structured output when supported and inline prompt injection otherwise.",
                   },
                 ],
               },
@@ -544,6 +544,17 @@ const result = await agent.generate('message for agent')
                     isOptional: true,
                     description:
                       'Additional memory configuration options including lastMessages, readOnly, semanticRecall, workingMemory, and filterIncompleteToolCalls.',
+                  },
+                ],
+              },
+              {
+                parameters: [
+                  {
+                    name: 'onTitleGenerated',
+                    type: '(title: string) => void | Promise<void>',
+                    isOptional: true,
+                    description:
+                      'Callback fired asynchronously when a thread title is generated and persisted to storage. Title generation runs in the background and may complete after `generate()` returns. Only fires when `generateTitle` is enabled in memory options and the thread has no existing title.',
                   },
                 ],
               },
@@ -1346,7 +1357,7 @@ const limitedResult = await agent.generate('Write a short poem about coding', {
 
 ### With memory
 
-Give your agent access to conversation history and persistence by configuring memory options. This allows the agent to remember previous interactions and maintain context across messages.
+Give your agent access to conversation history and persistence by configuring memory options. It allows the agent to remember previous interactions and maintain context across messages.
 
 ```ts
 const memoryResult = await agent.generate('Remember my favorite color is blue', {
@@ -1395,7 +1406,7 @@ console.log(response.text)
 
 ### Using `maxSteps`
 
-The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step includes generating a response, executing any tool calls, and processing the result. Limiting steps helps prevent infinite loops, reduce latency, and control token usage for agents that use tools. The default is 5, but can be increased:
+The `maxSteps` parameter controls the maximum number of sequential LLM calls an agent can make. Each step generates a response and executes any tool calls before processing the result. Limiting steps helps prevent infinite loops and reduce latency. It also controls token usage for agents that use tools. The default is 5, but can be increased:
 
 ```typescript
 const response = await agent.generate('Help me organize my day', {
@@ -1415,6 +1426,22 @@ You can monitor the progress of multi-step operations using the `onStepFinish` c
 const response = await agent.generate('Help me organize my day', {
   onStepFinish: ({ text, toolCalls, toolResults, finishReason, usage }) => {
     console.log({ text, toolCalls, toolResults, finishReason, usage })
+  },
+})
+```
+
+### Using `onTitleGenerated`
+
+When `generateTitle` is enabled in memory options, title generation runs asynchronously after the response completes. Use `onTitleGenerated` to react when the title is ready, for example by pushing it to the client via SSE.
+
+```typescript
+const response = await agent.generate('What is quantum computing?', {
+  memory: {
+    thread: threadId,
+    resource: userId,
+    onTitleGenerated: title => {
+      console.log('Thread title:', title)
+    },
   },
 })
 ```

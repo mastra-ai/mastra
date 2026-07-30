@@ -3,14 +3,13 @@
     "name": "test-ec76f34b",
     "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Agent network() method > should handle messages starting with assistant-with-tool-call in network",
-    "createdAt": "2026-05-18T10:51:14.719Z",
-    "updatedAt": "2026-05-28T17:34:17.480Z"
+    "createdAt": "2026-07-14T17:16:05.864Z"
   },
   "recordings": [
     {
-      "hash": "f774579858790ef2",
+      "hash": "65903f8e86d49322",
       "request": {
-        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
         "method": "POST",
         "body": {
           "generationConfig": {
@@ -53,6 +52,7 @@
               "parts": [
                 {
                   "functionCall": {
+                    "id": "call_1",
                     "name": "test-tool",
                     "args": {
                       "query": "test"
@@ -66,6 +66,7 @@
               "parts": [
                 {
                   "functionResponse": {
+                    "id": "call_1",
                     "name": "test-tool",
                     "response": {
                       "name": "test-tool",
@@ -100,7 +101,7 @@
             ]
           }
         },
-        "timestamp": 1779989656050
+        "timestamp": 1784049355333
       },
       "response": {
         "status": 200,
@@ -108,9 +109,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Thu, 28 May 2026 17:34:17 GMT",
+          "date": "Tue, 14 Jul 2026 17:15:57 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1312",
+          "server-timing": "gfet4t7; dur=1854",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -123,37 +124,102 @@
               "content": {
                 "parts": [
                   {
-                    "text": "{\n  \"primitiveId\": \"none\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"The tool returned a response with content 'previous result' and name 'test-tool'. Can you explain what this response means in the context of the user's request to 'Explain what this result means.'?\",\n  \"selectionReason\": \"The user wants an explanation of the tool's response. An agent is best suited for this task as it can provide a natural language explanation.\"\n}"
+                    "text": "{\n\"primitiveId\": \"none\",\n\"primitiveType\": \"none\",\n\"prompt\": \"The previous tool output was {\\\"test-tool_response\\\": {\\\"content\\\": \\\"previous result\\\", \\\"name\\\": \\\"test-tool\\\"}}. This indicates that the `testTool` was executed successfully. The tool returned a dictionary with a key `test-tool_response`, which contains another dictionary. This inner dictionary has two key-value pairs: `\\\"content\\\": \\\"previous result\\\"`, meaning the tool's main output or data is \\\"previous result\\\", and `\\\"name\\\": \\\"test-tool\\\"`, confirming the name of the tool that produced this output. In summary, the `testTool` was called and successfully returned a result, which is the string \\\"previous result\\\", and identified itself as \\\"test-tool\\\".\",\n\"selectionReason\": \"No further tools or agents are needed to explain the result. The previous tool output is simple and can be directly interpreted and explained to the user. I am providing a clear and concise explanation of what the output means.\"\n}"
                   }
                 ],
                 "role": "model"
               },
               "finishReason": "STOP",
-              "avgLogprobs": -0.304161899494675
+              "index": 0
             }
           ],
           "usageMetadata": {
-            "promptTokenCount": 909,
-            "candidatesTokenCount": 106,
-            "totalTokenCount": 1015,
+            "promptTokenCount": 879,
+            "candidatesTokenCount": 224,
+            "totalTokenCount": 1103,
             "promptTokensDetails": [
               {
                 "modality": "TEXT",
-                "tokenCount": 909
-              }
-            ],
-            "candidatesTokensDetails": [
-              {
-                "modality": "TEXT",
-                "tokenCount": 106
+                "tokenCount": 879
               }
             ],
             "serviceTier": "standard"
           },
-          "modelVersion": "gemini-2.0-flash",
-          "responseId": "mHwYareiFoLmjMcPg5Sy4QY"
+          "modelVersion": "gemini-2.5-flash",
+          "responseId": "y25WaqiXF5uK7M8P_4CC-Qw"
         },
         "isStreaming": false
+      }
+    },
+    {
+      "hash": "0bad97e2d9292b00",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+              "required": ["isComplete", "completionReason"],
+              "type": "object",
+              "properties": {
+                "isComplete": {
+                  "description": "Whether the task is complete",
+                  "type": "boolean"
+                },
+                "completionReason": {
+                  "description": "Explanation of why the task is or is not complete",
+                  "type": "string"
+                },
+                "finalResult": {
+                  "description": "The final result text to return to the user. omit if primitive result is sufficient",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "\n    The none none has contributed to the task.\n    This is the result: \"No further tools or agents are needed to explain the result. The previous tool output is simple and can be directly interpreted and explained to the user. I am providing a clear and concise explanation of what the output means.\"\n    \n    \n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: Explain what this result means.\n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the none none has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "\n          You are a router in a network of specialized AI agents.\n          Your job is to decide which agent should handle each step of a task.\n          If asking for completion of a task, make sure to follow system instructions closely.\n\n          Every step will result in a prompt message. It will be a JSON object with a \"selectionReason\" and \"finalResult\" property. Make your decision based on previous decision history, as well as the overall task criteria. If you already called a primitive, you shouldn't need to call it again, unless you strongly believe it adds something to the task completion criteria. Make sure to call enough primitives to complete the task.\n\n          ## System Instructions\n          You help users understand tool results. Explain tool outputs clearly.\n          You can only pick agents and workflows that are available in the lists below. Never call any agents or workflows that are not available in the lists below.\n          ## Available Agents in Network\n          \n          ## Available Workflows in Network (make sure to use inputs corresponding to the input schema when calling a workflow)\n          \n          ## Available Tools in Network (make sure to use inputs corresponding to the input schema when calling a tool)\n           - **testTool**: A test tool, input schema: {\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"}},\"required\":[\"query\"],\"additionalProperties\":false}\n          If you have multiple entries that need to be called with a workflow or agent, call them separately with each input.\n          When calling a workflow, the prompt should be a JSON value that corresponds to the input schema of the workflow. The JSON value is stringified.\n          When calling a tool, the prompt should be a JSON value that corresponds to the input schema of the tool. The JSON value is stringified.\n          When calling an agent, the prompt should be a text value, like you would call an LLM in a chat interface.\n          Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.\n          \n        "
+              }
+            ]
+          }
+        },
+        "timestamp": 1784049357208
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-disposition": "attachment",
+          "content-type": "text/event-stream",
+          "date": "Tue, 14 Jul 2026 17:16:05 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=8146",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "chunks": [
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\\\"isComplete\\\": true, \\\"completionReason\\\": \\\"The previous\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 833,\"candidatesTokenCount\": 13,\"totalTokenCount\": 2411,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 833}],\"thoughtsTokenCount\": 1565,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"zW5WauHzD8uK7M8P-r-EwQg\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" step (a 'none none' decision) indicated that the explanation has been provided and no further tools or agents are needed to complete the task.\\\", \\\"finalResult\\\": \\\"The system has completed the task of explaining the result. It has provided\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 833,\"candidatesTokenCount\": 61,\"totalTokenCount\": 2459,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 833}],\"thoughtsTokenCount\": 1565,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"zW5WauHzD8uK7M8P-r-EwQg\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" a clear and concise explanation, stating that the previous output was simple and directly interpretable, and no further steps are required.\\\"}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 833,\"candidatesTokenCount\": 87,\"totalTokenCount\": 2485,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 833}],\"thoughtsTokenCount\": 1565,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"zW5WauHzD8uK7M8P-r-EwQg\"}\r\n\r\n"
+        ],
+        "chunkTimings": [0, 41, 164],
+        "isStreaming": true
       }
     }
   ]

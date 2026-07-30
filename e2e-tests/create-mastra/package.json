@@ -9,14 +9,14 @@
   },
   "devDependencies": {
     "execa": "^9.6.1",
-    "get-port": "^7.1.0",
-    "tinyglobby": "^0.2.16",
+    "get-port": "^7.2.0",
+    "tinyglobby": "^0.2.17",
     "npm-cli-login": "^1.0.0",
-    "verdaccio": "^6.2.5",
-    "verdaccio-auth-memory": "^10.3.1",
-    "vitest": "^4.1.8"
+    "verdaccio": "^6.7.4",
+    "verdaccio-auth-memory": "^13.0.3",
+    "vitest": "^4.1.10"
   },
   "dependencies": {
-    "form-data": "^2.5.5"
+    "form-data": "^4.0.6"
   }
 }

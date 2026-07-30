@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
-import { getErrorFromUnknown } from '@mastra/core/error';
+import { getErrorFromUnknown, MastraNonRetryableError } from '@mastra/core/error';
 import type { SerializedError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
@@ -17,7 +17,41 @@ import type {
   WorkflowResult,
 } from '@mastra/core/workflows';
 import type { Inngest, BaseContext } from 'inngest';
+import { NonRetriableError } from 'inngest';
 import { InngestWorkflow } from './workflow';
+
+function isNonRetryableStepFailure(error: unknown): boolean {
+  if (error instanceof MastraNonRetryableError || error instanceof NonRetriableError) {
+    return true;
+  }
+
+  if (error instanceof Error && error.cause !== undefined && isNonRetryableStepFailure(error.cause)) {
+    return true;
+  }
+
+  if (error && typeof error === 'object') {
+    const record = error as {
+      nonRetryable?: true;
+      error?: unknown;
+      name?: string;
+      isNonRetryable?: boolean;
+    };
+
+    if (record.nonRetryable) {
+      return true;
+    }
+
+    if (record.name === 'MastraNonRetryableError' || record.isNonRetryable) {
+      return true;
+    }
+
+    if (record.error !== undefined && isNonRetryableStepFailure(record.error)) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 export class InngestExecutionEngine extends DefaultExecutionEngine {
   private inngestStep: BaseContext<Inngest>['step'];
@@ -86,7 +120,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       workflowId: string;
       runId: string;
     },
-  ): Promise<{ ok: true; result: T } | { ok: false; error: { status: 'failed'; error: Error; endedAt: number } }> {
+  ): Promise<
+    | { ok: true; result: T }
+    | { ok: false; error: { status: 'failed'; error: Error; endedAt: number; nonRetryable?: true } }
+  > {
     for (let i = 0; i < params.retries + 1; i++) {
       if (i > 0 && params.delay) {
         await new Promise(resolve => setTimeout(resolve, params.delay));
@@ -96,7 +133,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         const result = await this.wrapDurableOperation(stepId, runStep);
         return { ok: true, result };
       } catch (e) {
-        if (i === params.retries) {
+        const isNonRetryable = isNonRetryableStepFailure(e);
+
+        if (isNonRetryable || i === params.retries) {
           // After step-level retries exhausted, extract failure from error cause
           const cause = (e as any)?.cause;
           if (cause?.status === 'failed') {
@@ -108,7 +147,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             if (cause.error && !(cause.error instanceof Error)) {
               cause.error = getErrorFromUnknown(cause.error, { serializeStack: false });
             }
-            return { ok: false, error: cause };
+            return {
+              ok: false,
+              error: {
+                ...cause,
+                ...(isNonRetryable && { nonRetryable: true as const }),
+              },
+            };
           }
 
           // Fallback for other errors - preserve the original error instance
@@ -126,6 +171,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               status: 'failed',
               error: errorInstance,
               endedAt: Date.now(),
+              ...(isNonRetryable && { nonRetryable: true as const }),
             },
           };
         }
@@ -171,11 +217,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           serializeStack: false,
           fallbackMessage: 'Unknown step execution error',
         });
+        const isNonRetryable = isNonRetryableStepFailure(e);
         throw new Error(errorInstance.message, {
           cause: {
             status: 'failed',
             error: errorInstance,
             endedAt: Date.now(),
+            ...(isNonRetryable && { nonRetryable: true as const }),
           },
         });
       }
@@ -426,6 +474,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     perStep?: boolean;
     stepSpan?: any;
     actor?: ActorSignal;
+    requestContext?: RequestContext;
   }): Promise<StepResult<any, any, any, any> | null> {
     // Only handle InngestWorkflow instances
     if (!(params.step instanceof InngestWorkflow)) {
@@ -445,7 +494,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       perStep,
       stepSpan,
       actor,
+      requestContext: parentRequestContext,
     } = params;
+    const forwardedRequestContext = parentRequestContext
+      ? this.serializeRequestContext(parentRequestContext)
+      : (inputData?.requestContextEntries ?? {});
 
     // Build trace context to propagate to nested workflow
     const nestedTracingContext = executionContext.tracingIds?.traceId
@@ -470,18 +523,36 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           runId: runId,
         });
 
+        const nestedResumeSteps = resume.steps.slice(1);
+        if (nestedResumeSteps.length === 0) {
+          const suspendedStepIds = Object.keys(snapshot?.suspendedPaths ?? {});
+          if (suspendedStepIds.length === 0) {
+            throw new Error(`No suspended steps found in nested workflow: ${step.id}`);
+          }
+          if (suspendedStepIds.length > 1) {
+            const pathStrings = suspendedStepIds.map(stepId => `[${stepId}]`);
+            throw new Error(
+              `Multiple suspended steps found: ${pathStrings.join(', ')}. ` +
+                'Please specify which step to resume using the "step" parameter.',
+            );
+          }
+          nestedResumeSteps.push(suspendedStepIds[0]!);
+        }
+        const nestedResumeStepId = nestedResumeSteps[0];
+
         const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
           function: step.getFunction(),
           data: {
             inputData,
             initialState: executionContext.state ?? snapshot?.value ?? {},
+            requestContext: forwardedRequestContext,
             runId: runId,
             resume: {
               runId: runId,
-              steps: resume.steps.slice(1),
+              steps: nestedResumeSteps,
               stepResults: snapshot?.context as any,
               resumePayload: resume.resumePayload,
-              resumePath: resume.steps?.[1] ? (snapshot?.suspendedPaths?.[resume.steps?.[1]] as any) : undefined,
+              resumePath: nestedResumeStepId ? (snapshot?.suspendedPaths?.[nestedResumeStepId] as any) : undefined,
             },
             outputOptions: { includeState: true },
             perStep,
@@ -512,6 +583,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           data: {
             timeTravel: timeTravelParams,
             initialState: executionContext.state ?? {},
+            requestContext: forwardedRequestContext,
             runId: executionContext.runId,
             outputOptions: { includeState: true },
             perStep,
@@ -528,6 +600,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           data: {
             inputData,
             initialState: executionContext.state ?? {},
+            requestContext: forwardedRequestContext,
             outputOptions: { includeState: true },
             perStep,
             tracingOptions: nestedTracingContext,

@@ -222,6 +222,28 @@ export function categorizeFileData(
 }
 
 /**
+ * Resolve a stored file part's media type and payload across the AI SDK v4 and v5 shapes.
+ *
+ * Stored "v2" file parts are typed as the AI SDK v4 UI shape (`mimeType`/`data`), but
+ * v5-shaped file parts (`mediaType`/`url`, renamed in the v5 Media Type Standardization)
+ * reach the same read sites. Reading only the v4 fields leaves a v5 part with both values
+ * `undefined`, which downstream becomes `contentType: undefined` (making `attachmentsToParts`
+ * throw) or collapses distinct parts onto a single cache key. Read whichever shape is present.
+ *
+ * Returns the RAW resolved values (undefined-preserving); call sites that build a
+ * `contentType` should apply their own `'application/octet-stream'` fallback. Mirrors #17366.
+ */
+export function resolveFilePartMediaTypeAndData(part: unknown): { mediaType: string | undefined; data: unknown } {
+  // Narrow the boundary: the stored union only describes v4, so widen it here to read
+  // either shape without an `as any` cast.
+  const filePart = part as { mimeType?: string; data?: unknown; mediaType?: string; url?: unknown };
+  return {
+    mediaType: filePart.mimeType ?? filePart.mediaType,
+    data: filePart.data ?? filePart.url,
+  };
+}
+
+/**
  * Classifies a string as a URL, data URI, or raw data.
  *
  * @param data - The string to classify

@@ -1,11 +1,14 @@
 import { z } from 'zod';
+import type { PubSub } from '../../../../events/pubsub';
 import type { Mastra } from '../../../../mastra';
 import { EntityType, SpanType } from '../../../../observability';
 import type { ExportedSpan } from '../../../../observability';
+import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry } from '../../run-registry';
+import { emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
@@ -103,7 +106,8 @@ export function createDurableLLMMappingStep() {
     id: DurableStepIds.LLM_MAPPING,
     inputSchema: durableLLMMappingInputSchema,
     outputSchema: durableLLMMappingOutputSchema,
-    execute: async ({ inputData, mastra, requestContext }) => {
+    execute: async params => {
+      const { inputData, mastra, requestContext } = params;
       const {
         llmOutput,
         toolResults,
@@ -259,13 +263,24 @@ export function createDurableLLMMappingStep() {
         }
       }
 
+      // 2b. Sync the updated messageList back to the in-process registry.
+      // The durable workflow deserializes a fresh MessageList on every step,
+      // so updates (output-denied, tool results) are invisible to other
+      // steps that read from the registry — in particular tool-call.ts's
+      // doFlush() which persists messages before suspension. Without this
+      // sync, a declined tool's output-denied state would never reach memory
+      // if the workflow re-suspends on a subsequent iteration.
+      if (registryEntry) {
+        registryEntry.messageList = messageList;
+      }
+
       // 3. Determine if we should continue
-      // Preserve the LLM step's isContinued (which respects finishReason).
-      // Keep ToolNotFoundError recoverable so the model can see the error and
-      // retry with one of the currently available tool names.
-      const allToolsErrored = toolResults.length > 0 && toolResults.every(r => r.error !== undefined);
-      const allToolsNotFound = allToolsErrored && toolResults.every(r => r.error?.name === 'ToolNotFoundError');
-      const isContinued = llmOutput.stepResult.isContinued && (!allToolsErrored || allToolsNotFound);
+      // When tool errors occur, always continue the agentic loop so the model
+      // can see the error messages (already added to messageList above) and
+      // self-correct. This matches the regular agent's behaviour where both
+      // ToolNotFoundError and generic tool execution errors are recoverable.
+      const hasToolErrors = toolResults.some(r => r.error !== undefined);
+      const isContinued = hasToolErrors ? true : llmOutput.stepResult.isContinued;
 
       // Check if any delegation hook called ctx.bail(). The bail flag is
       // communicated via requestContext because Zod output validation strips
@@ -327,6 +342,58 @@ export function createDurableLLMMappingStep() {
           (mastra as Mastra | undefined)
             ?.getLogger?.()
             ?.warn?.(`[DurableAgent] Failed to close model_step span: ${error}`);
+        }
+      }
+
+      // Emit the deferred step-finish chunk for intermediate steps.
+      // llm-execution defers step-finish emission for tool-calling steps so that
+      // it arrives AFTER tool-result chunks (emitted by tool-call.ts). This
+      // matches the regular agent's chunk ordering which MastraModelOutput
+      // relies on for correct step content reconstruction in onStepFinish.
+      const deferredChunk = llmOutput.deferredStepFinishChunk as any;
+      const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
+      if (deferredChunk && pubsub) {
+        try {
+          // Build step content directly from this iteration's data.
+          // We cannot rely on messageList.get.response.aiV5.modelContent(-1)
+          // because each durable step deserializes a fresh MessageList, so
+          // the MastraModelOutput's reference is stale. Instead, construct
+          // the content array from the LLM output (text + tool calls) and
+          // the tool results collected in this step.
+          const stepContent: unknown[] = [];
+          if (llmOutput.text) {
+            stepContent.push({ type: 'text', text: llmOutput.text });
+          }
+          for (const tc of llmOutput.toolCalls ?? []) {
+            stepContent.push({
+              type: 'tool-call',
+              toolCallId: tc.toolCallId,
+              toolName: tc.toolName,
+              args: tc.args,
+            });
+          }
+          for (const tr of toolResults ?? []) {
+            stepContent.push({
+              type: 'tool-result',
+              toolCallId: tr.toolCallId,
+              toolName: tr.toolName,
+              result: tr.error ? tr.error.message : tr.result,
+              ...(tr.error ? { isError: true } : {}),
+            });
+          }
+
+          const enrichedChunk = {
+            ...deferredChunk,
+            payload: {
+              ...deferredChunk.payload,
+              _durableStepContent: stepContent,
+            },
+          };
+          await emitChunkEvent(pubsub, _runId, enrichedChunk);
+        } catch (error) {
+          (mastra as Mastra | undefined)
+            ?.getLogger?.()
+            ?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
         }
       }
 

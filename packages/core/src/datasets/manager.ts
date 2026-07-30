@@ -111,6 +111,7 @@ export class DatasetsManager {
    * fields mirror `CreateDatasetInput` exactly.
    */
   async create(input: {
+    id?: string;
     name: string;
     description?: string;
     inputSchema?: unknown;

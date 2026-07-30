@@ -15,6 +15,7 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { MockMemory } from '../../../memory/mock';
 import { RequestContext } from '../../../request-context';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
@@ -193,6 +194,37 @@ describe('DurableAgent isTaskComplete', () => {
     // We can verify by checking we did not see multiple text-end chunks.
     const textEnd = chunks.filter(c => c.type === 'text-end');
     expect(textEnd).toHaveLength(1);
+  });
+
+  it('does not persist the completion report to memory when the check passes', async () => {
+    const memory = new MockMemory();
+    const model = createTextModel('Here is the final answer.');
+    const baseAgent = new Agent({
+      id: 'task-complete-no-report-agent',
+      name: 'Task Complete No Report Agent',
+      instructions: 'noop',
+      model: model as LanguageModelV2,
+      memory,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const scorer = passingScorer();
+
+    const { output, cleanup } = await durableAgent.stream('go', {
+      isTaskComplete: {
+        scorers: [scorer as any],
+      } as any,
+      maxSteps: 3,
+      memory: { thread: 'thread-no-report', resource: 'resource-no-report' },
+    });
+
+    await drain(output.fullStream as unknown as ReadableStream<any>);
+    await cleanup();
+
+    const recalled = await memory.recall({ threadId: 'thread-no-report', resourceId: 'resource-no-report' });
+    const persistedText = JSON.stringify(recalled.messages);
+    expect(persistedText).toContain('Here is the final answer.');
+    expect(persistedText).not.toContain('Completion Check Results');
   });
 
   it('continues the loop with feedback when scorers reject the answer, then stops at maxSteps', async () => {

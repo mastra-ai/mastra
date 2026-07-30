@@ -1,3 +1,4 @@
 {
-  "temperature": ["z-code"]
+  "temperature": ["z-code"],
+  "structuredOutput": ["z-code"]
 }

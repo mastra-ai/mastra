@@ -95,5 +95,5 @@ describeForAllEngines(
       expect(finishReason).toMatch(/abort|cancelled|error|tripwire/i);
     });
   },
-  { skip: ['durable'] },
+  {},
 );
