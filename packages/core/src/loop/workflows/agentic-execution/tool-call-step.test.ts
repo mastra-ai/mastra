@@ -507,7 +507,7 @@ describe('createToolCallStep delegated agent tool approvals', () => {
     vi.restoreAllMocks();
   });
 
-  it('stores parentRunId when a nested agent run requests tool approval', async () => {
+  it('stores the outer resumable runId with delegatedRunId when a nested agent run requests tool approval', async () => {
     const assistantMessage = {
       role: 'assistant',
       content: { metadata: {} as Record<string, unknown> },
@@ -563,11 +563,15 @@ describe('createToolCallStep delegated agent tool approvals', () => {
     const pending = (assistantMessage.content.metadata as Record<string, any>).pendingToolApprovals?.[
       'parent-tool-call-id'
     ];
+    // `runId` is the outer resumable run (valid `resumeStream` target after
+    // refresh/restart); the inner suspended run is kept as `delegatedRunId`.
+    // Channel resume reads `parentRunId ?? runId`, so no `parentRunId` is needed.
     expect(pending).toMatchObject({
       toolCallId: 'parent-tool-call-id',
-      runId: 'sub-agent-run-id',
-      parentRunId: 'parent-run-id',
+      runId: 'parent-run-id',
+      delegatedRunId: 'sub-agent-run-id',
     });
+    expect(pending.parentRunId).toBeUndefined();
 
     await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });
