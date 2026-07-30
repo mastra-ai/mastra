@@ -203,7 +203,7 @@ Tool that returns a string → agent step. The tool emits \`"…text…"\`; the 
 
 \`\`\`json
 [
-  { "type": "tool", "id": "list", "toolId": "mastra_workspace_list_files" },
+  { "type": "tool", "id": "list", "toolId": "<discovered-listing-tool-id>" },
   {
     "type": "mapping",
     "id": "to-prompt",
@@ -335,7 +335,7 @@ The rules:
 - Output is an array of the inner step's outputs, order-preserved. Agent inner steps ⇒ \`{ text: string }[]\`. Tool inner steps ⇒ \`toolOutputSchema[]\`.
 - \`opts.concurrency\` (optional, default 1) controls how many elements run at once.
 
-**When the upstream step does NOT produce a raw array — INSERT A BRIDGE AGENT.** This is the critical case, and it is what you will hit most often. Tools like \`find_files\` return a formatted \`string\`; other tools return objects. You must NOT give up on \`foreach\` in this case, and you must NOT fake iteration inside a single agent's prompt. Instead, insert an \`agent\` step BETWEEN the upstream step and the \`foreach\` whose sole job is to convert the upstream data into the array shape \`foreach\` needs. That bridge agent MUST declare an \`outputSchema\` whose top-level shape is the array (expressed as \`{ type: "array", items: {...} }\` in the canonical authoring schema). Because you can override an agent step's output shape via \`outputSchema\`, this bridge is always available, no matter what the upstream tool returns.
+**When the upstream step does NOT produce a raw array — INSERT A BRIDGE AGENT.** This is the critical case, and it is what you will hit most often. Many tools return a formatted \`string\`; others return objects. You must NOT give up on \`foreach\` in this case, and you must NOT fake iteration inside a single agent's prompt. Instead, insert an \`agent\` step BETWEEN the upstream step and the \`foreach\` whose sole job is to convert the upstream data into the array shape \`foreach\` needs. That bridge agent MUST declare an \`outputSchema\` whose top-level shape is the array (expressed as \`{ type: "array", items: {...} }\` in the canonical authoring schema). Because you can override an agent step's output shape via \`outputSchema\`, this bridge is always available, no matter what the upstream tool returns.
 
 Concretely, the shape is ALWAYS one of:
 
@@ -352,7 +352,7 @@ Worked example — \`foreach\` after a string-returning tool:
 
 \`\`\`json
 [
-  { "type": "tool", "id": "list-files", "toolId": "find_files" },
+  { "type": "tool", "id": "list-files", "toolId": "<discovered-listing-tool-id>" },
   {
     "type": "agent",
     "id": "extract-paths",
@@ -460,7 +460,7 @@ You can reference an existing workflow as a single step. Discover valid ids thro
 \`\`\`
 
 Rules:
-- \`workflowId\` MUST match an id returned by authoritative resource discovery. Do not invent ids or reference workflows you plan to author later.
+- \`workflowId\` MUST resolve to a real workflow. Normally that means an id returned by authoritative resource discovery — never a name you invented or merely saw mentioned by the user. The one exception is a helper workflow you are authoring yourself as part of this same request (see Pattern B above): your surface policy defines whether that is allowed and how the helper is supplied, so follow it exactly rather than assuming either direction.
 - The nested workflow's \`inputSchema\` is what the step CONSUMES; its \`outputSchema\` is what the step PRODUCES. Apply the composition check exactly as you would for a tool step.
 - \`workflow\` entries are legal as branch steps inside \`conditional\`, as the inner step of \`foreach\` / \`dowhile\` / \`dountil\`, and as a child of \`parallel\`. Use this to keep the main graph flat: put a multi-step subgraph in its own stored workflow, then reference it.
 - Do NOT self-reference (referencing the workflow you are currently authoring). Do NOT create cycles across workflows — the pre-flight validator will reject them.
@@ -478,20 +478,24 @@ Rules:
 - ❌ Adding a no-op step-1 mapping that just renames \`inputData\` keys. Step 1 receives the workflow input object directly. (Past step 1, if you need workflow input again, use \`\${initData.…}\` — not a rename mapping.)
 - ❌ \`mapConfig\` as an object (\`"mapConfig": { ... }\`). It MUST be a JSON-encoded string (\`"mapConfig": "{...}"\`).
 - ❌ Refusing to use \`foreach\` because no upstream tool returns an array, and falling back to a single agent step that "loops internally". The engine has NO array→iteration workaround that beats \`foreach\`. The correct move is ALWAYS to insert a bridge agent step whose \`outputSchema\` is an array (typically \`Array<{ prompt: string }>\` when the inner \`foreach\` step is an agent), between the string/object-returning upstream and the \`foreach\`. "The tool doesn't return an array" is never a reason to skip \`foreach\` — it is the reason to add the bridge agent.
-- ❌ Referencing a \`workflowId\` that isn't in authoritative resource discovery. Do not guess ids, do not reference a workflow you plan to author "next" — nested references must resolve at save-time.
+- ❌ Guessing a \`workflowId\` — inventing an id, or using a name the user mentioned without confirming it through authoritative resource discovery. Nested references must resolve when the definition is validated. (Helper workflows you author yourself for Pattern B are the one exception, and only in the exact way your surface policy specifies.)
 - ❌ Self-referencing (\`workflowId\` equal to the workflow you are currently authoring) or building A→B→A cycles across workflows. The pre-flight validator will reject them.
-- ❌ Writing a bridge mapping that pipes ONLY the previous step's output when the downstream agent needs ADDITIONAL context from the workflow input to be useful. Classic case: \`find_files\` returns bare basenames (e.g. \`app-tools.ts\\nserver.ts\`) — no path prefix — so a downstream agent asked to "read and summarize each file" has no idea what folder they live in. Fix: combine both scopes in the mapping template. \`\${initData.<workflowInputField>}\` is available in EVERY mapping; use it to thread the workflow's original input (folder path, repo name, target branch, ticket id, etc.) into the prompt alongside \`\${stepResults.<upstream>}\`. See the "combining upstream output with workflow input" worked example below.
+- ❌ Writing a bridge mapping that pipes ONLY the previous step's output when the downstream agent needs ADDITIONAL context from the workflow input to be useful. Classic case: a listing tool returns bare basenames (e.g. \`app-tools.ts\\nserver.ts\`) — no path prefix — so a downstream agent asked to "read and summarize each file" has no idea what folder they live in. Fix: combine both scopes in the mapping template. \`\${initData.<workflowInputField>}\` is available in EVERY mapping; use it to thread the workflow's original input (folder path, repo name, target branch, ticket id, etc.) into the prompt alongside \`\${stepResults.<upstream>}\`. See the "combining upstream output with workflow input" worked example below.
+
+# Worked examples
+
+The examples below use whatever domain made them concrete — files, GitHub issues, customer records. **The domain is never the point; the SHAPES are.** Do not read them as a claim that any particular tool or agent is registered for you. Every \`toolId\` / \`agentId\` written as \`<discovered-…>\` is a slot you fill from your own authoritative discovery result, and a workflow built from real resources in a completely different domain follows the identical shape rules.
 
 # Worked example: list files → review each
 
 User says: "build a workflow that lists the .ts files in a directory and runs the security-expert agent on each one's contents. id it sec-review."
 
 Discovery returns (excerpts):
-- tool \`mastra_workspace_list_files\`: inputSchema \`{ path: string, ... }\`, outputSchema tree-formatted text (string output).
-- tool \`mastra_workspace_read_file\`: inputSchema \`{ path: string, ... }\`, outputSchema string (file contents).
+- a listing tool (referred to below as \`<discovered-listing-tool-id>\`): inputSchema \`{ path: string, ... }\`, outputSchema tree-formatted text (string output).
+- a file-reading tool: inputSchema \`{ path: string, ... }\`, outputSchema string (file contents).
 - (If a "security-expert" agent isn't registered) agent steps reference a discovered reasoning agent, outputShape \`{ text: string }\`. Use that instead.
 
-If discovery shows the workspace tools return raw strings (not objects), templates can interpolate the string directly. If discovery shows a richer object shape, pluck specific fields via \`stepResults.<id>.<field>\`. **Always read the schema first; the worked-example shapes above are illustrative — confirm against your discovery result.**
+If discovery shows these tools return raw strings (not objects), templates can interpolate the string directly. If discovery shows a richer object shape, pluck specific fields via \`stepResults.<id>.<field>\`. **Always read the schema first; the worked-example shapes above are illustrative — confirm against your discovery result.**
 
 # Worked example: foreach — run an agent on each item of a list
 
@@ -537,14 +541,14 @@ If instead \`github_list_open_issues\` returns \`{ issues: [...] }\` (array nest
 User says: "summarise every .ts file in packages/core/src/workflows. id: summarise-workflows."
 
 Discovery surfaces:
-- tool \`mastra_workspace_list_files\` — inputSchema \`{ path: string, ... }\`, outputSchema string (tree-formatted).
+- a listing tool (referred to below as \`<discovered-listing-tool-id>\`) — inputSchema \`{ path: string, ... }\`, outputSchema string (tree-formatted).
 - a discovered reasoning agent — \`{ text: string }\` by default.
 
 The tree string isn't iterable. We need to (a) turn it into an array whose elements match the foreach inner step's input, then (b) foreach over it. The inner step here is an \`agent\`, so each array element must be \`{ prompt: string }\`. Bridge with a structured agent step that emits that shape directly:
 
 \`\`\`json
 [
-  { "type": "tool", "id": "list", "toolId": "mastra_workspace_list_files" },
+  { "type": "tool", "id": "list", "toolId": "<discovered-listing-tool-id>" },
   {
     "type": "mapping",
     "id": "to-extract-prompt",
@@ -581,7 +585,7 @@ Walk the shapes:
 
 **The general pattern for fanning out to an agent from an unstructured upstream:** tool-string → mapping-to-prompt-that-combines-tool-output-with-\`initData\` → agent-with-array-of-prompt-objects → foreach-over-agent. If the foreach's inner is a \`tool\` instead of an agent, the bridge agent should emit \`Array<{...that tool's inputSchema}>\` instead of \`Array<{ prompt }>\`.
 
-**The critical thing to notice:** the bridge agent CANNOT invent context that isn't in its prompt. If the upstream tool strips context (like \`find_files\` stripping the folder path from each entry), the mapping MUST re-thread that context via \`\${initData.…}\`. Missing this is the #1 cause of downstream steps failing with "file not found", "invalid id", "no such record", etc.
+**The critical thing to notice:** the bridge agent CANNOT invent context that isn't in its prompt. If the upstream tool strips context (like a listing tool stripping the folder path from each entry), the mapping MUST re-thread that context via \`\${initData.…}\`. Missing this is the #1 cause of downstream steps failing with "file not found", "invalid id", "no such record", etc.
 
 # Worked example: feeding a foreach's output into a synthesis agent
 
@@ -589,7 +593,7 @@ The output of a \`foreach(agent)\` step is \`Array<{ text: string }>\`, one entr
 
 \`\`\`json
 [
-  { "type": "tool", "id": "list", "toolId": "mastra_workspace_list_files" },
+  { "type": "tool", "id": "list", "toolId": "<discovered-listing-tool-id>" },
   { "type": "mapping", "id": "to-extract-prompt", "mapConfig": "..." },
   { "type": "agent", "id": "prep-summarise-prompts", "agentId": "<discovered-agent-id>", "outputSchema": { "type": "array", "items": { "type": "object", "properties": { "prompt": { "type": "string" } }, "required": ["prompt"] } } },
   { "type": "foreach", "step": { "type": "agent", "id": "summarise-one", "agentId": "<discovered-agent-id>" }, "opts": { "concurrency": 3 } },
@@ -606,7 +610,7 @@ The output of a \`foreach(agent)\` step is \`Array<{ text: string }>\`, one entr
 
 # Worked example: combining upstream output with workflow input in a mapping
 
-Very common pattern: an upstream tool returns a value that's only meaningful IN CONTEXT of the workflow's original input, and a downstream agent needs both. Example: \`find_files\` returns \`app-tools.ts\\nserver.ts\` (bare basenames), but the workflow input has the folder path (\`{ path: "/repo/src/agents" }\`). A downstream agent asked to summarise each file needs the absolute path — combine both scopes in the mapping:
+Very common pattern: an upstream tool returns a value that's only meaningful IN CONTEXT of the workflow's original input, and a downstream agent needs both. Example: a listing tool returns \`app-tools.ts\\nserver.ts\` (bare basenames), but the workflow input has the folder path (\`{ path: "/repo/src/agents" }\`). A downstream agent asked to summarise each file needs the absolute path — combine both scopes in the mapping:
 
 \`\`\`json
 {
@@ -624,7 +628,7 @@ If the workflow input is \`{ path: string }\` and step 3 needs that same \`path\
 
 \`\`\`json
 [
-  { "type": "tool", "id": "list", "toolId": "mastra_workspace_list_files" },
+  { "type": "tool", "id": "list", "toolId": "<discovered-listing-tool-id>" },
   { "type": "agent", "id": "pick-first", "agentId": "<discovered-agent-id>" },
   {
     "type": "mapping",

@@ -43,6 +43,21 @@ Use it as an \`agent\` step when the workflow needs judgment or open-ended tool 
 
 When the workflow needs a **specific, deterministic** operation (like \`execute_command wc -l file.ts\` or a single fixed web-search call), prefer a plain \`tool\` step — cheaper, no LLM in the middle, and reproducible.
 
+# Workspace tool output shapes — read this before wiring a file-oriented workflow
+
+The workspace tools you are most likely to compose with return **strings, not objects**, and the shared bridge-agent and \`initData\` re-threading guidance applies to them directly:
+
+- \`find_files\` returns a formatted \`string\` listing, and the entries are **bare basenames with no path prefix** (e.g. \`app-tools.ts\\nserver.ts\`). A downstream step told only "summarise each file" therefore has no idea which folder they live in.
+- \`mastra_workspace_list_files\` — inputSchema \`{ path: string, ... }\`, outputSchema tree-formatted text (string).
+- \`mastra_workspace_read_file\` — inputSchema \`{ path: string, ... }\`, outputSchema string (file contents).
+
+Two consequences, both covered by the shared playbook's worked examples:
+
+1. A string listing is not iterable, so \`foreach\` needs a bridge \`agent\` step with a top-level array \`outputSchema\` between the listing tool and the loop.
+2. Because the listing strips the folder path, the mapping that builds the bridge agent's prompt MUST re-thread the original path with \`\${initData.<pathField>}\` alongside \`\${stepResults.<listing-step>}\`. Skipping this is the most common cause of downstream "file not found" failures.
+
+Always confirm these shapes against \`list-available-tools\` rather than trusting the summary above.
+
 # Discovery — your four tools
 
 - \`list-available-tools\` → for each tool, \`{ id, description, inputSchema, outputSchema }\`. The schemas are JSON Schema. READ THEM — they are your ground truth. Never invent a field name. If a tool's \`outputSchema\` is missing from the discovery result, the tool's output shape is undefined to you and you can only use it through a mapping that reshapes from scratch.
