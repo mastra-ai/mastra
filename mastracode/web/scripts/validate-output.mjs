@@ -14,6 +14,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -65,12 +66,20 @@ if (!fs.existsSync(spaPath)) {
   ok(`SPA (${path.relative(outputDir, spaPath)})`);
 }
 
-// 4. Web Factory skills
+// 4. Web Factory skills — present AND identical to the canonical copy in
+// @mastra/factory, so a broken sync can't ship stale skill content.
+const require = createRequire(path.join(webRoot, 'package.json'));
+const canonicalSkillsDir = path.join(path.dirname(require.resolve('@mastra/factory/package.json')), 'factory-skills');
 for (const skillName of ['configure-factory-rules', 'factory-plan', 'factory-review', 'factory-triage']) {
   const relativeSkillPath = path.join('factory-skills', skillName, 'SKILL.md');
   const skillPath = path.join(outputDir, relativeSkillPath);
   if (!fs.existsSync(skillPath)) {
     fail(`Factory skill not found: ${relativeSkillPath}`);
+    continue;
+  }
+  const canonical = fs.readFileSync(path.join(canonicalSkillsDir, skillName, 'SKILL.md'), 'utf8');
+  if (fs.readFileSync(skillPath, 'utf8') !== canonical) {
+    fail(`Factory skill is stale: ${relativeSkillPath} differs from @mastra/factory — sync-factory-skills.mjs did not run`);
   } else {
     ok(`Factory skill (${relativeSkillPath})`);
   }
