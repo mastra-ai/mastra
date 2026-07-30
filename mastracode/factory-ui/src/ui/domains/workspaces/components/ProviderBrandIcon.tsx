@@ -9,18 +9,18 @@ import type { ComponentType, SVGProps } from 'react';
 
 interface ProviderIconConfig {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
-  sizeClassName: string;
+  className: string;
 }
 
 const PROVIDER_ICON_CONFIG: Record<string, ProviderIconConfig> = {
-  anthropic: { icon: AnthropicMessagesIcon, sizeClassName: 'size-4' },
-  openai: { icon: OpenAIIcon, sizeClassName: 'size-4' },
-  'openai-codex': { icon: OpenAIIcon, sizeClassName: 'size-4' },
-  'github-copilot': { icon: GithubIcon, sizeClassName: 'size-4' },
-  xai: { icon: XGroqIcon, sizeClassName: 'size-5' },
-  google: { icon: GoogleIcon, sizeClassName: 'size-4' },
-  groq: { icon: GroqIcon, sizeClassName: 'size-4' },
-  mistral: { icon: MistralIcon, sizeClassName: 'size-4' },
+  anthropic: { icon: AnthropicMessagesIcon, className: 'size-3.5 shrink-0' },
+  openai: { icon: OpenAIIcon, className: 'size-[18px] shrink-0' },
+  'openai-codex': { icon: OpenAIIcon, className: 'size-[18px] shrink-0' },
+  'github-copilot': { icon: GithubIcon, className: 'size-4 shrink-0' },
+  xai: { icon: XGroqIcon, className: 'size-5 shrink-0' },
+  google: { icon: GoogleIcon, className: 'size-4 shrink-0' },
+  groq: { icon: GroqIcon, className: 'size-4 shrink-0' },
+  mistral: { icon: MistralIcon, className: 'size-4 shrink-0' },
 };
 
 export interface ProviderBrandIconProps {
@@ -35,7 +35,7 @@ export function ProviderBrandIcon({ provider }: ProviderBrandIconProps) {
 
   return (
     <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center">
-      <Icon className={config.sizeClassName} focusable="false" />
+      <Icon className={config.className} focusable="false" />
     </span>
   );
 }
