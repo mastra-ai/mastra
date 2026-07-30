@@ -33,60 +33,67 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+const ITEM_NAME = 'Settings Path Application navigation /settings';
+
+function renderPalette() {
+  const selectScope = vi.fn();
+  const selectItem = vi.fn();
+
+  render(
+    <CommandPaletteDialog
+      open
+      onOpenChange={() => {}}
+      title="Application search"
+      description="Search application resources"
+      commandLabel="Search resources"
+    >
+      <CommandPaletteInput placeholder="Search resources" />
+      <CommandPaletteBody>
+        <CommandPaletteRail aria-label="Search categories">
+          <CommandPaletteScope icon={<Search />} label="All" count={4} active={false} onSelect={() => {}} />
+          <CommandPaletteScope icon={<Route />} label="Navigation" count={2} active onSelect={selectScope} />
+        </CommandPaletteRail>
+        <CommandPaletteResults aria-label="Search results" footer={<CommandPaletteFooter label="Application search" />}>
+          <CommandEmpty>No matching results.</CommandEmpty>
+          <CommandGroup heading="Navigation">
+            <CommandPaletteItem
+              icon={<Route />}
+              title="Settings"
+              subtitle="Application navigation"
+              path="/settings"
+              badge="Path"
+              value="settings application navigation"
+              onSelect={selectItem}
+            />
+          </CommandGroup>
+        </CommandPaletteResults>
+      </CommandPaletteBody>
+    </CommandPaletteDialog>,
+  );
+
+  return { selectScope, selectItem };
+}
+
 describe('CommandPalette', () => {
-  describe('when it renders application-owned scopes and results', () => {
-    it('provides the shared accessible shell without owning domain state', () => {
-      const selectNavigation = vi.fn();
-      const selectResult = vi.fn();
+  it('labels the input, rail, and results so each region is reachable by name', () => {
+    renderPalette();
 
-      render(
-        <CommandPaletteDialog
-          open
-          onOpenChange={() => {}}
-          title="Application search"
-          description="Search application resources"
-          commandLabel="Search resources"
-        >
-          <CommandPaletteInput placeholder="Search resources" />
-          <CommandPaletteBody>
-            <CommandPaletteRail aria-label="Search categories">
-              <CommandPaletteScope icon={<Search />} label="All" count={4} active={false} onSelect={() => {}} />
-              <CommandPaletteScope icon={<Route />} label="Navigation" count={2} active onSelect={selectNavigation} />
-            </CommandPaletteRail>
-            <CommandPaletteResults
-              aria-label="Search results"
-              footer={<CommandPaletteFooter label="Application search" />}
-            >
-              <CommandEmpty>No matching results.</CommandEmpty>
-              <CommandGroup heading="Navigation">
-                <CommandPaletteItem
-                  icon={<Route />}
-                  title="Settings"
-                  subtitle="Application navigation"
-                  path="/settings"
-                  badge="Path"
-                  value="settings application navigation"
-                  onSelect={selectResult}
-                />
-              </CommandGroup>
-            </CommandPaletteResults>
-          </CommandPaletteBody>
-        </CommandPaletteDialog>,
-      );
+    expect(screen.getByRole('combobox', { name: 'Search resources' })).toBeDefined();
+    expect(screen.getByRole('complementary', { name: 'Search categories' })).toBeDefined();
+    const results = screen.getByRole('region', { name: 'Search results' });
+    expect(within(results).getByText('Application search')).toBeDefined();
+    expect(screen.getByRole('option', { name: ITEM_NAME })).toBeDefined();
+  });
 
-      expect(screen.getByRole('combobox', { name: 'Search resources' })).toBeDefined();
-      expect(screen.getByRole('complementary', { name: 'Search categories' })).toBeDefined();
-      const results = screen.getByRole('region', { name: 'Search results' });
-      expect(results).toBeDefined();
-      expect(screen.getByRole('button', { name: 'Navigation 2' }).getAttribute('aria-pressed')).toBe('true');
-      expect(screen.getByRole('option', { name: 'Settings Path Application navigation /settings' })).toBeDefined();
-      expect(within(results).getByText('Application search')).toBeDefined();
+  it('marks the active scope pressed and reports scope and item selection to the application', () => {
+    const { selectScope, selectItem } = renderPalette();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Navigation 2' }));
-      fireEvent.click(screen.getByRole('option', { name: 'Settings Path Application navigation /settings' }));
+    expect(screen.getByRole('button', { name: 'Navigation 2' }).getAttribute('aria-pressed')).toBe('true');
 
-      expect(selectNavigation).toHaveBeenCalledOnce();
-      expect(selectResult).toHaveBeenCalledOnce();
-    });
+    fireEvent.click(screen.getByRole('button', { name: 'Navigation 2' }));
+    fireEvent.click(screen.getByRole('option', { name: ITEM_NAME }));
+
+    expect(selectScope).toHaveBeenCalledOnce();
+    expect(selectItem).toHaveBeenCalledOnce();
   });
 });

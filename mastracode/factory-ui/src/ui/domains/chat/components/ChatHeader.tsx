@@ -14,10 +14,8 @@ function searchTriggerId(isMobile: boolean): string {
   return 'global-search-collapsed-trigger';
 }
 
-/** The single header bar of a page. Renders nothing when it would hold neither controls nor content. */
 export function ChatHeader({ mobileContent, children, className, ...props }: ChatHeaderProps) {
-  // Both controls use the design-system media signal. Mixing px matchMedia with
-  // rem-based CSS breakpoints can otherwise render two controls or none.
+  // DS media signal for both — px matchMedia against rem breakpoints desyncs into two controls or none
   const { isMobile, desktopState } = useMainSidebar();
   const sidebarCollapsed = desktopState === 'collapsed';
   const showHeaderControls = isMobile || sidebarCollapsed;

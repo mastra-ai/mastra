@@ -147,7 +147,7 @@ const ShortcutResults = ({
         title="Toggle Sidebar"
         subtitle="Studio layout"
         badge="Shortcut"
-        shortcut={<Kbd className="text-[10px]">{sidebarShortcutLabel}</Kbd>}
+        shortcut={<Kbd size="sm">{sidebarShortcutLabel}</Kbd>}
       />
     </CommandGroup>
   );
