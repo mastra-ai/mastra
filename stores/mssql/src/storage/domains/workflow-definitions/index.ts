@@ -17,22 +17,25 @@ import { MssqlDB, resolveMssqlConfig } from '../../db';
 import type { MssqlDomainConfig } from '../../db';
 import { getSchemaName, getTableName } from '../utils';
 
-function parseJson(value: unknown): unknown {
+function parseJson(value: unknown, column: string, rowId: unknown): unknown {
   if (value == null) return null;
   if (typeof value === 'string') {
     try {
       return JSON.parse(value);
     } catch {
-      return value;
+      // Surface corruption loudly — returning the raw string would hand
+      // callers a definition whose graph/schema is a string, failing much
+      // later (or silently) at rehydration time.
+      throw new Error(`Workflow definition row "${String(rowId)}" has malformed JSON in column "${column}".`);
     }
   }
   return value;
 }
 
 function rowToDefinition(row: Record<string, unknown>): WorkflowDefinition {
-  const inputSchema = parseJson(row.inputSchema);
-  const outputSchema = parseJson(row.outputSchema);
-  const graph = parseJson(row.graph);
+  const inputSchema = parseJson(row.inputSchema, 'inputSchema', row.id);
+  const outputSchema = parseJson(row.outputSchema, 'outputSchema', row.id);
+  const graph = parseJson(row.graph, 'graph', row.id);
   if (inputSchema == null || outputSchema == null || graph == null) {
     throw new Error(`Workflow definition row "${String(row.id)}" is missing required JSON columns.`);
   }
@@ -47,11 +50,11 @@ function rowToDefinition(row: Record<string, unknown>): WorkflowDefinition {
     updatedAt: row.updatedAt instanceof Date ? row.updatedAt : new Date(row.updatedAt as string),
   };
   if (row.description != null) def.description = String(row.description);
-  const metadata = parseJson(row.metadata);
+  const metadata = parseJson(row.metadata, 'metadata', row.id);
   if (metadata != null) def.metadata = metadata as Record<string, unknown>;
-  const stateSchema = parseJson(row.stateSchema);
+  const stateSchema = parseJson(row.stateSchema, 'stateSchema', row.id);
   if (stateSchema != null) def.stateSchema = stateSchema;
-  const requestContextSchema = parseJson(row.requestContextSchema);
+  const requestContextSchema = parseJson(row.requestContextSchema, 'requestContextSchema', row.id);
   if (requestContextSchema != null) def.requestContextSchema = requestContextSchema;
   if (row.authorId != null) def.authorId = String(row.authorId);
   return def;

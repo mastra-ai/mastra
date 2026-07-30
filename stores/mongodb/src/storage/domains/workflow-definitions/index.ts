@@ -124,8 +124,10 @@ export class MongoDBWorkflowDefinitionsStore extends WorkflowDefinitionsStorage 
       } catch (error) {
         // A concurrent upsert may have created the document after our
         // existence check; fall back to updating it so the upsert stays
-        // idempotent.
-        if (!(await collection.findOne({ id: input.id }))) throw error;
+        // idempotent. Only duplicate-key failures (code 11000) qualify —
+        // anything else is a real persistence error and must propagate.
+        const isDuplicateKey = (error as { code?: number })?.code === 11000;
+        if (!isDuplicateKey || !(await collection.findOne({ id: input.id }))) throw error;
         return this.applyUpdate(input, now);
       }
       return docToDefinition(doc);

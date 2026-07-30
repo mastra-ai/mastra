@@ -161,7 +161,9 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
         kind: 'nested-workflow-step',
         id: flow.id,
         step: {
-          id: flow.workflowId,
+          // Use the declared call-site id, consistent with unwrapInnerEntry and
+          // collectGraphStepFlags; the registry key stays available as flow.workflowId.
+          id: flow.id,
           description: flow.description,
           component: 'WORKFLOW',
           serializedStepFlow: flow.serializedStepFlow,

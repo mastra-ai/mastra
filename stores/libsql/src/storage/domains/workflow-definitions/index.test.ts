@@ -8,6 +8,7 @@
  *  - the domain is reachable through the LibSQLStore composite
  */
 import { createClient } from '@libsql/client';
+import { TABLE_WORKFLOW_DEFINITIONS } from '@mastra/core/storage';
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -154,7 +155,7 @@ describe('WorkflowDefinitionsLibSQL', () => {
 
     // Corrupt the graph column directly, simulating storage-level damage.
     await client.execute({
-      sql: `UPDATE "mastra_workflow_definitions" SET graph = ? WHERE id = ?`,
+      sql: `UPDATE "${TABLE_WORKFLOW_DEFINITIONS}" SET graph = ? WHERE id = ?`,
       args: ['{not valid json', 'wf-corrupt'],
     });
 

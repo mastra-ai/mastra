@@ -71,6 +71,19 @@ describe('resolveWorkflowGraphStep', () => {
     const tool = resolveWorkflowGraphStep({ type: 'tool', id: 'double', toolId: 'double-tool' });
     expect(tool.kind).toBe('tool-step');
     expect((tool.flow as Extract<SerializedStepFlowEntry, { type: 'tool' }>).toolId).toBe('double-tool');
+
+    // Regression: the nested-workflow shim step used to expose the registry key
+    // (workflowId) as step.id instead of the declared call-site id.
+    const nested = resolveWorkflowGraphStep({
+      type: 'workflow',
+      id: 'call-site-id',
+      workflowId: 'registry-wf',
+      serializedStepFlow: [stepEntry('inner')],
+    });
+    expect(nested.kind).toBe('nested-workflow-step');
+    expect(nested.id).toBe('call-site-id');
+    expect(nested.step?.id).toBe('call-site-id');
+    expect((nested.flow as Extract<SerializedStepFlowEntry, { type: 'workflow' }>).workflowId).toBe('registry-wf');
   });
 
   it('preserves mapConfig and declarative fields for entries nested in foreach / loop', () => {
