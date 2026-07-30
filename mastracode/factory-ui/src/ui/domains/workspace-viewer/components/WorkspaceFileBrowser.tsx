@@ -173,9 +173,9 @@ interface WorkspaceFileBrowserProps {
   isLoading: boolean;
   isRefreshing: boolean;
   error?: Error;
+  onRefresh: () => void;
   onRenderedPathChange: (path: RenderedWorkspacePath) => void;
   onFileSelect: (filePath: string) => void;
-  onRefresh: () => void;
   onShowChanges: () => void;
 }
 
@@ -187,9 +187,9 @@ export function WorkspaceFileBrowser({
   isLoading,
   isRefreshing,
   error,
+  onRefresh,
   onRenderedPathChange,
   onFileSelect,
-  onRefresh,
   onShowChanges,
 }: WorkspaceFileBrowserProps) {
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
@@ -200,8 +200,8 @@ export function WorkspaceFileBrowser({
   };
 
   return (
-    <aside className="bg-surface1 flex h-full w-full min-w-0 flex-col" aria-label="Workspace files">
-      <div className="flex items-center justify-between gap-2 px-3 py-2 lg:pr-12">
+    <aside className="flex h-full min-h-0 w-full min-w-0 flex-col" aria-label="Workspace files">
+      <div className="border-border1 flex items-center border-b px-3 py-2">
         <Tabs<'files' | 'changes'>
           defaultTab="files"
           value="files"
@@ -220,17 +220,7 @@ export function WorkspaceFileBrowser({
             </Tab>
           </TabList>
         </Tabs>
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          onClick={onRefresh}
-          disabled={isRefreshing}
-          aria-label={isRefreshing ? 'Refreshing workspace files' : 'Refresh workspace files'}
-        >
-          {isRefreshing ? <Spinner size="sm" /> : <RefreshCw size={14} />}
-        </Button>
       </div>
-
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         <Tree
           selectedId={selectedFilePath ? `${selectedPath.root}/${selectedFilePath}` : undefined}
@@ -251,7 +241,21 @@ export function WorkspaceFileBrowser({
                   setFolderOpen(path.root, open);
                 }}
               >
-                <Tree.FolderTrigger>
+                <Tree.FolderTrigger
+                  actions={
+                    isSelectedRoot ? (
+                      <Button
+                        size="icon-xs"
+                        variant="ghost"
+                        onClick={onRefresh}
+                        disabled={isRefreshing}
+                        aria-label={isRefreshing ? 'Refreshing workspace files' : 'Refresh workspace files'}
+                      >
+                        {isRefreshing ? <Spinner size="sm" /> : <RefreshCw />}
+                      </Button>
+                    ) : null
+                  }
+                >
                   <Tree.Icon>{getFolderIcon(isOpen)}</Tree.Icon>
                   <Tree.Label>{path.label}</Tree.Label>
                 </Tree.FolderTrigger>

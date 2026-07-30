@@ -55,9 +55,9 @@ function getHandler(routes: ReturnType<typeof createSlackConnectRoutes>, method 
 
 describe('/connect/slack route', () => {
   // The Slack-side entry point carries no identity and writes no link — it
-  // only lands the visitor on Connected accounts, where the OIDC flow (which
+  // only lands the visitor on Connections, where the OIDC flow (which
   // makes Slack assert the account) starts.
-  it('redirects to the connected-accounts surface without writing a link', async () => {
+  it('redirects to the connections surface without writing a link', async () => {
     const { store, saveAccountLink } = fakeStore();
     const routes = createSlackConnectRoutes({
       auth: fakeAuth({ orgId: 'org-9', userId: 'user-9' }),
@@ -84,7 +84,7 @@ describe('/connect/slack route', () => {
     await getHandler(routes)(c);
 
     expect(saveAccountLink).not.toHaveBeenCalled();
-    expect(c.redirect).toHaveBeenCalledWith('/settings/connected-accounts');
+    expect(c.redirect).toHaveBeenCalledWith('/settings/connections');
   });
 
   it('ignores a state query parameter entirely', async () => {
@@ -98,7 +98,7 @@ describe('/connect/slack route', () => {
     await getHandler(routes)(c);
 
     expect(saveAccountLink).not.toHaveBeenCalled();
-    expect(c.redirect).toHaveBeenCalledWith('/settings/connected-accounts');
+    expect(c.redirect).toHaveBeenCalledWith('/settings/connections');
   });
 });
 
@@ -313,9 +313,9 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     vi.unstubAllGlobals();
   });
 
-  it('start redirects to Slack authorize with a tenant-bound signed state', async () => {
+  it('start redirects to Slack authorize with a tenant-and-Factory-bound signed state', async () => {
     const { routes } = oidcRoutes();
-    const c = fakeCtx();
+    const c = fakeCtx(undefined, undefined, { factoryId: 'fp-1' });
 
     await getHandler(routes, 'GET', '/connect/slack/oidc/start')(c);
 
@@ -325,24 +325,25 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     expect(target.searchParams.get('scope')).toBe('openid profile');
     expect(target.searchParams.get('client_id')).toBe('client-1');
     expect(target.searchParams.get('redirect_uri')).toBe('https://tunnel.example/connect/slack/oidc/callback');
-    // The state round-trips the initiating tenant, plus the nonce the callback
-    // burns to keep the binding single-use.
+    // The state round-trips the initiating tenant and Factory, plus the nonce
+    // the callback burns to keep the binding single-use.
     expect(tenantSigner.verify(target.searchParams.get('state') ?? undefined)).toEqual({
       orgId: 'org-9',
       userId: 'user-9',
+      factoryProjectId: 'fp-1',
       nonce: expect.stringMatching(/^[0-9a-f]{16}$/),
     });
   });
 
-  it('start sends signed-out visitors through login', async () => {
+  it('start sends signed-out visitors through login without losing the initiating Factory', async () => {
     const { routes } = oidcRoutes({ auth: fakeAuth(undefined) });
-    const c = fakeCtx();
+    const c = fakeCtx(undefined, undefined, { factoryId: 'fp-1' });
 
     await getHandler(routes, 'GET', '/connect/slack/oidc/start')(c);
 
     const target = c.redirect.mock.calls[0][0];
     expect(target.startsWith('/auth/login?returnTo=')).toBe(true);
-    expect(decodeURIComponent(target)).toContain('/connect/slack/oidc/start');
+    expect(decodeURIComponent(target)).toContain('/connect/slack/oidc/start?factoryId=fp-1');
   });
 
   it('start errors out when OIDC is not configured', async () => {
@@ -379,7 +380,23 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
       externalTeamName: undefined,
       externalUserName: undefined,
     });
-    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/?slack=connected');
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/settings/connections?slack=connected');
+  });
+
+  it('callback returns to the initiating Factory Slack settings', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true, id_token: makeIdToken(validClaims) }) }),
+    );
+    const { routes } = oidcRoutes();
+    const state = tenantSigner.sign('org-9', 'user-9', { factoryProjectId: 'fp-1' });
+    const c = fakeCtx(state, undefined, { code: 'code-1' });
+
+    await getHandler(routes, 'GET', '/connect/slack/oidc/callback')(c);
+
+    expect(c.redirect).toHaveBeenCalledWith(
+      'http://localhost:5173/factories/fp-1/settings/connections/slack?slack=connected',
+    );
   });
 
   it('callback links a personal account with no org id', async () => {
@@ -541,6 +558,6 @@ describe('/connect/slack/oidc (Sign in with Slack)', () => {
     await getHandler(routes, 'GET', '/connect/slack')(c);
 
     expect(saveAccountLink).not.toHaveBeenCalled();
-    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/settings/connected-accounts');
+    expect(c.redirect).toHaveBeenCalledWith('http://localhost:5173/settings/connections');
   });
 });

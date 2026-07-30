@@ -1,4 +1,5 @@
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import type { ReactNode } from 'react';
 import { Navigate, useLocation, useParams } from 'react-router';
 
 import { Sidebar } from '../Sidebar';
@@ -21,10 +22,14 @@ export function SettingsPage() {
   if (!isSettingsSection(section)) {
     return <Navigate to="../preferences" replace state={location.state} />;
   }
-  return <SettingsPageContent />;
+  return (
+    <SettingsPageLayout>
+      <SettingsPanel />
+    </SettingsPageLayout>
+  );
 }
 
-function SettingsPageContent() {
+export function SettingsPageLayout({ children }: { children: ReactNode }) {
   const { factoryId } = useParams<{ factoryId: string }>();
   const { isMobile } = useMainSidebar();
 
@@ -36,7 +41,7 @@ function SettingsPageContent() {
             <SettingsHeader autoFocus placement="mobile" />
           </div>
         )}
-        <SettingsPanel />
+        {children}
       </main>
     );
   }
@@ -45,7 +50,7 @@ function SettingsPageContent() {
       sidebar={<Sidebar />}
       header={<ChatHeader mobileContent={isMobile ? <SettingsHeader autoFocus placement="mobile" /> : undefined} />}
     >
-      <SettingsPanel />
+      {children}
     </PageLayout>
   );
 }

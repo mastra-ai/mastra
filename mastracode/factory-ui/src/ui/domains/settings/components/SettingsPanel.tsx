@@ -2,6 +2,7 @@ import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { toast } from '@mastra/playground-ui/components/Toaster';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
@@ -13,6 +14,7 @@ import {
   useUpdateAgentControllerSettingsMutation,
 } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { ConnectedAccountsSection } from './ConnectedAccountsSection';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { SettingsHeader } from './SettingsHeader';
 import { FactoryManagementSection } from './FactoryManagementSection';
@@ -69,6 +71,14 @@ export function SettingsPanel() {
         {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
         {section === 'preferences' && <GeneralSettings theme={theme} onThemeChange={setTheme} />}
         {section === 'factory' && <FactoryManagementSection />}
+        {section === 'connections' && (
+          <div className="flex flex-col gap-2">
+            <Txt as="p" variant="ui-sm" className="text-icon3">
+              Connect your account to use Factory from Slack.
+            </Txt>
+            <ConnectedAccountsSection />
+          </div>
+        )}
         {section === 'repositories' && <RepositoriesSection />}
         {section === 'intake' && <IntakeSection />}
         {section === 'models' && (

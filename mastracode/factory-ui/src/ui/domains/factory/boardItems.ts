@@ -9,6 +9,7 @@ export const SOURCE_LABELS: Record<WorkItemSource, string> = {
   'github-issue': 'Issue',
   'github-pr': 'PR Review',
   'linear-issue': 'Linear',
+  'slack-thread': 'Slack',
   manual: 'Manual',
 };
 
@@ -40,6 +41,7 @@ export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
 /** Aria label for the icon-only external link next to a card title. */
 export function externalLinkLabel(source: WorkItemSource): string {
   if (source === 'linear-issue') return 'Open in Linear';
+  if (source === 'slack-thread') return 'Open in Slack';
   if (source === 'manual') return 'Open link';
   return 'Open in GitHub';
 }

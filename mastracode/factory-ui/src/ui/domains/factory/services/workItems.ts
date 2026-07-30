@@ -6,7 +6,7 @@
  * org-wide, so every member of the org reads and moves the same cards.
  */
 
-export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'manual';
+export type WorkItemSource = 'github-issue' | 'github-pr' | 'linear-issue' | 'slack-thread' | 'manual';
 
 export interface WorkItemSessionRef {
   sessionId: string;
@@ -82,6 +82,7 @@ function sourceFromExternalSource(source: ExternalWorkItemSource | null): WorkIt
   if (source.integrationId === 'github' && source.type === 'issue') return 'github-issue';
   if (source.integrationId === 'github' && source.type === 'pull-request') return 'github-pr';
   if (source.integrationId === 'linear' && source.type === 'issue') return 'linear-issue';
+  if (source.integrationId === 'slack' && source.type === 'slack-thread') return 'slack-thread';
   return 'manual';
 }
 
@@ -92,7 +93,9 @@ function toExternalSource(input: CreateWorkItemInput): ExternalWorkItemSource | 
       ? ['github', 'issue']
       : input.source === 'github-pr'
         ? ['github', 'pull-request']
-        : ['linear', 'issue'];
+        : input.source === 'linear-issue'
+          ? ['linear', 'issue']
+          : ['slack', 'slack-thread'];
   return {
     integrationId,
     type,

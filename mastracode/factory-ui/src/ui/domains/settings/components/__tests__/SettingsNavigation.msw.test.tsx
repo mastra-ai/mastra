@@ -29,6 +29,10 @@ describe('SettingsNavigation', () => {
     expect(screen.getByRole('link', { name: 'Factory' })).toHaveAttribute('href', '/factories/fp-1/settings/factory');
 
     const sources = screen.getByRole('region', { name: 'Sources' });
+    expect(within(sources).getByRole('link', { name: 'Connections' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/connections',
+    );
     expect(within(sources).getByRole('link', { name: 'Repositories' })).toHaveAttribute(
       'href',
       '/factories/fp-1/settings/repositories',
@@ -37,6 +41,11 @@ describe('SettingsNavigation', () => {
       'href',
       '/factories/fp-1/settings/intake',
     );
+    expect(
+      within(sources)
+        .getAllByRole('link')
+        .map(link => link.textContent),
+    ).toEqual(['Repositories', 'Work Intake', 'Connections']);
 
     const agent = screen.getByRole('region', { name: 'Agent' });
     expect(within(agent).getByRole('link', { name: 'Models' })).toHaveAttribute(

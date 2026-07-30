@@ -1,8 +1,16 @@
-export type SettingsSection = 'preferences' | 'factory' | 'repositories' | 'intake' | 'models' | 'behavior';
+export type SettingsSection =
+  | 'preferences'
+  | 'factory'
+  | 'connections'
+  | 'repositories'
+  | 'intake'
+  | 'models'
+  | 'behavior';
 
 export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   preferences: 'Preferences',
   factory: 'Factory',
+  connections: 'Connections',
   repositories: 'Repositories',
   intake: 'Work Intake',
   models: 'Models',

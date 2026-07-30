@@ -91,12 +91,11 @@ describe('WorkspaceViewerPanel', () => {
 
     renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} renderedPaths={renderedPaths} />);
 
-    expect(await screen.findByText('Files')).toBeInTheDocument();
     await userEvent.click(await screen.findByRole('button', { name: 'Artifacts' }));
     expect(await screen.findByText('No artifacts yet. Session files created will appear here.')).toBeInTheDocument();
   });
 
-  it('expands folders inline and opens the selected file viewer left of the browser', async () => {
+  it('expands folders inline and swaps the browser for the selected file viewer', async () => {
     const fileRequests = installHandlers();
     const user = userEvent.setup();
     renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} renderedPaths={renderedPaths} />);
@@ -124,7 +123,7 @@ describe('WorkspaceViewerPanel', () => {
     const viewer = await screen.findByLabelText('Workspace file viewer');
     expect(viewer).toBeInTheDocument();
     expect(await screen.findByText('Notes')).toBeInTheDocument();
-    expect(screen.getByLabelText('Workspace files')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Workspace files')).not.toBeInTheDocument();
     expect(fileRequests).toContain('.artifacts/understand-pr/HISTORY.md');
     expect(fileRequests).not.toContain('understand-pr/HISTORY.md');
   });
@@ -144,7 +143,7 @@ describe('WorkspaceViewerPanel', () => {
     expect(await screen.findByText('summary.md')).toBeInTheDocument();
   });
 
-  it('opens file content independently and returns to the unchanged file browser', async () => {
+  it('returns from file content to the file browser', async () => {
     installHandlers();
     const user = userEvent.setup();
     renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} renderedPaths={renderedPaths} />);
@@ -154,12 +153,11 @@ describe('WorkspaceViewerPanel', () => {
     await user.click(await screen.findByText('HISTORY.md'));
 
     expect(await screen.findByLabelText('Workspace file viewer')).toBeInTheDocument();
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByLabelText('Workspace files')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Close' }));
+    await user.click(screen.getByRole('button', { name: 'Back to workspace files' }));
 
-    await waitFor(() => expect(screen.queryByLabelText('Workspace file viewer')).not.toBeInTheDocument());
-    expect(screen.getByText('HISTORY.md')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Workspace file viewer')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Workspace files')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Artifacts' })).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('shows progress while refreshing the current listing', async () => {

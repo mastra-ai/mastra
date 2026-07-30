@@ -1,5 +1,47 @@
 # @mastra/core
 
+## 1.55.0-alpha.3
+
+### Patch Changes
+
+- Review sessions now load project AGENTS.md/CLAUDE.md from the pull request's trusted base branch instead of skipping them entirely. The working-tree copies on an untrusted checkout remain excluded from the system prompt and reminder injection; content is served from the base ref via git, and sessions without a known base ref still skip project instruction files. ([#20372](https://github.com/mastra-ai/mastra/pull/20372))
+
+- Review sessions no longer ingest AGENTS.md or CLAUDE.md from the checked-out pull request branch. A PR branch is third-party content, so its instruction files are treated as content under review instead of trusted configuration — closing a prompt-injection path into the reviewer agent. The reviewer also runs the PR's install/build/test commands with GitHub tokens stripped from the environment. ([#20372](https://github.com/mastra-ai/mastra/pull/20372))
+
+- Added an option to the instruction-file reminder processor that lets hosts disable injection entirely for a request, so instruction files from untrusted checkouts are never surfaced as reminders. ([#20372](https://github.com/mastra-ai/mastra/pull/20372))
+
+## 1.55.0-alpha.2
+
+### Minor Changes
+
+- Channel handlers can now contribute to the request context of the run they start. ([#20060](https://github.com/mastra-ai/mastra/pull/20060))
+
+  `ChannelHandlerContext` gains a `requestContext` field holding the `RequestContext` for the run the inbound message is about to start. It is constructed fresh for every message, and a handler may write to it before calling `defaultHandler`. Core then adds its own channel and render-context entries and dispatches with the same instance, so anything the handler wrote reaches the run.
+
+  ```ts
+  import { AgentControllerChannels } from '@mastra/core/channels';
+
+  const channels = new AgentControllerChannels({
+    adapters,
+    handlers: {
+      onDirectMessage: async (thread, message, defaultHandler, ctx) => {
+        ctx.requestContext.set('locale', 'en-GB');
+        await defaultHandler(thread, message);
+      },
+    },
+  });
+  ```
+
+  Anything a run reads from its request context can now be decided per inbound message — for example resolving which user a platform sender maps to, so the run uses that user's stored credentials.
+
+  **Contract change:** `ChannelHandler`'s 4th `ctx` parameter is now non-optional (`ctx: ChannelHandlerContext`, previously `ctx?: ChannelHandlerContext`). Core has always passed it, and requiring it means a handler writing `ctx.requestContext.set(...)` needs neither a non-null assertion nor a guard that would silently skip the write.
+
+  Handler _implementations_ are unaffected: TypeScript lets a function declaring fewer parameters satisfy a type declaring more, so existing three-parameter handlers — and anyone who wrote `ctx?.mastra` — keep compiling. Code that _calls_ a `ChannelHandler`-typed value with three arguments does need updating, and will fail with `Expected 4 arguments, but got 3` until the context is passed.
+
+### Patch Changes
+
+- Improved workflow and MCP tool-result formatting to avoid serializing large values during equality checks while preserving explicit model outputs. ([#20340](https://github.com/mastra-ai/mastra/pull/20340))
+
 ## 1.55.0-alpha.1
 
 ### Minor Changes

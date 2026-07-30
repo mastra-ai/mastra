@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
+import { WorkspaceFilesProvider } from '../../workspace-viewer/context/WorkspaceFilesProvider';
 import { FactorySessionHeader } from '../components/RelatedFactorySessions';
 
 const FACTORY_ID = 'factory-1';
@@ -91,7 +92,11 @@ function renderHeader() {
       <Routes>
         <Route
           path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
-          element={<FactorySessionHeader />}
+          element={
+            <WorkspaceFilesProvider>
+              <FactorySessionHeader />
+            </WorkspaceFilesProvider>
+          }
         />
       </Routes>
     </MemoryRouter>,
@@ -110,6 +115,7 @@ describe('FactorySessionHeader', () => {
       expect(link).toHaveAttribute('href', issueUrl);
       expect(link).toHaveAttribute('target', '_blank');
       expect(link).toHaveAttribute('rel', 'noreferrer');
+      expect(link.querySelector('.lucide-circle-dot')).toBeInTheDocument();
     });
   });
 
@@ -124,6 +130,7 @@ describe('FactorySessionHeader', () => {
       expect(link).toHaveAttribute('href', issueUrl);
       expect(link).toHaveAttribute('target', '_blank');
       expect(link).toHaveAttribute('rel', 'noreferrer');
+      expect(link.querySelector('.lucide-external-link')).toBeInTheDocument();
     });
   });
 

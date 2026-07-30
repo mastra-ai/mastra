@@ -1,7 +1,7 @@
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ArrowLeft, Bot, Building2, GitBranch, Inbox, Palette, Search, SlidersHorizontal } from 'lucide-react';
+import { ArrowLeft, Bot, Building2, Cable, GitBranch, Inbox, Palette, Search, SlidersHorizontal } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
@@ -55,6 +55,12 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.intake,
         icon: Inbox,
         searchText: 'work intake sources tasks issues pull requests github linear feed sync',
+      },
+      {
+        id: 'connections',
+        label: SETTINGS_SECTION_LABELS.connections,
+        icon: Cable,
+        searchText: 'connections connected accounts slack communication integrations',
       },
     ],
   },

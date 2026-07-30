@@ -218,7 +218,11 @@ function WorkspaceGroup({
         {visibleRows.map(row => (
           <SessionNavRow
             key={row.workspace.sessionId}
-            name={row.label ?? row.workspace.branch}
+            name={
+              row.label ??
+              (row.workspace.branch.startsWith('slack/') ? row.itemTitle : undefined) ??
+              row.workspace.branch
+            }
             url={row.url}
             active={row.active}
             disabled={pending}
