@@ -65,6 +65,8 @@ export function ThreadPage() {
 
 function ThreadPageMain() {
   useGlobalShortcuts();
+  useRouteThreadSync();
+  useThreadPageKickoffs();
 
   return (
     <ThreadShell>
@@ -121,8 +123,6 @@ function ThreadShell({ children }: { children: ReactNode }) {
 }
 
 function ThreadTranscript() {
-  useRouteThreadSync();
-  useThreadPageKickoffs();
   const { transcript, showWorkingIndicator } = useChatTranscript();
 
   return (
