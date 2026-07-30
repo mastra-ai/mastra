@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 
-import type { WorkflowDraftAuthoringState, WorkflowDraftValidationContext } from './workflow-draft';
+import type { WorkflowDraftAuthoringState } from './workflow-draft';
 import type { WorkflowDraftCandidate } from './workflow-draft-tools';
 
 export function getWorkflowBuilderThreadId(projectId: string, workflowId: string): string {
@@ -15,19 +15,12 @@ export function getOriginalWorkflowRequest(messages: MastraDBMessage[]): string 
 
 export function serializeWorkflowDraftInstructions(
   authoringState: WorkflowDraftAuthoringState,
-  validationContext: WorkflowDraftValidationContext = {},
   candidate?: WorkflowDraftCandidate,
   originalRequest?: string,
 ): string {
   const originalRequestContext = originalRequest
     ? `## Original workflow request\n${originalRequest}\n\nContinue constructing or repairing this workflow. Do not ask the user to restate it.\n\n`
     : '';
-  const catalogContext = {
-    workflowCatalog: validationContext.workflowCatalog ?? 'available',
-    agents: Object.keys(validationContext.agents ?? {}),
-    tools: Object.keys(validationContext.tools ?? {}),
-    workflows: Object.keys(validationContext.workflows ?? {}),
-  };
   const candidateContext = candidate
     ? `
 
@@ -49,13 +42,8 @@ Lifecycle: ${authoringState.lifecycle}
 Revision: ${authoringState.revision}
 Finalized revision: ${authoringState.finalizedRevision ?? 'none'}
 
-## Discovered catalogs
-\`\`\`json
-${JSON.stringify(catalogContext, null, 2)}
-\`\`\`
-
 ## Workflow construction rules
-Use inspect-workflow-resources to batch-inspect authoritative registered resource identities and schemas when the workflow depends on tools, agents, or nested workflows.
+Call list-available-agents, list-available-tools, and list-available-workflows before composing. They take no arguments and return every registered resource with its contract: tool and workflow rows carry inputSchema and outputSchema, agent rows carry outputContract. Those returned schemas are your ground truth — never invent a field name, and never assume a resource exists because the user named it.
 Submit one complete canonical WorkflowDefinition with submit-workflow-draft. Mapping steps use canonical descriptor objects, never template expressions or stringified objects. Examples:
 - Workflow input: { "initData": true, "path": "prompt" }
 - Preceding step output: { "step": "lookup-customer", "path": "customerId" }

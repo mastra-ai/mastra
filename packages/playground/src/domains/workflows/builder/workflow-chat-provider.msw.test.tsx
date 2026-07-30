@@ -160,7 +160,9 @@ describe('WorkflowChatProvider', () => {
         await new Promise(resolve => setTimeout(resolve, 20));
       });
       expect(Object.keys((requestBody?.clientTools ?? {}) as object)).toEqual([
-        'inspect-workflow-resources',
+        'list-available-agents',
+        'list-available-tools',
+        'list-available-workflows',
         'submit-workflow-draft',
       ]);
       const serializedTools = JSON.stringify(requestBody?.clientTools);

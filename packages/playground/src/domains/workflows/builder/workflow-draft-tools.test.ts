@@ -16,6 +16,13 @@ const canonicalFixtures = JSON.parse(
   readFileSync(resolve(process.cwd(), '../../test-fixtures/workflow-builder-canonical/definitions.json'), 'utf8'),
 ) as Array<{ name: string; input: unknown; expected: unknown }>;
 
+const toolInputSchema = (tool: unknown) => {
+  if (!tool || typeof tool !== 'object' || !('inputSchema' in tool)) {
+    throw new Error('Expected client tool with an input schema');
+  }
+  return tool.inputSchema as { safeParse: (input: unknown) => { success: boolean } };
+};
+
 const executeTool = async (tool: unknown, input: unknown) => {
   if (!tool || typeof tool !== 'object' || !('execute' in tool) || typeof tool.execute !== 'function') {
     throw new Error('Expected executable client tool');
@@ -24,10 +31,11 @@ const executeTool = async (tool: unknown, input: unknown) => {
 };
 
 const validationContext: WorkflowDraftValidationContext = {
-  agents: { supportAgent: { runtimeId: 'support-agent' } },
+  agents: { supportAgent: { runtimeId: 'support-agent', description: 'Answers support questions' } },
   tools: {
     lookupCustomer: {
       runtimeId: 'lookup-customer',
+      description: 'Looks a customer up by email',
       inputSchema: { type: 'object', properties: { email: { type: 'string' } }, required: ['email'] },
       outputSchema: { type: 'object', properties: { customerId: { type: 'string' } }, required: ['customerId'] },
     },
@@ -35,6 +43,7 @@ const validationContext: WorkflowDraftValidationContext = {
   workflows: {
     greetingWorkflow: {
       runtimeId: 'greeting-workflow',
+      description: 'Greets a person by name',
       inputSchema: { type: 'object', properties: { name: { type: 'string' } } },
       outputSchema: { type: 'object', properties: { message: { type: 'string' } } },
     },
@@ -96,53 +105,98 @@ describe('workflow draft client tools', () => {
   });
 
   describe('when the browser registers workflow authoring tools', () => {
-    it('exposes only unified resource inspection and whole-definition submission', () => {
-      expect(Object.keys(createStore().tools)).toEqual(['inspect-workflow-resources', 'submit-workflow-draft']);
+    it('exposes one eager listing per resource type plus whole-definition submission', () => {
+      expect(Object.keys(createStore().tools)).toEqual([
+        'list-available-agents',
+        'list-available-tools',
+        'list-available-workflows',
+        'submit-workflow-draft',
+      ]);
     });
+
+    it.each(['list-available-agents', 'list-available-tools', 'list-available-workflows'])(
+      'lets the model call %s with no arguments',
+      async toolId => {
+        const { tools } = createStore({ context: validationContext });
+
+        expect(toolInputSchema(tools[toolId]).safeParse({}).success).toBe(true);
+        await expect(executeTool(tools[toolId], {})).resolves.toBeDefined();
+      },
+    );
   });
 
-  describe('when registered resources are inspected', () => {
-    it('returns authoritative identities and schemas for multiple resource types', async () => {
+  describe('when registered resources are listed', () => {
+    it('returns every agent with its output contract in one call', async () => {
       const { tools } = createStore({ context: validationContext });
-      const result = await executeTool(tools['inspect-workflow-resources'], {
-        resources: [
-          { type: 'tool', registryKey: 'lookupCustomer' },
-          { type: 'agent', registryKey: 'supportAgent' },
-          { type: 'workflow', registryKey: 'greetingWorkflow' },
-        ],
-      });
 
-      expect(result).toMatchObject({
-        available: true,
-        resources: [
-          { type: 'tool', found: true, registryKey: 'lookupCustomer', runtimeId: 'lookup-customer' },
+      expect(await executeTool(tools['list-available-agents'], {})).toEqual({
+        agents: [
           {
-            type: 'agent',
-            found: true,
             registryKey: 'supportAgent',
             runtimeId: 'support-agent',
+            description: 'Answers support questions',
             outputContract: expect.stringContaining('outputSchema'),
           },
+        ],
+      });
+    });
+
+    it('returns every tool with both schemas in one call', async () => {
+      const { tools } = createStore({ context: validationContext });
+
+      expect(await executeTool(tools['list-available-tools'], {})).toEqual({
+        tools: [
           {
-            type: 'workflow',
-            found: true,
+            registryKey: 'lookupCustomer',
+            runtimeId: 'lookup-customer',
+            description: 'Looks a customer up by email',
+            inputSchema: validationContext.tools!.lookupCustomer.inputSchema,
+            outputSchema: validationContext.tools!.lookupCustomer.outputSchema,
+          },
+        ],
+      });
+    });
+
+    it('returns every workflow with the id that nested entries must reference', async () => {
+      const { tools } = createStore({ context: validationContext });
+
+      expect(await executeTool(tools['list-available-workflows'], {})).toEqual({
+        available: true,
+        workflows: [
+          {
             registryKey: 'greetingWorkflow',
-            runtimeId: 'greeting-workflow',
             authoritativeWorkflowId: 'greeting-workflow',
+            description: 'Greets a person by name',
+            inputSchema: validationContext.workflows!.greetingWorkflow.inputSchema,
+            outputSchema: validationContext.workflows!.greetingWorkflow.outputSchema,
           },
         ],
       });
     });
   });
 
-  describe('when resource inspection is degraded', () => {
-    it('returns catalog availability without mutating authoring state', async () => {
-      const store = createStore({ context: { workflowCatalog: 'unavailable' } });
+  describe('when the workflow catalog is withheld', () => {
+    it('reports the workflow catalog unavailable without mutating authoring state', async () => {
+      const store = createStore({ context: { ...validationContext, workflowCatalog: 'unavailable' } });
       const before = store.state;
-      const result = await executeTool(store.tools['inspect-workflow-resources'], { resources: [] });
 
-      expect(result).toEqual({ available: false, reason: 'catalog-unavailable', resources: [], catalog: [] });
+      expect(await executeTool(store.tools['list-available-workflows'], {})).toEqual({
+        available: false,
+        reason: 'catalog-unavailable',
+        workflows: [],
+      });
       expect(store.state).toBe(before);
+    });
+
+    it('still lists agents and tools, which are not gated behind workflow permission', async () => {
+      const { tools } = createStore({ context: { ...validationContext, workflowCatalog: 'unavailable' } });
+
+      expect(await executeTool(tools['list-available-agents'], {})).toMatchObject({
+        agents: [{ registryKey: 'supportAgent' }],
+      });
+      expect(await executeTool(tools['list-available-tools'], {})).toMatchObject({
+        tools: [{ registryKey: 'lookupCustomer' }],
+      });
     });
   });
 

@@ -61,13 +61,17 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
   const validationContext = useMemo<WorkflowDraftValidationContext>(
     () => ({
       agents: Object.fromEntries(
-        Object.entries(agentsQuery.data ?? {}).map(([id, agent]) => [id, { runtimeId: agent.id }]),
+        Object.entries(agentsQuery.data ?? {}).map(([id, agent]) => [
+          id,
+          { runtimeId: agent.id, description: agent.description },
+        ]),
       ),
       tools: Object.fromEntries(
         Object.entries(toolsQuery.data ?? {}).map(([id, tool]) => [
           id,
           {
             runtimeId: tool.id,
+            description: tool.description,
             inputSchema: parseWorkflowCatalogSchema(tool.inputSchema),
             outputSchema: parseWorkflowCatalogSchema(tool.outputSchema),
           },
@@ -77,6 +81,7 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
         Object.entries(workflowsQuery.data ?? {}).map(([id, workflow]) => [
           id,
           {
+            description: workflow.description,
             inputSchema: parseWorkflowCatalogSchema(workflow.inputSchema),
             outputSchema: parseWorkflowCatalogSchema(workflow.outputSchema),
           },
@@ -159,7 +164,6 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
       key={threadId}
       threadId={threadId}
       authoringState={workflowDraft.authoringState}
-      validationContext={validationContext}
       initialMessages={initialMessages}
       createTools={workflowDraft.createTools}
       onGenerationFailure={setGenerationFailure}

@@ -13,11 +13,12 @@ import type {
   WorkflowDraft,
   WorkflowDraftAuthoringResult,
   WorkflowDraftAuthoringState,
+  WorkflowDraftStepSchema,
   WorkflowDraftValidationContext,
   WorkflowDraftValidationIssue,
 } from './workflow-draft';
 import { validateWorkflowDraft } from './workflow-draft';
-const inspectionResultSchema = z.record(z.string(), z.unknown());
+const catalogResultSchema = z.record(z.string(), z.unknown());
 const resultSchema = z.object({
   success: z.boolean(),
   reason: z.enum(['superseded', 'already-ready', 'empty-arguments', 'generation-stopped']).optional(),
@@ -223,66 +224,81 @@ function reportResult(store: WorkflowDraftToolStore, toolId: string, result: z.i
   return result;
 }
 
-function catalogUnavailable(store: WorkflowDraftToolStore) {
-  return !store.validationContext || store.validationContext.workflowCatalog === 'unavailable';
-}
-
-const resourceRequestSchema = z.object({
-  type: z.enum(['tool', 'agent', 'workflow']),
-  registryKey: z.string().min(1),
-});
-
 const AGENT_OUTPUT_CONTRACT =
   'An agent step takes a { prompt: string } input and by default outputs { text: string }. To make an agent emit a different shape — for example a top-level array to drive a foreach — set outputSchema on that agent step; it overrides the default for that step only.';
 
-function inspectResource(store: WorkflowDraftToolStore, request: z.infer<typeof resourceRequestSchema>) {
-  const catalogName = request.type === 'tool' ? 'tools' : request.type === 'agent' ? 'agents' : 'workflows';
-  const entry = store.validationContext?.[catalogName]?.[request.registryKey];
-  if (!entry) return { ...request, found: false };
-  return {
-    ...request,
-    found: true,
-    runtimeId: entry.runtimeId,
-    inputSchema: entry.inputSchema,
-    outputSchema: entry.outputSchema,
-    ...(request.type === 'agent' ? { outputContract: AGENT_OUTPUT_CONTRACT } : {}),
-    ...(request.type === 'workflow' ? { authoritativeWorkflowId: entry.runtimeId ?? request.registryKey } : {}),
-  };
+/**
+ * Only the workflow catalog can be withheld: it is the one listing gated behind a
+ * permission the user may lack. Agents and tools stay listable in that case.
+ */
+function workflowCatalogUnavailable(store: WorkflowDraftToolStore) {
+  return !store.validationContext || store.validationContext.workflowCatalog === 'unavailable';
+}
+
+function catalogRows(
+  store: WorkflowDraftToolStore,
+  catalogName: 'agents' | 'tools' | 'workflows',
+  toRow: (registryKey: string, entry: WorkflowDraftStepSchema) => Record<string, unknown>,
+) {
+  return Object.entries(store.validationContext?.[catalogName] ?? {}).map(([registryKey, entry]) =>
+    toRow(registryKey, entry),
+  );
 }
 
 export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientToolsInput {
   const candidate = store.candidate ?? createWorkflowDraftCandidate(store.getState());
 
   return {
-    'inspect-workflow-resources': createTool({
-      id: 'inspect-workflow-resources',
+    'list-available-agents': createTool({
+      id: 'list-available-agents',
       description:
-        'Batch-inspect authoritative registered tools, agents, and workflows. Returns registry keys, runtime IDs, normalized input/output JSON Schemas, nested workflow identity, catalog availability, and — for agents — the default { prompt } -> { text } contract plus how a step outputSchema overrides it.',
-      inputSchema: z.object({
-        query: z.string().optional().describe('Optional case-insensitive registry-key or runtime-ID search.'),
-        resources: z
-          .array(resourceRequestSchema)
-          .max(50)
-          .optional()
-          .describe('Optional exact resources to batch-inspect.'),
+        'Returns every agent registered on this Mastra instance. The registry keys returned here are the only valid values you can put in `{ type: "agent", agentId }` graph entries. Every row includes `outputContract` so you know what an agent step produces — read it instead of guessing.',
+      inputSchema: z.object({}),
+      outputSchema: catalogResultSchema,
+      execute: async () => ({
+        agents: catalogRows(store, 'agents', (registryKey, entry) => ({
+          registryKey,
+          runtimeId: entry.runtimeId,
+          description: entry.description,
+          outputContract: AGENT_OUTPUT_CONTRACT,
+        })),
       }),
-      outputSchema: inspectionResultSchema,
-      execute: async ({ query, resources = [] }) => {
-        if (catalogUnavailable(store))
-          return { available: false, reason: 'catalog-unavailable', resources: [], catalog: [] };
-        const normalizedQuery = query?.toLowerCase();
-        const catalog = (['tool', 'agent', 'workflow'] as const).flatMap(type => {
-          const catalogName = type === 'tool' ? 'tools' : type === 'agent' ? 'agents' : 'workflows';
-          return Object.entries(store.validationContext?.[catalogName] ?? {})
-            .filter(([registryKey, entry]) =>
-              normalizedQuery
-                ? registryKey.toLowerCase().includes(normalizedQuery) ||
-                  entry.runtimeId?.toLowerCase().includes(normalizedQuery)
-                : true,
-            )
-            .map(([registryKey, entry]) => ({ type, registryKey, runtimeId: entry.runtimeId }));
-        });
-        return { available: true, catalog, resources: resources.map(resource => inspectResource(store, resource)) };
+    }),
+    'list-available-tools': createTool({
+      id: 'list-available-tools',
+      description:
+        'Returns every tool registered on this Mastra instance. The registry keys returned here are the only valid values you can put in `{ type: "tool", toolId }` graph entries. Every row includes `inputSchema` and `outputSchema` as JSON Schema — read them to know what fields the tool accepts and emits; never invent field names.',
+      inputSchema: z.object({}),
+      outputSchema: catalogResultSchema,
+      execute: async () => ({
+        tools: catalogRows(store, 'tools', (registryKey, entry) => ({
+          registryKey,
+          runtimeId: entry.runtimeId,
+          description: entry.description,
+          inputSchema: entry.inputSchema,
+          outputSchema: entry.outputSchema,
+        })),
+      }),
+    }),
+    'list-available-workflows': createTool({
+      id: 'list-available-workflows',
+      description:
+        'Returns every workflow already registered on this Mastra instance. The `authoritativeWorkflowId` values returned here are the only valid values you can put in `{ type: "workflow", workflowId }` graph entries. Every row includes `inputSchema` and `outputSchema` as JSON Schema — read them to know what shape the nested workflow expects and produces; never invent field names. Helper workflows you submit in the same draft are not listed here yet.',
+      inputSchema: z.object({}),
+      outputSchema: catalogResultSchema,
+      execute: async () => {
+        if (workflowCatalogUnavailable(store))
+          return { available: false, reason: 'catalog-unavailable' as const, workflows: [] };
+        return {
+          available: true,
+          workflows: catalogRows(store, 'workflows', (registryKey, entry) => ({
+            registryKey,
+            authoritativeWorkflowId: entry.runtimeId ?? registryKey,
+            description: entry.description,
+            inputSchema: entry.inputSchema,
+            outputSchema: entry.outputSchema,
+          })),
+        };
       },
     }),
     'submit-workflow-draft': createTool({

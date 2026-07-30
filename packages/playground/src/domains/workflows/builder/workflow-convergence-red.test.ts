@@ -25,10 +25,15 @@ describe('Workflow Studio complex prompt authoring tools', () => {
   describe.each(['customer ticket workflow', 'parallel lookup workflow', 'priority router', 'mixed support pipeline'])(
     'when the %s needs validation-driven correction',
     () => {
-      it('uses resource inspection and complete-definition resubmission without granular repair tools', () => {
+      it('uses eager catalog listings and complete-definition resubmission without granular repair tools', () => {
         const tools = createTools();
 
-        expect(Object.keys(tools)).toEqual(['inspect-workflow-resources', 'submit-workflow-draft']);
+        expect(Object.keys(tools)).toEqual([
+          'list-available-agents',
+          'list-available-tools',
+          'list-available-workflows',
+          'submit-workflow-draft',
+        ]);
       });
     },
   );

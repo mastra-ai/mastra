@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { getOriginalWorkflowRequest, serializeWorkflowDraftInstructions } from './workflow-conversation';
-import type { WorkflowDraftAuthoringState, WorkflowDraftValidationContext } from './workflow-draft';
+import type { WorkflowDraftAuthoringState } from './workflow-draft';
 import { createWorkflowDraftCandidate } from './workflow-draft-tools';
 import type { WorkflowDraftCandidate, WorkflowDraftToolResult } from './workflow-draft-tools';
 import { StreamChatProvider } from '@/domains/agent-builder/contexts/stream-chat-provider';
@@ -17,7 +17,6 @@ export interface WorkflowGenerationFailure {
 export interface WorkflowChatProviderProps {
   threadId: string;
   authoringState: WorkflowDraftAuthoringState;
-  validationContext?: WorkflowDraftValidationContext;
   initialMessages: MastraDBMessage[];
   initialUserMessage?: string;
   createTools: (
@@ -50,7 +49,6 @@ function hasAcceptedDraft(state: WorkflowDraftAuthoringState) {
 function WorkflowChatSession({
   threadId,
   authoringState,
-  validationContext,
   initialMessages,
   initialUserMessage,
   createTools,
@@ -185,12 +183,7 @@ function WorkflowChatSession({
       initialMessages={hydrationMessages}
       initialUserMessage={initialUserMessage}
       createClientTools={createClientTools}
-      extraInstructions={serializeWorkflowDraftInstructions(
-        authoringState,
-        validationContext,
-        candidateSnapshot,
-        originalRequest,
-      )}
+      extraInstructions={serializeWorkflowDraftInstructions(authoringState, candidateSnapshot, originalRequest)}
       enableThreadSignals={false}
       debounceTime={debounceTime}
       maxSteps={1000}

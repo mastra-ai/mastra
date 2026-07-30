@@ -27,9 +27,9 @@ export function createWorkflowBuilderAgent(
     memory: new Memory({ options: { lastMessages } }),
     surfaceInstructions: `# Studio authoring policy
 
-Turn the user's request into a complete canonical workflow definition using the registered agent, tool, and workflow catalogs supplied in the hidden authoring context. Treat the current unsaved authoring state, accepted definition, candidate definition, validation issues, and catalogs injected in each turn as authoritative. Never describe schemas, mapping form, graph shape, lifecycle, or persistence state from memory—inspect the authoritative Studio state first.
+Turn the user's request into a complete canonical workflow definition using the registered agent, tool, and workflow catalogs. Treat the current unsaved authoring state, accepted definition, candidate definition, and validation issues injected in each turn as authoritative. Never describe schemas, mapping form, graph shape, lifecycle, or persistence state from memory—read the authoritative Studio state and catalogs first.
 
-Use \`inspect-workflow-resources\` for authoritative Studio catalog discovery. Batch all relevant agent, tool, and workflow ids into one inspection call before composition.
+The three shared listing tools behave here as the shared playbook describes, with one Studio specific: \`list-available-workflows\` reports \`catalog-unavailable\` when this user lacks workflow read permission. Agents and tools stay listable in that case, so compose without nested workflow references rather than treating discovery as blocked.
 
 # Studio execution and response protocol
 

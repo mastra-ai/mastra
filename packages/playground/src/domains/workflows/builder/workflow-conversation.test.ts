@@ -19,16 +19,11 @@ describe('workflow conversation', () => {
   describe('when creating hidden instructions', () => {
     it('serializes the authoritative draft without adding a visible message', () => {
       const state = createWorkflowDraftAuthoringState('daily-report');
-      const instructions = serializeWorkflowDraftInstructions(state, {
-        agents: { 'support-agent': {} },
-        workflowCatalog: 'unavailable',
-      });
+      const instructions = serializeWorkflowDraftInstructions(state);
 
       expect(instructions).toContain('## Current unsaved workflow authoring state');
       expect(instructions).toContain('Lifecycle: untouched');
       expect(instructions).toContain('Revision: 0');
-      expect(instructions).toContain('"workflowCatalog": "unavailable"');
-      expect(instructions).toContain('support-agent');
       expect(instructions).toContain('"id": "daily-report"');
       expect(instructions).toContain('{ "initData": true, "path": "prompt" }');
       expect(instructions).toContain('submit-workflow-draft');
@@ -47,7 +42,6 @@ describe('workflow conversation', () => {
       const originalRequest = getOriginalWorkflowRequest(messages);
       const instructions = serializeWorkflowDraftInstructions(
         createWorkflowDraftAuthoringState('mixed-support-pipeline'),
-        {},
         undefined,
         originalRequest,
       );
@@ -64,7 +58,7 @@ describe('workflow conversation', () => {
       candidate.hasUncheckpointedChanges = true;
       candidate.draft.description = 'Candidate-only description';
 
-      const instructions = serializeWorkflowDraftInstructions(state, {}, candidate);
+      const instructions = serializeWorkflowDraftInstructions(state, candidate);
 
       expect(instructions).toContain('## Generation-local candidate');
       expect(instructions).toContain('Candidate revision: 2');
