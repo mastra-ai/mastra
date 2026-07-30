@@ -212,11 +212,7 @@ export interface FactoryPendingStartRecord {
   bindingId: string;
   kickoffKey: string;
   message: string | null;
-  /**
-   * `blocked` gates a kickoff created before its session exists (fast-phase
-   * prepare); the dispatcher cannot claim it until it is released to `pending`.
-   */
-  status: 'blocked' | 'pending' | 'leased' | 'retry' | 'sent' | 'failed';
+  status: 'pending' | 'leased' | 'retry' | 'sent' | 'failed';
   attempts: number;
   availableAt: Date;
   leaseOwner: string | null;
@@ -278,20 +274,6 @@ export interface PrepareFactoryRunStartInput {
   resourceId: string;
   kickoffKey: string;
   kickoffMessage: string | null;
-  /**
-   * Initial pending-start status. Use `blocked` when the session is created in
-   * a background finalize phase; release with {@link releasePendingStart}.
-   * Defaults to `pending`.
-   */
-  kickoffStatus?: 'pending' | 'blocked';
-}
-
-export interface ReleasePendingStartInput {
-  id: string;
-  orgId: string;
-  factoryProjectId: string;
-  /** Replaces the stored kickoff message when provided (deferred resolution). */
-  message?: string;
 }
 
 export interface PrepareFactoryRunStartResult {
@@ -547,9 +529,6 @@ function applyUpdate({
     updated_at: now,
   };
 }
-
-/** How long a `blocked` pending start may sit before it is considered orphaned. */
-export const BLOCKED_START_STALE_MS = 30 * 60_000;
 
 const projectRelationLocks = new Map<string, Promise<unknown>>();
 
@@ -1433,56 +1412,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   async claimPendingStarts(input: FactoryLeaseClaimInput): Promise<FactoryPendingStartRecord[]> {
-    await this.#failStaleBlockedStarts(input.now);
     return this.#claimLeases('factory_pending_starts', input, toPendingStart);
-  }
-
-  /**
-   * Safety net for `blocked` pending starts orphaned by a server death
-   * mid-finalize: after 30 minutes they are failed (visible/retryable) instead
-   * of staying invisible to the dispatcher forever.
-   */
-  async #failStaleBlockedStarts(now: Date): Promise<void> {
-    const cutoff = new Date(now.getTime() - BLOCKED_START_STALE_MS);
-    const stale = await this.#db.findMany<GovernanceDbRow>(
-      'factory_pending_starts',
-      { status: 'blocked' },
-      { orderBy: [['created_at', 'asc']], limit: 50 },
-    );
-    for (const row of stale) {
-      const updatedAt = new Date(row.updated_at as Date | string).getTime();
-      if (updatedAt > cutoff.getTime()) continue;
-      await this.#db.updateAtomic<GovernanceDbRow>('factory_pending_starts', { id: row.id }, current => {
-        if (current.status !== 'blocked') return null;
-        return {
-          status: 'failed',
-          last_error: 'Factory start preparation never completed (blocked kickoff went stale).',
-          completed_at: now,
-          updated_at: now,
-        };
-      });
-    }
-  }
-
-  /** Flips a gated (`blocked`) pending start to `pending` so the dispatcher can claim it. */
-  async releasePendingStart(input: ReleasePendingStartInput): Promise<FactoryPendingStartRecord | null> {
-    let released = false;
-    const now = new Date();
-    const row = await this.#db.updateAtomic<GovernanceDbRow>(
-      'factory_pending_starts',
-      { id: input.id, org_id: input.orgId, factory_project_id: input.factoryProjectId },
-      current => {
-        if (current.status !== 'blocked') return null;
-        released = true;
-        return {
-          status: 'pending',
-          ...(input.message !== undefined ? { message: input.message } : {}),
-          available_at: now,
-          updated_at: now,
-        };
-      },
-    );
-    return released && row ? toPendingStart(row) : null;
   }
 
   async renewPendingStartLease(identity: FactoryLeaseIdentity, leaseExpiresAt: Date): Promise<boolean> {
@@ -1611,7 +1541,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           binding_id: bindingRow.id,
           kickoff_key: input.kickoffKey,
           message: input.kickoffMessage,
-          status: input.kickoffStatus ?? 'pending',
+          status: 'pending',
           attempts: 0,
           available_at: now,
           lease_owner: null,

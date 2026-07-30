@@ -1,14 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { BLOCKED_START_STALE_MS } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 
-async function prepareBinding(storage: WorkItemsStorage, kickoffStatus?: 'pending' | 'blocked') {
+async function prepareBinding(storage: WorkItemsStorage) {
   return storage.prepareRunStart({
-    ...(kickoffStatus ? { kickoffStatus } : {}),
     orgId: 'org-1',
     userId: 'user-1',
     factoryProjectId: PROJECT_ID,
@@ -98,81 +96,5 @@ describe('Factory run binding authority', () => {
       }),
     ).resolves.toMatchObject({ status: 'revoked', revokedAt });
     await expect(storage.findActiveRunBinding(exact)).resolves.toBeNull();
-  });
-});
-
-describe('Blocked pending starts', () => {
-  const claimInput = (now = new Date()) => ({
-    ownerId: 'dispatcher-1',
-    now,
-    leaseExpiresAt: new Date(now.getTime() + 30_000),
-    limit: 10,
-  });
-
-  it('keeps blocked kickoffs invisible to the dispatcher until released', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const prepared = await prepareBinding(storage, 'blocked');
-    expect(prepared.pendingStart.status).toBe('blocked');
-
-    await expect(storage.claimPendingStarts(claimInput())).resolves.toEqual([]);
-
-    const released = await storage.releasePendingStart({
-      id: prepared.pendingStart.id,
-      orgId: 'org-1',
-      factoryProjectId: PROJECT_ID,
-      message: 'kickoff resolved late',
-    });
-    expect(released).toMatchObject({ status: 'pending', message: 'kickoff resolved late' });
-
-    const claimed = await storage.claimPendingStarts(claimInput());
-    expect(claimed).toHaveLength(1);
-    expect(claimed[0]).toMatchObject({ id: prepared.pendingStart.id, status: 'leased' });
-  });
-
-  it('releases only blocked rows and leaves the stored message without an override', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const prepared = await prepareBinding(storage, 'blocked');
-
-    const released = await storage.releasePendingStart({
-      id: prepared.pendingStart.id,
-      orgId: 'org-1',
-      factoryProjectId: PROJECT_ID,
-    });
-    expect(released).toMatchObject({ status: 'pending', message: null });
-
-    // Already released — a second release (or releasing a claimed row) is a no-op.
-    await expect(
-      storage.releasePendingStart({ id: prepared.pendingStart.id, orgId: 'org-1', factoryProjectId: PROJECT_ID }),
-    ).resolves.toBeNull();
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
-  });
-
-  it('scopes release to the exact tenant and project', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const prepared = await prepareBinding(storage, 'blocked');
-
-    await expect(
-      storage.releasePendingStart({ id: prepared.pendingStart.id, orgId: 'other-org', factoryProjectId: PROJECT_ID }),
-    ).resolves.toBeNull();
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('blocked');
-  });
-
-  it('fails blocked kickoffs that outlive the staleness window', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const prepared = await prepareBinding(storage, 'blocked');
-
-    // Just inside the window — stays gated.
-    const fresh = new Date(Date.now() + BLOCKED_START_STALE_MS - 60_000);
-    await expect(storage.claimPendingStarts(claimInput(fresh))).resolves.toEqual([]);
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('blocked');
-
-    // Past the window (server died mid-finalize) — surfaced as failed.
-    const stale = new Date(Date.now() + BLOCKED_START_STALE_MS + 60_000);
-    await expect(storage.claimPendingStarts(claimInput(stale))).resolves.toEqual([]);
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({
-      id: prepared.pendingStart.id,
-      status: 'failed',
-      lastError: expect.stringContaining('blocked kickoff went stale'),
-    });
   });
 });

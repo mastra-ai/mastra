@@ -140,16 +140,13 @@ describe('FactoryStartCoordinator', () => {
 
     const prepared = await coordinator.prepare(startRequest());
 
-    // Fast phase returns before the session exists — the kickoff stays
-    // `blocked` (invisible to the dispatcher) until finalize releases it.
     expect(prepared).toMatchObject({
       threadId: 'session-1',
       resourceId: 'session-1',
       sessionId: 'session-1',
-      kickoffStatus: 'blocked',
+      kickoffStatus: 'pending',
       replayed: false,
     });
-    await prepared.finalized;
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
     const requestContext = vi.mocked(controller.createSession).mock.calls[0]?.[0].requestContext;
     expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
@@ -173,9 +170,7 @@ describe('FactoryStartCoordinator', () => {
       makeSourceControl() as never,
     );
 
-    await (
-      await coordinator.prepare(startRequest({ defaultModelId: 'anthropic/claude-fable-5' }))
-    ).finalized;
+    await coordinator.prepare(startRequest({ defaultModelId: 'anthropic/claude-fable-5' }));
 
     expect(session.model.switch).toHaveBeenCalledWith({ modelId: 'anthropic/claude-fable-5' });
   });
@@ -202,9 +197,7 @@ describe('FactoryStartCoordinator', () => {
       storage.memorySettings,
     );
 
-    await (
-      await coordinator.prepare(startRequest())
-    ).finalized;
+    await coordinator.prepare(startRequest());
 
     expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
     expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
@@ -227,9 +220,9 @@ describe('FactoryStartCoordinator', () => {
       makeSourceControl() as never,
     );
 
-    const prepared = await coordinator.prepare(startRequest({ defaultModelId: 'anthropic/claude-fable-5' }));
-    expect(prepared).toMatchObject({ threadId: 'session-1', kickoffStatus: 'blocked' });
-    await prepared.finalized;
+    await expect(
+      coordinator.prepare(startRequest({ defaultModelId: 'anthropic/claude-fable-5' })),
+    ).resolves.toMatchObject({ threadId: 'session-1', kickoffStatus: 'pending' });
     expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply factory default model', {
       modelId: 'anthropic/claude-fable-5',
       error: 'Unknown model',
@@ -271,7 +264,6 @@ describe('FactoryStartCoordinator', () => {
     expect((await storage.get({ orgId: 'org-1', id: prepared.workItemId }))?.stages).toEqual(['execute']);
     expect(bindingsDuringRule).toBe(1);
     expect(sendMessage).not.toHaveBeenCalled();
-    await prepared.finalized;
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
   });
 
@@ -286,7 +278,6 @@ describe('FactoryStartCoordinator', () => {
     );
 
     const prepared = await coordinator.prepare(startRequest({ kickoffMessage: null }));
-    await prepared.finalized;
 
     expect(prepared).toMatchObject({ threadId: 'session-1', resourceId: 'session-1', sessionId: 'session-1' });
     expect(controller.createSession).toHaveBeenCalledWith(
@@ -321,9 +312,7 @@ describe('FactoryStartCoordinator', () => {
 
     const request = startRequest({ role: 'review', kickoffMessage: null });
     request.workItem.input.externalSource.type = 'pull-request' as never;
-    await (
-      await coordinator.prepare(request)
-    ).finalized;
+    await coordinator.prepare(request);
 
     // The PR checkout is attacker-writable third-party content — the SDK
     // reads this flag to skip AGENTS.md/CLAUDE.md ingestion for the session.
@@ -355,9 +344,7 @@ describe('FactoryStartCoordinator', () => {
 
     const request = startRequest({ kickoffMessage: null });
     request.invocation = { type: 'skill', skillName: 'factory-review', arguments: 'PR #1' } as never;
-    await (
-      await coordinator.prepare(request)
-    ).finalized;
+    await coordinator.prepare(request);
 
     expect(session.state.set).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
@@ -378,9 +365,7 @@ describe('FactoryStartCoordinator', () => {
     const request = startRequest({ role: 'review', kickoffMessage: null });
     request.workItem.input.externalSource.type = 'pull-request' as never;
     request.workItem.input.metadata = { baseBranch: 'release-1.x' };
-    await (
-      await coordinator.prepare(request)
-    ).finalized;
+    await coordinator.prepare(request);
 
     expect(session.state.set).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
@@ -400,9 +385,7 @@ describe('FactoryStartCoordinator', () => {
       makeSourceControl() as never,
     );
 
-    await (
-      await coordinator.prepare(startRequest({ kickoffMessage: null }))
-    ).finalized;
+    await coordinator.prepare(startRequest({ kickoffMessage: null }));
 
     expect(session.state.set).toHaveBeenCalledWith({
       factoryProjectId: PROJECT_ID,
@@ -423,11 +406,9 @@ describe('FactoryStartCoordinator', () => {
     const triage = await coordinator.prepare(
       startRequest({ role: 'triage', kickoffKey: 'triage-1', kickoffMessage: null }),
     );
-    await triage.finalized;
     const plan = await coordinator.prepare(
       startRequest({ id: triage.workItemId, role: 'plan', kickoffKey: 'plan-1', kickoffMessage: null }),
     );
-    await plan.finalized;
 
     expect(plan.threadId).toBe('session-1');
     expect(plan.threadId).toBe(triage.threadId);
@@ -494,16 +475,12 @@ describe('FactoryStartCoordinator', () => {
     const input = startRequest();
 
     const first = await coordinator.prepare(input);
-    await first.finalized;
     const replay = await coordinator.prepare(input);
-    await replay.finalized;
 
     expect(replay).toMatchObject({ workItemId: first.workItemId, bindingId: first.bindingId, replayed: true });
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'pending' });
     expect(sendMessage).not.toHaveBeenCalled();
     expect(await storage.listRunBindings('org-1', PROJECT_ID)).toHaveLength(1);
-    // The replay saw an already-released kickoff — no second finalize ran.
-    expect(controller.createSession).toHaveBeenCalledTimes(1);
   });
 
   it('revokes only the prior binding for the same item role', async () => {
@@ -551,112 +528,5 @@ describe('FactoryStartCoordinator', () => {
     expect(second.workItemId).not.toBe(first.workItemId);
     expect(await storage.listPendingStarts('org-1', PROJECT_ID)).toHaveLength(1);
     expect(await storage.listPendingStarts('org-2', PROJECT_ID)).toHaveLength(1);
-  });
-
-  it('returns while the session is still materializing and releases the kickoff on finalize', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { controller } = makeController();
-    let releaseSession!: () => void;
-    const gate = new Promise<void>(resolve => {
-      releaseSession = resolve;
-    });
-    const createSession = controller.createSession;
-    controller.createSession = (async (args: Parameters<typeof createSession>[0]) => {
-      await gate;
-      return createSession(args);
-    }) as typeof createSession;
-    const coordinator = new FactoryStartCoordinator(
-      controller as never,
-      storage,
-      undefined,
-      makeSourceControl() as never,
-    );
-
-    // prepare resolves even though session creation (sandbox materialization)
-    // is still hanging — the kickoff stays gated until finalize releases it.
-    const prepared = await coordinator.prepare(startRequest());
-    expect(prepared.kickoffStatus).toBe('blocked');
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('blocked');
-
-    releaseSession();
-    await prepared.finalized;
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
-  });
-
-  it('marks the pending start failed when finalize cannot create the session', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { controller } = makeController();
-    vi.mocked(controller.createSession).mockRejectedValue(new Error('sandbox provisioning failed'));
-    const coordinator = new FactoryStartCoordinator(
-      controller as never,
-      storage,
-      undefined,
-      makeSourceControl() as never,
-    );
-
-    const prepared = await coordinator.prepare(startRequest());
-
-    expect(prepared.kickoffStatus).toBe('blocked');
-    await expect(prepared.finalized).rejects.toThrow('sandbox provisioning failed');
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({
-      status: 'failed',
-      lastError: 'sandbox provisioning failed',
-    });
-  });
-
-  it('resolves bundled factory-skill kickoffs without the session workspace', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { controller, session } = makeController();
-    const coordinator = new FactoryStartCoordinator(
-      controller as never,
-      storage,
-      undefined,
-      makeSourceControl() as never,
-    );
-
-    const request = startRequest({ kickoffMessage: null });
-    request.invocation = { type: 'skill', skillName: 'factory-review', arguments: 'PR #1' } as never;
-    const prepared = await coordinator.prepare(request);
-
-    // The message is already on the gated pending start — resolved from the
-    // server-local bundled skills, before any sandbox exists.
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({
-      status: 'blocked',
-      message: expect.stringContaining('<skill name="factory-review">'),
-    });
-    await prepared.finalized;
-    expect(session.getWorkspace).not.toHaveBeenCalled();
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('pending');
-  });
-
-  it('defers project-skill kickoffs to the live session workspace', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { controller, session } = makeController();
-    session.getWorkspace.mockReturnValue({
-      skills: {
-        maybeRefresh: vi.fn(async () => {}),
-        get: vi.fn(async () => ({ name: 'my-skill', description: 'Project skill', instructions: 'Do the thing.' })),
-      },
-    } as never);
-    const coordinator = new FactoryStartCoordinator(
-      controller as never,
-      storage,
-      undefined,
-      makeSourceControl() as never,
-    );
-
-    const request = startRequest({ kickoffMessage: null });
-    request.invocation = { type: 'skill', skillName: 'my-skill', arguments: '' } as never;
-    const prepared = await coordinator.prepare(request);
-
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({
-      status: 'blocked',
-      message: null,
-    });
-    await prepared.finalized;
-    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({
-      status: 'pending',
-      message: expect.stringContaining('<skill name="my-skill">'),
-    });
   });
 });
