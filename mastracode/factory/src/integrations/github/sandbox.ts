@@ -179,6 +179,53 @@ async function shOnce(
   }
 }
 
+const GIT_TRANSFER_RETRIES = 2;
+const GIT_TRANSFER_RETRY_DELAY_MS = 2000;
+
+/**
+ * True when a git transfer died mid-flight rather than being refused.
+ *
+ * `sh` already retries transport errors the sandbox provider *throws*, but a
+ * git command that reaches the network and then loses it exits non-zero
+ * instead — so a single HTTP/2 framing glitch or dropped connection to
+ * github.com would otherwise permanently fail opening a workspace. These
+ * patterns all mean "the bytes stopped arriving", which says nothing about
+ * whether the operation would succeed if attempted again.
+ *
+ * Deliberately narrow: a refusal (bad credentials, missing repo, blocked
+ * egress) is terminal and must surface immediately rather than be retried into
+ * a slow failure.
+ */
+function isTransientGitFailure(result: SandboxCommandResult): boolean {
+  const output = `${result.stderr || ''}\n${result.stdout || ''}`;
+  return /HTTP2 framing layer|RPC failed; curl|RPC failed; HTTP 5\d\d|the remote end hung up unexpectedly|early EOF|unexpected disconnect|connection reset by peer|Recv failure|Send failure|GnuTLS recv error|TLS connection was non-properly terminated|502 Bad Gateway|503 Service Unavailable/i.test(
+    output,
+  );
+}
+
+/**
+ * Run a git command that only *reads* from the remote, retrying it when the
+ * transfer dies mid-flight. Restricted to read-only transfers on purpose:
+ * re-running a clone or a fetch is free, whereas re-running a push could
+ * duplicate work already accepted by the remote before the connection dropped.
+ *
+ * `beforeRetry` lets a call site clear whatever the aborted attempt left
+ * behind — a half-written clone directory blocks the next `git clone` outright.
+ */
+async function gitTransfer(
+  sandbox: MaterializationSandbox,
+  script: string,
+  options: ShOptions & { beforeRetry?: (attempt: number) => Promise<void> } = {},
+): Promise<SandboxCommandResult> {
+  const { beforeRetry, ...shOptions } = options;
+  for (let attempt = 0; ; attempt++) {
+    const result = await sh(sandbox, script, shOptions);
+    if (result.exitCode === 0 || attempt >= GIT_TRANSFER_RETRIES || !isTransientGitFailure(result)) return result;
+    await new Promise(resolve => setTimeout(resolve, GIT_TRANSFER_RETRY_DELAY_MS * (attempt + 1)));
+    await beforeRetry?.(attempt + 1);
+  }
+}
+
 /** Error raised when the sandbox cannot materialize the repo (actionable). */
 export class MaterializeError extends Error {
   constructor(
@@ -282,10 +329,21 @@ export async function materializeRepo(options: {
         phase: 'cloning',
         message: `Cloning ${repo} (first open can take a minute)…`,
       });
-      const clone = await sh(
+      const clone = await gitTransfer(
         sandbox,
         `git clone --depth=1 --single-branch --branch ${shellQuote(repoInfo.defaultBranch)} ${shellQuote(authUrl)} ${shellQuote(workdir)}`,
-        { phase: 'repository clone' },
+        {
+          phase: 'repository clone',
+          beforeRetry: async attempt => {
+            reportProgress(onProgress, {
+              phase: 'cloning',
+              message: `Lost the connection to github.com — retrying the clone (attempt ${attempt + 1})…`,
+            });
+            // A clone that died partway leaves the destination non-empty, which
+            // git refuses to clone into. Clear it so the retry starts clean.
+            await sh(sandbox, `rm -rf ${shellQuote(workdir)}`);
+          },
+        },
       );
       if (clone.exitCode !== 0) {
         throw classifyGitFailure(clone, 'clone-failed');
@@ -297,7 +355,14 @@ export async function materializeRepo(options: {
       if (setUrl.exitCode !== 0) {
         throw new MaterializeError(`Failed to set git remote: ${setUrl.stderr}`, 'pull-failed');
       }
-      const pull = await sh(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`, { phase: 'repository pull' });
+      const pull = await gitTransfer(sandbox, `git -C ${shellQuote(workdir)} pull --ff-only`, {
+        phase: 'repository pull',
+        beforeRetry: async attempt =>
+          reportProgress(onProgress, {
+            phase: 'pulling',
+            message: `Lost the connection to github.com — retrying the update (attempt ${attempt + 1})…`,
+          }),
+      });
       if (pull.exitCode !== 0) {
         if (!isBenignNonFastForward(pull)) {
           throw classifyGitFailure(pull, 'pull-failed');
