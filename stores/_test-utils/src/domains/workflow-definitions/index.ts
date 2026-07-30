@@ -92,6 +92,21 @@ export function createWorkflowDefinitionsTests({ storage }: WorkflowDefinitionsT
       expect(updated.graph).toEqual(baseGraph);
     });
 
+    it('handles concurrent upserts of the same id without failing', async () => {
+      // Both callers read "no row", so one insert loses the race; the loser
+      // must fall back to updating instead of surfacing a key violation.
+      const results = await Promise.all([
+        store.upsert({ ...baseInput('wf-race'), description: 'first' }),
+        store.upsert({ ...baseInput('wf-race'), description: 'second' }),
+      ]);
+      for (const result of results) {
+        expect(result.id).toBe('wf-race');
+        expect(['first', 'second']).toContain(result.description);
+      }
+      const all = await store.list();
+      expect(all.total).toBe(1);
+    });
+
     it('rejects creation when required fields are explicitly undefined', async () => {
       await expect(store.upsert({ ...baseInput('wf-1'), graph: undefined } as any)).rejects.toThrow(/graph/);
       expect(await store.get('wf-1')).toBeNull();

@@ -165,6 +165,30 @@ describe('WorkflowDefinitionsLibSQL', () => {
     await expect(wd.get('wf-corrupt')).rejects.toThrow(/malformed JSON/i);
   });
 
+  it('falls back to update when a concurrent upsert wins the insert race', async () => {
+    const wd = (await store.getStore('workflowDefinitions'))!;
+
+    // Another writer already created the row…
+    const winner = await wd.upsert({ id: 'wf-race', description: 'winner', inputSchema, outputSchema, graph });
+    // Ensure the loser's timestamp would differ if it clobbered the winner's row.
+    await new Promise(r => setTimeout(r, 10));
+
+    // …but our upsert's existence check raced it and saw nothing. Simulate the
+    // stale read deterministically: first get() returns null, later reads are real.
+    const getSpy = vi.spyOn(wd, 'get');
+    getSpy.mockImplementationOnce(async () => null);
+
+    // The create branch's insert hits the PRIMARY KEY violation and must fall
+    // back to the update path instead of surfacing the constraint error.
+    const result = await wd.upsert({ id: 'wf-race', description: 'loser', inputSchema, outputSchema, graph });
+    expect(result.description).toBe('loser');
+    expect(result.createdAt.getTime()).toBe(winner.createdAt.getTime());
+
+    getSpy.mockRestore();
+    const fetched = await wd.get('wf-race');
+    expect(fetched?.description).toBe('loser');
+  });
+
   it('delete removes the row', async () => {
     const wd = (await store.getStore('workflowDefinitions'))!;
     await wd.upsert({ id: 'wf-doomed', inputSchema, outputSchema, graph });

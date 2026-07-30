@@ -108,12 +108,29 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
         createdAt: now,
         updatedAt: now,
       };
-      await this.#db.insert({ tableName: TABLE_WORKFLOW_DEFINITIONS, record });
+      try {
+        // insertOnly: a plain INSERT so a concurrent create is detected as a
+        // key violation instead of INSERT OR REPLACE silently clobbering the
+        // winning row (and its createdAt).
+        await this.#db.insertOnly({ tableName: TABLE_WORKFLOW_DEFINITIONS, record });
+      } catch (error) {
+        // A concurrent upsert may have created the row after our existence
+        // check; fall back to updating it so the upsert stays idempotent.
+        if (!(await this.get(input.id))) throw error;
+        return this.#applyUpdate(input, now);
+      }
       const created = await this.get(input.id);
       if (!created) throw new Error(`Failed to persist workflow definition "${input.id}".`);
       return created;
     }
 
+    return this.#applyUpdate(input, now);
+  }
+
+  async #applyUpdate(
+    input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
+    now: Date,
+  ): Promise<WorkflowDefinition> {
     // Update — only patch fields present in the input
     const data: Record<string, any> = { updatedAt: now };
     if ('description' in input && input.description !== undefined) data.description = input.description;
