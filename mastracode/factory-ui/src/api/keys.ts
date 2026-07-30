@@ -65,6 +65,12 @@ export const queryKeys = {
     ['workspace-rendered-list', workspacePath ?? null, renderedRoot ?? null] as const,
   workspaceFile: (workspacePath: string | undefined, filePath: string | undefined) =>
     ['workspace-file', workspacePath ?? null, filePath ?? null] as const,
+  workspaceChanges: (workspacePath: string | undefined) => ['workspace-changes', workspacePath ?? null] as const,
+  workspaceDiff: (
+    workspacePath: string | undefined,
+    filePath: string | undefined,
+    previousFilePath: string | undefined,
+  ) => ['workspace-changes', workspacePath ?? null, 'diff', filePath ?? null, previousFilePath ?? null] as const,
   agentControllerModes: (agentControllerId: string | undefined) =>
     ['agent-controller', agentControllerId ?? null, 'modes'] as const,
   // Sessions are scoped per worktree (projectPath), so every session-derived key

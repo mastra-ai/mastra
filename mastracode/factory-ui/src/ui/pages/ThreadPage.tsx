@@ -6,12 +6,14 @@ import { useThreadWorkspacePath } from '../domains/workspace-viewer/hooks/useThr
 import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
 import { WorkspaceFilesSurface } from '../domains/workspace-viewer/components/WorkspaceFilesSurface';
 import { workspaceFilesInsetClass } from '../domains/workspace-viewer/layout';
+import { useInvalidateWorkspaceChangesOnRunCompletion } from '../domains/workspace-viewer/useInvalidateWorkspaceChangesOnRunCompletion';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { FactorySessionHeader } from '../domains/factory/components/RelatedFactorySessions';
 import { ChatMessageList } from '../domains/chat/components/ChatMessageList';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
 import { TaskPanel } from '../domains/chat/components/TaskPanel';
 import { ChatMessageBoundary, ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
+import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
 import { useRouteThreadSync } from '../../hooks/useRouteThreadSync';
 import { useThreadPageKickoffs } from '../domains/chat/hooks/useThreadPageKickoffs';
@@ -43,7 +45,7 @@ export function ThreadPage() {
         ) : (
           <ChatSessionBoundary threadId={threadId}>
             <WorkspaceFilesProvider>
-              <ThreadPageMain />
+              <ThreadPageMain workspacePath={workspace.workspacePath} />
             </WorkspaceFilesProvider>
           </ChatSessionBoundary>
         )
@@ -52,7 +54,9 @@ export function ThreadPage() {
   );
 }
 
-function ThreadPageMain() {
+function ThreadPageMain({ workspacePath }: { workspacePath: string | undefined }) {
+  const { busy } = useChatTranscript();
+  useInvalidateWorkspaceChangesOnRunCompletion(workspacePath, busy);
   useGlobalShortcuts();
 
   return (
