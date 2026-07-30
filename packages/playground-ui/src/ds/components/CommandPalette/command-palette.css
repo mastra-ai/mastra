@@ -1,3 +1,10 @@
+/* Fixed height: dialog is centred, so a content-driven one slides the input while typing.
+ * Unlayered on purpose — `Command`'s own `size-full` height would otherwise win by utility order. */
+.command-palette-shell {
+  height: var(--command-palette-height, min(34rem, calc(100dvh - 2rem)));
+  max-height: calc(100dvh - 2rem);
+}
+
 .command-palette-popup[data-open] {
   animation: none !important;
 }

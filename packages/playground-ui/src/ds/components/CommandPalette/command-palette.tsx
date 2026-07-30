@@ -26,7 +26,8 @@ function CommandPaletteDialog({
         contentClassName,
       )}
       commandClassName={cn(
-        'h-[min(42rem,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] min-h-[min(30rem,calc(100dvh-2rem))] gap-2 overflow-visible rounded-none bg-transparent text-neutral4 shadow-none backdrop-blur-none',
+        // Height lives in `.command-palette-shell` — see command-palette.css.
+        'command-palette-shell gap-2 overflow-visible rounded-none bg-transparent text-neutral4 shadow-none backdrop-blur-none',
         '[&_[data-slot=command-input-wrapper]]:h-14 [&_[data-slot=command-input-wrapper]]:shrink-0 [&_[data-slot=command-input-wrapper]]:rounded-xl [&_[data-slot=command-input-wrapper]]:border [&_[data-slot=command-input-wrapper]]:border-border1 [&_[data-slot=command-input-wrapper]]:bg-surface3 [&_[data-slot=command-input-wrapper]]:px-4 [&_[data-slot=command-input-wrapper]]:shadow-[0_6px_18px_-16px_rgb(0_0_0_/_0.55)]',
         '[&_[data-slot=command-input-wrapper]]:pr-11 [&_[data-slot=command-input-wrapper]]:transition-[border-color,box-shadow] [&_[data-slot=command-input-wrapper]]:duration-150 [&_[data-slot=command-input-wrapper]]:ease-out [&_[data-slot=command-input-wrapper]_svg]:text-neutral4 [&_[data-slot=command-input-wrapper]:focus-within]:border-border1 [&_[data-slot=command-input-wrapper]:focus-within]:bg-surface3 [&_[data-slot=command-input-wrapper]:focus-within]:shadow-[0_8px_22px_-18px_rgb(0_0_0_/_0.6)]',
         '**:[[cmdk-input]]:h-full **:[[cmdk-input]]:text-ui-md',
@@ -104,7 +105,8 @@ function CommandPaletteScope({
   return (
     <button
       type="button"
-      className="active:scale-0.99 text-ui-smd leading-ui-sm text-neutral3 hover:border-border1 hover:bg-surface4 hover:text-neutral6 data-[active=true]:border-border1 data-[active=true]:bg-surface4 data-[active=true]:text-neutral6 flex h-9 w-full cursor-pointer items-center gap-2 rounded-lg border border-transparent px-2.5 text-left transition-[background-color,border-color,color,transform] duration-150 ease-out"
+      // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- v4 emits nothing for `scale-0.99`
+      className="text-ui-smd leading-ui-sm text-neutral3 hover:border-border1 hover:bg-surface4 hover:text-neutral6 data-[active=true]:border-border1 data-[active=true]:bg-surface4 data-[active=true]:text-neutral6 flex h-9 w-full cursor-pointer items-center gap-2 rounded-lg border border-transparent px-2.5 text-left transition-[background-color,border-color,color,transform] duration-150 ease-out active:scale-[0.99]"
       data-active={active}
       aria-pressed={active}
       onClick={onSelect}
