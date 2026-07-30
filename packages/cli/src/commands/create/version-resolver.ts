@@ -29,10 +29,14 @@ export async function resolveMastraPackageVersions(
   return resolved;
 }
 
+const NPM_VIEW_TIMEOUT_MS = 15_000;
+
 async function resolveSinglePackageVersion(packageName: string, versionTag: string): Promise<string | undefined> {
   let stdout: string;
   try {
-    const { stdout: output } = await execa('npm', ['view', packageName, `dist-tags.${versionTag}`]);
+    const { stdout: output } = await execa('npm', ['view', packageName, `dist-tags.${versionTag}`], {
+      timeout: NPM_VIEW_TIMEOUT_MS,
+    });
     stdout = output;
   } catch {
     return undefined;
