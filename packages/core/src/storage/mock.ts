@@ -9,6 +9,7 @@ import { ExperimentsInMemory } from './domains/experiments/inmemory';
 import { InMemoryFavoritesStorage } from './domains/favorites/inmemory';
 import { InMemoryHarness } from './domains/harness/inmemory';
 import { InMemoryDB } from './domains/inmemory-db';
+import { InMemoryKnowledgeStorage } from './domains/knowledge/inmemory';
 import { InMemoryMCPClientsStorage } from './domains/mcp-clients/inmemory';
 import { InMemoryMCPServersStorage } from './domains/mcp-servers/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
@@ -63,6 +64,7 @@ export class InMemoryStore extends MastraCompositeStore {
     // Create all domain instances with the shared db
     this.stores = {
       memory: new InMemoryMemory({ db: this.#db }),
+      knowledge: new InMemoryKnowledgeStorage({ db: this.#db }),
       workflows: new WorkflowsInMemory({ db: this.#db }),
       scores: new ScoresInMemory({ db: this.#db }),
       observability: new ObservabilityInMemory({ db: this.#db }),
