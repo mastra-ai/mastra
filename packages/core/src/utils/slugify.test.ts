@@ -54,6 +54,14 @@ describe('slugify interop', () => {
     expect(resolved('My Server ID')).toBe('my-server-id');
   });
 
+  it('resolves a double-wrapped default export', () => {
+    const fn = (value: string) => value.toLowerCase().replace(/\s+/g, '-');
+    const resolved = resolveSlugify({ default: { default: fn } });
+
+    expect(resolved).toBe(fn);
+    expect(resolved('My Server ID')).toBe('my-server-id');
+  });
+
   it('passes a plain function through unchanged', () => {
     const fn = (value: string) => value.toUpperCase();
     expect(resolveSlugify(fn)).toBe(fn);
