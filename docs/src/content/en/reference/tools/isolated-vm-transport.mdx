@@ -13,7 +13,7 @@ This feature is in beta. Breaking changes may occur without a major version bump
 
 :::
 
-The `IsolatedVmCodeModeTransport` class runs [Code mode](/docs/agents/code-mode) programs in an in-process V8 isolate, backed by [isolated-vm](https://github.com/laverdet/isolated-vm). The isolate is the execution boundary, so no workspace sandbox is required: the program has no filesystem, network, process, or module access. Its only capabilities are the `external_*` functions, which call back into the real tools on the host.
+The `IsolatedVmCodeModeTransport` class runs [Code mode](/guides/agents/code-mode) programs in an in-process V8 isolate, backed by [isolated-vm](https://github.com/laverdet/isolated-vm). The isolate is the execution boundary, so no workspace sandbox is required: the program has no filesystem, network, process, or module access. Its only capabilities are the `external_*` functions, which call back into the real tools on the host.
 
 Compared to the default `StdioCodeModeTransport`, this transport spawns no processes and writes no temp files, which makes it a good fit for serverless and multi-tenant hosts where OS-level sandboxing isn't available.
 
@@ -81,5 +81,5 @@ The `timeout` configured on `createCodeMode()` applies to both asynchronous hang
 
 ## Related
 
-- [Code mode](/docs/agents/code-mode)
+- [Code mode](/guides/agents/code-mode)
 - [createCodeMode() reference](/reference/tools/create-code-mode)

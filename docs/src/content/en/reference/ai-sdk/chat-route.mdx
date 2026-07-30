@@ -10,7 +10,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # chatRoute()
 
-Creates a chat route handler for streaming agent conversations using the AI SDK format. This function registers an HTTP `POST` endpoint that accepts messages, executes an agent, and streams the response back to the client in AI SDK-compatible format. You have to use it inside a [custom API route](/docs/server/custom-api-routes).
+Creates a chat route handler for streaming agent conversations using the AI SDK format. This function registers an HTTP `POST` endpoint that accepts messages, executes an agent, and streams the response back to the client in AI SDK-compatible format. You have to use it inside a [custom API route](/guides/server/custom-api-routes).
 
 Use [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) if you need a framework-agnostic handler.
 
@@ -20,7 +20,7 @@ Use [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) if you need a f
 
 `chatRoute()` forwards the incoming request's `AbortSignal` to `agent.stream()`. If the client disconnects, Mastra aborts the in-flight generation.
 
-If you want the server to continue generation and persist the final response after disconnect, build a [custom API route](/docs/server/custom-api-routes#continue-generation-after-client-disconnect) around `agent.stream()` and call `consumeStream()` on the returned `MastraModelOutput`.
+If you want the server to continue generation and persist the final response after disconnect, build a [custom API route](/guides/server/custom-api-routes#continue-generation-after-client-disconnect) around `agent.stream()` and call `consumeStream()` on the returned `MastraModelOutput`.
 
 :::
 
@@ -90,7 +90,7 @@ export const mastra = new Mastra({
     name: 'agentVersion',
     type: "{ versionId: string } | { status?: 'draft' | 'published' }",
     description:
-      "Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. When the route is called, query parameters `?versionId=<id>` or `?status=draft|published` take precedence over this static value. Requires the [Editor](/docs/editor/overview) to be configured.",
+      "Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. When the route is called, query parameters `?versionId=<id>` or `?status=draft|published` take precedence over this static value. Requires the [Editor](/guides/editor/overview) to be configured.",
     isOptional: true,
   },
   {

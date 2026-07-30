@@ -88,7 +88,7 @@ const result = await run.startAsync({
 })
 ```
 
-The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/docs/workflows/workflow-state) for more details.
+The `initialState` object should match the structure defined in the workflow's `stateSchema`. See [Workflow State](/guides/workflows/workflow-state) for more details.
 
 To associate a run with a specific resource, pass `resourceId` to `createRun()`:
 
@@ -233,7 +233,7 @@ A workflow run result yields the following:
 
 ## Schedules
 
-Schedules are declared in code via the `schedule` field on `createWorkflow`. The client SDK exposes read and operational methods for managing workflow schedules at runtime. See [Scheduled workflows](/docs/workflows/scheduled-workflows).
+Schedules are declared in code via the `schedule` field on `createWorkflow`. The client SDK exposes read and operational methods for managing workflow schedules at runtime. See [Scheduled workflows](/guides/workflows/scheduled-workflows).
 
 ### `createSchedule()`
 

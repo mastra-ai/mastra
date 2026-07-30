@@ -13,12 +13,12 @@ The Cloudflare D1 storage implementation provides a serverless SQL database solu
 
 :::warning[Observability Not Supported]
 
-Cloudflare D1 storage **doesn't support the observability domain**. Traces from the `MastraStorageExporter` can't be persisted to D1, and [Studio's](/docs/studio/overview) observability features won't work with D1 as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse.
+Cloudflare D1 storage **doesn't support the observability domain**. Traces from the `MastraStorageExporter` can't be persisted to D1, and [Studio's](/guides/studio/overview) observability features won't work with D1 as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse.
 
 :::
 
 :::warning[Row Size Limit]
-Cloudflare D1 enforces a **1 MiB maximum row size**. This limit can be exceeded when storing messages with base64-encoded attachments such as images. See [Handling large attachments](/docs/memory/memory-processors#handling-large-attachments) for workarounds including uploading attachments to external storage.
+Cloudflare D1 enforces a **1 MiB maximum row size**. This limit can be exceeded when storing messages with base64-encoded attachments such as images. See [Handling large attachments](/guides/memory/memory-processors#handling-large-attachments) for workarounds including uploading attachments to external storage.
 :::
 
 ## Installation

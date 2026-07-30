@@ -29,6 +29,7 @@ interface SectionConfig {
   contentDir: string
   sidebarPath: string
   sidebarKey: string
+  ignoredPatterns?: RegExp[]
 }
 
 const SECTIONS: SectionConfig[] = [
@@ -37,12 +38,36 @@ const SECTIONS: SectionConfig[] = [
     contentDir: 'src/content/en/docs',
     sidebarPath: 'src/content/en/docs/sidebars.js',
     sidebarKey: 'docsSidebar',
+    ignoredPatterns: [
+      // Temp ignore for mastra-platform docs that are in the process of moving out of the docs
+      /\/mastra-platform\/.*/,
+      /\/docs\/[^/]+\/.+\.mdx$/,
+      /\/docs\/what-is-mastra\.mdx$/,
+      /\/agents\/networks/,
+      /\/docs\/guide\/.*/,
+      /\/docs\/migrations\/.*/,
+    ],
   },
   {
     name: 'ecosystem',
     contentDir: 'src/content/en/ecosystem',
     sidebarPath: 'src/content/en/ecosystem/sidebars.js',
     sidebarKey: 'ecosystemSidebar',
+  },
+  {
+    name: 'guides',
+    contentDir: 'src/content/en/guides',
+    sidebarPath: 'src/content/en/guides/sidebars.js',
+    sidebarKey: 'guidesSidebar',
+    ignoredPatterns: [
+      /\/(agents|workflows|harness|memory|extend|sandboxes|browser|channels|subagents|tools|mcp|develop-deploy|deploy|storage|observe|metrics|evals)\.mdx$/,
+      /\/guides\/getting-started\/quickstart\.mdx$/,
+      /\/guides\/getting-started\/installation\.mdx$/,
+      /\/guides\/concepts\/.*/,
+      /\/guides\/guide\/.*/,
+      /\/guides\/migrations\/.*/,
+      /\/agents\/networks/,
+    ],
   },
   {
     name: 'reference',
@@ -56,13 +81,6 @@ const SECTIONS: SectionConfig[] = [
 const IGNORED_PATTERNS = [
   /\/_template\.mdx$/, // Template files for authors
   /\/_partial-.*\.mdx$/, // Partial MDX files that are imported into other docs
-  // Temp ignore for mastra-platform docs that are in the process of moving out of the docs
-  /\/mastra-platform\/.*/,
-  /\/docs\/[^/]+\/.+\.mdx$/,
-  /\/docs\/what-is-mastra\.mdx$/,
-  /\/agents\/networks/,
-  /\/docs\/guide\/.*/,
-  /\/docs\/migrations\/.*/,
   /\/license\.mdx$/,
 ]
 
@@ -105,8 +123,8 @@ async function collectMdxFiles(dir: string): Promise<string[]> {
   return results
 }
 
-function shouldIgnore(filePath: string): boolean {
-  return IGNORED_PATTERNS.some(pattern => pattern.test(filePath))
+function shouldIgnore(filePath: string, section: SectionConfig): boolean {
+  return [...IGNORED_PATTERNS, ...(section.ignoredPatterns ?? [])].some(pattern => pattern.test(filePath))
 }
 
 interface ValidationResult {
@@ -132,7 +150,7 @@ async function validateSection(section: SectionConfig, rootDir: string): Promise
   const ghostPages: string[] = []
 
   for (const filePath of mdxFiles) {
-    if (shouldIgnore(filePath)) continue
+    if (shouldIgnore(filePath, section)) continue
 
     // Convert file path to doc ID: strip content dir prefix and .mdx extension
     const relativePath = path.relative(contentFullDir, filePath)

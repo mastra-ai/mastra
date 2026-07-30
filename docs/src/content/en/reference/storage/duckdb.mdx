@@ -160,7 +160,7 @@ await duckdb.observability.init()
 
 ## Observability strategy
 
-DuckDB supports the `event-sourced` strategy used by `MastraStorageExporter`, which buffers spans in memory and writes completed events in batches. This is appropriate for development-scale traffic. For high-volume production workloads, see [`MastraStorageExporter` storage provider support](/docs/observability/integrations/exporters/mastra-storage#storage-provider-support).
+DuckDB supports the `event-sourced` strategy used by `MastraStorageExporter`, which buffers spans in memory and writes completed events in batches. This is appropriate for development-scale traffic. For high-volume production workloads, see [`MastraStorageExporter` storage provider support](/guides/observability/integrations/exporters/mastra-storage#storage-provider-support).
 
 ## Related
 
@@ -168,4 +168,4 @@ DuckDB supports the `event-sourced` strategy used by `MastraStorageExporter`, wh
 - [Composite storage](/reference/storage/composite)
 - [ClickHouse storage](/reference/storage/clickhouse): Production observability backend
 - [DuckDB vector store](/reference/vectors/duckdb): Vector search using the same package
-- [Observability overview](/docs/observability/overview)
+- [Observability overview](/guides/observability/overview)

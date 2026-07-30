@@ -4,16 +4,22 @@ import { useLocation } from '@docusaurus/router'
 
 const docsTabs = [
   {
+    id: 'Models',
+    label: 'Models',
+    href: '/models',
+    basePath: '/models',
+  },
+  {
     id: 'Docs',
     label: 'Docs',
     href: '/docs',
     basePath: '/docs',
   },
   {
-    id: 'Models',
-    label: 'Models',
-    href: '/models',
-    basePath: '/models',
+    id: 'Guides',
+    label: 'Guides',
+    href: '/guides',
+    basePath: '/guides',
   },
   {
     id: 'Reference',

@@ -8,7 +8,7 @@ packages:
 
 # Agent Builder API
 
-The Agent Builder API provides methods to interact with [Agent Builder](/docs/agent-builder/overview) actions on the server. Each action is a workflow exposed under `/agent-builder/:actionId/*`. The Builder must be enabled on the server via `MastraEditor.builder.enabled`, with a valid `MASTRA_EE_LICENSE` in production.
+The Agent Builder API provides methods to interact with [Agent Builder](/guides/agent-builder/overview) actions on the server. Each action is a workflow exposed under `/agent-builder/:actionId/*`. The Builder must be enabled on the server via `MastraEditor.builder.enabled`, with a valid `MASTRA_EE_LICENSE` in production.
 
 ## Getting all actions
 
@@ -166,4 +166,4 @@ await action.cancelRun(runId)
 
 ## Access control
 
-The `/agent-builder/*` routes are gated by the `agent-builder` permission resource. Calling clients need at minimum `agent-builder:read` and `agent-builder:execute`, plus any picker resources the action touches (`stored-agents`, `stored-skills`, `tools`, `workflows`, `memory`). See [Access control](/docs/agent-builder/access-control) for the full grant list.
+The `/agent-builder/*` routes are gated by the `agent-builder` permission resource. Calling clients need at minimum `agent-builder:read` and `agent-builder:execute`, plus any picker resources the action touches (`stored-agents`, `stored-skills`, `tools`, `workflows`, `memory`). See [Access control](/guides/agent-builder/access-control) for the full grant list.

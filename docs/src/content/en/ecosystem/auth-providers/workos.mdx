@@ -83,7 +83,7 @@ By default, `MastraAuthWorkos` grants access to any authenticated WorkOS user. T
 
 ### FGA membership loading
 
-Set `fetchMemberships: true` when you use [`MastraFGAWorkos`](/docs/server/auth/fga). This tells the auth provider to load the user's WorkOS organization memberships during authentication so FGA checks can resolve the correct organization membership ID.
+Set `fetchMemberships: true` when you use [`MastraFGAWorkos`](/guides/server/auth/fga). This tells the auth provider to load the user's WorkOS organization memberships during authentication so FGA checks can resolve the correct organization membership ID.
 
 ```typescript title="src/mastra/auth.ts"
 import { MastraAuthWorkos, MastraFGAWorkos } from '@mastra/auth-workos'
@@ -203,7 +203,7 @@ export const createMastraClient = (accessToken: string) => {
 
 The access token must be prefixed with `Bearer` in the Authorization header.
 
-Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration options.
+Visit [Mastra Client SDK](/guides/server/mastra-client) for more configuration options.
 
 :::
 

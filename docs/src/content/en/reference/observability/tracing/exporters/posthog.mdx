@@ -164,7 +164,7 @@ const exporter = new PosthogExporter({
 
 ## Feedback export
 
-Feedback recorded with [`addFeedback()`](/docs/observability/feedback) is exported to PostHog as a native `$ai_feedback` event. PostHog shows it as **User feedback** on the linked trace. No extra configuration is needed.
+Feedback recorded with [`addFeedback()`](/guides/observability/feedback) is exported to PostHog as a native `$ai_feedback` event. PostHog shows it as **User feedback** on the linked trace. No extra configuration is needed.
 
 ```typescript
 const trace = await mastra.observability.getRecordedTrace({ traceId })

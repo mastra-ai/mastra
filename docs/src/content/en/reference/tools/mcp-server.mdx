@@ -12,7 +12,7 @@ The `MCPServer` class provides the functionality to expose your existing Mastra 
 
 Note that if you only need to use your tools or agents directly within your Mastra application, you don't necessarily need to create an MCP server. This API is specifically for exposing your Mastra tools and agents to _external_ MCP clients.
 
-It supports both [stdio (subprocess) and SSE (HTTP) MCP transports](https://modelcontextprotocol.io/docs/concepts/transports).
+It supports both [stdio (subprocess) and SSE (HTTP) MCP transports](https://modelcontextprotocol.io/guides/concepts/transports).
 
 ## Constructor
 
@@ -780,7 +780,7 @@ Clients can discover resources through:
 
 To read a resource, clients make a `resources/read` request with the URI. Servers can also notify clients about changes to the resource list (`notifications/resources/list_changed`) or updates to specific resource content (`notifications/resources/updated`) if a client has subscribed to that resource.
 
-For more detailed information, refer to the [official MCP documentation on Resources](https://modelcontextprotocol.io/docs/concepts/resources).
+For more detailed information, refer to the [official MCP documentation on Resources](https://modelcontextprotocol.io/guides/concepts/resources).
 
 ### `MCPServerResources` Type
 
@@ -1140,7 +1140,7 @@ Notification methods (`resources.notifyListChanged()`, `prompts.notifyListChange
 
 ## Examples
 
-For practical examples of setting up and deploying an MCPServer, see the [Publishing an MCP Server guide](/docs/guide/publishing-mcp-server).
+For practical examples of setting up and deploying an MCPServer, see the [Publishing an MCP Server guide](/guides/guide/publishing-mcp-server).
 
 The example at the beginning of this page also demonstrates how to instantiate `MCPServer` with both tools and agents.
 
@@ -1914,7 +1914,7 @@ const server = new MCPServer({
 })
 ```
 
-Link a tool to its app resource by setting `_meta.ui.resourceUri` on the tool to the matching `ui://` URI. The server auto-normalizes this metadata when registering tools. Visit [MCP Apps](/docs/mcp/mcp-apps) for the full app bridge API and usage patterns.
+Link a tool to its app resource by setting `_meta.ui.resourceUri` on the tool to the matching `ui://` URI. The server auto-normalizes this metadata when registering tools. Visit [MCP Apps](/guides/mcp/mcp-apps) for the full app bridge API and usage patterns.
 
 ## Related information
 

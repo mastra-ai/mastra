@@ -10,7 +10,7 @@ packages:
 
 The `MastraEditor` class sets up the editor system. Pass it to the `Mastra` constructor to turn on editor features like prompt blocks, agent code override, versioning, and tool providers.
 
-See the [Editor overview](/docs/editor/overview) for an introduction to what the editor does.
+See the [Editor overview](/guides/editor/overview) for an introduction to what the editor does.
 
 ## Usage example
 
@@ -126,9 +126,9 @@ Each provider field above takes a record keyed by provider id. See the per-provi
 
 ## Agent Builder
 
-The `builder` field enables the [Agent Builder](/docs/agent-builder/overview), a browser-based UI for creating and editing stored agents. See:
+The `builder` field enables the [Agent Builder](/guides/agent-builder/overview), a browser-based UI for creating and editing stored agents. See:
 
-- [Agent Builder overview](/docs/agent-builder/overview): Concepts and getting started.
+- [Agent Builder overview](/guides/agent-builder/overview): Concepts and getting started.
 - [AgentBuilderOptions](/reference/editor/agent-builder/agent-builder-options): Full options schema.
 - [BuilderAgentDefaults](/reference/editor/agent-builder/builder-agent-defaults): Admin-pinned defaults for new agents.
 - [builder.configuration.agent.models](/reference/editor/agent-builder/builder-models): Model allowlist and default model.
@@ -152,7 +152,7 @@ export const mastra = new Mastra({
 
 The key name (`builderAgent`) is conventional. Any key works. The `@mastra/editor/ee` subpath is gated by the Mastra Enterprise Edition license at runtime.
 
-See the [Agent Builder overview](/docs/agent-builder/overview#prerequisites) for the full setup checklist.
+See the [Agent Builder overview](/guides/agent-builder/overview#prerequisites) for the full setup checklist.
 
 ## Namespaces
 

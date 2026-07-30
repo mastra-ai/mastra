@@ -1,0 +1,454 @@
+---
+title: "Working memory | Memory"
+description: "Learn how to configure working memory in Mastra to store persistent user data, preferences."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/mongodb"
+  - "@mastra/pg"
+  - "@mastra/upstash"
+---
+
+# Working Memory
+
+While [message history](/guides/memory/message-history) and [semantic recall](./semantic-recall) help agents remember conversations, working memory allows them to maintain persistent information about users across interactions.
+
+Working memory is the agent's active scratchpad: key information it keeps available about the user or task. It can retain a person's name, preferences, or other important details during a conversation.
+
+This is useful for maintaining ongoing state that's always relevant and should always be available to the agent.
+
+If you use [Observational Memory](/guides/memory/observational-memory), `observationalMemory.observation.manageWorkingMemory` lets OM update working memory for the agent.
+
+:::tip[📹 Watch]
+
+Watch [Mastra working memory](https://www.youtube.com/watch?v=UMy_JHLf1n8\&pp=ygUVbWFzdHJhIHdvcmtpbmcgbWVtb3J5) to see how agents keep persistent user context available across interactions.
+
+:::
+
+Working memory can persist at two different scopes:
+
+- **Resource-scoped** (default): Memory persists across all conversation threads for the same user
+- **Thread-scoped**: Memory is isolated per conversation thread
+
+**Requirement:** Switching between scopes means the agent won't see memory from the other scope - thread-scoped memory is completely separate from resource-scoped memory.
+
+## Quickstart
+
+Here's a minimal example of setting up an agent with working memory:
+
+```typescript {11-15}
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+
+// Create agent with working memory enabled
+const agent = new Agent({
+  id: 'personal-assistant',
+  name: 'PersonalAssistant',
+  instructions: 'You are a helpful personal assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({
+    options: {
+      workingMemory: {
+        enabled: true,
+      },
+    },
+  }),
+})
+```
+
+## How it works
+
+Working memory is a block of Markdown text that the agent can update over time to store continuously relevant information.
+
+## Memory persistence scopes
+
+Working memory can operate in two different scopes, allowing you to choose how memory persists across conversations:
+
+### Resource-Scoped Memory (Default)
+
+By default, working memory persists across all conversation threads for the same user (resourceId), enabling persistent user memory:
+
+```typescript
+const memory = new Memory({
+  storage,
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: 'resource', // Memory persists across all user threads
+      template: `# User Profile
+- **Name**:
+- **Location**:
+- **Interests**:
+- **Preferences**:
+- **Long-term Goals**:
+`,
+    },
+  },
+})
+```
+
+**Use cases:**
+
+- Personal assistants that remember user preferences
+- Customer service bots that maintain customer context
+- Educational applications that track student progress
+
+### Usage with Agents
+
+When using resource-scoped memory, make sure to pass the `resource` parameter in the memory options:
+
+```typescript
+// Resource-scoped memory requires resource
+const response = await agent.generate('Hello!', {
+  memory: {
+    thread: 'conversation-123',
+    resource: 'user-alice-456', // Same user across different threads
+  },
+})
+```
+
+### Thread-Scoped Memory
+
+Thread-scoped memory isolates working memory to individual conversation threads. Each thread maintains its own isolated memory:
+
+```typescript
+const memory = new Memory({
+  storage,
+  options: {
+    workingMemory: {
+      enabled: true,
+      scope: 'thread', // Memory is isolated per thread
+      template: `# User Profile
+- **Name**:
+- **Interests**:
+- **Current Goal**:
+`,
+    },
+  },
+})
+```
+
+**Use cases:**
+
+- Different conversations about separate topics
+- Temporary or session-specific information
+- Workflows where each thread needs working memory but threads are ephemeral and not related to each other
+
+## Storage adapter support
+
+Resource-scoped working memory requires specific storage adapters that support the `mastra_resources` table:
+
+### Supported Storage Adapters
+
+- **libSQL** (`@mastra/libsql`)
+- **PostgreSQL** (`@mastra/pg`)
+- **Upstash** (`@mastra/upstash`)
+- **MongoDB** (`@mastra/mongodb`)
+
+## Custom templates
+
+Templates guide the agent on what information to track and update in working memory. Mastra uses a default template when you don't provide one. Define a custom template for your agent's use case so it remembers the most relevant information. For threads shared by multiple users, see [Multi-user threads](./multi-user-threads).
+
+Here's an example of a custom template. In this example the agent will store the users name, location, timezone, etc as soon as the user sends a message containing any of the info:
+
+```typescript {5-28}
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      template: `
+# User Profile
+
+## Personal info
+
+- Name:
+- Location:
+- Timezone:
+
+## Preferences
+
+- Communication Style: [e.g., Formal, Casual]
+- Project Goal:
+- Key Deadlines:
+  - [Deadline 1]: [Date]
+  - [Deadline 2]: [Date]
+
+## Session state
+
+- Last Task Discussed:
+- Open Questions:
+  - [Question 1]
+  - [Question 2]
+`,
+    },
+  },
+})
+```
+
+## Designing effective templates
+
+A well-structured template keeps the information straightforward for the agent to parse and update. Treat the
+template as a short form that you want the assistant to keep up to date.
+
+- **Short, focused labels.** Avoid paragraphs or very long headings. Keep labels brief (for example
+  `## Personal Info` or `- Name:`) so updates are readable and less likely to be truncated.
+- **Use consistent casing.** Inconsistent capitalization (`Timezone:` vs `timezone:`) can cause messy
+  updates. Stick to Title Case or lower case for headings and bullet labels.
+- **Keep placeholder text minimal.** Use hints such as `[e.g., Formal]` or `[Date]` to help the LLM
+  fill in the correct spots.
+- **Abbreviate very long values.** If you only need a short form, include guidance like
+  `- Name: [First name or nickname]` or `- Address (short):` rather than the full legal text.
+- **Mention update rules in `instructions`.** You can instruct how and when to fill or clear parts of
+  the template directly in the agent's `instructions` field.
+
+### Alternative Template Styles
+
+Use a shorter single block if you only need a few items:
+
+```typescript
+const basicMemory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      template: `User Facts:\n- Name:\n- Favorite Color:\n- Current Topic:`,
+    },
+  },
+})
+```
+
+You can also store the key facts in a short paragraph format if you prefer a more narrative style:
+
+```typescript
+const paragraphMemory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      template: `Important Details:\n\nKeep a short paragraph capturing the user's important facts (name, main goal, current task).`,
+    },
+  },
+})
+```
+
+## Structured working memory
+
+Working memory can also be defined using a structured schema instead of a Markdown template. This allows you to specify the exact fields and types that should be tracked, using a [Standard JSON Schema](https://standardschema.dev/json-schema) ([Zod](https://zod.dev/), [Valibot](https://valibot.dev/), [ArkType](https://arktype.io/), etc.). When using a schema, the agent will see and update working memory as a JSON object matching your schema.
+
+**Requirement:** You must specify either `template` or `schema`, but not both.
+
+### Example: Schema-Based Working Memory
+
+```typescript
+import { z } from 'zod'
+import { Memory } from '@mastra/memory'
+
+const userProfileSchema = z.object({
+  name: z.string().optional(),
+  location: z.string().optional(),
+  timezone: z.string().optional(),
+  preferences: z
+    .object({
+      communicationStyle: z.string().optional(),
+      projectGoal: z.string().optional(),
+      deadlines: z.array(z.string()).optional(),
+    })
+    .optional(),
+})
+
+const memory = new Memory({
+  options: {
+    workingMemory: {
+      enabled: true,
+      schema: userProfileSchema,
+      // template: ... (do not set)
+    },
+  },
+})
+```
+
+When a schema is provided, the agent receives the working memory as a JSON object. For example:
+
+```json
+{
+  "name": "Sam",
+  "location": "Berlin",
+  "timezone": "CET",
+  "preferences": {
+    "communicationStyle": "Formal",
+    "projectGoal": "Launch MVP",
+    "deadlines": ["2025-07-01"]
+  }
+}
+```
+
+### Merge Semantics for Schema-Based Memory
+
+Schema-based working memory uses **merge semantics**, meaning the agent only needs to include fields it wants to add or update. Existing fields are preserved automatically.
+
+- **Object fields are deep merged:** Only provided fields are updated; others remain unchanged
+- **Set a field to `null` to delete it:** This explicitly removes the field from memory
+- **Arrays are replaced entirely:** When an array field is provided, it replaces the existing array (arrays aren't merged element-by-element)
+
+## Choosing between template and schema
+
+- Use a **template** (Markdown) if you want the agent to maintain memory as a free-form text block, such as a user profile or scratchpad. Templates use **replace semantics**: the agent must provide the complete memory content on each update.
+- Use a **schema** if you need structured, type-safe data that can be validated and programmatically accessed as JSON. The `workingMemory.schema` field accepts any `PublicSchema`-compatible schema (including Zod v3, Zod v4, JSON Schema, or already-standard schemas). Schemas use **merge semantics**: the agent only provides fields to update, and existing fields are preserved.
+- Only one mode can be active at a time: setting both `template` and `schema` isn't supported.
+
+## Example: Multi-step retention
+
+Below is a simplified view of how the `User Profile` template updates across a short user
+conversation:
+
+```nohighlight
+# User Profile
+
+## Personal info
+
+- Name:
+- Location:
+- Timezone:
+
+--- After user says "My name is **Sam** and I'm from **Berlin**" ---
+
+# User Profile
+- Name: Sam
+- Location: Berlin
+- Timezone:
+
+--- After user adds "By the way I'm normally in **CET**" ---
+
+# User Profile
+- Name: Sam
+- Location: Berlin
+- Timezone: CET
+```
+
+The agent can now refer to `Sam` or `Berlin` in later responses without requesting the information
+again because it has been stored in working memory.
+
+If your agent isn't properly updating working memory when you expect it to, you can add system
+instructions on _how_ and _when_ to use this template in your agent's `instructions` setting.
+
+## Setting initial working memory
+
+While agents typically update working memory through the `updateWorkingMemory` tool, you can also set initial working memory programmatically when creating or updating threads. This is useful for injecting user data (like their name, preferences, or other info) that you want available to the agent without passing it in every request.
+
+### Setting Working Memory via Thread Metadata
+
+When creating a thread, you can provide initial working memory through the metadata's `workingMemory` key:
+
+```typescript title="src/app/medical-consultation.ts"
+// Create a thread with initial working memory
+const thread = await memory.createThread({
+  threadId: 'thread-123',
+  resourceId: 'user-456',
+  title: 'Medical Consultation',
+  metadata: {
+    workingMemory: `# Patient Profile
+- Name: John Doe
+- Blood Type: O+
+- Allergies: Penicillin
+- Current Medications: None
+- Medical History: Hypertension (controlled)
+`,
+  },
+})
+
+// The agent will now have access to this information in all messages
+await agent.generate("What's my blood type?", {
+  memory: {
+    thread: thread.id,
+    resource: 'user-456',
+  },
+})
+// Response: "Your blood type is O+."
+```
+
+### Updating Working Memory Programmatically
+
+You can also update an existing thread's working memory:
+
+```typescript title="src/app/medical-consultation.ts"
+// Update thread metadata to add/modify working memory
+await memory.updateThread({
+  id: 'thread-123',
+  title: thread.title,
+  metadata: {
+    ...thread.metadata,
+    workingMemory: `# Patient Profile
+- Name: John Doe
+- Blood Type: O+
+- Allergies: Penicillin, Ibuprofen  // Updated
+- Current Medications: Lisinopril 10mg daily  // Added
+- Medical History: Hypertension (controlled)
+`,
+  },
+})
+```
+
+### Direct Memory Update
+
+Alternatively, use the `updateWorkingMemory` method directly:
+
+```typescript title="src/app/medical-consultation.ts"
+await memory.updateWorkingMemory({
+  threadId: 'thread-123',
+  resourceId: 'user-456', // Required for resource-scoped memory
+  workingMemory: 'Updated memory content...',
+})
+```
+
+## Read-only working memory
+
+In some scenarios, you may want an agent to have access to working memory data without the ability to modify it. This is useful for:
+
+- **Routing agents** that need context but shouldn't update user profiles
+- **Sub agents** in a multi-agent system that should reference but not own the memory
+
+To enable read-only mode, set `readOnly: true` in the memory options:
+
+```typescript
+const response = await agent.generate('What do you know about me?', {
+  memory: {
+    thread: 'conversation-123',
+    resource: 'user-alice-456',
+    options: {
+      readOnly: true, // Working memory is provided but cannot be updated
+    },
+  },
+})
+```
+
+## Opt in to state signals (experimental)
+
+By default, working memory reaches the model as part of the system message. You can opt into delivering it as a [state signal](/guides/long-running-agents/signals) instead by setting `useStateSignals: true`:
+
+```typescript
+const memory = new Memory({
+  storage: new LibSQLStore({ id: 'mastra-storage', url: 'file:./mastra.db' }),
+  options: {
+    workingMemory: {
+      enabled: true,
+      template: '# User\n- name:\n- location:',
+      useStateSignals: true, // experimental: deliver as state signal
+    },
+  },
+})
+```
+
+What changes:
+
+- **Storage is identical.** The same resource/thread `workingMemory` field is read and written.
+- **The tool is the same shape, exposed under a new name.** Writes still flow through the same underlying tool; on this path it's registered as `setWorkingMemory` (instead of `updateWorkingMemory`). The rename keeps legacy strip filters from removing tool-call parts so they persist as a normal audit trail and the next model step picks the new value up automatically.
+- **Delivery only.** Instead of folding into the system prompt, `Memory` auto-attaches a `WorkingMemoryStateProcessor` that emits the current working memory as a `state` signal with `stateId: 'working-memory'`.
+
+You inherit the standard state-signal benefits: thread-scoped tracking metadata, `cacheKey` dedup so identical snapshots are only emitted once, and `contextWindow.hasSnapshot` re-injection when an older snapshot rolls out of the window.
+
+The default (`useStateSignals: false`) keeps the existing system-message behavior unchanged. `useStateSignals` isn't supported with template working memory `version: 'vnext'`.
+
+## Examples
+
+- [Working memory with template](https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-template)
+- [Working memory with schema](https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-schema)
+- [Per-resource working memory](https://github.com/mastra-ai/mastra/tree/main/examples/memory-per-resource-example): Complete example showing resource-scoped memory persistence

@@ -17,7 +17,7 @@ The `AgentController` class coordinates agent modes with shared state, memory, a
 
 Per-conversation state (identity, the active thread, mode and model selection, run state, grants, and the display snapshot) lives on the [`Session`](/reference/agent-controller/session), accessed through `agentController.session`.
 
-For a conceptual introduction, see the [AgentController overview](/docs/agent-controller/overview).
+For a conceptual introduction, see the [AgentController overview](/guides/agent-controller/overview).
 
 ## Usage example
 
@@ -644,7 +644,7 @@ await agentController.renameThread({ title: 'Updated title' })
 
 #### `cloneThread({ sourceThreadId?, title?, resourceId? })`
 
-Clone an existing thread and switch to the clone. Copies all messages and acquires a lock on the new thread. It then releases the lock on the previous thread and emits a `thread_created` event. If `sourceThreadId` is omitted, the current thread is cloned. When [Observational Memory](/docs/memory/observational-memory) is enabled, OM records are cloned with remapped message IDs.
+Clone an existing thread and switch to the clone. Copies all messages and acquires a lock on the new thread. It then releases the lock on the previous thread and emits a `thread_created` event. If `sourceThreadId` is omitted, the current thread is cloned. When [Observational Memory](/guides/memory/observational-memory) is enabled, OM records are cloned with remapped message IDs.
 
 ```typescript
 // Clone the current thread
@@ -1001,6 +1001,6 @@ agentController.subscribe(event => {
 ## Related
 
 - [Session class](/reference/agent-controller/session)
-- [AgentController overview](/docs/agent-controller/overview)
-- [Threads and state](/docs/agent-controller/threads-and-state)
-- [Tool approvals](/docs/agent-controller/tool-approvals)
+- [AgentController overview](/guides/agent-controller/overview)
+- [Threads and state](/guides/agent-controller/threads-and-state)
+- [Tool approvals](/guides/agent-controller/tool-approvals)

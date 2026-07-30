@@ -843,7 +843,7 @@ const stream = await agent.stream('message for agent')
             type: 'VersionOverrides',
             isOptional: true,
             description:
-              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Sub-agent versioning](/docs/editor/overview#sub-agent-versioning).',
+              'Per-invocation version overrides for sub-agent delegation. Merged on top of Mastra instance-level versions and propagated automatically through sub-agent calls via requestContext. Requires the editor package. See [Sub-agent versioning](/guides/editor/overview#sub-agent-versioning).',
             properties: [
               {
                 type: 'VersionOverrides',
@@ -1098,6 +1098,6 @@ Responses WebSocket connections run one response at a time. Mastra rejects overl
 
 ## Related
 
-- [Generating responses](/docs/agents/overview#use-your-agent)
-- [Streaming responses](/docs/agents/overview#use-your-agent)
-- [Agent Approval](/docs/agents/agent-approval)
+- [Generating responses](/guides/agents/overview#use-your-agent)
+- [Streaming responses](/guides/agents/overview#use-your-agent)
+- [Agent Approval](/guides/agents/agent-approval)

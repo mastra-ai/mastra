@@ -714,7 +714,7 @@ interface DataOmObservationEndPart {
 }
 ```
 
-Both extractor fields are optional. A completion can include values, failures, both, or neither. `data-om-observation-end` reports synchronous completion. `data-om-buffering-end` reports completed background work whose buffered content still awaits activation, although extractor metadata is already persisted. `DataOmBufferingEndPart` carries the same extractor fields, and both types are exported from `@mastra/memory/processors`. See [Read extracted values from a stream](/docs/memory/observational-memory#read-extracted-values-from-a-stream) for a consumer example.
+Both extractor fields are optional. A completion can include values, failures, both, or neither. `data-om-observation-end` reports synchronous completion. `data-om-buffering-end` reports completed background work whose buffered content still awaits activation, although extractor metadata is already persisted. `DataOmBufferingEndPart` carries the same extractor fields, and both types are exported from `@mastra/memory/processors`. See [Read extracted values from a stream](/guides/memory/observational-memory#read-extracted-values-from-a-stream) for a consumer example.
 
 ### `data-om-status`
 
@@ -973,7 +973,7 @@ Emitted when buffered observations or reflections are activated (moved into the 
 
 ## Standalone usage
 
-Most users should use the `Memory` class above. Using `ObservationalMemory` directly is mainly useful for benchmarking, experimentation, or when you need to control processor ordering with other processors (like [guardrails](/docs/agents/guardrails)).
+Most users should use the `Memory` class above. Using `ObservationalMemory` directly is mainly useful for benchmarking, experimentation, or when you need to control processor ordering with other processors (like [guardrails](/guides/agents/guardrails)).
 
 ```typescript title="src/mastra/agents/agent.ts"
 import { ObservationalMemory } from '@mastra/memory/processors'
@@ -1276,8 +1276,8 @@ const selector = new ModelByInputTokens({
 
 ### Related
 
-- [Observational Memory](/docs/memory/observational-memory)
-- [Memory Overview](/docs/memory/overview)
+- [Observational Memory](/guides/memory/observational-memory)
+- [Memory Overview](/guides/memory/overview)
 - [Memory Class](/reference/memory/memory-class)
-- [Memory Processors](/docs/memory/memory-processors)
-- [Processors](/docs/agents/processors)
+- [Memory Processors](/guides/memory/memory-processors)
+- [Processors](/guides/agents/processors)

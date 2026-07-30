@@ -17,22 +17,22 @@
   "redirects": [
     {
       "source": "/docs/agents/channels",
-      "destination": "/docs/capabilities/channels/overview",
+      "destination": "/guides/capabilities/channels/overview",
       "permanent": true
     },
     {
       "source": "/docs/voice/livekit",
-      "destination": "/docs/voice/realtime-voice",
+      "destination": "/guides/voice/realtime-voice",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud",
-      "destination": "/docs/observability/integrations/exporters/mastra-platform",
+      "destination": "/guides/observability/integrations/exporters/mastra-platform",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/exporters/default",
-      "destination": "/docs/observability/integrations/exporters/mastra-storage",
+      "destination": "/guides/observability/integrations/exporters/mastra-storage",
       "permanent": true
     },
     {
@@ -87,7 +87,7 @@
     },
     {
       "source": "/docs/getting-started/installation",
-      "destination": "/docs/getting-started/quickstart",
+      "destination": "/guides/getting-started/quickstart",
       "permanent": true
     },
     {
@@ -97,57 +97,57 @@
     },
     {
       "source": "/examples/agents/calling-agents",
-      "destination": "/docs/agents/overview",
+      "destination": "/guides/agents/overview",
       "permanent": true
     },
     {
       "source": "/examples/agents/system-prompt",
-      "destination": "/docs/agents/overview",
+      "destination": "/guides/agents/overview",
       "permanent": true
     },
     {
       "source": "/docs/logging",
-      "destination": "/docs/observability/logging",
+      "destination": "/guides/observability/logging",
       "permanent": true
     },
     {
       "source": "/docs/agents/adding-voice",
-      "destination": "/docs/voice/overview",
+      "destination": "/guides/voice/overview",
       "permanent": true
     },
     {
       "source": "/docs/agents/background-tasks",
-      "destination": "/docs/long-running-agents/background-tasks",
+      "destination": "/guides/long-running-agents/background-tasks",
       "permanent": true
     },
     {
       "source": "/docs/agents/durable-agents",
-      "destination": "/docs/long-running-agents/durable-agents",
+      "destination": "/guides/long-running-agents/durable-agents",
       "permanent": true
     },
     {
       "source": "/docs/agents/goals",
-      "destination": "/docs/long-running-agents/goals",
+      "destination": "/guides/long-running-agents/goals",
       "permanent": true
     },
     {
       "source": "/docs/agents/heartbeats",
-      "destination": "/docs/long-running-agents/schedules",
+      "destination": "/guides/long-running-agents/schedules",
       "permanent": true
     },
     {
       "source": "/docs/long-running-agents/heartbeats",
-      "destination": "/docs/long-running-agents/schedules",
+      "destination": "/guides/long-running-agents/schedules",
       "permanent": true
     },
     {
       "source": "/docs/agents/signal-providers",
-      "destination": "/docs/long-running-agents/signal-providers",
+      "destination": "/guides/long-running-agents/signal-providers",
       "permanent": true
     },
     {
       "source": "/docs/agents/signals",
-      "destination": "/docs/long-running-agents/signals",
+      "destination": "/guides/long-running-agents/signals",
       "permanent": true
     },
     {
@@ -207,12 +207,12 @@
     },
     {
       "source": "/guides/guide/manual-install",
-      "destination": "/docs/getting-started/manual-install",
+      "destination": "/guides/getting-started/manual-install",
       "permanent": true
     },
     {
       "source": "/guides/getting-started/manual-install",
-      "destination": "/docs/getting-started/manual-install",
+      "destination": "/guides/getting-started/manual-install",
       "permanent": true
     },
     {
@@ -222,12 +222,12 @@
     },
     {
       "source": "/guides/quickstarts/standalone-server",
-      "destination": "/docs/getting-started/quickstart",
+      "destination": "/guides/getting-started/quickstart",
       "permanent": true
     },
     {
       "source": "/docs/getting-started/quickstart",
-      "destination": "/docs/getting-started/quickstart",
+      "destination": "/guides/getting-started/quickstart",
       "permanent": true
     },
     {
@@ -237,7 +237,7 @@
     },
     {
       "source": "/examples/agents/whatsapp-chat-bot",
-      "destination": "/docs/guide/whatsapp-chat-bot",
+      "destination": "/guides/guide/whatsapp-chat-bot",
       "permanent": true
     },
     {
@@ -257,107 +257,107 @@
     },
     {
       "source": "/examples/agents/image-analysis",
-      "destination": "/docs/agents/overview",
+      "destination": "/guides/agents/overview",
       "permanent": true
     },
     {
       "source": "/examples/evals/running-in-ci",
-      "destination": "/docs/evals/running-in-ci",
+      "destination": "/guides/evals/running-in-ci",
       "permanent": true
     },
     {
       "source": "/examples/observability/basic-ai-tracing",
-      "destination": "/docs/observability/overview",
+      "destination": "/guides/observability/overview",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-text",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-html",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-json",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/chunk-markdown",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/adjust-chunk-size",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/chunking/adjust-chunk-delimiters",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/embedding/embed-text-chunk",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/embedding/embed-chunk-array",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/embedding/embed-text-with-cohere",
-      "destination": "/docs/rag/chunking-and-embedding",
+      "destination": "/guides/rag/chunking-and-embedding",
       "permanent": true
     },
     {
       "source": "/examples/rag/upsert/upsert-embeddings",
-      "destination": "/docs/rag/vector-databases",
+      "destination": "/guides/rag/vector-databases",
       "permanent": true
     },
     {
       "source": "/examples/rag/query/retrieve-results",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/rerank",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/rerank-rag",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/reranking-with-cohere",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/rerank/reranking-with-zeroentropy",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/usage/basic-rag",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/docs/agents/human-in-the-loop-with-tools",
-      "destination": "/docs/agents/agent-approval",
+      "destination": "/guides/agents/agent-approval",
       "permanent": true
     },
     {
       "source": "/examples/agents/request-context",
-      "destination": "/docs/server/request-context",
+      "destination": "/guides/server/request-context",
       "permanent": true
     },
     {
@@ -387,42 +387,42 @@
     },
     {
       "source": "/docs/server-db/storage",
-      "destination": "/docs/storage/overview",
+      "destination": "/guides/storage/overview",
       "permanent": true
     },
     {
       "source": "/docs/server-db/mastra-server",
-      "destination": "/docs/server/mastra-server",
+      "destination": "/guides/server/mastra-server",
       "permanent": true
     },
     {
       "source": "/docs/server-db/server-adapters",
-      "destination": "/docs/server/server-adapters",
+      "destination": "/guides/server/server-adapters",
       "permanent": true
     },
     {
       "source": "/docs/server-db/custom-adapters",
-      "destination": "/docs/server/custom-adapters",
+      "destination": "/guides/server/custom-adapters",
       "permanent": true
     },
     {
       "source": "/docs/server-db/middleware",
-      "destination": "/docs/server/middleware",
+      "destination": "/guides/server/middleware",
       "permanent": true
     },
     {
       "source": "/docs/server-db/request-context",
-      "destination": "/docs/server/request-context",
+      "destination": "/guides/server/request-context",
       "permanent": true
     },
     {
       "source": "/docs/server-db/custom-api-routes",
-      "destination": "/docs/server/custom-api-routes",
+      "destination": "/guides/server/custom-api-routes",
       "permanent": true
     },
     {
       "source": "/docs/server-db/mastra-client",
-      "destination": "/docs/server/mastra-client",
+      "destination": "/guides/server/mastra-client",
       "permanent": true
     },
     {
@@ -432,12 +432,12 @@
     },
     {
       "source": "/docs/auth/index",
-      "destination": "/docs/server/auth/index",
+      "destination": "/guides/server/auth/index",
       "permanent": true
     },
     {
       "source": "/docs/auth/jwt",
-      "destination": "/docs/server/auth/jwt",
+      "destination": "/guides/server/auth/jwt",
       "permanent": true
     },
     {
@@ -487,12 +487,12 @@
     },
     {
       "source": "/examples/rag/query/hybrid-vector-search",
-      "destination": "/docs/rag/retrieval",
+      "destination": "/guides/rag/retrieval",
       "permanent": true
     },
     {
       "source": "/examples/rag/usage/graph-rag",
-      "destination": "/docs/rag/graph-rag",
+      "destination": "/guides/rag/graph-rag",
       "permanent": true
     },
     {
@@ -557,7 +557,7 @@
     },
     {
       "source": "/docs/deployment/building-mastra",
-      "destination": "/docs/deployment/mastra-server",
+      "destination": "/guides/deployment/mastra-server",
       "permanent": true
     },
     {
@@ -572,7 +572,7 @@
     },
     {
       "source": "/docs/memory/storage/overview",
-      "destination": "/docs/storage/overview",
+      "destination": "/guides/storage/overview",
       "permanent": true
     },
     {
@@ -597,12 +597,12 @@
     },
     {
       "source": "/docs/memory/threads-and-resources",
-      "destination": "/docs/storage/overview",
+      "destination": "/guides/storage/overview",
       "permanent": true
     },
     {
       "source": "/docs/memory/conversation-history",
-      "destination": "/docs/memory/message-history",
+      "destination": "/guides/memory/message-history",
       "permanent": true
     },
     {
@@ -617,7 +617,7 @@
     },
     {
       "source": "/guides/deployment",
-      "destination": "/docs/deployment/cloud-providers",
+      "destination": "/guides/deployment/cloud-providers",
       "permanent": true
     },
     {
@@ -652,12 +652,12 @@
     },
     {
       "source": "/reference/workflows/workflow-methods/sendEvent",
-      "destination": "/docs/workflows/suspend-and-resume",
+      "destination": "/guides/workflows/suspend-and-resume",
       "permanent": true
     },
     {
       "source": "/reference/workflows/workflow-methods/waitForEvent",
-      "destination": "/docs/workflows/suspend-and-resume",
+      "destination": "/guides/workflows/suspend-and-resume",
       "permanent": true
     },
     {
@@ -667,12 +667,12 @@
     },
     {
       "source": "/docs/scorers/overview",
-      "destination": "/docs/evals/overview",
+      "destination": "/guides/evals/overview",
       "permanent": true
     },
     {
       "source": "/docs/getting-started/mcp-docs-server",
-      "destination": "/docs/getting-started/build-with-ai",
+      "destination": "/guides/getting-started/build-with-ai",
       "permanent": true
     },
     {
@@ -687,22 +687,22 @@
     },
     {
       "source": "/docs/tools-mcp/advanced-usage",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/guides/agents/using-tools",
       "permanent": true
     },
     {
       "source": "/docs/tools-mcp/mcp-overview",
-      "destination": "/docs/mcp/overview",
+      "destination": "/guides/mcp/overview",
       "permanent": true
     },
     {
       "source": "/docs/tools-mcp/overview",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/guides/agents/using-tools",
       "permanent": true
     },
     {
       "source": "/docs/workflows/input-data-mapping",
-      "destination": "/docs/workflows/control-flow",
+      "destination": "/guides/workflows/control-flow",
       "permanent": true
     },
     {
@@ -752,22 +752,22 @@
     },
     {
       "source": "/docs/agents/network-approval",
-      "destination": "/docs/agents/networks",
+      "destination": "/guides/agents/networks",
       "permanent": true
     },
     {
       "source": "/docs/agents/agent-memory",
-      "destination": "/docs/memory/overview",
+      "destination": "/guides/memory/overview",
       "permanent": true
     },
     {
       "source": "/docs/getting-started/studio",
-      "destination": "/docs/studio/overview",
+      "destination": "/guides/studio/overview",
       "permanent": true
     },
     {
       "source": "/docs/deployment/studio",
-      "destination": "/docs/studio/deployment",
+      "destination": "/guides/studio/deployment",
       "permanent": true
     },
     {
@@ -777,12 +777,12 @@
     },
     {
       "source": "/docs/observability/datasets/overview",
-      "destination": "/docs/evals/datasets/overview",
+      "destination": "/guides/evals/datasets/overview",
       "permanent": true
     },
     {
       "source": "/docs/observability/datasets/running-experiments",
-      "destination": "/docs/evals/datasets/running-experiments",
+      "destination": "/guides/evals/datasets/running-experiments",
       "permanent": true
     },
     {
@@ -817,82 +817,82 @@
     },
     {
       "source": "/docs/mcp/publishing-mcp-server",
-      "destination": "/docs/guide/publishing-mcp-server",
+      "destination": "/guides/guide/publishing-mcp-server",
       "permanent": true
     },
     {
       "source": "/docs/agents/response-caching",
-      "destination": "/docs/agents/processors",
+      "destination": "/guides/agents/processors",
       "permanent": true
     },
     {
       "source": "/docs/build-with-ai/skills",
-      "destination": "/docs/getting-started/build-with-ai",
+      "destination": "/guides/getting-started/build-with-ai",
       "permanent": true
     },
     {
       "source": "/docs/build-with-ai/mcp-docs-server",
-      "destination": "/docs/getting-started/build-with-ai",
+      "destination": "/guides/getting-started/build-with-ai",
       "permanent": true
     },
     {
       "source": "/docs/streaming",
-      "destination": "/docs/concepts/streaming",
+      "destination": "/guides/concepts/streaming",
       "permanent": true
     },
     {
       "source": "/docs/streaming/overview",
-      "destination": "/docs/concepts/streaming",
+      "destination": "/guides/concepts/streaming",
       "permanent": true
     },
     {
       "source": "/docs/streaming/events",
-      "destination": "/docs/concepts/streaming",
+      "destination": "/guides/concepts/streaming",
       "permanent": true
     },
     {
       "source": "/docs/streaming/tool-streaming",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/guides/agents/using-tools",
       "permanent": true
     },
     {
       "source": "/docs/streaming/workflow-streaming",
-      "destination": "/docs/workflows/overview",
+      "destination": "/guides/workflows/overview",
       "permanent": true
     },
     {
       "source": "/docs/streaming/background-task-streaming",
-      "destination": "/docs/long-running-agents/background-tasks",
+      "destination": "/guides/long-running-agents/background-tasks",
       "permanent": true
     },
     {
       "source": "/docs/harness/modes",
-      "destination": "/docs/agent-controller/modes",
+      "destination": "/guides/agent-controller/modes",
       "permanent": true
     },
     {
       "source": "/docs/harness/overview",
-      "destination": "/docs/agent-controller/overview",
+      "destination": "/guides/agent-controller/overview",
       "permanent": true
     },
     {
       "source": "/docs/harness/session",
-      "destination": "/docs/agent-controller/session",
+      "destination": "/guides/agent-controller/session",
       "permanent": true
     },
     {
       "source": "/docs/harness/subagents",
-      "destination": "/docs/agent-controller/subagents",
+      "destination": "/guides/agent-controller/subagents",
       "permanent": true
     },
     {
       "source": "/docs/harness/threads-and-state",
-      "destination": "/docs/agent-controller/threads-and-state",
+      "destination": "/guides/agent-controller/threads-and-state",
       "permanent": true
     },
     {
       "source": "/docs/harness/tool-approvals",
-      "destination": "/docs/agent-controller/tool-approvals",
+      "destination": "/guides/agent-controller/tool-approvals",
       "permanent": true
     },
     {
@@ -937,7 +937,7 @@
     },
     {
       "source": "/docs/tools/overview",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/guides/agents/using-tools",
       "permanent": true
     },
     {
@@ -952,17 +952,17 @@
     },
     {
       "source": "/docs/memory/storage",
-      "destination": "/docs/storage/overview",
+      "destination": "/guides/storage/overview",
       "permanent": true
     },
     {
       "source": "/docs/agents/file-based-agents",
-      "destination": "/docs/getting-started/file-based-agents",
+      "destination": "/guides/getting-started/file-based-agents",
       "permanent": true
     },
     {
       "source": "/docs/agents/input-processors",
-      "destination": "/docs/agents/processors",
+      "destination": "/guides/agents/processors",
       "permanent": true
     },
     {
@@ -982,12 +982,12 @@
     },
     {
       "source": "/docs/workflows/using-with-agents-and-tools",
-      "destination": "/docs/workflows/agents-and-tools",
+      "destination": "/guides/workflows/agents-and-tools",
       "permanent": true
     },
     {
       "source": "/docs/workflows/using-agents-and-tools",
-      "destination": "/docs/workflows/agents-and-tools",
+      "destination": "/guides/workflows/agents-and-tools",
       "permanent": true
     },
     {
@@ -997,62 +997,197 @@
     },
     {
       "source": "/docs/workflows/agents",
-      "destination": "/docs/workflows/agents-and-tools",
+      "destination": "/guides/workflows/agents-and-tools",
       "permanent": true
     },
     {
       "source": "/docs/workflows/flow-control",
-      "destination": "/docs/workflows/control-flow",
+      "destination": "/guides/workflows/control-flow",
       "permanent": true
     },
     {
       "source": "/docs/evals/running-evals",
-      "destination": "/docs/evals/overview",
+      "destination": "/guides/evals/overview",
       "permanent": true
     },
     {
       "source": "/docs/scorers/custom-scorers",
-      "destination": "/docs/evals/custom-scorers",
+      "destination": "/guides/evals/custom-scorers",
       "permanent": true
     },
     {
       "source": "/docs/scorers/creating-custom-scorers",
-      "destination": "/docs/evals/custom-scorers",
+      "destination": "/guides/evals/custom-scorers",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/agents",
-      "destination": "/docs/agents/overview",
+      "destination": "/guides/agents/overview",
       "permanent": true
     },
     {
       "source": "/docs/guide/tools",
-      "destination": "/docs/agents/using-tools",
+      "destination": "/guides/agents/using-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/stagehand",
+      "destination": "/ecosystem/browser-integrations/stagehand",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/firecrawl",
+      "destination": "/ecosystem/browser-integrations/firecrawl",
       "permanent": true
     },
     {
       "source": "/docs/browser/:path*",
-      "destination": "/ecosystem/browser/:path*",
+      "destination": "/guides/browser/:path*",
       "permanent": true
     },
     {
       "source": "/docs/workspace/:path*",
-      "destination": "/ecosystem/workspace/:path*",
+      "destination": "/guides/workspace/:path*",
       "permanent": true
     },
     {
       "source": "/docs/server/auth",
-      "destination": "/ecosystem/auth-providers",
+      "destination": "/guides/server/auth",
       "permanent": true
     },
     {
       "source": "/docs/server/auth/:path*",
-      "destination": "/ecosystem/auth-providers/:path*",
+      "destination": "/guides/server/auth/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/mastra-storage",
+      "destination": "/guides/observability/integrations/exporters/mastra-storage",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/mastra-platform",
+      "destination": "/guides/observability/integrations/exporters/mastra-platform",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/processors/sensitive-data-filter",
+      "destination": "/guides/observability/integrations/processors/sensitive-data-filter",
       "permanent": true
     },
     {
       "source": "/docs/observability/integrations/:path*",
       "destination": "/ecosystem/observability-integrations/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/:path*",
+      "destination": "/guides/agents/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/:path*",
+      "destination": "/guides/workflows/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/:path*",
+      "destination": "/guides/memory/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/studio/:path*",
+      "destination": "/guides/studio/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/:path*",
+      "destination": "/guides/agent-builder/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/editor/:path*",
+      "destination": "/guides/editor/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/capabilities/:path*",
+      "destination": "/guides/capabilities/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/rag/:path*",
+      "destination": "/guides/rag/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/voice/:path*",
+      "destination": "/guides/voice/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/:path*",
+      "destination": "/guides/long-running-agents/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/:path*",
+      "destination": "/guides/agent-controller/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/:path*",
+      "destination": "/guides/server/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/:path*",
+      "destination": "/guides/observability/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/:path*",
+      "destination": "/guides/evals/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/:path*",
+      "destination": "/guides/deployment/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mcp/:path*",
+      "destination": "/guides/mcp/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/storage/:path*",
+      "destination": "/guides/storage/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/:path*",
+      "destination": "/guides/getting-started/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/concepts/:path*",
+      "destination": "/guides/concepts/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guide/:path*",
+      "destination": "/guides/guide/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/migrations/:path*",
+      "destination": "/guides/migrations/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/what-is-mastra",
+      "destination": "/guides/what-is-mastra",
       "permanent": true
     },
     {
@@ -1116,108 +1251,88 @@
       "permanent": true
     },
     {
-      "source": "/guides",
-      "destination": "/docs",
-      "permanent": true
-    },
-    {
-      "source": "/guides/:path*",
-      "destination": "/docs/:path*",
-      "permanent": true
-    },
-    {
       "source": "/docs/deployment/cloud-providers",
-      "destination": "/docs/deployment/cloud-providers",
+      "destination": "/guides/deployment/cloud-providers",
       "permanent": true
     },
     {
       "source": "/docs/deployment/sandbox",
-      "destination": "/docs/deployment/sandbox",
+      "destination": "/guides/deployment/sandbox",
       "permanent": true
     },
     {
       "source": "/docs/deployment/web-framework",
-      "destination": "/docs/deployment/web-framework",
+      "destination": "/guides/deployment/web-framework",
       "permanent": true
     },
     {
       "source": "/docs/deployment/workflow-runners",
-      "destination": "/docs/deployment/workflow-runners",
+      "destination": "/guides/deployment/workflow-runners",
       "permanent": true
     },
     {
       "source": "/docs/deployment/workers",
-      "destination": "/docs/deployment/workers",
+      "destination": "/guides/deployment/workers",
       "permanent": true
     },
     {
       "source": "/ecosystem/deployment-patterns/:path*",
-      "destination": "/docs/deployment/:path*",
+      "destination": "/guides/deployment/:path*",
       "permanent": true
     },
     {
       "source": "/ecosystem/browser/:path*",
-      "destination": "/docs/browser/:path*",
+      "destination": "/guides/browser/:path*",
       "permanent": true
     },
     {
       "source": "/ecosystem/workspace/:path*",
-      "destination": "/docs/workspace/:path*",
+      "destination": "/guides/workspace/:path*",
       "permanent": true
     },
     {
       "source": "/ecosystem/auth-providers/index",
-      "destination": "/docs/server/auth/index",
+      "destination": "/guides/server/auth/index",
       "permanent": true
     },
     {
       "source": "/ecosystem/auth-providers/composite-auth",
-      "destination": "/docs/server/auth/composite-auth",
+      "destination": "/guides/server/auth/composite-auth",
       "permanent": true
     },
     {
       "source": "/ecosystem/auth-providers/custom-auth-provider",
-      "destination": "/docs/server/auth/custom-auth-provider",
+      "destination": "/guides/server/auth/custom-auth-provider",
       "permanent": true
     },
     {
       "source": "/ecosystem/auth-providers/fga",
-      "destination": "/docs/server/auth/fga",
+      "destination": "/guides/server/auth/fga",
       "permanent": true
     },
     {
       "source": "/ecosystem/auth-providers/jwt",
-      "destination": "/docs/server/auth/jwt",
+      "destination": "/guides/server/auth/jwt",
       "permanent": true
     },
     {
       "source": "/ecosystem/auth-providers/simple-auth",
-      "destination": "/docs/server/auth/simple-auth",
+      "destination": "/guides/server/auth/simple-auth",
       "permanent": true
     },
     {
       "source": "/ecosystem/auth-providers/workers",
-      "destination": "/docs/server/auth/workers",
+      "destination": "/guides/server/auth/workers",
       "permanent": true
     },
     {
       "source": "/ecosystem/observability-integrations/exporters/mastra-storage",
-      "destination": "/docs/observability/integrations/exporters/mastra-storage",
+      "destination": "/guides/observability/integrations/exporters/mastra-storage",
       "permanent": true
     },
     {
       "source": "/ecosystem/observability-integrations/exporters/mastra-platform",
-      "destination": "/docs/observability/integrations/exporters/mastra-platform",
-      "permanent": true
-    },
-    {
-      "source": "/docs/browser/stagehand",
-      "destination": "/ecosystem/browser-integrations/stagehand",
-      "permanent": true
-    },
-    {
-      "source": "/docs/browser/firecrawl",
-      "destination": "/ecosystem/browser-integrations/firecrawl",
+      "destination": "/guides/observability/integrations/exporters/mastra-platform",
       "permanent": true
     },
     {
@@ -1312,32 +1427,32 @@
     },
     {
       "source": "/ecosystem/observability-integrations/processors/sensitive-data-filter",
-      "destination": "/docs/observability/integrations/processors/sensitive-data-filter",
+      "destination": "/guides/observability/integrations/processors/sensitive-data-filter",
       "permanent": true
     },
     {
       "source": "/ecosystem/deployment-targets/mastra-workers",
-      "destination": "/docs/deployment/mastra-workers",
+      "destination": "/guides/deployment/mastra-workers",
       "permanent": true
     },
     {
       "source": "/docs/agents/channels/llms.txt",
-      "destination": "/docs/capabilities/channels/overview/llms.txt",
+      "destination": "/guides/capabilities/channels/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/voice/livekit/llms.txt",
-      "destination": "/docs/voice/realtime-voice/llms.txt",
+      "destination": "/guides/voice/realtime-voice/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud/llms.txt",
-      "destination": "/docs/observability/integrations/exporters/mastra-platform/llms.txt",
+      "destination": "/guides/observability/integrations/exporters/mastra-platform/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/exporters/default/llms.txt",
-      "destination": "/docs/observability/integrations/exporters/mastra-storage/llms.txt",
+      "destination": "/guides/observability/integrations/exporters/mastra-storage/llms.txt",
       "permanent": true
     },
     {
@@ -1387,52 +1502,52 @@
     },
     {
       "source": "/docs/getting-started/installation/llms.txt",
-      "destination": "/docs/getting-started/quickstart/llms.txt",
+      "destination": "/guides/getting-started/quickstart/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/logging/llms.txt",
-      "destination": "/docs/observability/logging/llms.txt",
+      "destination": "/guides/observability/logging/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/adding-voice/llms.txt",
-      "destination": "/docs/voice/overview/llms.txt",
+      "destination": "/guides/voice/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/background-tasks/llms.txt",
-      "destination": "/docs/long-running-agents/background-tasks/llms.txt",
+      "destination": "/guides/long-running-agents/background-tasks/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/durable-agents/llms.txt",
-      "destination": "/docs/long-running-agents/durable-agents/llms.txt",
+      "destination": "/guides/long-running-agents/durable-agents/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/goals/llms.txt",
-      "destination": "/docs/long-running-agents/goals/llms.txt",
+      "destination": "/guides/long-running-agents/goals/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/heartbeats/llms.txt",
-      "destination": "/docs/long-running-agents/schedules/llms.txt",
+      "destination": "/guides/long-running-agents/schedules/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/long-running-agents/heartbeats/llms.txt",
-      "destination": "/docs/long-running-agents/schedules/llms.txt",
+      "destination": "/guides/long-running-agents/schedules/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/signal-providers/llms.txt",
-      "destination": "/docs/long-running-agents/signal-providers/llms.txt",
+      "destination": "/guides/long-running-agents/signal-providers/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/signals/llms.txt",
-      "destination": "/docs/long-running-agents/signals/llms.txt",
+      "destination": "/guides/long-running-agents/signals/llms.txt",
       "permanent": true
     },
     {
@@ -1482,12 +1597,12 @@
     },
     {
       "source": "/guides/guide/manual-install/llms.txt",
-      "destination": "/docs/getting-started/manual-install/llms.txt",
+      "destination": "/guides/getting-started/manual-install/llms.txt",
       "permanent": true
     },
     {
       "source": "/guides/getting-started/manual-install/llms.txt",
-      "destination": "/docs/getting-started/manual-install/llms.txt",
+      "destination": "/guides/getting-started/manual-install/llms.txt",
       "permanent": true
     },
     {
@@ -1497,12 +1612,12 @@
     },
     {
       "source": "/guides/quickstarts/standalone-server/llms.txt",
-      "destination": "/docs/getting-started/quickstart/llms.txt",
+      "destination": "/guides/getting-started/quickstart/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/getting-started/quickstart/llms.txt",
-      "destination": "/docs/getting-started/quickstart/llms.txt",
+      "destination": "/guides/getting-started/quickstart/llms.txt",
       "permanent": true
     },
     {
@@ -1512,7 +1627,7 @@
     },
     {
       "source": "/docs/agents/human-in-the-loop-with-tools/llms.txt",
-      "destination": "/docs/agents/agent-approval/llms.txt",
+      "destination": "/guides/agents/agent-approval/llms.txt",
       "permanent": true
     },
     {
@@ -1537,42 +1652,42 @@
     },
     {
       "source": "/docs/server-db/storage/llms.txt",
-      "destination": "/docs/storage/overview/llms.txt",
+      "destination": "/guides/storage/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/server-db/mastra-server/llms.txt",
-      "destination": "/docs/server/mastra-server/llms.txt",
+      "destination": "/guides/server/mastra-server/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/server-db/server-adapters/llms.txt",
-      "destination": "/docs/server/server-adapters/llms.txt",
+      "destination": "/guides/server/server-adapters/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/server-db/custom-adapters/llms.txt",
-      "destination": "/docs/server/custom-adapters/llms.txt",
+      "destination": "/guides/server/custom-adapters/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/server-db/middleware/llms.txt",
-      "destination": "/docs/server/middleware/llms.txt",
+      "destination": "/guides/server/middleware/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/server-db/request-context/llms.txt",
-      "destination": "/docs/server/request-context/llms.txt",
+      "destination": "/guides/server/request-context/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/server-db/custom-api-routes/llms.txt",
-      "destination": "/docs/server/custom-api-routes/llms.txt",
+      "destination": "/guides/server/custom-api-routes/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/server-db/mastra-client/llms.txt",
-      "destination": "/docs/server/mastra-client/llms.txt",
+      "destination": "/guides/server/mastra-client/llms.txt",
       "permanent": true
     },
     {
@@ -1582,12 +1697,12 @@
     },
     {
       "source": "/docs/auth/index/llms.txt",
-      "destination": "/docs/server/auth/index/llms.txt",
+      "destination": "/guides/server/auth/index/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/auth/jwt/llms.txt",
-      "destination": "/docs/server/auth/jwt/llms.txt",
+      "destination": "/guides/server/auth/jwt/llms.txt",
       "permanent": true
     },
     {
@@ -1672,7 +1787,7 @@
     },
     {
       "source": "/docs/deployment/building-mastra/llms.txt",
-      "destination": "/docs/deployment/mastra-server/llms.txt",
+      "destination": "/guides/deployment/mastra-server/llms.txt",
       "permanent": true
     },
     {
@@ -1682,7 +1797,7 @@
     },
     {
       "source": "/docs/memory/storage/overview/llms.txt",
-      "destination": "/docs/storage/overview/llms.txt",
+      "destination": "/guides/storage/overview/llms.txt",
       "permanent": true
     },
     {
@@ -1707,12 +1822,12 @@
     },
     {
       "source": "/docs/memory/threads-and-resources/llms.txt",
-      "destination": "/docs/storage/overview/llms.txt",
+      "destination": "/guides/storage/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/memory/conversation-history/llms.txt",
-      "destination": "/docs/memory/message-history/llms.txt",
+      "destination": "/guides/memory/message-history/llms.txt",
       "permanent": true
     },
     {
@@ -1727,7 +1842,7 @@
     },
     {
       "source": "/guides/deployment/llms.txt",
-      "destination": "/docs/deployment/cloud-providers/llms.txt",
+      "destination": "/guides/deployment/cloud-providers/llms.txt",
       "permanent": true
     },
     {
@@ -1737,12 +1852,12 @@
     },
     {
       "source": "/reference/workflows/workflow-methods/sendEvent/llms.txt",
-      "destination": "/docs/workflows/suspend-and-resume/llms.txt",
+      "destination": "/guides/workflows/suspend-and-resume/llms.txt",
       "permanent": true
     },
     {
       "source": "/reference/workflows/workflow-methods/waitForEvent/llms.txt",
-      "destination": "/docs/workflows/suspend-and-resume/llms.txt",
+      "destination": "/guides/workflows/suspend-and-resume/llms.txt",
       "permanent": true
     },
     {
@@ -1752,12 +1867,12 @@
     },
     {
       "source": "/docs/scorers/overview/llms.txt",
-      "destination": "/docs/evals/overview/llms.txt",
+      "destination": "/guides/evals/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/getting-started/mcp-docs-server/llms.txt",
-      "destination": "/docs/getting-started/build-with-ai/llms.txt",
+      "destination": "/guides/getting-started/build-with-ai/llms.txt",
       "permanent": true
     },
     {
@@ -1772,22 +1887,22 @@
     },
     {
       "source": "/docs/tools-mcp/advanced-usage/llms.txt",
-      "destination": "/docs/agents/using-tools/llms.txt",
+      "destination": "/guides/agents/using-tools/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/tools-mcp/mcp-overview/llms.txt",
-      "destination": "/docs/mcp/overview/llms.txt",
+      "destination": "/guides/mcp/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/tools-mcp/overview/llms.txt",
-      "destination": "/docs/agents/using-tools/llms.txt",
+      "destination": "/guides/agents/using-tools/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/workflows/input-data-mapping/llms.txt",
-      "destination": "/docs/workflows/control-flow/llms.txt",
+      "destination": "/guides/workflows/control-flow/llms.txt",
       "permanent": true
     },
     {
@@ -1802,22 +1917,22 @@
     },
     {
       "source": "/docs/agents/network-approval/llms.txt",
-      "destination": "/docs/agents/networks/llms.txt",
+      "destination": "/guides/agents/networks/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/agent-memory/llms.txt",
-      "destination": "/docs/memory/overview/llms.txt",
+      "destination": "/guides/memory/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/getting-started/studio/llms.txt",
-      "destination": "/docs/studio/overview/llms.txt",
+      "destination": "/guides/studio/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/deployment/studio/llms.txt",
-      "destination": "/docs/studio/deployment/llms.txt",
+      "destination": "/guides/studio/deployment/llms.txt",
       "permanent": true
     },
     {
@@ -1827,12 +1942,12 @@
     },
     {
       "source": "/docs/observability/datasets/overview/llms.txt",
-      "destination": "/docs/evals/datasets/overview/llms.txt",
+      "destination": "/guides/evals/datasets/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/observability/datasets/running-experiments/llms.txt",
-      "destination": "/docs/evals/datasets/running-experiments/llms.txt",
+      "destination": "/guides/evals/datasets/running-experiments/llms.txt",
       "permanent": true
     },
     {
@@ -1867,82 +1982,82 @@
     },
     {
       "source": "/docs/mcp/publishing-mcp-server/llms.txt",
-      "destination": "/docs/guide/publishing-mcp-server/llms.txt",
+      "destination": "/guides/guide/publishing-mcp-server/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/response-caching/llms.txt",
-      "destination": "/docs/agents/processors/llms.txt",
+      "destination": "/guides/agents/processors/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/build-with-ai/skills/llms.txt",
-      "destination": "/docs/getting-started/build-with-ai/llms.txt",
+      "destination": "/guides/getting-started/build-with-ai/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/build-with-ai/mcp-docs-server/llms.txt",
-      "destination": "/docs/getting-started/build-with-ai/llms.txt",
+      "destination": "/guides/getting-started/build-with-ai/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/streaming/llms.txt",
-      "destination": "/docs/concepts/streaming/llms.txt",
+      "destination": "/guides/concepts/streaming/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/streaming/overview/llms.txt",
-      "destination": "/docs/concepts/streaming/llms.txt",
+      "destination": "/guides/concepts/streaming/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/streaming/events/llms.txt",
-      "destination": "/docs/concepts/streaming/llms.txt",
+      "destination": "/guides/concepts/streaming/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/streaming/tool-streaming/llms.txt",
-      "destination": "/docs/agents/using-tools/llms.txt",
+      "destination": "/guides/agents/using-tools/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/streaming/workflow-streaming/llms.txt",
-      "destination": "/docs/workflows/overview/llms.txt",
+      "destination": "/guides/workflows/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/streaming/background-task-streaming/llms.txt",
-      "destination": "/docs/long-running-agents/background-tasks/llms.txt",
+      "destination": "/guides/long-running-agents/background-tasks/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/harness/modes/llms.txt",
-      "destination": "/docs/agent-controller/modes/llms.txt",
+      "destination": "/guides/agent-controller/modes/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/harness/overview/llms.txt",
-      "destination": "/docs/agent-controller/overview/llms.txt",
+      "destination": "/guides/agent-controller/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/harness/session/llms.txt",
-      "destination": "/docs/agent-controller/session/llms.txt",
+      "destination": "/guides/agent-controller/session/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/harness/subagents/llms.txt",
-      "destination": "/docs/agent-controller/subagents/llms.txt",
+      "destination": "/guides/agent-controller/subagents/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/harness/threads-and-state/llms.txt",
-      "destination": "/docs/agent-controller/threads-and-state/llms.txt",
+      "destination": "/guides/agent-controller/threads-and-state/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/harness/tool-approvals/llms.txt",
-      "destination": "/docs/agent-controller/tool-approvals/llms.txt",
+      "destination": "/guides/agent-controller/tool-approvals/llms.txt",
       "permanent": true
     },
     {
@@ -1977,7 +2092,7 @@
     },
     {
       "source": "/docs/tools/overview/llms.txt",
-      "destination": "/docs/agents/using-tools/llms.txt",
+      "destination": "/guides/agents/using-tools/llms.txt",
       "permanent": true
     },
     {
@@ -1992,17 +2107,17 @@
     },
     {
       "source": "/docs/memory/storage/llms.txt",
-      "destination": "/docs/storage/overview/llms.txt",
+      "destination": "/guides/storage/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/file-based-agents/llms.txt",
-      "destination": "/docs/getting-started/file-based-agents/llms.txt",
+      "destination": "/guides/getting-started/file-based-agents/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/input-processors/llms.txt",
-      "destination": "/docs/agents/processors/llms.txt",
+      "destination": "/guides/agents/processors/llms.txt",
       "permanent": true
     },
     {
@@ -2022,12 +2137,12 @@
     },
     {
       "source": "/docs/workflows/using-with-agents-and-tools/llms.txt",
-      "destination": "/docs/workflows/agents-and-tools/llms.txt",
+      "destination": "/guides/workflows/agents-and-tools/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/workflows/using-agents-and-tools/llms.txt",
-      "destination": "/docs/workflows/agents-and-tools/llms.txt",
+      "destination": "/guides/workflows/agents-and-tools/llms.txt",
       "permanent": true
     },
     {
@@ -2037,62 +2152,197 @@
     },
     {
       "source": "/docs/workflows/agents/llms.txt",
-      "destination": "/docs/workflows/agents-and-tools/llms.txt",
+      "destination": "/guides/workflows/agents-and-tools/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/workflows/flow-control/llms.txt",
-      "destination": "/docs/workflows/control-flow/llms.txt",
+      "destination": "/guides/workflows/control-flow/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/evals/running-evals/llms.txt",
-      "destination": "/docs/evals/overview/llms.txt",
+      "destination": "/guides/evals/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/scorers/custom-scorers/llms.txt",
-      "destination": "/docs/evals/custom-scorers/llms.txt",
+      "destination": "/guides/evals/custom-scorers/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/scorers/creating-custom-scorers/llms.txt",
-      "destination": "/docs/evals/custom-scorers/llms.txt",
+      "destination": "/guides/evals/custom-scorers/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/frameworks/agents/llms.txt",
-      "destination": "/docs/agents/overview/llms.txt",
+      "destination": "/guides/agents/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/guide/tools/llms.txt",
-      "destination": "/docs/agents/using-tools/llms.txt",
+      "destination": "/guides/agents/using-tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/stagehand/llms.txt",
+      "destination": "/ecosystem/browser-integrations/stagehand/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/browser/firecrawl/llms.txt",
+      "destination": "/ecosystem/browser-integrations/firecrawl/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/browser/:path*/llms.txt",
-      "destination": "/ecosystem/browser/:path*/llms.txt",
+      "destination": "/guides/browser/:path*/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/workspace/:path*/llms.txt",
-      "destination": "/ecosystem/workspace/:path*/llms.txt",
+      "destination": "/guides/workspace/:path*/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/server/auth/llms.txt",
-      "destination": "/ecosystem/auth-providers/llms.txt",
+      "destination": "/guides/server/auth/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/server/auth/:path*/llms.txt",
-      "destination": "/ecosystem/auth-providers/:path*/llms.txt",
+      "destination": "/guides/server/auth/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/mastra-storage/llms.txt",
+      "destination": "/guides/observability/integrations/exporters/mastra-storage/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/exporters/mastra-platform/llms.txt",
+      "destination": "/guides/observability/integrations/exporters/mastra-platform/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/integrations/processors/sensitive-data-filter/llms.txt",
+      "destination": "/guides/observability/integrations/processors/sensitive-data-filter/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/observability/integrations/:path*/llms.txt",
       "destination": "/ecosystem/observability-integrations/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/:path*/llms.txt",
+      "destination": "/guides/agents/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/:path*/llms.txt",
+      "destination": "/guides/workflows/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/:path*/llms.txt",
+      "destination": "/guides/memory/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/studio/:path*/llms.txt",
+      "destination": "/guides/studio/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-builder/:path*/llms.txt",
+      "destination": "/guides/agent-builder/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/editor/:path*/llms.txt",
+      "destination": "/guides/editor/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/capabilities/:path*/llms.txt",
+      "destination": "/guides/capabilities/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/rag/:path*/llms.txt",
+      "destination": "/guides/rag/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/voice/:path*/llms.txt",
+      "destination": "/guides/voice/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/:path*/llms.txt",
+      "destination": "/guides/long-running-agents/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agent-controller/:path*/llms.txt",
+      "destination": "/guides/agent-controller/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/server/:path*/llms.txt",
+      "destination": "/guides/server/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/:path*/llms.txt",
+      "destination": "/guides/observability/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/:path*/llms.txt",
+      "destination": "/guides/evals/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/deployment/:path*/llms.txt",
+      "destination": "/guides/deployment/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mcp/:path*/llms.txt",
+      "destination": "/guides/mcp/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/storage/:path*/llms.txt",
+      "destination": "/guides/storage/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/:path*/llms.txt",
+      "destination": "/guides/getting-started/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/concepts/:path*/llms.txt",
+      "destination": "/guides/concepts/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guide/:path*/llms.txt",
+      "destination": "/guides/guide/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/migrations/:path*/llms.txt",
+      "destination": "/guides/migrations/:path*/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/what-is-mastra/llms.txt",
+      "destination": "/guides/what-is-mastra/llms.txt",
       "permanent": true
     },
     {
@@ -2156,108 +2406,88 @@
       "permanent": true
     },
     {
-      "source": "/guides/llms.txt",
-      "destination": "/docs/llms.txt",
-      "permanent": true
-    },
-    {
-      "source": "/guides/:path*/llms.txt",
-      "destination": "/docs/:path*/llms.txt",
-      "permanent": true
-    },
-    {
       "source": "/docs/deployment/cloud-providers/llms.txt",
-      "destination": "/docs/deployment/cloud-providers/llms.txt",
+      "destination": "/guides/deployment/cloud-providers/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/deployment/sandbox/llms.txt",
-      "destination": "/docs/deployment/sandbox/llms.txt",
+      "destination": "/guides/deployment/sandbox/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/deployment/web-framework/llms.txt",
-      "destination": "/docs/deployment/web-framework/llms.txt",
+      "destination": "/guides/deployment/web-framework/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/deployment/workflow-runners/llms.txt",
-      "destination": "/docs/deployment/workflow-runners/llms.txt",
+      "destination": "/guides/deployment/workflow-runners/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/deployment/workers/llms.txt",
-      "destination": "/docs/deployment/workers/llms.txt",
+      "destination": "/guides/deployment/workers/llms.txt",
       "permanent": true
     },
     {
       "source": "/ecosystem/deployment-patterns/:path*/llms.txt",
-      "destination": "/docs/deployment/:path*/llms.txt",
+      "destination": "/guides/deployment/:path*/llms.txt",
       "permanent": true
     },
     {
       "source": "/ecosystem/browser/:path*/llms.txt",
-      "destination": "/docs/browser/:path*/llms.txt",
+      "destination": "/guides/browser/:path*/llms.txt",
       "permanent": true
     },
     {
       "source": "/ecosystem/workspace/:path*/llms.txt",
-      "destination": "/docs/workspace/:path*/llms.txt",
+      "destination": "/guides/workspace/:path*/llms.txt",
       "permanent": true
     },
     {
       "source": "/ecosystem/auth-providers/index/llms.txt",
-      "destination": "/docs/server/auth/index/llms.txt",
+      "destination": "/guides/server/auth/index/llms.txt",
       "permanent": true
     },
     {
       "source": "/ecosystem/auth-providers/composite-auth/llms.txt",
-      "destination": "/docs/server/auth/composite-auth/llms.txt",
+      "destination": "/guides/server/auth/composite-auth/llms.txt",
       "permanent": true
     },
     {
       "source": "/ecosystem/auth-providers/custom-auth-provider/llms.txt",
-      "destination": "/docs/server/auth/custom-auth-provider/llms.txt",
+      "destination": "/guides/server/auth/custom-auth-provider/llms.txt",
       "permanent": true
     },
     {
       "source": "/ecosystem/auth-providers/fga/llms.txt",
-      "destination": "/docs/server/auth/fga/llms.txt",
+      "destination": "/guides/server/auth/fga/llms.txt",
       "permanent": true
     },
     {
       "source": "/ecosystem/auth-providers/jwt/llms.txt",
-      "destination": "/docs/server/auth/jwt/llms.txt",
+      "destination": "/guides/server/auth/jwt/llms.txt",
       "permanent": true
     },
     {
       "source": "/ecosystem/auth-providers/simple-auth/llms.txt",
-      "destination": "/docs/server/auth/simple-auth/llms.txt",
+      "destination": "/guides/server/auth/simple-auth/llms.txt",
       "permanent": true
     },
     {
       "source": "/ecosystem/auth-providers/workers/llms.txt",
-      "destination": "/docs/server/auth/workers/llms.txt",
+      "destination": "/guides/server/auth/workers/llms.txt",
       "permanent": true
     },
     {
       "source": "/ecosystem/observability-integrations/exporters/mastra-storage/llms.txt",
-      "destination": "/docs/observability/integrations/exporters/mastra-storage/llms.txt",
+      "destination": "/guides/observability/integrations/exporters/mastra-storage/llms.txt",
       "permanent": true
     },
     {
       "source": "/ecosystem/observability-integrations/exporters/mastra-platform/llms.txt",
-      "destination": "/docs/observability/integrations/exporters/mastra-platform/llms.txt",
-      "permanent": true
-    },
-    {
-      "source": "/docs/browser/stagehand/llms.txt",
-      "destination": "/ecosystem/browser-integrations/stagehand/llms.txt",
-      "permanent": true
-    },
-    {
-      "source": "/docs/browser/firecrawl/llms.txt",
-      "destination": "/ecosystem/browser-integrations/firecrawl/llms.txt",
+      "destination": "/guides/observability/integrations/exporters/mastra-platform/llms.txt",
       "permanent": true
     },
     {
@@ -2352,12 +2582,12 @@
     },
     {
       "source": "/ecosystem/observability-integrations/processors/sensitive-data-filter/llms.txt",
-      "destination": "/docs/observability/integrations/processors/sensitive-data-filter/llms.txt",
+      "destination": "/guides/observability/integrations/processors/sensitive-data-filter/llms.txt",
       "permanent": true
     },
     {
       "source": "/ecosystem/deployment-targets/mastra-workers/llms.txt",
-      "destination": "/docs/deployment/mastra-workers/llms.txt",
+      "destination": "/guides/deployment/mastra-workers/llms.txt",
       "permanent": true
     }
   ]

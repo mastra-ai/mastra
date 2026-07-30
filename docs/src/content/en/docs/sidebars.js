@@ -7,6 +7,7 @@
 /** @type {import('@docusaurus/plugin-content-docs').SidebarsConfig} */
 const sidebars = {
   docsSidebar: [
+    { type: 'doc', id: 'index', label: 'Get Started' },
     {
       type: 'category',
       label: 'Build',
@@ -16,7 +17,6 @@ const sidebars = {
         displayAsGroup: true,
       },
       items: [
-        { type: 'doc', id: 'index', label: 'Get Started' },
         { type: 'doc', id: 'agents', label: 'Agents' },
         { type: 'doc', id: 'workflows', label: 'Workflows' },
         { type: 'doc', id: 'harness', label: 'Harness' },

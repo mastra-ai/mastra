@@ -14,6 +14,7 @@ interface RouteMapping {
 
 const ROUTE_MAPPINGS: RouteMapping[] = [
   { routePrefix: '/docs', sourceDir: 'src/content/en/docs' },
+  { routePrefix: '/guides', sourceDir: 'src/content/en/guides' },
   { routePrefix: '/reference', sourceDir: 'src/content/en/reference' },
   { routePrefix: '/models', sourceDir: 'src/content/en/models' },
 ]
@@ -21,7 +22,7 @@ const ROUTE_MAPPINGS: RouteMapping[] = [
 /**
  * Resolve a route to its source MDX file path
  *
- * @param route - The route from the build (e.g., "/docs/agents/overview")
+ * @param route - The route from the build (e.g., "/guides/agents/overview")
  * @param siteDir - The docusaurus site directory
  * @returns The absolute path to the source MDX file, or null if not found
  */
@@ -54,7 +55,7 @@ export async function resolveSourceFile(route: string, siteDir: string): Promise
 /**
  * Extract the category from a route
  *
- * @param route - The route (e.g., "/docs/agents/overview")
+ * @param route - The route (e.g., "/guides/agents/overview")
  * @returns The category (e.g., "docs")
  */
 export function getCategoryFromRoute(route: string): string {
@@ -65,7 +66,7 @@ export function getCategoryFromRoute(route: string): string {
 /**
  * Extract the folder path from a route (path within the category)
  *
- * @param route - The route (e.g., "/docs/agents/overview")
+ * @param route - The route (e.g., "/guides/agents/overview")
  * @returns The folder path (e.g., "agents/overview")
  */
 export function getFolderPathFromRoute(route: string): string {

@@ -7,13 +7,13 @@ packages:
 
 # Scorers
 
-A file-based agent discovers [scorers](/docs/evals/overview) from its `scorers/` directory. Use this page for the file-based convention; use the scorers guide for built-in scorers, custom scorers, and sampling.
+A file-based agent discovers [scorers](/guides/evals/overview) from its `scorers/` directory. Use this page for the file-based convention; use the scorers guide for built-in scorers, custom scorers, and sampling.
 
 Each file under `scorers/` default-exports one scorer, and the filename becomes its key. The default export is either a [`MastraScorer`](/reference/evals/create-scorer) or a `{ scorer, sampling }` entry.
 
 ## Quickstart
 
-Add a scorer by placing a file under the agent's `scorers/` directory. This example uses a [custom scorer](/docs/evals/custom-scorers):
+Add a scorer by placing a file under the agent's `scorers/` directory. This example uses a [custom scorer](/guides/evals/custom-scorers):
 
 ```typescript title="src/mastra/agents/weather/scorers/relevance.ts"
 import { createScorer } from '@mastra/core/evals'

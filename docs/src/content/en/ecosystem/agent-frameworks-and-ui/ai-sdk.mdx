@@ -9,7 +9,7 @@ packages:
 
 # AI SDK
 
-If you're already using the [Vercel AI SDK](https://sdk.vercel.ai) directly and want to add Mastra capabilities like [processors](/docs/agents/processors) or [memory](/docs/memory/memory-processors) without switching to the full Mastra agent API, [`withMastra()`](/reference/ai-sdk/with-mastra) lets you wrap any AI SDK model with these features. This is useful when you want to keep your existing AI SDK code but add input/output processing, conversation persistence, or content filtering.
+If you're already using the [Vercel AI SDK](https://sdk.vercel.ai) directly and want to add Mastra capabilities like [processors](/guides/agents/processors) or [memory](/guides/memory/memory-processors) without switching to the full Mastra agent API, [`withMastra()`](/reference/ai-sdk/with-mastra) lets you wrap any AI SDK model with these features. This is useful when you want to keep your existing AI SDK code but add input/output processing, conversation persistence, or content filtering.
 
 :::tip
 
@@ -128,6 +128,6 @@ const { text } = await generateText({
 ## Related
 
 - [`withMastra()`](/reference/ai-sdk/with-mastra): API reference for `withMastra()`
-- [Processors](/docs/agents/processors): Learn about input and output processors
-- [Memory](/docs/memory/overview): Overview of Mastra's memory system
+- [Processors](/guides/agents/processors): Learn about input and output processors
+- [Memory](/guides/memory/overview): Overview of Mastra's memory system
 - [AI SDK UI](/ecosystem/agent-frameworks-and-ui/ai-sdk-ui): Using AI SDK UI hooks with Mastra agents, workflows, and networks

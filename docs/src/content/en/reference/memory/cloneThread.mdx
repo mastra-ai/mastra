@@ -263,7 +263,7 @@ When working memory is enabled, `cloneThread()` copies or shares working memory 
 
 ## Observational Memory
 
-When [Observational Memory](/docs/memory/observational-memory) is enabled, `cloneThread()` automatically clones the OM records associated with the source thread. The behavior depends on the OM scope:
+When [Observational Memory](/guides/memory/observational-memory) is enabled, `cloneThread()` automatically clones the OM records associated with the source thread. The behavior depends on the OM scope:
 
 - **Thread-scoped OM**: The OM record is cloned to the new thread. All internal message ID references are remapped to point to the cloned messages.
 - **Resource-scoped OM (same `resourceId`)**: The OM record is shared between the source and cloned threads since they belong to the same resource. No duplication occurs.

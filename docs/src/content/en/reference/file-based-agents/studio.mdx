@@ -8,9 +8,9 @@ packages:
 
 # Studio
 
-Mastra configures [Studio](/docs/studio/overview) from a `studio.ts` file directly under `src/mastra/`. The file default-exports a `StudioConfig` object for Studio authentication and authorization: who can access Studio, and what authenticated users can do.
+Mastra configures [Studio](/guides/studio/overview) from a `studio.ts` file directly under `src/mastra/`. The file default-exports a `StudioConfig` object for Studio authentication and authorization: who can access Studio, and what authenticated users can do.
 
-Use this page for the file-based convention. For auth providers, role-based access control (RBAC), and fine-grained authorization (FGA), see [Studio auth](/docs/studio/auth).
+Use this page for the file-based convention. For auth providers, role-based access control (RBAC), and fine-grained authorization (FGA), see [Studio auth](/guides/studio/auth).
 
 ## Quickstart
 
@@ -35,7 +35,7 @@ export default {
 } satisfies StudioConfig
 ```
 
-The auth provider handles who the user is. For what the user can do after sign-in, add RBAC or FGA in the same config. See [Studio auth](/docs/studio/auth) for full examples.
+The auth provider handles who the user is. For what the user can do after sign-in, add RBAC or FGA in the same config. See [Studio auth](/guides/studio/auth) for full examples.
 
 ## Precedence with code
 

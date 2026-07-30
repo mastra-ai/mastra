@@ -11,12 +11,12 @@ The Convex storage implementation provides a serverless storage solution using [
 
 :::warning[Observability Not Supported]
 
-Convex storage **doesn't support the observability domain**. Traces from the `MastraStorageExporter` can't be persisted to Convex, and [Studio's](/docs/studio/overview) observability features won't work with Convex as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse.
+Convex storage **doesn't support the observability domain**. Traces from the `MastraStorageExporter` can't be persisted to Convex, and [Studio's](/guides/studio/overview) observability features won't work with Convex as your only storage provider. To enable observability, use [composite storage](/reference/storage/composite#specialized-storage-for-observability) to route observability data to a supported provider like ClickHouse.
 
 :::
 
 :::warning[Record Size Limit]
-Convex enforces a **1 MiB maximum record size**. This limit can be exceeded when storing messages with base64-encoded attachments such as images. See [Handling large attachments](/docs/memory/memory-processors#handling-large-attachments) for workarounds including uploading attachments to external storage like S3, Cloudflare R2, or [Convex file storage](https://docs.convex.dev/file-storage).
+Convex enforces a **1 MiB maximum record size**. This limit can be exceeded when storing messages with base64-encoded attachments such as images. See [Handling large attachments](/guides/memory/memory-processors#handling-large-attachments) for workarounds including uploading attachments to external storage like S3, Cloudflare R2, or [Convex file storage](https://docs.convex.dev/file-storage).
 :::
 
 ## Installation
@@ -253,7 +253,7 @@ The storage implementation uses typed Convex tables for each Mastra domain:
 
 ### Observational memory
 
-`ConvexStore` supports [observational memory](/docs/memory/observational-memory). Add `mastraObservationalMemoryTable` to your Convex schema and redeploy with `npx convex deploy` to enable it. Existing deployments created before this table was added need the same schema update.
+`ConvexStore` supports [observational memory](/guides/memory/observational-memory). Add `mastraObservationalMemoryTable` to your Convex schema and redeploy with `npx convex deploy` to enable it. Existing deployments created before this table was added need the same schema update.
 
 ### Architecture
 

@@ -7,7 +7,7 @@ packages:
 
 # DurableAgent
 
-`DurableAgent` wraps an existing [`Agent`](/reference/agents/agent) with durable execution and resumable streams. It runs the agentic loop so that a client can disconnect and reconnect without missing events, and it streams those events over [PubSub](/docs/server/pubsub). Use it when a run must outlive a single request or survive a dropped connection.
+`DurableAgent` wraps an existing [`Agent`](/reference/agents/agent) with durable execution and resumable streams. It runs the agentic loop so that a client can disconnect and reconnect without missing events, and it streams those events over [PubSub](/guides/server/pubsub). Use it when a run must outlive a single request or survive a dropped connection.
 
 Create one with the [`createDurableAgent`](#createdurableagentoptions) factory, or use [`createEventedAgent`](#createeventedagentoptions) for fire-and-forget execution on the built-in workflow engine. For Inngest-powered execution, use [`createInngestAgent`](/reference/agents/inngest-agent) from `@mastra/inngest`.
 
@@ -676,5 +676,5 @@ interface DurableAgentStreamResult<OUTPUT = undefined> {
 
 - [`createInngestAgent()`](/reference/agents/inngest-agent)
 - [Agent class](/reference/agents/agent)
-- [PubSub](/docs/server/pubsub)
+- [PubSub](/guides/server/pubsub)
 - [`.getMemory()`](/reference/agents/getMemory)

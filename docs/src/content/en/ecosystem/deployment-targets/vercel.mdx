@@ -13,12 +13,12 @@ import StepItem from "@site/src/components/StepItem";
 Use `@mastra/deployer-vercel` to deploy your Mastra server as serverless functions on Vercel. The deployer bundles your code and generates a `.vercel/output` directory conforming to Vercel's [Build Output API](https://vercel.com/docs/build-output-api/v3), ready to deploy with no additional configuration.
 
 :::info
-This guide covers deploying the [Mastra server](/docs/server/mastra-server). If you're using a [server adapter](/docs/server/server-adapters) or [web framework](/docs/deployment/web-framework), deploy the way you normally would for that framework.
+This guide covers deploying the [Mastra server](/guides/server/mastra-server). If you're using a [server adapter](/guides/server/server-adapters) or [web framework](/guides/deployment/web-framework), deploy the way you normally would for that framework.
 :::
 
 ## Before you begin
 
-You'll need a [Mastra application](/docs/getting-started/quickstart) and a [Vercel](https://vercel.com/) account.
+You'll need a [Mastra application](/guides/getting-started/quickstart) and a [Vercel](https://vercel.com/) account.
 
 :::warning
 Vercel Functions use an ephemeral filesystem, so any storage you configure (including observability storage) must be hosted externally. If you're using [LibSQLStore](/reference/storage/libsql) with a file URL, switch to a remotely hosted database.
@@ -74,14 +74,14 @@ export const mastra = new Mastra({
     You can now call your Mastra endpoints over HTTP.
 
     :::warning
-    Set up [authentication](/docs/server/auth) before exposing your endpoints publicly.
+    Set up [authentication](/guides/server/auth) before exposing your endpoints publicly.
     :::
   </StepItem>
 </Steps>
 
 ## Studio
 
-You can deploy [Studio](/docs/studio/overview) alongside your API by enabling the `studio` option. Studio is deployed as static assets served from Vercel's Edge CDN, so it doesn't consume function invocations.
+You can deploy [Studio](/guides/studio/overview) alongside your API by enabling the `studio` option. Studio is deployed as static assets served from Vercel's Edge CDN, so it doesn't consume function invocations.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -131,6 +131,6 @@ The Vercel deployer doesn't include `flush` calls. If you need this, you'll need
 ## Related
 
 - [VercelDeployer reference](/reference/deployer/vercel)
-- [Deployment overview](/docs/deployment/overview)
-- [Server adapters](/docs/server/server-adapters)
-- [Web framework integration](/docs/deployment/web-framework)
+- [Deployment overview](/guides/deployment/overview)
+- [Server adapters](/guides/server/server-adapters)
+- [Web framework integration](/guides/deployment/web-framework)

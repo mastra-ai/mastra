@@ -7,7 +7,7 @@ packages:
 
 # Firecrawl
 
-The `@mastra/browser-firecrawl` package provides browser automation using the [Firecrawl Browser Sandbox](https://docs.firecrawl.dev/features/browser). It provisions remote browser sessions through the Firecrawl API and drives them with the same deterministic, accessibility-first tools as [AgentBrowser](/docs/browser/agent-browser).
+The `@mastra/browser-firecrawl` package provides browser automation using the [Firecrawl Browser Sandbox](https://docs.firecrawl.dev/features/browser). It provisions remote browser sessions through the Firecrawl API and drives them with the same deterministic, accessibility-first tools as [AgentBrowser](/guides/browser/agent-browser).
 
 `FirecrawlBrowser` extends `AgentBrowser`, so agents get the same toolset (`browser_goto`, `browser_snapshot`, `browser_click`, and so on) while the browser itself runs in Firecrawl's hosted infrastructure. No local Chromium install is needed.
 
@@ -112,7 +112,7 @@ const browser = new FirecrawlBrowser({
 
 ## Related
 
-- [Browser overview](/docs/browser/overview)
-- [AgentBrowser](/docs/browser/agent-browser)
-- [Browser recording (alpha)](/docs/browser/recording)
+- [Browser overview](/guides/browser/overview)
+- [AgentBrowser](/guides/browser/agent-browser)
+- [Browser recording (alpha)](/guides/browser/recording)
 - [FirecrawlBrowser reference](/reference/browser/firecrawl-browser)

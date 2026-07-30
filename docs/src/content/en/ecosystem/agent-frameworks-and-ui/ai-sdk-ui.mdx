@@ -13,7 +13,7 @@ import TabItem from "@theme/TabItem";
 [AI SDK UI](https://sdk.vercel.ai) is a library of React utilities and components for building AI-powered interfaces. In this guide, you'll learn how to use `@mastra/ai-sdk` to convert Mastra's output to AI SDK-compatible formats, enabling you to use its hooks and components in your frontend.
 
 :::note
-Migrating from AI SDK v4 to v5? See the [migration guide](/docs/migrations/ai-sdk-v4-to-v5).
+Migrating from AI SDK v4 to v5? See the [migration guide](/guides/migrations/ai-sdk-v4-to-v5).
 :::
 
 :::tip
@@ -47,7 +47,7 @@ Once you have your API routes set up, you can use them in the [`useChat()`](#use
 
 ### Mastra's server
 
-Run Mastra as a standalone server and connect your frontend (e.g. using Vite + React) to its API endpoints. You'll be using Mastra's [custom API routes](/docs/server/custom-api-routes) feature for this.
+Run Mastra as a standalone server and connect your frontend (e.g. using Vite + React) to its API endpoints. You'll be using Mastra's [custom API routes](/guides/server/custom-api-routes) feature for this.
 
 :::info
 
@@ -105,7 +105,7 @@ You can use [`chatRoute()`](/reference/ai-sdk/chat-route), [`workflowRoute()`](/
 
     When a workflow step pipes an agent's stream to the workflow writer (e.g., `await response.fullStream.pipeTo(writer)`), the agent's text chunks and tool calls are forwarded to the UI stream in real time, even when the agent runs inside workflow steps.
 
-    See [Workflow Streaming](/docs/workflows/overview#inspecting-workflow-stream-payloads) for more details.
+    See [Workflow Streaming](/guides/workflows/overview#inspecting-workflow-stream-payloads) for more details.
 
     :::
   </TabItem>
@@ -252,7 +252,7 @@ Use [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/u
 
 ## Using Mastra Memory
 
-When your agent has [memory](/docs/memory/overview) configured, Mastra loads conversation history from storage on the server. Send only the new message from the client instead of the full conversation history.
+When your agent has [memory](/guides/memory/overview) configured, Mastra loads conversation history from storage on the server. Send only the new message from the client instead of the full conversation history.
 
 Sending the full history is redundant and can cause message-ordering bugs because client-side timestamps can conflict with the timestamps stored in your database.
 
@@ -280,7 +280,7 @@ const { messages, sendMessage } = useChat({
 
 Set `memory.thread` and `memory.resource` from your app's own state, such as URL params, auth context, or your database.
 
-See [Message history](/docs/memory/message-history) for more on how Mastra memory loads and stores messages.
+See [Message history](/guides/memory/message-history) for more on how Mastra memory loads and stores messages.
 
 [`chatRoute()`](/reference/ai-sdk/chat-route) and [`handleChatStream()`](/reference/ai-sdk/handle-chat-stream) already work with memory. Configure the client to send only the new message and include the thread and resource identifiers.
 
@@ -698,7 +698,7 @@ When using `workflowRoute()` or `handleWorkflowStream()`, Mastra emits `data-wor
   </TabItem>
 </Tabs>
 
-For more details on workflow streaming, see [Workflow Streaming](/docs/workflows/overview#inspecting-workflow-stream-payloads).
+For more details on workflow streaming, see [Workflow Streaming](/guides/workflows/overview#inspecting-workflow-stream-payloads).
 
 ### Rendering network data
 
@@ -803,7 +803,7 @@ When using `networkRoute()` or `handleNetworkStream()`, Mastra emits `data-netwo
   </TabItem>
 </Tabs>
 
-For more details on agent networks, see [Agent Networks](/docs/agents/networks).
+For more details on agent networks, see [Agent Networks](/guides/agents/networks).
 
 ### Custom events
 
@@ -936,7 +936,7 @@ You must `await` the `writer.custom()` call, otherwise you may encounter a `Writ
 
 ### Tool streaming
 
-Tools can also stream data using `context.writer.write()` for lower-level control, or pipe an agent's stream directly to the tool's writer. For more details, see [Tool Streaming](/docs/agents/using-tools#streaming).
+Tools can also stream data using `context.writer.write()` for lower-level control, or pipe an agent's stream directly to the tool's writer. For more details, see [Tool Streaming](/guides/agents/using-tools#streaming).
 
 ### Examples
 
@@ -968,7 +968,7 @@ When loading messages from Mastra's memory to display in a chat UI, use [`toAISd
 
 ### Passing additional data
 
-[`sendMessage()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#send-message) allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as [`RequestContext`](/docs/server/request-context).
+[`sendMessage()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#send-message) allows you to pass additional data from the frontend to Mastra. This data can then be used on the server as [`RequestContext`](/guides/server/request-context).
 
 Here's an example of the frontend code:
 
@@ -1052,7 +1052,7 @@ Implement the backend with either of these examples.
 
     :::info
 
-    You can access this data in your tools via the `requestContext` parameter. See the [Request Context documentation](/docs/server/request-context) for more details.
+    You can access this data in your tools via the `requestContext` parameter. See the [Request Context documentation](/guides/server/request-context) for more details.
 
     :::
   </TabItem>

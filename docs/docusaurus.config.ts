@@ -107,6 +107,18 @@ const config: Config = {
     [
       '@docusaurus/plugin-content-docs',
       {
+        id: 'guides',
+        path: 'src/content/en/guides',
+        routeBasePath: 'guides',
+        sidebarPath: './src/content/en/guides/sidebars.js',
+        editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
+        admonitions: ADMONITIONS_CONFIG,
+        remarkPlugins: [...SHARED_REMARK_PLUGINS],
+      },
+    ],
+    [
+      '@docusaurus/plugin-content-docs',
+      {
         id: 'reference',
         path: 'src/content/en/reference',
         routeBasePath: 'reference',
@@ -135,36 +147,40 @@ const config: Config = {
           {
             label: 'Quickstart',
             description: 'Get up and running with Mastra',
-            link: '/docs/getting-started/quickstart',
+            link: '/guides/getting-started/quickstart',
           },
-          { label: 'Studio', description: 'Test your agents, workflows, and tools', link: '/docs/studio/overview' },
+          { label: 'Studio', description: 'Test your agents, workflows, and tools', link: '/guides/studio/overview' },
           {
             label: 'Agents',
             description: 'Use LLMs and tools to solve open-ended tasks',
-            link: '/docs/agents/overview',
+            link: '/guides/agents/overview',
           },
-          { label: 'Memory', description: 'Manage agent context across conversations', link: '/docs/memory/overview' },
+          {
+            label: 'Memory',
+            description: 'Manage agent context across conversations',
+            link: '/guides/memory/overview',
+          },
           {
             label: 'Workflows',
             description: 'Define and manage complex sequences of tasks',
-            link: '/docs/workflows/overview',
+            link: '/guides/workflows/overview',
           },
           {
             label: 'Streaming',
             description: 'Streaming for real-time agent interactions',
             link: '/docs/streaming/overview',
           },
-          { label: 'MCP', description: 'Connect agents to external tools and resources', link: '/docs/mcp/overview' },
-          { label: 'Evals', description: 'Evaluate agent performance', link: '/docs/evals/overview' },
+          { label: 'MCP', description: 'Connect agents to external tools and resources', link: '/guides/mcp/overview' },
+          { label: 'Evals', description: 'Evaluate agent performance', link: '/guides/evals/overview' },
           {
             label: 'Observability',
             description: 'Monitor and log agent activity',
-            link: '/docs/observability/overview',
+            link: '/guides/observability/overview',
           },
           {
             label: 'Deployment',
             description: 'Deploy your agents, workflows, and tools',
-            link: '/docs/deployment/overview',
+            link: '/guides/deployment/overview',
           },
         ],
       } satisfies AlgoliaPluginOptions,

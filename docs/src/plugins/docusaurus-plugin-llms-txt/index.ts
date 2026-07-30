@@ -55,7 +55,7 @@ export default function pluginLlmsTxt(_context: LoadContext, userOptions: LlmsTx
 
       const results = await mapConcurrent(htmlFiles, CONCURRENCY, async (htmlFile): Promise<RouteEntry | null> => {
         // Get route from file path
-        // e.g., "docs/agents/overview/index.html" -> "/docs/agents/overview"
+        // e.g., "docs/agents/overview/index.html" -> "/guides/agents/overview"
         const dirPath = path.dirname(htmlFile)
         const route = dirPath === '.' ? '/' : '/' + dirPath
 

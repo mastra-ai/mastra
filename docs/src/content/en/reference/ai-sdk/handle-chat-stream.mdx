@@ -9,7 +9,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # handleChatStream()
 
-Framework-agnostic handler for streaming agent chat in AI SDK-compatible format. Use this function directly when you need to handle chat streaming outside Hono or Mastra's own [apiRoutes](/docs/server/custom-api-routes) feature.
+Framework-agnostic handler for streaming agent chat in AI SDK-compatible format. Use this function directly when you need to handle chat streaming outside Hono or Mastra's own [apiRoutes](/guides/server/custom-api-routes) feature.
 
 `handleChatStream()` returns a `ReadableStream` that you can wrap with [`createUIMessageStreamResponse()`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/create-ui-message-stream-response).
 
@@ -83,7 +83,7 @@ export async function POST(req: Request) {
     name: 'agentVersion',
     type: "{ versionId: string } | { status?: 'draft' | 'published' }",
     description:
-      "Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. Requires the [Editor](/docs/editor/overview) to be configured.",
+      "Selects a specific agent version. Pass `{ versionId: '<id>' }` to target an exact version, or `{ status: 'draft' }` / `{ status: 'published' }` to resolve by status. Requires the [Editor](/guides/editor/overview) to be configured.",
     isOptional: true,
   },
   {
