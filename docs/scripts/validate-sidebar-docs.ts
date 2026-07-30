@@ -39,12 +39,6 @@ const SECTIONS: SectionConfig[] = [
     sidebarKey: 'docsSidebar',
   },
   {
-    name: 'guides',
-    contentDir: 'src/content/en/guides',
-    sidebarPath: 'src/content/en/guides/sidebars.js',
-    sidebarKey: 'guidesSidebar',
-  },
-  {
     name: 'ecosystem',
     contentDir: 'src/content/en/ecosystem',
     sidebarPath: 'src/content/en/ecosystem/sidebars.js',
@@ -64,9 +58,11 @@ const IGNORED_PATTERNS = [
   /\/_partial-.*\.mdx$/, // Partial MDX files that are imported into other docs
   // Temp ignore for mastra-platform docs that are in the process of moving out of the docs
   /\/mastra-platform\/.*/,
+  /\/docs\/[^/]+\/.+\.mdx$/,
+  /\/docs\/what-is-mastra\.mdx$/,
   /\/agents\/networks/,
-  /\/guides\/guide\/.*/,
-  /\/guides\/migrations\/.*/,
+  /\/docs\/guide\/.*/,
+  /\/docs\/migrations\/.*/,
   /\/license\.mdx$/,
 ]
 

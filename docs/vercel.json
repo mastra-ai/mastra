@@ -72,7 +72,7 @@
     },
     {
       "source": "/guides/v1/:path*",
-      "destination": "/guides/:path*",
+      "destination": "/docs/:path*",
       "permanent": true
     },
     {
@@ -87,7 +87,7 @@
     },
     {
       "source": "/docs/getting-started/installation",
-      "destination": "/guides/getting-started/quickstart",
+      "destination": "/docs/getting-started/quickstart",
       "permanent": true
     },
     {
@@ -222,12 +222,12 @@
     },
     {
       "source": "/guides/quickstarts/standalone-server",
-      "destination": "/guides/getting-started/quickstart",
+      "destination": "/docs/getting-started/quickstart",
       "permanent": true
     },
     {
       "source": "/docs/getting-started/quickstart",
-      "destination": "/guides/getting-started/quickstart",
+      "destination": "/docs/getting-started/quickstart",
       "permanent": true
     },
     {
@@ -237,7 +237,7 @@
     },
     {
       "source": "/examples/agents/whatsapp-chat-bot",
-      "destination": "/guides/guide/whatsapp-chat-bot",
+      "destination": "/docs/guide/whatsapp-chat-bot",
       "permanent": true
     },
     {
@@ -817,7 +817,7 @@
     },
     {
       "source": "/docs/mcp/publishing-mcp-server",
-      "destination": "/guides/guide/publishing-mcp-server",
+      "destination": "/docs/guide/publishing-mcp-server",
       "permanent": true
     },
     {
@@ -837,17 +837,17 @@
     },
     {
       "source": "/docs/streaming",
-      "destination": "/guides/concepts/streaming",
+      "destination": "/docs/concepts/streaming",
       "permanent": true
     },
     {
       "source": "/docs/streaming/overview",
-      "destination": "/guides/concepts/streaming",
+      "destination": "/docs/concepts/streaming",
       "permanent": true
     },
     {
       "source": "/docs/streaming/events",
-      "destination": "/guides/concepts/streaming",
+      "destination": "/docs/concepts/streaming",
       "permanent": true
     },
     {
@@ -1116,6 +1116,16 @@
       "permanent": true
     },
     {
+      "source": "/guides",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/guides/:path*",
+      "destination": "/docs/:path*",
+      "permanent": true
+    },
+    {
       "source": "/docs/deployment/cloud-providers",
       "destination": "/docs/deployment/cloud-providers",
       "permanent": true
@@ -1367,7 +1377,7 @@
     },
     {
       "source": "/guides/v1/:path*/llms.txt",
-      "destination": "/guides/:path*/llms.txt",
+      "destination": "/docs/:path*/llms.txt",
       "permanent": true
     },
     {
@@ -1377,7 +1387,7 @@
     },
     {
       "source": "/docs/getting-started/installation/llms.txt",
-      "destination": "/guides/getting-started/quickstart/llms.txt",
+      "destination": "/docs/getting-started/quickstart/llms.txt",
       "permanent": true
     },
     {
@@ -1487,12 +1497,12 @@
     },
     {
       "source": "/guides/quickstarts/standalone-server/llms.txt",
-      "destination": "/guides/getting-started/quickstart/llms.txt",
+      "destination": "/docs/getting-started/quickstart/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/getting-started/quickstart/llms.txt",
-      "destination": "/guides/getting-started/quickstart/llms.txt",
+      "destination": "/docs/getting-started/quickstart/llms.txt",
       "permanent": true
     },
     {
@@ -1857,7 +1867,7 @@
     },
     {
       "source": "/docs/mcp/publishing-mcp-server/llms.txt",
-      "destination": "/guides/guide/publishing-mcp-server/llms.txt",
+      "destination": "/docs/guide/publishing-mcp-server/llms.txt",
       "permanent": true
     },
     {
@@ -1877,17 +1887,17 @@
     },
     {
       "source": "/docs/streaming/llms.txt",
-      "destination": "/guides/concepts/streaming/llms.txt",
+      "destination": "/docs/concepts/streaming/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/streaming/overview/llms.txt",
-      "destination": "/guides/concepts/streaming/llms.txt",
+      "destination": "/docs/concepts/streaming/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/streaming/events/llms.txt",
-      "destination": "/guides/concepts/streaming/llms.txt",
+      "destination": "/docs/concepts/streaming/llms.txt",
       "permanent": true
     },
     {
@@ -2143,6 +2153,16 @@
     {
       "source": "/guides/agent-frameworks/ai-sdk/llms.txt",
       "destination": "/ecosystem/agent-frameworks-and-ui/ai-sdk/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/llms.txt",
+      "destination": "/docs/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/:path*/llms.txt",
+      "destination": "/docs/:path*/llms.txt",
       "permanent": true
     },
     {

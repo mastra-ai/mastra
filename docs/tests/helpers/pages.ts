@@ -14,25 +14,22 @@ export interface PageConfig {
 export const pages: PageConfig[] = [
   // --- Docs ---
   { path: '/docs', name: 'Docs – Get Started' },
-  { path: '/docs/agents/overview', name: 'Docs – Agents' },
-  { path: '/docs/workflows/overview', name: 'Docs – Workflows' },
-  { path: '/docs/memory/overview', name: 'Docs – Memory' },
-  { path: '/docs/rag/overview', name: 'Docs – RAG' },
-  { path: '/docs/mcp/overview', name: 'Docs – MCP' },
-  { path: '/docs/server/mastra-server', name: 'Docs – Server' },
-  { path: '/docs/observability/overview', name: 'Docs – Observability' },
-  { path: '/docs/evals/running-in-ci', name: 'Docs – Evals CI' },
-  { path: '/docs/voice/overview', name: 'Docs – Voice' },
-  { path: '/docs/deployment/overview', name: 'Docs – Deployment' },
+  { path: '/docs/agents', name: 'Docs – Agents' },
+  { path: '/docs/workflows', name: 'Docs – Workflows' },
+  { path: '/docs/memory', name: 'Docs – Memory' },
+  { path: '/docs/mcp', name: 'Docs – MCP' },
+  { path: '/docs/storage', name: 'Docs – Storage' },
+  { path: '/docs/observe', name: 'Docs – Observe' },
+  { path: '/docs/evals', name: 'Docs – Evals' },
+  { path: '/docs/deploy', name: 'Docs – Deploy' },
 
   // --- Models ---
   { path: '/models', name: 'Models – Index' },
   { path: '/models/providers/openai', name: 'Models – OpenAI' },
 
-  // --- Guides ---
-  { path: '/guides/getting-started/quickstart', name: 'Guides – Quickstart' },
-  { path: '/guides/build-your-ui/ai-sdk-ui', name: 'Guides – AI SDK UI' },
-  { path: '/guides/getting-started/next-js', name: 'Guides – Next.js' },
+  // --- Ecosystem ---
+  { path: '/ecosystem/agent-frameworks-and-ui/ai-sdk-ui', name: 'Ecosystem – AI SDK UI' },
+  { path: '/ecosystem/app-frameworks/next-js', name: 'Ecosystem – Next.js' },
 
   // --- Reference ---
   { path: '/reference/configuration', name: 'Reference – Configuration' },

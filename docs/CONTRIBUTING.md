@@ -68,8 +68,7 @@ Before submitting a PR, make sure to:
 
 The Mastra documentation is organized into several sections:
 
-- **docs/** - Main documentation (`src/content/en/docs/`)
-- **guides/** - Step-by-step guides (`src/content/en/guides/`)
+- **docs/** - Main documentation and guides (`src/content/en/docs/`)
 - **reference/** - API reference documentation (`src/content/en/reference/`)
 - **models/** - Model provider documentation (`src/content/en/models/`). These docs are auto-generated and should not be edited manually.
 - **course/** - Tutorial and course content (`src/course/`)

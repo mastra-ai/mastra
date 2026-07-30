@@ -57,7 +57,7 @@
     },
     {
       "source": "/guides/v1/:path*",
-      "destination": "/guides/:path*",
+      "destination": "/docs/:path*",
       "permanent": true
     },
     {
@@ -72,7 +72,7 @@
     },
     {
       "source": "/docs/getting-started/installation",
-      "destination": "/guides/getting-started/quickstart",
+      "destination": "/docs/getting-started/quickstart",
       "permanent": true
     },
     {
@@ -207,12 +207,12 @@
     },
     {
       "source": "/guides/quickstarts/standalone-server",
-      "destination": "/guides/getting-started/quickstart",
+      "destination": "/docs/getting-started/quickstart",
       "permanent": true
     },
     {
       "source": "/docs/getting-started/quickstart",
-      "destination": "/guides/getting-started/quickstart",
+      "destination": "/docs/getting-started/quickstart",
       "permanent": true
     },
     {
@@ -222,7 +222,7 @@
     },
     {
       "source": "/examples/agents/whatsapp-chat-bot",
-      "destination": "/guides/guide/whatsapp-chat-bot",
+      "destination": "/docs/guide/whatsapp-chat-bot",
       "permanent": true
     },
     {
@@ -802,7 +802,7 @@
     },
     {
       "source": "/docs/mcp/publishing-mcp-server",
-      "destination": "/guides/guide/publishing-mcp-server",
+      "destination": "/docs/guide/publishing-mcp-server",
       "permanent": true
     },
     {
@@ -822,17 +822,17 @@
     },
     {
       "source": "/docs/streaming",
-      "destination": "/guides/concepts/streaming",
+      "destination": "/docs/concepts/streaming",
       "permanent": true
     },
     {
       "source": "/docs/streaming/overview",
-      "destination": "/guides/concepts/streaming",
+      "destination": "/docs/concepts/streaming",
       "permanent": true
     },
     {
       "source": "/docs/streaming/events",
-      "destination": "/guides/concepts/streaming",
+      "destination": "/docs/concepts/streaming",
       "permanent": true
     },
     {
@@ -1098,6 +1098,16 @@
     {
       "source": "/guides/agent-frameworks/ai-sdk",
       "destination": "/ecosystem/agent-frameworks-and-ui/ai-sdk",
+      "permanent": true
+    },
+    {
+      "source": "/guides",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/guides/:path*",
+      "destination": "/docs/:path*",
       "permanent": true
     },
     {

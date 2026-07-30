@@ -20,6 +20,8 @@ const DEFAULT_CONFIG: ValidationConfig = {
     'guides/',
     'docs/license.mdx',
     'docs/getting-started/',
+    'docs/guide/',
+    'docs/migrations/',
     'docs/mastra-platform/',
     'docs/index.mdx',
     'models/',

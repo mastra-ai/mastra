@@ -95,18 +95,6 @@ const config: Config = {
     [
       '@docusaurus/plugin-content-docs',
       {
-        id: 'guides',
-        path: 'src/content/en/guides',
-        routeBasePath: 'guides',
-        sidebarPath: './src/content/en/guides/sidebars.js',
-        editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
-        admonitions: ADMONITIONS_CONFIG,
-        remarkPlugins: [...SHARED_REMARK_PLUGINS],
-      },
-    ],
-    [
-      '@docusaurus/plugin-content-docs',
-      {
         id: 'ecosystem',
         path: 'src/content/en/ecosystem',
         routeBasePath: 'ecosystem',
@@ -147,7 +135,7 @@ const config: Config = {
           {
             label: 'Quickstart',
             description: 'Get up and running with Mastra',
-            link: '/guides/getting-started/quickstart',
+            link: '/docs/getting-started/quickstart',
           },
           { label: 'Studio', description: 'Test your agents, workflows, and tools', link: '/docs/studio/overview' },
           {

@@ -38,7 +38,7 @@ For building agents entirely in code, see the [Agents overview](/docs/agents/ove
 
 The Agent Builder requires:
 
-- An existing Mastra project (Follow the [installation guide](/guides/getting-started/quickstart) to set up a new project)
+- An existing Mastra project (Follow the [installation guide](/docs/getting-started/quickstart) to set up a new project)
 - **Storage**: A `@mastra/core` storage adapter on the `Mastra` instance. Agents, memory, and workspace state all persist through `Mastra.storage`.
 - **A builder agent**: Register a `builderAgent` created with the `createBuilderAgent()` factory from `@mastra/editor/ee` on `Mastra.agents`. The chat-based editor invokes it through the same `Mastra.getAgent(id)` lookup as any other agent. Without this registration, the chat-based editor returns 404.
 - **Model credentials**: `createBuilderAgent()` uses an OpenAI model by default, which requires `OPENAI_API_KEY`. To use a different provider, pass a `model` override to `createBuilderAgent({ model })` and set that provider's credentials instead.

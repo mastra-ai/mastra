@@ -72,7 +72,7 @@ test.describe('Tab switcher navigation', () => {
     // Click through remaining tabs
     const tabs = [
       { label: 'Models', expectedPath: '/models' },
-      { label: 'Guides', expectedPath: '/guides' },
+      { label: 'Ecosystem', expectedPath: '/ecosystem' },
       { label: 'Reference', expectedPath: '/reference' },
     ]
 
@@ -199,10 +199,10 @@ test.describe('Sidebar navigation', () => {
   })
 })
 
-// ─── Admonitions and tabs on /guides/build-your-ui/ai-sdk-ui ──────────
+// ─── Admonitions and tabs on /ecosystem/agent-frameworks-and-ui/ai-sdk-ui ──────────
 
 test.describe('Admonitions and tabs on AI SDK UI guide', () => {
-  const PAGE = '/guides/build-your-ui/ai-sdk-ui'
+  const PAGE = '/ecosystem/agent-frameworks-and-ui/ai-sdk-ui'
 
   test('admonitions are rendered and visible', async ({ page }) => {
     const getErrors = trackJsErrors(page)
