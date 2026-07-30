@@ -249,6 +249,56 @@ describe('SankeyChart', () => {
     });
   });
 
+  describe('when a fixed-geometry flow is disconnected in the middle', () => {
+    it('draws each ribbon between its own columns instead of spanning the chart', async () => {
+      // Links exist only for goal->outcome and behavior->sentiment. Depth-based
+      // layouts would push outcome and sentiment to the rightmost column,
+      // stretching both ribbons across the full chart width away from their
+      // fixed-position nodes.
+      render(
+        <Sankey
+          data={[
+            { goal: 'A', goalCount: 2, outcome: 'B', outcomeCount: 2, count: 2, layoutCount: 2 },
+            { behavior: 'C', behaviorCount: 14, sentiment: 'D', sentimentCount: 14, count: 14, layoutCount: 14 },
+          ]}
+          columns={[
+            { id: 'goal', label: 'Goal' },
+            { id: 'outcome', label: 'Outcome' },
+            { id: 'behavior', label: 'Behavior' },
+            { id: 'sentiment', label: 'Sentiment' },
+          ]}
+          getRecordWeight={record => Number(record.count)}
+          getRecordLayoutWeight={record => Number(record.layoutCount)}
+          getRecordNodeValue={(record, column) => Number(record[`${column.id}Count`])}
+        >
+          <SankeyChart />
+        </Sankey>,
+      );
+      await screen.findAllByText('Goal');
+
+      // fixed geometry: width 800, margins 160/160, node width 7
+      const left = 160;
+      const right = 800 - 160 - 7;
+      const pitch = (right - left) / 3;
+      const paths = [...document.querySelectorAll<SVGPathElement>('svg path[fill^="url(#sankey-grad"]')];
+      const endpoints = paths.map(path => {
+        const coordinates =
+          path
+            .getAttribute('d')
+            ?.match(/-?[\d.]+/g)
+            ?.map(Number) ?? [];
+        const xValues = coordinates.filter((_, index) => index % 2 === 0);
+        return { sourceX: xValues[0] ?? 0, targetX: xValues[3] ?? 0 };
+      });
+
+      expect(endpoints).toHaveLength(2);
+      expect(endpoints[0]?.sourceX).toBeCloseTo(left + 7, 0);
+      expect(endpoints[0]?.targetX).toBeCloseTo(left + pitch, 0);
+      expect(endpoints[1]?.sourceX).toBeCloseTo(left + pitch * 2 + 7, 0);
+      expect(endpoints[1]?.targetX).toBeCloseTo(right, 0);
+    });
+  });
+
   describe('when a node label includes a description', () => {
     const description =
       'Looks up relevant knowledge before responding, including all supporting context needed to explain a long theme description without clipping it.';

@@ -118,9 +118,16 @@ export function SankeyChart({
               link={(props: SankeyLinkRendererProps) => {
                 const link = graph.links[props.index];
                 const linkGeometry = link ? fixedGeometry?.links.get(link.id) : undefined;
+                const sourceX = linkGeometry?.sourceX ?? props.sourceX;
+                const targetX = linkGeometry?.targetX ?? props.targetX;
+                const fixedControlX = linkGeometry ? (sourceX + targetX) / 2 : undefined;
                 return (
                   <SankeyLink
                     {...props}
+                    sourceX={sourceX}
+                    targetX={targetX}
+                    sourceControlX={fixedControlX ?? props.sourceControlX}
+                    targetControlX={fixedControlX ?? props.targetControlX}
                     sourceY={linkGeometry?.sourceY ?? props.sourceY}
                     targetY={linkGeometry?.targetY ?? props.targetY}
                     sourceWidth={linkGeometry?.sourceWidth}
