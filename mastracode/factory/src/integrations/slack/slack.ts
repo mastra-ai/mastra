@@ -9,15 +9,16 @@ import {
   type ResolveThreadId,
 } from '@mastra/core/channels';
 import type { Mastra } from '@mastra/core/mastra';
+import { createSlackAdapter } from '@mastra/slack';
+import { Card, CardText, Actions, LinkButton } from 'chat';
+
 import type {
   ChannelAccountLink,
   ChannelAccountLinkKey,
   ChannelIdentityStorage,
-  FactoryProjectsStorage,
-  WorkItemsStorage,
-} from '@mastra/factory';
-import { createSlackAdapter } from '@mastra/slack';
-import { Card, CardText, Actions, LinkButton } from 'chat';
+} from '../../storage/domains/channel-identity/base.js';
+import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
+import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 
 // Derive the thread/message types from the core handler signature rather than
 // importing them from `chat` directly: mc-web can resolve a different `chat`

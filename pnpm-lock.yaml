@@ -2190,12 +2190,18 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/slack':
+        specifier: workspace:*
+        version: link:../../channels/slack
       '@octokit/auth-app':
         specifier: ^8.0.0
         version: 8.2.0
       '@octokit/rest':
         specifier: ^22.0.1
         version: 22.0.1
+      chat:
+        specifier: ^4.34.0
+        version: 4.34.0(ai@7.0.31(zod@4.4.3))(zod@4.4.3)
       hono:
         specifier: ^4.12.8
         version: 4.12.30

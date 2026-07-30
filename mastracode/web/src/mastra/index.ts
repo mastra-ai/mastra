@@ -30,8 +30,8 @@ import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraFactory } from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
+import { SlackIntegration, createGithubSourceControl } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
-import { SlackIntegration, createGithubSourceControl } from '../web/channels/slack/integration.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".

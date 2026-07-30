@@ -1,5 +1,6 @@
-import { createStateSigner } from '@mastra/factory';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { createStateSigner } from '../../state-signing.js';
 
 import { createSlackConnectRoutes } from './connect-route.js';
 

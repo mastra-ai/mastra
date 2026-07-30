@@ -11,17 +11,17 @@
  * the factory does all of that the same way it already does for GitHub and
  * Linear, and the entry's job shrinks to reading Slack's env vars once.
  *
- * This lives in `mastracode/web` rather than in `@mastra/factory` on purpose:
- * it depends on `@mastra/slack` and `chat`, which are mc-web dependencies. The
- * integration interface is explicitly designed to be implemented from outside
- * ("Third parties add capabilities by implementing this same interface — no
- * factory changes required"), so Slack takes that path instead of pushing two
- * chat-platform dependencies into the factory package.
+ * Slack ships as a factory built-in alongside GitHub and Linear (it originally
+ * lived in `mastracode/web` to keep `@mastra/slack`/`chat` out of this package;
+ * the team reversed that so `create-factory` consumers get Slack channels out
+ * of the box). The integration interface remains open — third parties still add
+ * capabilities by implementing `FactoryIntegration` from outside the package.
  */
 
 import type { AgentControllerChannels } from '@mastra/core/channels';
 import type { ApiRoute } from '@mastra/core/server';
-import type { FactoryIntegration, IntegrationContext } from '@mastra/factory';
+
+import type { FactoryIntegration, IntegrationContext } from '../base.js';
 
 import { createSlackConnectRoutes } from './connect-route.js';
 import { createAgentControllerSlackChannels, createGithubSourceControl } from './slack.js';
