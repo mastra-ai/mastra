@@ -391,6 +391,51 @@ describe('RequestContext', () => {
       expect(json).not.toHaveProperty('cyclicTyped');
     });
 
+    it('should keep plain DataViews, matching JSON.stringify', () => {
+      // A DataView has no intrinsic elements; JSON.stringify renders it '{}'.
+      const ctx = new RequestContext();
+      ctx.set('dataView', new DataView(new ArrayBuffer(8)));
+
+      const json = ctx.toJSON();
+
+      expect(json).toHaveProperty('dataView');
+    });
+
+    it('should skip DataViews whose own index-named property leads back into a cycle', () => {
+      // Unlike a typed array, an index-named own property on a DataView is
+      // ordinary data that a real serialization walks — the probe must not
+      // treat it as a skippable element.
+      const dataView = new DataView(new ArrayBuffer(8));
+      const holder: Record<string, unknown> = { dataView };
+      (dataView as unknown as Record<number, unknown>)[0] = holder;
+
+      const ctx = new RequestContext();
+      ctx.set('cyclicDataView', dataView);
+      ctx.set('serializable', 'value');
+
+      const json = ctx.toJSON();
+
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('cyclicDataView');
+    });
+
+    it('should budget typed-array elements by intrinsic length even when an own length property lies', () => {
+      const big = new Float64Array(8 * 1024 * 1024);
+      Object.defineProperty(big, 'length', { value: 0 });
+
+      const ctx = new RequestContext();
+      ctx.set('lyingLength', big);
+      ctx.set('serializable', 'value');
+
+      const start = Date.now();
+      const json = ctx.toJSON();
+      const elapsed = Date.now() - start;
+
+      expect(elapsed).toBeLessThan(2000);
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('lyingLength');
+    });
+
     it('should skip typed arrays whose own enumerable __proto__ property leads back into a cycle', () => {
       // An own enumerable `__proto__` data property is serialized by
       // JSON.stringify; a plain-object surrogate would swallow it through

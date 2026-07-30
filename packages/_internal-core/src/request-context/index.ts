@@ -148,6 +148,15 @@ let _toJSONDepth = 0;
  */
 const SERIALIZATION_PROBE_BUDGET = 1_000_000;
 
+/**
+ * The intrinsic `%TypedArray%.prototype.length` getter. Reads the element
+ * count from internal slots, so it cannot be shadowed by an own `length`
+ * property, works across realms, and throws `TypeError` for `DataView` —
+ * which makes it double as the discriminator between typed arrays (intrinsic
+ * indexed elements) and other `ArrayBuffer` views (plain-object semantics).
+ */
+const _typedArrayLength = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Int8Array.prototype), 'length')!.get!;
+
 export class RequestContext<Values extends Record<string, any> | unknown = unknown> {
   private registry = new Map<string, unknown>();
 
@@ -322,6 +331,19 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
         // the budget arithmetically instead of materializing every element
         // through the replacer.
         if (ArrayBuffer.isView(probed)) {
+          // The fast path is only sound for typed arrays, whose index-shaped
+          // own keys are always intrinsic elements (out-of-bounds index
+          // definition throws). `DataView` has no intrinsic elements — an
+          // index-named own property on one is ordinary data that a real
+          // serialization walks — so it must pass through with plain-object
+          // semantics. The intrinsic length getter discriminates: it throws
+          // for anything without typed-array internal slots.
+          let elementCount: number;
+          try {
+            elementCount = _typedArrayLength.call(probed) as number;
+          } catch {
+            return probed;
+          }
           // Detect BigInt element types by reading element 0 — integer-indexed
           // access on a typed array is unspoofable and realm-independent,
           // unlike `instanceof` (fails cross-realm) or the brand tag (an own
@@ -332,7 +354,9 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
           if (typeof (probed as ArrayLike<unknown>)[0] === 'bigint') {
             return probed;
           }
-          budget -= (probed as { length?: number }).length ?? 0;
+          // Charge the intrinsic element count — an own `length` data
+          // property can shadow the prototype getter and lie.
+          budget -= elementCount;
           if (budget < 0) {
             throw new RangeError('RequestContext.isSerializable: value expands past the serialization probe budget');
           }
