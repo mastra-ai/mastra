@@ -1,10 +1,10 @@
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
+import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Factory } from 'lucide-react';
 
+import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
 import { factoryHomePath } from '../../workspaces/services/factoryPaths';
 import type { FactoryProject } from '../../workspaces/services/github';
-import { GlobalSearchCommandItem } from './GlobalSearchCommandItem';
-import type { GlobalSearchSelectHandler } from './GlobalSearchCommandItem';
 
 function factoryContext(repositorySlugs: string[]): string {
   if (repositorySlugs.length === 0) return 'No repositories linked';
@@ -32,11 +32,11 @@ export function GlobalSearchFactoriesResults({
       {factories.map(factory => {
         const repositorySlugs = factory.repositories.map(repository => repository.slug);
         return (
-          <GlobalSearchCommandItem
+          <CommandPaletteItem
             key={factory.id}
             icon={<Factory />}
             title={factory.name}
-            context={factoryContext(repositorySlugs)}
+            subtitle={factoryContext(repositorySlugs)}
             value={`${factory.name} ${factory.id} ${repositorySlugs.join(' ')} Factory`}
             shortcut={currentFactoryShortcut(factory.id, activeFactoryId)}
             onSelect={() => onSelect(factoryHomePath(factory), false)}

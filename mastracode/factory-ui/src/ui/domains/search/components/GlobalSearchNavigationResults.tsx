@@ -1,9 +1,9 @@
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
+import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { ChartLine, GitPullRequest, ListChecks, ScrollText, Settings, SquareKanban } from 'lucide-react';
 
+import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
-import { GlobalSearchCommandItem } from './GlobalSearchCommandItem';
-import type { GlobalSearchSelectHandler } from './GlobalSearchCommandItem';
 
 export function GlobalSearchNavigationResults({
   factoryId,
@@ -14,87 +14,87 @@ export function GlobalSearchNavigationResults({
 }) {
   return (
     <CommandGroup heading="Navigation">
-      <GlobalSearchCommandItem
+      <CommandPaletteItem
         icon={<SquareKanban />}
         title="Work"
-        context="Factory navigation"
+        subtitle="Factory navigation"
         value={`Work Factory navigation /factories/${factoryId}/work`}
         onSelect={() => onSelect(`/factories/${factoryId}/work`, false)}
       />
-      <GlobalSearchCommandItem
+      <CommandPaletteItem
         icon={<GitPullRequest />}
         title="Review"
-        context="Factory navigation"
+        subtitle="Factory navigation"
         value={`Review Factory navigation /factories/${factoryId}/review`}
         onSelect={() => onSelect(`/factories/${factoryId}/review`, false)}
       />
-      <GlobalSearchCommandItem
+      <CommandPaletteItem
         icon={<ChartLine />}
         title="Metrics"
-        context="Factory navigation"
+        subtitle="Factory navigation"
         value={`Metrics Factory navigation /factories/${factoryId}/metrics`}
         onSelect={() => onSelect(`/factories/${factoryId}/metrics`, false)}
       />
-      <GlobalSearchCommandItem
+      <CommandPaletteItem
         icon={<ListChecks />}
         title="Rules"
-        context="Factory navigation"
+        subtitle="Factory navigation"
         value={`Rules Factory navigation /factories/${factoryId}/rules`}
         onSelect={() => onSelect(`/factories/${factoryId}/rules`, false)}
       />
-      <GlobalSearchCommandItem
+      <CommandPaletteItem
         icon={<ScrollText />}
         title="Audit log"
-        context="Factory navigation"
+        subtitle="Factory navigation"
         value={`Audit log Factory navigation /factories/${factoryId}/audit`}
         onSelect={() => onSelect(`/factories/${factoryId}/audit`, false)}
       />
-      <GlobalSearchCommandItem
+      <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.preferences}
-        context="Settings"
+        subtitle="Settings"
         value={`Preferences Settings preferences ${settingsSectionPath(factoryId, 'preferences')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'preferences'), true)}
       />
-      <GlobalSearchCommandItem
+      <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.factory}
-        context="Settings"
+        subtitle="Settings"
         value={`Factory Settings factory ${settingsSectionPath(factoryId, 'factory')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'factory'), true)}
       />
-      <GlobalSearchCommandItem
+      <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.connections}
-        context="Settings"
+        subtitle="Settings"
         value={`Connections Settings connections ${settingsSectionPath(factoryId, 'connections')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'connections'), true)}
       />
-      <GlobalSearchCommandItem
+      <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.repositories}
-        context="Settings"
+        subtitle="Settings"
         value={`Repositories Settings repositories ${settingsSectionPath(factoryId, 'repositories')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'repositories'), true)}
       />
-      <GlobalSearchCommandItem
+      <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.intake}
-        context="Settings"
+        subtitle="Settings"
         value={`Work Intake Settings intake ${settingsSectionPath(factoryId, 'intake')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'intake'), true)}
       />
-      <GlobalSearchCommandItem
+      <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.models}
-        context="Settings"
+        subtitle="Settings"
         value={`Models Settings models ${settingsSectionPath(factoryId, 'models')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'models'), true)}
       />
-      <GlobalSearchCommandItem
+      <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.behavior}
-        context="Settings"
+        subtitle="Settings"
         value={`Behavior Settings behavior ${settingsSectionPath(factoryId, 'behavior')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'behavior'), true)}
       />
