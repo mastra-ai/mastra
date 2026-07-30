@@ -95,7 +95,7 @@ export class ExperimentsPG extends ExperimentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['status', 'tags', 'toolMockReport', 'organizationId', 'projectId'],
+      ifNotExists: ['status', 'tags', 'comment', 'toolMockReport', 'organizationId', 'projectId'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -272,6 +272,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       traceId: (row.traceId as string | null) ?? null,
       status: (row.status as ExperimentResult['status']) ?? null,
       tags: row.tags ? safelyParseJSON(row.tags) : null,
+      comment: (row.comment as string | null) ?? null,
       toolMockReport: row.toolMockReport ? safelyParseJSON(row.toolMockReport) : null,
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
     };
@@ -646,6 +647,10 @@ export class ExperimentsPG extends ExperimentsStorage {
       if (input.tags !== undefined) {
         setClauses.push(`"tags" = $${paramIndex++}`);
         values.push(JSON.stringify(input.tags));
+      }
+      if (input.comment !== undefined) {
+        setClauses.push(`"comment" = $${paramIndex++}`);
+        values.push(input.comment);
       }
 
       if (setClauses.length === 0) {

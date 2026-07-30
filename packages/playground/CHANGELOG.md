@@ -1,5 +1,27 @@
 # @internal/playground
 
+## 1.21.1-alpha.1
+
+### Patch Changes
+
+- Fixed the Studio review tab losing comments on reload. Comments on experiment results are now saved to the database like tags, in both the dataset review view and the agent review queue (https://github.com/mastra-ai/mastra/issues/19857). ([#19865](https://github.com/mastra-ai/mastra/pull/19865))
+
+- Updated dependencies [[`c5e56ff`](https://github.com/mastra-ai/mastra/commit/c5e56ff3bcabdf062708f2d48744fec304df6792), [`c5e56ff`](https://github.com/mastra-ai/mastra/commit/c5e56ff3bcabdf062708f2d48744fec304df6792), [`b35ed6f`](https://github.com/mastra-ai/mastra/commit/b35ed6f7c257583eafbad6afa3320c88b26d8112), [`b6f36d7`](https://github.com/mastra-ai/mastra/commit/b6f36d77227c8a09f59f073cbd369e67686946d6), [`b6f36d7`](https://github.com/mastra-ai/mastra/commit/b6f36d77227c8a09f59f073cbd369e67686946d6), [`4e35a56`](https://github.com/mastra-ai/mastra/commit/4e35a56cdf8d74a5ff6d5eda01f2c1deaf6cc7be)]:
+  - @mastra/core@1.56.0-alpha.1
+  - @mastra/client-js@1.36.1-alpha.1
+  - @mastra/playground-ui@45.1.0-alpha.1
+  - @mastra/react@1.3.5-alpha.1
+
+## 1.21.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`7f4e26d`](https://github.com/mastra-ai/mastra/commit/7f4e26dd57bd9b23c278ea21235ab823a3810a6c), [`b582f7f`](https://github.com/mastra-ai/mastra/commit/b582f7fa2f9c1f87d19efc63d344fbe5dda2608c), [`b582f7f`](https://github.com/mastra-ai/mastra/commit/b582f7fa2f9c1f87d19efc63d344fbe5dda2608c)]:
+  - @mastra/core@1.56.0-alpha.0
+  - @mastra/client-js@1.36.1-alpha.0
+  - @mastra/react@1.3.5-alpha.0
+  - @mastra/playground-ui@45.0.1-alpha.0
+
 ## 1.21.0
 
 ### Patch Changes
