@@ -2,12 +2,12 @@
 '@mastra/mongodb': patch
 ---
 
-When `MongoDBStore.init()` fails because an existing non-unique index conflicts with Mastra's required unique index, the error now includes step-by-step migration commands instead of a generic failure message.
+When MongoDB storage initialization fails because an existing non-unique index conflicts with Mastra's required unique index, the error now includes step-by-step migration commands instead of a generic failure message.
 
 **Before:** `Failed to create default index on collection "mastra_threads". Set skipDefaultIndexes to manage indexes yourself.`
 
 **After:**
-```
+```text
 Index conflict on collection "mastra_threads": an existing non-unique index on { id: 1 }
 conflicts with Mastra's required unique index.
 

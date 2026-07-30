@@ -142,8 +142,8 @@ describe('MemoryStorageMongoDB — index definitions and metadata storage', () =
     expect(String(err.id)).toContain('CREATE_DEFAULT_INDEXES');
   });
 
-  test('createDefaultIndexes emits migration steps on IndexKeySpecsConflict (code 86)', async () => {
-    const conflict = Object.assign(new Error('index conflict'), { code: 86 });
+  test('createDefaultIndexes emits migration steps on IndexOptionsConflict (code 85)', async () => {
+    const conflict = Object.assign(new Error('index conflict'), { code: 85 });
     const throwingMemory = new MemoryStorageMongoDB({
       connectorHandler: {
         getCollection: async () =>

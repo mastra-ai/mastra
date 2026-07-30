@@ -154,7 +154,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         // Fail loud: a silently missing index degrades query performance at scale.
         // Users who manage their own indexes can set skipDefaultIndexes.
         const mongoCode = (error as any)?.code;
-        const isUniqueConflict = mongoCode === 86 && indexDef.options?.unique === true;
+        const isUniqueConflict = mongoCode === 85 && indexDef.options?.unique === true;
         const field = Object.keys(indexDef.keys)[0] ?? 'id';
         const indexName = Object.entries(indexDef.keys)
           .map(([k, v]) => `${k}_${v}`)
