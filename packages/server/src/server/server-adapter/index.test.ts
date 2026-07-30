@@ -39,6 +39,10 @@ class TestMastraServer extends MastraServer<any, any, any> {
   validateCustomRoutePathsForTest(routes: Parameters<typeof this.validateCustomRoutePaths>[0]) {
     return this.validateCustomRoutePaths(routes);
   }
+
+  warnIfUnregisteredChannelWebhookForTest(path: string, method: string, status: number) {
+    return this.warnIfUnregisteredChannelWebhook(path, method, status);
+  }
 }
 
 function createTestAdapter() {
@@ -135,6 +139,61 @@ describe('custom route forwarding', () => {
     expect(errorSpy.mock.calls[0]![0]).toContain('GET /explode');
     expect(errorSpy.mock.calls[0]![1]).toMatchObject({ method: 'GET', path: '/explode' });
     expect(String((errorSpy.mock.calls[0]![1] as { error: string }).error)).toContain('kaboom');
+  });
+});
+
+describe('agent channel webhook diagnostics', () => {
+  it('warns once when an agent channel webhook route is missing', () => {
+    const mastra = new Mastra({ logger: false });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+    const warnSpy = vi.spyOn(mastra.getLogger(), 'warn');
+
+    adapter.warnIfUnregisteredChannelWebhookForTest('/api/agents/support/channels/slack/webhook', 'POST', 404);
+    adapter.warnIfUnregisteredChannelWebhookForTest('/api/agents/support/channels/slack/webhook', 'POST', 404);
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('channels.adapters configuration'), {
+      agentId: 'support',
+      platform: 'slack',
+    });
+  });
+
+  it.each([
+    ['/api/agents/support/channels/slack/webhook', 'GET', 404],
+    ['/api/agents/support/channels/slack/webhook', 'POST', 500],
+    ['/api/agent-controllers/support/channels/slack/webhook', 'POST', 404],
+    ['/api/agents/support/generate', 'POST', 404],
+  ])('ignores non-matching request %s', (path, method, status) => {
+    const mastra = new Mastra({ logger: false });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+    const warnSpy = vi.spyOn(mastra.getLogger(), 'warn');
+
+    adapter.warnIfUnregisteredChannelWebhookForTest(path, method, status);
+
+    expect(warnSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not warn when a matching custom route is registered', () => {
+    const mastra = new Mastra({
+      logger: false,
+      server: {
+        apiRoutes: [
+          {
+            path: '/api/agents/:agentId/channels/:platform/webhook',
+            method: 'POST',
+            requiresAuth: false,
+            _mastraInternal: true,
+            handler: async c => c.json({ error: 'Not Found' }, 404),
+          },
+        ],
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+    const warnSpy = vi.spyOn(mastra.getLogger(), 'warn');
+
+    adapter.warnIfUnregisteredChannelWebhookForTest('/api/agents/support/channels/slack/webhook', 'POST', 404);
+
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 });
 

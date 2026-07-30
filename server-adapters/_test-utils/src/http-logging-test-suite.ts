@@ -366,5 +366,26 @@ export function createHttpLoggingTestSuite<TApp>(config: HttpLoggingTestSuiteCon
       expect(logSpy).toHaveBeenCalledWith(expect.stringMatching(/GET \/not-found 404/), expect.any(Object));
       expect(logSpy).toHaveBeenCalledWith(expect.stringMatching(/GET \/error 500/), expect.any(Object));
     });
+
+    describe('agent channel webhook diagnostics', () => {
+      const webhookPath = '/api/agents/support/channels/slack/webhook';
+
+      it('warns when a webhook request reaches an unregistered channel route', async () => {
+        const mastra = new Mastra({ logger: false });
+        const warnSpy = vi.spyOn(mastra.getLogger(), 'warn');
+        const { adapter } = await setupAdapter(app, mastra);
+
+        await adapter.init();
+        await addRoute(app, 'POST', webhookPath, () => ({ status: 404, body: { error: 'Not found' } }));
+
+        const response = await executeRequest(app, 'POST', `http://localhost${webhookPath}`, { body: '{}' });
+
+        expect(response.status).toBe(404);
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('channels.adapters configuration'), {
+          agentId: 'support',
+          platform: 'slack',
+        });
+      });
+    });
   });
 }

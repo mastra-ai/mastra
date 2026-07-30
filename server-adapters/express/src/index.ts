@@ -619,6 +619,15 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
   }
 
   async registerCustomApiRoutes(): Promise<void> {
+    this.app.use((req, res, next) => {
+      const path = String(req.path || '/');
+      const method = String(req.method || 'GET');
+      res.on('finish', () => {
+        this.warnIfUnregisteredChannelWebhook(path, method, res.statusCode);
+      });
+      next();
+    });
+
     if (!(await this.buildCustomRouteHandler())) return;
 
     this.app.use(async (req: Request, res: Response, next: NextFunction) => {

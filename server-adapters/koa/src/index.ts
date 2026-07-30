@@ -876,9 +876,13 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   }
 
   async registerCustomApiRoutes(): Promise<void> {
-    if (!(await this.buildCustomRouteHandler())) return;
-
     const server = this;
+    this.app.use(async function mastraChannelWebhookDiagnostic(ctx: Context, next: Next) {
+      await next();
+      server.warnIfUnregisteredChannelWebhook(ctx.path, ctx.method, ctx.status);
+    });
+
+    if (!(await this.buildCustomRouteHandler())) return;
 
     this.app.use(async function mastraCustomRouteDispatcher(ctx: Context, next: Next) {
       // Check if this request matches a protected custom route and run auth

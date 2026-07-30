@@ -12,7 +12,7 @@ import type { ZodError } from 'zod/v4';
 import { z } from 'zod/v4';
 
 import type { InMemoryTaskStore } from '../a2a/store';
-import { coreAuthMiddleware } from '../auth/helpers';
+import { coreAuthMiddleware, findMatchingCustomRoute } from '../auth/helpers';
 import {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
@@ -68,6 +68,9 @@ export interface StreamOptions {
    */
   redact?: boolean;
 }
+
+const AGENT_CHANNEL_WEBHOOK_PATH = /^\/api\/agents\/([^/]+)\/channels\/([^/]+)\/webhook\/?$/;
+const MAX_CHANNEL_WEBHOOK_WARNINGS = 100;
 
 /**
  * MCP transport options for configuring MCP HTTP and SSE transports.
@@ -336,6 +339,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   protected httpLoggingConfig?: HttpLoggingConfig;
   protected customApiRoutes?: ApiRoute[];
   protected mcpOptions?: MCPOptions;
+  private warnedChannelWebhooks = new Set<string>();
   private customRouteHandler:
     | ((
         request: Request,
@@ -434,6 +438,31 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // Uses segment-aware matching so '/health' excludes '/health' and '/health/deep' but not '/healthcheck'
     const excludePaths = this.httpLoggingConfig.excludePaths || [];
     return !excludePaths.some((excluded: string) => path === excluded || path.startsWith(excluded + '/'));
+  }
+
+  /** Warn when a request looks like an agent channel webhook whose route was never registered. */
+  protected warnIfUnregisteredChannelWebhook(path: string, method: string, status: number): void {
+    if (status !== 404 || method.toUpperCase() !== 'POST') return;
+
+    const match = AGENT_CHANNEL_WEBHOOK_PATH.exec(path);
+    if (!match) return;
+
+    const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
+    if (findMatchingCustomRoute(path, method.toUpperCase(), routes)) return;
+
+    const [, agentId, platform] = match;
+    const warningKey = `${agentId}:${platform}`;
+    if (this.warnedChannelWebhooks.has(warningKey) || this.warnedChannelWebhooks.size >= MAX_CHANNEL_WEBHOOK_WARNINGS) {
+      return;
+    }
+    this.warnedChannelWebhooks.add(warningKey);
+
+    this.mastra
+      .getLogger()
+      ?.warn(
+        `Received a webhook request for channel "${platform}" on agent "${agentId}", but no matching channel route is registered. Add the "${platform}" adapter to the agent's channels.adapters configuration and restart the server.`,
+        { agentId, platform },
+      );
   }
 
   protected mergeRequestContext({

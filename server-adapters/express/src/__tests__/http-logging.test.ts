@@ -58,7 +58,7 @@ describe('Express Server Adapter', () => {
 
         // Create mock response
         let statusCode = 200;
-        let finishHandler: (() => void) | null = null;
+        const finishHandlers: Array<() => void> = [];
         const res: any = {
           statusCode,
           status: (code: number) => {
@@ -68,7 +68,7 @@ describe('Express Server Adapter', () => {
           },
           json: () => {
             // Trigger finish event before resolving
-            if (finishHandler) {
+            for (const finishHandler of finishHandlers) {
               finishHandler();
             }
             setTimeout(() => resolve({ status: statusCode }), 0);
@@ -76,7 +76,7 @@ describe('Express Server Adapter', () => {
           setHeader: () => {},
           on: (event: string, handler: () => void) => {
             if (event === 'finish') {
-              finishHandler = handler;
+              finishHandlers.push(handler);
             }
           },
         };
