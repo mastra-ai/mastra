@@ -84,6 +84,7 @@ export type ScenarioName =
   | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'
   | 'login-preserves-model-pack'
+  | 'login-seeds-om-default'
   | 'modal-and-shell'
   | 'mcp-http-tool-call'
   | 'mcp-long-running-tool'
@@ -105,8 +106,10 @@ export type ScenarioName =
   | 'om-global-settings-persistence'
   | 'om-model-override-reload'
   | 'om-pack-startup-restore'
+  | 'om-provider-error-guidance'
   | 'om-status-indicator'
   | 'om-threshold-persistence'
+  | 'onboarding-om-follows-login'
   | 'quiet-settings'
   | 'quiet-streaming-preview-height'
   | 'quiet-tool-history-parity'
@@ -122,6 +125,7 @@ export type ScenarioName =
   | 'setup-nested-model-selector'
   | 'settings-api-keys-navigation'
   | 'settings-startup-model-restore'
+  | 'shell-passthrough-during-run'
   | 'shell-passthrough-configured-settings'
   | 'shell-passthrough-env-override'
   | 'shell-passthrough-long-output'
@@ -177,6 +181,12 @@ export type McE2eScenarioRuntime = {
   waitForOutputText: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
   waitForScreenText: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
   waitForScreenTextAbsent: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
+  /**
+   * Stop the in-process Mastra Code app (TUI + storage close). Idempotent —
+   * safe to call before the runner's own finally-block stop. Scenarios that
+   * need to inspect on-disk database state after shutdown call this first.
+   */
+  stopApp?: () => Promise<void>;
 };
 
 export type McE2ePrepareContext = {
@@ -225,6 +235,6 @@ export type McE2eScenario = {
   inProcessApp?: (context: McE2eInProcessAppContext) => Promise<McE2eInProcessApp> | McE2eInProcessApp;
   terminalBackend?: 'subprocess';
   prepare?: (context: McE2ePrepareContext) => Promise<void> | void;
-  run: (context: { terminal: McE2eTerminal; runtime: McE2eScenarioRuntime }) => Promise<void>;
+  run: (context: { terminal: McE2eTerminal; runtime: McE2eScenarioRuntime; dbPath: string }) => Promise<void>;
   verifyAimockRequests?: (requests: unknown[]) => void;
 };

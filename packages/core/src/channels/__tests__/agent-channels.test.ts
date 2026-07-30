@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { Agent } from '../../agent';
+import { RequestContext } from '../../request-context';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
 import { AgentChannels } from '../agent-channels';
+import { getChatModule } from '../chat-lazy';
 import { matchesDomain, extractUrls } from '../inline-media';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
@@ -101,6 +104,46 @@ describe('AgentChannels', () => {
         tools: false,
       });
       expect(Object.keys(disabled.getTools())).toHaveLength(0);
+    });
+  });
+
+  describe('channel tools are not auto-injected into an agent toolset', () => {
+    it('resolves a channel-bearing agent toolset without the channel tools', async () => {
+      // getTools() still returns the channel tools (the explicit opt-in)...
+      const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
+      expect(Object.keys(channels.getTools())).toContain('add_reaction');
+
+      // ...but attaching channels to an agent does not inject them into the
+      // agent's resolved toolset.
+      const agent = new Agent({
+        id: 'no-auto-tools',
+        name: 'no-auto-tools',
+        instructions: 'test',
+        model: 'openai/gpt-4o',
+      });
+      agent.setChannels(channels);
+
+      const resolved = await agent.getToolsForExecution({});
+      const toolNames = Object.keys(resolved);
+      expect(toolNames).not.toContain('add_reaction');
+      expect(toolNames).not.toContain('remove_reaction');
+    });
+
+    it('resolves the channel tools when passed explicitly via tools: { ...channels.getTools() }', async () => {
+      const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
+      const agent = new Agent({
+        id: 'explicit-tools',
+        name: 'explicit-tools',
+        instructions: 'test',
+        model: 'openai/gpt-4o',
+        tools: { ...(channels.getTools() as Record<string, any>) },
+      });
+      agent.setChannels(channels);
+
+      const resolved = await agent.getToolsForExecution({});
+      const toolNames = Object.keys(resolved);
+      expect(toolNames).toContain('add_reaction');
+      expect(toolNames).toContain('remove_reaction');
     });
   });
 
@@ -340,7 +383,7 @@ describe('AgentChannels', () => {
         attachments: [],
       } as any;
 
-      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra);
+      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
 
       expect(mockAgent.sendMessage).toHaveBeenCalledTimes(1);
       expect(mockAgent.sendMessage).toHaveBeenCalledWith(
@@ -414,7 +457,7 @@ describe('AgentChannels', () => {
         attachments: [],
       } as any;
 
-      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra);
+      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
 
       expect(consumeStream).toHaveBeenCalledTimes(1);
     });
@@ -452,7 +495,9 @@ describe('AgentChannels', () => {
         attachments: [],
       } as any;
 
-      await expect((agentChannels as any).processChatMessage(chatThread, message, mockMastra)).resolves.not.toThrow();
+      await expect(
+        (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext()),
+      ).resolves.not.toThrow();
       expect(consumeStream).not.toHaveBeenCalled();
     });
   });
@@ -493,7 +538,7 @@ describe('AgentChannels', () => {
       await agentChannels.initialize(mockMastra);
       const chatThread = makeChatThread({ adapter: agentChannels.adapters.discord });
 
-      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra);
+      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
 
       expect(mockAgent.sendMessage).toHaveBeenCalledWith(
         expect.anything(),
@@ -520,7 +565,7 @@ describe('AgentChannels', () => {
       await channels.initialize(mockMastra);
       const chatThread = makeChatThread({ adapter: channels.adapters.discord, isDM: true });
 
-      await (channels as any).processChatMessage(chatThread, message, mockMastra);
+      await (channels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
 
       expect(resolveResourceId).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -557,7 +602,7 @@ describe('AgentChannels', () => {
       await channels.initialize(mockMastra);
       const chatThread = makeChatThread({ adapter: channels.adapters.discord, isDM: false });
 
-      await (channels as any).processChatMessage(chatThread, message, mockMastra);
+      await (channels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
 
       expect(mockAgent.sendMessage).toHaveBeenCalledWith(
         // actor identity stays the sender
@@ -588,7 +633,7 @@ describe('AgentChannels', () => {
       await channels.initialize(mockMastra);
       const chatThread = makeChatThread({ adapter: channels.adapters.discord });
 
-      await (channels as any).processChatMessage(chatThread, message, mockMastra);
+      await (channels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
 
       expect(mockAgent.sendMessage).toHaveBeenCalledWith(
         expect.anything(),
@@ -626,7 +671,7 @@ describe('AgentChannels', () => {
       });
 
       const chatThread = makeChatThread({ adapter: channels.adapters.discord });
-      await (channels as any).processChatMessage(chatThread, message, mockMastra);
+      await (channels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
 
       // The reused thread's stored owner drives memory, and the resolver is never
       // called; existing conversations don't depend on the resolver being available.
@@ -677,12 +722,406 @@ describe('AgentChannels', () => {
       const chatThread = makeChatThread({ adapter: channels.adapters.discord });
 
       // A flaky resolver must not break message handling on an existing thread.
-      await expect((channels as any).processChatMessage(chatThread, message, mockMastra)).resolves.not.toThrow();
+      await expect(
+        (channels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext()),
+      ).resolves.not.toThrow();
       expect(resolveResourceId).not.toHaveBeenCalled();
       expect(mockAgent.sendMessage).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({ resourceId: 'original-owner' }),
       );
+    });
+
+    it('does not create a thread when an approval action has no mapping', async () => {
+      const adapter = createMockAdapter('discord');
+      adapter.channelIdFromThreadId.mockImplementation((id: string) => id.split(':')[0]);
+      const resolveResourceId = vi.fn(async () => 'sso-owner');
+      const resolveThreadId = vi.fn(async () => 'resolved-thread');
+      const channels = new AgentChannels({
+        adapters: { discord: adapter },
+        resolveResourceId,
+        resolveThreadId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+      channels.__setLogger(logger as any);
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+
+      await (channels.sdk as any).processAction({
+        actionId: 'tool_approve:tool-call-1',
+        adapter,
+        messageId: 'approval-card-1',
+        threadId: 'channel-1:thread-1',
+        user: { userId: 'clicker-1', userName: 'clicker', fullName: 'Clicker' },
+        raw: {},
+      });
+
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      const { threads } = await memoryStore.listThreads({
+        filter: {
+          metadata: {
+            channel_platform: 'discord',
+            channel_externalThreadId: 'channel-1:thread-1',
+            channel_externalChannelId: 'channel-1',
+          },
+        },
+        perPage: 10,
+      });
+      expect(threads).toHaveLength(0);
+      expect(resolveResourceId).not.toHaveBeenCalled();
+      expect(resolveThreadId).not.toHaveBeenCalled();
+      expect(adapter.editMessage).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('No mapped channel thread found for tool approval action'),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe('resolveThreadId', () => {
+    function makeChatThread(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter: undefined as any,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+        ...overrides,
+      } as any;
+    }
+
+    const message = {
+      id: 'message-1',
+      text: 'hi',
+      author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+      attachments: [],
+    } as any;
+
+    function makeMastra() {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      return {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+    }
+
+    it('creates the new thread with the resolver id, after the resourceId resolves', async () => {
+      const resolveResourceId = vi.fn(async () => 'session-abc');
+      const resolveThreadId = vi.fn(async ({ resourceId }: any) => resourceId);
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveResourceId,
+        resolveThreadId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord, isDM: true });
+
+      await (channels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+
+      // The hook saw the resolved owner and the built-in default.
+      expect(resolveThreadId).toHaveBeenCalledWith(
+        expect.objectContaining({
+          platform: 'discord',
+          thread: chatThread,
+          message,
+          resourceId: 'session-abc',
+          defaultThreadId: expect.any(String),
+        }),
+      );
+      // The stored thread carries the hook's id (= the session id here), so a
+      // host addressing threads by session id resolves this thread directly.
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      const stored = await memoryStore.getThreadById({ threadId: 'session-abc' });
+      expect(stored).toMatchObject({ id: 'session-abc', resourceId: 'session-abc' });
+      expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          ifIdle: expect.objectContaining({
+            streamOptions: expect.objectContaining({
+              memory: expect.objectContaining({ thread: 'session-abc' }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('returning defaultThreadId keeps the built-in random id', async () => {
+      const resolveThreadId = vi.fn(async ({ defaultThreadId }: any) => defaultThreadId);
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveThreadId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+
+      await (channels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+
+      const [{ defaultThreadId }] = resolveThreadId.mock.calls[0]!;
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      const stored = await memoryStore.getThreadById({ threadId: defaultThreadId });
+      expect(stored).toMatchObject({ id: defaultThreadId, resourceId: 'discord:user-1' });
+    });
+
+    it('falls back to the generated id when the resolver id already belongs to another thread', async () => {
+      const resolveThreadId = vi.fn(async () => 'taken-id');
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveThreadId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+
+      // An unrelated thread already owns the id the resolver returns.
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      const original = {
+        id: 'taken-id',
+        title: 'someone elses thread',
+        resourceId: 'other-owner',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: { unrelated: true },
+      };
+      await memoryStore.saveThread({ thread: original });
+
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await (channels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+
+      // The original thread is untouched (saveThread upserts by id, so a
+      // collision would have overwritten its owner and metadata).
+      const kept = await memoryStore.getThreadById({ threadId: 'taken-id' });
+      expect(kept).toMatchObject({ resourceId: 'other-owner', title: 'someone elses thread' });
+      expect(kept?.metadata).toMatchObject({ unrelated: true });
+
+      // The channel conversation got its own thread under a generated id.
+      const { threads } = await memoryStore.listThreads({
+        filter: { metadata: { channel_externalThreadId: 'channel-1:thread-1' } },
+        perPage: 10,
+      });
+      expect(threads).toHaveLength(1);
+      expect(threads[0]!.id).not.toBe('taken-id');
+    });
+
+    it('does not run the resolver when reusing an existing thread (keeps stored id)', async () => {
+      const resolveThreadId = vi.fn(async () => 'should-not-be-used');
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveThreadId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      await memoryStore.saveThread({
+        thread: {
+          id: 'pre-existing',
+          title: 'discord conversation',
+          resourceId: 'original-owner',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {
+            channel_platform: 'discord',
+            channel_externalThreadId: 'channel-1:thread-1',
+            channel_externalChannelId: 'channel-1',
+          },
+        },
+      });
+
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await (channels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+
+      expect(resolveThreadId).not.toHaveBeenCalled();
+      expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          ifIdle: expect.objectContaining({
+            streamOptions: expect.objectContaining({
+              memory: expect.objectContaining({ thread: 'pre-existing' }),
+            }),
+          }),
+        }),
+      );
+    });
+  });
+
+  describe('handler context', () => {
+    const message = {
+      id: 'message-1',
+      text: 'hi',
+      author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+      attachments: [],
+    } as any;
+
+    function makeMastra() {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      return {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+    }
+
+    function makeChatThread(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: true,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+        ...overrides,
+      } as any;
+    }
+
+    it('passes the resolved Mastra instance to a custom handler as ctx.mastra', async () => {
+      const chatMod = await getChatModule();
+      // Capture the wrapper AgentChannels registers with the Chat SDK so we can
+      // drive it directly and inspect what it forwards to our custom handler.
+      let registeredDMWrapper: ((thread: any, message: any) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const onDirectMessage = vi.fn(async () => {});
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+
+      expect(registeredDMWrapper).toBeTypeOf('function');
+
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, message);
+
+      expect(onDirectMessage).toHaveBeenCalledTimes(1);
+      // 4th arg is the handler context carrying the resolved Mastra instance
+      // and the request context for the run this message will start.
+      const ctx = onDirectMessage.mock.calls[0]![3];
+      expect(ctx).toEqual({ mastra: mockMastra, requestContext: expect.any(RequestContext) });
+
+      spy.mockRestore();
+    });
+
+    it('gives a custom handler the request context for the run', async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((thread: any, message: any) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const onDirectMessage = vi.fn(async () => {});
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, message);
+
+      const ctx = onDirectMessage.mock.calls[0]![3] as { requestContext: RequestContext };
+      expect(ctx.requestContext).toBeInstanceOf(RequestContext);
+
+      spy.mockRestore();
+    });
+
+    it('carries a handler write on the request context through to dispatch', async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((thread: any, message: any) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      // A custom handler stamps the tenant, then defers to the default handler —
+      // this is the seam the Slack host uses to run under the linked user.
+      const onDirectMessage = vi.fn(async (thread: any, msg: any, defaultHandler: any, ctx: any) => {
+        ctx.requestContext.set('user', { id: 'user-from-handler' });
+        await defaultHandler(thread, msg);
+      });
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      // Intercept the dispatch to read the request context the run receives.
+      let dispatched: RequestContext | undefined;
+      vi.spyOn(channels as any, 'dispatchInboundMessage').mockImplementation(async (args: any) => {
+        dispatched = args.requestContext;
+      });
+
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, message);
+
+      expect(dispatched).toBeDefined();
+      // The handler's write survived, and core's own enrichment sits alongside it.
+      expect(dispatched!.get('user')).toEqual({ id: 'user-from-handler' });
+      expect(dispatched!.get('channel')).toBeDefined();
+
+      spy.mockRestore();
+    });
+
+    it('does not leak one message request context into the next', async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((thread: any, message: any) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const seen: (unknown | undefined)[] = [];
+      const onDirectMessage = vi.fn(async (_thread: any, _msg: any, _defaultHandler: any, ctx: any) => {
+        // Record what this message's context already carried on arrival, then
+        // write a marker that must not survive into the next message.
+        seen.push(ctx.requestContext.get('leak-marker'));
+        ctx.requestContext.set('leak-marker', 'from-first-message');
+      });
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      // Sequential, not Promise.all: concurrent dispatch could pass by
+      // interleaving rather than by genuine per-message isolation.
+      await registeredDMWrapper!(chatThread, message);
+      await registeredDMWrapper!(chatThread, message);
+
+      expect(seen).toHaveLength(2);
+      expect(seen[0]).toBeUndefined();
+      // The second message must start clean — a shared context would carry the marker.
+      expect(seen[1]).toBeUndefined();
+
+      const first = onDirectMessage.mock.calls[0]![3] as { requestContext: RequestContext };
+      const second = onDirectMessage.mock.calls[1]![3] as { requestContext: RequestContext };
+      expect(first.requestContext).not.toBe(second.requestContext);
+
+      spy.mockRestore();
     });
   });
 });

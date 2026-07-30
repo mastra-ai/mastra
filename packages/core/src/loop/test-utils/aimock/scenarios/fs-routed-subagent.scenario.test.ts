@@ -105,7 +105,8 @@ describeForAllEngines(
       // original delegation call id.
       const supervisorFinalTurn = requests.at(-1)?.body?.messages ?? [];
       const toolMessage = supervisorFinalTurn.find(message => (message as { role?: string }).role === 'tool') as
-        { tool_call_id?: string; content?: unknown } | undefined;
+        | { tool_call_id?: string; content?: unknown }
+        | undefined;
       expect(toolMessage?.tool_call_id).toBe('call_writer');
       expect(JSON.stringify(toolMessage?.content)).toContain('Brewed fresh, served warm.');
 

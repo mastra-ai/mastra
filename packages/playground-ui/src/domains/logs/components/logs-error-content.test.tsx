@@ -17,4 +17,17 @@ describe('LogsErrorContent', () => {
     expect(screen.getByText('Logs are not available with your current storage')).toBeTruthy();
     expect(screen.queryByText('Failed to load logs')).toBeNull();
   });
+
+  it('renders an unavailable state when the observability storage domain is disabled', () => {
+    render(
+      <LogsErrorContent
+        error={new Error('HTTP error! status: 501 - {"error":"Observability storage domain is not available"}')}
+        resource="logs"
+        errorTitle="Failed to load logs"
+      />,
+    );
+
+    expect(screen.getByText('Observability storage is not available')).toBeTruthy();
+    expect(screen.queryByText('Failed to load logs')).toBeNull();
+  });
 });

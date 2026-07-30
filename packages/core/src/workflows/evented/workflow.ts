@@ -646,7 +646,8 @@ function createStepFromTool<TStepInput, TSuspend, TResume, TStepOutput>(
   agentOrToolOptions?: Record<string, unknown>,
 ): Step<string, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType> {
   const toolOpts = agentOrToolOptions as
-    { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata } | undefined;
+    | { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata }
+    | undefined;
   if (!params.inputSchema || !params.outputSchema) {
     throw new Error('Tool must have input and output schemas defined');
   }
@@ -1247,7 +1248,7 @@ function createStepFromProcessor<TProcessorId extends string>(
               }
 
               if (validatedResult.systemMessages) {
-                passThrough.messageList!.replaceAllSystemMessages(validatedResult.systemMessages as CoreMessage[]);
+                passThrough.messageList.replaceAllSystemMessages(validatedResult.systemMessages as CoreMessage[]);
               }
 
               // Preserve messages in return - passThrough doesn't include messages,
@@ -1256,7 +1257,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...passThrough,
                 messages,
                 ...validatedResult,
-                systemMessages: passThrough.messageList!.getSystemMessages(),
+                systemMessages: passThrough.messageList.getSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
             }
@@ -1272,7 +1273,8 @@ function createStepFromProcessor<TProcessorId extends string>(
               // across processOutputStream and processOutputResult calls
               const mutableState = processorState;
               let processorSpan = mutableState[spanKey] as
-                ReturnType<NonNullable<typeof parentSpan>['createChildSpan']> | undefined;
+                | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
+                | undefined;
 
               if (!processorSpan && parentSpan) {
                 // First chunk - create span for this processor

@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { ReadableStream, TransformStream } from 'node:stream/web';
-import { coreContentToString } from '../../agent/message-list';
+import { convertMessages, coreContentToString } from '../../agent/message-list';
 import type { MessageList, MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
 import { MastraBase } from '../../base';
@@ -52,6 +52,25 @@ export function createDestructurableOutput<OUTPUT = undefined>(
       return originalValue;
     },
   }) as MastraModelOutput<OUTPUT>;
+}
+
+function persistProcessorDataChunk(
+  messageList: MessageList,
+  messageId: string,
+  chunk: { type: string; data?: unknown; transient?: boolean },
+): void {
+  if (!chunk.type.startsWith('data-') || chunk.transient) return;
+
+  const message: MastraDBMessage = {
+    id: messageId,
+    role: 'assistant',
+    content: {
+      format: 2,
+      parts: [{ type: chunk.type as `data-${string}`, data: chunk.data }],
+    },
+    createdAt: new Date(),
+  };
+  messageList.add(message, 'response');
 }
 
 type PromiseResults<OUTPUT = undefined> = Pick<
@@ -142,6 +161,26 @@ export type FullOutput<OUTPUT = undefined> = {
   /** Only messages loaded from memory (conversation history) */
   rememberedMessages: MastraDBMessage[];
 };
+
+/**
+ * Resolve the output text from the latest response message, skipping internal
+ * completion-check feedback so it can't become the final text.
+ * The completionResult metadata only exists on DB-format messages, and the
+ * message is converted alone so adjacent assistant messages aren't merged.
+ */
+function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): string {
+  const responseDbMessages = messageList.get.response.db();
+  const hasCompletionCheckMessages = responseDbMessages.some(m => m.content?.metadata?.completionResult);
+  if (hasCompletionCheckMessages) {
+    const lastRealMessage = responseDbMessages.findLast(m => !m.content?.metadata?.completionResult);
+    const converted = lastRealMessage ? convertMessages([lastRealMessage]).to('AIV4.Core') : [];
+    const lastConverted = converted[converted.length - 1];
+    return lastConverted ? coreContentToString(lastConverted.content) : '';
+  }
+  const responseMessages = messageList.get.response.aiV4.core();
+  const lastResponseMessage = responseMessages[responseMessages.length - 1];
+  return lastResponseMessage ? coreContentToString(lastResponseMessage.content) : '';
+}
 
 export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #status: WorkflowRunStatus = 'running';
@@ -391,7 +430,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
               // Create a ProcessorStreamWriter from the controller so processOutputStream can emit custom chunks
               const streamWriter = {
-                custom: async (data: { type: string }) => controller.enqueue(data as ChunkType<OUTPUT>),
+                custom: async (
+                  data: { type: string; data?: unknown; transient?: boolean },
+                  writerOptions?: { messageId?: string },
+                ) => {
+                  persistProcessorDataChunk(self.messageList, writerOptions?.messageId ?? self.messageId, data);
+                  controller.enqueue(data as ChunkType<OUTPUT>);
+                },
               };
 
               const {
@@ -923,7 +968,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // Must use both #emitChunk (for fullStream/EventEmitter consumers) and
                   // controller.enqueue (for raw stream consumers) to ensure visibility.
                   const outputResultWriter = {
-                    custom: async (data: { type: string }) => {
+                    custom: async (
+                      data: { type: string; data?: unknown; transient?: boolean },
+                      writerOptions?: { messageId?: string },
+                    ) => {
+                      persistProcessorDataChunk(self.messageList, writerOptions?.messageId ?? self.messageId, data);
                       self.#emitChunk(data as ChunkType<OUTPUT>);
                       controller.enqueue(data as ChunkType<OUTPUT>);
                     },
@@ -946,9 +995,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   );
 
                   // Get text from the latest response message (the last assistant message)
-                  const responseMessages = self.messageList.get.response.aiV4.core();
-                  const lastResponseMessage = responseMessages[responseMessages.length - 1];
-                  const outputText = lastResponseMessage ? coreContentToString(lastResponseMessage.content) : '';
+                  const outputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
 
                   // Only update the last step's text if output processors actually modified it
                   // This preserves text from retry scenarios where step.text is already correct
@@ -1309,7 +1356,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    * Stream of all chunks. Provides complete control over stream processing.
    */
   get fullStream() {
-    return this.#createEventedStream();
+    const configuredTransforms = this.#options.experimentalTransform;
+    if (!configuredTransforms) {
+      return this.#createEventedStream();
+    }
+
+    const transforms = typeof configuredTransforms === 'function' ? [configuredTransforms] : configuredTransforms;
+    let stream = this.#createEventedStream();
+    for (const transform of transforms) {
+      stream = stream.pipeThrough(transform());
+    }
+    return stream;
   }
 
   /**

@@ -47,7 +47,7 @@ export const ThreadListNewItem = ({ as, href, to, children }: ThreadListNewItemP
 };
 
 export const ThreadListSeparator = () => (
-  <div role="separator" aria-orientation="horizontal" className="-mx-1 my-1 h-px bg-border1/40" />
+  <div role="separator" aria-orientation="horizontal" className="bg-border1/40 -mx-1 my-1 h-px" />
 );
 
 export interface ThreadListItemsProps {
@@ -122,7 +122,7 @@ export interface ThreadListEmptyProps {
 
 export const ThreadListEmpty = ({ children }: ThreadListEmptyProps) => {
   return (
-    <Txt as="p" variant="ui-sm" className="px-5 py-3 text-neutral3">
+    <Txt as="p" variant="ui-sm" className="text-neutral3 px-5 py-3">
       {children}
     </Txt>
   );

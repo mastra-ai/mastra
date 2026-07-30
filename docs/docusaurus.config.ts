@@ -5,6 +5,7 @@ import remarkModelTokens from './src/plugins/remark-model-tokens'
 import type { Config } from '@docusaurus/types'
 import type { ThemeConfig } from '@docusaurus/preset-classic'
 import type { AlgoliaPluginOptions } from '@mastra/docusaurus-plugin-algolia'
+import type { KapaPluginOptions } from '@mastra/docusaurus-plugin-kapa'
 
 const NPM2YARN_CONFIG = { sync: true, converters: ['pnpm', 'yarn', 'bun'] }
 const SHARED_REMARK_PLUGINS = [
@@ -30,7 +31,7 @@ const kapaThemes: Config['themes'] =
           {
             integrationId: KAPA_INTEGRATION_ID,
             groupId: KAPA_GROUP_ID,
-          },
+          } satisfies KapaPluginOptions,
         ],
       ]
     : []

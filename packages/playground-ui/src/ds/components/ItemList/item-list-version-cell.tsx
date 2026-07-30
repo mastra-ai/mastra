@@ -21,7 +21,7 @@ export function ItemListVersionCell({ version, date, isLatest, isDeleted }: Item
         })}
       >
         <strong className="font-normal">v. {version}</strong>
-        <em className="text-ui-sm font-normal text-neutral2">
+        <em className="text-ui-sm text-neutral2 font-normal">
           {date ? format(new Date(date), 'MMM d, yyyy HH:mm') : null}
         </em>
       </div>

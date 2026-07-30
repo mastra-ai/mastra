@@ -42,9 +42,9 @@ Each turn runs `agent.generate()` with the same thread ID, so the agent sees the
 
 ## Memory is required for cross-turn recall
 
-Multi-turn recall depends on the agent having a **memory store configured**. The shared thread ID is what lets each turn see the earlier ones — but a thread only persists history when the agent has memory. If the agent has no memory configured, the turns still run sequentially and their outputs still accumulate for scoring, but the agent will not recall earlier turns (each input runs in isolation). `runEvals` logs a warning when you use `inputs` on an agent without memory.
+Multi-turn recall depends on the agent having a **memory store configured**. The shared thread ID is what lets each turn see the earlier ones, but a thread only persists history when the agent has memory. If the agent has no memory configured, the turns still run sequentially and their outputs still accumulate for scoring, but the agent won't recall earlier turns (each input runs in isolation). `runEvals` logs a warning when you use `inputs` on an agent without memory.
 
-`runEvals` manages the conversation identity for you: it generates the shared `threadId` and injects a `resourceId` (Mastra memory scopes messages by resource + thread, so both are required for recall to work). By default the resource is derived from the generated thread so each conversation is isolated. To pin a specific resource — for example to reuse an existing user's memory — pass `targetOptions.memory.resource`; `runEvals` still owns the thread, so you don't provide one:
+`runEvals` manages the conversation identity for you: it generates the shared `threadId` and injects a `resourceId` (Mastra memory scopes messages by resource + thread, so both are required for recall to work). By default the resource is derived from the generated thread so each conversation is isolated. To pin a specific resource, for example to reuse an existing user's memory, pass `targetOptions.memory.resource`; `runEvals` still owns the thread, so you don't provide one:
 
 ```typescript
 await runEvals({
@@ -66,18 +66,18 @@ When a data item has an `inputs` array, `runEvals`:
 1. Accumulates all output messages across turns
 1. Passes the full accumulated output to scorers for evaluation
 
-Scorers see the complete conversation output, not just the last turn.
+Scorers see the complete conversation output, including every turn.
 
 ## Scoring semantics
 
-Two details matter when writing scorers for multi-turn items:
+These details matter when writing scorers for multi-turn items:
 
-- **`run.output` is the accumulated output from every turn.** Output-based scorers — `checks.includes`, `checks.calledTool`, `checks.similarity`, and similar — evaluate the whole conversation. For example, `checks.calledTool('get_weather', { times: 2 })` counts calls across all turns.
+- **`run.output` is the accumulated output from every turn.** Output-based scorers: `checks.includes`, `checks.calledTool`, `checks.similarity`, and similar: evaluate the whole conversation. For example, `checks.calledTool('get_weather', { times: 2 })` counts calls across all turns.
 - **`run.input` is only the first turn's input.** Scorers that compare input against output (faithfulness, answer relevancy, and other input-relative LLM scorers) only see the first user message, not the full conversation. Prefer output-based checks for multi-turn, or build scorers that read the accumulated `run.output` directly.
 
 ## Per-turn assertions with `turns`
 
-The `inputs` form scores the **accumulated** output holistically — a single score over every turn's output. That can hide per-turn failures: an output-based check like `checks.includes('Brooklyn')` passes if _any_ turn mentions Brooklyn, even when the follow-up turn is broken.
+The `inputs` form scores the **accumulated** output as a whole, a single score over every turn's output. That can hide per-turn failures: an output-based check like `checks.includes('Brooklyn')` passes if _any_ turn mentions Brooklyn, even when the follow-up turn is broken.
 
 When you need to assert that a **specific turn** behaved correctly, use `turns` instead. Each turn is an object with its own `input` and optional `gates`/`scorers` that evaluate **only that turn's** input and output:
 
@@ -113,14 +113,14 @@ result.turnResults // per-turn gate/threshold/scorer outcomes
 
 Semantics:
 
-- A per-turn gate or scorer sees **only that turn's** `run.input` and `run.output` — never the accumulated conversation. This fixes both blind spots of `inputs`: the wrong turn can't satisfy a check, and `run.input` is correct for each turn.
-- Per-turn outcomes fold into the overall [verdict](/docs/evals/gates-and-verdicts): a failing turn gate makes the verdict `failed`; a missed turn threshold (with gates passing) makes it `scored`.
+- A per-turn gate or scorer sees **only that turn's** `run.input` and `run.output`: never the accumulated conversation. This fixes both blind spots of `inputs`: the wrong turn can't satisfy a check, and `run.input` is correct for each turn.
+- Per-turn outcomes fold into the [verdict](/docs/evals/gates-and-verdicts): a failing turn gate makes the verdict `failed`. A missed turn threshold (with gates passing) makes it `scored`.
 - `result.turnResults[i]` reports each turn's `gateResults`, `thresholdResults`, and `scores`, so a failure points at the exact turn. Across multiple conversations, turn results are averaged by turn index.
-- A turn with no `gates`/`scorers` just advances the conversation.
-- Top-level `scorers`/`gates` still run holistically over the accumulated output, so you can combine "this turn must call the tool" with "the overall answer mentions Brooklyn."
+- A turn with no `gates` or `scorers` advances the conversation.
+- Top-level `scorers`/`gates` still run as a whole over the accumulated output, so you can combine "this turn must call the tool" with "the answer mentions Brooklyn."
 - When the agent has storage configured, each per-turn scorer/gate result is persisted like top-level scores, so per-turn outcomes appear in your scores store. Each stored per-turn score is labeled with its turn index (`metadata.turnIndex`), shares the conversation's `threadId`, and links to that turn's own trace span.
 
-Use `inputs` when a single holistic score over the whole conversation is enough; use `turns` when correctness depends on individual turns. `turns` cannot be combined with `input` or `inputs` in the same data item.
+Use `inputs` when a single whole-conversation score over the whole conversation is enough. Use `turns` when correctness depends on individual turns. `turns` can't be combined with `input` or `inputs` in the same data item.
 
 ## Combining with gates and thresholds
 
@@ -161,7 +161,7 @@ const result = await runEvals({
 })
 ```
 
-Single-turn items use `input` as usual. Multi-turn items use `inputs` — `input` can be omitted entirely.
+Single-turn items use `input` as usual. Multi-turn items use `inputs`, `input` can be omitted entirely.
 
 ## Validation
 
