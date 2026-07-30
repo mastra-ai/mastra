@@ -29,4 +29,4 @@ Mastra registers the logger before storage, observability, and file-based agents
 
 ## Precedence with code
 
-Code-registered logging wins over `logger.ts`. If you pass `logger` to `new Mastra({ logger })` in `src/mastra/index.ts` (or set `logger: false` to disable logging), `logger.ts` is ignored with a warning. Use `logger.ts` when one project-wide logger is enough; use code registration when setup depends on runtime wiring.
+Code-registered logging wins over `logger.ts`. If you pass `logger` to `new Mastra({ logger })` in `src/mastra/index.ts` (or set `logger: false` to disable logging), `logger.ts` is ignored with a warning. Use `logger.ts` when one project-wide logger is enough. Use code registration when setup depends on runtime wiring.

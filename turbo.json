@@ -13,11 +13,11 @@
     "lint": {
       "dependsOn": []
     },
-    "//#lint:format": {
+    "lint:fix": {
       "dependsOn": [],
       "cache": false
     },
-    "//#format:prettier": {
+    "//#lint:format": {
       "dependsOn": [],
       "cache": false
     },
@@ -34,6 +34,10 @@
     },
     "validate:package": {
       "dependsOn": []
+    },
+    "//#format:oxfmt": {
+      "dependsOn": [],
+      "cache": false
     }
   }
 }

@@ -6,7 +6,7 @@ export const LoadingBadge = () => {
   return (
     <BadgeWrapper
       icon={<Spinner className="text-neutral3" />}
-      title={<Skeleton className="ml-2 w-12 h-2" />}
+      title={<Skeleton className="ml-2 h-2 w-12" />}
       collapsible={false}
     />
   );

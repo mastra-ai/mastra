@@ -12,9 +12,9 @@ import type {
   ToolProviderHealth,
   ToolProviderInfo,
   ToolProviderToolkit,
+  BaseToolProviderOptions,
 } from '@mastra/core/tool-provider';
 import { BaseToolProvider } from '@mastra/core/tool-provider';
-import type { BaseToolProviderOptions } from '@mastra/core/tool-provider';
 import type { ToolAction } from '@mastra/core/tools';
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 

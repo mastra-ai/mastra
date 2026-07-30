@@ -9,7 +9,7 @@ export { fastModePrompt } from './fast.js';
 import { buildBasePrompt } from '@mastra/core/coding-agent';
 import type { PromptContext as BasePromptContext } from '@mastra/core/coding-agent';
 import { hasTavilyKey } from '../../tools/index.js';
-import { loadAgentInstructions, formatAgentInstructions } from './agent-instructions.js';
+import { loadAgentInstructions, formatAgentInstructions, createGitRefInstructionReader } from './agent-instructions.js';
 import { buildModePromptFn } from './build.js';
 import { fastModePrompt } from './fast.js';
 import { modelSpecificPrompts } from './model.js';
@@ -77,9 +77,23 @@ export function buildFullPrompt(ctx: PromptContext): string {
   // keeps the prompt prefix stable across task updates (preserving prompt cache)
   // while still surviving observational-memory truncation.
 
-  // Load and inject agent instructions from AGENTS.md/CLAUDE.md files
+  // Load and inject agent instructions from AGENTS.md/CLAUDE.md files.
+  // Untrusted checkouts (e.g. a PR branch under review) never read
+  // project-scope files off the working tree: their AGENTS.md is
+  // attacker-writable and would otherwise land in the system prompt as
+  // trusted configuration. When the session carries a trusted base ref, the
+  // project instructions are served from that ref instead (`git show`);
+  // without one, project-scope files are skipped entirely. Global (operator
+  // machine) instructions always load.
   const configDir = ctx.state?.configDir as string | undefined;
-  const instructionSources = loadAgentInstructions(ctx.workingDir, configDir);
+  const untrustedCheckout = ctx.state?.untrustedCheckout === true;
+  const baseRef = typeof ctx.state?.baseRef === 'string' ? ctx.state.baseRef : undefined;
+  const projectReader = untrustedCheckout
+    ? baseRef
+      ? createGitRefInstructionReader(ctx.workingDir, baseRef)
+      : { exists: () => false, read: () => '' }
+    : undefined;
+  const instructionSources = loadAgentInstructions(ctx.workingDir, configDir, projectReader);
   const instructionsSection = formatAgentInstructions(instructionSources);
 
   const sections = [base, instructionsSection.trim(), modelSpecific.trim(), modeSpecific.trim()].filter(Boolean);

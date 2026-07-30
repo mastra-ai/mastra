@@ -50,7 +50,7 @@ Run the migration command which automatically deduplicates spans and adds the co
 npx mastra migrate
 ```
 
-The CLI bundles your project, connects to your configured storage, and runs the migration. It keeps the most complete record (based on `endTime` and attributes) when removing duplicates.
+The CLI bundles your project and connects to your configured storage before running the migration. It keeps the most complete record (based on `endTime` and attributes) when removing duplicates.
 
 #### Option 2: Manual SQL (PostgreSQL)
 
@@ -158,7 +158,7 @@ To migrate, update your imports and instantiation:
 ```
 
 :::note
-If you're using a single store implementation (like `PostgresStore` or `LibSQLStore`) directly, no changes are needed. This only affects code that explicitly uses `MastraStorage` for composite storage.
+If you're using a single store implementation (like `PostgresStore` or `LibSQLStore`) directly, keep the existing configuration. This only affects code that explicitly uses `MastraStorage` for composite storage.
 :::
 
 ### Required `id` property for storage instances
@@ -183,7 +183,7 @@ To migrate, add an `id` field to your storage constructor.
 
 ### Pagination from `offset/limit` to `page/perPage`
 
-All pagination APIs now use `page` and `perPage` instead of `offset` and `limit`. This change provides a more intuitive pagination model that aligns with common web pagination patterns.
+All pagination APIs now use `page` and `perPage` instead of `offset` and `limit`, matching page-based web pagination.
 
 To migrate, update all pagination parameters from `offset/limit` to `page/perPage`. Note that `page` is 0-indexed.
 
@@ -423,9 +423,9 @@ To migrate, use the memory store, remove format parameters, and update code to w
 
 ### Vector store API from positional to named arguments
 
-All vector store methods now use named arguments instead of positional arguments. This change improves code readability and makes method signatures more maintainable.
+All vector store methods now use an arguments object instead of positional arguments. This makes each value's purpose visible at the call site and lets method signatures evolve without relying on argument order.
 
-To migrate, update all vector store method calls to use named arguments.
+To migrate, update all vector store method calls to use an arguments object.
 
 ```diff
 - await vectorDB.createIndex(indexName, 3, 'cosine');
@@ -452,9 +452,9 @@ To migrate, update all vector store method calls to use named arguments.
 
 ### Vector store method renames
 
-The `updateIndexById` and `deleteIndexById` methods have been renamed to `updateVector` and `deleteVector` respectively. This change provides clearer naming that better describes the operations.
+The `updateIndexById` and `deleteIndexById` methods have been renamed to `updateVector` and `deleteVector` respectively. The new names identify that these methods operate on vectors.
 
-To migrate, rename the methods and use named arguments.
+To migrate, rename the methods and pass an arguments object.
 
 ```diff
 - await vectorDB.updateIndexById(indexName, id, update);
@@ -488,9 +488,9 @@ npx @mastra/codemod@latest v1/vector-pg-constructor .
 
 ### PGVector `defineIndex` to `buildIndex`
 
-The `defineIndex()` method has been removed in favor of `buildIndex()`. This change provides clearer naming for the index building operation.
+The `defineIndex()` method has been removed in favor of `buildIndex()`, which identifies that the method builds an index.
 
-To migrate, rename the method and use named arguments.
+To migrate, rename the method and pass an arguments object.
 
 ```diff
 - await vectorDB.defineIndex(indexName, 'cosine', { type: 'flat' });
@@ -503,7 +503,7 @@ To migrate, rename the method and use named arguments.
 
 ### `PostgresStore`: `schema` to `schemaName`
 
-The `schema` parameter has been renamed to `schemaName` in the PostgresStore constructor. This change provides clearer naming to avoid confusion with database schema concepts.
+The `schema` parameter has been renamed to `schemaName` in the PostgresStore constructor. The new name identifies the value as the database schema's name.
 
 To migrate, rename the parameter.
 
@@ -564,7 +564,7 @@ To migrate, use paginated methods via domain stores. For fetching all records, u
 
 ### `getTraces` and `getTracesPaginated`
 
-The `getTraces()` and `getTracesPaginated()` methods have been removed from storage. Traces are now handled through the observability package rather than core storage. This change provides better separation of concerns between core storage and observability features.
+The `getTraces()` and `getTracesPaginated()` methods have been removed from storage. Use the observability package to access traces instead of core storage.
 
 To migrate, use observability storage methods instead.
 

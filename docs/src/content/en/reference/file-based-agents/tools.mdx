@@ -42,7 +42,7 @@ Use one file per tool. Name the file after the action the model should take:
 
 - Use `get_weather.ts`, `search_docs.ts`, or `create_ticket.ts`.
 - Avoid vague names like `helper.ts`, `api.ts`, or `utils.ts`.
-- Co-locate tests next to the tool as `*.test.ts` or `*.spec.ts`; discovery ignores those files.
+- Co-locate tests next to the tool as `*.test.ts` or `*.spec.ts`. Discovery ignores those files.
 - Keep shared helper code outside `tools/` or in files that don't match the discovered extensions under `tools/`.
 
 Because nested directories aren't discovered as tools, group related tools with clear filename prefixes instead of subfolders, such as `calendar_create_event.ts` and `calendar_list_events.ts`.

@@ -52,7 +52,7 @@ export function AgentViewHeader({ agentId, view }: AgentViewHeaderProps) {
         className="flex items-center justify-between gap-2 pr-3 max-lg:py-2"
         style={{ viewTransitionName: 'agent-view-header' }}
       >
-        <div className="flex-1 min-w-0 max-lg:hidden">
+        <div className="min-w-0 flex-1 max-lg:hidden">
           <AgentEntityHeader agentId={agentId} />
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -72,19 +72,19 @@ export function AgentViewHeader({ agentId, view }: AgentViewHeaderProps) {
             data-testid="agent-entity-header-share"
           >
             {isShareCopied ? (
-              <Check className="h-4 w-4 text-neutral3" />
+              <Check className="text-neutral3 h-4 w-4" />
             ) : (
-              <LinkIcon className="h-4 w-4 text-neutral3 hover:text-neutral6" />
+              <LinkIcon className="text-neutral3 hover:text-neutral6 h-4 w-4" />
             )}
           </Button>
           <Button variant="default" type="button" onClick={handleToggle} data-testid="agent-view-header-toggle">
             {view === 'chat' ? (
               <>
-                <SlidersHorizontal className="h-4 w-4 text-neutral3" /> Settings
+                <SlidersHorizontal className="text-neutral3 h-4 w-4" /> Settings
               </>
             ) : (
               <>
-                <X className="h-4 w-4 text-neutral3" /> Close
+                <X className="text-neutral3 h-4 w-4" /> Close
               </>
             )}
           </Button>
