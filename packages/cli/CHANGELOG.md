@@ -1,5 +1,27 @@
 # mastra
 
+## 1.22.0-alpha.2
+
+### Minor Changes
+
+- Added overwrite protection to `mastra env vars pull`. ([#19824](https://github.com/mastra-ai/mastra/pull/19824))
+
+  Use `--force` to intentionally replace an existing env file.
+
+  ```bash
+  mastra env vars pull production --force
+  ```
+
+### Patch Changes
+
+- Fixed Studio navigation and authentication redirects when Studio is mounted at a custom base path. ([#19799](https://github.com/mastra-ai/mastra/pull/19799))
+
+- Fixed the slash-command menu in the Factory web chat. Typing `/` in the composer now shows the list of available commands again; the menu was rendering but invisibly clipped by the composer box. ([#20476](https://github.com/mastra-ai/mastra/pull/20476))
+
+- Updated dependencies [[`322daa6`](https://github.com/mastra-ai/mastra/commit/322daa6d90552909204044790d850958f6745fed), [`cadaa13`](https://github.com/mastra-ai/mastra/commit/cadaa1372e1077c8e85eb64c5499ba8803caa323), [`06000d7`](https://github.com/mastra-ai/mastra/commit/06000d73712911572e913b8a83339270296d0a22), [`3de0188`](https://github.com/mastra-ai/mastra/commit/3de0188bfaf9a9c09c95fe322b53838cf52c70b6)]:
+  - @mastra/core@1.56.0-alpha.2
+  - @mastra/deployer@1.56.0-alpha.2
+
 ## 1.21.1-alpha.1
 
 ### Patch Changes

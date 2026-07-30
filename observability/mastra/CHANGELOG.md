@@ -1,5 +1,14 @@
 # @mastra/observability
 
+## 1.16.4-alpha.0
+
+### Patch Changes
+
+- Fixed logs and metrics emitted outside of a span (for example server request logs) being stored without an environment or service name. They now inherit the Mastra-level environment (from the environment config option or NODE_ENV) and the configured service name, so filtering by environment in Studio Observability no longer hides these logs and metrics. Relates to https://github.com/mastra-ai/mastra/issues/19870 ([#19892](https://github.com/mastra-ai/mastra/pull/19892))
+
+- Updated dependencies [[`322daa6`](https://github.com/mastra-ai/mastra/commit/322daa6d90552909204044790d850958f6745fed), [`cadaa13`](https://github.com/mastra-ai/mastra/commit/cadaa1372e1077c8e85eb64c5499ba8803caa323), [`06000d7`](https://github.com/mastra-ai/mastra/commit/06000d73712911572e913b8a83339270296d0a22), [`3de0188`](https://github.com/mastra-ai/mastra/commit/3de0188bfaf9a9c09c95fe322b53838cf52c70b6)]:
+  - @mastra/core@1.56.0-alpha.2
+
 ## 1.16.3
 
 ### Patch Changes
