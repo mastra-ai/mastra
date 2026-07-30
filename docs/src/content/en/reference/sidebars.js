@@ -834,6 +834,7 @@ const sidebars = {
           type: 'category',
           label: 'Methods',
           items: [
+            { type: 'doc', id: 'workflows/workflow-methods/agent', label: '.agent()' },
             { type: 'doc', id: 'workflows/workflow-methods/branch', label: '.branch()' },
             { type: 'doc', id: 'workflows/workflow-methods/commit', label: '.commit()' },
             { type: 'doc', id: 'workflows/workflow-methods/create-run', label: '.createRun()' },
@@ -845,6 +846,7 @@ const sidebars = {
             { type: 'doc', id: 'workflows/workflow-methods/sleep', label: '.sleep()' },
             { type: 'doc', id: 'workflows/workflow-methods/sleepUntil', label: '.sleepUntil()' },
             { type: 'doc', id: 'workflows/workflow-methods/then', label: '.then()' },
+            { type: 'doc', id: 'workflows/workflow-methods/tool', label: '.tool()' },
           ],
         },
         {
