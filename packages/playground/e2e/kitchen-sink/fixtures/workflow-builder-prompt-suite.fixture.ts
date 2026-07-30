@@ -64,6 +64,17 @@ const ticketSchema = objectSchema({ ticketId: stringSchema, status: stringSchema
 const fromStep = (step: string | string[], path: string) => ({ step, path });
 const fromInput = (path: string) => ({ initData: true, path });
 
+const emailLookupHelper = (id: string, sourceField: string) => ({
+  id,
+  description: `Looks up the customer named by ${sourceField}.`,
+  inputSchema: objectSchema({ [sourceField]: stringSchema }, [sourceField]),
+  outputSchema: customerSchema,
+  graph: [
+    { type: 'mapping', id: 'lookup-input', mapConfig: { email: fromInput(sourceField) } },
+    { type: 'tool', id: 'lookup-customer-step', toolId: 'lookupCustomer' },
+  ],
+});
+
 export const workflowBuilderPromptFixtures = {
   'workflow-builder-prompt-addition': promptSuiteFixture({
     id: 'addition-workflow',
@@ -105,6 +116,9 @@ export const workflowBuilderPromptFixtures = {
       },
     ],
   }),
+  // Parallel branches all receive the same object, so two lookups of two
+  // different emails need one helper workflow per branch to do the shaping.
+  // The helpers are submitted with the root and saved with it.
   'workflow-builder-prompt-parallel-customer-lookup': promptSuiteFixture({
     id: 'parallel-customer-lookup-workflow',
     description: 'Looks up two customers in parallel.',
@@ -117,8 +131,8 @@ export const workflowBuilderPromptFixtures = {
       {
         type: 'parallel',
         steps: [
-          { type: 'tool', id: 'lookup-first', toolId: 'lookupCustomer' },
-          { type: 'tool', id: 'lookup-second', toolId: 'lookupCustomer' },
+          { type: 'workflow', id: 'lookup-first', workflowId: 'lookup-first-customer' },
+          { type: 'workflow', id: 'lookup-second', workflowId: 'lookup-second-customer' },
         ],
       },
       {
@@ -127,6 +141,39 @@ export const workflowBuilderPromptFixtures = {
         mapConfig: {
           firstCustomer: fromStep('lookup-first', ''),
           secondCustomer: fromStep('lookup-second', ''),
+        },
+      },
+    ],
+    dependencies: [
+      emailLookupHelper('lookup-first-customer', 'firstEmail'),
+      emailLookupHelper('lookup-second-customer', 'secondEmail'),
+    ],
+  }),
+  // The other parallel shape: one object feeds both branches, and each branch
+  // consumes the fields its own schema requires. No helpers needed.
+  'workflow-builder-prompt-parallel-support-fanout': promptSuiteFixture({
+    id: 'parallel-support-fanout-workflow',
+    description: 'Looks up a customer and opens a ticket in parallel.',
+    inputSchema: objectSchema({ email: stringSchema, customerId: stringSchema, summary: stringSchema }, [
+      'email',
+      'customerId',
+      'summary',
+    ]),
+    outputSchema: objectSchema({ customer: customerSchema, ticket: ticketSchema }, ['customer', 'ticket']),
+    graph: [
+      {
+        type: 'parallel',
+        steps: [
+          { type: 'tool', id: 'lookup-customer-step', toolId: 'lookupCustomer' },
+          { type: 'tool', id: 'create-ticket-step', toolId: 'createSupportTicket' },
+        ],
+      },
+      {
+        type: 'mapping',
+        id: 'parallel-fanout-result',
+        mapConfig: {
+          customer: fromStep('lookup-customer-step', ''),
+          ticket: fromStep('create-ticket-step', ''),
         },
       },
     ],

@@ -7,6 +7,8 @@ import type {
 } from '@mastra/core/workflows/builder';
 
 export type WorkflowDraft = UpsertStoredWorkflowParams;
+/** One member of a draft: the workflow being built, or a helper it nests. */
+export type WorkflowDraftDefinition = NonNullable<WorkflowDraft['dependencies']>[number];
 export type WorkflowDraftStep = WorkflowDraft['graph'][number];
 type JsonSchema = WorkflowDraft['inputSchema'];
 
@@ -255,22 +257,31 @@ function toDraftIssue(issue: WorkflowDefinitionPreflightIssue): WorkflowDraftVal
 
 const issueKey = (issue: WorkflowDraftValidationIssue): string => `${issue.code}:${issue.path}`;
 
-export function validateWorkflowDraft(
-  draft: WorkflowDraft,
-  context?: WorkflowDraftValidationContext,
-): WorkflowDraftValidationResult {
-  const issues: WorkflowDraftValidationIssue[] = [];
+function validateDefinition(
+  definition: WorkflowDraftDefinition,
+  context: WorkflowDraftValidationContext | undefined,
+  prefix: string,
+  issues: WorkflowDraftValidationIssue[],
+): void {
+  const at = (path: string) => `${prefix}${path}`;
 
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(draft.id)) {
-    issues.push({ code: 'invalid-workflow-id', path: 'id', message: 'Workflow id must be descriptive kebab-case.' });
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(definition.id)) {
+    issues.push({
+      code: 'invalid-workflow-id',
+      path: at('id'),
+      message: 'Workflow id must be descriptive kebab-case.',
+    });
   }
-  validateJsonSchema(draft.inputSchema, 'inputSchema', issues);
-  validateJsonSchema(draft.outputSchema, 'outputSchema', issues);
-  if (draft.stateSchema !== undefined) validateJsonSchema(draft.stateSchema, 'stateSchema', issues);
-  if (draft.requestContextSchema !== undefined) {
-    validateJsonSchema(draft.requestContextSchema, 'requestContextSchema', issues);
+  validateJsonSchema(definition.inputSchema, at('inputSchema'), issues);
+  validateJsonSchema(definition.outputSchema, at('outputSchema'), issues);
+  if (definition.stateSchema !== undefined) validateJsonSchema(definition.stateSchema, at('stateSchema'), issues);
+  if (definition.requestContextSchema !== undefined) {
+    validateJsonSchema(definition.requestContextSchema, at('requestContextSchema'), issues);
   }
-  validateDraftSpecifics(draft, issues, context);
+
+  const specificIssues: WorkflowDraftValidationIssue[] = [];
+  validateDraftSpecifics(definition, specificIssues, context);
+  issues.push(...specificIssues.map(issue => ({ ...issue, path: at(issue.path) })));
 
   // Structure, references, JSON-Schema keywords, and schema-flow all come
   // from the single Core validation domain — the same checks the server runs
@@ -281,18 +292,132 @@ export function validateWorkflowDraft(
     workflows: context?.workflowCatalog === 'unavailable' ? undefined : context?.workflows,
   };
   try {
-    const preflight = preflightWorkflowDefinition(normalizeWorkflowBuilderDefinition(draft), coreContext);
+    const { dependencies: _bundleMembers, ...definitionOnly } = definition as WorkflowDraft;
+    const preflight = preflightWorkflowDefinition(normalizeWorkflowBuilderDefinition(definitionOnly), coreContext);
     if (!preflight.ok) {
       const seen = new Set(issues.map(issueKey));
-      issues.push(...preflight.issues.map(toDraftIssue).filter(issue => !seen.has(issueKey(issue))));
+      issues.push(
+        ...preflight.issues
+          .map(toDraftIssue)
+          .map(issue => ({ ...issue, path: at(issue.path) }))
+          .filter(issue => !seen.has(issueKey(issue))),
+      );
     }
   } catch (error) {
     issues.push({
       code: 'invalid-schema',
-      path: 'graph',
+      path: at('graph'),
       message: error instanceof Error ? error.message : 'Workflow definition could not be normalized.',
     });
   }
+}
+
+/** Nested workflow ids referenced anywhere in a graph, containers included. */
+function collectNestedWorkflowIds(graph: WorkflowDraft['graph']): string[] {
+  const ids: string[] = [];
+  forEachDraftStep(graph, step => {
+    if (step.type === 'workflow' && step.workflowId.trim().length > 0) ids.push(step.workflowId);
+  });
+  return ids;
+}
+
+/**
+ * Helpers and root are saved as one bundle, so hydration order is derived from
+ * the graphs. A reference cycle has no order, and Core rejects the bundle at
+ * save time — catch it here so a draft never goes Ready that cannot be saved.
+ */
+function findDependencyCycle(members: WorkflowDraftDefinition[]): string[] | undefined {
+  const memberIds = new Set(members.map(member => member.id));
+  const edges = new Map(
+    members.map(
+      member =>
+        [
+          member.id,
+          collectNestedWorkflowIds(member.graph).filter(id => id !== member.id && memberIds.has(id)),
+        ] as const,
+    ),
+  );
+  const visiting = new Set<string>();
+  const settled = new Set<string>();
+  let cycle: string[] | undefined;
+
+  const walk = (id: string, trail: string[]) => {
+    if (cycle || settled.has(id)) return;
+    if (visiting.has(id)) {
+      cycle = trail.slice(trail.indexOf(id));
+      return;
+    }
+    visiting.add(id);
+    for (const next of edges.get(id) ?? []) walk(next, [...trail, next]);
+    visiting.delete(id);
+    settled.add(id);
+  };
+
+  for (const member of members) walk(member.id, [member.id]);
+  return cycle;
+}
+
+/**
+ * Unsaved helpers are not in the registry catalog, so the root would fail its
+ * reference pre-flight. Bundle members resolve against the registry plus each
+ * other — the same index Core builds when it validates the bundle at save.
+ */
+function withDependencyCatalog(
+  context: WorkflowDraftValidationContext | undefined,
+  dependencies: WorkflowDraftDefinition[],
+): WorkflowDraftValidationContext | undefined {
+  if (dependencies.length === 0) return context;
+  const workflows = { ...context?.workflows };
+  for (const dependency of dependencies) {
+    workflows[dependency.id] = {
+      runtimeId: dependency.id,
+      inputSchema: dependency.inputSchema,
+      outputSchema: dependency.outputSchema,
+    };
+  }
+  return { ...context, workflows, workflowCatalog: context?.workflowCatalog ?? 'available' };
+}
+
+export function validateWorkflowDraft(
+  draft: WorkflowDraft,
+  context?: WorkflowDraftValidationContext,
+): WorkflowDraftValidationResult {
+  const issues: WorkflowDraftValidationIssue[] = [];
+  const dependencies = draft.dependencies ?? [];
+
+  const seenIds = new Set([draft.id]);
+  dependencies.forEach((dependency, index) => {
+    if (!seenIds.has(dependency.id)) {
+      seenIds.add(dependency.id);
+      return;
+    }
+    issues.push({
+      code: 'invalid-workflow-id',
+      path: `dependencies.${index}.id`,
+      message:
+        dependency.id === draft.id
+          ? 'Helper workflow id must differ from the workflow being built.'
+          : `Helper workflow id "${dependency.id}" is used by more than one helper.`,
+    });
+  });
+
+  const members = [draft, ...dependencies];
+  const cycle = findDependencyCycle(members);
+  if (cycle) {
+    issues.push({
+      code: 'missing-reference',
+      path: 'dependencies',
+      message: `Helper workflows nest each other in a cycle (${cycle.join(' → ')}), so they cannot be saved together.`,
+    });
+  }
+
+  // Every member validates against the registry plus the whole bundle, so a
+  // helper may nest another helper and the root may nest any of them.
+  const bundleContext = withDependencyCatalog(context, dependencies);
+  dependencies.forEach((dependency, index) =>
+    validateDefinition(dependency, bundleContext, `dependencies.${index}.`, issues),
+  );
+  validateDefinition(draft, bundleContext, '', issues);
 
   return issues.length === 0 ? { ok: true } : { ok: false, issues };
 }

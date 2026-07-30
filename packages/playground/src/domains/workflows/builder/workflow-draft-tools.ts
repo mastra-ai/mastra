@@ -31,9 +31,18 @@ const resultSchema = z.object({
   definition: z.unknown().optional(),
 });
 
-export const workflowDefinitionInputSchema = workflowBuilderDefinitionInputSchema.describe(
-  'One complete canonical WorkflowDefinition. Submit exactly one candidate per attempt, never parallel alternatives. After diagnostics, correct and resubmit the whole definition. A successful submission becomes Ready automatically but is not persisted until the user clicks Save.',
-);
+export const workflowDefinitionInputSchema = workflowBuilderDefinitionInputSchema
+  .extend({
+    dependencies: z
+      .array(workflowBuilderDefinitionInputSchema)
+      .optional()
+      .describe(
+        'Helper workflows this definition nests that do not exist in the catalog yet. They travel with this submission as one unit: validated together, shown together, and saved together when the user clicks Save. Use them only when a nested workflow is genuinely needed — for example to give each parallel branch its own input shaping. Each helper becomes an ordinary stored workflow the user will see.',
+      ),
+  })
+  .describe(
+    'One complete canonical WorkflowDefinition. Submit exactly one candidate per attempt, never parallel alternatives. After diagnostics, correct and resubmit the whole definition. A successful submission becomes Ready automatically but is not persisted until the user clicks Save.',
+  );
 
 export function parseWorkflowDefinitionInput(input: unknown): WorkflowBuilderDefinition {
   const normalized = normalizeWorkflowBuilderDefinition(input);
@@ -41,8 +50,7 @@ export function parseWorkflowDefinitionInput(input: unknown): WorkflowBuilderDef
   return normalized;
 }
 
-function parseWorkflowDraftInput(input: unknown): WorkflowDraft {
-  const normalized = parseWorkflowDefinitionInput(input);
+function toDraftDefinition(normalized: WorkflowBuilderDefinition) {
   return {
     id: normalized.id,
     description: normalized.description,
@@ -51,6 +59,16 @@ function parseWorkflowDraftInput(input: unknown): WorkflowDraft {
     stateSchema: normalized.stateSchema,
     requestContextSchema: normalized.requestContextSchema,
     graph: normalized.graph as WorkflowDraft['graph'],
+  };
+}
+
+function parseWorkflowDraftInput(input: unknown): WorkflowDraft {
+  const { dependencies, ...definition } = (input ?? {}) as { dependencies?: unknown[] };
+  const draft = toDraftDefinition(parseWorkflowDefinitionInput(definition));
+  if (!Array.isArray(dependencies) || dependencies.length === 0) return draft;
+  return {
+    ...draft,
+    dependencies: dependencies.map(dependency => toDraftDefinition(parseWorkflowDefinitionInput(dependency))),
   };
 }
 
@@ -239,7 +257,7 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
     'submit-workflow-draft': createTool({
       id: 'submit-workflow-draft',
       description:
-        'Submit or replace one complete canonical WorkflowDefinition. Studio immediately displays the candidate, validates it through Core, returns all diagnostics for a corrected whole-definition retry, and automatically marks valid definitions Ready. This never persists the workflow; the user must explicitly Save.',
+        'Submit or replace one complete canonical WorkflowDefinition, plus any helper workflows it nests that do not exist yet. Studio immediately displays the candidate, validates the whole set through Core, returns all diagnostics for a corrected whole-definition retry, and automatically marks a valid set Ready. This never persists anything; the user must explicitly Save, which saves the workflow and its helpers together.',
       inputSchema: workflowDefinitionInputSchema,
       outputSchema: resultSchema,
       execute: async input => {

@@ -266,6 +266,13 @@ export default function WorkflowBuilderEditorPage({ create = false }: { create?:
               </Badge>
               <span className="text-ui-xs text-neutral3">{workflowDraft.draft.graph.length} top-level entries</span>
             </div>
+            {workflowDraft.draft.dependencies?.length ? (
+              <div className="border-border1 bg-surface2 text-ui-xs text-neutral3 rounded-lg border p-3">
+                Saving also creates {workflowDraft.draft.dependencies.length} helper workflow
+                {workflowDraft.draft.dependencies.length === 1 ? '' : 's'} this workflow nests:{' '}
+                {workflowDraft.draft.dependencies.map(dependency => dependency.id).join(', ')}
+              </div>
+            ) : null}
             {generationCandidate?.hasUncheckpointedChanges ? (
               <div className="border-border1 bg-surface2 text-ui-xs text-neutral3 space-y-2 rounded-lg border p-3">
                 <div className="flex items-center justify-between gap-3">

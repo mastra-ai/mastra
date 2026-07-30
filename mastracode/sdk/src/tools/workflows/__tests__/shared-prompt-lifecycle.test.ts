@@ -214,14 +214,16 @@ const scenarios = [
       ],
     },
   },
-  // Exercises a real `parallel` container: both children receive the same
-  // preceding object, so the workflow input must satisfy both child schemas.
+  // Parallel pattern A — one shared object, each branch reads its own field.
+  // Both children receive the same preceding object, so the workflow input must
+  // satisfy both child schemas at once; `lookupCustomer` consumes `email` while
+  // `createSupportTicket` consumes `customerId`/`summary`. Extra fields a branch
+  // does not need are ignored.
   //
-  // This deliberately does NOT model "look up two different emails in parallel".
-  // Container children cannot carry per-child input mappings, so fanning one
-  // input out to two differently-shaped branch inputs is not expressible in the
-  // portable contract. Do not "fix" that by replacing this container with a
-  // mapping that hardcodes branch outputs — that asserts nothing about parallel.
+  // Do not "fix" this by replacing the container with a mapping that hardcodes
+  // branch outputs — that asserts nothing about parallel. When two branches need
+  // different VALUES of the same field, pattern A cannot express it; see
+  // `parallel-customer-lookup-workflow` below for the helper-workflow form.
   {
     id: 'parallel-support-fanout-workflow',
     input: { email: 'ada@example.com', customerId: 'customer-999', summary: 'Cannot log in' },
@@ -251,6 +253,71 @@ const scenarios = [
           mapConfig: {
             customer: fromStep('lookup-customer-branch', ''),
             ticket: fromStep('create-ticket-branch', ''),
+          },
+        },
+      ],
+    },
+  },
+  // Parallel pattern B — two branches call the SAME tool on different values.
+  // One shared object carries only one `email`, so pattern A would look the same
+  // customer up twice. Each branch is therefore a small helper workflow that maps
+  // its OWN field into `lookupCustomer`. Helper workflows are saved first, in
+  // dependency order; each save live-registers the helper so the root can
+  // reference it by `workflowId`. Mappings are legal as a nested workflow's first
+  // step — the container-child restriction applies to the parallel's children,
+  // not to the inside of a workflow those children invoke.
+  {
+    id: 'parallel-customer-lookup-workflow',
+    input: { email1: 'ada@example.com', email2: 'grace@example.com' },
+    // Distinct emails prove each helper mapped its own field rather than both
+    // branches receiving the same value.
+    expected: {
+      firstCustomer: { customerId: 'customer-123', email: 'ada@example.com', plan: 'pro' },
+      secondCustomer: { customerId: 'customer-123', email: 'grace@example.com', plan: 'pro' },
+    },
+    dependencies: [
+      {
+        id: 'lookup-first-customer',
+        description: 'Looks up the first customer email from a two-email input.',
+        inputSchema: objectSchema({ email1: stringSchema, email2: stringSchema }, ['email1', 'email2']),
+        outputSchema: customerSchema,
+        graph: [
+          { type: 'mapping', id: 'first-email', mapConfig: { email: fromInput('email1') } },
+          { type: 'tool', id: 'lookup-first', toolId: 'lookupCustomer' },
+        ],
+      },
+      {
+        id: 'lookup-second-customer',
+        description: 'Looks up the second customer email from a two-email input.',
+        inputSchema: objectSchema({ email1: stringSchema, email2: stringSchema }, ['email1', 'email2']),
+        outputSchema: customerSchema,
+        graph: [
+          { type: 'mapping', id: 'second-email', mapConfig: { email: fromInput('email2') } },
+          { type: 'tool', id: 'lookup-second', toolId: 'lookupCustomer' },
+        ],
+      },
+    ],
+    definition: {
+      id: 'parallel-customer-lookup-workflow',
+      inputSchema: objectSchema({ email1: stringSchema, email2: stringSchema }, ['email1', 'email2']),
+      outputSchema: objectSchema({ firstCustomer: customerSchema, secondCustomer: customerSchema }, [
+        'firstCustomer',
+        'secondCustomer',
+      ]),
+      graph: [
+        {
+          type: 'parallel',
+          steps: [
+            { type: 'workflow', id: 'first-lookup-branch', workflowId: 'lookup-first-customer' },
+            { type: 'workflow', id: 'second-lookup-branch', workflowId: 'lookup-second-customer' },
+          ],
+        },
+        {
+          type: 'mapping',
+          id: 'parallel-lookup-results',
+          mapConfig: {
+            firstCustomer: fromStep('first-lookup-branch', ''),
+            secondCustomer: fromStep('second-lookup-branch', ''),
           },
         },
       ],
@@ -380,6 +447,19 @@ describe('Mastra Code registry-backed Workflow Builder prompt lifecycle', () => 
         tools: { addNumbers, lookupCustomer, createSupportTicket },
         workflows: { greetingWorkflow },
       });
+      // Helper dependencies are saved first, one complete definition per call.
+      // Each save must live-register the helper, otherwise the root definition
+      // below cannot resolve it by `workflowId`.
+      const dependencies = 'dependencies' in scenario ? scenario.dependencies : undefined;
+      for (const dependency of dependencies ?? []) {
+        const savedDependency = await (saveWorkflowTool as any).execute(
+          (saveWorkflowTool as any).inputSchema.parse(dependency),
+          { mastra, requestContext: new RequestContext() },
+        );
+
+        expect(savedDependency, JSON.stringify(savedDependency)).toEqual({ ok: true, id: dependency.id });
+      }
+
       const parsedDefinition = (saveWorkflowTool as any).inputSchema.parse(definition);
       const workflowBuilder = createWorkflowBuilderAgent(mastra, parsedDefinition);
       const createResult = await (createWorkflowTool as any).execute(

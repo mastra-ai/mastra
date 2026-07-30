@@ -5,6 +5,7 @@ export type CanonicalWorkflowScenarioId =
   | 'addition-workflow'
   | 'customer-ticket-workflow'
   | 'parallel-customer-lookup-workflow'
+  | 'parallel-support-fanout-workflow'
   | 'support-answer-workflow'
   | 'nested-greeting-workflow'
   | 'foreach-customer-lookup-workflow'
@@ -44,6 +45,15 @@ const scenarioMetadata = {
       isRecord(output) &&
       isCustomer(output.firstCustomer, 'ada@example.com') &&
       isCustomer(output.secondCustomer, 'grace@example.com'),
+  },
+  'parallel-support-fanout-workflow': {
+    fixture: 'workflow-builder-prompt-parallel-support-fanout',
+    expectedGraphEntry: 'parallel-fanout-result',
+    // `runInput` carries customer-999 while lookup-customer always answers with
+    // customer-123, so a passing assertion proves the tool actually ran instead
+    // of the input being echoed through.
+    assertOutput: (output: unknown) =>
+      isRecord(output) && isCustomer(output.customer, 'ada@example.com') && isTicket(output.ticket),
   },
   'support-answer-workflow': {
     fixture: 'workflow-builder-prompt-support-answer',

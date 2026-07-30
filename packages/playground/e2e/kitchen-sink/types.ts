@@ -15,6 +15,7 @@ export type Fixtures =
   | 'workflow-builder-prompt-addition'
   | 'workflow-builder-prompt-customer-ticket'
   | 'workflow-builder-prompt-parallel-customer-lookup'
+  | 'workflow-builder-prompt-parallel-support-fanout'
   | 'workflow-builder-prompt-support-answer'
   | 'workflow-builder-prompt-nested-greeting'
   | 'workflow-builder-prompt-foreach-customer-lookup'

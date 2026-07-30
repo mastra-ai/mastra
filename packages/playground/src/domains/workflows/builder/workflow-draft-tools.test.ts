@@ -172,6 +172,145 @@ describe('workflow draft client tools', () => {
     });
   });
 
+  describe('when the definition nests helper workflows that do not exist yet', () => {
+    const customerSchema = {
+      type: 'object',
+      properties: { customerId: { type: 'string' } },
+      required: ['customerId'],
+      additionalProperties: false,
+    };
+    const helper = (id: string, sourceField: string) => ({
+      id,
+      description: `Looks up the customer named by ${sourceField}.`,
+      inputSchema: {
+        type: 'object',
+        properties: { [sourceField]: { type: 'string' } },
+        required: [sourceField],
+        additionalProperties: false,
+      },
+      outputSchema: customerSchema,
+      graph: [
+        {
+          type: 'mapping' as const,
+          id: 'to-lookup-input',
+          mapConfig: { email: { initData: true, path: sourceField } },
+        },
+        { type: 'tool' as const, id: 'lookup', toolId: 'lookupCustomer' },
+      ],
+    });
+    // The R3 shape: parallel branches all receive the same object, so the only
+    // way to look up two different emails is one helper workflow per branch.
+    const rootWithHelpers = {
+      id: 'parallel-customer-lookup-workflow',
+      inputSchema: {
+        type: 'object',
+        properties: { firstEmail: { type: 'string' }, secondEmail: { type: 'string' } },
+        required: ['firstEmail', 'secondEmail'],
+        additionalProperties: false,
+      },
+      outputSchema: {
+        type: 'object',
+        properties: { first: customerSchema, second: customerSchema },
+        required: ['first', 'second'],
+        additionalProperties: false,
+      },
+      graph: [
+        {
+          type: 'parallel' as const,
+          steps: [
+            { type: 'workflow' as const, id: 'first-lookup', workflowId: 'lookup-first-customer' },
+            { type: 'workflow' as const, id: 'second-lookup', workflowId: 'lookup-second-customer' },
+          ],
+        },
+        {
+          type: 'mapping' as const,
+          id: 'merge-lookups',
+          mapConfig: { first: { step: 'first-lookup', path: '' }, second: { step: 'second-lookup', path: '' } },
+        },
+      ],
+      dependencies: [helper('lookup-first-customer', 'firstEmail'), helper('lookup-second-customer', 'secondEmail')],
+    };
+
+    it('resolves them from the submission itself so the whole set becomes one Ready draft', async () => {
+      const store = createStore({ context: validationContext });
+      const result = (await executeTool(store.tools['submit-workflow-draft'], rootWithHelpers)) as {
+        success: boolean;
+        definition?: { dependencies?: Array<{ id: string }> };
+      };
+
+      expect(result.success).toBe(true);
+      expect(store.state).toMatchObject({ lifecycle: 'ready', revision: 1 });
+      // The helpers ride along on the accepted draft, so the user's Save sends
+      // them with the root as one unit.
+      expect(result.definition?.dependencies?.map(dependency => dependency.id)).toEqual([
+        'lookup-first-customer',
+        'lookup-second-customer',
+      ]);
+    });
+
+    it('still rejects a nested reference no helper supplies', async () => {
+      const store = createStore({ context: validationContext });
+      const result = await executeTool(store.tools['submit-workflow-draft'], {
+        ...rootWithHelpers,
+        dependencies: [helper('lookup-first-customer', 'firstEmail')],
+      });
+
+      expect(result).toMatchObject({
+        success: false,
+        issues: [expect.objectContaining({ code: 'missing-reference' })],
+      });
+      expect(store.state).toMatchObject({ lifecycle: 'untouched' });
+    });
+
+    it('reports a broken helper against its own path instead of blaming the root', async () => {
+      const store = createStore({ context: validationContext });
+      const brokenHelper = helper('lookup-second-customer', 'secondEmail');
+      const result = (await executeTool(store.tools['submit-workflow-draft'], {
+        ...rootWithHelpers,
+        dependencies: [
+          helper('lookup-first-customer', 'firstEmail'),
+          { ...brokenHelper, graph: [{ type: 'tool', id: 'lookup', toolId: 'missingTool' }] },
+        ],
+      })) as { success: boolean; issues?: Array<{ code: string; path: string }> };
+
+      expect(result.success).toBe(false);
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({ code: 'missing-reference', path: 'dependencies.1.graph.0.toolId' }),
+      );
+    });
+
+    it('rejects a helper that nests the workflow being built, because the set has no save order', async () => {
+      const store = createStore({ context: validationContext });
+      const result = (await executeTool(store.tools['submit-workflow-draft'], {
+        ...rootWithHelpers,
+        dependencies: [
+          {
+            ...helper('lookup-first-customer', 'firstEmail'),
+            graph: [{ type: 'workflow', id: 'back-to-root', workflowId: 'parallel-customer-lookup-workflow' }] as never,
+          },
+          helper('lookup-second-customer', 'secondEmail'),
+        ],
+      })) as { success: boolean; issues?: Array<{ message: string }> };
+
+      expect(result.success).toBe(false);
+      expect(result.issues?.some(issue => issue.message.includes('cycle'))).toBe(true);
+      expect(store.state).toMatchObject({ lifecycle: 'untouched' });
+    });
+
+    it('rejects a helper that reuses the id of the workflow being built', async () => {
+      const store = createStore({ context: validationContext });
+      const result = (await executeTool(store.tools['submit-workflow-draft'], {
+        ...rootWithHelpers,
+        dependencies: [helper('parallel-customer-lookup-workflow', 'firstEmail')],
+      })) as { success: boolean; issues?: Array<{ code: string; path: string }> };
+
+      expect(result.success).toBe(false);
+      expect(result.issues).toContainEqual(
+        expect.objectContaining({ code: 'invalid-workflow-id', path: 'dependencies.0.id' }),
+      );
+    });
+  });
+
   describe('when an invalid complete definition is submitted', () => {
     it('preserves it for display and returns all validation diagnostics', async () => {
       let candidate: WorkflowDraftCandidate | undefined;

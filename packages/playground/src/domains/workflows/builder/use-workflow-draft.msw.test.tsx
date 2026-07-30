@@ -52,6 +52,42 @@ describe('workflow draft save orchestration', () => {
     });
   });
 
+  describe('when the draft nests helper workflows the model authored', () => {
+    it('saves the helpers and the workflow as one request', async () => {
+      const requests = vi.fn();
+      server.use(
+        http.post(`${BASE_URL}/api/stored/workflows`, async ({ request }) => {
+          requests(await request.json());
+          return HttpResponse.json({ ok: true as const, id: definition.id, dependencyIds: ['report-data-helper'] });
+        }),
+      );
+      const helper = {
+        id: 'report-data-helper',
+        inputSchema: { type: 'object' as const },
+        outputSchema: { type: 'object' as const },
+        graph: [{ type: 'tool' as const, id: 'fetch-data', toolId: 'report-data' }],
+      };
+      const draft = renderHook(() => useWorkflowDraft(definition, definition.id), { wrapper: createWrapper() });
+
+      await act(async () => {
+        draft.result.current.checkpoint(0, { ...definition, dependencies: [helper] });
+      });
+      await act(async () => {
+        draft.result.current.finalize(1);
+      });
+      await act(async () => {
+        await expect(draft.result.current.save()).resolves.toEqual({
+          ok: true,
+          id: definition.id,
+          dependencyIds: ['report-data-helper'],
+        });
+      });
+
+      expect(requests).toHaveBeenCalledOnce();
+      expect(requests).toHaveBeenCalledWith(expect.objectContaining({ id: definition.id, dependencies: [helper] }));
+    });
+  });
+
   describe('when authoring metadata is supplied for the save', () => {
     it('persists the workflow conversation association', async () => {
       const requests = vi.fn();

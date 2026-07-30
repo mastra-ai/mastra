@@ -29,6 +29,17 @@
       }
     },
     {
+      "id": "parallel-support-fanout-workflow",
+      "fixture": "workflow-builder-prompt-parallel-support-fanout",
+      "expectedGraphEntry": "parallel-fanout-result",
+      "prompt": "Create a workflow named parallel-support-fanout-workflow that accepts a customer email, a customerId, and a support summary. In parallel, look the customer up with lookup-customer and open a ticket with create-support-ticket, then return both results in a clear object.",
+      "runInput": { "email": "ada@example.com", "customerId": "customer-999", "summary": "Cannot sign in" },
+      "expectedOutput": {
+        "customer": { "customerId": "customer-123", "email": "ada@example.com", "plan": "pro" },
+        "ticket": { "ticketId": "ticket-456", "status": "open" }
+      }
+    },
+    {
       "id": "support-answer-workflow",
       "fixture": "workflow-builder-prompt-support-answer",
       "expectedGraphEntry": "support-answer-result",
