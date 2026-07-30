@@ -4,7 +4,8 @@ import { z } from 'zod';
 
 import type { IntegrationTools } from '../integrations/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { getFactorySessionAddress } from './binding-context.js';
+import type { FactorySessionSourceLookup } from './binding-context.js';
+import { resolveFactorySessionAddress } from './binding-context.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import { FACTORY_RULE_STAGES } from './types.js';
 import type { FactoryRuleBoard } from './types.js';
@@ -25,10 +26,15 @@ export async function createFactoryTransitionTools(options: {
   requestContext: RequestContext;
   storage: WorkItemsStorage;
   transitionService: Pick<FactoryTransitionService, 'transition'>;
+  sessions?: FactorySessionSourceLookup;
 }): Promise<IntegrationTools> {
-  const address = getFactorySessionAddress(options.requestContext);
-  if (!address) return {};
-  const availableBinding = await options.storage.findActiveRunBinding(address);
+  const resolution = await resolveFactorySessionAddress({
+    requestContext: options.requestContext,
+    storage: options.storage,
+    sessions: options.sessions,
+  });
+  if (!resolution) return {};
+  const availableBinding = resolution.binding ?? (await options.storage.findActiveRunBinding(resolution.address));
   if (!availableBinding) return {};
 
   return {
@@ -38,7 +44,12 @@ export async function createFactoryTransitionTools(options: {
         'Request a governed stage transition for the Factory work item exactly bound to this thread. Use the current revision from the factory-phase signal and explain why the transition is appropriate.',
       inputSchema: transitionInputSchema,
       execute: async ({ stage, expectedRevision, rationale }, execution) => {
-        const currentAddress = getFactorySessionAddress(execution.requestContext);
+        const currentResolution = await resolveFactorySessionAddress({
+          requestContext: execution.requestContext,
+          storage: options.storage,
+          sessions: options.sessions,
+        });
+        const currentAddress = currentResolution?.address ?? null;
         const toolCallId = execution.agent?.toolCallId;
         if (!currentAddress || !toolCallId) {
           throw new Error('Factory transitions require an authenticated bound agent tool call.');

@@ -29,6 +29,24 @@ function requestContext(
   return context;
 }
 
+/** A session recreated after a server crash: coordinates intact, state empty. */
+function crashResumedContext(
+  setState: (updates: Record<string, unknown>) => Promise<void>,
+  overrides: Partial<{ threadId: string; resourceId: string }> = {},
+) {
+  const context = new RequestContext();
+  context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+  context.set('controller', {
+    resourceId: overrides.resourceId ?? 'resource-1',
+    threadId: overrides.threadId ?? 'thread-1',
+    scope: '/worktree',
+    session: { id: 'session-1', ownerId: 'code', modeId: 'build' },
+    getState: () => ({}),
+    setState,
+  });
+  return context;
+}
+
 async function prepareBoundItem(storage: WorkItemsStorage, source: 'github-issue' | 'github-pr' = 'github-issue') {
   return storage.prepareRunStart({
     orgId: 'org-1',
@@ -241,6 +259,107 @@ describe('factory_transition_work_item', () => {
       rationale: 'Review started.',
     });
     expect(transition).toHaveBeenCalledWith(expect.objectContaining({ board: 'review', workItemId: review.item.id }));
+  });
+
+  it('recovers a review binding after crash-resume wipes session state and heals the security posture', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepareBoundItem(storage, 'github-pr');
+    const transition = vi.fn(async () => ({ status: 'accepted' as const }));
+    const setState = vi.fn(async () => {});
+    const context = crashResumedContext(setState);
+    const sessions = {
+      getBySessionId: vi.fn(async () => ({ orgId: 'org-1', projectRepositoryId: 'repo-1', baseBranch: 'main' })),
+    };
+
+    const tools = await createFactoryTransitionTools({
+      requestContext: context,
+      storage,
+      transitionService: { transition } as never,
+      sessions,
+    });
+
+    expect(tools).toHaveProperty('factory_transition_work_item');
+    expect(sessions.getBySessionId).toHaveBeenCalledWith('resource-1');
+    expect(setState).toHaveBeenCalledWith({
+      factoryProjectId: PROJECT_ID,
+      projectRepositoryId: 'repo-1',
+      untrustedCheckout: true,
+      baseRef: 'main',
+    });
+
+    await execute(tools.factory_transition_work_item as ExecutableTool, context, {
+      stage: 'review',
+      expectedRevision: prepared.item.revision,
+      rationale: 'Review complete.',
+    });
+    expect(transition).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: 'org-1', factoryProjectId: PROJECT_ID, workItemId: prepared.item.id }),
+    );
+  });
+
+  it('recovers a work binding without marking the checkout untrusted', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) });
+    await prepareBoundItem(storage);
+    const setState = vi.fn(async () => {});
+
+    const tools = await createFactoryTransitionTools({
+      requestContext: crashResumedContext(setState),
+      storage,
+      transitionService: service,
+    });
+
+    expect(tools).toHaveProperty('factory_transition_work_item');
+    expect(setState).toHaveBeenCalledWith({ factoryProjectId: PROJECT_ID });
+  });
+
+  it('exposes nothing on crash-resume when no active binding matches the thread', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) });
+    await prepareBoundItem(storage);
+    const setState = vi.fn(async () => {});
+
+    await expect(
+      createFactoryTransitionTools({
+        requestContext: crashResumedContext(setState, { threadId: 'other-thread' }),
+        storage,
+        transitionService: service,
+      }),
+    ).resolves.toEqual({});
+    expect(setState).not.toHaveBeenCalled();
+  });
+
+  it('never authorizes on crash-resume when bindings are ambiguous across factory projects', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({ storage, rules: defaultFactoryRules({ version: 'rules-v1' }) });
+    await prepareBoundItem(storage);
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: '99999999-8888-4777-8666-555555555555',
+      workItem: {
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:2' },
+          title: 'Second project item',
+          stages: ['intake'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'resource-1', branch: 'factory/item', threadId: 'thread-1' },
+      resourceId: 'resource-1',
+      kickoffKey: 'kickoff-2',
+      kickoffMessage: null,
+    });
+
+    await expect(
+      createFactoryTransitionTools({
+        requestContext: crashResumedContext(vi.fn(async () => {})),
+        storage,
+        transitionService: service,
+      }),
+    ).resolves.toEqual({});
   });
 
   it('bounds stage, revision, and rationale at the schema boundary', async () => {
