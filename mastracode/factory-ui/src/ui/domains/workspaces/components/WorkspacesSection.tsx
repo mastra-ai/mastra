@@ -10,7 +10,6 @@ import { useWorkspaceAttention } from '../../../../hooks/useWorkspaceAttention';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
-import { createAgentControllerClient } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { relationshipLabel } from '../../factory/services/relationships';
 import type { FactoryUserSession } from '../services/github';
@@ -32,14 +31,7 @@ export function WorkspacesSection() {
   const navigate = useNavigate();
   const location = useLocation();
   const scope = { agentControllerId: AGENT_CONTROLLER_ID, resourceId };
-  const { session } = createAgentControllerClient({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: sessionId,
-    baseUrl,
-    enabled: sessionEnabled,
-  });
-  const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, projectRepositoryId, session, scope);
+  const deleteWorkspace = useDeleteWorkspaceMutation(factoryId, projectRepositoryId, scope);
   const [confirmDelete, setConfirmDelete] = useState<FactoryUserSession | null>(null);
   const workItems = useWorkItemsQuery(factoryId);
   const workspaceRows = workspaces.data?.workspaces ?? [];
@@ -157,8 +149,8 @@ export function WorkspacesSection() {
             </DialogHeader>
             <div className="flex flex-col gap-4 px-5 pb-4">
               <Txt as="p" variant="ui-sm" className="text-icon4 m-0">
-                This deletes the <span className="text-icon6">{confirmDelete.branch}</span> checkout, its uncommitted
-                changes, and every thread in this workspace. This can’t be undone.
+                This deletes the <span className="text-icon6">{confirmDelete.branch}</span> checkout and its uncommitted
+                changes. This can’t be undone. Threads from this workspace are kept.
               </Txt>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => setConfirmDelete(null)} disabled={deleteWorkspace.isPending}>
