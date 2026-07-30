@@ -753,6 +753,11 @@ describe('PlatformSandbox', () => {
       for (const call of fetchMock.mock.calls) {
         expect(String(call[0])).not.toMatch(/\/exec$/);
       }
+
+      // The lease from the failed second attempt must be evicted so a caller
+      // that catches the transport error and re-runs the command doesn't
+      // waste its first WS attempt on the same implicated JWT.
+      expect((sandbox as unknown as { _lease: unknown })._lease).toBeNull();
     });
 
     it('coalesces concurrent execs during a transient WS failure into a single retry mint', async () => {

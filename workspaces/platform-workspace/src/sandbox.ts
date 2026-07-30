@@ -125,10 +125,7 @@ export class SandboxDestroyedError extends Error {
   readonly command: string;
   readonly attempts: number;
 
-  constructor(
-    message: string,
-    diagnostics: { sandboxId?: string; command: string; attempts: number },
-  ) {
+  constructor(message: string, diagnostics: { sandboxId?: string; command: string; attempts: number }) {
     super(message);
     this.name = 'SandboxDestroyedError';
     this.sandboxId = diagnostics.sandboxId;
@@ -529,6 +526,10 @@ export class PlatformSandbox extends MastraSandbox {
     // broken."
     const result = lastResult!;
     const lease = lastLease!;
+    // The lease from the failed second attempt is still cached; drop it so
+    // the next `executeCommand` doesn't waste its first attempt on the same
+    // implicated JWT before minting fresh.
+    this._lease = null;
     throw new SandboxExecTransportError(
       `Direct-exec transport failed for sandbox ${this._sandboxId ?? '(unknown)'} after ${attemptsMade} attempt(s)` +
         (result.closeCode !== undefined
