@@ -77,7 +77,7 @@ describe('workflow draft', () => {
   });
 
   describe('when nested workflow call-site ids differ from their referenced workflow ids', () => {
-    it('returns a repairable issue for nested entries inside containers', () => {
+    it('accepts the declared call-site id for nested entries inside containers', () => {
       const draft = createValidDraft();
       draft.graph = [
         {
@@ -86,17 +86,9 @@ describe('workflow draft', () => {
         },
       ];
 
-      expect(validateWorkflowDraft(draft)).toEqual({
-        ok: false,
-        issues: [
-          {
-            code: 'invalid-nested-workflow-id',
-            path: 'graph.0.steps.0.id',
-            message:
-              'Nested workflow step id "greeting-step" must match workflowId "greetingWorkflow". Use "greetingWorkflow" for both fields.',
-          },
-        ],
-      });
+      // The call-site `id` is the local step identity used for result addressing;
+      // it is deliberately independent of the referenced `workflowId`.
+      expect(validateWorkflowDraft(draft)).toEqual({ ok: true });
     });
   });
 

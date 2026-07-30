@@ -154,10 +154,9 @@ export const workflowBuilderPromptFixtures = {
     description: 'Returns a nested greeting.',
     inputSchema: objectSchema({ name: stringSchema }, ['name']),
     outputSchema: objectSchema({ message: stringSchema }, ['message']),
-    // The nested step declares its own id (`invoke-greeting`) and the final
-    // mapping reads from that declared id. Runtime currently keys nested
-    // results by the intrinsic workflow id instead, so this stays red until
-    // rehydration preserves the declared entry id.
+    // The nested step declares its own call-site id (`invoke-greeting`), which
+    // differs from the referenced workflow's intrinsic id, and the final mapping
+    // addresses that declared id. Rehydration preserves it.
     graph: [
       { type: 'workflow', id: 'invoke-greeting', workflowId: 'greetingWorkflow' },
       {

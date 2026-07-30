@@ -57,6 +57,11 @@ test.describe('Workflow Builder registry-backed prompt lifecycle', () => {
         expect(scenario.assertOutput(body.result), `unexpected workflow output: ${JSON.stringify(body.result)}`).toBe(
           true,
         );
+
+        const assertSteps = 'assertSteps' in scenario ? scenario.assertSteps : undefined;
+        if (assertSteps) {
+          expect(assertSteps(body.steps), `unexpected executed steps: ${JSON.stringify(body.steps)}`).toBe(true);
+        }
       });
     });
   }

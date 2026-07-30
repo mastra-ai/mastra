@@ -9,6 +9,7 @@ import {
   workflowBuilderForeachEntryInputSchema,
   workflowBuilderNestedWorkflowEntrySchema,
   workflowBuilderParallelEntryInputSchema,
+  storedWorkflowDefinitionSchema,
 } from './index';
 
 const aliasedDefinition = {
@@ -64,6 +65,26 @@ describe('shared workflow builder authoring schema', () => {
         String(workflowBuilderAgentEntryInputSchema.description),
     );
     expect(serialized).toBeTruthy();
+  });
+
+  describe('stored workflow API contract', () => {
+    it('preserves definition metadata and graph fidelity in stored responses', () => {
+      const definition = workflowBuilderDefinitionSchema.parse({
+        ...normalizeWorkflowBuilderDefinition(aliasedDefinition),
+        metadata: { owner: 'support' },
+      });
+
+      const stored = storedWorkflowDefinitionSchema.parse({
+        ...definition,
+        status: 'active',
+        source: 'storage',
+        createdAt: '2026-07-29T00:00:00.000Z',
+        updatedAt: new Date('2026-07-29T00:01:00.000Z'),
+      });
+
+      expect(stored.metadata).toEqual({ owner: 'support' });
+      expect(stored.graph).toEqual(definition.graph);
+    });
   });
 
   describe('when a model submits a definition with authoring aliases', () => {

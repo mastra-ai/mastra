@@ -146,7 +146,7 @@ describe('WorkflowChatProvider', () => {
       const serializedTools = JSON.stringify(requestBody?.clientTools);
       expect(serializedTools).toContain('${initData.name}');
       expect(serializedTools).toContain('Default agents consume { prompt: string } and return { text: string }');
-      expect(serializedTools).toContain('id must exactly equal workflowId');
+      expect(serializedTools).toContain('it does not need to equal workflowId');
       expect(serializedTools).toContain('Each child receives the same preceding input');
       expect(serializedTools).toContain('Each item is passed directly to the child step');
       expect(serializedTools).toContain('The workflow result is exactly the final top-level entry output');
@@ -154,10 +154,13 @@ describe('WorkflowChatProvider', () => {
   });
 
   describe('when equivalent complete definitions are rejected three times', () => {
-    it('stops generation with the bounded retry failure', async () => {
+    async function renderBudgetHarness() {
       registerStreamingHandlers();
-      let reportResult: ((event: WorkflowDraftToolResult) => void) | undefined;
-      let failureCode: string | undefined;
+      const captured: {
+        reportResult?: (event: WorkflowDraftToolResult) => void;
+        isCurrent?: () => boolean;
+        failureCode?: string;
+      } = {};
 
       render(
         <Providers>
@@ -165,11 +168,12 @@ describe('WorkflowChatProvider', () => {
             threadId="workflow-builder-retry-budget"
             authoringState={createWorkflowDraftAuthoringState('retry-budget')}
             initialMessages={[]}
-            createTools={(_, onResult) => {
-              reportResult = onResult;
+            createTools={(isCurrent, onResult) => {
+              captured.isCurrent = isCurrent;
+              captured.reportResult = onResult;
               return {};
             }}
-            onGenerationFailure={failure => (failureCode = failure?.code)}
+            onGenerationFailure={failure => (captured.failureCode = failure?.code)}
           >
             <Composer message="Build a workflow" />
           </WorkflowChatProvider>
@@ -179,21 +183,67 @@ describe('WorkflowChatProvider', () => {
       await act(async () => {
         await new Promise(resolve => setTimeout(resolve, 20));
       });
-      const rejected: WorkflowDraftToolResult = {
+      return captured;
+    }
+
+    const rejected: WorkflowDraftToolResult = {
+      toolId: 'submit-workflow-draft',
+      result: {
+        success: false,
+        error: 'Invalid definition',
+        issues: [{ code: 'invalid-map-config', path: 'graph.0.mapConfig.message', message: 'Invalid source' }],
+      },
+    };
+
+    it('reports the bounded retry failure without disarming the submission tool', async () => {
+      const harness = await renderBudgetHarness();
+
+      act(() => {
+        harness.reportResult?.(rejected);
+        harness.reportResult?.(rejected);
+        harness.reportResult?.(rejected);
+      });
+
+      expect(harness.failureCode).toBe('repair-budget-exhausted');
+      expect(harness.isCurrent?.()).toBe(true);
+    });
+
+    it('clears the reported failure once a later submission is accepted', async () => {
+      const harness = await renderBudgetHarness();
+
+      act(() => {
+        harness.reportResult?.(rejected);
+        harness.reportResult?.(rejected);
+        harness.reportResult?.(rejected);
+        harness.reportResult?.({
+          toolId: 'submit-workflow-draft',
+          result: { success: true, revision: 1, finalizedRevision: 1 },
+        });
+      });
+
+      expect(harness.failureCode).toBeUndefined();
+    });
+
+    it('does not spend the repair budget on dropped tool call payloads', async () => {
+      const harness = await renderBudgetHarness();
+      const dropped: WorkflowDraftToolResult = {
         toolId: 'submit-workflow-draft',
         result: {
           success: false,
-          error: 'Invalid definition',
-          issues: [{ code: 'invalid-map-config', path: 'graph.0.mapConfig.message', message: 'Invalid source' }],
+          reason: 'empty-arguments',
+          error: 'No workflow definition arguments were received.',
         },
       };
+
       act(() => {
-        reportResult?.(rejected);
-        reportResult?.(rejected);
-        reportResult?.(rejected);
+        harness.reportResult?.(dropped);
+        harness.reportResult?.(dropped);
+        harness.reportResult?.(dropped);
+        harness.reportResult?.(dropped);
       });
 
-      expect(failureCode).toBe('repair-budget-exhausted');
+      expect(harness.failureCode).toBeUndefined();
+      expect(harness.isCurrent?.()).toBe(true);
     });
   });
 

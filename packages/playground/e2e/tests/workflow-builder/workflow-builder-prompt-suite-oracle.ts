@@ -23,6 +23,9 @@ const isTicket = (value: unknown) => isRecord(value) && value.ticketId === 'tick
 
 const isNonEmptyString = (value: unknown) => typeof value === 'string' && value.length > 0;
 
+// A conditional branch that was not selected has no step result at all.
+const didStepRun = (step: unknown) => isRecord(step) && step.status === 'success';
+
 const scenarioMetadata = {
   'addition-workflow': {
     fixture: 'workflow-builder-prompt-addition',
@@ -63,6 +66,11 @@ const scenarioMetadata = {
     expectedGraphEntry: 'priority-support-result',
     // The prompt only requires the selected agent text in a `response` field.
     assertOutput: (output: unknown) => isRecord(output) && isNonEmptyString(output.response),
+    // Both branches call support-agent, which replies with a fixed string, so
+    // the output alone cannot show which branch ran. `runInput` sets an urgent
+    // priority, so assert the routing decision directly from step results.
+    assertSteps: (steps: unknown) =>
+      isRecord(steps) && didStepRun(steps['urgent-support']) && !didStepRun(steps['normal-support']),
   },
   'mixed-support-pipeline': {
     fixture: 'workflow-builder-prompt-mixed-support-pipeline',
@@ -71,7 +79,7 @@ const scenarioMetadata = {
   },
 } satisfies Record<
   CanonicalWorkflowScenarioId,
-  { fixture: Fixtures; expectedGraphEntry: string; assertOutput: OutputAssertion }
+  { fixture: Fixtures; expectedGraphEntry: string; assertOutput: OutputAssertion; assertSteps?: OutputAssertion }
 >;
 
 const isCanonicalScenarioId = (value: string): value is CanonicalWorkflowScenarioId => value in scenarioMetadata;

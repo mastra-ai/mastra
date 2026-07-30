@@ -43,7 +43,8 @@ export const workflowBuilderAgentEntrySchema = z
     type: z.literal('agent'),
     id: z.string().min(1).describe('Step id — kebab-case, unique within the workflow.'),
     agentId: z.string().min(1).describe('Id of an agent registered on this Mastra instance (from resource discovery).'),
-    outputSchema: z.any().optional().describe(agentOutputSchemaDescription),
+    description: z.string().optional(),
+    outputSchema: z.unknown().optional().describe(agentOutputSchemaDescription),
     options: stepOptionsSchema,
   })
   .describe(AGENT_ENTRY_DESCRIPTION);
@@ -58,7 +59,8 @@ export const workflowBuilderAgentEntryInputSchema = z
       .optional()
       .describe('Id of an agent registered on this Mastra instance (from resource discovery).'),
     agent: z.string().min(1).optional().describe('Alias for agentId; prefer agentId.'),
-    outputSchema: z.any().optional().describe(agentOutputSchemaDescription),
+    description: z.string().optional(),
+    outputSchema: z.unknown().optional().describe(agentOutputSchemaDescription),
     options: stepOptionsSchema,
   })
   .describe(AGENT_ENTRY_DESCRIPTION);
@@ -68,6 +70,7 @@ export const workflowBuilderToolEntrySchema = z
     type: z.literal('tool'),
     id: z.string().min(1).describe('Step id — kebab-case, unique within the workflow.'),
     toolId: z.string().min(1).describe('Id of a tool registered on this Mastra instance (from resource discovery).'),
+    description: z.string().optional(),
     options: stepOptionsSchema,
   })
   .describe(
@@ -140,6 +143,7 @@ export const workflowBuilderNestedWorkflowEntrySchema = z
       .describe(
         'Authoritative ID of another workflow registered on this Mastra instance, exactly as returned by resource discovery. Never invent workflow IDs, self-reference, or create cycles.',
       ),
+    description: z.string().optional(),
     options: stepOptionsSchema,
   })
   .describe(
@@ -302,10 +306,11 @@ const GRAPH_DESCRIPTION =
 export const workflowBuilderDefinitionSchema = z.object({
   id: z.string().min(1).describe('Workflow id — kebab-case. Preserve the exact requested workflow ID.'),
   description: z.string().optional(),
-  inputSchema: z.any().describe('Complete JSON Schema (Draft 2020-12) for the workflow input.'),
-  outputSchema: z.any().describe('Complete JSON Schema (Draft 2020-12) for the workflow output.'),
-  stateSchema: z.any().optional().describe('Optional JSON Schema for persisted workflow state.'),
-  requestContextSchema: z.any().optional().describe('Optional JSON Schema for request context values.'),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  inputSchema: z.unknown().describe('Complete JSON Schema (Draft 2020-12) for the workflow input.'),
+  outputSchema: z.unknown().describe('Complete JSON Schema (Draft 2020-12) for the workflow output.'),
+  stateSchema: z.unknown().optional().describe('Optional JSON Schema for persisted workflow state.'),
+  requestContextSchema: z.unknown().optional().describe('Optional JSON Schema for request context values.'),
   graph: z.array(workflowBuilderGraphEntrySchema).min(1).describe(GRAPH_DESCRIPTION),
 });
 
@@ -316,6 +321,7 @@ export const workflowBuilderDefinitionInputSchema = z
       .min(1)
       .describe('Workflow id — kebab-case. Preserve the exact requested workflow ID unless the user renames it.'),
     description: z.string().optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
     inputSchema: jsonSchema.describe('Complete JSON Schema (Draft 2020-12) for the workflow input.'),
     outputSchema: jsonSchema.describe('Complete JSON Schema (Draft 2020-12) for the workflow output.'),
     stateSchema: jsonSchema.nullish().describe('Optional JSON Schema for persisted workflow state.'),
@@ -325,3 +331,32 @@ export const workflowBuilderDefinitionInputSchema = z
   .describe(
     'One complete canonical WorkflowDefinition. Submit exactly one complete candidate per attempt — never parallel alternatives. After diagnostics, correct and resubmit the whole definition.',
   );
+
+/** Public HTTP/SDK contract for a persisted workflow definition row. */
+export const storedWorkflowDefinitionSchema = workflowBuilderDefinitionSchema.extend({
+  status: z.enum(['active', 'archived']),
+  source: z.literal('storage'),
+  authorId: z.string().optional(),
+  createdAt: z.union([z.date(), z.string()]),
+  updatedAt: z.union([z.date(), z.string()]),
+});
+
+export const listStoredWorkflowsResponseSchema = z.object({
+  workflows: z.array(storedWorkflowDefinitionSchema),
+  total: z.number(),
+});
+
+export const upsertStoredWorkflowResponseSchema = z.object({
+  ok: z.literal(true),
+  id: z.string(),
+});
+
+export const deleteStoredWorkflowResponseSchema = z.object({
+  success: z.literal(true),
+  message: z.string(),
+});
+
+export type StoredWorkflowDefinition = z.infer<typeof storedWorkflowDefinitionSchema>;
+export type ListStoredWorkflowsResponse = z.infer<typeof listStoredWorkflowsResponseSchema>;
+export type UpsertStoredWorkflowResponse = z.infer<typeof upsertStoredWorkflowResponseSchema>;
+export type DeleteStoredWorkflowResponse = z.infer<typeof deleteStoredWorkflowResponseSchema>;

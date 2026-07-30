@@ -8,6 +8,7 @@ import { convertArrayToReadableStream, MockLanguageModelV3 } from 'ai/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { runWorkflow } from '../../../workflows/service.js';
 import { createWorkflowTool } from '../create-workflow.js';
 import { runWorkflowTool } from '../run-workflow.js';
 import { saveWorkflowTool } from '../save-workflow.js';
@@ -132,6 +133,38 @@ function createWorkflowBuilderAgent(mastra: Mastra, definition: unknown) {
   };
 }
 
+// Both branches call support-agent, per the prompt. support-agent replies with a
+// fixed string, so the workflow output cannot reveal which branch ran — the
+// scenario asserts the routing decision from step results instead.
+const priorityRouterDefinition = (id: string) => ({
+  id,
+  inputSchema: objectSchema({ prompt: stringSchema, priority: stringSchema }, ['prompt', 'priority']),
+  outputSchema: objectSchema({ response: stringSchema }, ['response']),
+  graph: [
+    {
+      type: 'mapping',
+      id: 'route-input',
+      mapConfig: { prompt: fromInput('prompt') },
+    },
+    {
+      type: 'conditional',
+      steps: [
+        { type: 'agent', id: 'urgent-support', agentId: 'support-agent' },
+        { type: 'agent', id: 'normal-support', agentId: 'support-agent' },
+      ],
+      predicates: [
+        { op: 'eq', left: { path: 'initData.priority' }, right: { literal: 'urgent' } },
+        { op: 'ne', left: { path: 'initData.priority' }, right: { literal: 'urgent' } },
+      ],
+    },
+    {
+      type: 'mapping',
+      id: 'priority-support-result',
+      mapConfig: { response: fromStep(['urgent-support', 'normal-support'], 'text') },
+    },
+  ],
+});
+
 const scenarios = [
   {
     id: 'addition-workflow',
@@ -181,24 +214,43 @@ const scenarios = [
       ],
     },
   },
+  // Exercises a real `parallel` container: both children receive the same
+  // preceding object, so the workflow input must satisfy both child schemas.
+  //
+  // This deliberately does NOT model "look up two different emails in parallel".
+  // Container children cannot carry per-child input mappings, so fanning one
+  // input out to two differently-shaped branch inputs is not expressible in the
+  // portable contract. Do not "fix" that by replacing this container with a
+  // mapping that hardcodes branch outputs — that asserts nothing about parallel.
   {
-    id: 'parallel-customer-lookup-workflow',
-    input: { firstEmail: 'ada@example.com', secondEmail: 'grace@example.com' },
+    id: 'parallel-support-fanout-workflow',
+    input: { email: 'ada@example.com', customerId: 'customer-999', summary: 'Cannot log in' },
     expected: {
-      firstCustomer: { customerId: 'customer-123', email: 'ada@example.com', plan: 'pro' },
-      secondCustomer: { customerId: 'customer-123', email: 'grace@example.com', plan: 'pro' },
+      customer: { customerId: 'customer-123', email: 'ada@example.com', plan: 'pro' },
+      ticket: { ticketId: 'ticket-456', status: 'open' },
     },
     definition: {
-      id: 'parallel-customer-lookup-workflow',
-      inputSchema: objectSchema({ firstEmail: stringSchema, secondEmail: stringSchema }, ['firstEmail', 'secondEmail']),
-      outputSchema: {},
+      id: 'parallel-support-fanout-workflow',
+      inputSchema: objectSchema({ email: stringSchema, customerId: stringSchema, summary: stringSchema }, [
+        'email',
+        'customerId',
+        'summary',
+      ]),
+      outputSchema: objectSchema({ customer: customerSchema, ticket: ticketSchema }, ['customer', 'ticket']),
       graph: [
+        {
+          type: 'parallel',
+          steps: [
+            { type: 'tool', id: 'lookup-customer-branch', toolId: 'lookupCustomer' },
+            { type: 'tool', id: 'create-ticket-branch', toolId: 'createSupportTicket' },
+          ],
+        },
         {
           type: 'mapping',
           id: 'parallel-customer-results',
           mapConfig: {
-            firstCustomer: { value: { customerId: 'customer-123', email: 'ada@example.com', plan: 'pro' } },
-            secondCustomer: { value: { customerId: 'customer-123', email: 'grace@example.com', plan: 'pro' } },
+            customer: fromStep('lookup-customer-branch', ''),
+            ticket: fromStep('create-ticket-branch', ''),
           },
         },
       ],
@@ -261,34 +313,19 @@ const scenarios = [
     id: 'priority-support-router',
     input: { prompt: 'Production is down', priority: 'urgent' },
     expected: { response: 'Urgent support response for Production is down' },
-    definition: {
-      id: 'priority-support-router',
-      inputSchema: objectSchema({ prompt: stringSchema, priority: stringSchema }, ['prompt', 'priority']),
-      outputSchema: objectSchema({ response: stringSchema }, ['response']),
-      graph: [
-        {
-          type: 'mapping',
-          id: 'route-input',
-          mapConfig: { prompt: fromInput('prompt') },
-        },
-        {
-          type: 'conditional',
-          steps: [
-            { type: 'agent', id: 'urgent-support', agentId: 'support-agent' },
-            { type: 'agent', id: 'normal-support', agentId: 'support-agent' },
-          ],
-          predicates: [
-            { op: 'eq', left: { path: 'initData.priority' }, right: { literal: 'urgent' } },
-            { op: 'ne', left: { path: 'initData.priority' }, right: { literal: 'urgent' } },
-          ],
-        },
-        {
-          type: 'mapping',
-          id: 'priority-support-result',
-          mapConfig: { response: fromStep(['urgent-support', 'normal-support'], 'text') },
-        },
-      ],
-    },
+    // Proves the urgent predicate selected branch 0; the non-urgent branch must
+    // not have run.
+    expectedBranch: { ran: 'urgent-support', skipped: 'normal-support' },
+    definition: priorityRouterDefinition('priority-support-router'),
+  },
+  {
+    id: 'priority-support-router-normal-route',
+    input: { prompt: 'Production is down', priority: 'low' },
+    // Same prompt and same agent as the urgent case, so only the branch
+    // assertion distinguishes this from the urgent route.
+    expected: { response: 'Urgent support response for Production is down' },
+    expectedBranch: { ran: 'normal-support', skipped: 'urgent-support' },
+    definition: priorityRouterDefinition('priority-support-router-normal-route'),
   },
   {
     id: 'mixed-support-pipeline',
@@ -333,36 +370,49 @@ const scenarios = [
 
 describe('Mastra Code registry-backed Workflow Builder prompt lifecycle', () => {
   describe('when definitions represent prompts that compose registered instance resources', () => {
-    it.each(scenarios)(
-      'persists and runs $id with the expected output',
-      async ({ definition, expected, id, input }) => {
-        const mastra = new Mastra({
-          logger: false,
-          storage: new InMemoryStore({ id: `shared-prompt-${id}` }),
-          agents: { supportAgent },
-          tools: { addNumbers, lookupCustomer, createSupportTicket },
-          workflows: { greetingWorkflow },
-        });
-        const parsedDefinition = (saveWorkflowTool as any).inputSchema.parse(definition);
-        const workflowBuilder = createWorkflowBuilderAgent(mastra, parsedDefinition);
-        const createResult = await (createWorkflowTool as any).execute(
-          { request: `Create ${id}.` },
-          {
-            mastra: {
-              getAgent: (agentId: string) => (agentId === 'workflow-builder' ? workflowBuilder : undefined),
-            },
-            requestContext: new RequestContext(),
+    it.each(scenarios)('persists and runs $id with the expected output', async scenario => {
+      const { definition, expected, id, input } = scenario;
+      const expectedBranch = 'expectedBranch' in scenario ? scenario.expectedBranch : undefined;
+      const mastra = new Mastra({
+        logger: false,
+        storage: new InMemoryStore({ id: `shared-prompt-${id}` }),
+        agents: { supportAgent },
+        tools: { addNumbers, lookupCustomer, createSupportTicket },
+        workflows: { greetingWorkflow },
+      });
+      const parsedDefinition = (saveWorkflowTool as any).inputSchema.parse(definition);
+      const workflowBuilder = createWorkflowBuilderAgent(mastra, parsedDefinition);
+      const createResult = await (createWorkflowTool as any).execute(
+        { request: `Create ${id}.` },
+        {
+          mastra: {
+            getAgent: (agentId: string) => (agentId === 'workflow-builder' ? workflowBuilder : undefined),
           },
-        );
-        const run = (await (runWorkflowTool as any).execute(
-          { workflowId: id, inputData: input },
-          { mastra, requestContext: new RequestContext() },
-        )) as { status: string; result?: unknown; error?: unknown };
+          requestContext: new RequestContext(),
+        },
+      );
+      const run = (await (runWorkflowTool as any).execute(
+        { workflowId: id, inputData: input },
+        { mastra, requestContext: new RequestContext() },
+      )) as { status: string; result?: unknown; error?: unknown };
 
-        expect(createResult).toEqual({ summary: `Built ${id}.`, workflowId: id });
-        expect(run.status, JSON.stringify(run.error)).toBe('success');
-        expect(run.result).toEqual(expected);
-      },
-    );
+      expect(createResult).toEqual({ summary: `Built ${id}.`, workflowId: id });
+      expect(run.status, JSON.stringify(run.error)).toBe('success');
+      expect(run.result).toEqual(expected);
+
+      if (expectedBranch) {
+        // Rerun through the service so per-step events are observable; the
+        // output alone cannot show which conditional branch was selected.
+        const startedSteps: string[] = [];
+        await runWorkflow(mastra, id, input, new RequestContext(), event => {
+          if (event.type === 'workflow-step-start') {
+            startedSteps.push(String((event.payload as { id?: unknown } | undefined)?.id));
+          }
+        });
+
+        expect(startedSteps, `executed steps: ${startedSteps.join(', ')}`).toContain(expectedBranch.ran);
+        expect(startedSteps, `executed steps: ${startedSteps.join(', ')}`).not.toContain(expectedBranch.skipped);
+      }
+    });
   });
 });

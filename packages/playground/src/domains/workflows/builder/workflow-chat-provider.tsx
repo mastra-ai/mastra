@@ -110,13 +110,17 @@ function WorkflowChatSession({
         generationStateRef.current.finalized = result.finalizedRevision === result.revision;
         generationStateRef.current.rejected = 0;
         generationStateRef.current.rejectionSignature = '';
+        onGenerationFailure?.(null);
         return;
       }
+      // Transport faults and non-evaluations are not the model's failed repair
+      // attempts, so they must never consume the repair budget.
       if (
         result.reason === 'superseded' ||
         result.reason === 'already-ready' ||
-        result.error === 'Draft changed before this operation completed.' ||
-        result.error === 'Submission was superseded.'
+        result.reason === 'empty-arguments' ||
+        result.reason === 'generation-stopped' ||
+        result.error === 'Draft changed before this operation completed.'
       )
         return;
 
@@ -131,24 +135,22 @@ function WorkflowChatSession({
         generationStateRef.current.rejected = 1;
       }
       if (generationStateRef.current.rejected >= 3) {
-        failGeneration({
+        // Surfaced to the user, but never disarms the tool: the model keeps its
+        // remaining steps to recover, and a later success clears this.
+        onGenerationFailure?.({
           code: 'repair-budget-exhausted',
-          message:
-            'Workflow generation stopped after three equivalent rejected definitions. Review the latest issues and retry.',
+          message: 'Workflow generation has rejected three equivalent definitions. Review the latest issues and retry.',
         });
       }
     };
 
     return createTools(
-      () =>
-        generation === generationRef.current &&
-        !generationStateRef.current.stopped &&
-        !generationStateRef.current.finalized,
+      () => !generationStateRef.current.stopped && !generationStateRef.current.finalized,
       onResult,
       candidate,
       updateCandidate,
     );
-  }, [createTools, failGeneration, onGenerationFailure, updateCandidate]);
+  }, [createTools, onGenerationFailure, updateCandidate]);
 
   const handleSendComplete = useCallback(() => {
     const state = generationStateRef.current;
@@ -186,7 +188,7 @@ function WorkflowChatSession({
       )}
       enableThreadSignals={false}
       debounceTime={debounceTime}
-      maxSteps={10}
+      maxSteps={1000}
       onSendComplete={handleSendComplete}
       onSendError={handleSendError}
     >

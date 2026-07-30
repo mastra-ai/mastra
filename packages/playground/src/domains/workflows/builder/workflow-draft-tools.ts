@@ -19,7 +19,7 @@ import { validateWorkflowDraft } from './workflow-draft';
 const inspectionResultSchema = z.record(z.string(), z.unknown());
 const resultSchema = z.object({
   success: z.boolean(),
-  reason: z.enum(['superseded', 'already-ready']).optional(),
+  reason: z.enum(['superseded', 'already-ready', 'empty-arguments', 'generation-stopped']).optional(),
   error: z.string().optional(),
   message: z.string().optional(),
   issues: z.array(z.object({ code: z.string(), path: z.string(), message: z.string() })).optional(),
@@ -88,8 +88,8 @@ export interface WorkflowDraftToolStore {
   onCandidateChange?: (candidate: WorkflowDraftCandidate) => void;
 }
 
-const SUPERSEDED_MESSAGE =
-  'This tool call was superseded by another call in the same turn. An earlier call for this workflow was accepted first and remains the current accepted state. Do NOT apologize, retry, or claim the workflow is broken based on this response. Call inspect-workflow-resources to see the actual accepted definition before saying anything about persistence, schema, mapping form, or graph shape.';
+const GENERATION_STOPPED_MESSAGE =
+  'Workflow generation was stopped for this turn, so this submission was not evaluated. Nothing has been accepted and nothing is broken. Do NOT apologize, do NOT claim the workflow is broken, and do NOT invent a reason. Wait for the user.';
 
 const SUPERSEDED_NOOP_MESSAGE =
   'This submission structurally matched the earlier accepted revision for this workflow; treating it as a no-op confirmation. The workflow is Ready and awaiting the user’s explicit Save. Do NOT resubmit, apologize, or claim the workflow is broken.';
@@ -160,9 +160,9 @@ function makeSupersededResult(store: WorkflowDraftToolStore, input?: unknown) {
   }
   return {
     success: false as const,
-    reason: 'superseded' as const,
-    error: 'Submission was superseded.',
-    message: SUPERSEDED_MESSAGE,
+    reason: 'generation-stopped' as const,
+    error: 'Workflow generation was stopped before this submission was evaluated.',
+    message: GENERATION_STOPPED_MESSAGE,
     lifecycle: state.lifecycle,
     finalizedRevision: state.finalizedRevision,
     baseAcceptedRevision: state.revision,
@@ -249,6 +249,7 @@ export function createWorkflowDraftTools(store: WorkflowDraftToolStore): ClientT
           const state = store.getState();
           return reportResult(store, 'submit-workflow-draft', {
             success: false as const,
+            reason: 'empty-arguments' as const,
             error: EMPTY_ARGUMENTS_ERROR,
             message: EMPTY_ARGUMENTS_MESSAGE,
             lifecycle: state.lifecycle,

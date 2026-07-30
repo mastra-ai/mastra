@@ -14,15 +14,25 @@ describe('EditorWorkflowBuilder', () => {
 
     const instructions = await builder.getAgent().getInstructions();
 
-    expect(instructions).toContain('submit-workflow-draft exactly once');
-    expect(instructions).toContain('Do not submit alternative definitions in parallel');
-    expect(instructions).toContain('Stop calling tools after a successful submission');
+    expect(instructions).toContain('# Studio execution and response protocol');
+    expect(instructions).toContain(
+      'Do not submit incremental fragments, speculative alternatives, or parallel attempts',
+    );
+    expect(instructions).toContain('Stop calling tools after success');
+    expect(instructions).toContain('If the result is `already-ready`');
+    expect(instructions).toContain('If the result is `superseded`');
+    expect(instructions).toContain('# Shared summary rules');
+    expect(instructions).toContain('# Studio authoring policy');
+    expect(instructions).not.toContain('# Mastra Code authoring policy');
     expect(instructions).not.toContain('checkpoint-workflow-draft');
     expect(instructions).not.toContain('finalize-workflow-draft');
     expect(instructions).toContain('explicit Studio Save action');
+    expect(instructions).toContain('# Composition procedure');
     expect(instructions).toContain('# The composition rule — schemas MUST match');
     expect(instructions).toContain('# Mappings — how to reshape data between steps');
     expect(instructions).toContain('# Nested workflows — compose one workflow inside another');
+    expect(instructions).toContain("# Anti-patterns — don't do these");
+    expect(instructions).toContain('# Worked example: foreach — run an agent on each item of a list');
     expect(instructions).not.toContain('set-workflow-identity');
     expect(instructions).not.toContain('set-workflow-schemas');
   });

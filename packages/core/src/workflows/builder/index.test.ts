@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   compareWorkflowBuilderSchemas,
+  createWorkflowBuilderAgent,
   inspectWorkflowBuilderSchemas,
   normalizeWorkflowBuilderDefinition,
   preflightWorkflowDefinition,
@@ -39,8 +40,11 @@ describe('workflow builder authoring contract', () => {
     expect(WORKFLOW_BUILDER_AUTHORING_CONSTRAINTS).toContain('Never invent agent, tool, or workflow IDs');
   });
 
-  it('publishes the complete Mastra Code composition playbook for every authoring frontend', () => {
+  it('publishes the shared composition playbook without surface mutation semantics', () => {
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# How a workflow runs');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Composition procedure');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('Run the shared pre-action check');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Shared summary rules');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# The composition rule — schemas MUST match');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Mappings — how to reshape data between steps');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain(
@@ -48,19 +52,30 @@ describe('workflow builder authoring contract', () => {
     );
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Conditional branches and loops — declarative predicates');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Nested workflows — compose one workflow inside another');
-    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Authoring behavior — how to use your tools');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain("# Anti-patterns — don't do these");
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain(
+      '# Worked example: foreach — run an agent on each item of a list',
+    );
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Definition quality');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('# Out of scope — do NOT emit these');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).not.toContain('submit-workflow-draft');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).not.toContain('save-workflow exactly once');
+    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).not.toContain('superseded');
   });
 
-  it('tells authoring frontends how to behave: description, no parallel submits, batch inspects, inspect before claiming state', () => {
-    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('Always include a concise `description`');
-    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain(
-      'Do NOT issue parallel or speculative `submit-workflow-draft` calls',
-    );
-    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('Batch resource discovery');
-    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('reason: "superseded"');
-    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('Do NOT apologize');
-    expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('Never describe persisted state');
+  it('composes the shared playbook with a concrete surface policy', async () => {
+    const agent = createWorkflowBuilderAgent({
+      id: 'test-workflow-builder',
+      name: 'Test Workflow Builder',
+      model: 'openai/gpt-5.5',
+      surfaceInstructions: '# Test surface policy\n\nCall save-test exactly once.',
+    });
+
+    const instructions = await agent.getInstructions();
+
+    expect(instructions).toContain('# The composition rule — schemas MUST match');
+    expect(instructions).toContain('# Test surface policy');
+    expect(instructions).toContain('Call save-test exactly once.');
   });
 
   it('documents canonical direct mapping sources and container output semantics', () => {
@@ -68,7 +83,7 @@ describe('workflow builder authoring contract', () => {
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('`{ "step": "<stepId>", "path": "<field.path>" }`');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain('references **exactly one** source');
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain(
-      'The inner step receives ONE ELEMENT of the array at a time as its input.',
+      'The inner step receives ONE ELEMENT of the array at a time as its input, without coercion.',
     );
     expect(WORKFLOW_BUILDER_AUTHORING_PLAYBOOK).toContain("complete output of **every** child under that child's id");
   });
@@ -225,7 +240,7 @@ describe('workflow builder authoring contract', () => {
         graph: [
           {
             type: 'parallel',
-            steps: [{ type: 'mapping', id: 'map-child', mapConfig: JSON.stringify({ value: { value: true } }) }],
+            steps: [{ type: 'mapping', id: 'map-child', mapConfig: JSON.stringify({ value: { value: true } }) }] as any,
           },
         ],
       });

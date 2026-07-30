@@ -206,18 +206,22 @@ describe('workflow draft client tools', () => {
     });
   });
 
-  describe('when a submission is superseded', () => {
-    it('returns an anti-apology superseded response that references the earlier accepted submission', async () => {
+  describe('when generation was stopped before a submission was evaluated', () => {
+    it('reports the stop truthfully instead of claiming an earlier submission was accepted', async () => {
       const store = createStore({ isCurrentGeneration: () => false, context: validationContext });
       const result = await executeTool(store.tools['submit-workflow-draft'], validDefinition);
 
       expect(result).toMatchObject({
         success: false,
-        reason: 'superseded',
-        error: 'Submission was superseded.',
+        reason: 'generation-stopped',
+        error: 'Workflow generation was stopped before this submission was evaluated.',
+        lifecycle: 'untouched',
+        baseAcceptedRevision: 0,
       });
-      expect(result.message).toContain('earlier call');
-      expect(result.message).toContain('inspect-workflow-resources');
+      // Nothing was accepted, so the response must never imply otherwise.
+      expect(result.message).not.toContain('earlier call');
+      expect(result.message).not.toContain('was accepted first');
+      expect(result.message).toContain('Nothing has been accepted');
       expect(result.message).toContain('Do NOT apologize');
       expect(store.state.revision).toBe(0);
     });
@@ -228,7 +232,7 @@ describe('workflow draft client tools', () => {
       const store = createStore({ context: validationContext });
       const result = await executeTool(store.tools['submit-workflow-draft'], {});
 
-      expect(result).toMatchObject({ success: false });
+      expect(result).toMatchObject({ success: false, reason: 'empty-arguments' });
       expect(result.error).toContain('No workflow definition arguments');
       expect(result.message).toContain('provider may have truncated');
       expect(result.message).toContain('complete WorkflowDefinition');

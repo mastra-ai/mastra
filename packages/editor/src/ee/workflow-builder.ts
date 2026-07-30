@@ -1,28 +1,35 @@
 import type { Mastra } from '@mastra/core';
-import { Agent } from '@mastra/core/agent';
+import type { Agent } from '@mastra/core/agent';
 import type { IWorkflowBuilder, WorkflowBuilderOptions } from '@mastra/core/editor';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { WORKFLOW_BUILDER_AUTHORING_PLAYBOOK } from '@mastra/core/workflows/builder';
+import { createWorkflowBuilderAgent as createSharedWorkflowBuilderAgent } from '@mastra/core/workflows/builder';
 import { Memory } from '@mastra/memory';
 
 export const DEFAULT_WORKFLOW_BUILDER_MODEL = 'openai/gpt-5.5';
 
 export function createWorkflowBuilderAgent(model?: MastraModelConfig): Agent<'workflow-builder-agent'> {
-  return new Agent({
+  return createSharedWorkflowBuilderAgent({
     id: 'workflow-builder-agent',
     name: 'Workflow Builder',
     description: 'Builds persisted workflow definitions through constrained client tools',
     model: model ?? DEFAULT_WORKFLOW_BUILDER_MODEL,
     memory: new Memory(),
-    instructions: `You are the Workflow Builder.
+    surfaceInstructions: `# Studio authoring policy
 
-Turn the user's request into a complete canonical workflow definition using the registered agent, tool, and workflow catalogs supplied in the hidden authoring context. Never persist a workflow directly and never call a server-side save-workflow tool. Only the user's explicit Studio Save action may persist the finalized draft.
+Turn the user's request into a complete canonical workflow definition using the registered agent, tool, and workflow catalogs supplied in the hidden authoring context. Treat the current unsaved authoring state, accepted definition, candidate definition, validation issues, and catalogs injected in each turn as authoritative. Never describe schemas, mapping form, graph shape, lifecycle, or persistence state from memory—inspect the authoritative Studio state first.
 
-${WORKFLOW_BUILDER_AUTHORING_PLAYBOOK}
+Use \`inspect-workflow-resources\` for authoritative Studio catalog discovery. Batch all relevant agent, tool, and workflow ids into one inspection call before composition.
 
-Treat the current unsaved authoring state, accepted definition, candidate definition, validation issues, and catalogs injected in each turn as authoritative. Use inspect-workflow-resources for authoritative Studio catalog discovery; references in the shared playbook to list-available-tools, list-available-agents, or list-available-workflows mean this inspection tool in Studio.
+# Studio execution and response protocol
 
-Reason about the whole definition first, then call submit-workflow-draft exactly once with one complete canonical definition. Do not submit alternative definitions in parallel. If that submission is rejected, use every returned diagnostic to correct the complete definition, then submit exactly one corrected definition. A successful submission automatically makes the draft Ready. Stop calling tools after a successful submission; never resubmit a Ready definition in the same turn. Never claim the draft was persisted. Finish with a concise summary and tell the user to review and use the explicit Studio Save action.`,
+1. Complete discovery, composition, and the shared pre-action check before calling \`submit-workflow-draft\`.
+2. Call \`submit-workflow-draft\` with one complete canonical definition. Do not submit incremental fragments, speculative alternatives, or parallel attempts.
+3. Wait for the submission result before deciding what to do next. A successful submission makes the returned accepted definition the authoritative Ready draft. Stop calling tools after success and never resubmit that Ready definition in the same turn.
+4. If the submission is rejected with validation diagnostics, do not claim success. Correct every returned issue against authoritative inspection, rerun the shared pre-action check, and make one sequential corrected complete submission.
+5. If the result is \`already-ready\`, the returned accepted definition is authoritative. Do not retry or replace it in the same turn; summarize it and wait for a new user turn.
+6. If the result is \`superseded\`, an earlier submission in the turn won. Do not apologize, retry, or claim the workflow is broken. Inspect the authoritative state before making any claim.
+7. Ready is not persisted. Never persist directly, never call a server-side \`save-workflow\` tool, and never claim persistence. Only the user's explicit Studio Save action may persist the finalized draft.
+8. After Ready success, follow the shared summary rules and end by telling the user to review the authoritative draft and use the explicit Studio Save action.`,
   });
 }
 
