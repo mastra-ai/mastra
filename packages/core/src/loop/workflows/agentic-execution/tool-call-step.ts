@@ -516,12 +516,18 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         //
         // Nested sub-agent/workflow approvals also write `requireToolApproval` on the
         // outer suspend payload, but they additionally set `suspendedToolRunId`. Those
-        // must resume into the nested tool path — not the outer approval short-circuit.
+        // must resume into the nested tool path — not the outer approval short-circuit —
+        // even when a live outer `requireToolApproval` policy is still present.
+        const isDelegatedApproval = Boolean(
+          suspendData &&
+          typeof suspendData === 'object' &&
+          (suspendData as { suspendedToolRunId?: unknown }).suspendedToolRunId,
+        );
         const suspendedForApproval = Boolean(
           suspendData &&
           typeof suspendData === 'object' &&
           (suspendData as { requireToolApproval?: unknown }).requireToolApproval &&
-          !(suspendData as { suspendedToolRunId?: unknown }).suspendedToolRunId,
+          !isDelegatedApproval,
         );
         const isApprovalResume =
           resumeData != null && typeof resumeData === 'object' && 'approved' in (resumeData as Record<string, unknown>);
@@ -529,7 +535,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // Without this, `declineToolCall` falls through to `execute` when the policy was
         // lost (#20470). Do not key only on `approved` in resumeData — generic tool
         // resumes can carry that field for unrelated reasons (same guard as durable).
-        const approvalGated = toolRequiresApproval || (suspendedForApproval && isApprovalResume);
+        const approvalGated =
+          !isDelegatedApproval && (toolRequiresApproval || (suspendedForApproval && isApprovalResume));
 
         // Schema for tool call approval - used for both streaming and metadata
         const approvalSchema = toStandardSchema(

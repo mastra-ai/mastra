@@ -575,6 +575,53 @@ describe('createToolCallStep tool approval workflow', () => {
     );
   });
 
+  it('forwards delegated decline even when a live requireToolApproval policy is present', async () => {
+    // Live outer policy must not re-gate nested resumes: with requireToolApproval still
+    // set, suspendedToolRunId + { approved: false } must reach the nested tool.
+    const inputData = makeInputData();
+    const toolsWithoutFlag = {
+      'test-tool': {
+        execute: vi.fn().mockResolvedValue({ forwarded: true }),
+      },
+    };
+    const step = createToolCallStep({
+      tools: toolsWithoutFlag,
+      messageList,
+      controller,
+      requireToolApproval: true,
+      runId: 'test-run',
+      streamState,
+    });
+
+    const resumeData = { approved: false };
+    const result = await step.execute(
+      makeExecuteParams({
+        inputData,
+        resumeData,
+        suspendData: {
+          requireToolApproval: {
+            toolCallId: inputData.toolCallId,
+            toolName: inputData.toolName,
+            args: inputData.args,
+          },
+          suspendedToolRunId: 'nested-run-id',
+        },
+      }),
+    );
+
+    expect(result).toEqual({
+      result: { forwarded: true },
+      ...inputData,
+    });
+    expect(toolsWithoutFlag['test-tool'].execute).toHaveBeenCalledWith(
+      inputData.args,
+      expect.objectContaining({
+        toolCallId: inputData.toolCallId,
+        resumeData,
+      }),
+    );
+  });
+
   it('should return inputData as-is for provider-executed tools (no client execution)', async () => {
     // Provider-executed tools are handled by the stream path (tool-call + tool-result chunks
     // in llm-execution-step), so tool-call-step just passes through inputData unchanged.
