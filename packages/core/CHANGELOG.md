@@ -1,5 +1,17 @@
 # @mastra/core
 
+## 1.56.0-alpha.2
+
+### Patch Changes
+
+- Fixed a crash in tool input validation when using Zod v4 compatibility schemas that don't provide a native JSON Schema. ([#19030](https://github.com/mastra-ai/mastra/pull/19030))
+
+- Fixed delegated tool approvals not resuming after a page refresh or server restart. Approvals saved in conversation metadata previously pointed at a sub-agent run that could not be resumed. They now point at the supervisor run, so the saved approval works directly with `resumeStream()` and `approveToolCall()`. Approvals saved before this fix keep working. ([#19645](https://github.com/mastra-ai/mastra/pull/19645))
+
+- Fixed custom data chunks emitted by processors so they are saved with thread messages unless marked transient. ([#19375](https://github.com/mastra-ai/mastra/pull/19375))
+
+- Fixed thread title generation using messages from other threads when memory is resource-scoped. Titles for new threads are now derived only from the messages of the thread being titled, instead of the full message list which can include recalled messages from the user's other conversations. ([#19856](https://github.com/mastra-ai/mastra/pull/19856))
+
 ## 1.56.0-alpha.1
 
 ### Minor Changes

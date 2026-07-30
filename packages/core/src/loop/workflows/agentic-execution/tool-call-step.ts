@@ -508,6 +508,36 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
         }
 
+        // On resume, the live `requireToolApproval` policy may be gone: function-form
+        // policies do not survive RequestContext serialization, and decline/approve
+        // helpers typically only pass `{ runId, toolCallId }` — not the original option.
+        // The suspend payload still records that this step waited for approval, so treat
+        // that as authoritative for the resume decision (especially declines).
+        //
+        // Nested sub-agent/workflow approvals also write `requireToolApproval` on the
+        // outer suspend payload, but they additionally set `suspendedToolRunId`. Those
+        // must resume into the nested tool path — not the outer approval short-circuit —
+        // even when a live outer `requireToolApproval` policy is still present.
+        const isDelegatedApproval = Boolean(
+          suspendData &&
+          typeof suspendData === 'object' &&
+          (suspendData as { suspendedToolRunId?: unknown }).suspendedToolRunId,
+        );
+        const suspendedForApproval = Boolean(
+          suspendData &&
+          typeof suspendData === 'object' &&
+          (suspendData as { requireToolApproval?: unknown }).requireToolApproval &&
+          !isDelegatedApproval,
+        );
+        const isApprovalResume =
+          resumeData != null && typeof resumeData === 'object' && 'approved' in (resumeData as Record<string, unknown>);
+        // Gate the resume branch on either a live policy or a prior outer approval suspend.
+        // Without this, `declineToolCall` falls through to `execute` when the policy was
+        // lost (#20470). Do not key only on `approved` in resumeData — generic tool
+        // resumes can carry that field for unrelated reasons (same guard as durable).
+        const approvalGated =
+          !isDelegatedApproval && (toolRequiresApproval || (suspendedForApproval && isApprovalResume));
+
         // Schema for tool call approval - used for both streaming and metadata
         const approvalSchema = toStandardSchema(
           z.object({
@@ -519,7 +549,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           }),
         );
 
-        if (toolRequiresApproval) {
+        if (approvalGated) {
           if (!resumeData) {
             await stopGoalActivity({
               agentId,
@@ -595,8 +625,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         // When an approval-gated tool is approved on resume, tag the resolved output with the
         // approval decision so it round-trips through persistence as `approval: { approved: true }`.
+        // Use `approvalGated` (not only the live policy) so approve-after-policy-loss still tags.
         const approvalGrant =
-          toolRequiresApproval && resumeData && (resumeData as { approved?: boolean }).approved === true
+          approvalGated && resumeData && (resumeData as { approved?: boolean }).approved === true
             ? ({ approval: { id: inputData.toolCallId, approved: true as const } } as const)
             : undefined;
 
@@ -606,7 +637,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const isAgentTool = inputData.toolName?.startsWith('agent-');
         const isWorkflowTool = inputData.toolName?.startsWith('workflow-');
         const resumeDataToPassToToolOptions =
-          !isAgentTool && toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
+          !isAgentTool &&
+          approvalGated &&
+          resumeData &&
+          Object.keys(resumeData).length === 1 &&
+          'approved' in resumeData
             ? undefined
             : resumeData;
 
