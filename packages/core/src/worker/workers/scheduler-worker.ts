@@ -46,20 +46,33 @@ export class SchedulerWorker extends MastraWorker {
     // miss; we adapt that into a boolean.
     const mastra = this.mastra;
     const isTargetReady = mastra
-      ? (target: ScheduleTarget) => {
-          try {
-            if (target.type === 'workflow') {
+      ? async (target: ScheduleTarget) => {
+          if (target.type === 'workflow') {
+            try {
               mastra.getWorkflowById(target.workflowId);
               return true;
+            } catch {
+              return false;
             }
-            if (target.type === 'agent') {
+          }
+          if (target.type === 'agent') {
+            try {
               mastra.getAgentById(target.agentId);
               return true;
+            } catch {
+              // Stored (editor) agents aren't registered until hydrated once
+              // in this process, so a registry miss doesn't mean the agent is
+              // gone. Confirm against the editor before burning a grace miss.
+              try {
+                return (await mastra.getEditor?.()?.agent.getById(target.agentId)) != null;
+              } catch {
+                // Transient editor/storage failure — don't count it as a miss
+                // toward deletion; the execute path will surface the error.
+                return true;
+              }
             }
-            return false;
-          } catch {
-            return false;
           }
+          return false;
         }
       : undefined;
 
