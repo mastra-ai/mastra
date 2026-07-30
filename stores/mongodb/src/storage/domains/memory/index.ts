@@ -153,12 +153,26 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       } catch (error) {
         // Fail loud: a silently missing index degrades query performance at scale.
         // Users who manage their own indexes can set skipDefaultIndexes.
+        const mongoCode = (error as any)?.code;
+        const isUniqueConflict = mongoCode === 85 && indexDef.options?.unique === true;
+        const field = Object.keys(indexDef.keys)[0] ?? 'id';
+        const indexName = Object.entries(indexDef.keys)
+          .map(([k, v]) => `${k}_${v}`)
+          .join('_');
+        const text = isUniqueConflict
+          ? `Index conflict on collection "${indexDef.collection}": an existing non-unique index on { ${field}: 1 } conflicts with Mastra's required unique index.\n\n` +
+            `To migrate:\n` +
+            `  1. Check for duplicates:  db.${indexDef.collection}.aggregate([{ $group: { _id: "$${field}", n: { $sum: 1 } } }, { $match: { n: { $gt: 1 } } }])\n` +
+            `  2. Drop the old index:    db.${indexDef.collection}.dropIndex("${indexName}")\n` +
+            `  3. Recreate as unique:    db.${indexDef.collection}.createIndex({ ${field}: 1 }, { unique: true })\n\n` +
+            `Alternatively, set skipDefaultIndexes: true to manage indexes yourself.`
+          : `Failed to create default index on collection "${indexDef.collection}". Set skipDefaultIndexes to manage indexes yourself.`;
         throw new MastraError(
           {
             id: createStorageErrorId('MONGODB', 'CREATE_DEFAULT_INDEXES', 'FAILED'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.THIRD_PARTY,
-            text: `Failed to create default index on collection "${indexDef.collection}". Set skipDefaultIndexes to manage indexes yourself.`,
+            text,
             details: { collection: indexDef.collection },
           },
           error,

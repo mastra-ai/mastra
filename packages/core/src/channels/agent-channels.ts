@@ -412,19 +412,27 @@ export class AgentChannels {
         ...this.chatOptions,
       });
 
-      // Default handler that routes messages to the agent
-      const defaultHandler = (chatThread: Thread, message: Message) =>
-        this.handleChatMessage(chatThread, message, mastra);
-
       // Register handlers with optional overrides
       const { onDirectMessage, onMention, onSubscribedMessage } = this.handlerOverrides;
 
-      // Context handed to custom handlers so they can reach the resolved Mastra
-      // instance without being injected with an external accessor.
-      const handlerContext: ChannelHandlerContext = { mastra };
+      // Per-message dispatch scope. The request context and the handler context
+      // MUST be built per message, never once at initialize() time: a custom
+      // handler may write the sender's tenant onto the request context, and a
+      // shared instance would leak that tenant into the next message's run.
+      const beginMessage = () => {
+        const requestContext = new RequestContext();
+        const defaultHandler = (chatThread: Thread, message: Message) =>
+          this.handleChatMessage(chatThread, message, mastra, requestContext);
+        // Context handed to custom handlers so they can reach the resolved Mastra
+        // instance without being injected with an external accessor, and
+        // contribute to the request context the run will dispatch with.
+        const handlerContext: ChannelHandlerContext = { mastra, requestContext };
+        return { defaultHandler, handlerContext };
+      };
 
       if (onDirectMessage !== false) {
         chat.onDirectMessage((thread, message) => {
+          const { defaultHandler, handlerContext } = beginMessage();
           if (typeof onDirectMessage === 'function') {
             return onDirectMessage(thread, message, defaultHandler, handlerContext);
           }
@@ -434,6 +442,7 @@ export class AgentChannels {
 
       if (onMention !== false) {
         chat.onNewMention((thread, message) => {
+          const { defaultHandler, handlerContext } = beginMessage();
           if (typeof onMention === 'function') {
             return onMention(thread, message, defaultHandler, handlerContext);
           }
@@ -443,6 +452,7 @@ export class AgentChannels {
 
       if (onSubscribedMessage !== false) {
         chat.onSubscribedMessage((thread, message) => {
+          const { defaultHandler, handlerContext } = beginMessage();
           if (typeof onSubscribedMessage === 'function') {
             return onSubscribedMessage(thread, message, defaultHandler, handlerContext);
           }
@@ -474,13 +484,19 @@ export class AgentChannels {
           if (!adapter) throw new Error(`No adapter for platform "${platform}"`);
 
           const externalThreadId = this.resolveExternalThreadId({ platform, chatThread, messageId });
-          const mastraThread = await this.getOrCreateThread({
+          const { thread: mastraThread } = await this.findThreadMapping({
             externalThreadId,
             channelId: chatThread.channelId,
             platform,
-            resourceId: `${platform}:${event.user.userId}`,
             mastra,
           });
+          if (!mastraThread) {
+            // Approval cards can only continue runs on threads created by an
+            // earlier message. Do not mint a replacement from the clicker's
+            // identity when that durable mapping is missing.
+            this.log('warn', `No mapped channel thread found for tool approval action toolCallId=${toolCallId}`);
+            return;
+          }
 
           // Look up the runId for this toolCallId. Prefer the in-memory
           // `pendingApprovalCards` map (set when the approval card was posted)
@@ -981,9 +997,14 @@ export class AgentChannels {
    * and onSubscribedMessage. Streams the Mastra agent response and
    * updates the channel message in real-time via edits.
    */
-  private async handleChatMessage(chatThread: Thread, message: Message, mastra: Mastra): Promise<void> {
+  private async handleChatMessage(
+    chatThread: Thread,
+    message: Message,
+    mastra: Mastra,
+    requestContext: RequestContext,
+  ): Promise<void> {
     try {
-      await this.processChatMessage(chatThread, message, mastra);
+      await this.processChatMessage(chatThread, message, mastra, requestContext);
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       this.log('error', `[${chatThread.adapter.name}] Error handling message`, {
@@ -1003,7 +1024,12 @@ export class AgentChannels {
     }
   }
 
-  private async processChatMessage(chatThread: Thread, message: Message, mastra: Mastra): Promise<void> {
+  private async processChatMessage(
+    chatThread: Thread,
+    message: Message,
+    mastra: Mastra,
+    requestContext: RequestContext,
+  ): Promise<void> {
     const platform = chatThread.adapter.name;
 
     // Map to a Mastra thread for memory/history.
@@ -1189,7 +1215,10 @@ export class AgentChannels {
       actor: message.author,
     });
 
-    const requestContext = new RequestContext();
+    // NOTE: `requestContext` is constructed per message at the handler boundary
+    // (see `beginMessage` in initialize) so a custom handler can contribute to
+    // it — e.g. stamping the tenant — before the run dispatches. Core only
+    // enriches it here.
     requestContext.set('channel', channelContext);
 
     // Stash the per-event render deps so `ChatChannelOutputProcessor` can
@@ -1439,6 +1468,47 @@ export class AgentChannels {
   }
 
   /**
+   * Look up a channel-backed Mastra thread and retain the store/metadata needed
+   * by the create path when no mapping exists.
+   */
+  private async findThreadMapping({
+    externalThreadId,
+    channelId,
+    platform,
+    mastra,
+  }: {
+    externalThreadId: string;
+    channelId: string;
+    platform: string;
+    mastra: Mastra;
+  }) {
+    const storage = mastra.getStorage();
+    if (!storage) {
+      throw new Error('Storage is required for channel thread mapping. Configure storage in your Mastra instance.');
+    }
+
+    const memoryStore = await storage.getStore('memory');
+    if (!memoryStore) {
+      throw new Error(
+        'Memory store is required for channel thread mapping. Configure storage in your Mastra instance.',
+      );
+    }
+
+    const metadata = {
+      channel_platform: platform,
+      channel_externalThreadId: externalThreadId,
+      channel_externalChannelId: channelId,
+    };
+
+    const { threads } = await memoryStore.listThreads({
+      filter: { metadata },
+      perPage: 1,
+    });
+
+    return { thread: threads[0], memoryStore, metadata };
+  }
+
+  /**
    * Resolves an existing Mastra thread for the given external IDs, or creates one.
    */
   private async getOrCreateThread({
@@ -1466,32 +1536,17 @@ export class AgentChannels {
     threadId?: (resolvedResourceId: string, defaultThreadId: string) => string | Promise<string>;
     mastra: Mastra;
   }): Promise<StorageThreadType> {
-    const storage = mastra.getStorage();
-    if (!storage) {
-      throw new Error('Storage is required for channel thread mapping. Configure storage in your Mastra instance.');
-    }
-
-    const memoryStore = await storage.getStore('memory');
-    if (!memoryStore) {
-      throw new Error(
-        'Memory store is required for channel thread mapping. Configure storage in your Mastra instance.',
-      );
-    }
-
-    const metadata = {
-      channel_platform: platform,
-      channel_externalThreadId: externalThreadId,
-      channel_externalChannelId: channelId,
-    };
-
-    const { threads } = await memoryStore.listThreads({
-      filter: { metadata },
-      perPage: 1,
+    const {
+      thread: existingThread,
+      memoryStore,
+      metadata,
+    } = await this.findThreadMapping({
+      externalThreadId,
+      channelId,
+      platform,
+      mastra,
     });
-
-    if (threads.length > 0) {
-      return threads[0]!;
-    }
+    if (existingThread) return existingThread;
 
     const resolvedResourceId = typeof resourceId === 'function' ? await resourceId() : resourceId;
     const defaultThreadId = crypto.randomUUID();

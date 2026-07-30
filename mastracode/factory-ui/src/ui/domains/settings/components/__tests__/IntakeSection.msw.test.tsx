@@ -97,9 +97,9 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      expect(await screen.findByText('Intake sources')).toBeInTheDocument();
-      expect(await screen.findByRole('switch', { name: 'Sync GitHub repositories' })).toBeChecked();
-      expect(await screen.findByRole('switch', { name: 'Sync Linear projects' })).toBeChecked();
+      expect(await screen.findByText(/feed issues into Intake/)).toBeInTheDocument();
+      expect(await screen.findByRole('switch', { name: 'Sync GitHub issues' })).toBeChecked();
+      expect(await screen.findByRole('switch', { name: 'Sync Linear issues' })).toBeChecked();
 
       await userEvent.click(await screen.findByRole('button', { name: 'Repositories' }));
       expect(await screen.findByRole('checkbox', { name: 'mastra' })).toBeInTheDocument();
@@ -216,7 +216,7 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      await userEvent.click(await screen.findByRole('switch', { name: 'Sync GitHub repositories' }));
+      await userEvent.click(await screen.findByRole('switch', { name: 'Sync GitHub issues' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
       expect(saved[0]!.github.enabled).toBe(false);
@@ -345,7 +345,7 @@ describe('IntakeSection', () => {
       expect(await screen.findByText('Connect a Linear workspace to sync its issues.')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Connect Linear' })).toBeInTheDocument();
       expect(screen.queryByRole('checkbox', { name: 'Q3 Roadmap' })).not.toBeInTheDocument();
-      expect(screen.getByRole('switch', { name: 'Sync Linear projects' })).toBeDisabled();
+      expect(screen.getByRole('switch', { name: 'Sync Linear issues' })).toBeDisabled();
     });
   });
 
@@ -374,10 +374,10 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      expect(await screen.findByText('Intake sources')).toBeInTheDocument();
+      expect(await screen.findByText(/feed issues into Intake/)).toBeInTheDocument();
       // GitHub defaults to enabled; Linear stays off until it's connected here.
-      expect(await screen.findByRole('switch', { name: 'Sync GitHub repositories' })).toBeChecked();
-      expect(screen.getByRole('switch', { name: 'Sync Linear projects' })).not.toBeChecked();
+      expect(await screen.findByRole('switch', { name: 'Sync GitHub issues' })).toBeChecked();
+      expect(screen.getByRole('switch', { name: 'Sync Linear issues' })).not.toBeChecked();
     });
   });
 

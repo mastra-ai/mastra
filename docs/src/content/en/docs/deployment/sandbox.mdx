@@ -67,7 +67,9 @@ API:    https://<sandbox-id>-4111.vercel.run/api
 Studio: https://<sandbox-id>-4111.vercel.run
 ```
 
-The manifest includes `expiresAt` when the sandbox provider reports an expiration time. Redeploys to the same sandbox skip the dependency install when the install inputs (`package.json`, bundled lockfiles, and the install command) are unchanged.
+The manifest includes `expiresAt` when the sandbox provider reports an expiration time.
+
+Redeploys to the same sandbox skip the dependency install when its inputs are unchanged. These inputs are `package.json`, the bundled lockfiles, and the install command.
 
 ### Using E2B
 

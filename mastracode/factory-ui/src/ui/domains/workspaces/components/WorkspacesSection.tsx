@@ -13,9 +13,18 @@ import { useDeleteWorkspaceMutation, useWorkspacesQuery } from '../../../../hook
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { createAgentControllerClient } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { relatedWorkItems, workItemSourceNumber } from '../../factory/services/relationships';
+import { githubNumberForItem } from '../../factory/boardItems';
+import { relatedWorkItems, relationshipLabel } from '../../factory/services/relationships';
 import type { FactoryUserSession } from '../services/github';
+import { getFactorySessionKind } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
+import type { SessionPreviewDetails } from './SessionPreviewCard';
+
+function workspaceStatus(row: FactoryWorkspaceRow): 'running' | 'attention' | undefined {
+  if (row.running) return 'running';
+  if (row.attention) return 'attention';
+  return undefined;
+}
 
 export function WorkspacesSection() {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
@@ -67,7 +76,7 @@ export function WorkspacesSection() {
               (a, b) => b.updatedAt.localeCompare(a.updatedAt),
             )[0]
           : undefined;
-    const pullRequestNumber = Number(pullRequest ? workItemSourceNumber(pullRequest) : undefined);
+    const pullRequestNumber = pullRequest ? githubNumberForItem(pullRequest) : undefined;
     const active = workspace.sessionId === sessionId;
     const running = runningByPath[workspace.sessionId] === true;
     const factorySession = !workspace.branch.startsWith('user/');
@@ -80,10 +89,12 @@ export function WorkspacesSection() {
         active,
         running,
         attention: attentionByPath[workspace.sessionId] === true,
-        review: item?.source === 'github-pr' || (!item && workspace.branch.startsWith('factory/pr-')),
+        review: getFactorySessionKind(workspace, item) === 'review',
+        itemLabel: item && item.source !== 'manual' ? relationshipLabel(item) : undefined,
+        itemTitle: item?.title,
         updatedAt: item?.updatedAt ?? workspace.updatedAt,
         threadId: workItemSession?.threadId,
-        pullRequestNumber: Number.isInteger(pullRequestNumber) ? pullRequestNumber : undefined,
+        pullRequestNumber,
         knownMerged: pullRequest?.metadata.merged === true,
       },
     ];
@@ -155,6 +166,7 @@ export function WorkspacesSection() {
           title="Work Sessions"
           rows={workRows.visible}
           allRows={workRows.all}
+          kind="Work session"
           pending={pending}
           mergedByPath={mergedByPath}
           onSelect={openWorkspaceThread}
@@ -167,6 +179,7 @@ export function WorkspacesSection() {
           title="Review Sessions"
           rows={reviewRows.visible}
           allRows={reviewRows.all}
+          kind="Review session"
           pending={pending}
           mergedByPath={mergedByPath}
           onSelect={openWorkspaceThread}
@@ -214,6 +227,8 @@ interface FactoryWorkspaceRow {
   running: boolean;
   attention: boolean;
   review: boolean;
+  itemLabel?: string;
+  itemTitle?: string;
   updatedAt: string;
   threadId?: string;
   pullRequestNumber?: number;
@@ -224,6 +239,7 @@ function WorkspaceGroup({
   title,
   rows,
   allRows,
+  kind,
   pending,
   mergedByPath,
   onSelect,
@@ -232,6 +248,7 @@ function WorkspaceGroup({
   title: 'Work Sessions' | 'Review Sessions';
   rows: FactoryWorkspaceRow[];
   allRows: FactoryWorkspaceRow[];
+  kind: SessionPreviewDetails['kind'];
   pending: boolean;
   mergedByPath: Record<string, boolean>;
   onSelect: (workspace: FactoryUserSession) => void;
@@ -251,13 +268,24 @@ function WorkspaceGroup({
         {visibleRows.map(row => (
           <SessionNavRow
             key={row.workspace.sessionId}
-            name={row.label ?? row.workspace.branch}
-            title={row.workspace.branch}
+            name={
+              row.label ??
+              (row.workspace.branch.startsWith('slack/') ? row.itemTitle : undefined) ??
+              row.workspace.branch
+            }
             url={row.url}
             active={row.active}
             disabled={pending}
             merged={mergedByPath[row.workspace.sessionId] === true}
-            status={row.running ? 'running' : row.attention ? 'attention' : undefined}
+            status={workspaceStatus(row)}
+            preview={{
+              kind,
+              itemLabel: row.itemLabel,
+              itemTitle: row.itemTitle,
+              branch: row.workspace.branch,
+              baseBranch: row.workspace.baseBranch,
+              updatedAt: row.updatedAt,
+            }}
             onSelect={() => onSelect(row.workspace)}
             onDelete={() => onDelete(row.workspace)}
           />

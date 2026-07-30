@@ -244,7 +244,7 @@ const newestPullRequestCases: Array<{
 ];
 
 describe('Workspace sidebar statuses', () => {
-  it('shows the running spinner instead of a merged icon while the agent is active', async () => {
+  it('shows the running status dot instead of a merged icon while the agent is active', async () => {
     stubWorkspaceStatuses({
       items: baseItems(true),
       threads: [
@@ -259,8 +259,7 @@ describe('Workspace sidebar statuses', () => {
 
     renderSection();
 
-    const spinner = await screen.findByRole('status', { name: 'Agent working in Implement loader' });
-    expect(spinner.tagName.toLowerCase()).toBe('svg');
+    await screen.findByRole('status', { name: 'Agent working in Implement loader' });
     expect(screen.queryByRole('img', { name: 'Pull request merged for Implement loader' })).not.toBeInTheDocument();
   });
 
