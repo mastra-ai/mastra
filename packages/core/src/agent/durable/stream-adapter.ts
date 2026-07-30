@@ -197,6 +197,13 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // Track subscription state
   let isSubscribed = false;
   let cancelled = false;
+  // Set once the stream reaches ANY terminal state (FINISH/ERROR/ABORT, a
+  // closeOnSuspend suspend, idle termination, or cleanup). `cancelled` alone is
+  // insufficient: `safeClose()` leaves `controller` set and only `cleanup()`
+  // flips `cancelled`, so without this flag the watchdog would re-arm on an
+  // already-closed stream — observing a finished run (replayed FINISH) or a
+  // late/stale event would start a self-renewing timer. Checked by armIdleTimer.
+  let terminated = false;
   let controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> | null = null;
 
   // Promise that resolves when subscription is established
@@ -248,6 +255,12 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       idleTimer = undefined;
     }
   };
+  // Mark the stream terminal and stop the watchdog. Call at every terminal close
+  // so armIdleTimer() can never re-arm afterwards.
+  const markTerminated = () => {
+    terminated = true;
+    clearIdleTimer();
+  };
   const onIdleTimeout = async (generation: number) => {
     idleTimer = undefined;
     if (cancelled || !controller || generation !== idleGeneration) return;
@@ -277,6 +290,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       payload: { error },
     } as ChunkType<OUTPUT>);
     safeClose(controller);
+    markTerminated(); // block any re-arm while we await onError below
     try {
       await onError?.({ error });
     } catch (callbackError) {
@@ -286,7 +300,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     }
   };
   const armIdleTimer = () => {
-    if (idleTimeoutMs === undefined || idleTimeoutMs <= 0 || cancelled || !controller) return;
+    if (idleTimeoutMs === undefined || idleTimeoutMs <= 0 || cancelled || terminated || !controller) {
+      return;
+    }
     clearIdleTimer();
     const generation = idleGeneration;
     idleTimer = setTimeout(() => {
@@ -344,7 +360,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           } as ChunkType<OUTPUT>;
           safeEnqueue(controller, finishChunk);
           safeClose(controller);
-          clearIdleTimer();
+          markTerminated();
 
           // Build rich onFinish payload from finish event data.
           // The pubsub FINISH event carries output.text, output.steps, and
@@ -431,7 +447,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             payload: { error },
           } as ChunkType<OUTPUT>);
           safeClose(controller);
-          clearIdleTimer();
+          markTerminated();
           try {
             await onError?.({ error });
           } catch (callbackError) {
@@ -448,7 +464,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // into closing here so `getFullOutput()` can resolve.
           if (closeOnSuspend) {
             safeClose(controller);
-            clearIdleTimer();
+            markTerminated();
           }
           break;
         }
@@ -462,7 +478,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           }
           // Abort closes the stream — the run will not continue.
           safeClose(controller);
-          clearIdleTimer();
+          markTerminated();
           break;
         }
 
@@ -533,7 +549,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // Sets cancelled=true so the subscribe .then() handler will unsubscribe
   // if cleanup runs before the subscription promise resolves.
   const cleanup = () => {
-    clearIdleTimer();
+    markTerminated();
     cancelled = true;
     if (isSubscribed) {
       isSubscribed = false;

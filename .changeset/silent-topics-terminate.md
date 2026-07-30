@@ -2,18 +2,19 @@
 '@mastra/core': minor
 ---
 
-Add optional `idleTimeoutMs` and `isAlive` options to `DurableAgent.observe()`. A durable run whose driving process crashed stops emitting chunks but never publishes a terminal event, so a reconnecting `observe()` previously hung forever on a producerless pubsub topic. With `idleTimeoutMs` set, the stream terminates after that much silence; an optional `isAlive` probe (e.g. a run-liveness heartbeat) is consulted first so a legitimately-idle-but-live run (a long tool call, or a suspended HITL gate) keeps waiting instead of being closed. Fully backward-compatible: absent, behavior is unchanged.
+Add optional `idleTimeoutMs` and `isAlive` options to `DurableAgent.observe()`.
+
+When the process running a durable agent stops unexpectedly, the run stops producing updates but never emits a completion event — so a client that reconnects with `observe()` previously waited forever, with no way to tell the run was gone. With `idleTimeoutMs` set, the observed stream ends after that many milliseconds of silence. An optional `isAlive` check is consulted first: if it reports the run is still being worked on (for example a long-running tool call, or a run paused waiting for human input), the stream keeps waiting instead of ending. Fully backward-compatible — with neither option set, `observe()` behaves exactly as before.
 
 ```ts
-// Reconnect to an in-flight run, but don't hang forever if the pod driving it died.
+// Reconnect to an in-flight run, but stop waiting if the run is no longer running.
 const { output } = await agent.observe(runId, {
   idleTimeoutMs: 30_000,
-  // Consulted only when the stream has been silent for idleTimeoutMs. Return true
-  // while a producer is still driving the run (a heartbeat, a suspended HITL gate)
-  // to keep waiting; false/absent terminates the stream with an error chunk.
+  // Consulted only after idleTimeoutMs of silence. Return true while the run is
+  // still being worked on to keep waiting; false (or omitted) ends the stream.
   isAlive: () => runHeartbeat.isFresh(runId),
 });
 
-// Omit both options for the previous unbounded behavior:
+// Omit both options for the previous behavior (wait indefinitely):
 const { output: legacy } = await agent.observe(runId);
 ```

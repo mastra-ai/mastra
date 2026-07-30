@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { InMemoryServerCache } from '../../../cache/inmemory';
 import { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -211,10 +211,16 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     // stream. Without the idle-generation check this stale `false` would.
     const runId = 'idle-race';
     let aliveResult = false; // the first probe (captured at call time) returns false
+    // Signal the moment the FIRST probe starts, so the test can react to the real
+    // event (probe in flight) rather than guessing the timing with a fixed delay.
+    let markProbeStarted!: () => void;
+    const firstProbeStarted = new Promise<void>(resolve => (markProbeStarted = resolve));
+    let probeCount = 0;
     // Capture `aliveResult` at CALL time, not resolve time, so the in-flight
     // probe keeps its original verdict even after the flag is flipped below.
     const isAlive = () => {
       const captured = aliveResult;
+      if (++probeCount === 1) markProbeStarted();
       return new Promise<boolean>(resolve => setTimeout(() => resolve(captured), IDLE));
     };
     const { output, cleanup, ready } = makeStream(runId, { idleTimeoutMs: IDLE, isAlive });
@@ -223,14 +229,13 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     const reader = readFullStream(output.fullStream as ReadableStream<any>);
 
     await emitChunkEvent(pubsub, runId, textChunk('a')); // arms timer (generation G)
-    await delay(IDLE * 1.2); // timer fires; onIdleTimeout awaits the slow (false) probe
+    await firstProbeStarted; // deterministic: the idle timer fired and probe #1 is in flight
 
     aliveResult = true; // later probes report alive
     await emitChunkEvent(pubsub, runId, textChunk('b')); // re-arms (generation G+1) mid-probe
 
-    // The stale generation-G probe resolves `false` (~2×IDLE) but must be
-    // abandoned; the generation-G+1 timer's probe resolves `true` and re-arms.
-    // The stream must stay open across all of it.
+    // The stale generation-G probe resolves `false` but must be abandoned; the
+    // generation-G+1 timer's probe resolves `true` and re-arms. Stay open.
     await delay(IDLE * 4);
     expect(reader.isClosed()).toBe(false);
     expect(reader.chunks.filter(c => c.type === 'error')).toHaveLength(0);
@@ -240,6 +245,60 @@ describe('createDurableAgentStream idle/liveness timeout', () => {
     const result = await settleWithin(reader.done, IDLE * 20);
     expect(result).toBe('done');
     expect(reader.isClosed()).toBe(true);
+    expect(reader.chunks.filter(c => c.type === 'error')).toHaveLength(0);
+
+    cleanup();
+  });
+
+  it('invokes onError when it terminates on idle', async () => {
+    // Finding 2: idle termination must fire `onError` (not just enqueue an error
+    // chunk), because `observe()` wires onError → scheduleAutoCleanup. Without it
+    // a crashed-pod run's registry + topic are retained forever.
+    const runId = 'idle-onerror';
+    const onError = vi.fn();
+    const { output, cleanup, ready } = makeStream(runId, {
+      idleTimeoutMs: IDLE,
+      isAlive: () => false,
+      onError,
+    });
+    await ready;
+
+    const reader = readFullStream(output.fullStream as ReadableStream<any>);
+    await emitChunkEvent(pubsub, runId, textChunk('a'));
+
+    const result = await settleWithin(reader.done, IDLE * 20);
+    expect(result).toBe('done');
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(String(onError.mock.calls[0][0].error.message)).toContain(`idle for ${IDLE}ms`);
+
+    cleanup();
+  });
+
+  it('never arms the watchdog when observing an already-finished run', async () => {
+    // Finding 3: the ordinary reconnect-to-finished-run case. The replayed FINISH
+    // closes the stream; the watchdog must NOT arm on the closed stream, or with
+    // isAlive → true it would re-probe forever (a self-renewing timer + leak).
+    // Assert the probe is NEVER consulted after close.
+    const runId = 'idle-finished';
+    // Publish a full run terminal BEFORE observing → subscribeWithReplay delivers it.
+    await emitChunkEvent(pubsub, runId, textChunk('answer'));
+    await emitFinishEvent(pubsub, runId, finishData);
+
+    const isAlive = vi.fn(() => true);
+    const { output, cleanup, ready } = makeStream(runId, { idleTimeoutMs: IDLE, isAlive });
+    await ready;
+
+    const reader = readFullStream(output.fullStream as ReadableStream<any>);
+
+    // The replayed FINISH closes the stream.
+    const result = await settleWithin(reader.done, IDLE * 20);
+    expect(result).toBe('done');
+    expect(reader.chunks.some(c => c.type === 'finish')).toBe(true);
+
+    // Across several idle windows the watchdog stays disarmed: probe never called,
+    // no stray idle-error chunk.
+    await delay(IDLE * 4);
+    expect(isAlive).not.toHaveBeenCalled();
     expect(reader.chunks.filter(c => c.type === 'error')).toHaveLength(0);
 
     cleanup();
