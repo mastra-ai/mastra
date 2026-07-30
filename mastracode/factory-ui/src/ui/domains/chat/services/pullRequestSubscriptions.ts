@@ -42,6 +42,11 @@ export async function fetchPullRequestSubscriptions(
   if (!isRecord(body) || !Array.isArray(body.subscriptions)) {
     throw new Error('Pull request subscriptions returned an invalid response.');
   }
-  // one bad row must not hide every other pull request
-  return body.subscriptions.filter(isPullRequestSubscription);
+  // one bad row must not hide every other pull request; warn so a widened server enum is not silent
+  const subscriptions = body.subscriptions.filter(isPullRequestSubscription);
+  const dropped = body.subscriptions.length - subscriptions.length;
+  if (dropped > 0 && import.meta.env.DEV) {
+    console.warn(`Dropped ${dropped} pull request subscription(s) the client does not understand.`);
+  }
+  return subscriptions;
 }

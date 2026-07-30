@@ -9,6 +9,7 @@ interface FactoryReviewPullRequestLinksProps {
   threadId: string;
 }
 
+// only renders inside the thread's chat providers — PullRequestLinks reads session + transcript context
 export function FactoryReviewPullRequestLinks({
   factoryId,
   projectRepositoryId,

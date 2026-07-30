@@ -219,6 +219,22 @@ describe('ThreadPage pull request link placement', () => {
 
       expect(links).toHaveLength(1);
     });
+
+    it('still shows the active review when the subscriptions request fails', async () => {
+      stubThreadRoute(createWireWorkItem('pull-request'), [otherPullRequestSubscription]);
+      server.use(http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => new HttpResponse(null, { status: 500 })));
+      renderThreadRoute();
+
+      const factorySession = await screen.findByRole('region', { name: 'Factory session' });
+      const activeReviewLink = await within(factorySession).findByRole('link', {
+        name: PULL_REQUEST_ACCESSIBLE_NAME,
+      });
+
+      expect(activeReviewLink).toHaveAttribute('href', PULL_REQUEST_URL);
+      expect(
+        within(factorySession).queryByRole('link', { name: OTHER_PULL_REQUEST_ACCESSIBLE_NAME }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe('when the current Factory session is ordinary work', () => {
