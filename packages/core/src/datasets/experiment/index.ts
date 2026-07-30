@@ -5,8 +5,8 @@ import type { DatasetRecord } from '../../storage/types';
 import { executeTarget } from './executor';
 import type { Target, ExecutionResult } from './executor';
 import { resolveScorers, resolveStepScorers, runScorersForItem, runStepScorersForItem } from './scorer';
-import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED } from './tool-mocks';
-import type { ItemToolMock } from './tool-mocks';
+import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED, TOOL_MOCK_NOT_DECLARED } from './tool-mocks';
+import type { ItemToolMock, UnmockedToolPolicy } from './tool-mocks';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
 /** Unified item shape used within experiment execution (bridges inline + versioned data) */
@@ -23,6 +23,8 @@ type ExperimentItem = {
   resumeData?: unknown;
   /** Item-level static tool mocks (agent targets only) */
   toolMocks?: ItemToolMock[];
+  /** Item-level override for undeclared agent tool calls. */
+  unmockedToolPolicy?: UnmockedToolPolicy;
 };
 
 // Re-export types and helpers
@@ -41,11 +43,13 @@ export {
   ToolMockMatcher,
   TOOL_MOCK_MISMATCH,
   TOOL_MOCK_EXHAUSTED,
+  TOOL_MOCK_NOT_DECLARED,
   type ItemToolMock,
   type ToolMockMatchArgs,
   type ToolMockReport,
   type ToolMockResolution,
   type ToolMockFailureCode,
+  type UnmockedToolPolicy,
 } from './tool-mocks';
 
 // Re-export analytics
@@ -141,6 +145,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           resumeSteps: dataItem.resumeSteps,
           resumeData: dataItem.resumeData,
           toolMocks: dataItem.toolMocks,
+          unmockedToolPolicy: dataItem.unmockedToolPolicy,
         };
       });
       datasetVersion = null;
@@ -183,6 +188,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         requestContext: v.requestContext,
         metadata: v.metadata,
         toolMocks: v.toolMocks,
+        unmockedToolPolicy: v.unmockedToolPolicy,
       }));
     } else {
       throw new Error('No data source: provide datasetId or data');
@@ -237,6 +243,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           experimentId,
           versions,
           toolMocks: targetType === 'agent' ? item.toolMocks : undefined,
+          unmockedToolPolicy:
+            targetType === 'agent' ? (item.unmockedToolPolicy ?? config.unmockedToolPolicy ?? 'allow') : undefined,
         });
       };
     } else {
@@ -377,7 +385,11 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
           // Don't retry deterministic tool-mock failures — the matcher state cannot
           // change between attempts, so retrying would always fail identically.
-          if (execResult.error.code === TOOL_MOCK_MISMATCH || execResult.error.code === TOOL_MOCK_EXHAUSTED) {
+          if (
+            execResult.error.code === TOOL_MOCK_MISMATCH ||
+            execResult.error.code === TOOL_MOCK_EXHAUSTED ||
+            execResult.error.code === TOOL_MOCK_NOT_DECLARED
+          ) {
             break;
           }
 

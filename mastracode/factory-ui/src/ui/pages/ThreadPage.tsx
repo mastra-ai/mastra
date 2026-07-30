@@ -9,6 +9,7 @@ import { useThreadWorkspacePath } from '../domains/workspace-viewer/hooks/useThr
 import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
 import { WorkspaceFilesSurface } from '../domains/workspace-viewer/components/WorkspaceFilesSurface';
 import { chatColumnClass } from '../domains/workspace-viewer/layout';
+import { useInvalidateWorkspaceChangesOnRunCompletion } from '../domains/workspace-viewer/useInvalidateWorkspaceChangesOnRunCompletion';
 import { ChatHeader } from '../domains/chat/components/ChatHeader';
 import { FactorySessionHeader } from '../domains/factory/components/RelatedFactorySessions';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
@@ -54,7 +55,7 @@ export function ThreadPage() {
         ) : (
           <ChatSessionBoundary threadId={threadId}>
             <WorkspaceFilesProvider>
-              <ThreadPageMain />
+              <ThreadPageMain workspacePath={workspace.workspacePath} />
             </WorkspaceFilesProvider>
           </ChatSessionBoundary>
         )
@@ -63,13 +64,13 @@ export function ThreadPage() {
   );
 }
 
-function ThreadPageMain() {
+function ThreadPageMain({ workspacePath }: { workspacePath: string | undefined }) {
   useGlobalShortcuts();
   useRouteThreadSync();
   useThreadPageKickoffs();
 
   return (
-    <ThreadShell>
+    <ThreadShell workspacePath={workspacePath}>
       <ChatShell.Bar>
         <FactorySessionHeader />
       </ChatShell.Bar>
@@ -104,8 +105,9 @@ function ThreadPageMain() {
 
 // Reads the transcript so its caller does not: the context republishes on every
 // streamed chunk, and children passed through keep their element identity.
-function ThreadShell({ children }: { children: ReactNode }) {
-  const { loadMore } = useChatTranscript();
+function ThreadShell({ workspacePath, children }: { workspacePath: string | undefined; children: ReactNode }) {
+  const { busy, loadMore } = useChatTranscript();
+  useInvalidateWorkspaceChangesOnRunCompletion(workspacePath, busy);
   const canLoadMore = loadMore.hasMore && !loadMore.isLoading;
 
   return (
