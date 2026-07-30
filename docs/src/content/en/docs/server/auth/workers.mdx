@@ -66,13 +66,15 @@ services:
   orchestration-worker:
     environment:
       MASTRA_WORKER_AUTH_TOKEN: ${WORKER_TOKEN}
-      MASTRA_STEP_EXECUTION_URL: http://api:4111/api
+      MASTRA_STEP_EXECUTION_URL: http://api:4111/api  # Use HTTPS in production
       # ... other env vars
 ```
 
 ```bash title=".env"
 WORKER_TOKEN=sk-worker-secret-token
 ```
+
+These examples use `http://` for local development. In production, use HTTPS URLs and terminate TLS with a service mesh or ingress controller. See [Security recommendations](#security-recommendations).
 
 The orchestration worker reads `MASTRA_WORKER_AUTH_TOKEN` and sends it as a `Bearer` token in the `Authorization` header on every step execution request.
 
@@ -96,7 +98,7 @@ Send the credential as `x-worker-api-key` instead of `Authorization`:
 import { HttpRemoteStrategy } from '@mastra/core/worker'
 
 const strategy = new HttpRemoteStrategy({
-  serverUrl: 'http://api:4111/api',
+  serverUrl: 'http://api:4111/api', // Use HTTPS in production
   auth: { type: 'api-key', key: process.env.WORKER_API_KEY! },
 })
 ```
@@ -111,7 +113,7 @@ Use any header name and value:
 import { HttpRemoteStrategy } from '@mastra/core/worker'
 
 const strategy = new HttpRemoteStrategy({
-  serverUrl: 'http://api:4111/api',
+  serverUrl: 'http://api:4111/api', // Use HTTPS in production
   auth: {
     type: 'header',
     name: 'X-Internal-Service-Key',
