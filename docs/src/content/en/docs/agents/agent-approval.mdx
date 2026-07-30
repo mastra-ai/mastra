@@ -119,6 +119,78 @@ Function-based `requireToolApproval` is only available on regular `stream()` / `
 
 :::
 
+#### Bind approval to the exact tool arguments
+
+For sensitive tools, bind the approval to the exact tool name and arguments that were shown to the reviewer. If those arguments drift before execution, the tool shouldn't run under the old approval.
+
+The `tool-call-approval` chunk already includes `toolName`, `toolCallId`, and `args`. You can fingerprint those fields when the approval request is shown. The example below uses a simple JSON string as the fingerprint, but in production you should use a stable hash of the tool name and arguments:
+
+```typescript title="src/mastra/agents/approval-bound-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+// For your production usecase, build a stable hash of the tool name and args
+function actionFingerprint(toolName: string, args: unknown) {
+  const payload = JSON.stringify({ toolName, args })
+  return `fingerprint-${payload}`
+}
+
+const sensitiveTools = new Set(['issue_refund', 'delete_record'])
+const approvedFingerprints = new Set<string>()
+
+export const approvalBoundAgent = new Agent({
+  id: 'approval-bound-agent',
+  name: 'Approval Bound Agent',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { issueRefundTool, deleteRecordTool },
+  hooks: {
+    beforeToolCall: ({ toolName, input }) => {
+      if (!sensitiveTools.has(toolName)) return
+
+      const fingerprint = actionFingerprint(toolName, input)
+      if (!approvedFingerprints.delete(fingerprint)) {
+        return {
+          proceed: false,
+          output: `Tool call blocked: approval did not match ${toolName} arguments.`,
+        }
+      }
+    },
+  },
+})
+```
+
+```typescript
+const stream = await approvalBoundAgent.stream('Refund order ord-1042', {
+  requireToolApproval: ({ toolName }) => sensitiveTools.has(toolName),
+})
+
+async function consumeApprovalStream(currentStream: typeof stream) {
+  for await (const chunk of currentStream.fullStream) {
+    if (chunk.type === 'tool-call-approval') {
+      const { toolName, toolCallId, args } = chunk.payload
+      const fingerprint = actionFingerprint(toolName, args)
+
+      // Present toolName, args, and fingerprint to your approval UI.
+      const approved = await showApprovalDialog({ toolName, args, fingerprint })
+
+      const nextStream = approved
+        ? await approveReviewedToolCall(currentStream.runId, toolCallId, fingerprint)
+        : await approvalBoundAgent.declineToolCall({ runId: currentStream.runId, toolCallId })
+
+      await consumeApprovalStream(nextStream)
+    }
+  }
+}
+
+async function approveReviewedToolCall(runId: string, toolCallId: string, fingerprint: string) {
+  approvedFingerprints.add(fingerprint)
+  return approvalBoundAgent.approveToolCall({ runId, toolCallId })
+}
+
+await consumeApprovalStream(stream)
+```
+
+In production, store the approved fingerprint in durable storage scoped to the user, run, tool call, and policy version. The `Set` above is intentionally small so the boundary is easy to see: the approval is consumed once, and only for the same canonical tool arguments that were reviewed.
+
 ### Runtime suspension with `suspend()`
 
 A tool can also pause _during_ its `execute` function by calling `suspend()`. This is useful when the tool starts running and then discovers it needs additional user input or confirmation before it can finish.

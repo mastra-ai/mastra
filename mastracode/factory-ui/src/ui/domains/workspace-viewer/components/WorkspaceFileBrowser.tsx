@@ -1,7 +1,20 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { File, FileCode, FileJson, FileText, Folder, FolderOpen, Image, NotepadText, RefreshCw } from 'lucide-react';
+import {
+  File,
+  FileCode,
+  FileDiff,
+  FileJson,
+  FileText,
+  Folder,
+  FolderOpen,
+  Image,
+  NotepadText,
+  RefreshCw,
+} from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -158,10 +171,12 @@ interface WorkspaceFileBrowserProps {
   selectedFilePath?: string;
   listing?: WorkspaceRenderedListing;
   isLoading: boolean;
+  isRefreshing: boolean;
   error?: Error;
+  onRefresh: () => void;
   onRenderedPathChange: (path: RenderedWorkspacePath) => void;
   onFileSelect: (filePath: string) => void;
-  onRefresh: () => void;
+  onShowChanges: () => void;
 }
 
 export function WorkspaceFileBrowser({
@@ -170,10 +185,12 @@ export function WorkspaceFileBrowser({
   selectedFilePath,
   listing,
   isLoading,
+  isRefreshing,
   error,
+  onRefresh,
   onRenderedPathChange,
   onFileSelect,
-  onRefresh,
+  onShowChanges,
 }: WorkspaceFileBrowserProps) {
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const nodes = buildTree(listing?.entries ?? []);
@@ -183,19 +200,27 @@ export function WorkspaceFileBrowser({
   };
 
   return (
-    <aside className="bg-surface1 flex h-full w-full min-w-0 flex-col" aria-label="Workspace files">
-      <div className="flex items-center justify-between gap-2 px-3 py-2 pl-4 lg:pr-12">
-        <div className="flex min-w-0 items-center gap-2">
-          <NotepadText size={15} className="text-icon4 shrink-0" />
-          <Txt variant="ui-sm" className="text-icon6 truncate font-medium">
-            Files
-          </Txt>
-        </div>
-        <Button size="sm" variant="ghost" onClick={onRefresh} aria-label="Refresh workspace files">
-          <RefreshCw size={14} />
-        </Button>
+    <aside className="flex h-full min-h-0 w-full min-w-0 flex-col" aria-label="Workspace files">
+      <div className="border-border1 flex items-center border-b px-3 py-2">
+        <Tabs<'files' | 'changes'>
+          defaultTab="files"
+          value="files"
+          onValueChange={value => {
+            if (value === 'changes') onShowChanges();
+          }}
+        >
+          <TabList variant="pill-ghost">
+            <Tab value="files">
+              <NotepadText size={14} />
+              Files
+            </Tab>
+            <Tab value="changes">
+              <FileDiff size={14} />
+              Changes
+            </Tab>
+          </TabList>
+        </Tabs>
       </div>
-
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         <Tree
           selectedId={selectedFilePath ? `${selectedPath.root}/${selectedFilePath}` : undefined}
@@ -216,7 +241,21 @@ export function WorkspaceFileBrowser({
                   setFolderOpen(path.root, open);
                 }}
               >
-                <Tree.FolderTrigger>
+                <Tree.FolderTrigger
+                  actions={
+                    isSelectedRoot ? (
+                      <Button
+                        size="icon-xs"
+                        variant="ghost"
+                        onClick={onRefresh}
+                        disabled={isRefreshing}
+                        aria-label={isRefreshing ? 'Refreshing workspace files' : 'Refresh workspace files'}
+                      >
+                        {isRefreshing ? <Spinner size="sm" /> : <RefreshCw />}
+                      </Button>
+                    ) : null
+                  }
+                >
                   <Tree.Icon>{getFolderIcon(isOpen)}</Tree.Icon>
                   <Tree.Label>{path.label}</Tree.Label>
                 </Tree.FolderTrigger>

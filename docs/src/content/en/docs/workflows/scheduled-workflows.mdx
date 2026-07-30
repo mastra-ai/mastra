@@ -162,7 +162,7 @@ The built-in scheduler uses a `setInterval` tick loop to poll the schedules tabl
 
 ### Long-lived host (recommended)
 
-Deploy targets such as Fly Machines, Railway, Render, AWS ECS, GKE, or your own server keep the Mastra process alive between cron ticks. Schedules work without extra setup.
+Deploy targets such as Fly Machines, Railway, Render, AWS ECS, GKE, or your own server keep the Mastra process alive between cron ticks. Schedules work without extra setup. For production deployments, you can run the scheduler as a [dedicated worker process](/docs/deployment/workers#scheduler-worker) to isolate it from the API layer.
 
 ### Serverless platforms
 

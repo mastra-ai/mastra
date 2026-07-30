@@ -9,7 +9,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createInstructionBlock } from '../../components/agent-edit-page/utils/form-validation';
 import type { AgentDataSource } from '../../utils/compute-agent-initial-values';
 import { useAgentCmsForm } from '../use-agent-cms-form';
-import { createdCodeAgent } from './fixtures/use-agent-cms-form';
+import { useAgentVersions } from '../use-agent-versions';
+import { createdCodeAgent, noAgentVersions, oneUnpublishedAgentVersion } from './fixtures/use-agent-cms-form';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -231,5 +232,91 @@ describe('useAgentCmsForm — code agent tool ownership', () => {
     expect(body.tools).toBeUndefined();
     expect(body.integrationTools).toBeUndefined();
     expect(body.mcpClients).toBeUndefined();
+  });
+});
+
+describe('useAgentCmsForm', () => {
+  // Regression coverage: the version list backs the version dropdown and the
+  // published/unpublished badges. Skipping its invalidation for code-agent
+  // overrides left Studio showing stale publication state after a save.
+  describe('when a code-agent override is saved', () => {
+    it('refetches the agent version list once the save completes', async () => {
+      const sink: { body: Record<string, unknown> | null } = { body: null };
+      captureCreateBody(sink);
+
+      let versionRequests = 0;
+      server.use(
+        http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions`, () => {
+          versionRequests += 1;
+          return HttpResponse.json(versionRequests === 1 ? noAgentVersions : oneUnpublishedAgentVersion);
+        }),
+      );
+
+      const { result } = renderHook(
+        () => ({
+          cmsForm: useAgentCmsForm({
+            mode: 'edit',
+            agentId: AGENT_ID,
+            dataSource,
+            isCodeAgentOverride: true,
+            hasStoredOverride: false,
+            onSuccess: () => {},
+          }),
+          versions: useAgentVersions({ agentId: AGENT_ID, params: { orderBy: { direction: 'DESC' } } }),
+        }),
+        { wrapper: makeWrapper() },
+      );
+
+      await waitFor(() => expect(result.current.versions.data).toEqual(noAgentVersions));
+
+      act(() => {
+        result.current.cmsForm.form.setValue('instructionBlocks', [createInstructionBlock('User edited prompt')], {
+          shouldDirty: true,
+        });
+      });
+
+      await act(async () => {
+        await result.current.cmsForm.handleSaveDraft();
+      });
+
+      // The saved version shows up in the dropdown without a manual reload.
+      await waitFor(() => expect(result.current.versions.data).toEqual(oneUnpublishedAgentVersion));
+    });
+  });
+
+  // The first save for a code-defined agent creates the stored override. Publishing it
+  // there would put the override live before the user asked, silently replacing the code
+  // definition that was already serving traffic.
+  describe('when the first code-agent override is saved', () => {
+    it('asks the server not to publish the override so it stays a draft until the user publishes', async () => {
+      const sink: { body: Record<string, unknown> | null } = { body: null };
+      captureCreateBody(sink);
+
+      const { result } = renderHook(
+        () =>
+          useAgentCmsForm({
+            mode: 'edit',
+            agentId: AGENT_ID,
+            dataSource,
+            isCodeAgentOverride: true,
+            hasStoredOverride: false,
+            onSuccess: () => {},
+          }),
+        { wrapper: makeWrapper() },
+      );
+
+      act(() => {
+        result.current.form.setValue('instructionBlocks', [createInstructionBlock('User edited prompt')], {
+          shouldDirty: true,
+        });
+      });
+
+      await act(async () => {
+        await result.current.handleSaveDraft();
+      });
+
+      await waitFor(() => expect(sink.body).not.toBeNull());
+      expect(sink.body?.autoPublish).toBe(false);
+    });
   });
 });

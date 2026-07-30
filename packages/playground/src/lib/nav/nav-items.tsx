@@ -48,7 +48,10 @@ const signalsNavItem: NavItem = {
   url: '/intelligence',
   activePaths: ['/intelligence'],
   Icon: LayoutGrid,
-  docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Trace intelligence documentation' },
+  docs: {
+    href: 'https://mastra.ai/en/docs/mastra-platform/trace-intelligence',
+    label: 'Trace intelligence documentation',
+  },
   isOnMastraPlatform: true,
   // Kept in the registry so /intelligence routes and breadcrumbs always resolve, but
   // only surfaced in the sidebar/command palette when the flag is enabled.

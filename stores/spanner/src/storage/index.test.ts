@@ -737,7 +737,7 @@ if (ENABLE_TESTS) {
       );
     });
 
-    it('updateExperimentResult sets review status/tags and is a no-op without changes', async () => {
+    it('updateExperimentResult sets review status/tags/comment and is a no-op without changes', async () => {
       const exp = await experiments.createExperiment(baseExp());
       const r = await experiments.addExperimentResult(baseResult(exp.id, { itemId: 'i1' }));
       const updated = await experiments.updateExperimentResult({
@@ -745,12 +745,15 @@ if (ENABLE_TESTS) {
         experimentId: exp.id,
         status: 'reviewed',
         tags: ['a', 'b'],
+        comment: 'note',
       });
       expect(updated.status).toBe('reviewed');
       expect(updated.tags).toEqual(['a', 'b']);
-      // No-op (no status/tags) returns the existing row.
+      expect(updated.comment).toBe('note');
+      // No-op (no status/tags/comment) returns the existing row.
       const same = await experiments.updateExperimentResult({ id: r.id });
       expect(same.status).toBe('reviewed');
+      expect(same.comment).toBe('note');
       await expect(experiments.updateExperimentResult({ id: 'missing', status: 'complete' })).rejects.toThrow();
     });
 

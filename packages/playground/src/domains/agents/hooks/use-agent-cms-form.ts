@@ -287,11 +287,18 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         const editMemory = isCodeAgentOverride ? undefined : buildMemoryParams(values);
 
         if (needsCreate) {
-          // First save for a code agent — create the stored override
+          // First save for a code agent — create the stored override.
+          //
+          // The override is staged as an unpublished draft so the code definition keeps
+          // serving traffic until the user explicitly publishes, matching what every
+          // later save does. Code-source editors have no publish step; the server
+          // publishes there regardless, because the save's whole purpose is the
+          // filesystem write and only published entities reach disk.
           const createParams: CreateStoredAgentParams = {
             id: options.agentId,
             ...sharedParams,
             memory: editMemory,
+            autoPublish: false,
           };
           await createStoredAgent.mutateAsync(createParams);
           setOverrideCreated(true);
@@ -307,13 +314,16 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         // Pass keepDefaultValues so currently rendered field state (e.g. open tabs,
         // focused inputs) is preserved — only the dirty flag is cleared.
         form.reset(values, { keepValues: true });
+        // The version list drives the version dropdown and the published/unpublished
+        // badges, and it is not part of the form dataSource — always refresh it so the
+        // saved version shows up with the right publication state.
+        void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
         // For code-mode overrides we intentionally skip stored-agent / agent query
         // invalidation: the dataSource reload would cascade through the
         // resetFormWithData effect and remount the System Prompt tab, which
         // is jarring. The filesystem write is authoritative for code mode and
         // the in-memory form already reflects the saved state.
         if (!isCodeAgentOverride) {
-          void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
           void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
           void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
         }
