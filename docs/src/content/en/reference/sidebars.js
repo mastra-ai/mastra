@@ -199,6 +199,22 @@ const sidebars = {
         { type: 'doc', id: 'core/mastra-class', label: 'Mastra Class' },
         { type: 'doc', id: 'core/mastra-model-gateway', label: 'MastraModelGateway' },
         { type: 'doc', id: 'core/addGateway', label: '.addGateway()' },
+        {
+          type: 'doc',
+          id: 'core/addStoredWorkflow',
+          label: '.addStoredWorkflow()',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
+          id: 'core/addStoredWorkflows',
+          label: '.addStoredWorkflows()',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
         { type: 'doc', id: 'core/getAgent', label: '.getAgent()' },
         { type: 'doc', id: 'core/getAgentById', label: '.getAgentById()' },
         { type: 'doc', id: 'core/getDeployer', label: '.getDeployer()' },
