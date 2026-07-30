@@ -28,8 +28,8 @@ const greetStep = createStep({
 });
 
 // Single-schedule form: fires every minute.
-export const heartbeatWorkflow = createWorkflow({
-  id: 'heartbeatWorkflow',
+export const tickWorkflow = createWorkflow({
+  id: 'tickWorkflow',
   description: 'Demo workflow that fires every minute on a declarative schedule.',
   inputSchema: z.object({ greeting: z.string() }),
   outputSchema: z.object({ greeting: z.string(), firedAt: z.string() }),

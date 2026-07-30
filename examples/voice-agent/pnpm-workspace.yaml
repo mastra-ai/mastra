@@ -1,0 +1,38 @@
+# Standalone install root, linked against the monorepo packages.
+
+# Share pnpm's virtual store with the monorepo so native modules (LiveKit WebRTC,
+# onnxruntime) resolve to one physical copy instead of loading twice.
+enableGlobalVirtualStore: true
+
+# pnpm 11 reads overrides from here, not package.json. They are duplicated in
+# package.json `pnpm.overrides` because the example validator
+# (.github/scripts/validate-examples.js) checks for them there.
+# The @livekit/* links point at the monorepo-installed copies inside the linked
+# integration package, so the plugin worker's own LiveKit imports and the ones inside
+# @mastra/livekit are ONE module instance — `MastraLLM extends llm.LLM` must satisfy
+# the session's `instanceof` check. (Published installs don't need this: there the
+# peer dependency already yields a single copy.)
+overrides:
+  '@livekit/agents': 'link:../../integrations/livekit/node_modules/@livekit/agents'
+  '@livekit/agents-plugin-livekit': 'link:../../integrations/livekit/node_modules/@livekit/agents-plugin-livekit'
+  '@livekit/agents-plugin-silero': 'link:../../integrations/livekit/node_modules/@livekit/agents-plugin-silero'
+  '@mastra/core': 'link:../../packages/core'
+  '@mastra/libsql': 'link:../../stores/libsql'
+  '@mastra/memory': 'link:../../packages/memory'
+  '@mastra/observability': 'link:../../observability/mastra'
+  mastra: 'link:../../packages/cli'
+
+# @huggingface/transformers (turn-detector dependency) imports onnxruntime-common
+# without declaring it; declare it so strict/global-store resolution can find it.
+packageExtensions:
+  '@huggingface/transformers@*':
+    dependencies:
+      onnxruntime-common: '*'
+
+allowBuilds:
+  '@ffmpeg-installer/darwin-arm64': true
+  '@livekit/local-inference': true
+  esbuild: true
+  onnxruntime-node: true
+  protobufjs: true
+  sharp: true

@@ -106,13 +106,29 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'build-your-ui/copilotkit',
-          label: 'CopilotKit',
-        },
-        {
-          type: 'doc',
           id: 'build-your-ui/assistant-ui',
           label: 'Assistant UI',
+        },
+        {
+          type: 'category',
+          label: 'CopilotKit',
+          items: [
+            {
+              type: 'doc',
+              id: 'build-your-ui/copilotkit/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'build-your-ui/copilotkit/generative-ui',
+              label: 'Generative UI',
+            },
+            {
+              type: 'doc',
+              id: 'build-your-ui/copilotkit/channels',
+              label: 'Channels',
+            },
+          ],
         },
         {
           type: 'doc',
@@ -164,6 +180,19 @@ const sidebars = {
         {
           type: 'html',
           value: '<a class="menu__link" href="/docs/mastra-platform/server"><span>Mastra platform</span></a>',
+        },
+        {
+          type: 'doc',
+          id: 'deployment/kubernetes',
+          label: 'Kubernetes',
+        },
+        {
+          type: 'doc',
+          id: 'deployment/mastra-workers',
+          label: 'Mastra Workers',
+          customProps: {
+            tags: ['beta'],
+          },
         },
         {
           type: 'doc',
@@ -264,6 +293,11 @@ const sidebars = {
               label: 'Filesystem: Docs Manager',
             },
           ],
+        },
+        {
+          type: 'doc',
+          id: 'guide/coding-agent',
+          label: 'Building a Coding Agent',
         },
         {
           type: 'doc',

@@ -7,6 +7,10 @@ import {
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
   WorkflowRun,
   WorkflowRuns,
   StorageListWorkflowRunsInput,
@@ -15,6 +19,7 @@ import type {
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
+import { resolveTargets, runPrune } from '../../retention';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
 export class WorkflowsStorageMongoDB extends WorkflowsStorage {
@@ -25,6 +30,14 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   /** Collections managed by this domain */
   static readonly MANAGED_COLLECTIONS = [TABLE_WORKFLOW_SNAPSHOT] as const;
 
+  /**
+   * Anchor is `updatedAt` (BSON date), so the policy reads as inactivity:
+   * a run is pruned only after its snapshot has not been touched for `maxAge`.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    workflowSnapshot: { table: TABLE_WORKFLOW_SNAPSHOT, column: 'updatedAt', indexed: true },
+  };
+
   constructor(config: MongoDBDomainConfig) {
     super();
     this.#connector = resolveMongoDBConfig(config);
@@ -33,6 +46,16 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     this.#indexes = config.indexes?.filter(idx =>
       (WorkflowsStorageMongoDB.MANAGED_COLLECTIONS as readonly string[]).includes(idx.collection),
     );
+  }
+
+  /** Delete workflow snapshots idle for longer than the policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: WorkflowsStorageMongoDB.retentionTables,
+      order: ['workflowSnapshot'],
+    });
+    return runPrune({ connector: this.#connector, domain: 'workflows', targets, options, logger: this.logger });
   }
 
   supportsConcurrentUpdates(): boolean {
@@ -209,16 +232,10 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       // Use findOneAndUpdate with aggregation pipeline for atomic read-modify-write
       // This ensures concurrent updates don't overwrite each other
       const updatedDoc = await collection.findOneAndUpdate(
-        {
-          workflow_name: workflowName,
-          run_id: runId,
-          // Only update if snapshot exists and has context
-          'snapshot.context': { $exists: true },
-        },
+        { workflow_name: workflowName, run_id: runId },
         [
           {
             $set: {
-              // Merge the new options into the existing snapshot
               snapshot: {
                 $mergeObjects: ['$snapshot', opts],
               },
@@ -234,8 +251,20 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       }
 
       const snapshot = typeof updatedDoc.snapshot === 'string' ? JSON.parse(updatedDoc.snapshot) : updatedDoc.snapshot;
+
+      if (!snapshot?.context) {
+        throw new MastraError({
+          id: createStorageErrorId('MONGODB', 'UPDATE_WORKFLOW_STATE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          text: `Snapshot not found for runId ${runId}`,
+          details: { workflowName, runId },
+        });
+      }
+
       return snapshot;
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('MONGODB', 'UPDATE_WORKFLOW_STATE', 'FAILED'),

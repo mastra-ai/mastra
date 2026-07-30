@@ -1,7 +1,7 @@
 import type { z } from 'zod/v4';
 import type { AgentExecutionOptionsBase } from '../agent/agent.types';
 import type { SerializedError } from '../error';
-import type { ScoringSamplingConfig } from '../evals/types';
+import type { ScoringSamplingConfig, ScoringSource } from '../evals/types';
 import type { MastraDBMessage, StorageThreadType, SerializedMemoryConfig } from '../memory/types';
 import type { ProcessorPhase } from '../processor-provider';
 import { getZodInnerType, getZodTypeName } from '../utils/zod-utils';
@@ -63,6 +63,10 @@ export type PaginationInfo = {
 
 export type MastraMessageFormat = 'v1' | 'v2';
 
+export type StorageMetadataFilterValue = string | number | boolean | null;
+
+export type StorageMetadataFilter = Record<string, StorageMetadataFilterValue>;
+
 /**
  * Common options for listing messages (pagination, filtering, ordering)
  */
@@ -100,6 +104,13 @@ type StorageListMessagesOptions = {
        */
       endExclusive?: boolean;
     };
+    /**
+     * Filter messages by shallow scalar metadata key-value pairs from message content metadata.
+     * All specified key-value pairs must match with exact type equality (AND logic).
+     * Keys must start with a letter or underscore, contain only letters, numbers, and underscores,
+     * be at most 128 characters, and cannot be `__proto__`, `prototype`, or `constructor`.
+     */
+    metadata?: StorageMetadataFilter;
   };
   orderBy?: StorageOrderBy<'createdAt'>;
 };
@@ -917,6 +928,10 @@ export interface StorageScorerDefinitionType {
   activeVersionId?: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Organization identifier for multi-tenant scoping */
+  organizationId?: string;
+  /** Project identifier for multi-tenant scoping */
+  projectId?: string;
   /** Additional metadata for the scorer */
   metadata?: Record<string, unknown>;
   createdAt: Date;
@@ -942,6 +957,10 @@ export type StorageCreateScorerDefinitionInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Organization identifier for multi-tenant scoping */
+  organizationId?: string;
+  /** Project identifier for multi-tenant scoping */
+  projectId?: string;
   /** Additional metadata for the scorer */
   metadata?: Record<string, unknown>;
 } & StorageScorerDefinitionSnapshotType;
@@ -978,6 +997,14 @@ export type StorageListScorerDefinitionsInput = {
    * Filter scorers by author identifier.
    */
   authorId?: string;
+  /**
+   * Filter scorers by organization identifier (multi-tenant scoping).
+   */
+  organizationId?: string;
+  /**
+   * Filter scorers by project identifier (multi-tenant scoping).
+   */
+  projectId?: string;
   /**
    * Filter scorers by metadata key-value pairs.
    * All specified key-value pairs must match (AND logic).
@@ -1078,6 +1105,10 @@ export interface BufferedObservationChunk {
   currentTask?: string;
   /** Optional thread title from observer output */
   threadTitle?: string;
+  /** Values extracted during this buffered observation cycle. */
+  extractedValues?: Record<string, unknown>;
+  /** Extractor failures from this buffered observation cycle. */
+  extractionFailures?: Array<{ slug: string; error: string }>;
 }
 
 /**
@@ -1102,6 +1133,10 @@ export interface BufferedObservationChunkInput {
   currentTask?: string;
   /** Optional thread title from observer output */
   threadTitle?: string;
+  /** Values extracted during this buffered observation cycle. */
+  extractedValues?: Record<string, unknown>;
+  /** Extractor failures from this buffered observation cycle. */
+  extractionFailures?: Array<{ slug: string; error: string }>;
 }
 
 /**
@@ -2150,11 +2185,13 @@ export interface StorageBlobEntry {
 
 /**
  * Workspace reference configuration stored in agent snapshots.
- * Can reference a stored workspace by ID or provide inline workspace config.
+ * Can reference a stored workspace by ID, provide inline workspace config,
+ * or name a registered workspace provider to build the entire workspace.
  */
 export type StorageWorkspaceRef =
   | { type: 'id'; workspaceId: string }
-  | { type: 'inline'; config: StorageWorkspaceSnapshotType };
+  | { type: 'inline'; config: StorageWorkspaceSnapshotType }
+  | { type: 'provider'; provider: string; config: Record<string, unknown> };
 
 // ============================================
 // Workflow Storage Types
@@ -2425,17 +2462,25 @@ export interface DatasetItemToolMock {
  * Diagnostic receipt for tool-mock usage on a single experiment result.
  * Structurally mirrors `ToolMockReport` in the experiment engine.
  */
+export type DatasetUnmockedToolPolicy = 'allow' | 'deny';
+
 export interface DatasetToolMockReport {
   served: { mockIndex: number; toolName: string; args: unknown }[];
   unconsumed: { mockIndex: number; toolName: string; args: unknown }[];
   liveCalls: { toolName: string; args: unknown }[];
-  failure?: { code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED'; toolName: string; args: unknown };
+  failure?: {
+    code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED' | 'TOOL_MOCK_NOT_DECLARED';
+    toolName: string;
+    args: unknown;
+  };
 }
 
 export interface DatasetItem {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  /** Caller-defined, dataset-local logical identity. Immutable after insertion. */
+  externalId?: string | null;
   /** Inherited from the parent dataset at insert time. */
   organizationId?: string | null;
   /** Inherited from the parent dataset at insert time. */
@@ -2444,6 +2489,7 @@ export interface DatasetItem {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  unmockedToolPolicy?: DatasetUnmockedToolPolicy;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2455,6 +2501,8 @@ export interface DatasetItemRow {
   id: string;
   datasetId: string;
   datasetVersion: number;
+  /** Caller-defined, dataset-local logical identity. Immutable across SCD-2 history. */
+  externalId?: string | null;
   /** Inherited from the parent dataset at insert time. */
   organizationId?: string | null;
   /** Inherited from the parent dataset at insert time. */
@@ -2465,6 +2513,7 @@ export interface DatasetItemRow {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  unmockedToolPolicy?: DatasetUnmockedToolPolicy;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2482,6 +2531,11 @@ export interface DatasetVersion {
 // Dataset CRUD Input/Output Types
 
 export interface CreateDatasetInput {
+  /**
+   * Optional caller-defined durable identity. When provided, storage adapters atomically create
+   * the dataset or return the compatible dataset that already owns this ID.
+   */
+  id?: string;
   name: string;
   description?: string;
   metadata?: Record<string, unknown>;
@@ -2530,9 +2584,14 @@ export interface CreateDatasetInput {
  * Update input for a dataset. Tenancy ({@link CreateDatasetInput.organizationId},
  * {@link CreateDatasetInput.projectId}) and candidate identity
  * ({@link CreateDatasetInput.candidateKey}, {@link CreateDatasetInput.candidateId})
- * are intentionally omitted: they are set once at create time and must remain immutable
- * so item SCD-2 history (which inherits these fields per-write from the parent dataset)
- * stays consistent across the dataset's lifetime.
+ * are intentionally omitted from the payload: they are set once at create time and must
+ * remain immutable so item SCD-2 history (which inherits these fields per-write from the
+ * parent dataset) stays consistent across the dataset's lifetime.
+ *
+ * The optional `filters` field is a *read scope*, not a payload update — when provided,
+ * the update is only applied if the target dataset row also matches the tenancy filters.
+ * Callers that know the tenant should pass this to prevent cross-tenant updates via a
+ * leaked dataset ID.
  */
 export interface UpdateDatasetInput {
   id: string;
@@ -2546,6 +2605,8 @@ export interface UpdateDatasetInput {
   targetType?: TargetType | null;
   targetIds?: string[] | null;
   scorerIds?: string[] | null;
+  /** Tenancy read-scope. When set, the update only applies if the row matches; otherwise it is treated as NOT_FOUND. */
+  filters?: DatasetTenancyFilters;
 }
 
 /**
@@ -2560,10 +2621,17 @@ export interface UpdateDatasetInput {
  * {@link UpdateDatasetItemInput}.
  */
 export interface DatasetItemPayload {
+  /**
+   * Optional caller-defined identity scoped to this dataset. Reusing an identity
+   * with the originally accepted payload is idempotent; incompatible reuse fails.
+   */
+  externalId?: string;
   input: unknown;
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   toolMocks?: DatasetItemToolMock[];
+  /** Overrides the experiment's handling of tool calls not declared in `toolMocks`. */
+  unmockedToolPolicy?: DatasetUnmockedToolPolicy;
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2571,15 +2639,42 @@ export interface DatasetItemPayload {
 
 export interface AddDatasetItemInput extends DatasetItemPayload {
   datasetId: string;
+  /**
+   * Tenancy read-scope for the parent dataset. When set, the insert is rejected
+   * (NOT_FOUND) if the parent dataset row does not match the tenancy filters —
+   * prevents adding items to a dataset in another tenant via a leaked datasetId.
+   */
+  filters?: DatasetTenancyFilters;
 }
 
 /**
  * Update input for a dataset item. All payload fields are optional; only the
  * provided fields are patched.
+ *
+ * The optional `filters` field is a tenancy read-scope for the parent dataset;
+ * see {@link AddDatasetItemInput.filters}.
  */
-export interface UpdateDatasetItemInput extends Partial<DatasetItemPayload> {
+export interface UpdateDatasetItemInput extends Partial<Omit<DatasetItemPayload, 'externalId'>> {
   id: string;
   datasetId: string;
+  filters?: DatasetTenancyFilters;
+}
+
+export interface DatasetItemIdentityConflictDetail {
+  index: number;
+  externalId: string;
+  existingItemId: string;
+  reason: 'payload_mismatch' | 'deleted';
+}
+
+/**
+ * Delete input for a single dataset item. The optional `filters` field is a
+ * tenancy read-scope for the parent dataset; see {@link AddDatasetItemInput.filters}.
+ */
+export interface DeleteDatasetItemInput {
+  id: string;
+  datasetId: string;
+  filters?: DatasetTenancyFilters;
 }
 
 export interface DatasetTenancyFilters {
@@ -2590,6 +2685,20 @@ export interface DatasetTenancyFilters {
 export interface ListDatasetsFilters extends DatasetTenancyFilters {
   candidateKey?: string;
   candidateId?: string;
+  /**
+   * Filter by dataset target type (agent | workflow | scorer | processor).
+   */
+  targetType?: TargetType;
+  /**
+   * Filter to datasets whose `targetIds` intersect this list. A dataset
+   * matches if any of its targetIds is in this array. An empty array is
+   * treated as "no filter" (matches all datasets), not "match none".
+   */
+  targetIds?: string[];
+  /**
+   * Substring match on dataset `name`, case-insensitive.
+   */
+  name?: string;
 }
 
 export interface ListDatasetsInput {
@@ -2628,11 +2737,15 @@ export interface ListDatasetVersionsOutput {
 export interface BatchInsertItemsInput {
   datasetId: string;
   items: DatasetItemPayload[];
+  /** Tenancy read-scope for the parent dataset; see {@link AddDatasetItemInput.filters}. */
+  filters?: DatasetTenancyFilters;
 }
 
 export interface BatchDeleteItemsInput {
   datasetId: string;
   itemIds: string[];
+  /** Tenancy read-scope for the parent dataset; see {@link AddDatasetItemInput.filters}. */
+  filters?: DatasetTenancyFilters;
 }
 
 // ============================================
@@ -2691,6 +2804,7 @@ export interface ExperimentResult {
   traceId: string | null;
   status: ExperimentResultStatus | null;
   tags: string[] | null;
+  comment?: string | null;
   toolMockReport?: DatasetToolMockReport | null;
   /** Multi-tenant organization/account scope. Denormalized from the parent experiment for efficient tenancy-scoped queries. */
   organizationId?: string | null;
@@ -2705,6 +2819,7 @@ export interface UpdateExperimentResultInput {
   experimentId?: string;
   status?: ExperimentResultStatus | null;
   tags?: string[] | null;
+  comment?: string | null;
 }
 
 export interface CreateExperimentInput {
@@ -2786,6 +2901,45 @@ export interface AddExperimentResultInput {
 export interface ExperimentTenancyFilters {
   organizationId?: string;
   projectId?: string;
+}
+
+/**
+ * Multi-tenant scoping filters for score queries. Mirrors
+ * {@link DatasetTenancyFilters} so the scores domain can be queried
+ * within a tenancy bucket using the same shape.
+ */
+export interface ScoreTenancyFilters {
+  organizationId?: string;
+  projectId?: string;
+}
+
+export interface ListScoresByScorerIdInput {
+  scorerId: string;
+  pagination: StoragePagination;
+  entityId?: string;
+  entityType?: string;
+  source?: ScoringSource;
+  filters?: ScoreTenancyFilters;
+}
+
+export interface ListScoresByRunIdInput {
+  runId: string;
+  pagination: StoragePagination;
+  filters?: ScoreTenancyFilters;
+}
+
+export interface ListScoresByEntityIdInput {
+  entityId: string;
+  entityType: string;
+  pagination: StoragePagination;
+  filters?: ScoreTenancyFilters;
+}
+
+export interface ListScoresBySpanInput {
+  traceId: string;
+  spanId: string;
+  pagination: StoragePagination;
+  filters?: ScoreTenancyFilters;
 }
 
 export interface ListExperimentsInput {

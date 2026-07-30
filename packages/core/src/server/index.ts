@@ -1,4 +1,4 @@
-import type { Context, Handler, MiddlewareHandler } from 'hono';
+import type { Handler, MiddlewareHandler } from 'hono';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Mastra } from '../mastra';
@@ -20,8 +20,28 @@ export type {
   StudioConfig,
   Middleware,
 } from './types';
-export { MastraAuthProvider } from './auth';
-export type { MastraAuthProviderOptions } from './auth';
+export {
+  MastraAuthProvider,
+  isSSOProvider,
+  isSessionProvider,
+  isUserProvider,
+  isCredentialsProvider,
+  isOrganizationsProvider,
+  isAuthHttpHandler,
+  hasAuthInit,
+} from './auth';
+export type {
+  IMastraAuthProvider,
+  MastraAuthProviderOptions,
+  AuthInitContext,
+  IAuthHttpHandler,
+  IAuthInit,
+  ICredentialsProvider,
+  IOrganizationsProvider,
+  ISessionProvider,
+  ISSOProvider,
+  IUserProvider,
+} from './auth';
 export type { HonoRequestLike, MastraAuthRequest } from './request-types';
 export { getRequestHeader, getWebRequest } from './request-types';
 export { CompositeAuth } from './composite-auth';
@@ -53,7 +73,7 @@ type RegisterApiRouteOptions<P extends string> = {
     P,
     ParamsFromPath<P>
   >;
-  createHandler?: (c: Context) => Promise<ApiRouteHandler>;
+  createHandler?: (opts: { mastra: Mastra }) => Promise<ApiRouteHandler>;
   middleware?: MiddlewareHandler | MiddlewareHandler[];
   /**
    * Route-specific CORS configuration.

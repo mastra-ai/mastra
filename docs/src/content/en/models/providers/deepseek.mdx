@@ -144,13 +144,19 @@ const response = await agent.generate("Hello!", {
   content={[
     {
         "name": "thinking",
-        "type": "{ type?: \"enabled\" | \"disabled\" | undefined; } | undefined",
+        "type": "{ type?: \"adaptive\" | \"enabled\" | \"disabled\" | undefined; } | undefined",
         "description": "",
         "isOptional": true
     },
     {
         "name": "reasoningEffort",
-        "type": "\"high\" | \"max\" | undefined",
+        "type": "\"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\" | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "strictJsonSchema",
+        "type": "boolean | undefined",
         "description": "",
         "isOptional": true
     }

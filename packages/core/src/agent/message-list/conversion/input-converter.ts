@@ -220,10 +220,10 @@ export function hydrateMastraDBMessageFields(
 
   if (!message.threadId && context.memoryInfo?.threadId) {
     message.threadId = context.memoryInfo.threadId;
+  }
 
-    if (!message.resourceId && context.memoryInfo?.resourceId) {
-      message.resourceId = context.memoryInfo.resourceId;
-    }
+  if (!message.resourceId && context.memoryInfo?.resourceId) {
+    message.resourceId = context.memoryInfo.resourceId;
   }
 
   return message;

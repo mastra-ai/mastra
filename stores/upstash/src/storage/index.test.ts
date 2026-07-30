@@ -74,6 +74,7 @@ createTestSuite(
     id: 'upstash-test-store',
     ...TEST_CONFIG,
   }),
+  { deterministicScorePagination: true },
 );
 
 // Configuration validation tests

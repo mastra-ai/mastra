@@ -88,6 +88,7 @@ describe('span-type → Datadog kind mapping', () => {
       [SpanType.MODEL_INFERENCE]: 'llm',
       [SpanType.TOOL_CALL]: 'tool',
       [SpanType.MCP_TOOL_CALL]: 'tool',
+      [SpanType.PROVIDER_TOOL_CALL]: 'tool',
       [SpanType.WORKFLOW_RUN]: 'workflow',
     };
 

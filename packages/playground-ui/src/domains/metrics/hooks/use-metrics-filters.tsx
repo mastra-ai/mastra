@@ -3,8 +3,10 @@ import { useMemo, useRef } from 'react';
 import { useMetrics } from './use-metrics';
 import type { DatePreset, DateRange } from './use-metrics';
 
+const DEFAULT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
 const PRESET_MS: Record<string, number> = {
-  '24h': 24 * 60 * 60 * 1000,
+  '24h': DEFAULT_WINDOW_MS,
   '3d': 3 * 24 * 60 * 60 * 1000,
   '7d': 7 * 24 * 60 * 60 * 1000,
   '14d': 14 * 24 * 60 * 60 * 1000,
@@ -15,11 +17,11 @@ type Timestamp = { start: Date; end: Date };
 
 function buildTimestamp(preset: DatePreset, customRange: DateRange | undefined, anchor: number): Timestamp {
   if (preset !== 'custom') {
-    const ms = PRESET_MS[preset] ?? PRESET_MS['24h'];
+    const ms = PRESET_MS[preset] ?? DEFAULT_WINDOW_MS;
     return { start: new Date(anchor - ms), end: new Date(anchor) };
   }
   return {
-    start: customRange?.from ?? new Date(anchor - PRESET_MS['24h']),
+    start: customRange?.from ?? new Date(anchor - DEFAULT_WINDOW_MS),
     end: customRange?.to ?? new Date(anchor),
   };
 }

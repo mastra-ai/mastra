@@ -2,6 +2,7 @@ import type {
   Experiment,
   ExperimentResult,
   ExperimentReviewCounts,
+  ExperimentTenancyFilters,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -32,16 +33,54 @@ export abstract class ExperimentsStorage extends StorageDomain {
   // Experiment lifecycle
   abstract createExperiment(input: CreateExperimentInput): Promise<Experiment>;
   abstract updateExperiment(input: UpdateExperimentInput): Promise<Experiment>;
-  abstract getExperimentById(args: { id: string }): Promise<Experiment | null>;
+  /**
+   * When `filters` is set, returns `null` on tenancy mismatch (never throws,
+   * so existence does not leak via error timing/text). Implementers must fold
+   * the tenancy predicate into the SELECT, not filter in application code.
+   */
+  abstract getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null>;
   abstract listExperiments(args: ListExperimentsInput): Promise<ListExperimentsOutput>;
-  abstract deleteExperiment(args: { id: string }): Promise<void>;
+  /**
+   * Deletes an experiment and cascades to its results.
+   *
+   * When `filters` is set, silent no-op on tenancy mismatch (never throws,
+   * so existence does not leak). A resolved Promise does not imply a row was
+   * deleted. Implementers must fold the tenancy predicate into the destructive
+   * DML itself — a pre-check followed by an unscoped DELETE is unsafe under
+   * concurrent id reuse across tenants.
+   *
+   * When `filters` is omitted, implementations MAY skip the tenancy predicate
+   * entirely (backward compat: callers explicitly opt out of scoping).
+   */
+  abstract deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void>;
 
   // Results (per-item)
   abstract addExperimentResult(input: AddExperimentResultInput): Promise<ExperimentResult>;
   abstract updateExperimentResult(input: UpdateExperimentResultInput): Promise<ExperimentResult>;
-  abstract getExperimentResultById(args: { id: string }): Promise<ExperimentResult | null>;
+  /**
+   * When `filters` is set, returns `null` on tenancy mismatch (never throws).
+   * Implementers must fold the tenancy predicate into the SELECT.
+   */
+  abstract getExperimentResultById(args: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<ExperimentResult | null>;
   abstract listExperimentResults(args: ListExperimentResultsInput): Promise<ListExperimentResultsOutput>;
-  abstract deleteExperimentResults(args: { experimentId: string }): Promise<void>;
+  /**
+   * Deletes all results for an experiment.
+   *
+   * When `filters` is set, silent no-op on tenancy mismatch (never throws).
+   * Result rows carry `organizationId`/`projectId` from their parent, so
+   * implementers must fold the tenancy predicate into the destructive DML —
+   * a parent pre-check followed by an unscoped `DELETE WHERE experimentId = ?`
+   * is unsafe under concurrent id reuse.
+   *
+   * When `filters` is omitted, implementations MAY skip the tenancy predicate
+   * entirely (backward compat: callers explicitly opt out of scoping). This is
+   * why pg/mysql/spanner take an unscoped fast path here while mongodb/libsql
+   * fold the (empty) filter unconditionally — both are correct.
+   */
+  abstract deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void>;
 
   // Aggregation
   abstract getReviewSummary(): Promise<ExperimentReviewCounts[]>;

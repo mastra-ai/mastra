@@ -15,6 +15,7 @@ import {
   aiV4CoreMessageToV1PromptMessage,
   aiV5ModelMessageToV2PromptMessage,
   aiV5PromptToAIV6Prompt,
+  aiV5PromptToAIV7Prompt,
   coreContentToString,
   messagesAreEqual,
   inputToMastraDBMessage as convertInputToMastraDBMessage,
@@ -76,6 +77,27 @@ function mergeSignalDataParts<T extends { role: string; parts: Array<{ type: str
     }
   }
   return result;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function mergeBackgroundTasks(
+  existingBgTasks?: Record<string, unknown>,
+  incomingBgTasks?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  if (!existingBgTasks && !incomingBgTasks) {
+    return undefined;
+  }
+
+  const merged: Record<string, unknown> = { ...(existingBgTasks ?? {}) };
+  for (const [toolCallId, incomingTask] of Object.entries(incomingBgTasks ?? {})) {
+    const existingTask = merged[toolCallId];
+    merged[toolCallId] =
+      isPlainRecord(existingTask) && isPlainRecord(incomingTask) ? { ...existingTask, ...incomingTask } : incomingTask;
+  }
+  return merged;
 }
 
 type MessageListAddOptions = {
@@ -671,6 +693,17 @@ export class MessageList {
         supportedUrls?: Record<string, RegExp[]>;
       }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV6Prompt(await this.all.aiV5.llmPrompt(options)),
     },
+    aiV7: {
+      ui: () => this.toAIV6UIMessages(this.all.db()),
+
+      // Builds the v5 prompt, then converts tool-result `media` parts to the
+      // file content shape AI SDK v7 (spec 'v4') providers require.
+      llmPrompt: async (options?: {
+        downloadConcurrency?: number;
+        downloadRetries?: number;
+        supportedUrls?: Record<string, RegExp[]>;
+      }): Promise<LanguageModelV2Prompt> => aiV5PromptToAIV7Prompt(await this.all.aiV5.llmPrompt(options)),
+    },
 
     /* @deprecated use list.get.all.aiV4.prompt() instead */
     prompt: () => this.all.aiV4.prompt(),
@@ -1132,13 +1165,12 @@ export class MessageList {
           const incomingMeta = (metadata ?? {}) as Record<string, unknown>;
           const existingBgTasks = existingMeta.backgroundTasks as Record<string, unknown> | undefined;
           const incomingBgTasks = incomingMeta.backgroundTasks as Record<string, unknown> | undefined;
+          const backgroundTasks = mergeBackgroundTasks(existingBgTasks, incomingBgTasks);
 
           msg.content.metadata = {
             ...existingMeta,
             ...incomingMeta,
-            ...(existingBgTasks || incomingBgTasks
-              ? { backgroundTasks: { ...(existingBgTasks ?? {}), ...(incomingBgTasks ?? {}) } }
-              : {}),
+            ...(backgroundTasks ? { backgroundTasks } : {}),
           };
 
           // Move the message to the response source so it gets
@@ -1153,6 +1185,47 @@ export class MessageList {
       }
     }
     this.logger?.warn(`updateToolInvocation: no matching tool call found for toolCallId=${toolCallId}`);
+    return false;
+  }
+
+  public updateMessageMetadataByToolCallId(toolCallId: string, metadata: Record<string, unknown>): boolean {
+    if (!toolCallId) {
+      return false;
+    }
+
+    for (let m = this.messages.length - 1; m >= 0; m--) {
+      const msg = this.messages[m]!;
+      if (msg.role !== 'assistant' || !msg.content?.parts) continue;
+
+      const hasToolCall = msg.content.parts.some(
+        part => part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId,
+      );
+      if (!hasToolCall) continue;
+
+      const existingMeta = (msg.content.metadata ?? {}) as Record<string, unknown>;
+      const incomingMeta = (metadata ?? {}) as Record<string, unknown>;
+      const existingBgTasks = existingMeta.backgroundTasks as Record<string, unknown> | undefined;
+      const incomingBgTasks = incomingMeta.backgroundTasks as Record<string, unknown> | undefined;
+      const backgroundTasks = mergeBackgroundTasks(existingBgTasks, incomingBgTasks);
+
+      msg.content.metadata = {
+        ...existingMeta,
+        ...incomingMeta,
+        ...(backgroundTasks ? { backgroundTasks } : {}),
+      };
+
+      this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
+      this.updateLastCreatedAt(msg);
+
+      if (!this.stateManager.isResponseMessage(msg)) {
+        this.stateManager.removeMessage(msg);
+        this.stateManager.addToSource(msg, 'response');
+      }
+
+      return true;
+    }
+
+    this.logger?.warn(`updateMessageMetadataByToolCallId: no matching tool call found for toolCallId=${toolCallId}`);
     return false;
   }
 

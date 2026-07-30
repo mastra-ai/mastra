@@ -9,7 +9,7 @@ import type {
   UseChatOptions,
 } from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
-import type { AgentExecutionOptionsBase, SerializableStructuredOutputOptions } from '@mastra/core/agent';
+import type { SerializableStructuredOutputOptions } from '@mastra/core/agent';
 import type { AIV5Type, MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
@@ -44,6 +44,8 @@ import type {
   SendAgentSignalParams,
   QueueAgentMessageParams,
   SubscribeAgentThreadParams,
+  ListAgentSuspendedRunsParams,
+  ListAgentSuspendedRunsResponse,
   ProcessAgentThreadStreamOptions,
   CreateCodeAgentVersionParams,
   ActivateAgentVersionResponse,
@@ -64,6 +66,15 @@ type ResumeStreamParams<OUTPUT extends {}> = StreamParamsBaseWithoutMessages<OUT
   runId: string;
   toolCallId?: string;
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
+};
+
+type RecoverParams = {
+  runId: string;
+  requestContext?: Record<string, unknown>;
+  versions?: {
+    agents?: Record<string, { versionId: string } | { status: 'draft' | 'published' }>;
+    defaultStatus?: 'draft' | 'published';
+  };
 };
 
 type ToolCallRespondFn<OUTPUT> = (
@@ -2410,6 +2421,7 @@ export class Agent extends BaseResource {
 
   async approveNetworkToolCall(params: {
     runId: string;
+    model?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -2459,6 +2471,7 @@ export class Agent extends BaseResource {
 
   async declineNetworkToolCall(params: {
     runId: string;
+    model?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -2548,8 +2561,8 @@ export class Agent extends BaseResource {
   >;
   async stream<OUTPUT>(
     messagesOrParams: MessageListInput,
-    options?: AgentExecutionOptionsBase<any> & {
-      structuredOutput?: StreamParamsBaseWithoutMessages<any>;
+    options?: StreamParamsBaseWithoutMessages<any> & {
+      structuredOutput?: StructuredOutputOptions<any>;
     },
   ): Promise<
     Response & {
@@ -2669,8 +2682,8 @@ export class Agent extends BaseResource {
   >;
   async streamUntilIdle<OUTPUT>(
     messagesOrParams: MessageListInput,
-    options?: AgentExecutionOptionsBase<any> & {
-      structuredOutput?: StreamParamsBaseWithoutMessages<any>;
+    options?: StreamParamsBaseWithoutMessages<any> & {
+      structuredOutput?: StructuredOutputOptions<any>;
       maxIdleMs?: number;
     },
   ): Promise<
@@ -2742,9 +2755,35 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
+  /**
+   * Lists suspended runs for this agent from storage — runs waiting on a
+   * tool-call approval or on a tool that suspended. Backed by storage, so it
+   * works after a server restart and across server instances. Pass the
+   * returned runId to approveToolCall(), declineToolCall(), or resumeStream().
+   * @param params - Optional filters (threadId, resourceId, fromDate, toDate) and pagination (perPage, page)
+   * @param requestContext - Optional request context
+   * @returns Promise containing the matching runs and the total count before pagination
+   */
+  async listSuspendedRuns(
+    params?: ListAgentSuspendedRunsParams,
+    requestContext?: RequestContext | Record<string, any>,
+  ): Promise<ListAgentSuspendedRunsResponse> {
+    const searchParams = new URLSearchParams(requestContextQueryString(requestContext).slice(1));
+    if (params?.threadId) searchParams.set('threadId', params.threadId);
+    if (params?.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params?.fromDate) searchParams.set('fromDate', params.fromDate.toISOString());
+    if (params?.toDate) searchParams.set('toDate', params.toDate.toISOString());
+    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (params?.page !== undefined) searchParams.set('page', String(params.page));
+
+    const query = searchParams.size ? `?${searchParams}` : '';
+    return this.request<ListAgentSuspendedRunsResponse>(`/agents/${this.agentId}/suspended-runs${query}`);
+  }
+
   async approveToolCall(params: {
     runId: string;
     toolCallId: string;
+    model?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -2820,6 +2859,7 @@ export class Agent extends BaseResource {
   async declineToolCall(params: {
     runId: string;
     toolCallId: string;
+    model?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<
     Response & {
@@ -3003,6 +3043,60 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * Re-drives an orphaned RUNNING durable-agent run after a process restart.
+   *
+   * Only supported when the target agent is a durable agent (createDurableAgent).
+   * The server rebuilds the runtime state from the persisted snapshot, replays
+   * past chunks, and continues the loop to completion.
+   */
+  async recover(params: RecoverParams): Promise<
+    Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    }
+  > {
+    const body = {
+      runId: params.runId,
+      requestContext: parseClientRequestContext(params.requestContext),
+      versions: params.versions,
+    };
+
+    const response: Response = await this.request(`/agents/${this.agentId}/recover`, {
+      method: 'POST',
+      body,
+      stream: true,
+    });
+
+    if (!response.body) {
+      throw new Error('No response body');
+    }
+
+    const streamResponse = response as Response & {
+      processDataStream: ({
+        onChunk,
+      }: {
+        onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+      }) => Promise<void>;
+    };
+
+    streamResponse.processDataStream = async ({
+      onChunk,
+    }: {
+      onChunk: Parameters<typeof processMastraStream>[0]['onChunk'];
+    }) => {
+      await processMastraStream({
+        stream: streamResponse.body as ReadableStream<Uint8Array>,
+        onChunk,
+      });
+    };
+
+    return streamResponse;
+  }
+
+  /**
    * @deprecated Use `resumeStream(resumeData, { untilIdle: true, ... })` instead.
    *
    * Resumes a suspended agent stream until idle with custom resume data.
@@ -3077,6 +3171,7 @@ export class Agent extends BaseResource {
   async approveToolCallGenerate(params: {
     runId: string;
     toolCallId: string;
+    model?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<any> {
     const { requestContext, ...rest } = params;
@@ -3093,6 +3188,7 @@ export class Agent extends BaseResource {
   async declineToolCallGenerate(params: {
     runId: string;
     toolCallId: string;
+    model?: string;
     requestContext?: RequestContext | Record<string, any>;
   }): Promise<any> {
     const { requestContext, ...rest } = params;

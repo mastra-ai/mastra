@@ -1350,17 +1350,21 @@ export const recallTool = (
         });
       }
 
-      const usedDefaultThreadId = isResourceScope && !explicitThreadId && !cursor && Boolean(currentThreadId);
-      const defaultThreadNote = usedDefaultThreadId
-        ? `threadId wasn't passed so used default ${currentThreadId}.\n\n`
-        : '';
-      const effectiveThreadId = explicitThreadId || (usedDefaultThreadId ? 'current' : undefined);
-      const resolvedThreadId = effectiveThreadId === 'current' ? currentThreadId : effectiveThreadId;
-      const hasExplicitThreadId = typeof resolvedThreadId === 'string' && resolvedThreadId.length > 0;
+      const usedDefaultThreadId = !explicitThreadId && !cursor && Boolean(currentThreadId);
+      const defaultThreadNote =
+        usedDefaultThreadId && isResourceScope ? `threadId wasn't passed so used default ${currentThreadId}.\n\n` : '';
+      // Reuse the shared `resolvedExplicitThreadId` ('current' -> currentThreadId) mapping,
+      // falling back to the current thread when no threadId or cursor was provided.
+      const resolvedThreadId = resolvedExplicitThreadId || (usedDefaultThreadId ? currentThreadId : undefined);
+      const hasResolvedThreadId = typeof resolvedThreadId === 'string' && resolvedThreadId.length > 0;
       const hasCursor = typeof cursor === 'string' && cursor.length > 0;
 
-      if (!hasExplicitThreadId && !hasCursor) {
-        throw new Error('Either cursor or threadId is required for mode="messages"');
+      if (!hasResolvedThreadId && !hasCursor) {
+        throw new Error(
+          isResourceScope
+            ? 'No active thread context and no cursor or threadId was provided for mode="messages". Pass a threadId (use mode="threads" to discover thread IDs) or a message ID as cursor.'
+            : 'No active thread context for mode="messages". This tool is limited to the current thread and no current thread could be resolved.',
+        );
       }
 
       let targetThreadId: string | undefined;
@@ -1369,7 +1373,7 @@ export const recallTool = (
       if (!isResourceScope) {
         targetThreadId = currentThreadId;
         threadScope = currentThreadId || undefined;
-      } else if (hasExplicitThreadId) {
+      } else if (hasResolvedThreadId) {
         if (!resourceId) {
           throw new Error('Resource ID is required for recall');
         }
@@ -1389,7 +1393,7 @@ export const recallTool = (
         threadScope = currentThreadId || undefined;
       }
 
-      if (hasCursor && !hasExplicitThreadId && !currentThreadId) {
+      if (hasCursor && !hasResolvedThreadId && !currentThreadId) {
         if (!isResourceScope) {
           throw new Error('Current thread is required when browsing by cursor');
         }

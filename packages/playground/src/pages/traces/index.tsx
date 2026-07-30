@@ -1,28 +1,4 @@
-import { EntityType } from '@mastra/core/observability';
-import {
-  NoTracesInfo,
-  SpanDataPanelView,
-  TraceDataPanelView,
-  TracesErrorContent,
-  TracesLayout,
-  TracesListView,
-  TracesToolbar,
-  buildTraceListFilters,
-  createTracePropertyFilterFields,
-  neutralizeFilterTokens,
-  useEntityNames,
-  useEnvironments,
-  useServiceNames,
-  useSpanDetail,
-  useTags,
-  useTraceFilterPersistence,
-  useTraceListNavigation,
-  useTraceOrBranchSpans,
-  useTraceSpanNavigation,
-  useTraceUrlState,
-  useTraces,
-} from '@mastra/playground-ui';
-import type { SpanTab } from '@mastra/playground-ui';
+import type { EntityType } from '@mastra/core/observability';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { Label } from '@mastra/playground-ui/components/Label';
@@ -30,6 +6,30 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no-traces-info';
+import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
+import { TraceDataPanelView } from '@mastra/playground-ui/domains/traces/components/trace-data-panel-view';
+import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
+import { TracesLayout } from '@mastra/playground-ui/domains/traces/components/traces-layout';
+import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
+import { TracesToolbar } from '@mastra/playground-ui/domains/traces/components/traces-toolbar';
+import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
+import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
+import { useServiceNames } from '@mastra/playground-ui/domains/traces/hooks/use-service-names';
+import { useSpanDetail } from '@mastra/playground-ui/domains/traces/hooks/use-span-detail';
+import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
+import { useTraceFilterPersistence } from '@mastra/playground-ui/domains/traces/hooks/use-trace-filter-persistence';
+import { useTraceListNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-list-navigation';
+import { useTraceOrBranchSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-or-branch-spans';
+import { useTraceSpanNavigation } from '@mastra/playground-ui/domains/traces/hooks/use-trace-span-navigation';
+import { useTraceUrlState } from '@mastra/playground-ui/domains/traces/hooks/use-trace-url-state';
+import { useTraces } from '@mastra/playground-ui/domains/traces/hooks/use-traces';
+import {
+  buildTraceListFilters,
+  createTracePropertyFilterFields,
+  neutralizeFilterTokens,
+} from '@mastra/playground-ui/domains/traces/trace-filters';
+import type { SpanTab } from '@mastra/playground-ui/domains/traces/types';
 import { isBranchesNotSupportedError } from '@mastra/playground-ui/utils/errors';
 import { CircleSlash2, RefreshCw } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -138,7 +138,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
 
   const { data: availableTags = [], isPending: isTagsLoading } = useTags();
   const { data: rootEntityNameSuggestions = [], isPending: isEntityNamesLoading } = useEntityNames({
-    entityType: url.selectedEntityOption?.entityType,
+    entityType: url.selectedEntityOption?.entityType as EntityType | undefined,
     rootOnly: true,
   });
   const { data: discoveredEnvironments = [], isPending: isEnvironmentsLoading } = useEnvironments();
@@ -173,7 +173,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const traceFilters = useMemo(
     () =>
       buildTraceListFilters({
-        rootEntityType: url.selectedEntityOption?.entityType,
+        rootEntityType: url.selectedEntityOption?.entityType as EntityType | undefined,
         status: url.selectedStatus,
         dateFrom: url.selectedDateFrom,
         dateTo: url.selectedDateTo,
@@ -260,7 +260,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     const rootSpan = anchorSpanId
       ? lightSpans?.find(s => s.spanId === anchorSpanId)
       : lightSpans?.find(s => s.parentSpanId == null);
-    return rootSpan?.entityType === EntityType.AGENT;
+    return rootSpan?.entityType === 'agent';
   }, [lightSpans, anchorSpanId]);
 
   const filtersApplied =
@@ -289,7 +289,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         onStartTextFilter={setAutoFocusFilterFieldId}
         hiddenFieldIds={hiddenCreatorFieldIds}
       />
-      <div className="flex h-form-default items-center gap-2 ml-auto">
+      <div className="h-form-default ml-auto flex items-center gap-2">
         {!branchesUnsupported && (
           <>
             <Switch
@@ -339,7 +339,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const pageTopArea = (
     <PageLayout.TopArea>
       <PageLayout.Row>
-        <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2 w-full">
+        <PageLayout.Column className="flex w-full flex-wrap items-start justify-start gap-2">
           {toolbarControls}
         </PageLayout.Column>
       </PageLayout.Row>
@@ -481,9 +481,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
                     isTopLevelSpan={!Boolean(span.parentSpanId)}
                     spanId={sid}
                     entityType={
-                      span.attributes?.agentId || span.entityType === EntityType.AGENT
+                      span.attributes?.agentId || span.entityType === 'agent'
                         ? 'Agent'
-                        : span.attributes?.workflowId || span.entityType === EntityType.WORKFLOW_RUN
+                        : span.attributes?.workflowId || span.entityType === 'workflow_run'
                           ? 'Workflow'
                           : undefined
                     }

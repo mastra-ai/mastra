@@ -16,5 +16,19 @@
     "openai/gpt-5.4",
     "openai/gpt-5.5",
     "xai/grok-4-1-fast-non-reasoning"
+  ],
+  "temperature": [
+    "anthropic/claude-haiku-4-5",
+    "anthropic/claude-opus-4-5",
+    "anthropic/claude-opus-4-6",
+    "anthropic/claude-sonnet-4-5",
+    "anthropic/claude-sonnet-4-6",
+    "google/gemini-2.5-flash",
+    "google/gemini-2.5-pro",
+    "google/gemini-3-flash-preview",
+    "google/gemini-3.1-pro-preview",
+    "nvidia/nemotron-3-super-120b-a12b",
+    "perplexity/sonar",
+    "xai/grok-4-1-fast-non-reasoning"
   ]
 }

@@ -7,5 +7,14 @@
     "llama-3.3-8b-instruct",
     "llama-4-maverick-17b-128e-instruct-fp8",
     "llama-4-scout-17b-16e-instruct-fp8"
+  ],
+  "temperature": [
+    "cerebras-llama-4-maverick-17b-128e-instruct",
+    "cerebras-llama-4-scout-17b-16e-instruct",
+    "groq-llama-4-maverick-17b-128e-instruct",
+    "llama-3.3-70b-instruct",
+    "llama-3.3-8b-instruct",
+    "llama-4-maverick-17b-128e-instruct-fp8",
+    "llama-4-scout-17b-16e-instruct-fp8"
   ]
 }

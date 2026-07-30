@@ -12,10 +12,12 @@
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
+import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
+import { Extractor } from '../extractor';
 import { ModelByInputTokens } from '../model-by-input-tokens';
 import { ObservationalMemory } from '../observational-memory';
 
@@ -56,7 +58,10 @@ function createBulkMessages(count: number, threadId: string, startTime?: number)
   }));
 }
 
-function createMockObserverModel(observationOverride?: string) {
+function createMockObserverModel(
+  observationOverride?: string,
+  providerMetadata?: Record<string, Record<string, unknown>>,
+) {
   const observationText =
     observationOverride ??
     `<observations>
@@ -77,6 +82,7 @@ Continue helping the user
       usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
       warnings: [],
       content: [{ type: 'text', text: observationText }],
+      ...(providerMetadata ? { providerMetadata } : {}),
     }),
     doStream: async () => ({
       stream: convertArrayToReadableStream([
@@ -85,7 +91,12 @@ Continue helping the user
         { type: 'text-start', id: 'text-1' },
         { type: 'text-delta', id: 'text-1', delta: observationText },
         { type: 'text-end', id: 'text-1' },
-        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 } },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+          ...(providerMetadata ? { providerMetadata } : {}),
+        },
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -93,7 +104,10 @@ Continue helping the user
   } as any);
 }
 
-function createMockReflectorModel(reflectedObservations?: string) {
+function createMockReflectorModel(
+  reflectedObservations?: string,
+  providerMetadata?: Record<string, Record<string, unknown>>,
+) {
   const text =
     reflectedObservations ??
     `<observations>
@@ -107,6 +121,7 @@ function createMockReflectorModel(reflectedObservations?: string) {
       usage: { inputTokens: 50, outputTokens: 30, totalTokens: 80 },
       warnings: [],
       content: [{ type: 'text', text }],
+      ...(providerMetadata ? { providerMetadata } : {}),
     }),
     doStream: async () => ({
       stream: convertArrayToReadableStream([
@@ -115,7 +130,12 @@ function createMockReflectorModel(reflectedObservations?: string) {
         { type: 'text-start', id: 'text-1' },
         { type: 'text-delta', id: 'text-1', delta: text },
         { type: 'text-end', id: 'text-1' },
-        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 50, outputTokens: 30, totalTokens: 80 } },
+        {
+          type: 'finish',
+          finishReason: 'stop',
+          usage: { inputTokens: 50, outputTokens: 30, totalTokens: 80 },
+          ...(providerMetadata ? { providerMetadata } : {}),
+        },
       ]),
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
@@ -132,6 +152,8 @@ function createOM(
     scope?: 'thread' | 'resource';
     observerModel?: any;
     reflectorModel?: any;
+    observationExtract?: Extractor<any>[];
+    reflectionExtract?: Extractor<any>[];
     activateAfterIdle?: number | string;
   },
 ) {
@@ -143,10 +165,12 @@ function createOM(
       model: opts?.observerModel ?? createMockObserverModel(),
       messageTokens: opts?.messageTokens ?? 100,
       bufferTokens: opts?.bufferTokens ?? false,
+      extract: opts?.observationExtract,
     },
     reflection: {
       model: opts?.reflectorModel ?? createMockReflectorModel(),
       observationTokens: opts?.observationTokens ?? 50_000,
+      extract: opts?.reflectionExtract,
     },
   });
 }
@@ -271,6 +295,52 @@ describe('observe()', () => {
       expect(result.observed).toBe(true);
       expect(result.record.activeObservations).toContain('User discussed');
       expect(result.record.lastObservedAt).toBeDefined();
+    });
+
+    it('should persist schema-less inline extracted values and call hooks', async () => {
+      const onExtracted = vi.fn(({ current }) => current);
+      const userInfo = new Extractor({
+        name: 'User info',
+        instructions: 'Information about the user: name/location/work/etc',
+        includePreviousExtraction: false,
+        onExtracted,
+      });
+      const extractOm = createOM(storage, {
+        observationExtract: [userInfo],
+        observerModel: createMockObserverModel(
+          `<observations>
+* 🔴 User said their name is Tyler.
+</observations>
+<user-info>
+name: Tyler
+</user-info>`,
+        ),
+      });
+
+      await storage.saveThread({
+        thread: {
+          id: threadId,
+          resourceId: 'observe-resource',
+          title: 'Observe thread',
+          metadata: {},
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      const messages = createBulkMessages(10, threadId);
+      await storage.saveMessages({ messages });
+      const result = await extractOm.observe({ threadId });
+
+      expect(result.observed).toBe(true);
+      expect(onExtracted).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: 'observer',
+          threadId,
+          current: 'name: Tyler',
+        }),
+      );
+      const thread = await storage.getThreadById({ threadId });
+      expect(getThreadOMMetadata(thread?.metadata)?.extracted).toMatchObject({ 'user-info': 'name: Tyler' });
     });
 
     it('should skip when messages are below threshold', async () => {
@@ -442,6 +512,103 @@ describe('observe()', () => {
         });
       }
     });
+
+    it('should pass providerMetadata from the observer model result to onObservationEnd', async () => {
+      // The AI Gateway exposes per-call economics under providerMetadata.gateway
+      // (cost, generationId). Stub it on the observer model's finish/getFullOutput
+      // path — the exact path `usage` travels — and assert it reaches the hook.
+      const gatewayMetadata = { gateway: { cost: 0.0123, generationId: 'gen-obs-xyz' } };
+      const omWithMetadata = createOM(storage, {
+        observerModel: createMockObserverModel(undefined, gatewayMetadata),
+      });
+      const messages = createBulkMessages(10, threadId);
+      const hooks = {
+        onObservationStart: vi.fn(),
+        onObservationEnd: vi.fn(),
+      };
+
+      await omWithMetadata.observe({ threadId, messages, hooks });
+
+      expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+      expect(hooks.onObservationEnd).toHaveBeenCalledWith(
+        expect.objectContaining({
+          usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+          providerMetadata: gatewayMetadata,
+        }),
+      );
+    });
+
+    it('should leave providerMetadata absent when the observer model does not emit it', async () => {
+      // Provider-agnostic + zero breaking change: when the model omits providerMetadata,
+      // the hook result must not invent one.
+      const messages = createBulkMessages(10, threadId);
+      const hooks = {
+        onObservationStart: vi.fn(),
+        onObservationEnd: vi.fn(),
+      };
+
+      await om.observe({ threadId, messages, hooks });
+
+      expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+      // Absent, not present-with-undefined: the live hook-fire sites conditionally
+      // spread providerMetadata, so the key is omitted entirely when none is emitted.
+      expect(hooks.onObservationEnd.mock.calls[0]![0]).not.toHaveProperty('providerMetadata');
+    });
+
+    it('should pass providerMetadata from the reflector model result to onReflectionEnd', async () => {
+      // Very low reflection threshold so reflection fires; stub gateway economics on
+      // the reflector model so we can assert it reaches onReflectionEnd.
+      const gatewayMetadata = { gateway: { cost: 0.0456, generationId: 'gen-ref-xyz' } };
+      const omReflect = createOM(storage, {
+        observationTokens: 5,
+        reflectorModel: createMockReflectorModel(undefined, gatewayMetadata),
+      });
+      const messages = createBulkMessages(10, threadId);
+      const hooks = {
+        onObservationStart: vi.fn(),
+        onObservationEnd: vi.fn(),
+        onReflectionStart: vi.fn(),
+        onReflectionEnd: vi.fn(),
+      };
+
+      const result = await omReflect.observe({ threadId, messages, hooks });
+
+      expect(result.observed).toBe(true);
+      expect(result.reflected).toBe(true);
+      expect(hooks.onReflectionEnd).toHaveBeenCalled();
+      expect(hooks.onReflectionEnd).toHaveBeenCalledWith(
+        expect.objectContaining({
+          usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+          providerMetadata: gatewayMetadata,
+        }),
+      );
+    });
+
+    it('should pass providerMetadata to onObservationEnd through the batched resource-scoped path', async () => {
+      // Resource scope routes through callMultiThread() + the lastBatchProviderMetadata
+      // accumulator — a different code path from the single-thread observer above.
+      const gatewayMetadata = { gateway: { cost: 0.0321, generationId: 'gen-res-xyz' } };
+      const resourceId = 'res-pm';
+      await storage.saveThread({
+        thread: { id: threadId, resourceId, title: 'pm', metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+      });
+      const omResource = createOM(storage, {
+        scope: 'resource',
+        observerModel: createMockObserverModel(undefined, gatewayMetadata),
+      });
+      const messages = createBulkMessages(10, threadId);
+      const hooks = {
+        onObservationStart: vi.fn(),
+        onObservationEnd: vi.fn(),
+      };
+
+      await omResource.observe({ threadId, resourceId, messages, hooks });
+
+      expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+      expect(hooks.onObservationEnd).toHaveBeenCalledWith(
+        expect.objectContaining({ providerMetadata: gatewayMetadata }),
+      );
+    });
   });
 
   describe('reflected flag', () => {
@@ -540,6 +707,31 @@ describe('buffer()', () => {
     expect(result.record).toBeTruthy();
   });
 
+  it('preserves extraction fields on buffered chunks', async () => {
+    const extractor = new Extractor({
+      name: 'Priority',
+      instructions: 'Extract the priority.',
+    });
+    const om = createOM(storage, {
+      messageTokens: 500,
+      bufferTokens: 0.2,
+      observerModel: createMockObserverModel(`<observations>
+* User asked for urgent help
+</observations>
+<priority>high</priority>`),
+      observationExtract: [extractor],
+    });
+    await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+
+    const result = await om.buffer({ threadId });
+    expect(result.buffered).toBe(true);
+    await om.waitForBuffering(threadId, undefined, 5000);
+
+    const status = await om.getStatus({ threadId });
+    const chunk = status.record?.bufferedObservationChunks?.[0];
+    expect(chunk?.extractedValues).toEqual({ priority: 'high' });
+  });
+
   it('should use provided messages instead of loading from storage', async () => {
     const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2 });
     const messages = createBulkMessages(5, threadId);
@@ -573,6 +765,43 @@ describe('buffer()', () => {
       const status = await om.getStatus({ threadId });
       expect(status.bufferedChunkCount).toBeGreaterThanOrEqual(2);
     }
+  });
+
+  it('preserves existing OM thread title when buffering only persists extracted values', async () => {
+    const userInfo = new Extractor({ name: 'User info', instructions: 'Extract user info.' });
+    const om = createOM(storage, {
+      messageTokens: 500,
+      bufferTokens: 0.2,
+      observationExtract: [userInfo],
+      observerModel: createMockObserverModel(
+        `<observations>
+* User said their name is Tyler.
+</observations>
+<user-info>
+name: Tyler
+</user-info>`,
+      ),
+    });
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId: 'buffer-resource',
+        title: 'Existing thread title',
+        metadata: setThreadOMMetadata({}, { threadTitle: 'Existing OM title' }),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+
+    const result = await om.buffer({ threadId });
+
+    expect(result.buffered).toBe(true);
+    const thread = await storage.getThreadById({ threadId });
+    expect(getThreadOMMetadata(thread?.metadata)).toMatchObject({
+      threadTitle: 'Existing OM title',
+      extracted: { 'user-info': 'name: Tyler' },
+    });
   });
 
   it('should call beforeBuffer callback with candidate messages', async () => {
@@ -1354,6 +1583,43 @@ describe('reflect()', () => {
     // This shouldn't throw — the prompt is passed to the reflector
     const result = await om.reflect(threadId, undefined, 'Focus on action items');
     expect(result.reflected).toBe(true);
+  });
+
+  it('persists extracted values produced by manual reflection', async () => {
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId: 'reflect-resource',
+        title: 'Reflect thread',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const priority = new Extractor({
+      name: 'Priority',
+      instructions: 'Extract the current priority.',
+    });
+    const reflectOm = createOM(storage, {
+      reflectionExtract: [priority],
+      reflectorModel: createMockReflectorModel(
+        `<observations>
+* Condensed: User discussed priority.
+</observations>
+<extracted-values>
+{"priority":"high"}
+</extracted-values>`,
+      ),
+    });
+
+    await storage.saveMessages({ messages: createBulkMessages(10, threadId) });
+    await reflectOm.observe({ threadId });
+
+    const result = await reflectOm.reflect(threadId);
+
+    expect(result.reflected).toBe(true);
+    const thread = await storage.getThreadById({ threadId });
+    expect(getThreadOMMetadata(thread?.metadata)?.extracted).toMatchObject({ priority: 'high' });
   });
 
   it('should preserve history across multiple reflections', async () => {

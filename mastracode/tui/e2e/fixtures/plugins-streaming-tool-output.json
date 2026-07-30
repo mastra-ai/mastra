@@ -1,0 +1,34 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "Use the streaming plugin tool.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_streaming_plugin_tool",
+            "name": "e2e_plugin_lookup",
+            "arguments": {
+              "query": "stream progress"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "hasToolResult": true,
+        "toolCallId": "call_streaming_plugin_tool",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Streaming plugin tool completed."
+      }
+    }
+  ]
+}

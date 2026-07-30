@@ -1,3 +1,4 @@
+import type { RetentionConfig } from '@mastra/core/storage';
 import type { MongoClientOptions, IndexSpecification, CreateIndexesOptions } from 'mongodb';
 import type { ConnectorHandler } from './connectors/base';
 import type { MongoDBConnector } from './connectors/MongoDBConnector';
@@ -57,6 +58,26 @@ export type MongoDBBaseConfig = {
    * ```
    */
   indexes?: MongoDBIndexConfig[];
+  /**
+   * Opt-in retention policies, keyed by domain then table. Rows older than a
+   * table's `maxAge` are deleted when `prune()` is called — nothing is deleted
+   * automatically; wire `prune()` to your own scheduler. Unset tables are kept
+   * forever.
+   *
+   * @example
+   * ```typescript
+   * const store = new MongoDBStore({
+   *   url: 'mongodb://localhost:27017',
+   *   dbName: 'mastra',
+   *   retention: {
+   *     memory: { messages: { maxAge: '90d' } },
+   *     observability: { spans: { maxAge: '30d' } },
+   *   },
+   * });
+   * await store.prune();
+   * ```
+   */
+  retention?: RetentionConfig;
 };
 
 export type MongoDBConfig =

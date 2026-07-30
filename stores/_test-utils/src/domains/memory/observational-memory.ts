@@ -1292,6 +1292,33 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         expect(updated?.bufferedObservationChunks?.length ?? 0).toBe(0);
       });
 
+      it('should persist extractor data on buffered chunks', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+
+        await memoryStorage.updateBufferedObservations({
+          id: record.id,
+          chunk: {
+            ...createChunk({ observations: 'Buffered with extraction data', messageTokens: 600 }),
+            extractedValues: {
+              'working-memory': { name: 'Tyler', location: 'Vancouver' },
+              'weather-locations': { locations: ['Vancouver'] },
+            },
+            extractionFailures: [{ slug: 'failed-extractor', error: 'failed to parse' }],
+          },
+        });
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(updated?.bufferedObservationChunks).toHaveLength(1);
+        expect(updated?.bufferedObservationChunks?.[0]?.extractedValues).toEqual({
+          'working-memory': { name: 'Tyler', location: 'Vancouver' },
+          'weather-locations': { locations: ['Vancouver'] },
+        });
+        expect(updated?.bufferedObservationChunks?.[0]?.extractionFailures).toEqual([
+          { slug: 'failed-extractor', error: 'failed to parse' },
+        ]);
+      });
+
       it('should make swapBufferedToActive idempotent after activation', async () => {
         const input = createSampleOMInput();
         const record = await memoryStorage.initializeObservationalMemory(input);
@@ -1561,6 +1588,32 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
         expect(updated?.isObserving).toBe(true);
         expect(updated?.bufferedObservationChunks?.length ?? 0).toBe(1);
+      });
+
+      it('preserves every chunk under concurrent buffered-observation appends', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+
+        const CONCURRENT_CHUNKS = 8;
+        const labels = Array.from({ length: CONCURRENT_CHUNKS }, (_, i) => `concurrent-chunk-${i}`);
+
+        await Promise.all(
+          labels.map(label =>
+            memoryStorage.updateBufferedObservations({
+              id: record.id,
+              chunk: createChunk({ observations: label, messageTokens: 100 }),
+            }),
+          ),
+        );
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        const chunks = updated?.bufferedObservationChunks ?? [];
+        expect(chunks.length).toBe(CONCURRENT_CHUNKS);
+
+        // Every uniquely identified chunk must be present — no lost writes.
+        const observations = chunks.map(c => c.observations).sort();
+        const expected = [...labels].sort();
+        expect(observations).toEqual(expected);
       });
     });
   });

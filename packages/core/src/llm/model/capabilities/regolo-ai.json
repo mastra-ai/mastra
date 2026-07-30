@@ -1,3 +1,16 @@
 {
-  "attachment": ["mistral-small-4-119b", "qwen3.5-122b", "qwen3.5-9b"]
+  "attachment": ["mistral-small-4-119b", "qwen3.5-122b", "qwen3.5-9b"],
+  "temperature": [
+    "gpt-oss-120b",
+    "gpt-oss-20b",
+    "llama-3.1-8b-instruct",
+    "llama-3.3-70b-instruct",
+    "minimax-m2.5",
+    "mistral-small-4-119b",
+    "mistral-small3.2",
+    "qwen-image",
+    "qwen3-coder-next",
+    "qwen3.5-122b",
+    "qwen3.5-9b"
+  ]
 }

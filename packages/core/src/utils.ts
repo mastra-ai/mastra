@@ -26,47 +26,10 @@ export { getZodTypeName, getZodDef, isZodArray, isZodObject } from './utils/zod-
 export { fetchWithRetry } from './utils/fetchWithRetry';
 export type { FetchWithRetryOptions } from './utils/fetchWithRetry';
 
+export { ensureSerializable, safeStringify } from './utils/safe-stringify';
+export { deepEqual } from './utils/deep-equal';
+
 export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-/**
- * Safely JSON-stringifies a value, replacing circular references with "[Circular]".
- * Uses a stack-based approach so shared (non-circular) references are preserved.
- */
-export function safeStringify(value: unknown, space?: string | number): string {
-  const stack: unknown[] = [];
-  return JSON.stringify(
-    value,
-    function (this: unknown, _key: string, val: unknown) {
-      if (typeof val === 'bigint') return val.toString();
-      if (val !== null && typeof val === 'object') {
-        // Trim the stack: pop entries that are no longer ancestors of the current path.
-        // `this` is the parent object containing the current key.
-        while (stack.length > 0 && stack[stack.length - 1] !== this) {
-          stack.pop();
-        }
-        if (stack.includes(val)) return '[Circular]';
-        stack.push(val);
-      }
-      return val;
-    },
-    space,
-  );
-}
-
-/**
- * Returns a JSON-serializable copy of a value by stripping circular references.
- * If the value is already serializable, returns it unchanged (no cloning overhead).
- */
-export function ensureSerializable(value: unknown): unknown {
-  if (value === null || typeof value !== 'object') return value;
-
-  try {
-    JSON.stringify(value);
-    return value;
-  } catch {
-    return JSON.parse(safeStringify(value));
-  }
-}
 
 /**
  * Checks if a value is a plain object (not an array, function, Date, RegExp, etc.)
@@ -100,47 +63,6 @@ export function deepMerge<T extends object = object>(target: T, source: Partial<
   });
 
   return output;
-}
-
-/**
- * Deep equality comparison for comparing two values.
- * Handles primitives, arrays, objects, and Date instances.
- */
-export function deepEqual(a: unknown, b: unknown): boolean {
-  // Handle identical references and primitives
-  if (a === b) return true;
-
-  // Handle null/undefined
-  if (a == null || b == null) return a === b;
-
-  // Handle different types
-  if (typeof a !== typeof b) return false;
-
-  // Handle arrays
-  if (Array.isArray(a) && Array.isArray(b)) {
-    if (a.length !== b.length) return false;
-    return a.every((item, index) => deepEqual(item, b[index]));
-  }
-
-  // Handle dates (must check before generic objects since Date is also an object)
-  if (a instanceof Date && b instanceof Date) {
-    return a.getTime() === b.getTime();
-  }
-
-  // Handle objects (after Date check to avoid treating Dates as plain objects)
-  if (typeof a === 'object' && typeof b === 'object') {
-    const aObj = a as Record<string, unknown>;
-    const bObj = b as Record<string, unknown>;
-    const aKeys = Object.keys(aObj);
-    const bKeys = Object.keys(bObj);
-
-    if (aKeys.length !== bKeys.length) return false;
-
-    // Verify that bObj has the same keys as aObj before comparing values
-    return aKeys.every(key => Object.prototype.hasOwnProperty.call(bObj, key) && deepEqual(aObj[key], bObj[key]));
-  }
-
-  return false;
 }
 
 /**

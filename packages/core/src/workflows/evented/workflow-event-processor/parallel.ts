@@ -50,31 +50,36 @@ export async function processWorkflowParallel(
   }
 
   await Promise.all(
-    step.steps
-      ?.filter(step => pathsToRun[step.step.id])
-      .map(async (_step, idx) => {
-        return pubsub.publish('workflows', {
-          type: 'workflow.step.run',
+    // Iterate the full steps array and guard inside so `idx` stays the branch's
+    // real index. Filtering first and using the post-filter index would route a
+    // restart to the wrong branch when the active branches are not a zero-based
+    // contiguous prefix (mirrors `processWorkflowConditional` below).
+    step.steps?.map(async (nestedStep, idx) => {
+      if (!pathsToRun[nestedStep.step.id]) {
+        return;
+      }
+      return pubsub.publish('workflows', {
+        type: 'workflow.step.run',
+        runId,
+        data: {
+          workflowId,
           runId,
-          data: {
-            workflowId,
-            runId,
-            executionPath: restart ? executionPath.slice(0, -1).concat([idx]) : executionPath.concat([idx]),
-            resumeSteps,
-            stepResults,
-            prevResult,
-            resumeData,
-            timeTravel,
-            restart: restart ? { ...restart, isParallelOrConditionalRestarted: true } : undefined,
-            parentWorkflow,
-            activeStepsPath,
-            requestContext,
-            perStep,
-            state: currentState,
-            outputOptions,
-          },
-        });
-      }),
+          executionPath: restart ? executionPath.slice(0, -1).concat([idx]) : executionPath.concat([idx]),
+          resumeSteps,
+          stepResults,
+          prevResult,
+          resumeData,
+          timeTravel,
+          restart: restart ? { ...restart, isParallelOrConditionalRestarted: true } : undefined,
+          parentWorkflow,
+          activeStepsPath,
+          requestContext,
+          perStep,
+          state: currentState,
+          outputOptions,
+        },
+      });
+    }),
   );
 }
 

@@ -48,6 +48,10 @@ contract.
 - ❌ Implementation-mirror tests — do not duplicate source class strings,
   branch logic, generated shapes, or calculations without asserting a real
   behavior or regression.
+- ❌ Class-name-only visual tests — `expect(node.className).toContain(...)`
+  usually just tests that the implementation string exists. Prefer no test over
+  a className duplication test; use computed style, user-visible behavior, or a
+  browser/Storybook check unless the class string itself is the public API.
 - ❌ Inline TypeScript types in tests (`type AgentLite = { id: string }`) —
   these drift silently from the real SDK.
 - ❌ `as any` / `as unknown as ListAgentsResponse` on fixture data, MSW

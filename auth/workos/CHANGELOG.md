@@ -1,5 +1,55 @@
 # @mastra/auth-workos
 
+## 1.6.4
+
+### Patch Changes
+
+- dependencies updates: ([#19787](https://github.com/mastra-ai/mastra/pull/19787))
+  - Updated dependency [`@workos-inc/node@8.13.0` ↗︎](https://www.npmjs.com/package/@workos-inc/node/v/8.13.0) (from `8.8.0`, in `dependencies`)
+  - Updated dependency [`@workos/authkit-session@^0.7.1` ↗︎](https://www.npmjs.com/package/@workos/authkit-session/v/0.7.1) (from `^0.5.0`, in `dependencies`)
+
+- Added organization management and host integration to MastraAuthWorkos so it can be passed directly to a server host without a wrapper adapter. The provider now bootstraps a personal organization for new users (ensureOrganization), checks organization admin roles (isOrganizationAdmin), and resolves its redirect URI from the host public URL during init when not configured explicitly. ([#19765](https://github.com/mastra-ai/mastra/pull/19765))
+
+## 1.6.4-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#19787](https://github.com/mastra-ai/mastra/pull/19787))
+  - Updated dependency [`@workos-inc/node@8.13.0` ↗︎](https://www.npmjs.com/package/@workos-inc/node/v/8.13.0) (from `8.8.0`, in `dependencies`)
+  - Updated dependency [`@workos/authkit-session@^0.7.1` ↗︎](https://www.npmjs.com/package/@workos/authkit-session/v/0.7.1) (from `^0.5.0`, in `dependencies`)
+
+## 1.6.4-alpha.0
+
+### Patch Changes
+
+- Added organization management and host integration to MastraAuthWorkos so it can be passed directly to a server host without a wrapper adapter. The provider now bootstraps a personal organization for new users (ensureOrganization), checks organization admin roles (isOrganizationAdmin), and resolves its redirect URI from the host public URL during init when not configured explicitly. ([#19765](https://github.com/mastra-ai/mastra/pull/19765))
+
+## 1.6.3
+
+### Patch Changes
+
+- Added `mapUserToResourceId` to `MastraAuthWorkosOptions` so it can be set directly in the `MastraAuthWorkos` constructor. This maps an authenticated user to a resource id that multi-tenant tool providers use to bucket connected accounts (for example, Composio's `caller-supplied` scope). Previously the option was consumed at runtime but missing from the typed constructor surface, forcing a post-construction property assignment. ([#19144](https://github.com/mastra-ai/mastra/pull/19144))
+
+## 1.6.3-alpha.0
+
+### Patch Changes
+
+- Added `mapUserToResourceId` to `MastraAuthWorkosOptions` so it can be set directly in the `MastraAuthWorkos` constructor. This maps an authenticated user to a resource id that multi-tenant tool providers use to bucket connected accounts (for example, Composio's `caller-supplied` scope). Previously the option was consumed at runtime but missing from the typed constructor surface, forcing a post-construction property assignment. ([#19144](https://github.com/mastra-ai/mastra/pull/19144))
+
+## 1.6.2
+
+### Patch Changes
+
+- Updated dependencies [[`705ff39`](https://github.com/mastra-ai/mastra/commit/705ff3969e57214ff2fdaf3815d751dd558886ed)]:
+  - @mastra/auth@1.1.2
+
+## 1.6.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`705ff39`](https://github.com/mastra-ai/mastra/commit/705ff3969e57214ff2fdaf3815d751dd558886ed)]:
+  - @mastra/auth@1.1.2-alpha.0
+
 ## 1.6.1
 
 ### Patch Changes
@@ -299,9 +349,7 @@
   ```typescript
   import { MastraRBACWorkos } from '@mastra/auth-workos';
 
-  const rbac = new MastraRBACWorkos({
-    /* config */
-  });
+  const rbac = new MastraRBACWorkos({/* config */});
 
   // List all available roles
   const roles = await rbac.getAvailableRoles();
@@ -327,9 +375,7 @@
   ```typescript
   import { MastraRBACWorkos } from '@mastra/auth-workos';
 
-  const rbac = new MastraRBACWorkos({
-    /* config */
-  });
+  const rbac = new MastraRBACWorkos({/* config */});
 
   // List all available roles
   const roles = await rbac.getAvailableRoles();

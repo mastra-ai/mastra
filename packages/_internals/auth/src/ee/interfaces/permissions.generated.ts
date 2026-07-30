@@ -224,6 +224,8 @@ export const PERMISSION_PATTERNS = {
   'processors:execute': 'processors:execute',
   /** View processors */
   'processors:read': 'processors:read',
+  /** Delete schedules */
+  'schedules:delete': 'schedules:delete',
   /** Execute schedules */
   'schedules:execute': 'schedules:execute',
   /** View schedules */
@@ -380,6 +382,7 @@ export const PERMISSIONS = [
   'processor-providers:read',
   'processors:execute',
   'processors:read',
+  'schedules:delete',
   'schedules:execute',
   'schedules:read',
   'schedules:write',
@@ -512,6 +515,8 @@ export const MastraFGAPermissions = {
   PROCESSORS_EXECUTE: 'processors:execute',
   /** View processors */
   PROCESSORS_READ: 'processors:read',
+  /** Delete schedules */
+  SCHEDULES_DELETE: 'schedules:delete',
   /** Execute schedules */
   SCHEDULES_EXECUTE: 'schedules:execute',
   /** View schedules */

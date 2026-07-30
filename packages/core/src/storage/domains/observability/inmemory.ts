@@ -776,10 +776,20 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
     // Date range filters on startedAt (based on root span)
     if (filters.startedAt) {
-      if (filters.startedAt.start && rootSpan.startedAt < filters.startedAt.start) {
+      if (
+        filters.startedAt.start &&
+        (filters.startedAt.startExclusive
+          ? rootSpan.startedAt <= filters.startedAt.start
+          : rootSpan.startedAt < filters.startedAt.start)
+      ) {
         return false;
       }
-      if (filters.startedAt.end && rootSpan.startedAt > filters.startedAt.end) {
+      if (
+        filters.startedAt.end &&
+        (filters.startedAt.endExclusive
+          ? rootSpan.startedAt >= filters.startedAt.end
+          : rootSpan.startedAt > filters.startedAt.end)
+      ) {
         return false;
       }
     }
@@ -790,10 +800,20 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       if (rootSpan.endedAt == null) {
         return false;
       }
-      if (filters.endedAt.start && rootSpan.endedAt < filters.endedAt.start) {
+      if (
+        filters.endedAt.start &&
+        (filters.endedAt.startExclusive
+          ? rootSpan.endedAt <= filters.endedAt.start
+          : rootSpan.endedAt < filters.endedAt.start)
+      ) {
         return false;
       }
-      if (filters.endedAt.end && rootSpan.endedAt > filters.endedAt.end) {
+      if (
+        filters.endedAt.end &&
+        (filters.endedAt.endExclusive
+          ? rootSpan.endedAt >= filters.endedAt.end
+          : rootSpan.endedAt > filters.endedAt.end)
+      ) {
         return false;
       }
     }

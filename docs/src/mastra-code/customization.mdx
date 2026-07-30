@@ -16,26 +16,27 @@ Import `createMastraCode` to bootstrap Mastra Code in your own application:
 ```typescript title="src/custom-agent.ts"
 import { createMastraCode } from 'mastracode'
 
-const { controller, mcpManager, authStorage } = await createMastraCode({
+const { controller, session, mcpManager, authStorage } = await createMastraCode({
   cwd: '/path/to/project',
   initialState: {
     yolo: false,
   },
 })
 
-await controller.init()
-await controller.selectOrCreateThread()
-
-controller.subscribe(event => {
+session.subscribe(event => {
   if (event.type === 'message_update') {
-    console.log(event.message.content)
+    const text = event.message.content
+      .filter(p => p.type === 'text')
+      .map(p => p.text)
+      .join('')
+    process.stdout.write(text)
   }
 })
 
-await controller.sendMessage({ content: 'Explain the auth module' })
+await session.sendMessage({ content: 'Explain the auth module' })
 ```
 
-The `controller` object is a standard `AgentController` instance. You can subscribe to events, switch modes, manage threads, and send messages through its API.
+`createMastraCode` boots the `controller` and returns a ready-to-use `session`. Subscribe to events and send messages on the `session`; use the `controller` to switch modes, configure tools, and manage shared resources.
 
 ## Custom modes
 
@@ -148,15 +149,15 @@ const { controller } = await createMastraCode({
 
 This is equivalent to setting `.mastracode/database.json` but allows configuration at the code level.
 
-## Custom heartbeat handlers
+## Custom interval handlers
 
 Replace or extend the default background tasks:
 
-```typescript title="src/custom-heartbeats.ts"
+```typescript title="src/custom-intervals.ts"
 import { createMastraCode } from 'mastracode'
 
 const { controller } = await createMastraCode({
-  heartbeatHandlers: [
+  intervalHandlers: [
     {
       id: 'sync-config',
       intervalMs: 60_000,
@@ -168,7 +169,7 @@ const { controller } = await createMastraCode({
 })
 ```
 
-Heartbeat handlers run on a fixed interval. They start when `controller.init()` is called and stop when `controller.destroy()` is called.
+Interval handlers run on a fixed interval. They start when `controller.init()` is called and stop when `controller.destroy()` is called.
 
 ## Building a custom TUI
 
@@ -178,7 +179,7 @@ Mastra Code exports the `MastraTUI` class from `mastracode/tui` for building cus
 import { createMastraCode } from 'mastracode'
 import { MastraTUI } from 'mastracode/tui'
 
-const { controller, mcpManager, hookManager, authStorage } = createMastraCode()
+const { controller, mcpManager, hookManager, authStorage } = await createMastraCode()
 
 const tui = new MastraTUI({
   controller,

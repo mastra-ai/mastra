@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RequestContext } from './index';
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from './index';
 
 describe('RequestContext', () => {
   describe('constructor', () => {
@@ -243,6 +243,56 @@ describe('RequestContext', () => {
       expect(elapsed).toBeLessThan(2000);
       const parsed = JSON.parse(serialized);
       expect(parsed).toEqual({ serializable: 'value' });
+    });
+  });
+
+  describe('serializeForSpan', () => {
+    it('should redact the auth token key', () => {
+      const ctx = new RequestContext();
+      ctx.set(MASTRA_AUTH_TOKEN_KEY, 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.secret');
+      ctx.set('userId', 'user-123');
+
+      const result = ctx.serializeForSpan();
+
+      expect(result[MASTRA_AUTH_TOKEN_KEY]).toBe('[REDACTED]');
+      expect(result['userId']).toBe('user-123');
+    });
+
+    it('should include primitive values as-is', () => {
+      const ctx = new RequestContext();
+      ctx.set('str', 'hello');
+      ctx.set('num', 42);
+      ctx.set('bool', true);
+      ctx.set('nil', null);
+      ctx.set('undef', undefined);
+
+      const result = ctx.serializeForSpan();
+
+      expect(result).toEqual({
+        str: 'hello',
+        num: 42,
+        bool: true,
+        nil: null,
+        undef: undefined,
+      });
+    });
+
+    it('should replace non-primitive values with type placeholders', () => {
+      const ctx = new RequestContext();
+      ctx.set('obj', { nested: 'value' });
+      ctx.set('arr', [1, 2, 3]);
+      ctx.set('fn', () => {});
+
+      const result = ctx.serializeForSpan();
+
+      expect(result['obj']).toBe('[object]');
+      expect(result['arr']).toBe('[object]');
+      expect(result['fn']).toBe('[function]');
+    });
+
+    it('should return empty object for empty context', () => {
+      const ctx = new RequestContext();
+      expect(ctx.serializeForSpan()).toEqual({});
     });
   });
 });

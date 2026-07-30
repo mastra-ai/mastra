@@ -26,6 +26,8 @@ export interface NavItem {
   docs?: { href: string; label?: string };
   isOnMastraPlatform?: boolean;
   activePaths?: string[];
+  /** When true, the item stays in the registry (so breadcrumbs/routes can resolve it) but is hidden from the sidebar and command palette. */
+  hidden?: boolean;
 }
 
 export interface NavSection {
@@ -35,17 +37,25 @@ export interface NavSection {
   items: NavItem[];
 }
 
-// Signals is an opt-in experimental UI, gated by the server-injected `MASTRA_SIGNALS_UI` flag.
+// The Intelligence sidebar link is gated behind the dedicated MASTRA_SIGNALS_UI flag
+// so the feature can be toggled independently of the platform config that the
+// Intelligence route itself consumes.
 const isSignalsEnabled =
   typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).MASTRA_SIGNALS_UI === 'true';
 
 const signalsNavItem: NavItem = {
-  name: 'Signals',
-  url: '/signals',
-  activePaths: ['/signals'],
+  name: 'Intelligence',
+  url: '/intelligence',
+  activePaths: ['/intelligence'],
   Icon: LayoutGrid,
-  docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Signals documentation' },
+  docs: {
+    href: 'https://mastra.ai/en/docs/mastra-platform/trace-intelligence',
+    label: 'Trace intelligence documentation',
+  },
   isOnMastraPlatform: true,
+  // Kept in the registry so /intelligence routes and breadcrumbs always resolve, but
+  // only surfaced in the sidebar/command palette when the flag is enabled.
+  hidden: !isSignalsEnabled,
 };
 
 export const mainNav: NavSection[] = [
@@ -168,7 +178,7 @@ export const mainNav: NavSection[] = [
         docs: { href: 'https://mastra.ai/en/docs/observability/tracing/overview', label: 'Traces documentation' },
         isOnMastraPlatform: true,
       },
-      ...(isSignalsEnabled ? [signalsNavItem] : []),
+      signalsNavItem,
       {
         name: 'Logs',
         url: '/logs',

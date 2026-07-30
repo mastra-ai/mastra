@@ -1,4 +1,4 @@
-import type * as PlaygroundUi from '@mastra/playground-ui';
+import { usePlaygroundStore } from '@mastra/playground-ui/store/playground-store';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, act, waitFor } from '@testing-library/react';
@@ -10,15 +10,6 @@ import type { AgentBuilderEditFormValues } from '../../schemas';
 import { useAutosaveAgent } from '../use-autosave-agent';
 import { authEnabledCapabilities } from './fixtures/auth';
 import { server } from '@/test/msw-server';
-
-vi.mock('@mastra/playground-ui', async () => {
-  const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
-  return {
-    ...actual,
-    toast: { success: vi.fn(), error: vi.fn() },
-    usePlaygroundStore: () => ({ requestContext: undefined }),
-  };
-});
 
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -84,6 +75,7 @@ const waitForCapabilitiesSettled = (queryClient: QueryClient) =>
 
 describe('useAutosaveAgent', () => {
   beforeEach(() => {
+    usePlaygroundStore.setState({ requestContext: {} });
     // The hook resolves a default visibility via the real auth-capabilities
     // query; drive it through MSW instead of mocking the hook.
     server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authEnabledCapabilities)));

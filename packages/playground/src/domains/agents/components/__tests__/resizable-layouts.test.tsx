@@ -1,9 +1,8 @@
-import type * as PlaygroundUi from '@mastra/playground-ui';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode, Ref } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorkflowLayout } from '../../../workflows/components/workflow-layout';
-import type * as AgentsContext from '../../context';
+import type * as MemoryTimelineContext from '../../context/memory-timeline-context';
 import { AgentLayout } from '../agent-layout';
 
 const resizeLeftPanel = vi.hoisted(() => vi.fn());
@@ -58,8 +57,8 @@ vi.mock('react-resizable-panels', () => ({
   },
 }));
 
-vi.mock('../../context', async () => {
-  const actual = await vi.importActual<typeof AgentsContext>('../../context');
+vi.mock('../../context/memory-timeline-context', async () => {
+  const actual = await vi.importActual<typeof MemoryTimelineContext>('../../context/memory-timeline-context');
 
   return {
     ...actual,
@@ -73,19 +72,17 @@ vi.mock('../../context', async () => {
   };
 });
 
-vi.mock('@mastra/playground-ui', async () => {
-  const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
+vi.mock('@mastra/playground-ui/resize/collapsible-panel', () => ({
+  CollapsiblePanel: ({ id, className, children }: { id?: string; className?: string; children: ReactNode }) => (
+    <aside data-testid={`collapsible-${id}`} className={className}>
+      {children}
+    </aside>
+  ),
+}));
 
-  return {
-    ...actual,
-    CollapsiblePanel: ({ id, className, children }: { id?: string; className?: string; children: ReactNode }) => (
-      <aside data-testid={`collapsible-${id}`} className={className}>
-        {children}
-      </aside>
-    ),
-    PanelSeparator: () => <div data-testid="panel-separator" />,
-  };
-});
+vi.mock('@mastra/playground-ui/resize/separator', () => ({
+  PanelSeparator: () => <div data-testid="panel-separator" />,
+}));
 
 afterEach(() => {
   cleanup();

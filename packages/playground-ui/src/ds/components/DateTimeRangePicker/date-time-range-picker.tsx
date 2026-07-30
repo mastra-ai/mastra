@@ -106,7 +106,7 @@ export function DateTimeRangePicker({
         <PopoverContent align="start" className={cn('w-auto p-0')}>
           <div className={cn('flex')}>
             <div className={cn('border-r border-border1')}>
-              <span className={cn('text-ui-sm text-neutral3 font-medium px-4 pt-3 block')}>Start</span>
+              <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-neutral3')}>Start</span>
               <DatePicker
                 mode="single"
                 selected={draftDateFrom}
@@ -124,7 +124,7 @@ export function DateTimeRangePicker({
               />
             </div>
             <div>
-              <span className={cn('text-ui-sm text-neutral3 font-medium px-4 pt-3 block')}>End</span>
+              <span className={cn('block px-4 pt-3 text-ui-sm font-medium text-neutral3')}>End</span>
               <DatePicker
                 mode="single"
                 selected={draftDateTo}
@@ -142,14 +142,14 @@ export function DateTimeRangePicker({
               />
             </div>
           </div>
-          {customRangeError && <p className={cn('text-ui-sm text-red-500 px-4 pb-1')}>{customRangeError}</p>}
-          <div className={cn('flex justify-between items-center px-4 pb-3')}>
+          {customRangeError && <p className={cn('px-4 pb-1 text-ui-sm text-red-500')}>{customRangeError}</p>}
+          <div className={cn('flex items-center justify-between px-4 pb-3')}>
             <button
               type="button"
               disabled={disabled}
               className={cn(
                 'text-ui-sm text-neutral3 hover:text-neutral4',
-                disabled && 'opacity-50 pointer-events-none',
+                disabled && 'pointer-events-none opacity-50',
               )}
               onClick={() => {
                 setCustomRangeError(undefined);

@@ -295,7 +295,7 @@ describe('zod-v4 standard-schema adapter', () => {
       warnSpy.mockRestore();
     });
 
-    it('should not produce console warnings when using draft-07 target', () => {
+    it('should set $schema when using a valid draft-07 target', () => {
       const zodSchema = z.object({ name: z.string() });
       const standardSchema = toStandardSchema(zodSchema);
 
@@ -310,6 +310,60 @@ describe('zod-v4 standard-schema adapter', () => {
       expect(jsonSchema.$schema).toBeDefined(); // $schema should be set when target is valid
 
       warnSpy.mockRestore();
+    });
+  });
+
+  describe('z.record() patch parity with zodToJsonSchema', () => {
+    // Zod v4 has a known bug where `z.record(valueSchema)` puts the value in
+    // `def.keyType` instead of `def.valueType`, crashing `toJSONSchema`'s
+    // `recordProcessor` with "Cannot read properties of undefined (reading '_zod')".
+    // `zodToJsonSchema` works around this with `patchRecordSchemas`; the adapter
+    // now applies the same patch so both entry points behave consistently.
+
+    it('does not crash on z.record(z.boolean())', () => {
+      // @ts-expect-error single-arg z.record() is invalid in zod 4 types, but it's the runtime form that triggered #17051
+      const schema = z.object({ flags: z.record(z.boolean()) });
+      const standardSchema = toStandardSchema(schema);
+
+      expect(() => standardSchema['~standard'].jsonSchema.input({ target: 'draft-07' })).not.toThrow();
+    });
+
+    it('produces a usable JSON Schema for z.record(z.boolean())', () => {
+      // @ts-expect-error single-arg z.record() is invalid in zod 4 types, but it's the runtime form that triggered #17051
+      const schema = z.object({ flags: z.record(z.boolean()) });
+      const standardSchema = toStandardSchema(schema);
+
+      const result = standardSchema['~standard'].jsonSchema.input({ target: 'draft-07' }) as Record<string, any>;
+
+      expect(result.properties.flags.type).toBe('object');
+      expect(result.properties.flags.additionalProperties).toEqual({ type: 'boolean' });
+      expect(result.properties.flags.propertyNames).toEqual({ type: 'string' });
+      expect(result.properties.flags.required).toBeUndefined();
+    });
+
+    it('handles z.record() nested inside z.object().nullable()', () => {
+      // @ts-expect-error single-arg z.record() is invalid in zod 4 types, but it's the runtime form that triggered #17051
+      const schema = z.object({ tags: z.record(z.string()).nullable() });
+      const standardSchema = toStandardSchema(schema);
+
+      expect(() => standardSchema['~standard'].jsonSchema.input({ target: 'draft-07' })).not.toThrow();
+    });
+
+    it('patches the buggy zod <= 4.3.6 record def shape (value stored in keyType)', () => {
+      // On zod < 4.4.0, single-arg z.record(valueSchema) stores the value schema
+      // in def.keyType and leaves def.valueType undefined. The workspace zod has
+      // the upstream fix, so recreate the buggy def shape directly to keep this
+      // regression testable regardless of the installed zod version.
+      const schema = z.object({ flags: z.record(z.string(), z.boolean()) });
+      const def = (schema.shape.flags as any)._zod.def;
+      def.keyType = def.valueType;
+      def.valueType = undefined;
+
+      const standardSchema = toStandardSchema(schema);
+      const result = standardSchema['~standard'].jsonSchema.input({ target: 'draft-07' }) as Record<string, any>;
+
+      expect(result.properties.flags.type).toBe('object');
+      expect(result.properties.flags.additionalProperties).toEqual({ type: 'boolean' });
     });
   });
 });

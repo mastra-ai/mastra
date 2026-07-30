@@ -133,7 +133,14 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
 
   // OM observation markers render as ObservationMarkerBadge.
   if (toolName === 'mastra-memory-om-observation') {
-    return <ObservationMarkerBadge toolName={toolName} args={args} metadata={metadata} />;
+    const omData = result?.omData ?? args;
+    return (
+      <ObservationMarkerBadge
+        toolName={toolName}
+        args={omData}
+        metadata={metadata ? { ...metadata, omData } : undefined}
+      />
+    );
   }
 
   const isAgent = (metadata?.mode === 'network' && metadata.from === 'AGENT') || toolName.startsWith('agent-');
@@ -144,12 +151,8 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   const agentToolName = toolName.startsWith('agent-') ? toolName.substring('agent-'.length) : toolName;
   const workflowToolName = toolName.startsWith('workflow-') ? toolName.substring('workflow-'.length) : toolName;
 
-  const requireApprovalMetadata =
-    (metadata?.mode === 'stream' || metadata?.mode === 'network' || metadata?.mode === 'generate') &&
-    metadata?.requireApprovalMetadata;
-  const suspendedTools =
-    (metadata?.mode === 'stream' || metadata?.mode === 'network' || metadata?.mode === 'generate') &&
-    metadata?.suspendedTools;
+  const requireApprovalMetadata = metadata?.requireApprovalMetadata;
+  const suspendedTools = metadata?.suspendedTools;
 
   const toolApprovalMetadata = requireApprovalMetadata
     ? (requireApprovalMetadata?.[toolName] ?? requireApprovalMetadata?.[toolCallId])

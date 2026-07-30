@@ -81,14 +81,19 @@ function normalizeRows<TRow extends EnvironmentVariableRow>(
 }
 
 function hasOnlyEmptyRow(rows: readonly EnvironmentVariableEntry[]) {
-  return rows.length === 1 && !rows[0].key.trim() && !rows[0].value;
+  if (rows.length !== 1) return false;
+  const [firstRow] = rows;
+  if (!firstRow) return false;
+  return !firstRow.key.trim() && !firstRow.value;
 }
 
 function areRowsEqual(a: readonly EnvironmentVariableEntry[], b: readonly EnvironmentVariableEntry[]) {
   if (a.length !== b.length) return false;
 
   for (let index = 0; index < a.length; index++) {
-    if (a[index].key !== b[index].key || a[index].value !== b[index].value) {
+    const aRow = a[index];
+    const bRow = b[index];
+    if (!aRow || !bRow || aRow.key !== bRow.key || aRow.value !== bRow.value) {
       return false;
     }
   }

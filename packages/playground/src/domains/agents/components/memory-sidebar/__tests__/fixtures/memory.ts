@@ -10,6 +10,10 @@ export const memoryEnabledStatus: GetMemoryStatusResponse = {
   memoryType: 'local',
 };
 
+export const memoryDisabledStatus: GetMemoryStatusResponse = {
+  result: false,
+};
+
 export const semanticRecallConfig: GetMemoryConfigResponse = {
   memoryType: 'local',
   config: {

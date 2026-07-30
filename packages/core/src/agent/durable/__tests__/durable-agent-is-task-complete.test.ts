@@ -15,6 +15,8 @@ import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { MockMemory } from '../../../memory/mock';
+import { RequestContext } from '../../../request-context';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
@@ -194,6 +196,37 @@ describe('DurableAgent isTaskComplete', () => {
     expect(textEnd).toHaveLength(1);
   });
 
+  it('does not persist the completion report to memory when the check passes', async () => {
+    const memory = new MockMemory();
+    const model = createTextModel('Here is the final answer.');
+    const baseAgent = new Agent({
+      id: 'task-complete-no-report-agent',
+      name: 'Task Complete No Report Agent',
+      instructions: 'noop',
+      model: model as LanguageModelV2,
+      memory,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const scorer = passingScorer();
+
+    const { output, cleanup } = await durableAgent.stream('go', {
+      isTaskComplete: {
+        scorers: [scorer as any],
+      } as any,
+      maxSteps: 3,
+      memory: { thread: 'thread-no-report', resource: 'resource-no-report' },
+    });
+
+    await drain(output.fullStream as unknown as ReadableStream<any>);
+    await cleanup();
+
+    const recalled = await memory.recall({ threadId: 'thread-no-report', resourceId: 'resource-no-report' });
+    const persistedText = JSON.stringify(recalled.messages);
+    expect(persistedText).toContain('Here is the final answer.');
+    expect(persistedText).not.toContain('Completion Check Results');
+  });
+
   it('continues the loop with feedback when scorers reject the answer, then stops at maxSteps', async () => {
     const model = createSequencedTextModel(['first try', 'second try', 'third try']);
     const baseAgent = new Agent({
@@ -226,6 +259,41 @@ describe('DurableAgent isTaskComplete', () => {
     // attempt because the scorer rejected it).
     const textEndChunks = chunks.filter(c => c.type === 'text-end');
     expect(textEndChunks.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('forwards requestContext entries as customContext to isTaskComplete scorers', async () => {
+    const model = createTextModel('done');
+    const baseAgent = new Agent({
+      id: 'task-complete-ctx-agent',
+      name: 'Task Complete Ctx Agent',
+      instructions: 'noop',
+      model: model as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const scorer = passingScorer();
+    const requestContext = new RequestContext();
+    requestContext.set('userId', 'user-123');
+    requestContext.set('tenantId', 'tenant-abc');
+
+    const { output, cleanup } = await durableAgent.stream('go', {
+      requestContext,
+      isTaskComplete: {
+        scorers: [scorer as any],
+      } as any,
+      maxSteps: 2,
+    });
+
+    await drain(output.fullStream as unknown as ReadableStream<any>);
+    await cleanup();
+
+    expect(scorer.run).toHaveBeenCalledTimes(1);
+    const runArg = (scorer.run as any).mock.calls[0][0];
+    // runStreamCompletionScorers forwards `customContext` as `requestContext`
+    // on the scorer.run input, mirroring the non-durable path.
+    expect(runArg.requestContext).toBeDefined();
+    expect(runArg.requestContext.userId).toBe('user-123');
+    expect(runArg.requestContext.tenantId).toBe('tenant-abc');
   });
 
   it('suppresses feedback message when suppressFeedback is true', async () => {

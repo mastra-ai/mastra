@@ -1,7 +1,8 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import { InternalSpans } from '../../../observability';
-import { createWorkflow as createDirectWorkflow, createEventedWorkflow } from '../../../workflows/create';
+import { createWorkflow } from '../../../workflows/create';
 import type { OuterLLMRun } from '../../types';
+import { pruneAgentLoopSnapshot } from '../prune-snapshot';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
 import { createBackgroundTaskCheckStep } from './background-task-check-step';
@@ -79,8 +80,6 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     ...rest,
   });
 
-  const createWorkflow = process.env.MASTRA_EVENTED_EXECUTION === 'true' ? createEventedWorkflow : createDirectWorkflow;
-
   return createWorkflow({
     id: AGENTIC_EXECUTION_WORKFLOW_ID,
     inputSchema: llmIterationOutputSchema,
@@ -102,6 +101,10 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
           params.workflowStatus === 'suspended'
         );
       },
+      // Agent-loop snapshots are pure resume artifacts — strip everything a
+      // resume never reads (stale suspend payloads, duplicated message
+      // arrays, AI SDK step history) before persisting.
+      pruneSnapshot: pruneAgentLoopSnapshot,
       validateInputs: false,
     },
   })

@@ -62,6 +62,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         agentId?: string;
         agentName?: string;
         state?: { threadId?: string; resourceId?: string };
+        requestContextEntries?: Record<string, unknown>;
       };
 
       const registryEntry = globalRunRegistry.get(state.runId);
@@ -141,7 +142,7 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         runId: state.runId,
         threadId: initData.state?.threadId,
         resourceId: initData.state?.resourceId,
-        customContext: undefined,
+        customContext: initData.requestContextEntries,
       };
 
       let result: IsTaskCompleteRunResult | undefined;
@@ -181,32 +182,32 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
         };
       }
 
-      // Append the formatted feedback as an assistant message so the next
-      // LLM iteration can see the verdict — this is what lets the model
-      // course-correct when scorers say "not complete". The message is always
-      // added; `suppressFeedback` is a display hint stored in metadata that
-      // the frontend uses to hide it from the end user.
-      const feedback = formatStreamCompletionFeedback(result, maxIterationReached);
-      messageList.add(
-        {
-          id: mastra?.generateId?.(),
-          createdAt: new Date(),
-          type: 'text',
-          role: 'assistant',
-          content: {
-            parts: [{ type: 'text', text: feedback }],
-            metadata: {
-              mode: 'stream',
-              completionResult: {
-                passed: result.complete,
-                suppressFeedback: !!isTaskComplete.suppressFeedback,
+      // Append the feedback as an assistant message so the next LLM iteration
+      // can course-correct. Skipped when the check passes, mirroring the
+      // non-durable createIsTaskCompleteStep.
+      if (!result.complete) {
+        const feedback = formatStreamCompletionFeedback(result, maxIterationReached);
+        messageList.add(
+          {
+            id: mastra?.generateId?.(),
+            createdAt: new Date(),
+            type: 'text',
+            role: 'assistant',
+            content: {
+              parts: [{ type: 'text', text: feedback }],
+              metadata: {
+                mode: 'stream',
+                completionResult: {
+                  passed: result.complete,
+                  suppressFeedback: !!isTaskComplete.suppressFeedback,
+                },
               },
+              format: 2,
             },
-            format: 2,
-          },
-        } as MastraDBMessage,
-        'response',
-      );
+          } as MastraDBMessage,
+          'response',
+        );
+      }
       nextState.messageListState = messageList.serialize();
 
       if (pubsub) {

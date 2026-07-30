@@ -73,7 +73,8 @@ new MastraEditor({
           {
             name: 'lastMessages',
             type: 'number | false',
-            description: 'Number of recent messages to include in context, or `false` to disable.',
+            description:
+              'Number of recent messages to include in context, or `false` to disable message history entirely (messages are not loaded or saved).',
             isOptional: true,
           },
           {
@@ -166,7 +167,7 @@ new MastraEditor({
 
 ## Related
 
-- [Memory class](/reference/memory/memory-class) — the runtime type this config hydrates into.
-- [Observational memory](/reference/memory/observational-memory) — full observational memory reference.
-- [BuilderAgentDefaults](/reference/editor/agent-builder/builder-agent-defaults) — where this type is pinned as the Builder default.
-- [Agent Builder: Memory](/docs/agent-builder/memory) — concept and worked examples.
+- [Memory class](/reference/memory/memory-class): The runtime type this config hydrates into.
+- [Observational memory](/reference/memory/observational-memory): Full observational memory reference.
+- [BuilderAgentDefaults](/reference/editor/agent-builder/builder-agent-defaults): Where this type is pinned as the Builder default.
+- [Agent Builder: Memory](/docs/agent-builder/memory): Concept and worked examples.

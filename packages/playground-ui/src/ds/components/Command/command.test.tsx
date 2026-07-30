@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
+
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './command';
 
@@ -23,6 +24,35 @@ afterEach(() => {
 });
 
 describe('Command', () => {
+  it('labels the command input when CommandDialog receives commandLabel', () => {
+    render(
+      <CommandDialog open onOpenChange={() => {}} commandLabel="Filter commands">
+        <CommandInput placeholder="Search commands" />
+      </CommandDialog>,
+    );
+
+    expect(screen.getByRole('combobox', { name: 'Filter commands' })).toBeDefined();
+  });
+
+  it('wraps selection when navigating beyond the first command', () => {
+    render(
+      <CommandDialog open onOpenChange={() => {}}>
+        <CommandInput placeholder="Search commands" />
+        <CommandList>
+          <CommandGroup heading="Navigation">
+            <CommandItem value="settings">Settings</CommandItem>
+            <CommandItem value="profile">Profile</CommandItem>
+          </CommandGroup>
+        </CommandList>
+      </CommandDialog>,
+    );
+
+    const input = screen.getByPlaceholderText('Search commands');
+    fireEvent.keyDown(input, { key: 'ArrowUp', code: 'ArrowUp' });
+
+    assert.equal(screen.getByRole('option', { name: 'Profile' }).getAttribute('aria-selected'), 'true');
+  });
+
   it('closes CommandDialog when Escape is pressed inside the input', async () => {
     const onOpenChange = vi.fn();
 
@@ -185,6 +215,10 @@ describe('Command', () => {
       expect(screen.queryByText('Weather Workflow')).toBeNull();
     });
 
-    expect(Boolean(beta?.compareDocumentPosition(alpha!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    assert(beta, 'Expected filtered command items');
+    assert(alpha, 'Expected filtered command items');
+    const betaItem = beta;
+    const alphaItem = alpha;
+    expect(Boolean(betaItem.compareDocumentPosition(alphaItem) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 });

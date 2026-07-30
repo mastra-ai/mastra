@@ -21,6 +21,7 @@ import { Pool } from 'pg';
 import type { DbClient, QueryValues, TxClient } from '../client';
 import { PoolAdapter } from '../client';
 import { buildConstraintName } from './constraint-utils';
+import { isDuplicateRelationError, isDuplicateSchemaError } from './pg-errors';
 
 // Re-export DbClient for external use
 export type { DbClient } from '../client';
@@ -133,6 +134,16 @@ export function resolvePgConfig(config: PgDomainConfig): {
       ssl: config.ssl,
     });
   }
+
+  // pg emits 'error' on the pool when an idle client's connection drops;
+  // without a listener Node escalates the event to an uncaughtException and
+  // crashes the process. No logger is threaded into this helper, so warn on
+  // the console like COLLISION_WARNING does.
+  pool.on('error', err => {
+    console.warn(
+      `resolvePgConfig: idle pool client error (pool discards the client and reconnects on next checkout): ${err instanceof Error ? err.message : String(err)}`,
+    );
+  });
 
   return {
     client: new PoolAdapter(pool),
@@ -366,6 +377,17 @@ export interface PgDBInternalConfig {
 // This prevents race conditions when multiple domains try to create the same schema concurrently
 const schemaSetupRegistry = new Map<string, { promise: Promise<void> | null; complete: boolean }>();
 
+/**
+ * Guard prune batch limits: a non-positive limit deletes nothing while callers'
+ * drain checks (`affected < limit`) never fire, which turns the prune loop into
+ * an infinite spin. Fail loudly instead.
+ */
+function assertPositiveLimit(limit: number): void {
+  if (!Number.isSafeInteger(limit) || limit <= 0) {
+    throw new Error(`prune limit must be a positive integer; received ${limit}`);
+  }
+}
+
 export class PgDB extends MastraBase {
   public client: DbClient;
   public schemaName?: string;
@@ -526,11 +548,18 @@ export class PgDB extends MastraBase {
               await this.client.none(`CREATE SCHEMA IF NOT EXISTS ${quotedSchemaName}`);
               this.logger.info(`Schema "${schemaNameCapture}" created successfully`);
             } catch (error) {
-              this.logger.error(`Failed to create schema "${schemaNameCapture}"`, { error });
-              throw new Error(
-                `Unable to create schema "${schemaNameCapture}". This requires CREATE privilege on the database. ` +
-                  `Either create the schema manually or grant CREATE privilege to the user.`,
-              );
+              // `CREATE SCHEMA IF NOT EXISTS` is not atomic; a concurrent
+              // backend can race past the existence probe and create the
+              // schema first. Treat duplicate-schema errors as success.
+              if (isDuplicateSchemaError(error)) {
+                this.logger.debug(`Schema "${schemaNameCapture}" was created by another process`);
+              } else {
+                this.logger.error(`Failed to create schema "${schemaNameCapture}"`, { error });
+                throw new Error(
+                  `Unable to create schema "${schemaNameCapture}". This requires CREATE privilege on the database. ` +
+                    `Either create the schema manually or grant CREATE privilege to the user.`,
+                );
+              }
             }
           }
 
@@ -678,7 +707,14 @@ export class PgDB extends MastraBase {
 
       const sql = generateTableSQL({ tableName, schema, schemaName: this.schemaName, compositePrimaryKey });
 
-      await this.client.none(sql);
+      try {
+        await this.client.none(sql);
+      } catch (error) {
+        // `CREATE TABLE IF NOT EXISTS` is not atomic across concurrent
+        // backends. Two processes can both pass the existence probe and one
+        // surfaces a catalog duplicate error. Treat it as "already created".
+        if (!isDuplicateRelationError(error)) throw error;
+      }
 
       await this.alterTable({
         tableName,
@@ -1005,6 +1041,20 @@ export class PgDB extends MastraBase {
 
       this.logger?.info?.(`Added PRIMARY KEY constraint ${constraintName} to ${fullTableName}`);
     } catch (error) {
+      // Another process may have added the same constraint concurrently
+      // (TOCTOU between the EXISTS check and the ALTER TABLE). Treat the
+      // resulting duplicate-relation / duplicate-object error as success,
+      // but only after confirming the PRIMARY KEY is actually present.
+      // isDuplicateRelationError can also match on unrelated name collisions
+      // (e.g. a stale index with the same name), so the post-check prevents
+      // silently swallowing errors when the constraint is still missing.
+      if (isDuplicateRelationError(error)) {
+        const confirmed = await this.spansPrimaryKeyExists();
+        if (confirmed) {
+          this.logger?.debug?.(`PRIMARY KEY constraint ${constraintName} was created by another process`);
+          return;
+        }
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'ADD_SPANS_PRIMARY_KEY', 'FAILED'),
@@ -1623,6 +1673,121 @@ export class PgDB extends MastraBase {
    */
   async deleteData({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     return this.clearTable({ tableName });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Retention helpers (prune)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Deletes up to `limit` rows from `tableName` whose `column` value is strictly
+   * older than `cutoff`, in a single bounded statement. Returns the number of
+   * rows deleted so the caller's batch loop can decide whether the table is
+   * drained.
+   *
+   * PostgreSQL has no `DELETE ... LIMIT`, so this targets a bounded set of
+   * physical rows via the `ctid` system column (PG's row identity, analogous to
+   * SQLite's `rowid`). `cutoff` is bound as a parameter — a `Date`/ISO-8601
+   * string compared against a `timestamptz` anchor column, or a `number`
+   * compared against a `bigint` epoch-ms anchor column.
+   */
+  async pruneBatch({
+    tableName,
+    column,
+    cutoff,
+    limit,
+  }: {
+    tableName: TABLE_NAMES;
+    column: string;
+    cutoff: Date | string | number;
+    limit: number;
+  }): Promise<number> {
+    assertPositiveLimit(limit);
+    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+    const parsedColumn = `"${parseSqlIdentifier(column, 'column name')}"`;
+
+    const sql = `
+      DELETE FROM ${fullTableName}
+      WHERE ctid IN (
+        SELECT ctid FROM ${fullTableName}
+        WHERE ${parsedColumn} < $1
+        LIMIT $2
+      )
+    `;
+
+    const result = await this.client.query(sql, [cutoff, limit]);
+    return result.rowCount ?? 0;
+  }
+
+  /**
+   * Deletes up to `limit` aged parent rows *and* their child rows together, in
+   * a single transaction (used by whole-unit pruning such as experiments →
+   * experiment_results). The aged parent IDs are selected first and both
+   * deletes target that exact ID set, so a bound or abort between batches never
+   * leaves a parent hollow (kept, but with its children gone) or children
+   * orphaned.
+   */
+  async pruneUnitsBatch({
+    parentTable,
+    parentKey,
+    parentColumn,
+    childTable,
+    childForeignKey,
+    cutoff,
+    limit,
+  }: {
+    parentTable: TABLE_NAMES;
+    parentKey: string;
+    parentColumn: string;
+    childTable: TABLE_NAMES;
+    childForeignKey: string;
+    cutoff: Date | string | number;
+    limit: number;
+  }): Promise<{ parents: number; children: number }> {
+    assertPositiveLimit(limit);
+    const schemaName = getSchemaName(this.schemaName);
+    const fullChildTable = getTableName({ indexName: childTable, schemaName });
+    const fullParentTable = getTableName({ indexName: parentTable, schemaName });
+    const childFk = `"${parseSqlIdentifier(childForeignKey, 'column name')}"`;
+    const parentPk = `"${parseSqlIdentifier(parentKey, 'column name')}"`;
+    const parentCol = `"${parseSqlIdentifier(parentColumn, 'column name')}"`;
+
+    return this.client.tx(async t => {
+      const rows = await t.manyOrNone<{ id: unknown }>(
+        `SELECT ${parentPk} AS id FROM ${fullParentTable} WHERE ${parentCol} < $1 LIMIT $2 FOR UPDATE SKIP LOCKED`,
+        [cutoff, limit],
+      );
+      const ids = rows.map(r => r.id);
+      if (ids.length === 0) return { parents: 0, children: 0 };
+
+      const childResult = await t.query(`DELETE FROM ${fullChildTable} WHERE ${childFk} = ANY($1)`, [ids]);
+      const parentResult = await t.query(`DELETE FROM ${fullParentTable} WHERE ${parentPk} = ANY($1)`, [ids]);
+      return {
+        parents: parentResult.rowCount ?? 0,
+        children: childResult.rowCount ?? 0,
+      };
+    });
+  }
+
+  /**
+   * Creates a btree index on `column` for `tableName` if it does not already
+   * exist, so age-based prune deletes stay fast. Delegates to {@link createIndex}
+   * (which is a no-op when the index is present).
+   *
+   * The name is lowercased and truncated to Postgres' 63-byte identifier limit
+   * (schema-prefixed names can exceed it), mirroring {@link buildConstraintName}.
+   */
+  async ensureIndex({
+    indexName,
+    tableName,
+    column,
+  }: {
+    indexName: string;
+    tableName: TABLE_NAMES;
+    column: string;
+  }): Promise<void> {
+    const name = buildConstraintName({ baseName: indexName });
+    await this.createIndex({ name, table: tableName, columns: [column] });
   }
 
   private async executeUpdate(

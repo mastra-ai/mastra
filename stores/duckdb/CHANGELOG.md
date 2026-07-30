@@ -1,5 +1,73 @@
 # @mastra/duckdb
 
+## 1.5.2
+
+### Patch Changes
+
+- Fixed severe CPU and memory spikes when listing traces from large DuckDB databases. ([#20175](https://github.com/mastra-ai/mastra/pull/20175))
+
+  Opening the traces page in Studio (or calling the list traces / list branches APIs) against a multi-GB trace database previously decompressed the entire span_events table for every page load, poll, and scroll — pinning all CPU cores and ballooning memory by several GB per query. On multi-GB databases, trace list queries now use roughly 5x less CPU and stay within a bounded memory budget:
+
+  - Page queries now scan only the time range containing the requested spans instead of the whole table
+  - Filtered and custom-ordered queries (status, hasChildError, order by endedAt) now paginate on a narrow column set before reconstructing full span payloads
+  - Delta polls now short-circuit when there is no new data
+
+  Also added `memoryLimit` and `threads` options to `DuckDBStore`. DuckDB previously used its default memory budget of 80% of system RAM, which could push application servers into swap; it now defaults to 2GB. File-backed databases spill larger-than-memory operations to disk. Note that `:memory:` databases cannot spill, so if you run very large queries against an in-memory database, raise `memoryLimit`.
+
+  ```typescript
+  const store = new DuckDBStore({
+    path: 'mastra.duckdb',
+    memoryLimit: '4GB', // default '2GB'
+    threads: 2, // default: one per CPU core
+  });
+  ```
+
+- Updated dependencies [[`ce93a3c`](https://github.com/mastra-ai/mastra/commit/ce93a3c114ea1cbfbd576f3db41d7c26c9844f5b), [`5718a22`](https://github.com/mastra-ai/mastra/commit/5718a229281dcfd36bcd1f42a242e3717e510a33), [`a211d09`](https://github.com/mastra-ai/mastra/commit/a211d09185dc65a746534914cf38b67f21ee9bac), [`0dca9d0`](https://github.com/mastra-ai/mastra/commit/0dca9d0b1356024a53b72ea6f040db528b126caa), [`6218217`](https://github.com/mastra-ai/mastra/commit/62182171b6cfca0b099f1c6a77a2e65e7639ab86), [`5807d3a`](https://github.com/mastra-ai/mastra/commit/5807d3ae1d259b8b7d6df7e5bf2b485c694af9c8), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`05db566`](https://github.com/mastra-ai/mastra/commit/05db566fcbdcbf33d0bffca0c72ec30129e2e3ca), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`5718a22`](https://github.com/mastra-ai/mastra/commit/5718a229281dcfd36bcd1f42a242e3717e510a33), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`d1b7e3a`](https://github.com/mastra-ai/mastra/commit/d1b7e3a978a309a5653eeaa490d2d6c7c53bd093), [`29c584a`](https://github.com/mastra-ai/mastra/commit/29c584a13a88831e5ed1fdeb0ff8e82eae180433), [`c093146`](https://github.com/mastra-ai/mastra/commit/c0931466404d3c521308ea119cb165bb7e695155), [`8124754`](https://github.com/mastra-ai/mastra/commit/8124754ae89fbc69f8136d1df4a91904d0f84c4e), [`d12b2e4`](https://github.com/mastra-ai/mastra/commit/d12b2e4023fd9e3d3e93a9169f5088bcee2a849c)]:
+  - @mastra/core@1.54.0
+
+## 1.5.2-alpha.0
+
+### Patch Changes
+
+- Fixed severe CPU and memory spikes when listing traces from large DuckDB databases. ([#20175](https://github.com/mastra-ai/mastra/pull/20175))
+
+  Opening the traces page in Studio (or calling the list traces / list branches APIs) against a multi-GB trace database previously decompressed the entire span_events table for every page load, poll, and scroll — pinning all CPU cores and ballooning memory by several GB per query. On multi-GB databases, trace list queries now use roughly 5x less CPU and stay within a bounded memory budget:
+
+  - Page queries now scan only the time range containing the requested spans instead of the whole table
+  - Filtered and custom-ordered queries (status, hasChildError, order by endedAt) now paginate on a narrow column set before reconstructing full span payloads
+  - Delta polls now short-circuit when there is no new data
+
+  Also added `memoryLimit` and `threads` options to `DuckDBStore`. DuckDB previously used its default memory budget of 80% of system RAM, which could push application servers into swap; it now defaults to 2GB. File-backed databases spill larger-than-memory operations to disk. Note that `:memory:` databases cannot spill, so if you run very large queries against an in-memory database, raise `memoryLimit`.
+
+  ```typescript
+  const store = new DuckDBStore({
+    path: 'mastra.duckdb',
+    memoryLimit: '4GB', // default '2GB'
+    threads: 2, // default: one per CPU core
+  });
+  ```
+
+- Updated dependencies [[`ce93a3c`](https://github.com/mastra-ai/mastra/commit/ce93a3c114ea1cbfbd576f3db41d7c26c9844f5b), [`5718a22`](https://github.com/mastra-ai/mastra/commit/5718a229281dcfd36bcd1f42a242e3717e510a33), [`5807d3a`](https://github.com/mastra-ai/mastra/commit/5807d3ae1d259b8b7d6df7e5bf2b485c694af9c8), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`5718a22`](https://github.com/mastra-ai/mastra/commit/5718a229281dcfd36bcd1f42a242e3717e510a33), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`d1b7e3a`](https://github.com/mastra-ai/mastra/commit/d1b7e3a978a309a5653eeaa490d2d6c7c53bd093), [`c093146`](https://github.com/mastra-ai/mastra/commit/c0931466404d3c521308ea119cb165bb7e695155)]:
+  - @mastra/core@1.54.0-alpha.1
+
+## 1.5.1
+
+### Patch Changes
+
+- Fixed listing lightweight traces on DuckDB storage. Calling `listTracesLight` on a DuckDB observability store previously threw "This storage provider does not support listing lightweight traces" because the lazy-loading store facade was missing the forwarding method, even though DuckDB fully supports the operation. The call now returns lightweight traces as expected. Fixes #18942. ([#18955](https://github.com/mastra-ai/mastra/pull/18955))
+
+- Updated dependencies [[`e900f25`](https://github.com/mastra-ai/mastra/commit/e900f25dfe2c9237f15b26cb109ac55aa9de3000), [`e8eaf3a`](https://github.com/mastra-ai/mastra/commit/e8eaf3aea09d51c131b5d369aee459442f416efc), [`d1c930f`](https://github.com/mastra-ai/mastra/commit/d1c930f713d1de09d5f3cd665cb79a8b7ebd7ec7), [`02634f7`](https://github.com/mastra-ai/mastra/commit/02634f700051e014a125d0d10165e3c9b8414e95), [`a940148`](https://github.com/mastra-ai/mastra/commit/a9401483e1bfe85c18a6e73d33c5949239d65a92)]:
+  - @mastra/core@1.50.1
+
+## 1.5.1-alpha.0
+
+### Patch Changes
+
+- Fixed listing lightweight traces on DuckDB storage. Calling `listTracesLight` on a DuckDB observability store previously threw "This storage provider does not support listing lightweight traces" because the lazy-loading store facade was missing the forwarding method, even though DuckDB fully supports the operation. The call now returns lightweight traces as expected. Fixes #18942. ([#18955](https://github.com/mastra-ai/mastra/pull/18955))
+
+- Updated dependencies [[`a940148`](https://github.com/mastra-ai/mastra/commit/a9401483e1bfe85c18a6e73d33c5949239d65a92)]:
+  - @mastra/core@1.50.1-alpha.2
+
 ## 1.5.0
 
 ### Minor Changes
@@ -362,9 +430,7 @@
   });
 
   export const mastra = new Mastra({
-    agents: {
-      /* your agents here */
-    },
+    agents: {/* your agents here */},
     observability: new Observability({
       configs: {
         default: {
@@ -448,9 +514,7 @@
   });
 
   export const mastra = new Mastra({
-    agents: {
-      /* your agents here */
-    },
+    agents: {/* your agents here */},
     observability: new Observability({
       configs: {
         default: {
@@ -497,9 +561,7 @@
   });
 
   export const mastra = new Mastra({
-    agents: {
-      /* your agents here */
-    },
+    agents: {/* your agents here */},
     observability: new Observability({
       configs: {
         default: {

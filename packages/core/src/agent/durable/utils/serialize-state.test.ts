@@ -319,62 +319,33 @@ describe('serializeDurableOptions', () => {
     expect(result.toolChoice).toBeUndefined();
   });
 
-  it('drops sensitive credential headers from serialized modelSettings.headers', () => {
-    // Durable execution engines (e.g. Inngest) persist the serialized workflow
-    // input to durable storage. Headers that frequently carry credentials must
-    // never reach that storage.
+  it('strips ALL headers from serialized modelSettings — they live on RunRegistryEntry instead', () => {
+    // No headers should ever reach durable storage. Any header could carry
+    // credentials; the safest approach is to keep them all off the wire.
+    // Headers are stored on the in-process RunRegistryEntry and merged back
+    // at LLM call time.
     const result = serializeDurableOptions({
       modelSettings: {
         temperature: 0.5,
         headers: {
           'X-Trace-Id': 'trace-1',
-          // The full set of denylisted headers — match must be case-insensitive.
           Authorization: 'Bearer sk-secret',
-          'proxy-authorization': 'Basic c2VjcmV0',
-          Cookie: 'session=abc',
-          'Set-Cookie': 'session=abc',
           'X-Api-Key': 'sk-leaked',
-          'api-key': 'sk-leaked-2',
-          'x-auth-token': 'token-3',
-          'X-Access-Token': 'token-4',
-          'x-amz-security-token': 'amz-token',
-          'X-Goog-Api-Key': 'goog-key',
-          'openai-api-key': 'sk-openai',
-          'anthropic-api-key': 'sk-anthropic',
+          'x-custom-header': 'custom-value',
         },
       } as any,
     });
 
     expect(result.modelSettings?.temperature).toBe(0.5);
-    // Non-sensitive header is preserved.
-    expect(result.modelSettings?.headers).toEqual({ 'X-Trace-Id': 'trace-1' });
-
-    // Nothing on the serialized output should contain any of the leaked values.
-    const serialized = JSON.stringify(result);
-    expect(serialized).not.toContain('sk-secret');
-    expect(serialized).not.toContain('c2VjcmV0');
-    expect(serialized).not.toContain('session=abc');
-    expect(serialized).not.toContain('sk-leaked');
-    expect(serialized).not.toContain('sk-leaked-2');
-    expect(serialized).not.toContain('token-3');
-    expect(serialized).not.toContain('token-4');
-    expect(serialized).not.toContain('amz-token');
-    expect(serialized).not.toContain('goog-key');
-    expect(serialized).not.toContain('sk-openai');
-    expect(serialized).not.toContain('sk-anthropic');
-  });
-
-  it('omits modelSettings.headers entirely when only sensitive headers are provided', () => {
-    const result = serializeDurableOptions({
-      modelSettings: {
-        headers: {
-          Authorization: 'Bearer sk-secret',
-          'X-Api-Key': 'sk-leaked',
-        },
-      } as any,
-    });
-
+    // No headers property at all on the serialized output.
     expect(result.modelSettings?.headers).toBeUndefined();
+
+    // Nothing on the serialized output should contain any header values.
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('trace-1');
+    expect(serialized).not.toContain('sk-secret');
+    expect(serialized).not.toContain('sk-leaked');
+    expect(serialized).not.toContain('custom-value');
   });
 });
 

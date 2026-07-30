@@ -1,7 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import type { IUserProvider, User } from '@mastra/core/auth';
 import type { RequestContext } from '@mastra/core/di';
-import type { MastraAuthProvider } from '@mastra/core/server';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 
 /**
  * Public-safe resolved author shape — same fields exposed by `/auth/me`.
@@ -21,11 +21,11 @@ export type ResolvedAuthor = {
  * - no server config is registered;
  * - `server.auth` is a `MastraAuthConfig`, not a `MastraAuthProvider`.
  */
-function getAuthProvider(mastra: Mastra): MastraAuthProvider | null {
+function getAuthProvider(mastra: Mastra): IMastraAuthProvider | null {
   const serverConfig = (mastra as { getServer?: () => { auth?: unknown } }).getServer?.();
   if (!serverConfig?.auth) return null;
   if (typeof (serverConfig.auth as { authenticateToken?: unknown }).authenticateToken === 'function') {
-    return serverConfig.auth as MastraAuthProvider;
+    return serverConfig.auth as IMastraAuthProvider;
   }
   return null;
 }

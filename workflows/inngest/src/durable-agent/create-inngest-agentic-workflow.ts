@@ -10,6 +10,7 @@ import {
   durableAgenticOutputSchema,
   baseIterationStateSchema,
   createBaseIterationStateUpdate,
+  resolveDurableToolCallConcurrency,
 } from '@mastra/core/agent/durable';
 import type {
   DurableAgenticExecutionOutput,
@@ -168,9 +169,23 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       },
       { id: 'extract-tool-calls' },
     )
-    // Step 3: Execute each tool call individually (with suspend support)
-    // Tool result/error PubSub emission is handled by createDurableToolCallStep
-    .foreach(toolCallStep)
+    // Step 3: Execute each tool call individually (with suspend support).
+    // Tool result/error PubSub emission is handled by createDurableToolCallStep.
+    // Concurrency is resolved per run at execution time from the serialized
+    // iteration state (never a shared mutable object — the workflow instance is
+    // reused across runs and Inngest replays memoized steps): approval/suspend
+    // tool sets run sequentially, otherwise the run's `toolCallConcurrency`
+    // applies (default 10). Mirrors @mastra/core's behavior after #9704.
+    .foreach(toolCallStep, {
+      concurrency: ({ inputData, getInitData }) => {
+        const state = getInitData() as IterationState | undefined;
+        return resolveDurableToolCallConcurrency({
+          options: state?.options,
+          toolsMetadata: state?.toolsMetadata,
+          toolCalls: inputData as DurableToolCallInput[],
+        });
+      },
+    })
     // Step 4: Collect tool results, create observability spans, and bundle for mapping
     .map(
       async ({ inputData, getStepResult, getInitData, mastra }) => {

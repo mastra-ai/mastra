@@ -29,6 +29,15 @@ export class DualLogger implements IMastraLogger {
   }
 
   /**
+   * The wrapped underlying logger, without the observability dual-write layer.
+   * Use this when forwarding a logger to observability to avoid recursing back
+   * through the dual-write path.
+   */
+  get baseLogger(): IMastraLogger {
+    return this.#inner;
+  }
+
+  /**
    * Set or update the loggerVNext getter.
    * Called after observability initializes (which may happen after logger creation).
    */

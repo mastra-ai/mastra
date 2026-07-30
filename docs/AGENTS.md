@@ -2,21 +2,23 @@ Use @styleguides/STYLEGUIDE.md first. @styleguides/ also includes guides for doc
 
 When working check src/content/en/docs/ and src/content/en/reference/ update existing docs or create new docs
 @CONTRIBUTING.md for setup, local development, and components / frontmatter
+When adding model name/ID to docs, use placeholder token from src/plugins/remark-model-tokens/models.ts (remark replaces them at build time)
+When deleting/renaming doc, redirect needs to be added to vercel.redirects.json. Use pnpm run generate-vercel-redirects to update generated vercel.json
 
-main documentation src/content/en/docs/
-step by step guides src/content/en/guides/
-API reference docs src/content/en/reference/
-model provider docs src/content/en/models/ auto-generated
-tutorial content src/course/
+main documentation src/content/en/docs
+step by step guides src/content/en/guides
+API reference docs src/content/en/reference
+model provider docs src/content/en/models auto-generated
+tutorial content src/course
 
 Follow @styleguides/STYLEGUIDE.md for all docs. Use these when they apply:
 
 src/content/en/docs/ - @styleguides/DOC.md
 src/content/en/guides/ - choose the matching guide styleguide:
-@docs/styleguides/GUIDE_QUICKSTART.md - quickstarts for a fast working result with a specific library or framework
+@docs/styleguides/GUIDE_QUICKSTART.md - quickstarts for fast working result with specific library or framework
 @docs/styleguides/GUIDE_TUTORIAL.md - tutorials for building something specific with Mastra with deeper concepts
-@docs/styleguides/GUIDE_INTEGRATION.md - integration guides for a specific external library or ecosystem
-@docs/styleguides/GUIDE_DEPLOYMENT.md - deployment guides for a specific platform
+@docs/styleguides/GUIDE_INTEGRATION.md - integration guides for specific external library or ecosystem
+@docs/styleguides/GUIDE_DEPLOYMENT.md - deployment guides for specific platform
 src/content/en/reference/ - @styleguides/REFERENCE.md
 
 E2E testing
@@ -26,4 +28,8 @@ pnpm test:smoke # Smoke tests only desktop
 pnpm test:og # OG image meta tag tests only desktop
 pnpm test:navigation # Navigation tests desktop + tablet + mobile
 
-Tests live in tests/ helpers in tests/helpers/ and playwright.config.ts starts pnpm serve
+Linting
+pnpm validate # Check frontmatter values & if all sidebars are valid
+pnpm lint:prose # Check prose with Vale & Remark
+
+Tests live in tests/ helpers in tests/helpers/ & playwright.config.ts starts pnpm serve

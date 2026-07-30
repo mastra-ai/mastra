@@ -27,7 +27,7 @@ function AgentPlayground() {
 
   // Fetch versions first — this endpoint returns an empty array for code-only agents
   const { data: versionsData } = useAgentVersions({
-    agentId: agentId ?? '',
+    agentId,
     params: { orderBy: { direction: 'DESC' } },
   });
 
@@ -139,7 +139,7 @@ function AgentPlayground() {
   }
 
   if (!codeAgent) {
-    return <div className="text-center py-4">Agent not found</div>;
+    return <div className="py-4 text-center">Agent not found</div>;
   }
 
   return (

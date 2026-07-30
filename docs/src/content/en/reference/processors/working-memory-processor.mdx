@@ -157,6 +157,7 @@ const storage = new PostgresStorage({
 })
 
 export const agent = new Agent({
+  id: 'personalized-agent',
   name: 'personalized-agent',
   instructions: 'You are a helpful assistant that remembers user preferences',
   model: '__GATEWAY_OPENAI_MODEL__',

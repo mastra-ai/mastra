@@ -1,8 +1,7 @@
-import path from 'path';
-import { readFileSync, existsSync } from 'fs';
-import process from 'process';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
+import { existsSync, readFileSync } from 'node:fs';
+import path, { dirname } from 'node:path';
+import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -76,7 +75,7 @@ const checkRedirects = async () => {
     const { destination } = redirect;
     if (!destination) continue;
 
-    if (destination.includes(':path*')) {
+    if (destination.includes(':path*') || destination.endsWith('/llms.txt')) {
       console.log('├──SKIPPED──', `${baseUrl}${destination}`);
       skipped++;
       continue;

@@ -1,6 +1,44 @@
+import { MastraError } from '../../../error/index.js';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import type { GatewayAuthRequest, GatewayAuthResult, MastraModelGatewayInterface, ProviderConfig } from './base.js';
 import { findGatewayForModel, getGatewayId, shouldEnableGateway } from './gateway-helpers.js';
+
+/**
+ * MastraError IDs that represent expected "auth not available" states —
+ * missing credentials, missing gateway config, or no matching gateway.
+ * These are safe to surface as `hasAuth === false` for catalog/UI checks.
+ */
+const MISSING_AUTH_ERROR_IDS = new Set<string>([
+  'MODEL_ROUTER_NO_GATEWAY_FOUND',
+  'MASTRA_GATEWAY_NO_API_KEY',
+  'NETLIFY_GATEWAY_NO_TOKEN',
+  'NETLIFY_GATEWAY_NO_SITE_ID',
+  'AZURE_ENTRA_ID_AUTH_NOT_CONFIGURED',
+]);
+
+/**
+ * Returns true for errors that represent an expected "auth not available"
+ * state (no matching gateway, missing credentials/env vars, missing provider
+ * config). Real gateway failures (token exchange errors, network bugs,
+ * malformed auth hooks) are not matched here so {@link hasAuth} can re-throw
+ * them instead of silently hiding them.
+ */
+function isExpectedMissingAuthError(error: unknown): boolean {
+  if (error instanceof MastraError) {
+    return MISSING_AUTH_ERROR_IDS.has(error.id);
+  }
+  if (error instanceof Error) {
+    const msg = error.message;
+    return (
+      /Missing [^ ]+ environment variable/i.test(msg) ||
+      /Could not find API key/i.test(msg) ||
+      /no api key/i.test(msg) ||
+      /Could not find config for provider/i.test(msg) ||
+      /Could not identify provider/i.test(msg)
+    );
+  }
+  return false;
+}
 
 /**
  * A model entry in the gateway catalog (without use-count tracking).
@@ -32,7 +70,17 @@ export class GatewayManager {
   readonly gateways: MastraModelGatewayInterface[];
 
   constructor(gateways: MastraModelGatewayInterface[] = []) {
-    this.gateways = gateways.filter(shouldEnableGateway);
+    // Filter disabled gateways and deduplicate by gateway ID (first wins).
+    // Callers pass custom gateways before default gateways, so first-wins
+    // preserves custom-over-default precedence in a single place.
+    const seen = new Set<string>();
+    this.gateways = gateways.filter(gateway => {
+      if (!shouldEnableGateway(gateway)) return false;
+      const id = getGatewayId(gateway);
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
   }
 
   /**
@@ -62,11 +110,27 @@ export class GatewayManager {
     return findGatewayForModel(routerId, this.gateways);
   }
 
-  /** Parse a router id into its provider/model/gateway components. */
-  parseModelId(routerId: string): { providerId: string; modelId: string; gatewayId: string } {
+  /**
+   * Resolve the gateway and parsed provider/model components for a router id
+   * in a single pass. Centralises gateway selection + id parsing so callers
+   * (router constructor, doGenerate/doStream, supportedUrls) don't each
+   * re-derive the gateway and prefix separately.
+   */
+  resolveModelId(routerId: string): {
+    gateway: MastraModelGatewayInterface;
+    gatewayId: string;
+    providerId: string;
+    modelId: string;
+  } {
     const gateway = this.findGatewayForModel(routerId);
     const gatewayId = getGatewayId(gateway);
     const { providerId, modelId } = parseModelRouterId(routerId, GatewayManager.getPrefixForId(gatewayId, routerId));
+    return { gateway, gatewayId, providerId, modelId };
+  }
+
+  /** Parse a router id into its provider/model/gateway components. */
+  parseModelId(routerId: string): { providerId: string; modelId: string; gatewayId: string } {
+    const { gatewayId, providerId, modelId } = this.resolveModelId(routerId);
     return { providerId, modelId, gatewayId };
   }
 
@@ -80,9 +144,7 @@ export class GatewayManager {
    * from per-instance config on top of the result returned here.
    */
   async resolveAuth(routerId: string): Promise<GatewayAuthResult> {
-    const gateway = this.findGatewayForModel(routerId);
-    const gatewayId = getGatewayId(gateway);
-    const { providerId, modelId } = parseModelRouterId(routerId, GatewayManager.getPrefixForId(gatewayId, routerId));
+    const { gateway, gatewayId, providerId, modelId } = this.resolveModelId(routerId);
     const request: GatewayAuthRequest = { gatewayId, providerId, modelId, routerId };
 
     const rawGatewayAuth = await gateway.resolveAuth?.(request);
@@ -106,13 +168,22 @@ export class GatewayManager {
     };
   }
 
-  /** Convenience: whether auth is available for a model. Never throws. */
+  /**
+   * Convenience: whether auth is available for a model.
+   * Returns `false` for expected missing-auth states (no matching gateway,
+   * missing credentials/env vars) but re-throws unexpected errors (token
+   * exchange failures, network bugs, malformed auth hooks) so they surface
+   * instead of being silently hidden.
+   */
   async hasAuth(routerId: string): Promise<boolean> {
     try {
       const auth = await this.resolveAuth(routerId);
       return Boolean(auth.apiKey || auth.bearerToken || auth.headers);
-    } catch {
-      return false;
+    } catch (error) {
+      if (isExpectedMissingAuthError(error)) {
+        return false;
+      }
+      throw error;
     }
   }
 

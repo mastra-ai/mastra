@@ -328,7 +328,9 @@ export class SpannerStore extends MastraCompositeStore {
     // root throw below propagates to the current call. Attach a no-op catch
     // here so a rejected `pending` without other awaiters is not flagged as
     // an unhandled rejection.
-    pending.catch(() => {});
+    pending.catch(e => {
+      this.logger?.warn?.('Initialization failed', e);
+    });
 
     try {
       // Initialize domains sequentially to avoid concurrent DDL errors in Spanner.
@@ -389,7 +391,7 @@ export class SpannerStore extends MastraCompositeStore {
       if (this.spanner) {
         // Spanner node lib wraps most functions (including this one with PromisifyAll), but currently there's a bug that causes awaiting on it to hand indefinitely.
         // Current workaround is to just call it without await https://github.com/googleapis/google-cloud-node/issues/8106
-        this.spanner.close();
+        void this.spanner.close();
       }
     } catch (error) {
       throw error;

@@ -3,6 +3,7 @@ import type { ComponentPropsWithoutRef } from 'react';
 import type { SidebarState } from './main-sidebar-context';
 import { useMaybeSidebar } from './main-sidebar-context';
 import { navItemClasses } from './main-sidebar-nav-item-classes';
+import type { MainSidebarNavItemSize } from './main-sidebar-nav-item-classes';
 import { MainSidebarNavLabel } from './main-sidebar-nav-label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import type { LinkComponent } from '@/ds/types/link-component';
@@ -25,6 +26,12 @@ export type MainSidebarNavLinkProps = Omit<ComponentPropsWithoutRef<'li'>, 'chil
   isActive?: boolean;
   state?: SidebarState;
   children?: React.ReactNode;
+  /** Visual density for the interactive row. */
+  size?: MainSidebarNavItemSize;
+  /** Typed custom interactive element. Sidebar item classes are merged into its `className`. */
+  render?: React.ReactElement<SlottedNavChildProps>;
+  /** Optional trailing control rendered beside, never inside, the interactive row. */
+  action?: React.ReactNode;
   /** Override the Provider-level LinkComponent for this row. Defaults to `<a>` when neither is set. */
   LinkComponent?: LinkComponent;
   /** Nesting depth for manually composed subitems. Data-driven sections set this automatically. */
@@ -36,6 +43,9 @@ export type MainSidebarNavLinkProps = Omit<ComponentPropsWithoutRef<'li'>, 'chil
    * Use for `<button>` items or custom router Links. Item classes are forwarded
    * to the slotted element. `link.url` and `LinkComponent` are ignored; other
    * `link` presentation fields still apply when supplied.
+   *
+   * @deprecated Prefer typed render composition for new APIs; this legacy
+   * slotted prop will be migrated separately.
    */
   asChild?: boolean;
 };
@@ -49,6 +59,9 @@ export function MainSidebarNavLink({
   state: stateProp,
   children,
   isActive,
+  size,
+  render,
+  action,
   className,
   LinkComponent: LinkProp,
   level: levelProp,
@@ -67,16 +80,28 @@ export function MainSidebarNavLink({
   const linkParams = isExternal ? { target: '_blank', rel: 'noreferrer' } : {};
   const needsTooltip = link ? isCollapsed || Boolean(link.tooltipMsg) : false;
 
-  const itemClassName = navItemClasses({
-    isActive,
-    isCollapsed,
-    isFeatured,
-    level,
-  });
+  const itemClassName = cn(
+    navItemClasses({
+      isActive,
+      isCollapsed,
+      isFeatured,
+      level,
+      size,
+    }),
+    action && !isCollapsed && 'pr-10',
+  );
 
   let interactiveEl: React.ReactNode = null;
 
-  if (asChild) {
+  if (render && asChild) {
+    throw new Error('MainSidebarNavLink accepts either `render` or `asChild`, not both.');
+  }
+
+  if (render) {
+    interactiveEl = React.cloneElement(render, {
+      className: cn(itemClassName, render.props.className),
+    });
+  } else if (asChild) {
     if (!React.isValidElement<SlottedNavChildProps>(children)) {
       throw new Error(
         'MainSidebarNavLink requires a valid React element child when `asChild` is true so it can apply `SlottedNavChildProps` and merge `itemClassName`.',
@@ -97,7 +122,7 @@ export function MainSidebarNavLink({
   }
 
   return (
-    <li {...props} className={cn('flex flex-col relative min-w-0', className)}>
+    <li {...props} className={cn('relative flex min-w-0 flex-col', className)}>
       {link && needsTooltip && React.isValidElement(interactiveEl) ? (
         <Tooltip>
           <TooltipTrigger render={interactiveEl} />
@@ -108,6 +133,7 @@ export function MainSidebarNavLink({
       ) : (
         (interactiveEl ?? children)
       )}
+      {!isCollapsed && action && <div className="absolute top-1/2 right-1 -translate-y-1/2">{action}</div>}
       {!isCollapsed && subItems}
     </li>
   );

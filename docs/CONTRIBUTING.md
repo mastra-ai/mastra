@@ -56,11 +56,13 @@ Before submitting a PR, make sure to:
 
 4. **Verify code examples** - If you've added code examples, test them if possible to ensure they work.
 
-5. **Run linters** to check for style issues:
+5. **Run linters**:
 
    ```shell
-   pnpm run lint:prose
+   pnpm run lint:prose && pnpm run validate
    ```
+
+6. **Add redirect** (optional) - If you've renamed or deleted a doc, add a redirect to `vercel.redirects.json` and run `pnpm run generate-vercel-redirects` to update the generated `vercel.json`.
 
 ## Documentation structure
 

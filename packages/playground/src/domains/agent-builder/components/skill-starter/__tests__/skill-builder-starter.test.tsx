@@ -1,5 +1,5 @@
-import type * as PlaygroundUi from '@mastra/playground-ui';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { usePlaygroundStore } from '@mastra/playground-ui/store/playground-store';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
@@ -19,16 +19,6 @@ vi.mock('react-router', async () => {
     useNavigate: () => navigateMock,
   };
 });
-
-vi.mock('@mastra/playground-ui', async () => {
-  const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
-  return {
-    ...actual,
-    toast: { success: vi.fn(), error: vi.fn() },
-    usePlaygroundStore: () => ({ requestContext: undefined }),
-  };
-});
-
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
@@ -54,6 +44,7 @@ const renderStarter = () => {
 
 describe('SkillBuilderStarter', () => {
   beforeEach(() => {
+    usePlaygroundStore.setState({ requestContext: {} });
     // The starter pulls builder settings + stored workspaces so it can choose a
     // default workspace. Stub both: builder enabled with no agent-workspace
     // pin, and an empty workspace list so workspaceId stays undefined.

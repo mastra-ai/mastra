@@ -80,5 +80,5 @@ describeForAllEngines(
       expect(stepsSeen[0]).toBeDefined();
     });
   },
-  { skip: ['durable'] },
+  {},
 );

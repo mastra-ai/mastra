@@ -30,7 +30,7 @@ export function LogsToolbar({
   const hasNonDefaultFilter = filterTokens.some(token => isNonDefaultFilter(token, filterFields));
 
   return (
-    <div className={cn('grid grid-cols-[1fr_auto] gap-3 items-start')}>
+    <div className={cn('grid grid-cols-[1fr_auto] items-start gap-3')}>
       <PropertyFilterApplied
         fields={filterFields}
         tokens={filterTokens}

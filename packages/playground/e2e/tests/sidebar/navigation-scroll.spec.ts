@@ -14,61 +14,63 @@ test.describe('Sidebar Navigation - Scroll Behavior', () => {
     await resetStorage();
   });
 
-  test('should scroll to reveal all navigation sections when viewport height is small', async ({ page }) => {
-    // ARRANGE: Set viewport to desktop width but constrained height
-    await page.setViewportSize({ width: 1280, height: 400 });
-    await page.goto('/agents');
+  test.describe('when the viewport height is constrained', () => {
+    test('scrolls to reveal all navigation sections', async ({ page }) => {
+      // ARRANGE: Set viewport to desktop width but constrained height
+      await page.setViewportSize({ width: 1280, height: 400 });
+      await page.goto('/agents');
 
-    // Wait for sidebar scope to be visible and expanded
-    await expect(page.locator('[data-sidebar-state="default"]')).toBeAttached({ timeout: 10000 });
+      // Wait for sidebar scope to be visible and expanded
+      await expect(page.locator('[data-sidebar-state="default"]')).toBeAttached({ timeout: 10000 });
 
-    // Locate nav links by role — these span from top (Agents) to bottom (Settings)
-    const sidebar = page.locator('[data-sidebar-state="default"]');
-    const agentsLink = sidebar.getByRole('link', { name: 'Agents', exact: true });
-    const settingsLink = sidebar.getByRole('link', { name: 'Settings', exact: true });
+      // Locate nav links by role — these span from top (Agents) to bottom (Settings)
+      const sidebar = page.locator('[data-sidebar-state="default"]');
+      const agentsLink = sidebar.getByRole('link', { name: 'Agents', exact: true });
+      const settingsLink = sidebar.getByRole('link', { name: 'Settings', exact: true });
 
-    // All nav links should exist in DOM
-    await expect(agentsLink).toBeAttached();
-    await expect(settingsLink).toBeAttached();
+      // All nav links should exist in DOM
+      await expect(agentsLink).toBeAttached();
+      await expect(settingsLink).toBeAttached();
 
-    // ACT & ASSERT: Scroll to Settings link at bottom and verify it becomes visible
-    await settingsLink.scrollIntoViewIfNeeded();
-    await expect(settingsLink).toBeVisible();
+      // ACT & ASSERT: Scroll to Settings link at bottom and verify it becomes visible
+      await settingsLink.scrollIntoViewIfNeeded();
+      await expect(settingsLink).toBeVisible();
 
-    // Scroll back to top and verify Agents is visible
-    await agentsLink.scrollIntoViewIfNeeded();
-    await expect(agentsLink).toBeVisible();
-  });
+      // Scroll back to top and verify Agents is visible
+      await agentsLink.scrollIntoViewIfNeeded();
+      await expect(agentsLink).toBeVisible();
+    });
 
-  test('should allow navigation to bottom section items after scrolling', async ({ page }) => {
-    // ARRANGE: Constrained viewport
-    await page.setViewportSize({ width: 1280, height: 400 });
-    await page.goto('/agents');
-    await expect(page.locator('[data-sidebar-state="default"]')).toBeAttached({ timeout: 10000 });
+    test('should allow navigation to bottom section items after scrolling', async ({ page }) => {
+      // ARRANGE: Constrained viewport
+      await page.setViewportSize({ width: 1280, height: 400 });
+      await page.goto('/agents');
+      await expect(page.locator('[data-sidebar-state="default"]')).toBeAttached({ timeout: 10000 });
 
-    // ACT: Scroll to and click Settings link
-    const sidebar = page.locator('[data-sidebar-state="default"]');
-    const settingsLink = sidebar.getByRole('link', { name: 'Settings', exact: true });
-    await settingsLink.scrollIntoViewIfNeeded();
-    await settingsLink.click();
+      // ACT: Scroll to and click Settings link
+      const sidebar = page.locator('[data-sidebar-state="default"]');
+      const settingsLink = sidebar.getByRole('link', { name: 'Settings', exact: true });
+      await settingsLink.scrollIntoViewIfNeeded();
+      await settingsLink.click();
 
-    // ASSERT: Navigation succeeded - URL changed and settings page loaded
-    await expect(page).toHaveURL(/\/settings/);
-  });
+      // ASSERT: Navigation succeeded - URL changed and settings page loaded
+      await expect(page).toHaveURL(/\/settings/);
+    });
 
-  test('should allow navigation from bottom to top sections after scrolling', async ({ page }) => {
-    // ARRANGE: Constrained viewport, start at settings
-    await page.setViewportSize({ width: 1280, height: 400 });
-    await page.goto('/settings');
-    await expect(page.locator('[data-sidebar-state="default"]')).toBeAttached({ timeout: 10000 });
+    test('should allow navigation from bottom to top sections after scrolling', async ({ page }) => {
+      // ARRANGE: Constrained viewport, start at settings
+      await page.setViewportSize({ width: 1280, height: 400 });
+      await page.goto('/settings');
+      await expect(page.locator('[data-sidebar-state="default"]')).toBeAttached({ timeout: 10000 });
 
-    // ACT: Scroll to Agents link (top of nav) and click
-    const sidebar = page.locator('[data-sidebar-state="default"]');
-    const agentsLink = sidebar.getByRole('link', { name: 'Agents', exact: true });
-    await agentsLink.scrollIntoViewIfNeeded();
-    await agentsLink.click();
+      // ACT: Scroll to Agents link (top of nav) and click
+      const sidebar = page.locator('[data-sidebar-state="default"]');
+      const agentsLink = sidebar.getByRole('link', { name: 'Agents', exact: true });
+      await agentsLink.scrollIntoViewIfNeeded();
+      await agentsLink.click();
 
-    // ASSERT: Navigation works from any scroll position
-    await expect(page).toHaveURL(/\/agents/);
+      // ASSERT: Navigation works from any scroll position
+      await expect(page).toHaveURL(/\/agents/);
+    });
   });
 });

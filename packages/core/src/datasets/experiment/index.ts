@@ -5,8 +5,8 @@ import type { DatasetRecord } from '../../storage/types';
 import { executeTarget } from './executor';
 import type { Target, ExecutionResult } from './executor';
 import { resolveScorers, resolveStepScorers, runScorersForItem, runStepScorersForItem } from './scorer';
-import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED } from './tool-mocks';
-import type { ItemToolMock } from './tool-mocks';
+import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED, TOOL_MOCK_NOT_DECLARED } from './tool-mocks';
+import type { ItemToolMock, UnmockedToolPolicy } from './tool-mocks';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
 /** Unified item shape used within experiment execution (bridges inline + versioned data) */
@@ -23,6 +23,8 @@ type ExperimentItem = {
   resumeData?: unknown;
   /** Item-level static tool mocks (agent targets only) */
   toolMocks?: ItemToolMock[];
+  /** Item-level override for undeclared agent tool calls. */
+  unmockedToolPolicy?: UnmockedToolPolicy;
 };
 
 // Re-export types and helpers
@@ -41,11 +43,13 @@ export {
   ToolMockMatcher,
   TOOL_MOCK_MISMATCH,
   TOOL_MOCK_EXHAUSTED,
+  TOOL_MOCK_NOT_DECLARED,
   type ItemToolMock,
   type ToolMockMatchArgs,
   type ToolMockReport,
   type ToolMockResolution,
   type ToolMockFailureCode,
+  type UnmockedToolPolicy,
 } from './tool-mocks';
 
 // Re-export analytics
@@ -141,6 +145,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           resumeSteps: dataItem.resumeSteps,
           resumeData: dataItem.resumeData,
           toolMocks: dataItem.toolMocks,
+          unmockedToolPolicy: dataItem.unmockedToolPolicy,
         };
       });
       datasetVersion = null;
@@ -150,7 +155,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         throw new Error('DatasetsStorage not configured. Configure storage in Mastra instance.');
       }
 
-      datasetRecord = await datasetsStore.getDatasetById({ id: datasetId });
+      datasetRecord = await datasetsStore.getDatasetById({ id: datasetId, filters: config.filters });
       if (!datasetRecord) {
         throw new MastraError({
           id: 'DATASET_NOT_FOUND',
@@ -183,6 +188,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         requestContext: v.requestContext,
         metadata: v.metadata,
         toolMocks: v.toolMocks,
+        unmockedToolPolicy: v.unmockedToolPolicy,
       }));
     } else {
       throw new Error('No data source: provide datasetId or data');
@@ -237,6 +243,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           experimentId,
           versions,
           toolMocks: targetType === 'agent' ? item.toolMocks : undefined,
+          unmockedToolPolicy:
+            targetType === 'agent' ? (item.unmockedToolPolicy ?? config.unmockedToolPolicy ?? 'allow') : undefined,
         });
       };
     } else {
@@ -337,6 +345,10 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   // 6. Execute items with p-map
   let succeededCount = 0;
   let failedCount = 0;
+  // Rows whose target run completed but whose persistence to
+  // `mastra_experiment_results` failed. Surfaced on the summary so callers
+  // can detect the DB being out of sync with the returned results.
+  let persistenceFailures = 0;
   // Pre-allocate for deterministic ordering (results[i] matches items[i])
   const results: ItemWithScores[] = new Array(items.length);
 
@@ -373,7 +385,11 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
           // Don't retry deterministic tool-mock failures — the matcher state cannot
           // change between attempts, so retrying would always fail identically.
-          if (execResult.error.code === TOOL_MOCK_MISMATCH || execResult.error.code === TOOL_MOCK_EXHAUSTED) {
+          if (
+            execResult.error.code === TOOL_MOCK_MISMATCH ||
+            execResult.error.code === TOOL_MOCK_EXHAUSTED ||
+            execResult.error.code === TOOL_MOCK_NOT_DECLARED
+          ) {
             break;
           }
 
@@ -399,7 +415,9 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           succeededCount++;
         }
 
-        // Build item result
+        // Build item result. `persistenceError` starts null and is set below
+        // if `addExperimentResult` throws so callers can detect rows that
+        // never landed in storage.
         const itemResult: ItemResult = {
           itemId: item.id,
           itemVersion: item.datasetVersion ?? 0,
@@ -410,6 +428,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           startedAt: itemStartedAt,
           completedAt: itemCompletedAt,
           retryCount,
+          persistenceError: null,
           ...(execResult.toolMockReport ? { toolMockReport: execResult.toolMockReport } : {}),
         };
 
@@ -454,7 +473,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
 
         const itemScores = [...flatScores, ...stepScores];
 
-        // Persist result with scores (if storage available)
+        // Persist result with scores (if storage available). A throw here does
+        // NOT abort the run — persistence is best-effort and the target run's
+        // outcome is already recorded in `itemResult`. Instead we surface the
+        // failure on the item (`persistenceError`) and bump the run-level
+        // `persistenceFailures` counter so callers can detect rows that never
+        // landed in `mastra_experiment_results`.
         if (experimentsStore) {
           try {
             await experimentsStore.addExperimentResult({
@@ -474,7 +498,19 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
               ...(execResult.toolMockReport ? { toolMockReport: execResult.toolMockReport } : {}),
             });
           } catch (persistError) {
-            console.warn(`Failed to persist result for item ${item.id}:`, persistError);
+            persistenceFailures++;
+            itemResult.persistenceError = {
+              message: persistError instanceof Error ? persistError.message : String(persistError),
+            };
+            // Log the raw error (including stack) internally, but do NOT attach the
+            // stack to the returned `persistenceError` — the summary can cross a
+            // trust boundary (e.g. UIs, API responses) and stacks leak internal paths.
+            mastra
+              .getLogger()
+              ?.error(
+                `Failed to persist experiment result for item ${item.id} in experiment ${experimentId}: ${itemResult.persistenceError.message}`,
+                { error: persistError },
+              );
           }
 
           // Throttled progress update
@@ -524,6 +560,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       succeededCount,
       failedCount,
       skippedCount,
+      persistenceFailures,
       completedWithErrors: false,
       startedAt,
       completedAt,
@@ -555,6 +592,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     succeededCount,
     failedCount,
     skippedCount,
+    persistenceFailures,
     completedWithErrors,
     startedAt,
     completedAt,

@@ -2,7 +2,7 @@ import React from 'react';
 
 export const AnthropicMessagesIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
-    className="h-3 w-3"
+    className="size-3"
     fill="white"
     height="78"
     strokeLinejoin="round"

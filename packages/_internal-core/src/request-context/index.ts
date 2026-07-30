@@ -137,7 +137,7 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   /**
    * set a value with strict typing if `Values` is a Record and the key exists in it.
    */
-  public set<K extends Values extends Record<string, any> ? keyof Values : string>(
+  public set<K extends (Values extends Record<string, any> ? keyof Values : string)>(
     key: K,
     value: Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : never) : unknown,
   ): void {
@@ -149,7 +149,7 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
    * Get a value with its type
    */
   public get<
-    K extends Values extends Record<string, any> ? keyof Values : string,
+    K extends (Values extends Record<string, any> ? keyof Values : string),
     R = Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : never) : unknown,
   >(key: K): R {
     return this.registry.get(key as string) as R;
@@ -158,14 +158,14 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   /**
    * Check if a key exists in the container
    */
-  public has<K extends Values extends Record<string, any> ? keyof Values : string>(key: K): boolean {
+  public has<K extends (Values extends Record<string, any> ? keyof Values : string)>(key: K): boolean {
     return this.registry.has(key);
   }
 
   /**
    * Delete a value by key
    */
-  public delete<K extends Values extends Record<string, any> ? keyof Values : string>(key: K): boolean {
+  public delete<K extends (Values extends Record<string, any> ? keyof Values : string)>(key: K): boolean {
     return this.registry.delete(key);
   }
 
@@ -215,7 +215,7 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
    * Execute a function for each entry in the container.
    * The callback receives properly typed key-value pairs.
    */
-  public forEach<K extends Values extends Record<string, any> ? keyof Values : string>(
+  public forEach<K extends (Values extends Record<string, any> ? keyof Values : string)>(
     callbackfn: (
       value: Values extends Record<string, any> ? (K extends keyof Values ? Values[K] : unknown) : unknown,
       key: K,
@@ -286,6 +286,35 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
       }
       return false;
     }
+  }
+
+  /**
+   * Custom span serialization to prevent leaking internal state (like auth
+   * tokens stored in the private `registry` Map) into observability spans.
+   *
+   * `deepClean` in `@mastra/observability` calls this method before falling
+   * back to `Object.keys()` — which would walk the runtime-enumerable
+   * `registry` field and serialize its raw Map entries (including any
+   * bearer tokens) into exported spans.
+   */
+  serializeForSpan(): Record<string, unknown> {
+    const safe: Record<string, unknown> = {};
+    for (const [key, value] of this.registry.entries()) {
+      if (key === MASTRA_AUTH_TOKEN_KEY) {
+        safe[key] = '[REDACTED]';
+      } else if (
+        value === null ||
+        value === undefined ||
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean'
+      ) {
+        safe[key] = value;
+      } else {
+        safe[key] = `[${typeof value}]`;
+      }
+    }
+    return safe;
   }
 
   /**
