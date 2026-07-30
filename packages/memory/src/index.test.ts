@@ -2403,6 +2403,48 @@ describe('Memory', () => {
     });
   });
 
+  describe('processors skip when no thread context', () => {
+    // Regression: ephemeral invocations (e.g. workflow agent steps launched via
+    // the run-workflow tool) run without a Mastra memory thread/resource on
+    // requestContext. Thread-scoped processors like observational-memory and
+    // working-memory-state must no-op instead of throwing "requires
+    // resourceId/threadId" — otherwise every ephemeral agent call trips the
+    // tripwire even when the caller has no need for persistence.
+
+    function memoryWithOMAndWMState() {
+      return new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          workingMemory: { enabled: true, useStateSignals: true },
+          observationalMemory: { enabled: true, observation: { manageWorkingMemory: true } },
+        },
+      });
+    }
+
+    it('omits observational-memory input processor when requestContext has no MastraMemory', async () => {
+      const memory = memoryWithOMAndWMState();
+      const rc = new RequestContext();
+      const processors = await memory.getInputProcessors([], rc);
+      expect(processors.find(p => p.id === 'observational-memory')).toBeUndefined();
+    });
+
+    it('omits observational-memory output processor when requestContext has no MastraMemory', async () => {
+      const memory = memoryWithOMAndWMState();
+      const rc = new RequestContext();
+      const processors = await memory.getOutputProcessors([], rc);
+      expect(processors.find(p => p.id === 'observational-memory')).toBeUndefined();
+    });
+
+    it('omits working-memory-state processor when requestContext has no MastraMemory', async () => {
+      const memory = memoryWithOMAndWMState();
+      const rc = new RequestContext();
+      const inputs = await memory.getInputProcessors([], rc);
+      const outputs = await memory.getOutputProcessors([], rc);
+      expect(inputs.find(p => p.id === 'working-memory-state')).toBeUndefined();
+      expect(outputs.find(p => p.id === 'working-memory-state')).toBeUndefined();
+    });
+  });
+
   describe('Vector Deletion', () => {
     function createMemoryWithMockVector(indexSeparator = '_') {
       const mockVector = {

@@ -14813,9 +14813,16 @@ async function waitForSharedFunctionRegistration(expectedFnIds: string[] = [], m
       const fns = (data.functions ?? []) as Array<{ slug?: string; id?: string; name?: string }>;
       const candidates = fns.flatMap(f => [f.slug, f.id, f.name].filter(Boolean) as string[]);
       if (expectedFnIds.length > 0) {
-        if (expectedFnIds.every(id => candidates.some(c => matches(id, c)))) {
+        const missing = expectedFnIds.filter(id => !candidates.some(c => matches(id, c)));
+        if (missing.length === 0) {
           console.log(`[waitForSharedFunctionRegistration] all ${expectedFnIds.length} expected functions registered`);
           return true;
+        }
+        if (i === maxAttempts - 1) {
+          console.log(
+            `[waitForSharedFunctionRegistration] missing ${missing.length}/${expectedFnIds.length} after ${maxAttempts} attempts; dev server has ${fns.length} functions`,
+          );
+          console.log(`[waitForSharedFunctionRegistration] first missing: ${missing.slice(0, 10).join(', ')}`);
         }
       } else if (fns.length > 0) {
         return true;
@@ -14852,26 +14859,31 @@ async function startSharedInngest(expectedFnIds: string[] = []) {
 
   // Check if a server is already running (Docker or host CLI). Don't equate
   // "port reachable" with "Docker" — that would break host inngest-cli setups.
+  let devServerAlreadyRunning = false;
   try {
     const response = await fetch(`http://localhost:${SHARED_INNGEST_PORT}/dev`);
-    if (response.ok) {
-      _sharedInngestServerRunning = true;
-      console.log(`[startSharedInngest] Inngest already running on port ${SHARED_INNGEST_PORT}`);
-      // Trigger registration so the running server picks up *this* run's
-      // workflows (its previous registry may be stale from an earlier suite).
-      try {
-        await fetch(`http://localhost:${SHARED_HANDLER_PORT}/inngest/api`, { method: 'PUT' });
-      } catch {
-        // Ignore
-      }
-      const ok = await waitForSharedFunctionRegistration(expectedFnIds);
-      if (!ok && expectedFnIds.length > 0) {
-        throw new Error(`[startSharedInngest] expected functions not registered: ${expectedFnIds.join(', ')}`);
-      }
-      return;
-    }
+    devServerAlreadyRunning = response.ok;
   } catch {
     // Not running yet
+  }
+
+  if (devServerAlreadyRunning) {
+    _sharedInngestServerRunning = true;
+    console.log(`[startSharedInngest] Inngest already running on port ${SHARED_INNGEST_PORT}`);
+    // Trigger registration so the running server picks up *this* run's
+    // workflows (its previous registry may be stale from an earlier suite).
+    try {
+      await fetch(`http://localhost:${SHARED_HANDLER_PORT}/inngest/api`, { method: 'PUT' });
+    } catch {
+      // Ignore — dev server will poll the handler URL on its own schedule
+    }
+    const ok = await waitForSharedFunctionRegistration(expectedFnIds);
+    if (!ok && expectedFnIds.length > 0) {
+      throw new Error(
+        `[startSharedInngest] expected functions not registered after polling (see waitForSharedFunctionRegistration logs for missing ids)`,
+      );
+    }
+    return;
   }
 
   // Start the inngest dev server as a background process using the npm CLI
@@ -14985,10 +14997,15 @@ createWorkflowTestSuite({
       // Not running yet, will use inngest-cli
     }
 
-    // Collect all workflows from registry
+    // Collect all workflows + any Mastra-level agents/tools the entries declare
+    // (used by `.agent('id')` / `.tool('id')` by-id forms).
     const workflows: Record<string, InngestWorkflow<any, any, any, any, any, any, any>> = {};
+    const agents: Record<string, any> = {};
+    const tools: Record<string, any> = {};
     for (const [id, entry] of Object.entries(registry)) {
       workflows[id] = entry.workflow as InngestWorkflow<any, any, any, any, any, any, any>;
+      if (entry.mastraAgents) Object.assign(agents, entry.mastraAgents);
+      if (entry.mastraTools) Object.assign(tools, entry.mastraTools);
     }
 
     // Create storage
@@ -15005,6 +15022,8 @@ createWorkflowTestSuite({
     sharedMastra = new Mastra({
       storage: sharedStorage,
       workflows,
+      agents: Object.keys(agents).length ? agents : undefined,
+      tools: Object.keys(tools).length ? tools : undefined,
       server: {
         apiRoutes: [
           {
@@ -15051,7 +15070,9 @@ createWorkflowTestSuite({
     // We pass through the expected function ids so the registration wait verifies
     // *our* workflows have synced — not just that the dev server has at least one
     // function left over from a previous suite.
-    const expectedFnIds = Object.keys(workflows).map(id => `workflow.${id}`);
+    // Use workflow.id (Inngest function id), not registry keys — nested suites
+    // register e.g. `nested-basic-main` under the `nested-basic` registry key.
+    const expectedFnIds = Object.values(registry).map(entry => `workflow.${entry.workflow.id}`);
     console.log('[registerWorkflows] Starting Inngest...');
     await startSharedInngest(expectedFnIds);
     console.log('[registerWorkflows] Inngest started and functions registered');
