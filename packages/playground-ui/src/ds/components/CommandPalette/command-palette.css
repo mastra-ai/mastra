@@ -16,6 +16,7 @@
 .command-palette-surface {
   --command-palette-enter-delay: 0ms;
   --command-palette-exit-delay: 0ms;
+
   transform-origin: center;
   will-change: opacity, transform;
 }
@@ -37,6 +38,7 @@
 
 .command-palette-results-panel {
   --command-palette-footer-height: 4.75rem;
+
   isolation: isolate;
 }
 

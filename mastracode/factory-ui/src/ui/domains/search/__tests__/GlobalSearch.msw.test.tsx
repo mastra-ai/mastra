@@ -448,7 +448,7 @@ describe('Global search', () => {
     renderSearchRoute();
     await openFromSidebar();
     expect(await screen.findByText('factory/pr-900')).toBeInTheDocument();
-    expect(await screen.findByText(/Board cards and GitHub intake could not be loaded/)).toBeInTheDocument();
+    expect(await screen.findByText(/^Board cards could not be loaded/)).toBeInTheDocument();
   });
 
   it.each(['#900', '900', 'PR #900'])('finds the review session by GitHub identifier "%s"', async query => {
@@ -557,7 +557,7 @@ describe('Global search', () => {
     const dialog = await openFromSidebar();
 
     expect(await screen.findByText('Bump the command palette dependencies')).toBeInTheDocument();
-    expect(await screen.findByText(/Board cards and GitHub intake could not be loaded/)).toBeInTheDocument();
+    expect(await screen.findByText('GitHub intake could not be loaded.')).toBeInTheDocument();
     expect(within(dialog).queryByText('Harden the review board drop target')).not.toBeInTheDocument();
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');

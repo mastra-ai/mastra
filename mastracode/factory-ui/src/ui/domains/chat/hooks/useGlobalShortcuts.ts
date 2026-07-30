@@ -28,7 +28,7 @@ export function useGlobalShortcuts() {
 
   useKeyDown({
     '?': e => {
-      if (isTypingTarget(e.target) || e.metaKey || e.ctrlKey) return;
+      if (isTypingTarget(e.target) || e.metaKey || e.ctrlKey || overlays.isOpen('search')) return;
       e.preventDefault();
       overlays.toggle('shortcuts');
     },

@@ -98,7 +98,8 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
           )}
           {isWorkItemScope(activeScope) && hasRepositories && (
             <GlobalSearchWorkItemsStatus
-              failed={workItems.failed || intake.failed}
+              boardFailed={workItems.failed}
+              intakeFailed={intake.failed}
               onRetry={() => {
                 workItems.retry();
                 intake.retry();

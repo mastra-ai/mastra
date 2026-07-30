@@ -8,7 +8,9 @@ export function useGlobalSearchControls() {
   const { setOpenMobile } = useMainSidebar();
 
   const openSearch = (trigger?: HTMLElement) => {
-    rememberGlobalSearchTrigger(trigger);
+    // Falling back to activeElement inside an open overlay would remember a node that unmounts with it
+    const focusIsInsideOverlay = overlays.isOpen('shortcuts') || overlays.isOpen('search');
+    if (trigger || !focusIsInsideOverlay) rememberGlobalSearchTrigger(trigger);
     overlays.close('shortcuts');
     setOpenMobile(false);
     overlays.open('search');
