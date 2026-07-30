@@ -448,6 +448,25 @@ describe('MessageScroller older history', () => {
     expect(onReachStart).toHaveBeenCalledTimes(1);
   });
 
+  it('does not request older history again when messages append while the reader remains at the start', () => {
+    const onReachStart = vi.fn();
+    const { rerender } = render(<HistoryHarness messageIds={['message-1']} onReachStart={onReachStart} />);
+
+    const viewport = screen.getByTestId('history-viewport');
+    installScrollTo(viewport);
+
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 600 });
+    fireEvent.scroll(viewport);
+    setScrollMetrics(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 0 });
+    fireEvent.scroll(viewport);
+    expect(onReachStart).toHaveBeenCalledTimes(1);
+
+    rerender(<HistoryHarness messageIds={['message-1', 'message-2']} onReachStart={onReachStart} />);
+    fireEvent.scroll(viewport);
+
+    expect(onReachStart).toHaveBeenCalledTimes(1);
+  });
+
   it('holds the reading position when older messages are prepended', () => {
     const onReachStart = vi.fn();
     const { rerender } = render(<HistoryHarness messageIds={['message-3']} onReachStart={onReachStart} />);

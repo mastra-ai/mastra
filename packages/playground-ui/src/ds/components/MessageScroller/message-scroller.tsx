@@ -310,7 +310,10 @@ export function MessageScrollerProvider({
 
     if (!reachStartArmedRef.current) return;
     if (!wasScrollable) return;
-    if (viewportElement.scrollTop > reachStartThreshold) return;
+    if (viewportElement.scrollTop > reachStartThreshold) {
+      reachStartFiredRef.current = false;
+      return;
+    }
     // One request per trip to the start: staying there must not queue a second.
     if (reachStartFiredRef.current) return;
     if (!onReachStartRef.current) return;
@@ -514,7 +517,6 @@ export function MessageScrollerProvider({
 
     const anchor = prependAnchorRef.current;
     prependAnchorRef.current = null;
-    reachStartFiredRef.current = false;
     if (!anchor || !viewportElement || firstItemId === previousFirstItemId) return;
 
     const grownBy = viewportElement.scrollHeight - anchor.scrollHeight;
