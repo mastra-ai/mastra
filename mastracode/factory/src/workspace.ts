@@ -8,8 +8,8 @@ import type { WorkspaceSkillExtension } from '@mastra/code-sdk/agents/workspace'
 import { DEFAULT_CONFIG_DIR } from '@mastra/code-sdk/constants';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import { LocalSandbox, LocalSkillSource, Workspace } from '@mastra/core/workspace';
-import type { SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
+import { LocalSandbox, LocalSkillSource, Workspace, WorkspaceSkillsImpl } from '@mastra/core/workspace';
+import type { Skill, SkillSource, SkillSourceEntry, SkillSourceStat } from '@mastra/core/workspace';
 import { getFactoryAuthUserId } from './auth.js';
 import type { FactoryAuthUser } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
@@ -111,6 +111,25 @@ const factorySkillExtension: WorkspaceSkillExtension = {
   paths: [FACTORY_SKILLS_MOUNT],
   createSource: (fallback, fallbackSkillRoots) => new FactorySkillSource(fallback, fallbackSkillRoots),
 };
+
+let bundledFactorySkills: WorkspaceSkillsImpl | undefined;
+
+/**
+ * Resolve a bundled factory skill (`factory-review` etc.) straight from the
+ * server-local skills directory — no session or sandbox required. Returns null
+ * for names that are not bundled factory skills (project skills need a live
+ * workspace to resolve).
+ */
+export async function getBundledFactorySkill(name: string): Promise<Skill | null> {
+  if (!FACTORY_SKILL_NAMES.has(name)) return null;
+  bundledFactorySkills ??= new WorkspaceSkillsImpl({
+    source: new LocalSkillSource({ basePath: FACTORY_SKILLS_SOURCE_PATH }),
+    skills: ['.'],
+  });
+  await bundledFactorySkills.maybeRefresh();
+  const skill = await bundledFactorySkills.get(name);
+  return skill ?? null;
+}
 
 type DynamicWorkspaceContext = Parameters<typeof getDynamicWorkspace>[0];
 

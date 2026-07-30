@@ -139,6 +139,7 @@ export type {
 
 // Skill Tools
 export { createSkillTools, formatSkillActivation } from './skills';
+export { WorkspaceSkillsImpl, type WorkspaceSkillsImplConfig } from './skills';
 
 // Skill Publishing
 export type { SkillPublishResult } from './skills';

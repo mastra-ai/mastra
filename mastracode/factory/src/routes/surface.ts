@@ -169,7 +169,7 @@ async function prepareFactoryRuleBinding(
   const destinationStage = input.item.stages.length === 1 ? input.item.stages[0] : undefined;
   if (!destinationStage) throw new Error('Factory skill invocation requires one exclusive board stage.');
 
-  await coordinator.prepare({
+  const prepared = await coordinator.prepare({
     orgId: input.record.orgId,
     userId: preparedSession.userId,
     factoryProjectId: input.record.factoryProjectId,
@@ -190,6 +190,10 @@ async function prepareFactoryRuleBinding(
       },
     },
   });
+  // Rule-triggered kickoffs are delivered by the dispatcher right after this
+  // returns — the controller session must exist by then, so finish the
+  // finalize phase inline instead of letting it run in the background.
+  await prepared.finalized;
 }
 
 /**

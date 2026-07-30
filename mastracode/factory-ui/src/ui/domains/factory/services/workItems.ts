@@ -247,7 +247,7 @@ export interface StartFactoryRunPrepared {
   sessionId: string;
   branch: string;
   revision: number;
-  kickoffStatus: 'pending' | 'leased' | 'retry' | 'sent' | 'failed';
+  kickoffStatus: 'blocked' | 'pending' | 'leased' | 'retry' | 'sent' | 'failed';
   replayed: boolean;
 }
 

@@ -1,10 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Logo } from '@mastra/playground-ui/components/Logo';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ChevronDown } from 'lucide-react';
 import { useParams } from 'react-router';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatTranscript } from '../context/useChatTranscript';
 
 const emptyThreadClass =
   'flex w-full min-w-0 max-w-full flex-1 flex-col items-center justify-center px-6 py-12 text-center';
@@ -21,7 +23,8 @@ function FactoryMetadata({ label, value }: { label: string; value: string }) {
 export function EmptyThreadState() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const { data: activeFactory } = useFactoryQuery(factoryId);
-  const { projectPath, resourceId, factorySessionState } = useChatSessionContext();
+  const { projectPath, resourceId, factorySessionState, kind } = useChatSessionContext();
+  const { transcript } = useChatTranscript();
   const { prefillComposer } = useChatCommands();
   if (!activeFactory) return null;
 
@@ -29,6 +32,48 @@ export function EmptyThreadState() {
     repo => repo.projectRepositoryId === factorySessionState?.projectRepositoryId,
   );
   const gitBranch = repository?.gitBranch;
+
+  const factoryDetails = (
+    <details className="group text-ui-sm text-icon3 mt-8 w-full max-w-lg min-w-0">
+      <summary className="hover:text-icon5 focus-visible:outline-accent1 flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
+        <span>
+          Working in <span className="text-icon5 font-medium">{activeFactory.name}</span>
+        </span>
+        <ChevronDown
+          aria-hidden="true"
+          size={14}
+          className="transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none"
+        />
+      </summary>
+      <dl className="mx-auto mt-3 grid w-full min-w-0 gap-1 text-left font-mono leading-relaxed">
+        <FactoryMetadata label="Factory" value={activeFactory.name} />
+        {resourceId && <FactoryMetadata label="Resource ID" value={resourceId} />}
+        {gitBranch && <FactoryMetadata label="Branch" value={gitBranch} />}
+        {projectPath && <FactoryMetadata label="Workspace" value={projectPath} />}
+      </dl>
+    </details>
+  );
+
+  // Factory runs are kicked off server-side: while the sandbox materializes
+  // and the dispatcher delivers the kickoff, an honest preparing panel beats
+  // a personal-session hero that implies nothing is happening.
+  if (kind === 'factory') {
+    const workspaceReady = transcript.workspaceReady === true;
+    return (
+      <section className={emptyThreadClass} aria-labelledby="empty-thread-title" aria-busy="true">
+        <Spinner aria-hidden="true" className="text-icon3" />
+        <h1 id="empty-thread-title" className="text-header-lg text-icon6 mt-6 font-medium tracking-tight text-balance">
+          {workspaceReady ? 'Starting the agent…' : 'Preparing workspace…'}
+        </h1>
+        <p className="text-ui-lg text-icon3 mt-2 max-w-lg leading-relaxed text-pretty" role="status">
+          {workspaceReady
+            ? 'The workspace is ready — waiting for the first message.'
+            : 'Provisioning the sandbox and cloning the repository. This can take a moment.'}
+        </p>
+        {factoryDetails}
+      </section>
+    );
+  }
 
   return (
     <section className={emptyThreadClass} aria-labelledby="empty-thread-title">
@@ -70,24 +115,7 @@ export function EmptyThreadState() {
         </Button>
       </div>
 
-      <details className="group text-ui-sm text-icon3 mt-8 w-full max-w-lg min-w-0">
-        <summary className="hover:text-icon5 focus-visible:outline-accent1 flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
-          <span>
-            Working in <span className="text-icon5 font-medium">{activeFactory.name}</span>
-          </span>
-          <ChevronDown
-            aria-hidden="true"
-            size={14}
-            className="transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none"
-          />
-        </summary>
-        <dl className="mx-auto mt-3 grid w-full min-w-0 gap-1 text-left font-mono leading-relaxed">
-          <FactoryMetadata label="Factory" value={activeFactory.name} />
-          {resourceId && <FactoryMetadata label="Resource ID" value={resourceId} />}
-          {gitBranch && <FactoryMetadata label="Branch" value={gitBranch} />}
-          {projectPath && <FactoryMetadata label="Workspace" value={projectPath} />}
-        </dl>
-      </details>
+      {factoryDetails}
     </section>
   );
 }

@@ -749,7 +749,10 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               },
             },
           });
-          return c.json({ prepared }, 202);
+          // `finalized` is a live promise for the background session setup —
+          // the client polls thread state instead of waiting on it here.
+          const { finalized: _finalized, ...preparedBody } = prepared;
+          return c.json({ prepared: preparedBody }, 202);
         },
       }),
 
