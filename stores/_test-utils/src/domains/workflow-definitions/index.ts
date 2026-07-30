@@ -68,6 +68,35 @@ export function createWorkflowDefinitionsTests({ storage }: WorkflowDefinitionsT
       expect(updated.updatedAt.getTime()).toBeGreaterThanOrEqual(created.updatedAt.getTime());
     });
 
+    it('updates authorId on existing rows', async () => {
+      await store.upsert({ ...baseInput('wf-1'), authorId: 'author-1' });
+      const updated = await store.upsert({ id: 'wf-1', authorId: 'author-2' });
+      expect(updated.authorId).toBe('author-2');
+      const fetched = await store.get('wf-1');
+      expect(fetched?.authorId).toBe('author-2');
+    });
+
+    it('preserves unspecified columns across a partial upsert', async () => {
+      await store.upsert({
+        ...baseInput('wf-1'),
+        metadata: { owner: 'me' },
+        stateSchema: { type: 'object' },
+        authorId: 'author-1',
+      });
+      const updated = await store.upsert({ id: 'wf-1', description: 'renamed' });
+      expect(updated.description).toBe('renamed');
+      expect(updated.metadata).toEqual({ owner: 'me' });
+      expect(updated.stateSchema).toEqual({ type: 'object' });
+      expect(updated.authorId).toBe('author-1');
+      expect(updated.inputSchema).toEqual(baseInput('wf-1').inputSchema);
+      expect(updated.graph).toEqual(baseGraph);
+    });
+
+    it('rejects creation when required fields are explicitly undefined', async () => {
+      await expect(store.upsert({ ...baseInput('wf-1'), graph: undefined } as any)).rejects.toThrow(/graph/);
+      expect(await store.get('wf-1')).toBeNull();
+    });
+
     it('lists workflows and filters by status', async () => {
       await store.upsert(baseInput('wf-1'));
       await store.upsert(baseInput('wf-2'));

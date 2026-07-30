@@ -79,6 +79,28 @@ describe('WorkflowDefinitionsLibSQL', () => {
     expect(updated.graph).toEqual(graph);
   });
 
+  it('updates authorId on an existing row and keeps createdAt stable', async () => {
+    const wd = (await store.getStore('workflowDefinitions'))!;
+
+    const created = await wd.upsert({
+      id: 'wf-author',
+      inputSchema,
+      outputSchema,
+      graph,
+      authorId: 'author-1',
+    });
+    expect(created.authorId).toBe('author-1');
+
+    await new Promise(r => setTimeout(r, 5));
+    const updated = await wd.upsert({ id: 'wf-author', authorId: 'author-2' });
+    expect(updated.authorId).toBe('author-2');
+    expect(updated.createdAt.getTime()).toBe(created.createdAt.getTime());
+    expect(updated.updatedAt.getTime()).toBeGreaterThanOrEqual(created.updatedAt.getTime());
+
+    const fetched = await wd.get('wf-author');
+    expect(fetched?.authorId).toBe('author-2');
+  });
+
   it('round-trips JSON columns intact', async () => {
     const wd = (await store.getStore('workflowDefinitions'))!;
     await wd.upsert({

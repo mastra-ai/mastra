@@ -23,6 +23,9 @@ function rowToDefinition(row: Record<string, any>): WorkflowDefinition {
     tableName: TABLE_WORKFLOW_DEFINITIONS,
     row,
   });
+  if (parsed.inputSchema == null || parsed.outputSchema == null || parsed.graph == null) {
+    throw new Error(`Workflow definition row "${String(parsed.id)}" is missing required JSON columns.`);
+  }
   const def: WorkflowDefinition = {
     id: String(parsed.id),
     inputSchema: parsed.inputSchema,
@@ -136,6 +139,7 @@ export class WorkflowDefinitionsSpanner extends WorkflowDefinitionsStorage {
       data.requestContextSchema = input.requestContextSchema;
     if ('graph' in input && input.graph !== undefined) data.graph = input.graph;
     if ('status' in input && input.status !== undefined) data.status = input.status;
+    if ('authorId' in input && input.authorId !== undefined) data.authorId = input.authorId;
 
     await this.db.update({ tableName: TABLE_WORKFLOW_DEFINITIONS, keys: { id: input.id }, data });
     const updated = await this.get(input.id);

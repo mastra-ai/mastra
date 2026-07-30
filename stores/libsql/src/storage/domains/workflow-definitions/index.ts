@@ -122,6 +122,7 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
       data.requestContextSchema = input.requestContextSchema;
     if ('graph' in input && input.graph !== undefined) data.graph = input.graph;
     if ('status' in input && input.status !== undefined) data.status = input.status;
+    if ('authorId' in input && input.authorId !== undefined) data.authorId = input.authorId;
 
     await this.#db.update({ tableName: TABLE_WORKFLOW_DEFINITIONS, keys: { id: input.id }, data });
     const updated = await this.get(input.id);

@@ -133,6 +133,7 @@ export class MongoDBWorkflowDefinitionsStore extends WorkflowDefinitionsStorage 
       update.requestContextSchema = input.requestContextSchema;
     if ('graph' in input && input.graph !== undefined) update.graph = input.graph;
     if ('status' in input && input.status !== undefined) update.status = input.status;
+    if ('authorId' in input && input.authorId !== undefined) update.authorId = input.authorId;
 
     await collection.updateOne({ id: input.id }, { $set: update });
     const merged = { ...existing, ...update, id: input.id, createdAt: existing.createdAt };
