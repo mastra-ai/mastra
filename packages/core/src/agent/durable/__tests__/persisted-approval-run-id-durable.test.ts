@@ -259,6 +259,79 @@ describe('durable delegated approval persisted runId', () => {
     await drainAndAssertResumed(resumed, toolExecutions);
   }, 30000);
 
+  it('resumes the inner run when the delegation tool is itself approval-gated', async () => {
+    const storage = new InMemoryStore();
+    const mockMemory = new MockMemory();
+    const memory = { thread: 'durable-double-gate-thread', resource: 'durable-double-gate-resource' };
+    const toolExecutions = { count: 0 };
+
+    const durableAgent = createDurableAgent({ agent: buildSupervisor(mockMemory, toolExecutions), pubsub });
+    new Mastra({ agents: { durableAgent }, storage, logger: false });
+
+    // ---- Leg 1: the outer delegation tool is approval-gated, so the run
+    // suspends at the pre-execution gate before the sub-agent ever starts. ----
+    const result = await durableAgent.stream('Get the secret', {
+      memory,
+      maxSteps: 5,
+      requireToolApproval: true,
+    });
+    let sawApproval = false;
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        sawApproval = true;
+        break;
+      }
+    }
+    expect(sawApproval).toBe(true);
+    const outerGateEntry = await getApprovalEntry(mockMemory, memory);
+    expect(outerGateEntry.runId).toBe(result.runId);
+    // Pre-execution gate: no inner run exists yet.
+    expect(outerGateEntry.delegatedRunId).toBeUndefined();
+
+    // ---- Leg 2: approve the outer gate. The sub-agent starts and raises its
+    // own delegated approval mid-execution. ----
+    const midResumed = await durableAgent.approveToolCall({
+      runId: outerGateEntry.runId,
+      toolCallId: outerGateEntry.toolCallId,
+      memory,
+    });
+    let sawDelegatedApproval = false;
+    for await (const chunk of midResumed.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        sawDelegatedApproval = true;
+        break;
+      }
+    }
+    expect(sawDelegatedApproval).toBe(true);
+    expect(toolExecutions.count).toBe(0);
+
+    // The workflow suspend payload — the durable source of truth for the resume
+    // leg — now carries the inner suspended run, partitioned by toolCallId.
+    const workflows = (await storage.getStore('workflows'))!;
+    await vi.waitFor(async () => {
+      const persisted = await workflows.getWorkflowRunById({
+        runId: result.runId,
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+      });
+      const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
+      expect(snapshot?.status).toBe('suspended');
+      const innerRunId = JSON.stringify(snapshot).match(/"suspendedToolRunId":"([^"]+)"/)?.[1];
+      expect(innerRunId).toBeDefined();
+      expect(innerRunId).not.toBe(result.runId);
+    });
+
+    // ---- Leg 3: approve the delegated request with the same persisted pair.
+    // Even though the tool is approval-gated at the outer step, the decision
+    // must resume the suspended inner run instead of re-executing the
+    // delegation from scratch. ----
+    const resumed = await durableAgent.approveToolCall({
+      runId: outerGateEntry.runId,
+      toolCallId: outerGateEntry.toolCallId,
+      memory,
+    });
+    await drainAndAssertResumed(resumed, toolExecutions);
+  }, 30000);
+
   it('resumes with the persisted pair on a fresh process over the same storage', async () => {
     const storage = new InMemoryStore();
     const memoryStorage = new InMemoryStore();

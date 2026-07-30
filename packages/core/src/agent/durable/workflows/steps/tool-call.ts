@@ -694,8 +694,14 @@ export function createDurableToolCallStep() {
       // suspendedToolRunId in their arguments and keep that value unchanged.
       const isResumableTool = toolName?.startsWith('agent-') || toolName?.startsWith('workflow-');
       const suspendedToolRunId = (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId;
+      // When the delegation tool is itself approval-gated, an `{ approved: true }`
+      // resume is ambiguous: it can answer this step's pre-execution gate (execute
+      // fresh) or a delegated approval raised mid-execution by the sub-agent. The
+      // suspend payload disambiguates — only the delegated approval persists an
+      // inner suspended run id, so its decision must resume that inner run.
+      const isDelegatedApprovalResume = !!approvalGrant && isResumableTool && typeof suspendedToolRunId === 'string';
       if (
-        isResumingFromSuspension &&
+        (isResumingFromSuspension || isDelegatedApprovalResume) &&
         isResumableTool &&
         !cleanedArgs.suspendedToolRunId &&
         typeof suspendedToolRunId === 'string'
@@ -753,7 +759,9 @@ export function createDurableToolCallStep() {
         // Use the actor supplied for this workflow segment. A resumed segment
         // must never recover the initial actor from serialized agent options.
         actor,
-        resumeData: isResumingFromSuspension ? resumeData : undefined,
+        // Delegated approval decisions must also flow to the wrapper tool: it only
+        // resumes the inner suspended run when resumeData is present.
+        resumeData: isResumingFromSuspension || isDelegatedApprovalResume ? resumeData : undefined,
         ...(toolAbortSignal ? { abortSignal: toolAbortSignal } : {}),
         // Provide outputWriter so context.writer.write() / context.writer.custom()
         // emit chunks through pubsub (matching the regular agent's tool streaming).
