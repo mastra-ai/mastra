@@ -107,7 +107,7 @@ const workspace = new Workspace({
 
 ## Dynamic skills
 
-For dynamic skill paths based on context, pass a function:
+For runtime skill paths based on context, pass a function:
 
 ```typescript
 const workspace = new Workspace({
@@ -128,11 +128,11 @@ When a workspace has skills configured, agents automatically get access to skill
 
 The agent has three skill tools:
 
-- **`skill`** — Loads a skill's full instructions and returns them in the tool result. The agent calls this whenever it needs a skill's guidance.
-- **`skill_read`** — Reads a file from a skill's `references/`, `scripts/`, or `assets/` directory.
-- **`skill_search`** — Searches across all skill content. Uses BM25 or vector search when configured, otherwise falls back to basic text matching.
+- **`skill`**: Loads a skill's full instructions and returns them in the tool result. The agent calls this whenever it needs a skill's guidance.
+- **`skill_read`**: Reads a file from a skill's `references/`, `scripts/`, or `assets/` directory.
+- **`skill_search`**: Searches across all skill content. Uses BM25 or vector search when configured, otherwise falls back to basic text matching.
 
-This design is stateless — there is no activation state to track. If the skill instructions leave the conversation context (due to context window limits or compaction), the agent can call `skill` again to reload them.
+This design is stateless, there is no activation state to track. If the skill instructions leave the conversation context (due to context window limits or compaction), the agent can call `skill` again to reload them.
 
 ## Same-named skills
 
@@ -141,7 +141,7 @@ When multiple skill directories contain a skill with the same name, all of them 
 When the agent activates a skill by name, tie-breaking determines which one is returned:
 
 1. **Source-type priority**: local skills take precedence over managed (`.mastra/`) skills, which take precedence over external (`node_modules/`) skills.
-1. **Unresolvable conflicts throw**: if two skills share the same name _and_ the same source type (for example, two local skills both named `brand-guidelines`), `get()` throws an error. Rename one or move it to a different source type to resolve the conflict.
+1. **Unresolvable conflicts throw**: if two skills share the same name and the same source type (for example, two local skills both named `brand-guidelines`), `get()` throws an error. Rename one or move it to a different source type to resolve the conflict.
 1. **Path escape hatch**: the agent can pass a skill's full path instead of its name to activate a specific skill, bypassing tie-breaking entirely.
 
 ```typescript title="Example: local skill shadows an external package skill"
@@ -199,7 +199,7 @@ When `skillSource` is provided, it's used instead of the workspace filesystem fo
 
 ## Agent-level skills
 
-You can also attach skills directly to an agent without a workspace using `createSkill()` and the agent's `skills` config. When both agent-level and workspace-level skills exist, they merge — agent-level skills take precedence on name conflicts.
+You can also attach skills directly to an agent without a workspace using `createSkill()` and the agent's `skills` config. When both agent-level and workspace-level skills exist, they merge, agent-level skills take precedence on name conflicts.
 
 See [Agent skills](/docs/agents/skills) for details.
 

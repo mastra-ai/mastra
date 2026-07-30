@@ -227,7 +227,7 @@ During batched cleanup, cache metadata can temporarily use an internal `deleted`
 
 `clear()` only removes rows whose stored `keyPrefix` exactly matches the configured `keyPrefix`. It doesn't clear nested prefixes by string prefix matching. Each `listPush()` refreshes the list TTL using the cache's configured `ttlMs`.
 
-Use a non-empty `keyPrefix` unless you intentionally want `clear()` to remove every cache key in the deployment. Expired list rows are reclaimed incrementally during reads and writes; `clear()` removes all rows for the prefix.
+Use a non-empty `keyPrefix` unless you intentionally want `clear()` to remove every cache key in the deployment. Expired list rows are reclaimed incrementally during reads and writes. `clear()` removes all rows for the prefix.
 
 `ConvexServerCache` works best for durable replay of moderate-frequency events. For high-frequency token streams, prefer batching events or using a lower-latency cache backend.
 
@@ -262,14 +262,14 @@ All typed tables include:
 - An `id` field for Mastra's record ID (distinct from Convex's auto-generated `_id`)
 - A `by_record_id` index for efficient lookups by Mastra ID
 
-This design ensures compatibility with Mastra's storage contract while leveraging Convex's automatic indexing and real-time capabilities.
+This design ensures compatibility with Mastra's storage contract while using Convex's automatic indexing and real-time capabilities.
 
 ### Environment variables
 
 Set these environment variables for your deployment:
 
-- `CONVEX_URL` – Your Convex deployment URL
-- `CONVEX_ADMIN_KEY` – Admin authentication token (get from Convex dashboard)
+- `CONVEX_URL`: Your Convex deployment URL
+- `CONVEX_ADMIN_KEY`: Admin authentication token (get from Convex dashboard)
 
 ## Related
 

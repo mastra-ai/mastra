@@ -25,10 +25,14 @@ afterEach(() => {
 });
 
 function writePlugin(pluginDir: string, id: string, toolName: string, description = 'tool'): void {
-  fs.mkdirSync(path.join(pluginDir, 'src'), { recursive: true });
+  writePluginSource(path.join(pluginDir, 'src/index.ts'), id, id, toolName, description);
+}
+
+function writePluginSource(entryPath: string, id: string, name: string, toolName: string, description = 'tool'): void {
+  fs.mkdirSync(path.dirname(entryPath), { recursive: true });
   fs.writeFileSync(
-    path.join(pluginDir, 'src/index.ts'),
-    `export default { id: '${id}', name: '${id}', tools: { ${toolName}: { tool: { id: '${toolName}', description: '${description}' } } } };`,
+    entryPath,
+    `export default { id: '${id}', name: '${name}', tools: { ${toolName}: { tool: { id: '${toolName}', description: '${description}' } } } };`,
   );
 }
 
@@ -194,12 +198,16 @@ describe('PluginManager', () => {
 
     const manager = new PluginManager({ projectRoot, homeDir });
     const pluginTools = manager.getPluginTools();
+    const updateListener = vi.fn();
+    manager.onGithubPluginsUpdated(updateListener);
     await manager.reload();
     expect(pluginTools.github_tool?.description).toBe('first');
 
     await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
 
     expect(pluginTools.github_tool?.description).toBe('second');
+    expect(updateListener).toHaveBeenCalledTimes(1);
+    expect(updateListener).toHaveBeenCalledWith(['acme.github']);
     expect(execaMock).toHaveBeenCalledWith(
       'git',
       ['fetch', 'origin'],
@@ -218,6 +226,113 @@ describe('PluginManager', () => {
     expect(fs.realpathSync(path.join(checkoutDir, 'node_modules', 'mastracode'))).toBe(
       fs.realpathSync(mastracodePackageRoot),
     );
+  });
+
+  it('reports post-reload display names when an update renames a plugin', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-plugin');
+    writePluginSource(path.join(checkoutDir, 'src/index.ts'), 'acme.github', 'Acme Old', 'github_tool');
+    fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, '.mastracode/plugins'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.mastracode/plugins/plugins.json'),
+      JSON.stringify({
+        plugins: {
+          'acme.github': {
+            enabled: true,
+            source: 'github',
+            specifier: 'https://github.com/acme/plugin',
+            path: 'sources/github/acme-plugin',
+            entry: 'src/index.ts',
+          },
+        },
+      }),
+    );
+    execaMock.mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') {
+        return {
+          stdout:
+            execaMock.mock.calls.filter(call => call[1][0] === 'rev-parse' && call[1][1] === 'HEAD').length === 1
+              ? 'old'
+              : 'new',
+        };
+      }
+      if (args[0] === 'rev-parse') return { stdout: 'origin/main' };
+      if (args[0] === 'rev-list') return { stdout: '0\t1' };
+      if (args[0] === 'status') return { stdout: '' };
+      if (args[0] === 'reset') {
+        writePluginSource(path.join(checkoutDir, 'src/index.ts'), 'acme.github', 'Acme New', 'github_tool');
+      }
+      return { stdout: '' };
+    });
+
+    const manager = new PluginManager({ projectRoot, homeDir });
+    const updateListener = vi.fn();
+    manager.onGithubPluginsUpdated(updateListener);
+    await manager.reload();
+
+    await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
+
+    expect(updateListener).toHaveBeenCalledTimes(1);
+    expect(updateListener).toHaveBeenCalledWith(['Acme New']);
+  });
+
+  it('reports every plugin sharing an updated checkout', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-suite');
+    writePluginSource(path.join(checkoutDir, 'src/one.ts'), 'acme.one', 'acme.one', 'one_tool', 'first');
+    writePluginSource(path.join(checkoutDir, 'src/two.ts'), 'acme.two', 'acme.two', 'two_tool', 'first');
+    fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, '.mastracode/plugins'), { recursive: true });
+    const sharedSource = {
+      enabled: true,
+      source: 'github',
+      specifier: 'https://github.com/acme/suite',
+      path: 'sources/github/acme-suite',
+    };
+    fs.writeFileSync(
+      path.join(projectRoot, '.mastracode/plugins/plugins.json'),
+      JSON.stringify({
+        plugins: {
+          'acme.one': { ...sharedSource, entry: 'src/one.ts' },
+          'acme.two': { ...sharedSource, entry: 'src/two.ts' },
+        },
+      }),
+    );
+    execaMock.mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') {
+        return {
+          stdout:
+            execaMock.mock.calls.filter(call => call[1][0] === 'rev-parse' && call[1][1] === 'HEAD').length === 1
+              ? 'old'
+              : 'new',
+        };
+      }
+      if (args[0] === 'rev-parse') return { stdout: 'origin/main' };
+      if (args[0] === 'rev-list') return { stdout: '0\t1' };
+      if (args[0] === 'status') return { stdout: '' };
+      if (args[0] === 'reset') {
+        writePluginSource(path.join(checkoutDir, 'src/one.ts'), 'acme.one', 'acme.one', 'one_tool', 'second');
+        writePluginSource(path.join(checkoutDir, 'src/two.ts'), 'acme.two', 'acme.two', 'two_tool', 'second');
+      }
+      return { stdout: '' };
+    });
+
+    const manager = new PluginManager({ projectRoot, homeDir });
+    const updateListener = vi.fn();
+    manager.onGithubPluginsUpdated(updateListener);
+    await manager.reload();
+
+    await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
+
+    // One checkout fetch despite two plugins, one notification naming both.
+    expect(execaMock.mock.calls.filter(call => call[1][0] === 'fetch')).toHaveLength(1);
+    expect(updateListener).toHaveBeenCalledTimes(1);
+    expect(updateListener).toHaveBeenCalledWith(['acme.one', 'acme.two']);
   });
 
   it('installs dependencies for nested GitHub entry package roots during updates', async () => {
@@ -317,11 +432,14 @@ describe('PluginManager', () => {
     });
 
     const manager = new PluginManager({ projectRoot, homeDir });
+    const updateListener = vi.fn();
+    manager.onGithubPluginsUpdated(updateListener);
     await manager.reload();
 
     await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(false);
 
     expect(execaMock.mock.calls.some(call => call[0] === 'corepack' && call[1][0]?.startsWith('pnpm@'))).toBe(false);
+    expect(updateListener).not.toHaveBeenCalled();
   });
 
   it('backs up divergent GitHub plugin checkouts before forcing them to origin', async () => {

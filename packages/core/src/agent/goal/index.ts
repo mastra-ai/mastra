@@ -33,6 +33,8 @@ export {
   type ResolvedGoalStore,
 } from './objective';
 
+export { beginGoalActivity, stopGoalActivity, getGoalActivityDurationMs } from './activity';
+
 export { createGoalScorer } from './scorer';
 
 export { GoalStateProcessor } from './state-processor';

@@ -11,9 +11,9 @@ Tool execution signatures have been updated to use separate input and context pa
 
 ### `createTool` execute signature to `(inputData, context)` format
 
-All `createTool` execute functions now use a new signature with separate `inputData` and `context` parameters instead of a single destructured object. This change provides clearer separation between tool inputs and execution context.
+All `createTool` execute functions now use a signature with separate `inputData` and `context` parameters instead of a single destructured object. Tool inputs and execution context are now passed independently.
 
-**Note:** This change only applies to `createTool`. If you're using `createStep` for workflows, the signature remains `async (inputData, context)` and doesn't need to be changed.
+This signature change only applies to `createTool`. For workflow `createStep` calls, keep the `async (inputData, context)` signature.
 
 To migrate, update `createTool` signatures to use `inputData` as the first parameter (typed from `inputSchema`) and `context` as the second parameter.
 
@@ -94,7 +94,7 @@ For MCP-specific tool context changes, see the [MCP migration guide](/guides/mig
 
 ### `RuntimeContext` to `RequestContext`
 
-The `RuntimeContext` class has been renamed to `RequestContext` throughout the tool execution context. This change provides clearer naming that better describes its purpose as request-specific data.
+The `RuntimeContext` class has been renamed to `RequestContext` throughout the tool execution context. The new name identifies the class as request-specific data.
 
 To migrate, update references from `runtimeContext` to `requestContext` in tool execution functions.
 

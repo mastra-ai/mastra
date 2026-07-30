@@ -1,6 +1,7 @@
 import type { Adapter, CardElement, ChatConfig, Message, StateAdapter, StreamChunk, Thread } from 'chat';
 
 import type { Mastra } from '../mastra';
+import type { RequestContext } from '../request-context';
 import type { ApiRoute, CorsOptions } from '../server/types';
 import type { InlineLinkEntry } from './inline-media';
 import type { TypingStatusFn } from './typing-status';
@@ -287,21 +288,46 @@ export interface ChannelAdapterLegacyConfig extends ChannelAdapterBaseConfig {
 }
 
 /**
+ * Runtime context passed to a {@link ChannelHandler} as its 4th argument.
+ *
+ * Carries handles the channels instance already resolves internally so a
+ * custom handler doesn't have to be injected with them.
+ */
+export interface ChannelHandlerContext {
+  /** The Mastra instance that owns the channels, resolved from the bound agent or controller. */
+  mastra?: Mastra;
+  /**
+   * The request context for the run this message will start, constructed fresh
+   * per message.
+   *
+   * A handler may write to it before calling `defaultHandler` — for example to
+   * stamp the tenant a channel sender maps to, so the run resolves that user's
+   * credentials. Core adds the channel and render-context entries afterward and
+   * dispatches with this same instance.
+   */
+  requestContext: RequestContext;
+}
+
+/**
  * Handler function for channel events.
- * Receives the thread, message, and the default handler implementation.
+ * Receives the thread, message, the default handler implementation, and a
+ * runtime context ({@link ChannelHandlerContext}) carrying the resolved Mastra
+ * instance.
  * Call `defaultHandler` to run the built-in behavior, or ignore it to fully replace.
  */
 export type ChannelHandler = (
   thread: Thread,
   message: Message,
   defaultHandler: (thread: Thread, message: Message) => Promise<void>,
+  ctx: ChannelHandlerContext,
 ) => Promise<void>;
 
 /**
  * Handler configuration for channel events.
  * - `undefined` or omitted → use default handler
  * - `false` → disable handler entirely
- * - function → custom handler (receives defaultHandler as 3rd arg to wrap/extend)
+ * - function → custom handler (receives defaultHandler as 3rd arg and a
+ *   {@link ChannelHandlerContext} as 4th arg to wrap/extend)
  */
 export type ChannelHandlerConfig = ChannelHandler | false | undefined;
 
@@ -326,6 +352,31 @@ export interface ResolveResourceIdContext {
  * thread before it's created.
  */
 export type ResolveResourceId = (ctx: ResolveResourceIdContext) => string | Promise<string>;
+
+/**
+ * Context passed to {@link ChannelConfig.resolveThreadId}.
+ * Runs after {@link ChannelConfig.resolveResourceId}, so the resolved owner is
+ * available when picking the thread id.
+ */
+export interface ResolveThreadIdContext {
+  /** Platform name (e.g. 'slack', 'discord'). */
+  platform: string;
+  /** The channel thread the message arrived on. Use `thread.isDM` to tell DMs from group/channel threads. */
+  thread: Thread;
+  /** The incoming message. */
+  message: Message;
+  /** The resolved memory resourceId the new thread will belong to (after `resolveResourceId`). */
+  resourceId: string;
+  /** The built-in default: a random UUID. Return this to keep current behavior. */
+  defaultThreadId: string;
+}
+
+/**
+ * Resolve the internal Mastra thread id for a channel thread before it's created.
+ * The returned id must be unique across the memory store — if it already belongs
+ * to an existing thread, a warning is logged and a generated id is used instead.
+ */
+export type ResolveThreadId = (ctx: ResolveThreadIdContext) => string | Promise<string>;
 
 /** Handler overrides for built-in channel event handlers. */
 export interface ChannelHandlers {
@@ -469,8 +520,10 @@ export interface ChannelConfig {
   };
 
   /**
-   * Whether to include channel tools (add_reaction, remove_reaction).
-   * Set to `false` for models that don't support function calling.
+   * Whether `getTools()` returns the channel tools (add_reaction,
+   * remove_reaction). Set to `false` for models that don't support function
+   * calling. Channel tools are never injected into the agent automatically —
+   * pass them explicitly via `tools: { ...channels.getTools() }`.
    *
    * @default true
    */
@@ -512,6 +565,29 @@ export interface ChannelConfig {
    * ```
    */
   resolveResourceId?: ResolveResourceId;
+
+  /**
+   * Resolve the internal Mastra thread id before a channel thread is created.
+   * Runs after {@link resolveResourceId}, with the resolved owner on the context,
+   * so a host can align the thread id with an id it controls — e.g. give the
+   * thread the same id as the session it belongs to, matching how that host
+   * names threads it creates itself.
+   *
+   * Only affects **newly-created** threads; existing threads keep their stored id.
+   * The returned id must be unique across the memory store — on collision with an
+   * existing thread, a warning is logged and a generated id is used instead.
+   *
+   * Return `defaultThreadId` (a random UUID) to keep the built-in behavior.
+   * Not set: behavior is unchanged.
+   *
+   * @example
+   * ```ts
+   * resolveThreadId: ({ resourceId, defaultThreadId }) => {
+   *   return isSessionId(resourceId) ? resourceId : defaultThreadId;
+   * }
+   * ```
+   */
+  resolveThreadId?: ResolveThreadId;
 
   /**
    * Keep the serverless invocation alive while background work (agent stream → platform)

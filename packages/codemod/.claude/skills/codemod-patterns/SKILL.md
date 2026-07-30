@@ -27,7 +27,7 @@ $ = codemod name
 src/codemods/v1/$.ts implementation
 src/test/$.test.ts
 src/test/**fixtures**/$.input.ts
-src/test/__fixtures__/$.output.ts
+src/test/**fixtures**/$.output.ts
 Updates src/lib/bundle.ts automatically
 
 2 Test Fixtures

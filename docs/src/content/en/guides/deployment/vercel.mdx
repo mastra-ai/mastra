@@ -93,7 +93,7 @@ export const mastra = new Mastra({
 })
 ```
 
-After deploying, Studio is available at the root URL (`https://<your-project>.vercel.app/`) and the API remains at `/api/*`. Studio automatically connects to the API on the same origin — no additional environment variables are needed.
+After deploying, Studio is available at the root URL (`https://<your-project>.vercel.app/`) and the API remains at `/api/*`. Studio automatically connects to the API on the same origin, so you don't need additional environment variables.
 
 :::warning
 Once Studio is connected to your Mastra server, it has full access to your agents, workflows, and tools. Be sure to secure it properly in production (e.g. behind authentication, VPN, etc.) to prevent unauthorized access.

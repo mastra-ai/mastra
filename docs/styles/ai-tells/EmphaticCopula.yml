@@ -8,23 +8,23 @@ tokens:
   # Markdown italicized copula verbs - the "manufactured profundity" pattern
   # Note: underscore patterns require space prefix to avoid matching __dunder__ methods
   - "\\*is\\*"
-  - " _is_"
+  - ' _is_'
   - "\\*are\\*"
-  - " _are_"
+  - ' _are_'
   - "\\*was\\*"
-  - " _was_"
+  - ' _was_'
   - "\\*were\\*"
-  - " _were_"
+  - ' _were_'
 
   # Italicized "the" for false emphasis
   - "\\*the\\*"
-  - " _the_"
+  - ' _the_'
 
   # Italicized single conjunctions/prepositions for false drama
   # Note: underscore patterns require space prefix to avoid matching __dunder__ methods
   - "\\*and\\*"
-  - " _and_"
+  - ' _and_'
   - "\\*not\\*"
-  - " _not_"
+  - ' _not_'
   - "\\*or\\*"
-  - " _or_"
+  - ' _or_'

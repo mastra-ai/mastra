@@ -82,9 +82,11 @@ export function createCodeModeTool(
       // Resolve sandbox: explicit config -> workspace from context. There is no
       // implicit fallback: Code Mode runs model-authored code, so the execution
       // boundary must be chosen deliberately. To run locally (host privileges),
-      // pass `sandbox: new LocalSandbox()` explicitly.
+      // pass `sandbox: new LocalSandbox()` explicitly. Transports that provide
+      // their own execution boundary (e.g. in-process V8 isolates) declare
+      // `requiresSandbox: false` and run without one.
       const sandbox: WorkspaceSandbox | undefined = config.sandbox ?? ctx?.workspace?.sandbox;
-      if (!sandbox) {
+      if (!sandbox && transport.requiresSandbox !== false) {
         throw new Error(
           'Code Mode requires a sandbox to run model-authored code, but none was configured. ' +
             'Pass one to createCodeMode({ tools, sandbox }), or run the agent in a workspace that provides a sandbox. ' +

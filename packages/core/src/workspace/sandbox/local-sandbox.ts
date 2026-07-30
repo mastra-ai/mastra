@@ -211,8 +211,8 @@ export class LocalSandbox extends MastraSandbox {
 
   /**
    * Construct a sibling `LocalSandbox` that inherits this sandbox's
-   * configuration (working directory, isolation, native sandbox config,
-   * instructions) with per-instance overrides.
+   * configuration (isolation, native sandbox config, instructions) with
+   * per-instance overrides.
    *
    * Performs no I/O — the sandbox clone creates its working directory on its
    * own `start()`. `sandboxId` and `idleTimeoutMinutes` have no local
@@ -222,7 +222,7 @@ export class LocalSandbox extends MastraSandbox {
   clone(options: SandboxCloneOptions = {}): LocalSandbox {
     return new LocalSandbox({
       ...(options.id !== undefined && { id: options.id }),
-      workingDirectory: this.workingDirectory,
+      workingDirectory: options.workingDirectory ?? this.workingDirectory,
       env: options.env ?? this.env,
       isolation: this.isolation,
       nativeSandbox: {
