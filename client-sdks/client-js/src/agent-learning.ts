@@ -54,9 +54,12 @@ export interface ThemeFlowResponse {
   }>;
 }
 
+export type ThemeSnapshotLandmarkReason = 'range_start' | 'range_end' | 'time_sample';
+
 export interface ThemeSnapshotsResponse {
-  snapshots: Array<ThemeSnapshot & { availableSignals: TraceSignalName[] }>;
+  snapshots: Array<ThemeSnapshot & { availableSignals: TraceSignalName[]; reason?: ThemeSnapshotLandmarkReason }>;
   nextCursor?: string;
+  totalSnapshots?: number;
 }
 
 export interface ThemeEntitiesResponse {

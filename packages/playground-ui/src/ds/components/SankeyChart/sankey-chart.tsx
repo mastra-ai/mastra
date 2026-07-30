@@ -51,11 +51,13 @@ export function SankeyChart({
   const firstColumnId = enabledColumns[0]?.id;
   const lastColumnId = enabledColumns.at(-1)?.id;
   const nodeWeights = getSankeyChartNodeWeights(graph);
-  const total = graph.nodes.reduce(
-    (sum, node) =>
-      node.column.id === firstColumnId ? sum + (node.displayValue ?? nodeWeights.get(node.id) ?? 0) : sum,
-    0,
-  );
+  // Each node's percentage is its share of its own column, so later columns
+  // with more counted traces than the first column never exceed 100%.
+  const columnTotals = new Map<string, number>();
+  for (const node of graph.nodes) {
+    const nodeValue = node.displayValue ?? nodeWeights.get(node.id) ?? 0;
+    columnTotals.set(node.column.id, (columnTotals.get(node.column.id) ?? 0) + nodeValue);
+  }
 
   return (
     <div className={cn('min-w-0', className)}>
@@ -99,7 +101,7 @@ export function SankeyChart({
                     label={node?.label}
                     nodeValue={node?.displayValue}
                     layoutValue={nodeGeometry ? undefined : node ? nodeWeights.get(node.id) : undefined}
-                    total={total}
+                    columnTotal={node ? (columnTotals.get(node.column.id) ?? 0) : 0}
                     showColumnLabel={showColumnLabel}
                     isFirstColumn={node?.column.id === firstColumnId}
                     isLastColumn={node?.column.id === lastColumnId}
@@ -170,7 +172,7 @@ type SankeyNodeProps = SankeyNodeRendererProps & {
   label?: string;
   nodeValue?: number;
   layoutValue?: number;
-  total: number;
+  columnTotal: number;
   showColumnLabel: boolean;
   isFirstColumn: boolean;
   isLastColumn: boolean;
@@ -192,7 +194,7 @@ function SankeyNode({
   label,
   nodeValue,
   layoutValue,
-  total,
+  columnTotal,
   showColumnLabel,
   isFirstColumn,
   isLastColumn,
@@ -227,7 +229,8 @@ function SankeyNode({
   }>();
   const numericValue = nodeValue ?? (typeof payload.value === 'number' ? payload.value : Number(payload.value));
   const value = Number.isFinite(numericValue) ? String(numericValue) : '';
-  const percentage = total > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / total) * 100) : 0;
+  const percentage =
+    columnTotal > 0 && Number.isFinite(numericValue) ? Math.round((numericValue / columnTotal) * 100) : 0;
   const visibleHeight = scaleSankeyDimension(height, numericValue, layoutValue);
   const visibleY = y + (height - visibleHeight) / 2;
   const textAnchor = isFirstColumn ? 'start' : isLastColumn ? 'end' : 'middle';

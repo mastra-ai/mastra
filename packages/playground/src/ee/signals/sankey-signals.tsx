@@ -21,6 +21,7 @@ import {
   getSignalRecordNodeId,
   getSignalRecordNodeLabel,
   getSignalRecordNodeValue,
+  selectFlowSnapshotIds,
   stabilizeThemeFlow,
 } from './sankey-signals-data';
 import { SignalDistributions } from './signal-distributions';
@@ -142,13 +143,9 @@ export function SankeySignals({
   const selectSnapshot = (index: number) => setSelectedSnapshotOrdinal(snapshots[index]?.ordinal);
 
   const nextSnapshotOrdinal = snapshots[(selectedSnapshotIndex + 1) % snapshots.length]?.ordinal;
-  const flowQueries = useThemeFlows(
-    entityId,
-    entityType,
-    signalNames,
-    snapshots.map(candidate => candidate.snapshotId),
-  );
-  const flowQuery = flowQueries[selectedSnapshotIndex];
+  const flowSnapshotIds = selectFlowSnapshotIds(snapshots, selectedSnapshotIndex);
+  const flowQueries = useThemeFlows(entityId, entityType, signalNames, flowSnapshotIds);
+  const flowQuery = flowQueries[flowSnapshotIds.indexOf(snapshot?.snapshotId ?? '')];
   const currentFlow = flowQuery?.data;
   const isFlowPending = flowQueries.some(query => query.isPending);
   const hasFlowError = flowQueries.some(query => query.isError);
@@ -197,17 +194,18 @@ export function SankeySignals({
         ],
         queryFn: () => fetchThemeSnapshots(entityId, entityType, nextSignalNames, dateFrom, dateTo),
       });
+      const sortedNextSnapshots = [...nextSnapshots.snapshots].sort((left, right) => left.ordinal - right.ordinal);
+      const matchedNextIndex = sortedNextSnapshots.findIndex(candidate => candidate.ordinal === snapshot?.ordinal);
+      const nextSelectedIndex = matchedNextIndex >= 0 ? matchedNextIndex : sortedNextSnapshots.length - 1;
+      const nextSnapshot = sortedNextSnapshots[nextSelectedIndex];
       await Promise.all(
-        nextSnapshots.snapshots.map(nextSnapshot =>
+        selectFlowSnapshotIds(sortedNextSnapshots, nextSelectedIndex).map(snapshotId =>
           queryClient.fetchQuery({
-            queryKey: ['entity-learning', entityType, entityId, 'theme-flow', nextSignalNames, nextSnapshot.snapshotId],
-            queryFn: () => fetchThemeFlow(entityId, entityType, nextSignalNames, nextSnapshot.snapshotId),
+            queryKey: ['entity-learning', entityType, entityId, 'theme-flow', nextSignalNames, snapshotId],
+            queryFn: () => fetchThemeFlow(entityId, entityType, nextSignalNames, snapshotId),
           }),
         ),
       );
-      const nextSnapshot =
-        nextSnapshots.snapshots.find(candidate => candidate.ordinal === snapshot?.ordinal) ??
-        nextSnapshots.snapshots.at(-1);
       if (drillIn && nextSnapshot && nextSnapshot.traceCount <= DRILL_IN_TRACE_LIMIT) {
         await queryClient.fetchQuery({
           queryKey: ['entity-learning', entityType, entityId, 'theme-paths', nextSignalNames, nextSnapshot.snapshotId],
@@ -308,8 +306,8 @@ export function SankeySignals({
           sentiment trace signals connect.
         </p>
         <p className="text-neutral4 mt-2 font-mono text-xs">
-          {entityId} · Snapshot {flow.snapshot.ordinal} of {flow.snapshot.total} ·{' '}
-          {formatSnapshotWindow(flow.snapshot.startedAt, flow.snapshot.endedAt)}
+          {entityId} · Snapshot {snapshot.ordinal} of {snapshot.total} ·{' '}
+          {formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)}
         </p>
         <ul aria-label="Trace intelligence metrics" className="mt-3 flex flex-wrap gap-2">
           <li className="border-border1 bg-surface2 text-neutral4 rounded-md border px-3 py-1.5 text-xs">

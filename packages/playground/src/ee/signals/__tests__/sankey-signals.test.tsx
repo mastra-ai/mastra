@@ -20,7 +20,9 @@ import {
   emptyThemeSnapshotsResponse,
   fourStageThemeFlowResponse,
   inconsistentTraceCountThemeFlowResponse,
+  landmarkThemeSnapshotsResponse,
   multiThemeSnapshotsResponse,
+  rangeScopedThemeSnapshotsResponse,
   reorderedFourStageThemeFlowResponse,
   reorderedMultiThemeSnapshotsResponse,
   sameDayThemeSnapshotsResponse,
@@ -747,6 +749,79 @@ describe('SankeySignals', () => {
     });
   });
 
+  describe('when the timeline requests snapshots', () => {
+    it('requests time-balanced landmarks with a bounded limit', async () => {
+      const snapshotUrls: URL[] = [];
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, ({ request }) => {
+          snapshotUrls.push(new URL(request.url));
+          return HttpResponse.json(themeSnapshotsResponse);
+        }),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json(fourStageThemeFlowResponse),
+        ),
+      );
+      renderSankeySignals();
+
+      await screen.findByText('Snapshot 4/4 · Jul 1–8, 2026 · 50 traces');
+      expect(snapshotUrls[0]?.searchParams.get('presentation')).toBe('landmarks');
+      expect(snapshotUrls[0]?.searchParams.get('limit')).toBe('24');
+    });
+  });
+
+  describe('when the timeline holds many landmark snapshots', () => {
+    it('fetches the flow only for the selected landmark and its playback neighbors', async () => {
+      const flowSnapshotIds: string[] = [];
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(landmarkThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, ({ request }) => {
+          const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          const snapshot = landmarkThemeSnapshotsResponse.snapshots.find(item => item.snapshotId === snapshotId);
+          if (!snapshot) return HttpResponse.json({ error: 'Unknown snapshot' }, { status: 400 });
+          flowSnapshotIds.push(snapshot.snapshotId);
+          return HttpResponse.json({ ...fourStageThemeFlowResponse, snapshot });
+        }),
+      );
+      renderSankeySignals();
+
+      await screen.findByText('Snapshot 230/230 · Jun 18–Jul 8, 2026 · 50 traces');
+      await waitFor(() =>
+        expect([...new Set(flowSnapshotIds)].sort()).toEqual(['landmark-1', 'landmark-4', 'landmark-5']),
+      );
+      expect(flowSnapshotIds).not.toContain('landmark-2');
+      expect(flowSnapshotIds).not.toContain('landmark-3');
+    });
+  });
+
+  describe('when the flow reports global snapshot numbering', () => {
+    it('shows the range-scoped numbering from the snapshots response in the header and timeline', async () => {
+      server.use(
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-snapshots`, () =>
+          HttpResponse.json(rangeScopedThemeSnapshotsResponse),
+        ),
+        http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, () =>
+          HttpResponse.json({
+            ...fourStageThemeFlowResponse,
+            snapshot: {
+              ...fourStageThemeFlowResponse.snapshot,
+              snapshotId: 'snapshot-range-scoped',
+              ordinal: 812,
+              total: 842,
+            },
+          }),
+        ),
+      );
+      renderSankeySignals();
+
+      const header = await screen.findByTestId('signals-page-header');
+      expect(within(header).getByText('support-agent · Snapshot 273 of 303 · Jul 1–8, 2026')).not.toBeNull();
+      expect(screen.getByText('Snapshot 273/303 · Jul 1–8, 2026 · 50 traces')).not.toBeNull();
+      expect(screen.queryByText(/812/)).toBeNull();
+    });
+  });
+
   describe('when API count metadata disagrees with the weighted graph', () => {
     beforeEach(() => {
       server.use(
@@ -804,12 +879,12 @@ describe('SankeySignals', () => {
         '42 (37%)',
         '38 (34%)',
         '33 (29%)',
-        '51 (45%)',
-        '40 (35%)',
-        '54 (48%)',
-        '37 (33%)',
-        '49 (43%)',
-        '42 (37%)',
+        '51 (56%)',
+        '40 (44%)',
+        '54 (59%)',
+        '37 (41%)',
+        '49 (54%)',
+        '42 (46%)',
       ]) {
         expect(within(chart).getAllByText(label).length).toBeGreaterThan(0);
       }

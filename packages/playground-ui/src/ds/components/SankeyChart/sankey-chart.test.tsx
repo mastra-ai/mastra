@@ -386,6 +386,31 @@ describe('SankeyChart', () => {
     expect(screen.getAllByText('1 (25%)')).toHaveLength(2);
   });
 
+  describe('when a later column outweighs the first column', () => {
+    it('keeps every node percentage within its own column total', async () => {
+      const inflatedData = [
+        { channel: 'Search', outcome: 'Won', channelValue: 18, outcomeValue: 23 },
+        { channel: 'Search', outcome: 'Lost', channelValue: 18, outcomeValue: 23 },
+      ];
+      render(
+        <Sankey
+          data={inflatedData}
+          columns={[
+            { id: 'channel', label: 'Channel' },
+            { id: 'outcome', label: 'Outcome' },
+          ]}
+          getRecordNodeValue={(record, column) => Number(record[`${column.id}Value`])}
+        >
+          <SankeyChart />
+        </Sankey>,
+      );
+
+      expect(await screen.findByLabelText('Search: 18 traces (100%)')).not.toBeNull();
+      expect(screen.getByLabelText('Won: 23 traces (50%)')).not.toBeNull();
+      expect(screen.getByLabelText('Lost: 23 traces (50%)')).not.toBeNull();
+    });
+  });
+
   describe('when the caller provides chart margins', () => {
     it('positions the first node at the requested left margin', async () => {
       const { container } = render(

@@ -65,6 +65,25 @@ export function buildSignalGraphSummary(flow: ThemeFlowResponse): {
   return themeFlowToSankeyData(flow);
 }
 
+/**
+ * Snapshot ids whose flows the timeline needs right now: the selected landmark
+ * plus its previous and next playback neighbors (playback wraps around).
+ */
+export function selectFlowSnapshotIds(snapshots: Array<{ snapshotId: string }>, selectedIndex: number): string[] {
+  if (snapshots.length === 0) return [];
+  const neighborIndexes = new Set([
+    (selectedIndex - 1 + snapshots.length) % snapshots.length,
+    selectedIndex,
+    (selectedIndex + 1) % snapshots.length,
+  ]);
+  return [...neighborIndexes]
+    .sort((left, right) => left - right)
+    .flatMap(index => {
+      const snapshot = snapshots[index];
+      return snapshot ? [snapshot.snapshotId] : [];
+    });
+}
+
 export function stabilizeThemeFlow(flow: ThemeFlowResponse, windowFlows: ThemeFlowResponse[]): StableThemeFlowResponse {
   const stages = flow.stages.map(stage => {
     const nodes = new Map<string, ThemeNode>();
