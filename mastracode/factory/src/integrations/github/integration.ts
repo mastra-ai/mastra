@@ -48,6 +48,7 @@ import type {
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { runGithubIssueTriage } from './issue-triage.js';
 import { buildGithubRoutes } from './routes.js';
+import { attachGithubRules } from './rules.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -1075,6 +1076,7 @@ export class GithubIntegration implements FactoryIntegration {
    */
   routes(ctx: IntegrationContext): ApiRoute[] {
     this.#storage = ctx.storage;
+    const ingestFactoryEvent = attachGithubRules(this, ctx);
     return buildGithubRoutes({
       github: this,
       auth: ctx.auth,
@@ -1088,7 +1090,7 @@ export class GithubIntegration implements FactoryIntegration {
         : undefined,
       emitAudit: ctx.hooks?.emitAudit,
       projects: ctx.storage.projects,
-      ingestFactoryEvent: ctx.hooks?.ingestGithubEvent,
+      ingestFactoryEvent,
     });
   }
 

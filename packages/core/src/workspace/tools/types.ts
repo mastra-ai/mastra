@@ -52,7 +52,8 @@ export interface ToolConfigWithArgsContext extends ToolConfigContext {
  * ```
  */
 export type DynamicToolConfigValue<TContext = ToolConfigContext> =
-  boolean | ((context: TContext) => boolean | Promise<boolean>);
+  | boolean
+  | ((context: TContext) => boolean | Promise<boolean>);
 
 export interface WorkspaceToolHookContext {
   /** The name exposed to the model after any per-tool `name` remap. */

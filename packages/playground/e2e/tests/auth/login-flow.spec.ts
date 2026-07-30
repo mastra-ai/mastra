@@ -290,7 +290,7 @@ test.describe('Login Flow', () => {
       await expectCurrentBreadcrumb(page, 'Agents');
 
       // Should see application UI elements (sidebar navigation)
-      await expect(page.getByRole('link', { name: /Workflows/i })).toBeVisible();
+      await expect(page.getByRole('link', { name: 'Workflows', exact: true })).toBeVisible();
     });
 
     test('authenticated user can access protected pages', async ({ page }) => {

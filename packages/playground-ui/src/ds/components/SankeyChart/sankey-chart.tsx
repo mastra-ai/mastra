@@ -6,13 +6,20 @@ import {
   getSankeyChartCurveSelection,
   getSankeyChartNodeSelection,
   getSankeyChartNodeWeights,
+  SANKEY_NODE_WIDTH,
+  truncateSankeyLabel,
 } from './sankey-chart-utils';
-import type { SankeyChartCurveSelection, SankeyChartNodeSelection } from './sankey-chart-utils';
+import type { SankeyChartCurveSelection, SankeyChartNodeSelection, SankeyLabelWidths } from './sankey-chart-utils';
 import { useSankeyRenderContext } from './sankey-context';
 import { nodeColor, nodeColorVivid } from './sankeyColor';
 import { useSankeyChartMeasurements } from './use-sankey-chart-measurements';
 import { Colors } from '@/ds/tokens';
 import { cn } from '@/lib/utils';
+
+const NODE_LABEL_FONT_SIZE = 11;
+const COLUMN_LABEL_FONT_SIZE = 12;
+// pre-measurement cap, kept so wide charts read unchanged
+const NODE_LABEL_MAX_CHARACTERS = 23;
 
 export type SankeyChartProps = {
   height?: CSSProperties['height'];
@@ -32,7 +39,7 @@ export function SankeyChart({
   isNodeClickable,
 }: SankeyChartProps) {
   const { graph, enabledColumns, hueMap, usesFixedGeometry } = useSankeyRenderContext();
-  const { chartContainerRef, fixedGeometry } = useSankeyChartMeasurements({
+  const { chartContainerRef, fixedGeometry, labelWidths } = useSankeyChartMeasurements({
     graph,
     height,
     margin,
@@ -54,7 +61,7 @@ export function SankeyChart({
     <div className={cn('min-w-0', className)}>
       {graph.links.length === 0 ? (
         <div
-          className="flex items-center justify-center rounded-md border border-border1 text-ui-sm text-neutral3"
+          className="border-border1 text-ui-sm text-neutral3 flex items-center justify-center rounded-md border"
           style={{ height }}
         >
           Select at least two columns with data to display a flow
@@ -68,7 +75,7 @@ export function SankeyChart({
           >
             <RechartsSankey
               data={graph}
-              nodeWidth={7}
+              nodeWidth={SANKEY_NODE_WIDTH}
               nodePadding={56}
               margin={margin}
               node={(props: SankeyNodeRendererProps) => {
@@ -96,6 +103,7 @@ export function SankeyChart({
                     showColumnLabel={showColumnLabel}
                     isFirstColumn={node?.column.id === firstColumnId}
                     isLastColumn={node?.column.id === lastColumnId}
+                    labelWidths={labelWidths}
                     onFocusChange={setFocusedSourceName}
                     onHoverChange={setHoveredSourceName}
                     clickable={clickable}
@@ -166,6 +174,7 @@ type SankeyNodeProps = SankeyNodeRendererProps & {
   showColumnLabel: boolean;
   isFirstColumn: boolean;
   isLastColumn: boolean;
+  labelWidths: SankeyLabelWidths;
   clickable: boolean;
   onFocusChange: (sourceName: string | undefined) => void;
   onHoverChange: (sourceName: string | undefined) => void;
@@ -187,6 +196,7 @@ function SankeyNode({
   showColumnLabel,
   isFirstColumn,
   isLastColumn,
+  labelWidths,
   clickable,
   onFocusChange,
   onHoverChange,
@@ -198,7 +208,15 @@ function SankeyNode({
   const visibleDisplayLabel = descriptionIndex >= 0 ? displayLabel.slice(0, descriptionIndex) : displayLabel;
   const description = descriptionIndex >= 0 ? displayLabel.slice(descriptionIndex + 1) : undefined;
   const accessibleLabel = displayLabel.replaceAll('\n', '. ');
-  const visibleLabel = truncateNodeLabel(visibleDisplayLabel);
+  const nodeLabelWidth = isFirstColumn || isLastColumn ? labelWidths.edge : labelWidths.centered;
+  const visibleLabel = truncateSankeyLabel(visibleDisplayLabel, {
+    fontSize: NODE_LABEL_FONT_SIZE,
+    maxWidth: nodeLabelWidth,
+    maxCharacters: NODE_LABEL_MAX_CHARACTERS,
+  });
+  const visibleColumnLabel = columnLabel
+    ? truncateSankeyLabel(columnLabel, { fontSize: COLUMN_LABEL_FONT_SIZE, maxWidth: labelWidths.centered })
+    : undefined;
   const tooltipId = useId();
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
@@ -237,7 +255,7 @@ function SankeyNode({
       <g
         aria-describedby={description ? tooltipId : undefined}
         aria-label={`${accessibleLabel}: ${value} ${numericValue === 1 ? 'trace' : 'traces'} (${percentage}%)`}
-        className="outline-hidden focus-visible:[&>rect]:stroke-neutral6 focus-visible:[&>rect]:stroke-2"
+        className="focus-visible:[&>rect]:stroke-neutral6 outline-hidden focus-visible:[&>rect]:stroke-2"
         onClick={clickable ? onSelect : undefined}
         onKeyDown={clickable ? handleKeyDown : undefined}
         role={clickable ? 'button' : undefined}
@@ -263,9 +281,17 @@ function SankeyNode({
         tabIndex={0}
       >
         <title>{displayLabel}</title>
-        {showColumnLabel && columnLabel ? (
-          <text x={columnLabelX} y={18} textAnchor="middle" fill={nodeColor(hue)} fontSize={12} fontWeight={600}>
-            {columnLabel}
+        {showColumnLabel && visibleColumnLabel ? (
+          <text
+            x={columnLabelX}
+            y={18}
+            textAnchor="middle"
+            fill={nodeColor(hue)}
+            fontSize={COLUMN_LABEL_FONT_SIZE}
+            fontWeight={600}
+          >
+            {visibleColumnLabel === columnLabel ? null : <title>{columnLabel}</title>}
+            {visibleColumnLabel}
           </text>
         ) : null}
         <rect x={x} y={visibleY} width={width} height={visibleHeight} rx={3} fill={nodeColor(hue)} />
@@ -274,7 +300,7 @@ function SankeyNode({
           y={y - 24}
           textAnchor={textAnchor}
           fill={Colors.neutral5}
-          fontSize={11}
+          fontSize={NODE_LABEL_FONT_SIZE}
           fontFamily="var(--font-mono)"
         >
           {visibleLabel}
@@ -287,7 +313,7 @@ function SankeyNode({
         ? createPortal(
             <div
               aria-label={`${visibleDisplayLabel}: ${description}`}
-              className="pointer-events-none fixed z-50 rounded-md border border-border1 bg-surface5 p-2 text-xs leading-4 text-neutral6 shadow-elevated"
+              className="border-border1 bg-surface5 text-neutral6 shadow-elevated pointer-events-none fixed z-50 rounded-md border p-2 text-xs leading-4"
               id={tooltipId}
               role="tooltip"
               style={{
@@ -299,7 +325,7 @@ function SankeyNode({
               }}
             >
               <div className="font-medium">{visibleDisplayLabel}</div>
-              <div className="whitespace-pre-wrap text-neutral4">{description}</div>
+              <div className="text-neutral4 whitespace-pre-wrap">{description}</div>
             </div>,
             document.body,
           )
@@ -311,12 +337,6 @@ function SankeyNode({
 function scaleSankeyDimension(size: number, displayValue: number | undefined, layoutValue: number | undefined) {
   if (displayValue === undefined || layoutValue === undefined || layoutValue <= 0) return size;
   return size * Math.min(Math.max(displayValue / layoutValue, 0), 1);
-}
-
-function truncateNodeLabel(label: string) {
-  const maximumLength = 23;
-  if (label.length <= maximumLength) return label;
-  return `${label.slice(0, maximumLength - 1).trimEnd()}…`;
 }
 
 type SankeyLinkProps = SankeyLinkRendererProps & {

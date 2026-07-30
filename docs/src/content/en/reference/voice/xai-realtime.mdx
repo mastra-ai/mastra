@@ -184,7 +184,7 @@ Returns: `void`
 
 ### `addInstructions()`
 
-Sets session instructions. If the WebSocket is open, the provider sends a `session.update`; passing `undefined` stores an empty string and clears the active instructions on the current session or the next connection.
+Sets session instructions. If the WebSocket is open, the provider sends a `session.update`. Passing `undefined` stores an empty string and clears the active instructions on the current session or the next connection.
 
 <PropertiesTable
   content={[
@@ -361,7 +361,7 @@ Returns: `Promise<void>`
 - `speaking`: emits assistant audio deltas.
 - `speaking.done`: emits when an assistant audio response completes.
 - `writing`: emits assistant text deltas and user input transcriptions.
-- `error`: emits xAI errors, provider execution errors, tool execution errors, and malformed function-call arguments. Tool errors include `details.call_id` and `details.name`.
+- `error`: emits xAI and provider execution errors. It also emits tool execution errors, and malformed function-call arguments. Tool errors include `details.call_id` and `details.name`.
 - `close`: emits when the WebSocket closes.
 - `tool-call-start`: emits before a Mastra function tool is executed.
 - `tool-call-result`: emits after a Mastra function tool returns.

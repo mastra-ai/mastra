@@ -90,7 +90,7 @@ Visit [MCPServer reference](/reference/tools/mcp-server#mcp-apps-appresources) f
 
 ## Connecting MCP Apps to agents
 
-Agents consume tools — they don't need to know about MCP servers. Pass tools to the agent's `tools` config, and register the MCP server at the Mastra level so Studio can resolve app resources.
+Agents consume tools, they don't need to know about MCP servers. Pass tools to the agent's `tools` config, and register the MCP server at the Mastra level so Studio can resolve app resources.
 
 ```typescript title="src/mastra/agents/index.ts"
 import { Agent } from '@mastra/core/agent'

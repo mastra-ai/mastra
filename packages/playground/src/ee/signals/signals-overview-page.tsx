@@ -1,9 +1,11 @@
+import { DateTimeRangePicker } from '@mastra/playground-ui/components/DateTimeRangePicker';
+import type { DateRangePreset } from '@mastra/playground-ui/components/DateTimeRangePicker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { SignalsOverviewPage as SignalsEmptyState } from '@mastra/playground-ui/ee/signals';
 import { useState } from 'react';
 
 import { Link } from '../../lib/link';
-import { useThemeEntities } from './hooks';
+import { useEntityLearningProgress, useThemeEntities } from './hooks';
 import { SankeySignals } from './sankey-signals';
 import { SignalsErrorState } from './signals-error-state';
 import { SignalsLoadingSkeleton } from './signals-loading-skeleton';
@@ -11,22 +13,30 @@ import type { ThemeLearningEntity, TraceSignalName } from './types';
 
 const SIGNAL_ORDER: TraceSignalName[] = ['goal', 'outcome', 'behavior', 'sentiment'];
 
-function formatSignalName(signalName: TraceSignalName) {
-  return signalName.charAt(0).toUpperCase() + signalName.slice(1);
-}
-
-function AgentSelector({
+function SignalsControls({
   entities,
   selectedEntityId,
   onEntityChange,
+  showDatePicker,
+  datePreset,
+  dateFrom,
+  dateTo,
+  onDatePresetChange,
+  onDateChange,
 }: {
   entities: ThemeLearningEntity[];
   selectedEntityId: string;
   onEntityChange: (entityId: string) => void;
+  showDatePicker: boolean;
+  datePreset: DateRangePreset;
+  dateFrom?: Date;
+  dateTo?: Date;
+  onDatePresetChange: (preset: DateRangePreset) => void;
+  onDateChange: (value: Date | undefined, type: 'from' | 'to') => void;
 }) {
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-3 px-4 pt-4 lg:px-6 lg:pt-6">
-      <label className="text-xs font-medium text-neutral4" htmlFor="signals-agent-selector">
+    <div className="flex min-w-0 flex-wrap items-center gap-3 px-6 pt-6 pb-8 md:px-10 lg:px-12 lg:pt-8 lg:pb-10 xl:px-[4.375rem]">
+      <label className="text-neutral4 text-xs font-medium" htmlFor="signals-agent-selector">
         Agent
       </label>
       <Select value={selectedEntityId} onValueChange={onEntityChange}>
@@ -41,6 +51,20 @@ function AgentSelector({
           ))}
         </SelectContent>
       </Select>
+      {showDatePicker ? (
+        <>
+          <span className="text-neutral4 text-xs font-medium">Snapshot date</span>
+          <DateTimeRangePicker
+            preset={datePreset}
+            onPresetChange={onDatePresetChange}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onDateChange={onDateChange}
+            presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+            size="sm"
+          />
+        </>
+      ) : null}
     </div>
   );
 }
@@ -48,52 +72,63 @@ function AgentSelector({
 export function SignalsOverviewPage() {
   const entitiesQuery = useThemeEntities('agent');
   const [selectedEntityId, setSelectedEntityId] = useState<string>();
+  const [datePreset, setDatePreset] = useState<DateRangePreset>('last-7d');
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(() => new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+  const [dateTo, setDateTo] = useState<Date>();
+  const handleDateChange = (value: Date | undefined, type: 'from' | 'to') => {
+    if (type === 'from') setDateFrom(value);
+    else setDateTo(value);
+  };
+  const entities = entitiesQuery.data?.entities ?? [];
+  const entity =
+    entities.find(currentEntity => currentEntity.entityId === selectedEntityId) ??
+    entities.find(currentEntity => currentEntity.availableSignals.length >= 2) ??
+    entities[0];
+  const signalNames = entity ? SIGNAL_ORDER.filter(signalName => entity.availableSignals.includes(signalName)) : [];
+  const progressQuery = useEntityLearningProgress(
+    entity?.entityId,
+    entity?.entityType ?? 'agent',
+    !entitiesQuery.isPending && !entitiesQuery.isError && signalNames.length < 2,
+  );
 
   if (entitiesQuery.isPending) {
     return <SignalsLoadingSkeleton />;
   }
 
   if (entitiesQuery.isError) {
-    return <SignalsErrorState message="Unable to load signal entities." onRetry={() => void entitiesQuery.refetch()} />;
+    return (
+      <SignalsErrorState message="Unable to load trace signal entities." onRetry={() => void entitiesQuery.refetch()} />
+    );
   }
-
-  const entities = entitiesQuery.data?.entities ?? [];
-  const entity =
-    entities.find(currentEntity => currentEntity.entityId === selectedEntityId) ??
-    entities.find(currentEntity => currentEntity.availableSignals.length >= 2) ??
-    entities[0];
 
   if (!entity) {
     return <SignalsEmptyState LinkComponent={Link} />;
   }
 
-  const signalNames = SIGNAL_ORDER.filter(signalName => entity.availableSignals.includes(signalName));
-
   return (
     <>
-      <AgentSelector entities={entities} selectedEntityId={entity.entityId} onEntityChange={setSelectedEntityId} />
+      <SignalsControls
+        entities={entities}
+        selectedEntityId={entity.entityId}
+        onEntityChange={setSelectedEntityId}
+        showDatePicker={signalNames.length >= 2}
+        datePreset={datePreset}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        onDatePresetChange={setDatePreset}
+        onDateChange={handleDateChange}
+      />
       {signalNames.length >= 2 ? (
         <SankeySignals
-          key={`${entity.entityId}:${signalNames.join(',')}`}
+          key={`${entity.entityId}:${signalNames.join(',')}:${dateFrom?.toISOString() ?? 'open'}:${dateTo?.toISOString() ?? 'open'}`}
           entityId={entity.entityId}
           entityType="agent"
           signalNames={signalNames}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
         />
       ) : (
-        <section
-          className="m-4 rounded-lg border border-border1 bg-surface2 p-6 lg:m-6"
-          aria-labelledby="signals-data-heading"
-        >
-          <h1 className="text-lg font-semibold text-neutral6" id="signals-data-heading">
-            Not enough signal data yet
-          </h1>
-          <p className="mt-2 text-sm text-neutral3">
-            At least two signal types are needed to show how themes connect across traces.
-          </p>
-          <p className="mt-4 text-xs text-neutral4">
-            Available signals: {signalNames.length > 0 ? signalNames.map(formatSignalName).join(', ') : 'None'}
-          </p>
-        </section>
+        <SignalsEmptyState LinkComponent={Link} progress={progressQuery.data} />
       )}
     </>
   );

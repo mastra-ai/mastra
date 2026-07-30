@@ -459,15 +459,13 @@ export type ResponsesStreamEvent =
   | ResponsesCompletedEvent;
 
 type WithoutMethods<T> = {
-  [
-    K in keyof T as T[K] extends (...args: any[]) => any
+  [K in keyof T as T[K] extends (...args: any[]) => any
+    ? never
+    : T[K] extends { (): any }
       ? never
-      : T[K] extends { (): any }
+      : T[K] extends undefined | ((...args: any[]) => any)
         ? never
-        : T[K] extends undefined | ((...args: any[]) => any)
-          ? never
-          : K
-  ]: T[K];
+        : K]: T[K];
 };
 
 export type NetworkStreamParams<OUTPUT = undefined> = {
@@ -1245,7 +1243,8 @@ export interface StoredAgentSkillConfig {
  * Can reference a stored workspace by ID or provide inline workspace config.
  */
 export type StoredWorkspaceRef =
-  { type: 'id'; workspaceId: string } | { type: 'inline'; config: Record<string, unknown> };
+  | { type: 'id'; workspaceId: string }
+  | { type: 'inline'; config: Record<string, unknown> };
 
 export interface StoredBrowserConfig {
   provider: string;
@@ -1425,13 +1424,20 @@ export interface CreateStoredAgentParams {
   /** Browser config. `true` = use admin default, `false` = no browser. */
   browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
+  /**
+   * Publish the initial version so the agent resolves at `status: 'published'`.
+   * Defaults to true when omitted. Pass false to stage the agent as an unpublished
+   * draft — useful when overriding a code-defined agent, whose code definition keeps
+   * serving traffic until the override is published.
+   */
+  autoPublish?: boolean;
 }
 
 /**
  * Parameters for updating a stored agent
  */
 export type ExportStoredAgentParams = Partial<
-  Omit<CreateStoredAgentParams, 'id' | 'authorId' | 'visibility' | 'metadata'>
+  Omit<CreateStoredAgentParams, 'id' | 'authorId' | 'visibility' | 'metadata' | 'autoPublish'>
 >;
 
 export type OpenStoredAgentChangeRequestParams = ExportStoredAgentParams & {
@@ -2537,7 +2543,11 @@ export type ToolProviderHealthResponse = GeneratedResponse<'GET /tool-providers/
  * Distinct from ProcessorPhase which uses the short/unprefixed form for processor endpoints.
  */
 export type ProcessorProviderPhase =
-  'processInput' | 'processInputStep' | 'processOutputStream' | 'processOutputResult' | 'processOutputStep';
+  | 'processInput'
+  | 'processInputStep'
+  | 'processOutputStream'
+  | 'processOutputResult'
+  | 'processOutputStep';
 
 export interface ProcessorProviderInfo {
   id: string;
@@ -2668,6 +2678,10 @@ export interface DatasetExperiment {
   agentVersion: string | null;
   targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
   targetId: string;
+  /** Human-readable name used as the primary label wherever the experiment is displayed. */
+  name?: string;
+  /** Longer description shown as secondary detail (e.g. in a tooltip). */
+  description?: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
   totalItems: number;
   succeededCount: number;
@@ -3000,7 +3014,13 @@ export interface DeletePromptBlockVersionResponse {
 }
 
 export type BackgroundTaskStatus =
-  'pending' | 'running' | 'suspended' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
+  | 'pending'
+  | 'running'
+  | 'suspended'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'timed_out';
 
 export type BackgroundTaskDateColumn = 'createdAt' | 'startedAt' | 'completedAt';
 
@@ -3106,7 +3126,14 @@ export interface WorkflowSchedule {
 export type ScheduleResponse = AgentSchedule | WorkflowSchedule;
 
 export type ScheduleTriggerOutcome =
-  'published' | 'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped' | 'aborted' | 'failed';
+  | 'published'
+  | 'succeeded'
+  | 'delivered'
+  | 'persisted'
+  | 'discarded'
+  | 'skipped'
+  | 'aborted'
+  | 'failed';
 
 export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain' | 'manual';
 
