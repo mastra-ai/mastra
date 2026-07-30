@@ -32,7 +32,7 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
-import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
+import type { OutputResult, Processor, ProcessorStreamWriter, ProcessorStreamWriterOptions } from '../processors';
 import { ProcessorRunner, ProcessorState } from '../processors/runner';
 import { createProcessorSendSignal } from '../processors/send-signal';
 import {
@@ -982,8 +982,8 @@ function createStepFromProcessor<TProcessorId extends string>(
       // This enables processors to stream data-* parts to the UI in real-time
       const processorWriter: ProcessorStreamWriter | undefined = outputWriter
         ? {
-            custom: async <T extends { type: string }>(data: T) => {
-              await outputWriter(data as any);
+            custom: async <T extends { type: string }>(data: T, options?: ProcessorStreamWriterOptions) => {
+              await outputWriter(data as any, { messageId: options?.messageId ?? currentMessageId });
             },
           }
         : undefined;

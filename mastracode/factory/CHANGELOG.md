@@ -1,5 +1,17 @@
 # @mastra/factory
 
+## 0.4.0-alpha.1
+
+### Minor Changes
+
+- Added a lightweight pending changes viewer with per-file line counts for Factory session workspaces and improved chat composer readability. ([#20418](https://github.com/mastra-ai/mastra/pull/20418))
+
+### Patch Changes
+
+- Updated dependencies [[`c5e56ff`](https://github.com/mastra-ai/mastra/commit/c5e56ff3bcabdf062708f2d48744fec304df6792), [`4e35a56`](https://github.com/mastra-ai/mastra/commit/4e35a56cdf8d74a5ff6d5eda01f2c1deaf6cc7be)]:
+  - @mastra/core@1.56.0-alpha.1
+  - @mastra/code-sdk@1.1.2-alpha.1
+
 ## 0.3.1-alpha.0
 
 ### Patch Changes
