@@ -1,8 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import {
-  createWorkflowConversationGeneration,
   getOriginalWorkflowRequest,
   getWorkflowBuilderThreadId,
   serializeWorkflowDraftInstructions,
@@ -71,24 +70,6 @@ describe('workflow conversation', () => {
       expect(instructions).toContain('Candidate revision: 2');
       expect(instructions).toContain('Candidate-only description');
       expect(state.draft.description).toBeUndefined();
-    });
-  });
-
-  describe('when a newer submission supersedes an active stream', () => {
-    it('aborts the previous generation and rejects its late events', () => {
-      const firstAbort = vi.fn();
-      const secondAbort = vi.fn();
-      const conversation = createWorkflowConversationGeneration();
-
-      const first = conversation.start(firstAbort);
-      const second = conversation.start(secondAbort);
-
-      expect(firstAbort).toHaveBeenCalledOnce();
-      expect(first.isCurrent()).toBe(false);
-      expect(second.isCurrent()).toBe(true);
-      second.cancel();
-      expect(secondAbort).toHaveBeenCalledOnce();
-      expect(second.isCurrent()).toBe(false);
     });
   });
 });

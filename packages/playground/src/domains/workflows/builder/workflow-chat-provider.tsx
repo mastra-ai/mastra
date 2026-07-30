@@ -10,7 +10,7 @@ import type { WorkflowDraftCandidate, WorkflowDraftToolResult } from './workflow
 import { StreamChatProvider } from '@/domains/agent-builder/contexts/stream-chat-provider';
 
 export interface WorkflowGenerationFailure {
-  code: 'repair-budget-exhausted' | 'no-accepted-draft' | 'generation-failed' | 'stopped-by-user';
+  code: 'no-accepted-draft' | 'generation-failed' | 'stopped-by-user';
   message: string;
 }
 
@@ -78,8 +78,6 @@ function WorkflowChatSession({
   const generationStateRef = useRef({
     accepted: false,
     finalized: false,
-    rejected: 0,
-    rejectionSignature: '',
     stopped: false,
     submissionAttempted: false,
   });
@@ -112,8 +110,6 @@ function WorkflowChatSession({
     generationStateRef.current = {
       accepted: hasAcceptedDraft(acceptedState),
       finalized: false,
-      rejected: 0,
-      rejectionSignature: '',
       stopped: false,
       submissionAttempted: false,
     };
@@ -124,43 +120,12 @@ function WorkflowChatSession({
       if (generation !== generationRef.current || generationStateRef.current.stopped) return;
       if (toolId !== 'submit-workflow-draft') return;
       generationStateRef.current.submissionAttempted = true;
-      if (result.success) {
-        generationStateRef.current.accepted = true;
-        generationStateRef.current.finalized = result.finalizedRevision === result.revision;
-        generationStateRef.current.rejected = 0;
-        generationStateRef.current.rejectionSignature = '';
-        onGenerationFailure?.(null);
-        return;
-      }
-      // Transport faults and non-evaluations are not the model's failed repair
-      // attempts, so they must never consume the repair budget.
-      if (
-        result.reason === 'superseded' ||
-        result.reason === 'already-ready' ||
-        result.reason === 'empty-arguments' ||
-        result.reason === 'generation-stopped' ||
-        result.error === 'Draft changed before this operation completed.'
-      )
-        return;
-
-      const signature = JSON.stringify({
-        issues: result.issues?.map(issue => ({ code: issue.code, path: issue.path })) ?? [],
-        error: result.issues?.length ? undefined : result.error,
-      });
-      if (generationStateRef.current.rejectionSignature === signature) {
-        generationStateRef.current.rejected += 1;
-      } else {
-        generationStateRef.current.rejectionSignature = signature;
-        generationStateRef.current.rejected = 1;
-      }
-      if (generationStateRef.current.rejected >= 3) {
-        // Surfaced to the user, but never disarms the tool: the model keeps its
-        // remaining steps to recover, and a later success clears this.
-        onGenerationFailure?.({
-          code: 'repair-budget-exhausted',
-          message: 'Workflow generation has rejected three equivalent definitions. Review the latest issues and retry.',
-        });
-      }
+      // A rejection is not a failed turn: the model still has steps left and the
+      // diagnostics tell it what to fix. The user can stop it if it never does.
+      if (!result.success) return;
+      generationStateRef.current.accepted = true;
+      generationStateRef.current.finalized = result.finalizedRevision === result.revision;
+      onGenerationFailure?.(null);
     };
 
     return createTools(

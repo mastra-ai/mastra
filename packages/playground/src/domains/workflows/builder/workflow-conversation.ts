@@ -68,35 +68,3 @@ Agent steps take { prompt: string } and by default output { text: string }. Set 
 ${JSON.stringify(authoringState.draft, null, 2)}
 \`\`\`${candidateContext}`;
 }
-
-interface WorkflowConversationGeneration {
-  start(abort: () => void): {
-    token: number;
-    isCurrent: () => boolean;
-    cancel: () => void;
-  };
-}
-
-export function createWorkflowConversationGeneration(): WorkflowConversationGeneration {
-  let currentToken = 0;
-  let currentAbort: (() => void) | undefined;
-
-  return {
-    start(abort) {
-      currentAbort?.();
-      const token = ++currentToken;
-      currentAbort = abort;
-
-      return {
-        token,
-        isCurrent: () => token === currentToken,
-        cancel: () => {
-          if (token !== currentToken) return;
-          currentAbort?.();
-          currentAbort = undefined;
-          currentToken += 1;
-        },
-      };
-    },
-  };
-}

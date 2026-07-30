@@ -173,8 +173,8 @@ describe('WorkflowChatProvider', () => {
     });
   });
 
-  describe('when equivalent complete definitions are rejected three times', () => {
-    async function renderBudgetHarness() {
+  describe('when submitted definitions are rejected', () => {
+    async function renderRejectionHarness() {
       registerStreamingHandlers();
       const captured: {
         reportResult?: (event: WorkflowDraftToolResult) => void;
@@ -185,8 +185,8 @@ describe('WorkflowChatProvider', () => {
       render(
         <Providers>
           <WorkflowChatProvider
-            threadId="workflow-builder-retry-budget"
-            authoringState={createWorkflowDraftAuthoringState('retry-budget')}
+            threadId="workflow-builder-rejection"
+            authoringState={createWorkflowDraftAuthoringState('rejection')}
             initialMessages={[]}
             createTools={(isCurrent, onResult) => {
               captured.isCurrent = isCurrent;
@@ -215,8 +215,8 @@ describe('WorkflowChatProvider', () => {
       },
     };
 
-    it('reports the bounded retry failure without disarming the submission tool', async () => {
-      const harness = await renderBudgetHarness();
+    it('keeps the submission tool armed so the model can act on the diagnostics', async () => {
+      const harness = await renderRejectionHarness();
 
       act(() => {
         harness.reportResult?.(rejected);
@@ -224,46 +224,10 @@ describe('WorkflowChatProvider', () => {
         harness.reportResult?.(rejected);
       });
 
-      expect(harness.failureCode).toBe('repair-budget-exhausted');
+      // Repeated rejections must never disarm the tool or fail the turn on the
+      // model's behalf. Stopping a run that is going nowhere is the user's call.
       expect(harness.isCurrent?.()).toBe(true);
-    });
-
-    it('clears the reported failure once a later submission is accepted', async () => {
-      const harness = await renderBudgetHarness();
-
-      act(() => {
-        harness.reportResult?.(rejected);
-        harness.reportResult?.(rejected);
-        harness.reportResult?.(rejected);
-        harness.reportResult?.({
-          toolId: 'submit-workflow-draft',
-          result: { success: true, revision: 1, finalizedRevision: 1 },
-        });
-      });
-
       expect(harness.failureCode).toBeUndefined();
-    });
-
-    it('does not spend the repair budget on dropped tool call payloads', async () => {
-      const harness = await renderBudgetHarness();
-      const dropped: WorkflowDraftToolResult = {
-        toolId: 'submit-workflow-draft',
-        result: {
-          success: false,
-          reason: 'empty-arguments',
-          error: 'No workflow definition arguments were received.',
-        },
-      };
-
-      act(() => {
-        harness.reportResult?.(dropped);
-        harness.reportResult?.(dropped);
-        harness.reportResult?.(dropped);
-        harness.reportResult?.(dropped);
-      });
-
-      expect(harness.failureCode).toBeUndefined();
-      expect(harness.isCurrent?.()).toBe(true);
     });
   });
 
