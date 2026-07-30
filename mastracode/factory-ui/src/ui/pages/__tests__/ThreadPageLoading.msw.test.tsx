@@ -4,7 +4,7 @@
  * mounted with a centered spinner in the main slot only — clicking around the
  * sidebar must never blank the whole shell (the old early-return behavior).
  */
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -48,6 +48,7 @@ function deferred() {
  */
 function stubThreadRoute() {
   const sessionGate = deferred();
+  const messagesGate = deferred();
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -107,7 +108,10 @@ function stubThreadRoute() {
     ),
     http.get(`${AC}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
     http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
-    http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
+    http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, async () => {
+      await messagesGate.promise;
+      return HttpResponse.json({ messages: [] });
+    }),
     http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
     // Right workspace-files panel, which appears once workspacePath resolves.
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
@@ -115,7 +119,7 @@ function stubThreadRoute() {
     ),
   );
 
-  return { sessionGate };
+  return { sessionGate, messagesGate };
 }
 
 function renderThreadRoute() {
@@ -127,7 +131,8 @@ function renderThreadRoute() {
 
 describe('ThreadPage loading shell', () => {
   it('keeps the sidebar mounted with a main-slot spinner while the session resolves, then shows the thread', async () => {
-    const { sessionGate } = stubThreadRoute();
+    const { sessionGate, messagesGate } = stubThreadRoute();
+    messagesGate.resolve();
     renderThreadRoute();
 
     // Pending phase: the shell is up — sidebar navigation renders alongside
@@ -144,5 +149,19 @@ describe('ThreadPage loading shell', () => {
     expect(await screen.findByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByLabelText('Loading session')).not.toBeInTheDocument());
     expect(screen.getByRole('region', { name: 'User sessions' })).toBeInTheDocument();
+  });
+
+  it('keeps the session header and its workspace toggle mounted while thread messages load', async () => {
+    const { sessionGate, messagesGate } = stubThreadRoute();
+    renderThreadRoute();
+    sessionGate.resolve();
+
+    const header = await screen.findByRole('region', { name: 'Factory session' });
+    expect(await screen.findByLabelText('Loading messages')).toBeInTheDocument();
+    expect(within(header).getByRole('button', { name: 'Workspace files' })).toBeInTheDocument();
+
+    messagesGate.resolve();
+    await waitFor(() => expect(screen.queryByLabelText('Loading messages')).not.toBeInTheDocument());
+    expect(screen.getByRole('region', { name: 'Factory session' })).toBeInTheDocument();
   });
 });

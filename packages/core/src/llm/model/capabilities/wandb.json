@@ -8,7 +8,8 @@
     "google/gemma-4-31B-it",
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
-    "moonshotai/Kimi-K2.7-Code"
+    "moonshotai/Kimi-K2.7-Code",
+    "moonshotai/Kimi-K3"
   ],
   "temperature": [
     "JetBrains/Mellum2-12B-A2.5B-Instruct",
@@ -35,6 +36,7 @@
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
+    "moonshotai/Kimi-K3",
     "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8",
     "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
     "openai/gpt-oss-120b",
@@ -67,6 +69,7 @@
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
+    "moonshotai/Kimi-K3",
     "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8",
     "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
     "openai/gpt-oss-120b",

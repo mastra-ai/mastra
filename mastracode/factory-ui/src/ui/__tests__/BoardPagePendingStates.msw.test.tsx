@@ -425,6 +425,39 @@ describe('Board card pending states', () => {
     expect(linearLink).toHaveAttribute('target', '_blank');
   });
 
+  it('identifies Slack-created work items as Slack instead of Manual', async () => {
+    stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            {
+              ...workItem,
+              id: 'slack-item',
+              factoryProjectId: FACTORY_ID,
+              title: 'Slack request',
+              stages: ['execute'],
+              sessions: {},
+              externalSource: {
+                integrationId: 'slack',
+                type: 'slack-thread',
+                externalId: 'slack:C-1:1700.42',
+                url: 'https://app.slack.com/client/T-1/C-1/thread/C-1-170042',
+              },
+            },
+          ],
+        }),
+      ),
+    );
+    renderWorkBoard();
+
+    const title = await screen.findByText('Slack request');
+    const card = title.closest<HTMLElement>('[data-testid="work-item-card"]');
+    if (!card) throw new Error('Expected the title inside its work item card');
+    expect(within(card).getByText(/^Slack · added /)).toBeInTheDocument();
+    expect(within(card).queryByText(/^Manual · added /)).not.toBeInTheDocument();
+  });
+
   it('ignores a card dropped back into its current column', async () => {
     const { transitionRequests } = stubBoardEndpoints();
     renderWorkBoard();
@@ -519,6 +552,7 @@ describe('Board card pending states', () => {
     const composer = await within(planningColumn).findByRole('form', { name: 'New work item in Planning' });
     expect(planningColumn).toHaveAccessibleName('Planning');
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(within(composer).getByText('Manual · new')).toBeInTheDocument();
     expect(within(composer).getByRole('textbox', { name: 'Work item title' })).toHaveFocus();
 
     await user.keyboard('{Escape}');

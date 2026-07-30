@@ -2,18 +2,27 @@ import type {
   NoiseExamplesResponse,
   NoiseResponse,
   ThemeDetailResponse,
+  EntityLearningProgressResponse,
   ThemeEntitiesResponse,
   ThemeExamplesResponse,
   ThemeFlowResponse,
   ThemeHistoryResponse,
   ThemePathsResponse,
   ThemeSnapshotsResponse,
+  TraceInsightResponse,
   TraceSignalName,
 } from './types';
 
 export function fetchThemeEntities(entityType: string) {
   const query = new URLSearchParams({ entityType });
   return learningJson<ThemeEntitiesResponse>(`/api/learning/entities?${query}`);
+}
+
+export function fetchEntityLearningProgress(entityId: string, entityType: string) {
+  const query = new URLSearchParams({ entityType });
+  return learningJson<EntityLearningProgressResponse>(
+    `/api/learning/entities/${encodeURIComponent(entityId)}/progress?${query}`,
+  );
 }
 
 export function fetchThemeSnapshots(
@@ -154,6 +163,10 @@ function fetchThemePathsPage(
   return learningJson<ThemePathsResponse>(
     `/api/learning/entities/${encodeURIComponent(entityId)}/theme-paths?${query}`,
   );
+}
+
+export function fetchTraceInsight(traceId: string) {
+  return learningJson<TraceInsightResponse>(`/api/learning/traces/${encodeURIComponent(traceId)}/summary`);
 }
 
 function themePath(entityId: string, themeId: string, suffix: string) {

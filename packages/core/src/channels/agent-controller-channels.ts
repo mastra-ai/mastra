@@ -117,7 +117,12 @@ export class AgentControllerChannels extends AgentChannels {
   }): Promise<void> {
     const { signalContents, attributes, providerOptions, requestContext, thread, autoResumeSuspendedTools } = args;
 
-    const session = await this.getSessionForThread(thread);
+    // The tenant, when there is one, is already stamped on `requestContext` by
+    // the channel handler that accepted this message — a host that maps
+    // platform senders to Mastra users writes `user` before calling
+    // `defaultHandler`, and gating an unlinked sender means not calling it at
+    // all. Core dispatches whatever reaches it.
+    const session = await this.getSessionForThread(thread, requestContext);
 
     // The session equivalent of the base path's `autoResumeSuspendedTools`:
     // controller runs set `requireToolApproval` from this marker, so on
@@ -209,15 +214,22 @@ export class AgentControllerChannels extends AgentChannels {
    * pre-existing threads (custom resolveResourceId, or created before this
    * feature) always pass the session's thread-ownership check.
    */
-  protected async getSessionForThread(thread: Pick<StorageThreadType, 'id' | 'resourceId'>): Promise<Session<any>> {
+  protected async getSessionForThread(
+    thread: Pick<StorageThreadType, 'id' | 'resourceId'>,
+    requestContext?: RequestContext,
+  ): Promise<Session<any>> {
     const controller = this.requireController();
     const channelResourceId = thread.resourceId;
     // `createSession` is get-or-create keyed by resourceId, so follow-up messages
-    // on the same thread reuse the cached session bound to this thread.
+    // on the same thread reuse the cached session bound to this thread. The
+    // dispatch requestContext must flow in: a dynamic workspace factory is
+    // resolved once at session creation with THIS context, and it may need the
+    // stamped tenant (`user`) to authorize a repo-backed session workspace.
     const session = await controller.createSession({
       resourceId: channelResourceId,
       id: channelResourceId,
       ownerId: controller.id,
+      requestContext,
     });
     // Bind the mapped thread. Guard is mandatory: `switch` aborts any active
     // run, so never re-switch when the session is already on this thread.

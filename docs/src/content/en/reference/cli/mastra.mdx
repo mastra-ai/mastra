@@ -1019,12 +1019,14 @@ For runtime commands, the command resolves the target server in this order:
 
 Automatic platform auth is only used when the CLI resolves a Mastra platform target from `.mastra-project.json`. Localhost targets and explicit `--url` targets don't receive automatic credentials. Headers passed with `--header` are sent to any target, including localhost.
 
-For observability commands (`trace`, `log`, `score`, and `metric`), the CLI targets `https://observability.mastra.ai` by default instead of a project deployment URL. It resolves credentials in this order:
+For observability commands (`trace`, `log`, `score`, and `metric`), the CLI targets `https://observability.mastra.ai` by default instead of a project deployment URL. Trace Intelligence commands (`learning`) work the same way but target `https://output.signals.mastra.ai`. Both resolve credentials in this order:
 
 1. Explicit `Authorization` and `X-Mastra-Project-Id` headers passed with `--header`.
 1. `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` from your environment.
 1. Project metadata from `.mastra-project.json` for the project ID.
 1. Your Mastra CLI login token as an auth fallback.
+
+Learning commands also send `X-Mastra-Organization-Id`, resolved from an explicit `--header`, `MASTRA_ORGANIZATION_ID` in your environment, or `.mastra-project.json`, in that order.
 
 Use `--url` and `--header` when you need to override the default hosted observability target or credentials.
 
@@ -1552,6 +1554,86 @@ Lists results for an experiment. Pass optional JSON input for route-supported fi
 
 ```bash
 mastra api experiment results <datasetId> <experimentId> [input]
+```
+
+#### `mastra api learning entities`
+
+Lists entities (agents) with Trace Intelligence output, including which trace signals are available per entity. Requires enrollment in the Trace Intelligence private beta.
+
+```bash
+mastra api learning entities '{"entityType":"agent"}'
+```
+
+#### `mastra api learning snapshots`
+
+Lists analysis snapshots for an entity and an ordered, comma-separated list of trace signals. Later commands need a `snapshotId` from this list.
+
+```bash
+mastra api learning snapshots <entityId> '{"entityType":"agent","signalNames":"goal,outcome,behavior,sentiment","limit":10}'
+```
+
+#### `mastra api learning flow`
+
+Gets the cross-signal theme flow for one snapshot: stages and links for a Sankey-style view where counts are distinct traces.
+
+```bash
+mastra api learning flow <entityId> '{"entityType":"agent","signalNames":"goal,outcome","snapshotId":"<snapshotId>"}'
+```
+
+#### `mastra api learning paths`
+
+Gets per-trace theme assignments across the ordered trace signals in one snapshot. Paginate with `limit` and `offset`.
+
+```bash
+mastra api learning paths <entityId> '{"entityType":"agent","signalNames":"goal,outcome","snapshotId":"<snapshotId>","limit":100}'
+```
+
+#### `mastra api learning theme list`
+
+Lists themes for one trace signal in one snapshot.
+
+```bash
+mastra api learning theme list <entityId> '{"entityType":"agent","signalName":"goal","snapshotId":"<snapshotId>"}'
+```
+
+#### `mastra api learning theme get`
+
+Gets one theme in one snapshot by its numeric theme ID.
+
+```bash
+mastra api learning theme get <entityId> <themeId> '{"entityType":"agent","signalName":"goal","snapshotId":"<snapshotId>"}'
+```
+
+#### `mastra api learning theme examples`
+
+Lists trace examples for one theme in one snapshot. Paginate with `limit` and `offset`.
+
+```bash
+mastra api learning theme examples <entityId> <themeId> '{"entityType":"agent","signalName":"goal","snapshotId":"<snapshotId>","limit":10}'
+```
+
+#### `mastra api learning theme history`
+
+Gets the lifecycle history for one durable theme across snapshots, including split and merge relationships. Takes no `snapshotId`.
+
+```bash
+mastra api learning theme history <entityId> <themeId> '{"entityType":"agent","signalName":"goal"}'
+```
+
+#### `mastra api learning noise get`
+
+Gets the unclustered (noise) bucket for one trace signal in one snapshot.
+
+```bash
+mastra api learning noise get <entityId> '{"entityType":"agent","signalName":"goal","snapshotId":"<snapshotId>"}'
+```
+
+#### `mastra api learning noise examples`
+
+Lists trace examples for the noise bucket in one snapshot. Paginate with `limit` and `offset`.
+
+```bash
+mastra api learning noise examples <entityId> '{"entityType":"agent","signalName":"goal","snapshotId":"<snapshotId>","limit":10}'
 ```
 
 ## Common flags

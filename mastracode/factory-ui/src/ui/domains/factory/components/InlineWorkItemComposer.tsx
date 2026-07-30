@@ -1,15 +1,13 @@
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from '@mastra/playground-ui/components/InputGroup';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Check, FileText, X } from 'lucide-react';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { Check, X } from 'lucide-react';
 import type { FormEvent } from 'react';
 import { useRef, useState } from 'react';
 
 import type { BoardStageId } from '../stages';
+import { IntakeIcon } from './IntakeIcon';
 
 interface InlineWorkItemComposerProps {
   stage: BoardStageId;
@@ -51,18 +49,22 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
       id={`new-work-item-${stage}`}
       aria-label={`New work item in ${stageLabel}`}
       aria-busy={submitting}
-      className="flex flex-col gap-1"
+      className={cn(
+        'relative flex flex-col gap-3 rounded-xl border border-border1/50 bg-neutral6/5 p-3 outline-none transition-colors focus-within:border-neutral5/50 motion-reduce:transition-none',
+        error !== undefined && 'border-error',
+      )}
       onSubmit={event => void submit(event)}
     >
-      <InputGroup variant="outline">
-        <InputGroupAddon>
-          <FileText aria-hidden />
-        </InputGroupAddon>
-        <InputGroupInput
+      <span className="text-ui-xs text-icon2 truncate pr-14">Manual · new</span>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <IntakeIcon className="text-icon3 shrink-0" />
+        <Input
           ref={inputRef}
+          variant="unstyled"
           autoFocus
           aria-label="Work item title"
           autoComplete="off"
+          className="text-ui-smd text-icon6 placeholder:text-icon4 h-auto min-w-0 flex-1 p-0 font-semibold"
           value={title}
           onChange={event => {
             setTitle(event.target.value);
@@ -77,21 +79,30 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
           readOnly={submitting}
           error={error !== undefined}
         />
-        <InputGroupAddon align="inline-end">
-          <InputGroupButton type="button" aria-label="Cancel new work item" onClick={close} disabled={submitting}>
-            <X aria-hidden />
-          </InputGroupButton>
-          <InputGroupButton
-            type="submit"
-            aria-label={`Add work item to ${stageLabel}`}
-            disabled={!trimmedTitle || submitting}
-          >
-            {submitting ? <Spinner size="sm" aria-hidden className="size-3" /> : <Check aria-hidden />}
-          </InputGroupButton>
-        </InputGroupAddon>
-      </InputGroup>
+      </div>
+      <div className="absolute top-2 right-2 flex items-center">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label="Cancel new work item"
+          onClick={close}
+          disabled={submitting}
+        >
+          <X aria-hidden />
+        </Button>
+        <Button
+          type="submit"
+          variant="ghost"
+          size="icon-xs"
+          aria-label={`Add work item to ${stageLabel}`}
+          disabled={!trimmedTitle || submitting}
+        >
+          {submitting ? <Spinner size="sm" aria-hidden className="size-3" /> : <Check aria-hidden />}
+        </Button>
+      </div>
       {error ? (
-        <p className="text-ui-xs text-notice-destructive-fg m-0 px-2" role="alert">
+        <p className="text-ui-xs text-notice-destructive-fg m-0" role="alert">
           {error}
         </p>
       ) : null}

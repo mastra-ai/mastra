@@ -71,6 +71,10 @@ function parseUpdateInput(value: unknown): UpdateFactoryProjectInput | null {
     if (defaultModelId === false) return null;
     patch.defaultModelId = defaultModelId ?? null;
   }
+  if (input.slackWorkItemsEnabled !== undefined) {
+    if (typeof input.slackWorkItemsEnabled !== 'boolean') return null;
+    patch.slackWorkItemsEnabled = input.slackWorkItemsEnabled;
+  }
   return Object.keys(patch).length > 0 ? patch : null;
 }
 
