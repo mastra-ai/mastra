@@ -569,7 +569,16 @@ export class FactoryDecisionDispatcher {
     const binding = await this.#findBinding(record, role);
     if (binding) {
       const session = await this.#controller.getSessionByResource(binding.resourceId);
-      if (session) return { binding, prepared: false };
+      if (session) {
+        // Check if a pending start already exists for this kickoff key.
+        // If it does, the skill kickoff is already represented durably —
+        // either #dispatchPendingStart will deliver it (pending/leased/retry)
+        // or it already did (sent). Returning prepared: true in both cases
+        // prevents duplicate inline sending on retry.
+        const pendingStarts = await this.#storage.listPendingStarts(record.orgId, record.factoryProjectId);
+        const hasKickoff = pendingStarts.some(ps => ps.kickoffKey === record.id);
+        return { binding, prepared: hasKickoff };
+      }
     }
     if (!this.#prepareBinding) {
       throw new Error(binding ? 'Bound Factory session not found.' : `No active Factory binding for role ${role}.`);
