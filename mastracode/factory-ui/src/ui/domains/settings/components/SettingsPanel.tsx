@@ -15,6 +15,7 @@ import {
 } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { ConnectedAccountsSection } from './ConnectedAccountsSection';
+import { AccountSettingsSection } from './AccountSettingsSection';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { SettingsHeader } from './SettingsHeader';
 import { FactoryManagementSection } from './FactoryManagementSection';
@@ -69,6 +70,7 @@ export function SettingsPanel() {
     <section aria-label="Settings" className="flex flex-1 flex-col px-5 pb-5">
       <div className="mx-auto grid w-full max-w-4xl py-3">
         {!isMobile && <SettingsHeader autoFocus placement="desktop" />}
+        {section === 'account' && <AccountSettingsSection />}
         {section === 'preferences' && <GeneralSettings theme={theme} onThemeChange={setTheme} />}
         {section === 'factory' && <FactoryManagementSection />}
         {section === 'connections' && (

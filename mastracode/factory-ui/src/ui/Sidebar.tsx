@@ -1,12 +1,9 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { CircleUserRound, Settings } from 'lucide-react';
+import { Settings } from 'lucide-react';
 import { useLocation, useNavigate, useParams } from 'react-router';
 
-import { useApiConfig } from '../api/config';
-import { useFactoryAuth } from '../hooks/useFactoryAuth';
-import { clearMastraCodeStorage, redirectToLogout } from './domains/auth/services/auth';
+import { SidebarAccountLink } from './domains/auth/components/SidebarAccountLink';
 import { FactorySection } from './domains/factory/components/FactorySection';
 import { SidebarGlobalSearchButton } from './domains/search/components/SidebarGlobalSearchButton';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
@@ -115,7 +112,7 @@ function SidebarFooter() {
 
   return (
     <MainSidebar.NavList>
-      <SidebarAuth />
+      <SidebarAccountLink />
       <MainSidebar.NavLink
         asChild
         link={{
@@ -137,50 +134,5 @@ function SidebarFooter() {
         </button>
       </MainSidebar.NavLink>
     </MainSidebar.NavList>
-  );
-}
-
-function SidebarAuth() {
-  const auth = useFactoryAuth();
-  const { baseUrl } = useApiConfig();
-
-  if (auth.isLoading) {
-    return (
-      <li role="status" aria-label="Checking sign-in" className="flex h-9 items-center gap-2 px-3">
-        <Skeleton className="size-4 rounded-full" />
-        <Skeleton className="h-3 w-24" />
-      </li>
-    );
-  }
-
-  // Unauthenticated sessions never reach the app (the router bounces them to
-  // `/signin`), so the sidebar only renders the signed-in identity.
-  const state = auth.data;
-  if (!state?.authEnabled || !state.authenticated) return null;
-
-  const identity = state.user?.name ?? state.user?.email ?? 'User';
-
-  return (
-    <MainSidebar.NavLink
-      asChild
-      link={{
-        name: 'User',
-        url: '#',
-        icon: <CircleUserRound />,
-      }}
-    >
-      <button
-        type="button"
-        onClick={() => {
-          clearMastraCodeStorage();
-          redirectToLogout(baseUrl);
-        }}
-        aria-label="Sign out"
-        title={identity}
-      >
-        <CircleUserRound />
-        <MainSidebar.NavLabel>{identity}</MainSidebar.NavLabel>
-      </button>
-    </MainSidebar.NavLink>
   );
 }
