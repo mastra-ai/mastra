@@ -795,6 +795,12 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Workers',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'workers/overview', label: 'Overview' }],
+    },
+    {
+      type: 'category',
       label: 'Workflows',
       collapsed: true,
       items: [
