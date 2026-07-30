@@ -1,5 +1,11 @@
 # create-mastra
 
+## 1.21.1-alpha.0
+
+### Patch Changes
+
+- Generated projects now pin every Mastra dependency to the exact version published on the invoked release channel instead of writing the channel tag (for example `alpha`) verbatim. If the CLI cannot resolve exact versions, it warns and falls back to the channel tag. ([#20448](https://github.com/mastra-ai/mastra/pull/20448))
+
 ## 1.21.0
 
 ## 1.21.0-alpha.3
