@@ -156,10 +156,10 @@ export const listStoredWorkflowsQuerySchema = z.object({
 // ============================================================================
 
 /**
- * Body for `POST /stored/workflows` — upsert a static workflow definition.
- * Matches the input shape of `mastra.addStoredWorkflow()`.
+ * One static workflow definition on the wire. Matches the input shape of
+ * `mastra.addStoredWorkflow()`.
  */
-export const upsertStoredWorkflowBodySchema = z.object({
+export const storedWorkflowDefinitionBodySchema = z.object({
   id: z.string().describe('Workflow id — kebab-case, descriptive'),
   description: z.string().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
@@ -174,6 +174,24 @@ export const upsertStoredWorkflowBodySchema = z.object({
   graph: z
     .array(graphEntrySchema)
     .describe('Static workflow graph — ordered array of serialized step entries with all refs as ids.'),
+});
+
+/**
+ * Body for `POST /stored/workflows` — upsert a static workflow definition,
+ * optionally together with the helper workflows it nests.
+ */
+export const upsertStoredWorkflowBodySchema = storedWorkflowDefinitionBodySchema.extend({
+  // Deliberately a FLAT list rather than a recursive tree: helpers are peers
+  // of each other, hydration order is derived from the graphs, and a
+  // self-referential Zod schema would not survive OpenAPI generation.
+  dependencies: z
+    .array(storedWorkflowDefinitionBodySchema)
+    .optional()
+    .describe(
+      'Helper workflow definitions this workflow nests. Saved with it as one unit — the whole set is validated together, ' +
+        'hydrated in derived dependency order, and rejected together, so a failed save never leaves orphaned helpers behind. ' +
+        'Each helper becomes an ordinary stored workflow in its own right.',
+    ),
 });
 
 // ============================================================================
@@ -209,6 +227,10 @@ export const getStoredWorkflowResponseSchema = storedWorkflowResponseSchema;
 export const upsertStoredWorkflowResponseSchema = z.object({
   ok: z.literal(true),
   id: z.string(),
+  dependencyIds: z
+    .array(z.string())
+    .optional()
+    .describe('Ids of the helper workflows saved alongside this one. Present only when dependencies were supplied.'),
 });
 
 export const deleteStoredWorkflowResponseSchema = z.object({

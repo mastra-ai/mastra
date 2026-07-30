@@ -189,4 +189,120 @@ describe('StoredWorkflow resource', () => {
     });
     await expect(client.listStoredWorkflows()).resolves.toEqual({ workflows: [], total: 0 });
   });
+
+  it('saves helper workflows alongside the root in one upsert and exposes their ids', async () => {
+    // A root whose graph nests helpers that do not exist yet cannot be saved on
+    // its own. `dependencies` sends them together; the server persists and
+    // live-registers the whole set, then echoes the helper ids back.
+    const saved = new Map<string, StoredWorkflowDefinition>();
+
+    fetchMock.mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+
+      if (url.pathname === '/api/stored/workflows' && init?.method === 'POST') {
+        const { dependencies = [], ...root } = body;
+        for (const definition of [...dependencies, root]) {
+          saved.set(definition.id, {
+            ...definition,
+            status: 'active',
+            source: 'storage',
+            createdAt: '2026-07-21T00:00:00.000Z',
+            updatedAt: '2026-07-21T00:00:00.000Z',
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            id: root.id,
+            ...(dependencies.length ? { dependencyIds: dependencies.map((d: { id: string }) => d.id) } : {}),
+          }),
+          { status: 200 },
+        );
+      }
+
+      if (url.pathname === '/api/stored/workflows') {
+        const workflows = [...saved.values()];
+        return new Response(JSON.stringify({ workflows, total: workflows.length }), { status: 200 });
+      }
+
+      const detailMatch = url.pathname.match(/^\/api\/stored\/workflows\/(.+)$/);
+      if (detailMatch) {
+        const found = saved.get(decodeURIComponent(detailMatch[1]!));
+        return new Response(JSON.stringify(found ?? {}), { status: found ? 200 : 404 });
+      }
+
+      if (url.pathname === '/api/workflows/parallel-customer-lookup/create-run') {
+        return new Response(JSON.stringify({ runId: 'run-1' }), { status: 200 });
+      }
+
+      if (url.pathname === '/api/workflows/parallel-customer-lookup/start-async') {
+        return new Response(
+          JSON.stringify({
+            status: 'success',
+            result: { first: body.inputData.firstEmail, second: body.inputData.secondEmail },
+            steps: {},
+          }),
+          { status: 200 },
+        );
+      }
+
+      throw new Error(`Unhandled fetch to ${url}`);
+    });
+
+    const helper = (id: string, field: string): UpsertStoredWorkflowParams => ({
+      id,
+      description: `Look up ${field}`,
+      inputSchema: { type: 'object', properties: { [field]: { type: 'string' } }, required: [field] },
+      outputSchema: { type: 'object', properties: { email: { type: 'string' } }, required: ['email'] },
+      graph: [{ type: 'mapping', id: `pick-${field}`, mapConfig: JSON.stringify({ email: { path: field } }) }],
+    });
+
+    const root: UpsertStoredWorkflowParams = {
+      id: 'parallel-customer-lookup',
+      description: 'Looks up two customers in parallel',
+      inputSchema: {
+        type: 'object',
+        properties: { firstEmail: { type: 'string' }, secondEmail: { type: 'string' } },
+        required: ['firstEmail', 'secondEmail'],
+      },
+      outputSchema: {
+        type: 'object',
+        properties: { first: { type: 'string' }, second: { type: 'string' } },
+        required: ['first', 'second'],
+      },
+      graph: [
+        {
+          type: 'parallel',
+          steps: [
+            { type: 'workflow', id: 'lookup-first', workflowId: 'lookup-first' },
+            { type: 'workflow', id: 'lookup-second', workflowId: 'lookup-second' },
+          ],
+        },
+      ],
+      dependencies: [helper('lookup-first', 'firstEmail'), helper('lookup-second', 'secondEmail')],
+    };
+
+    await expect(client.upsertStoredWorkflow(root)).resolves.toEqual({
+      ok: true,
+      id: 'parallel-customer-lookup',
+      dependencyIds: ['lookup-first', 'lookup-second'],
+    });
+
+    // Helpers are ordinary stored workflows — individually retrievable and listed.
+    await expect(client.getStoredWorkflow('lookup-first').details()).resolves.toMatchObject({
+      id: 'lookup-first',
+      description: 'Look up firstEmail',
+    });
+    await expect(client.listStoredWorkflows()).resolves.toMatchObject({ total: 3 });
+
+    // The root is immediately runnable through the ordinary workflow resource.
+    const run = await client.getWorkflow('parallel-customer-lookup').createRun();
+    await expect(
+      run.startAsync({ inputData: { firstEmail: 'ada@example.com', secondEmail: 'grace@example.com' } }),
+    ).resolves.toMatchObject({
+      status: 'success',
+      result: { first: 'ada@example.com', second: 'grace@example.com' },
+    });
+  });
 });

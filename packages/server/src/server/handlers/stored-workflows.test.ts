@@ -767,4 +767,194 @@ describe('Stored Workflows handlers', () => {
       expect(result.success).toBe(true);
     });
   });
+
+  // A workflow whose graph nests a helper that does not exist yet cannot be
+  // saved on its own — the ref pre-flight rejects it. `dependencies` lets a
+  // client send the helpers alongside the root so the whole set is validated,
+  // hydrated in dependency order, and registered (or rejected) as one unit.
+  describe('UPSERT_STORED_WORKFLOW_ROUTE — helper dependencies', () => {
+    /** Root that nests two helpers and merges their outputs. */
+    const fanoutRoot = {
+      id: 'wf-fanout',
+      description: undefined,
+      metadata: undefined,
+      stateSchema: undefined,
+      requestContextSchema: undefined,
+      inputSchema: objectWith({ first: stringSchema, second: stringSchema }, ['first', 'second']),
+      outputSchema: objectWith({ merged: stringSchema }, ['merged']),
+      graph: [
+        {
+          type: 'parallel' as const,
+          steps: [
+            { type: 'workflow' as const, id: 'echo-first', workflowId: 'echo-first' },
+            { type: 'workflow' as const, id: 'echo-second', workflowId: 'echo-second' },
+          ],
+        },
+        {
+          type: 'mapping' as const,
+          id: 'merge',
+          mapConfig: JSON.stringify({
+            merged: { template: '${stepResults.echo-first.value}+${stepResults.echo-second.value}' },
+          }),
+        },
+      ],
+    };
+
+    /** Helper that reads one named field off the root input and echoes it. */
+    const echoHelper = (id: string, field: string) => ({
+      id,
+      description: `Echo ${field}`,
+      metadata: undefined,
+      stateSchema: undefined,
+      requestContextSchema: undefined,
+      inputSchema: objectWith({ first: stringSchema, second: stringSchema }, ['first', 'second']),
+      outputSchema: objectWith({ value: stringSchema }, ['value']),
+      graph: [
+        {
+          type: 'mapping' as const,
+          id: `pick-${field}`,
+          mapConfig: JSON.stringify({ value: { template: '${inputData.' + field + '}' } }),
+        },
+        { type: 'tool' as const, id: 'echo', toolId: 'echo-tool' },
+      ],
+    });
+
+    it('saves helpers with the root, registers all of them live, and reports their ids', async () => {
+      const result = await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra),
+        ...fanoutRoot,
+        dependencies: [echoHelper('echo-first', 'first'), echoHelper('echo-second', 'second')],
+      });
+
+      expect(result).toEqual({ ok: true, id: 'wf-fanout', dependencyIds: ['echo-first', 'echo-second'] });
+
+      // Every member is live-registered and independently runnable.
+      expect(mastra.getWorkflow('echo-first')).toBeDefined();
+      expect(mastra.getWorkflow('echo-second')).toBeDefined();
+
+      // And the root actually routes distinct branch inputs through them.
+      const run = await mastra.getWorkflow('wf-fanout').createRun();
+      const res = await run.start({ inputData: { first: 'ada', second: 'grace' } });
+      expect(res.status).toBe('success');
+      expect((res as any).result.merged).toBe('ada+grace');
+    });
+
+    it('persists each helper as an ordinary stored workflow, retrievable on its own', async () => {
+      await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra),
+        ...fanoutRoot,
+        dependencies: [echoHelper('echo-first', 'first'), echoHelper('echo-second', 'second')],
+      });
+
+      const helper = await GET_STORED_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra),
+        storedWorkflowId: 'echo-first',
+      });
+      expect(helper.id).toBe('echo-first');
+      expect(helper.description).toBe('Echo first');
+
+      const listed = await LIST_STORED_WORKFLOWS_ROUTE.handler({
+        ...ctx(mastra),
+        status: undefined,
+        authorId: undefined,
+      });
+      expect(listed.workflows.map(w => w.id).sort()).toEqual(['echo-first', 'echo-second', 'wf-fanout']);
+    });
+
+    it('order the client sends helpers in does not matter — hydration order is derived', async () => {
+      const result = await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra),
+        ...fanoutRoot,
+        // Reversed relative to graph order.
+        dependencies: [echoHelper('echo-second', 'second'), echoHelper('echo-first', 'first')],
+      });
+      expect(result.ok).toBe(true);
+
+      const run = await mastra.getWorkflow('wf-fanout').createRun();
+      const res = await run.start({ inputData: { first: 'ada', second: 'grace' } });
+      expect((res as any).result.merged).toBe('ada+grace');
+    });
+
+    it('rejects the whole bundle when the root is invalid — no helper is left behind', async () => {
+      await expect(
+        UPSERT_STORED_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra),
+          ...fanoutRoot,
+          graph: [
+            // References a helper that is in neither the registry nor the bundle.
+            { type: 'workflow' as const, id: 'echo-third', workflowId: 'echo-third' },
+          ],
+          dependencies: [echoHelper('echo-first', 'first')],
+        }),
+      ).rejects.toThrow();
+
+      expect(() => mastra.getWorkflow('echo-first')).toThrow();
+      await expect(
+        GET_STORED_WORKFLOW_ROUTE.handler({ ...ctx(mastra), storedWorkflowId: 'echo-first' }),
+      ).rejects.toBeInstanceOf(HTTPException);
+    });
+
+    it('rejects the whole bundle when a helper is invalid — the root is not saved either', async () => {
+      await expect(
+        UPSERT_STORED_WORKFLOW_ROUTE.handler({
+          ...ctx(mastra),
+          ...fanoutRoot,
+          dependencies: [
+            echoHelper('echo-first', 'first'),
+            {
+              ...echoHelper('echo-second', 'second'),
+              graph: [{ type: 'tool' as const, id: 'echo', toolId: 'not-a-registered-tool' }],
+            },
+          ],
+        }),
+      ).rejects.toThrow();
+
+      expect(() => mastra.getWorkflow('wf-fanout')).toThrow();
+      expect(() => mastra.getWorkflow('echo-first')).toThrow();
+      await expect(
+        GET_STORED_WORKFLOW_ROUTE.handler({ ...ctx(mastra), storedWorkflowId: 'wf-fanout' }),
+      ).rejects.toBeInstanceOf(HTTPException);
+    });
+
+    it('omitting dependencies leaves the single-workflow response shape untouched', async () => {
+      const result = await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra),
+        id: 'wf-solo',
+        description: undefined,
+        metadata: undefined,
+        stateSchema: undefined,
+        requestContextSchema: undefined,
+        ...baseSchemas,
+        graph: toolOnlyGraph(),
+      });
+      // No `dependencyIds` key at all — not `undefined`, absent.
+      expect(result).toEqual({ ok: true, id: 'wf-solo' });
+      expect('dependencyIds' in result).toBe(false);
+    });
+
+    it('an empty dependencies array behaves exactly like omitting it', async () => {
+      const result = await UPSERT_STORED_WORKFLOW_ROUTE.handler({
+        ...ctx(mastra),
+        id: 'wf-solo-empty',
+        description: undefined,
+        metadata: undefined,
+        stateSchema: undefined,
+        requestContextSchema: undefined,
+        ...baseSchemas,
+        graph: toolOnlyGraph(),
+        dependencies: [],
+      });
+      expect(result).toEqual({ ok: true, id: 'wf-solo-empty' });
+      expect(mastra.getWorkflow('wf-solo-empty')).toBeDefined();
+    });
+
+    it('the body schema accepts a flat dependencies list of full definitions', () => {
+      const parsed = upsertStoredWorkflowBodySchema.safeParse({
+        ...fanoutRoot,
+        dependencies: [echoHelper('echo-first', 'first')],
+      });
+      expect(parsed.success).toBe(true);
+      expect(parsed.success && parsed.data.dependencies?.[0]?.id).toBe('echo-first');
+    });
+  });
 });

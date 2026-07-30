@@ -109,12 +109,18 @@ export const UPSERT_STORED_WORKFLOW_ROUTE = createRoute({
     stateSchema,
     requestContextSchema,
     graph,
+    dependencies,
   }) => {
     try {
       // Pick the body fields explicitly — handler args also carry server
       // context (requestContext, abortSignal, ...) which must not leak into
       // the stored definition.
       const def = { id, description, metadata, inputSchema, outputSchema, stateSchema, requestContextSchema, graph };
+      // Helpers are saved with the root as one unit so a nested workflow that
+      // does not exist yet resolves, and so a rejected root can never leave
+      // its helpers behind as orphans. Order within the bundle is derived
+      // from the graphs, not from the order the client sent them in.
+      const bundle = [...(dependencies ?? []), def];
       // The Zod schema output is structurally compatible with
       // StoredWorkflowGraph but TS can't prove every arm:
       //   - sleepUntil.date is an ISO string on the wire, Date on the
@@ -122,10 +128,14 @@ export const UPSERT_STORED_WORKFLOW_ROUTE = createRoute({
       //   - conditional/loop's `serializedConditions`/`serializedCondition`
       //     debug labels are emitted by the fluent builder at rehydration
       //     time; clients don't send them.
-      // `addStoredWorkflow` runs a full registry pre-flight before
+      // `addStoredWorkflows` runs a full registry pre-flight before
       // rehydration; the cast documents this boundary.
-      await (mastra as Mastra).addStoredWorkflow(def as Parameters<Mastra['addStoredWorkflow']>[0]);
-      return { ok: true as const, id: def.id };
+      await mastra.addStoredWorkflows(bundle as Parameters<Mastra['addStoredWorkflows']>[0]);
+      return {
+        ok: true as const,
+        id: def.id,
+        ...(dependencies?.length ? { dependencyIds: dependencies.map(dependency => dependency.id) } : {}),
+      };
     } catch (error) {
       return handleError(error, 'Error upserting stored workflow');
     }

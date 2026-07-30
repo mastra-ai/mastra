@@ -113,10 +113,6 @@ export const workflowBuilderPromptFixtures = {
       'firstCustomer',
       'secondCustomer',
     ]),
-    // NOTE: parallel children all receive the SAME preceding input, and inner
-    // steps cannot declare an inputMapping. Looking up two DIFFERENT emails in
-    // parallel is therefore not expressible today — this fixture encodes what
-    // the prompt asks for and is expected to fail until that gap is addressed.
     graph: [
       {
         type: 'parallel',
