@@ -10,6 +10,8 @@ A background sweep now reads live pull request state for the cards that are stil
 
 The sweep runs every 5 minutes, is scoped to repositories linked to a factory project, and coordinates across replicas so only one sweeps at a time.
 
+It also retires the thread's pull request subscription, which the webhook handler was previously the only thing to do. That is what the PR chip in a thread and the workspace sidebar row read, so on both self-hosted and platform deployments they now show merged or closed instead of staying open indefinitely.
+
 **Configuration**
 
 ```bash

@@ -7,6 +7,7 @@ import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { GithubIntegration } from './integration.js';
 import { createGithubPullRequestReconciler, GithubRules } from './rules.js';
 import type { ReconcilePullRequestState } from './rules.js';
+import { changeRequestTargetKey } from './subscriptions.js';
 
 async function setup(permission: string | undefined) {
   const seeded = await createFactoryStorageForTests();
@@ -51,6 +52,9 @@ async function setup(permission: string | undefined) {
   return {
     sourceControl,
     integrationStorage,
+    // Same rows as `integrationStorage`, typed for the subscription payloads the
+    // reconciler retires rather than the provenance payloads the rules read.
+    subscriptionStorage: seeded.integrations.forIntegration('github'),
     workItems,
     projects: seeded.projects,
     project,
@@ -618,10 +622,7 @@ describe('createGithubPullRequestReconciler', () => {
     });
   }
 
-  function createReconciler(
-    context: Awaited<ReturnType<typeof setup>>,
-    fetchPullRequest: ReturnType<typeof vi.fn>,
-  ) {
+  function createReconciler(context: Awaited<ReturnType<typeof setup>>, fetchPullRequest: ReturnType<typeof vi.fn>) {
     return createGithubPullRequestReconciler(
       {
         github: context.github,
@@ -641,7 +642,14 @@ describe('createGithubPullRequestReconciler', () => {
     const fetchPullRequest = vi.fn(async () => mergedState(17));
     const reconcile = createReconciler(context, fetchPullRequest);
 
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 1, merged: 1, closed: 0, failed: 0, errors: [] });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 1,
+      merged: 1,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
     expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 17 });
     const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
     expect(decisions).toEqual([
@@ -653,7 +661,14 @@ describe('createGithubPullRequestReconciler', () => {
 
     // A later sweep re-checks live state but the ingress replays: no
     // duplicate decisions are committed for the same merge.
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 1, merged: 1, closed: 0, failed: 0, errors: [] });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 1,
+      merged: 1,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(1);
   });
 
@@ -664,10 +679,43 @@ describe('createGithubPullRequestReconciler', () => {
     const fetchPullRequest = vi.fn(async () => ({ ...mergedState(18), state: 'open' as const, merged: false }));
     const reconcile = createReconciler(context, fetchPullRequest);
 
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 1, merged: 0, closed: 0, failed: 0, errors: [] });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 1,
+      merged: 0,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
     expect(fetchPullRequest).toHaveBeenCalledTimes(1);
     expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 18 });
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
+  });
+
+  it.each([
+    { merged: true, expected: 'merged' },
+    { merged: false, expected: 'closed' },
+  ])('retires the thread subscription to $expected', async ({ merged, expected }) => {
+    const context = await setup('read');
+    await createCard(context, { number: 23 });
+    const subscription = await context.subscriptionStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: changeRequestTargetKey({
+        installationExternalId: '7',
+        repositoryExternalId: '10',
+        changeRequestId: '23',
+      }),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      status: 'open',
+      data: {},
+    });
+    const fetchPullRequest = vi.fn(async () => ({ ...mergedState(23), merged, mergedBy: undefined }));
+
+    await createReconciler(context, fetchPullRequest)([repositoryTarget]);
+
+    const [row] = await context.subscriptionStorage.subscriptions.listByTarget(subscription.targetKey);
+    expect(row?.status).toBe(expected);
   });
 
   it('never checks a card whose URL points at a different repository', async () => {
@@ -676,7 +724,14 @@ describe('createGithubPullRequestReconciler', () => {
     const fetchPullRequest = vi.fn(async () => mergedState(19));
     const reconcile = createReconciler(context, fetchPullRequest);
 
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 0, merged: 0, closed: 0, failed: 0, errors: [] });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 0,
+      merged: 0,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
     expect(fetchPullRequest).not.toHaveBeenCalled();
   });
 
