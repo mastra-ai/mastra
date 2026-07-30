@@ -196,7 +196,7 @@ describe('empty scaffold', () => {
   });
 
   it('warns once and falls back to the channel tag when resolution fails', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const invocationCwd = await createInvocationDirectory();
     const staging = await createOwnedStagingDirectory(invocationCwd, 'fallback-project');
@@ -208,8 +208,8 @@ describe('empty scaffold', () => {
       packageManager: 'npm',
     });
 
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-    errorSpy.mockRestore();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
 
     const manifest = JSON.parse(await fs.readFile(path.join(staging.projectPath, 'package.json'), 'utf8'));
     expect(manifest.dependencies['@mastra/core']).toBe('alpha');
@@ -217,7 +217,7 @@ describe('empty scaffold', () => {
   });
 
   it('never produces a partial mixture of exact versions and channel tags', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     let callCount = 0;
     mockedExeca.mockImplementation((() => {
       callCount++;
@@ -235,8 +235,8 @@ describe('empty scaffold', () => {
       packageManager: 'npm',
     });
 
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-    errorSpy.mockRestore();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
 
     const manifest = JSON.parse(await fs.readFile(path.join(staging.projectPath, 'package.json'), 'utf8'));
     expect(manifest.dependencies['@mastra/core']).toBe('alpha');

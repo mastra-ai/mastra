@@ -334,7 +334,7 @@ describe('adaptDefaultTemplate', () => {
   });
 
   it('warns once and preserves the channel tag for all Mastra packages on resolution failure', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     mockedExeca.mockRejectedValue(new Error('npm error') as never);
 
     const projectPath = await createFixture();
@@ -343,8 +343,8 @@ describe('adaptDefaultTemplate', () => {
 
     await adaptFixture({ projectPath, provider: 'openai', versionTag: 'snapshot-channel' });
 
-    expect(errorSpy).toHaveBeenCalledTimes(1);
-    errorSpy.mockRestore();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    warnSpy.mockRestore();
 
     const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
     for (const section of [manifest.dependencies, manifest.devDependencies]) {

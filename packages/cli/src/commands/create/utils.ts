@@ -107,7 +107,7 @@ export async function writeEmptyScaffold({
   const mastraPackages = ['@mastra/core', 'mastra'];
   const resolved = await resolveMastraPackageVersions(mastraPackages, versionTag);
   if (resolved === undefined) {
-    console.error(
+    console.warn(
       `We could not resolve exact Mastra package versions for the "${versionTag}" channel, using the channel tag instead`,
     );
   }

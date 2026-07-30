@@ -345,7 +345,7 @@ export async function adaptDefaultTemplate({
   const mastraPackages = collectMastraPackages(packageJsonSource);
   const resolvedVersions = await resolveMastraPackageVersions(mastraPackages, versionTag);
   if (resolvedVersions === undefined && mastraPackages.length > 0) {
-    console.error(
+    console.warn(
       `We could not resolve exact Mastra package versions for the "${versionTag}" channel, using the channel tag instead`,
     );
   }
