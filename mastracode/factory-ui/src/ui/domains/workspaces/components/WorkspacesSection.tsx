@@ -14,8 +14,15 @@ import { createAgentControllerClient } from '../../chat/services/agentController
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { relationshipLabel } from '../../factory/services/relationships';
 import type { FactoryUserSession } from '../services/github';
+import { getFactorySessionKind } from '../services/sessionPresentation';
 import { SessionNavRow } from './SessionNavRow';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
+
+function workspaceStatus(row: FactoryWorkspaceRow): 'running' | 'attention' | undefined {
+  if (row.running) return 'running';
+  if (row.attention) return 'attention';
+  return undefined;
+}
 
 export function WorkspacesSection() {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
@@ -68,7 +75,7 @@ export function WorkspacesSection() {
         active,
         running,
         attention: attentionByPath[workspace.sessionId] === true,
-        review: item?.source === 'github-pr' || (!item && workspace.branch.startsWith('factory/pr-')),
+        review: getFactorySessionKind(workspace, item) === 'review',
         itemLabel: item && item.source !== 'manual' ? relationshipLabel(item) : undefined,
         itemTitle: item?.title,
         updatedAt: item?.updatedAt ?? workspace.updatedAt,
@@ -226,7 +233,7 @@ function WorkspaceGroup({
             url={row.url}
             active={row.active}
             disabled={pending}
-            status={row.running ? 'running' : row.attention ? 'attention' : undefined}
+            status={workspaceStatus(row)}
             preview={{
               kind,
               itemLabel: row.itemLabel,

@@ -1,5 +1,53 @@
 # mastra
 
+## 1.22.0-alpha.2
+
+### Minor Changes
+
+- Added overwrite protection to `mastra env vars pull`. ([#19824](https://github.com/mastra-ai/mastra/pull/19824))
+
+  Use `--force` to intentionally replace an existing env file.
+
+  ```bash
+  mastra env vars pull production --force
+  ```
+
+### Patch Changes
+
+- Fixed Studio navigation and authentication redirects when Studio is mounted at a custom base path. ([#19799](https://github.com/mastra-ai/mastra/pull/19799))
+
+- Fixed the slash-command menu in the Factory web chat. Typing `/` in the composer now shows the list of available commands again; the menu was rendering but invisibly clipped by the composer box. ([#20476](https://github.com/mastra-ai/mastra/pull/20476))
+
+- Updated dependencies [[`322daa6`](https://github.com/mastra-ai/mastra/commit/322daa6d90552909204044790d850958f6745fed), [`cadaa13`](https://github.com/mastra-ai/mastra/commit/cadaa1372e1077c8e85eb64c5499ba8803caa323), [`06000d7`](https://github.com/mastra-ai/mastra/commit/06000d73712911572e913b8a83339270296d0a22), [`3de0188`](https://github.com/mastra-ai/mastra/commit/3de0188bfaf9a9c09c95fe322b53838cf52c70b6)]:
+  - @mastra/core@1.56.0-alpha.2
+  - @mastra/deployer@1.56.0-alpha.2
+
+## 1.21.1-alpha.1
+
+### Patch Changes
+
+- Fixed Factory thread history loading so short pages continue loading without duplicate requests. ([#20455](https://github.com/mastra-ai/mastra/pull/20455))
+
+- Improved Factory model setup with clearer provider branding and easier API key provider discovery. ([#20468](https://github.com/mastra-ai/mastra/pull/20468))
+
+- Updated dependencies [[`c5e56ff`](https://github.com/mastra-ai/mastra/commit/c5e56ff3bcabdf062708f2d48744fec304df6792), [`4e35a56`](https://github.com/mastra-ai/mastra/commit/4e35a56cdf8d74a5ff6d5eda01f2c1deaf6cc7be), [`8ac9019`](https://github.com/mastra-ai/mastra/commit/8ac9019db164b0703035c27da22c28e675053ce2)]:
+  - @mastra/core@1.56.0-alpha.1
+  - @mastra/deployer@1.56.0-alpha.1
+
+## 1.21.1-alpha.0
+
+### Patch Changes
+
+- `mastra create` now pins every Mastra dependency in generated default and empty projects to the exact version published on the invoked release channel instead of writing the channel tag (for example `alpha`) verbatim. If the CLI cannot resolve exact versions, it warns and falls back to the channel tag. ([#20448](https://github.com/mastra-ai/mastra/pull/20448))
+
+- Track Mastra platform observability setup outcome (skipped, cancelled, completed, failed) in create command telemetry. ([#20449](https://github.com/mastra-ai/mastra/pull/20449))
+
+- Added a My account settings page with signed-in identity details and an explicit logout action. ([#20454](https://github.com/mastra-ai/mastra/pull/20454))
+
+- Updated dependencies [[`7f4e26d`](https://github.com/mastra-ai/mastra/commit/7f4e26dd57bd9b23c278ea21235ab823a3810a6c), [`b582f7f`](https://github.com/mastra-ai/mastra/commit/b582f7fa2f9c1f87d19efc63d344fbe5dda2608c), [`6306f2c`](https://github.com/mastra-ai/mastra/commit/6306f2cac6fbe9a89d881044a609cc1d4aace797), [`b582f7f`](https://github.com/mastra-ai/mastra/commit/b582f7fa2f9c1f87d19efc63d344fbe5dda2608c)]:
+  - @mastra/core@1.56.0-alpha.0
+  - @mastra/deployer@1.56.0-alpha.0
+
 ## 1.21.0
 
 ### Minor Changes

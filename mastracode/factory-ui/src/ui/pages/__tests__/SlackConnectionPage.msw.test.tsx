@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import type { ConnectedChannelAccount } from '../../domains/settings/services/channelAccounts';
+import { OverlaysProvider } from '../../lib/overlays';
 import { SlackConnectionPage } from '../SlackConnectionPage';
 
 const slackLink: ConnectedChannelAccount = {
@@ -42,9 +43,11 @@ function renderPage(slackWorkItemsEnabled = false) {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1/settings/connections/slack']}>
       <MainSidebarProvider storageKey="slack-connection-page-test" mobileBreakpoint={0}>
-        <Routes>
-          <Route path="/factories/:factoryId/settings/connections/slack" element={<SlackConnectionPage />} />
-        </Routes>
+        <OverlaysProvider>
+          <Routes>
+            <Route path="/factories/:factoryId/settings/connections/slack" element={<SlackConnectionPage />} />
+          </Routes>
+        </OverlaysProvider>
       </MainSidebarProvider>
     </MemoryRouter>,
   );

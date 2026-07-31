@@ -6,6 +6,7 @@ import { CodeBlock as DsCodeBlock } from '@mastra/playground-ui/components/CodeB
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -741,37 +742,49 @@ export function TranscriptEntries({
     ),
   );
 
+  const renderEntry = (entry: TimelineEntry): ReactNode => {
+    switch (entry.kind) {
+      case 'message':
+        return (
+          <MessageBubble entry={entry} suspensions={suspensions} isSubmitting={isSubmitting} onRespond={onRespond} />
+        );
+      case 'notice':
+        return <NoticeCard entry={entry} />;
+      case 'approval':
+        return <ApprovalCard prompt={entry} isSubmitting={isSubmitting} onApprove={onApprove} />;
+      case 'notification':
+        return <NotificationCard entry={entry} />;
+      case 'notification_summary':
+        return <NotificationSummaryCard entry={entry} />;
+      case 'suspension':
+        return entry.toolName === 'request_access' || !canonicalToolCallIds.has(entry.toolCallId) ? (
+          <SuspensionCard prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
+        ) : null;
+      case 'subagent':
+        return <SubagentCard entry={entry} />;
+      default:
+        return null;
+    }
+  };
+
   return (
     <>
       {entries.map(entry => {
-        switch (entry.kind) {
-          case 'message':
-            return (
-              <MessageBubble
-                key={entry.id}
-                entry={entry}
-                suspensions={suspensions}
-                isSubmitting={isSubmitting}
-                onRespond={onRespond}
-              />
-            );
-          case 'notice':
-            return <NoticeCard key={entry.id} entry={entry} />;
-          case 'approval':
-            return <ApprovalCard key={entry.id} prompt={entry} isSubmitting={isSubmitting} onApprove={onApprove} />;
-          case 'notification':
-            return <NotificationCard key={entry.id} entry={entry} />;
-          case 'notification_summary':
-            return <NotificationSummaryCard key={entry.id} entry={entry} />;
-          case 'suspension':
-            return entry.toolName === 'request_access' || !canonicalToolCallIds.has(entry.toolCallId) ? (
-              <SuspensionCard key={entry.id} prompt={entry} isSubmitting={isSubmitting} onRespond={onRespond} />
-            ) : null;
-          case 'subagent':
-            return <SubagentCard key={entry.id} entry={entry} />;
-          default:
-            return null;
-        }
+        const rendered = renderEntry(entry);
+        if (!rendered) return null;
+
+        return (
+          <MessageScrollerItem
+            key={entry.id}
+            messageId={entry.id}
+            scrollAnchor={entry.kind === 'message' && entry.message.role === 'user'}
+            // Estimated off-screen heights would make the prepend anchor restore
+            // the wrong offset — measure the real thing.
+            className="[content-visibility:visible]"
+          >
+            {rendered}
+          </MessageScrollerItem>
+        );
       })}
     </>
   );

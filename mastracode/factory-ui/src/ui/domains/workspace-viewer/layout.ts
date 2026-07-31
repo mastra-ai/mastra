@@ -14,11 +14,8 @@ export const cardWidthClass = {
   viewing: '[--workspace-files-card:min(34rem,calc(100%-47rem))]',
 };
 
+/** The chat shell maps this onto `--chat-inset-end`, which pads its scroller. */
 export const reservedSpaceClass = {
   none: '[--workspace-files-inset:0px]',
   docked: '[--workspace-files-inset:calc(var(--workspace-files-card)+3rem)]',
 };
-
-/** Applied by every chat region that must stay clear of the docked card. */
-export const workspaceFilesInsetClass =
-  'pr-[var(--workspace-files-inset,0px)] transition-[padding] duration-360 ease-out-custom motion-reduce:transition-none';

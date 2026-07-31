@@ -2060,7 +2060,7 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Updates an experiment result's status and/or tags
+   * Updates an experiment result's status, tags, and/or comment
    */
   public updateDatasetExperimentResult(params: UpdateExperimentResultParams): Promise<DatasetExperimentResult> {
     const { datasetId, experimentId, resultId, ...body } = params;
@@ -2111,7 +2111,7 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Updates the status and/or tags on an experiment result
+   * Updates the status, tags, and/or comment on an experiment result
    */
   public updateExperimentResult(params: UpdateExperimentResultParams): Promise<DatasetExperimentResult> {
     const { datasetId, experimentId, resultId, ...body } = params;
