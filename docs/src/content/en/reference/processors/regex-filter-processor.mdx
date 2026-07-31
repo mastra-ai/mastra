@@ -209,7 +209,7 @@ A replacement string can reference capture groups with `$1` or `$&`. Those refer
 
 ## Redaction reporting
 
-The `redact` strategy rewrites text in place, so nothing downstream can tell what changed. Assign `onViolation` to record it. The processor calls it once per redacted message, message part, or stream chunk, and offsets are relative to that piece of text. Async callbacks are awaited, and errors are caught so an unavailable audit sink cannot fail the request.
+The `redact` strategy rewrites text in place, so nothing downstream can tell what changed. Assign `onViolation` to record it. The processor calls it once per redacted message, message part, or stream chunk, and offsets are relative to that piece of text. Async callbacks are awaited, and errors are caught so an unavailable audit sink can't fail the request.
 
 ```typescript
 import { RegexFilterProcessor, type RegexRedactionDetail } from '@mastra/core/processors'
