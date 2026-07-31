@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import type { SignalProvider } from '@mastra/core/signals';
 import { execa } from 'execa';
 
 import type { MastraCodePluginConfigValue, MastraCodePluginRuntime } from '../plugin.js';
@@ -12,7 +13,7 @@ import { ensureMastraCodePackageLink } from './package-link.js';
 import { getPluginScopePaths } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
 import { loadPluginRegistry, removePluginRecord, savePluginRegistry, setPluginRecord } from './registry.js';
-import type { LoadedPlugin, PluginScope } from './types.js';
+import type { LoadedPlugin, PluginContribution, PluginProcessorEntries, PluginScope } from './types.js';
 
 const GITHUB_PLUGIN_POLL_INTERVAL_MS = 60_000;
 
@@ -108,6 +109,29 @@ export class PluginManager {
   getPluginInstructions(): string[] {
     return this.loadedPlugins.flatMap(plugin =>
       plugin.status === 'active' && plugin.instructions ? [plugin.instructions] : [],
+    );
+  }
+
+  /**
+   * Processors contributed by active plugins, tagged with the plugin that owns
+   * each one. Reads already-resolved state — no filesystem access — because the
+   * agent's processor lanes call this before every request.
+   */
+  getPluginProcessors(): PluginProcessorEntries {
+    return {
+      input: this.collectActive(plugin => plugin.processors?.input ?? []),
+      output: this.collectActive(plugin => plugin.processors?.output ?? []),
+    };
+  }
+
+  /** Signal providers contributed by active plugins, tagged with their owning plugin. */
+  getPluginSignalProviders(): PluginContribution<SignalProvider<string>>[] {
+    return this.collectActive(plugin => plugin.signalProviders ?? []);
+  }
+
+  private collectActive<TValue>(select: (plugin: LoadedPlugin) => TValue[]): PluginContribution<TValue>[] {
+    return this.loadedPlugins.flatMap(plugin =>
+      plugin.status === 'active' ? select(plugin).map(value => ({ pluginId: plugin.id, value })) : [],
     );
   }
 

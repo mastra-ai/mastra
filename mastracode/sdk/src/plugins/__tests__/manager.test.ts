@@ -13,14 +13,33 @@ import { findMastraCodePackageRoot } from '../package-link.js';
 import { loadPluginRegistry } from '../registry.js';
 
 const mastracodePackageRoot = findMastraCodePackageRoot(path.dirname(fileURLToPath(import.meta.url)));
+const SDK_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
 let tempDir: string | undefined;
+let tempResolvableDir: string | undefined;
+
+/**
+ * Fixtures that import from `@mastra/core` have to sit somewhere Node can
+ * resolve it from, which `os.tmpdir()` is not. Inside the package's own
+ * `node_modules` keeps them out of both `tsc` and vitest's globs.
+ */
+function makeResolvableDir(): string {
+  const parent = path.join(SDK_ROOT, 'node_modules', '.mc-test-plugins');
+  fs.mkdirSync(parent, { recursive: true });
+  const dir = fs.mkdtempSync(path.join(parent, 'manager-'));
+  tempResolvableDir = dir;
+  return dir;
+}
 
 afterEach(() => {
   vi.clearAllMocks();
   if (tempDir) {
     fs.rmSync(tempDir, { recursive: true, force: true });
     tempDir = undefined;
+  }
+  if (tempResolvableDir) {
+    fs.rmSync(tempResolvableDir, { recursive: true, force: true });
+    tempResolvableDir = undefined;
   }
 });
 
@@ -165,6 +184,61 @@ describe('PluginManager', () => {
     await manager.reload();
 
     expect(manager.getPluginTools().runtime_tool?.description).toBe('mastra-code');
+  });
+
+  it('exposes processors and signal providers from active plugins only, tagged with their owner', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const contributorDir = makeResolvableDir();
+    const disabledDir = path.join(tempDir, 'disabled');
+    const writeContributor = (dir: string, id: string, marker: string, withProvider: boolean) => {
+      fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'src/index.ts'),
+        `${withProvider ? `import { SignalProvider } from '@mastra/core/signals';\n` : ''}export default {
+          id: '${id}',
+          processors: {
+            input: [{ id: '${marker}-in', processInputStep: async () => {} }],
+            output: [{ id: '${marker}-out', processOutputStep: async ({ messageList }) => messageList }]
+          },
+          ${
+            withProvider ? `signalProviders: [new (class extends SignalProvider { id = '${marker}-signals'; })()],` : ''
+          }
+        };`,
+      );
+    };
+    writeContributor(contributorDir, 'acme.contributor', 'contributor', true);
+    writeContributor(disabledDir, 'acme.disabled', 'disabled', false);
+
+    const manager = new PluginManager({ projectRoot, homeDir });
+    await manager.installLocal(contributorDir, 'project');
+    await manager.installLocal(disabledDir, 'project');
+
+    expect(manager.getPluginProcessors().input.map(entry => [entry.pluginId, entry.value.id])).toEqual([
+      ['acme.contributor', 'contributor-in'],
+      ['acme.disabled', 'disabled-in'],
+    ]);
+    expect(manager.getPluginProcessors().output.map(entry => entry.value.id)).toEqual([
+      'contributor-out',
+      'disabled-out',
+    ]);
+    expect(manager.getPluginSignalProviders().map(entry => [entry.pluginId, entry.value.id])).toEqual([
+      ['acme.contributor', 'contributor-signals'],
+    ]);
+
+    await manager.setEnabled('acme.disabled', 'project', false);
+
+    expect(manager.getPluginProcessors().input.map(entry => entry.pluginId)).toEqual(['acme.contributor']);
+    expect(manager.getPluginProcessors().output.map(entry => entry.pluginId)).toEqual(['acme.contributor']);
+    expect(manager.getPluginSignalProviders().map(entry => entry.pluginId)).toEqual(['acme.contributor']);
+
+    // Accessors read the current load, so a reload keeps serving them. Phase 4b
+    // is what decides whether the *instances* behind them are kept or cycled.
+    await manager.reload();
+
+    expect(manager.getPluginProcessors().input.map(entry => entry.value.id)).toEqual(['contributor-in']);
+    expect(manager.getPluginSignalProviders().map(entry => entry.value.id)).toEqual(['contributor-signals']);
   });
 
   it('does not expose tools for plugins blocked by project config', async () => {
