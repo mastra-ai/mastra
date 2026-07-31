@@ -25,6 +25,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
 
 import type { Intake } from '../capabilities/intake.js';
+import type { Messaging } from '../capabilities/messaging.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
 import type { FactoryRules } from '../rules/types.js';
@@ -165,6 +166,17 @@ export interface FactoryIntegration {
   /** Repository, installation, and pull-request capability. */
   readonly versionControl?: VersionControl;
   /**
+   * Multi-adapter channels contribution. Peer of {@link Intake} /
+   * {@link VersionControl}. At most one integration may own any given
+   * platform-adapter key (`'slack'`, `'discord'`, …) across all integrations
+   * on a factory — `SlackIntegration` and `PlatformSlackIntegration` both
+   * use `'slack'` and are therefore mutually exclusive at boot. The factory
+   * merges every messaging-bearing integration's contribution into a single
+   * `AgentControllerChannels` and fails loud on duplicate adapter keys,
+   * handler slots, or resolvers with an error naming both integration classes.
+   */
+  readonly messaging?: Messaging;
+  /**
    * Bind the integration's generic persistence handle. Called once by the
    * factory during `prepare()` (before routes/tools/workers are collected),
    * so instance methods that run outside an `IntegrationContext` — per-request
@@ -218,9 +230,11 @@ export interface FactoryIntegration {
    * not-ready and its channels never attach, rather than dispatching runs it
    * can't resolve a tenant for.
    *
-   * Only one integration may provide channels; the factory fails loud at boot
-   * on a second, because `setChannels` replaces rather than merges and the
-   * loser would silently never receive a message.
+   * @deprecated Use {@link FactoryIntegration.messaging} (`Messaging.channels()`)
+   * instead. This top-level slot is preserved through Phase 2 of the
+   * `feat/messaging-capability` segment as a shim so the tree keeps compiling
+   * mid-segment; Phase 3 removes it in the same commit that migrates
+   * `SlackIntegration` onto `messaging`.
    */
   channels?(ctx: IntegrationContext): FactoryChannelsConfig;
   /**
