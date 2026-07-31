@@ -145,7 +145,7 @@ Visit the [Scorers overview](/docs/evals/overview) for details on available and 
 
 ## Tool mocks
 
-When an experiment runs an agent that calls side-effecting tools, you can make the run deterministic by attaching static tool mocks to individual dataset items. During the experiment, a mocked tool returns its declared output instead of executing. By default, tools that have no mock on the item run live.
+When an experiment runs an agent that calls side-effecting tools, attach static tool mocks to individual dataset items to make the run deterministic. During the experiment, a mocked tool returns its declared output instead of executing. Tools without a mock on the item run live by default.
 
 Mocks live on the dataset item, so they version with the row and travel with the test case. Each mock declares a tool name, the arguments it expects, and the output to return:
 

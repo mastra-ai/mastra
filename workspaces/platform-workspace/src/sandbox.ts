@@ -66,12 +66,72 @@ const CREATE_MAX_ATTEMPTS = 3;
 /** Base delay between create retries; multiplied by the attempt number. */
 const CREATE_RETRY_BASE_DELAY_MS = 2_000;
 
-interface ExecResponse {
-  exitCode: number | null;
-  stdout: string;
-  stderr: string;
-  truncated?: boolean;
-  timedOut?: boolean;
+/**
+ * Diagnostic error thrown when the direct-exec WebSocket transport fails
+ * twice in a row (opening handshake refused or socket closed mid-stream
+ * without an `exit` frame). Distinguishes "the sandbox transport is broken"
+ * from "your command failed" so callers can decide whether to retry at a
+ * higher level (e.g. reprovision the sandbox) or surface the error.
+ *
+ * `opened` is `true` when the WebSocket completed its handshake at least
+ * once before closing; `false` when Railway refused the upgrade outright.
+ */
+export class SandboxExecTransportError extends Error {
+  readonly sandboxId: string | undefined;
+  readonly command: string;
+  readonly attempts: number;
+  readonly opened: boolean;
+  readonly closeCode: number | undefined;
+  readonly closeReason: string | undefined;
+  readonly wsEndpoint: string;
+
+  constructor(
+    message: string,
+    diagnostics: {
+      sandboxId?: string;
+      command: string;
+      attempts: number;
+      opened: boolean;
+      closeCode?: number;
+      closeReason?: string;
+      wsEndpoint: string;
+    },
+  ) {
+    super(message);
+    this.name = 'SandboxExecTransportError';
+    this.sandboxId = diagnostics.sandboxId;
+    this.command = diagnostics.command;
+    this.attempts = diagnostics.attempts;
+    this.opened = diagnostics.opened;
+    this.closeCode = diagnostics.closeCode;
+    this.closeReason = diagnostics.closeReason;
+    this.wsEndpoint = diagnostics.wsEndpoint;
+  }
+}
+
+/**
+ * Thrown when `/exec-lease` returns 410 Gone — the sandbox has been destroyed
+ * (Railway destroy, quota reclamation, etc.). The client cannot recover from
+ * this on its own because it does not own the binding store; only the fleet
+ * layer can clear the stale sandbox id and provision a fresh one. Callers
+ * (typically `SandboxFleet`) must catch this and reprovision-and-replay.
+ *
+ * When this is thrown the cached `_lease` and `_sandboxId` on the sandbox
+ * instance are cleared, so the next `ensureRunning()` on a reused instance
+ * will re-provision cleanly.
+ */
+export class SandboxDestroyedError extends Error {
+  readonly sandboxId: string | undefined;
+  readonly command: string;
+  readonly attempts: number;
+
+  constructor(message: string, diagnostics: { sandboxId?: string; command: string; attempts: number }) {
+    super(message);
+    this.name = 'SandboxDestroyedError';
+    this.sandboxId = diagnostics.sandboxId;
+    this.command = diagnostics.command;
+    this.attempts = diagnostics.attempts;
+  }
 }
 
 /**
@@ -193,16 +253,6 @@ export class PlatformSandbox extends MastraSandbox {
    * Cleared (regardless of success or failure) when the request settles.
    */
   private _leaseInFlight: Promise<ExecLease & { expiresAtMs: number | null }> | null = null;
-  /**
-   * Tri-state feature detection for the platform's exec-lease endpoint:
-   *   undefined — not yet tried (default; try direct on first exec)
-   *   true      — endpoint present, use direct exec
-   *   false     — endpoint absent (404/501) OR the WebSocket transport failed
-   *               once; fall back permanently to /exec for this sandbox
-   * Sticky per instance so we make the fallback decision once per sandbox
-   * lifetime instead of paying an extra round-trip on every exec.
-   */
-  private _directExecAvailable: boolean | undefined = undefined;
 
   constructor(options: PlatformSandboxOptions = {}) {
     super({ ...options, name: 'PlatformSandbox', processes: new PlatformProcessManager() });
@@ -355,83 +405,25 @@ export class PlatformSandbox extends MastraSandbox {
 
     const started = Date.now();
     const fullCommand = buildCommand(command, args);
-    // Nullish check so an explicit `timeout: 0` is sent as `0` (interpreted as
-    // "no timeout" by the proxy) instead of being dropped by a truthy check.
+    // Nullish check so an explicit `timeout: 0` still overrides the instance
+    // default. `_runDirectExec` omits `timeoutMs` from the exec payload when
+    // the value is 0, which disables the client-side timer entirely.
     const effectiveTimeout = options?.timeout ?? this._timeout;
 
-    // Prefer the direct-exec data plane (WebSocket straight to Railway's
-    // tcp-proxy) when the platform exposes the exec-lease endpoint. Falls
-    // back to the proxy /exec route on older platform deployments. See
-    // ./direct-exec.ts and `docs/factory/direct-sandbox-connection.md` in
-    // the Platform repo.
-    if (this._directExecAvailable !== false) {
-      const leaseResult = await this._tryDirectExec(fullCommand, effectiveTimeout, options);
-      if (leaseResult) return { ...leaseResult, executionTimeMs: Date.now() - started };
-    }
-    return this._execViaProxy(fullCommand, effectiveTimeout, options, started);
-  }
-
-  private async _tryDirectExec(
-    fullCommand: string,
-    effectiveTimeout: number | undefined,
-    options: ExecuteCommandOptions | undefined,
-  ): Promise<Omit<CommandResult, 'executionTimeMs'> | null> {
-    let lease: (ExecLease & { expiresAtMs: number | null }) | null;
-    try {
-      lease = await this._ensureLease();
-    } catch (error) {
-      // 404/501 → endpoint not present on this proxy deployment. Flip the
-      // feature bit and take the fallback path for this call AND every
-      // subsequent one on this sandbox.
-      if (error instanceof PlatformApiError && (error.status === 404 || error.status === 501)) {
-        this._directExecAvailable = false;
-        return null;
-      }
-      throw error;
-    }
-    this._directExecAvailable = true;
-
-    // Filter undefined values out of the env overlay so we match the
-    // Record<string, string> shape execViaLease expects. `ExecuteCommandOptions.env`
-    // is NodeJS.ProcessEnv (string | undefined); the proxy `/exec` path ships
-    // it through JSON.stringify which drops undefined implicitly, so this is
-    // just the explicit version of the same filter.
-    const filteredEnv = options?.env
-      ? Object.fromEntries(
-          Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
-        )
-      : undefined;
-    const result = await execViaLease(lease, {
-      command: fullCommand,
-      ...(options?.cwd !== undefined && { cwd: options.cwd }),
-      ...(filteredEnv !== undefined && { env: filteredEnv }),
-      ...(effectiveTimeout != null && effectiveTimeout > 0 && { timeoutMs: effectiveTimeout }),
-      ...(this._webSocketFactory && { webSocketFactory: this._webSocketFactory }),
-    });
-    // `null` exitCode without `timedOut` means the socket closed without an
-    // exit frame — i.e. a transport failure (handshake stalled, mid-stream
-    // drop, expired token). Drop the cached lease AND flip the feature bit
-    // so we don't burn a fresh mint + failed WS handshake on every subsequent
-    // exec; fall back permanently to /exec for this sandbox. Log the close
-    // metadata so we can diagnose why Railway refused the WebSocket. Timed-out
-    // and normal-exit results still return synthesised / real exit codes as
-    // before.
-    if (result.exitCode === null && !result.timedOut) {
-      // eslint-disable-next-line no-console
-      console.warn(
-        '[platform-workspace] direct-exec transport failed; falling back to /exec permanently for this sandbox',
-        {
-          sandboxId: this._sandboxId,
-          opened: result.opened,
-          closeCode: result.closeCode,
-          closeReason: result.closeReason,
-          wsEndpoint: lease.wsEndpoint,
-        },
-      );
-      this._lease = null;
-      this._directExecAvailable = false;
-      return null;
-    }
+    // Direct-exec (WebSocket straight to Railway's tcp-proxy) is the only
+    // data plane. `_runDirectExec` handles single-shot transport retry and
+    // throws typed errors on unrecoverable failure: `SandboxDestroyedError`
+    // when `/exec-lease` returns 410 (fleet must reprovision),
+    // `SandboxExecTransportError` when the WebSocket transport fails twice
+    // against a live sandbox, `PlatformApiError` for other `/exec-lease`
+    // errors (404/500/501). See ./direct-exec.ts and
+    // `docs/factory/direct-sandbox-connection.md` in the Platform repo.
+    const result = await this._runDirectExec(fullCommand, effectiveTimeout, options);
+    // `_runDirectExec` throws on transport failure (see its jsdoc), so a
+    // `null` exitCode here can only mean `timedOut: true` — the sandbox
+    // never got to send an exit frame because we cut the command short.
+    // Use 124 for that (the conventional timeout exit code). We are NOT
+    // coercing transport-failure nulls to fake exit codes — those throw.
     const exitCode = result.exitCode ?? 124;
     return {
       success: exitCode === 0,
@@ -440,44 +432,124 @@ export class PlatformSandbox extends MastraSandbox {
       stderr: result.stderr,
       timedOut: result.timedOut,
       command: fullCommand,
+      executionTimeMs: Date.now() - started,
     };
   }
 
-  private async _execViaProxy(
+  /**
+   * Run a single exec against the direct-exec transport, with one in-flight
+   * retry on WebSocket transport failure (socket closed without an `exit`
+   * frame and the exec did not time out). The retry mints a fresh lease
+   * — the failure could be a stale JWT — and reopens a new WebSocket.
+   *
+   * Error taxonomy:
+   * - **410 on `/exec-lease`** (either attempt) → the sandbox is gone.
+   *   Nulls the cached `_lease` and `_sandboxId` and throws
+   *   {@link SandboxDestroyedError}. Callers (typically `SandboxFleet`) must
+   *   catch this, clear the stale binding, and reprovision + replay.
+   * - **Persistent transport failure** (both WS attempts close without an
+   *   `exit` frame against a live sandbox) → {@link SandboxExecTransportError}
+   *   with WebSocket close diagnostics.
+   * - **Other `PlatformApiError`s** (404/500/501) propagate directly.
+   * - **Real command result** (exit code from Railway's exit frame, or
+   *   `timedOut: true`) returns normally.
+   *
+   * Returns a result with a real `exitCode` OR `timedOut: true`. Never
+   * returns `{ exitCode: null, timedOut: false }` — that case throws.
+   */
+  private async _runDirectExec(
     fullCommand: string,
     effectiveTimeout: number | undefined,
     options: ExecuteCommandOptions | undefined,
-    started: number,
-  ): Promise<CommandResult> {
-    if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
-    const timeoutSec = effectiveTimeout != null ? Math.ceil(effectiveTimeout / 1000) : undefined;
-    // Pass our own signal for exec so the client's default per-request
-    // timeout (60s) doesn't cut off commands that expect to run longer.
-    // Give the proxy a generous buffer over the requested command timeout.
-    const clientSignal =
-      effectiveTimeout != null && effectiveTimeout > 0 ? AbortSignal.timeout(effectiveTimeout + 30_000) : undefined;
-    const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}/exec`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
+  ): Promise<{ exitCode: number | null; stdout: string; stderr: string; timedOut: boolean }> {
+    // Filter undefined values out of the env overlay so we match the
+    // Record<string, string> shape execViaLease expects. `ExecuteCommandOptions.env`
+    // is NodeJS.ProcessEnv (string | undefined).
+    const filteredEnv = options?.env
+      ? Object.fromEntries(
+          Object.entries(options.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+        )
+      : undefined;
+
+    let lastResult: Awaited<ReturnType<typeof execViaLease>> | undefined;
+    let lastLease: (ExecLease & { expiresAtMs: number | null }) | undefined;
+    let attemptsMade = 0;
+    // Two attempts: initial + one retry. On the second attempt we drop the
+    // cached lease so we don't reuse a JWT that may itself be the cause of
+    // the transport failure — but only if the cache still holds the same
+    // lease we just failed against. A concurrent exec sharing this instance
+    // may have already cached a fresh, unrelated lease in between, and we
+    // must not discard that.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0 && lastLease && this._lease === lastLease) this._lease = null;
+      let lease: ExecLease & { expiresAtMs: number | null };
+      try {
+        lease = await this._ensureLease();
+      } catch (error) {
+        // 410 → sandbox has been destroyed. Clear all cached state so a
+        // reused instance re-provisions cleanly, then hand off to the fleet
+        // layer via a typed error. Other PlatformApiErrors (404/500/501)
+        // propagate as-is — those are configuration or platform errors, not
+        // a "reprovision me" signal.
+        if (error instanceof PlatformApiError && error.status === 410) {
+          this._lease = null;
+          const priorSandboxId = this._sandboxId;
+          this._sandboxId = undefined;
+          throw new SandboxDestroyedError(
+            `Sandbox ${priorSandboxId ?? '(unknown)'} was destroyed; /exec-lease returned 410`,
+            {
+              ...(priorSandboxId && { sandboxId: priorSandboxId }),
+              command: fullCommand,
+              attempts: attempt + 1,
+            },
+          );
+        }
+        throw error;
+      }
+      lastLease = lease;
+      attemptsMade = attempt + 1;
+      const result = await execViaLease(lease, {
         command: fullCommand,
-        timeoutSec,
-        cwd: options?.cwd,
-        env: options?.env,
-      }),
-      signal: clientSignal,
-    });
-    const json = (await response.json()) as ExecResponse;
-    const exitCode = json.exitCode ?? (json.timedOut ? 124 : 1);
-    return {
-      success: exitCode === 0,
-      exitCode,
-      stdout: json.stdout,
-      stderr: json.stderr,
-      executionTimeMs: Date.now() - started,
-      timedOut: json.timedOut,
-      command: fullCommand,
-    };
+        ...(options?.cwd !== undefined && { cwd: options.cwd }),
+        ...(filteredEnv !== undefined && { env: filteredEnv }),
+        ...(effectiveTimeout != null && effectiveTimeout > 0 && { timeoutMs: effectiveTimeout }),
+        ...(this._webSocketFactory && { webSocketFactory: this._webSocketFactory }),
+      });
+      lastResult = result;
+      // `null` exitCode with `timedOut: false` means the socket closed
+      // without an exit frame — a transport failure (handshake stalled,
+      // mid-stream drop, expired token). Any other outcome (real exit code
+      // or timed-out) is a valid result and we return it.
+      if (result.exitCode !== null || result.timedOut) return result;
+    }
+
+    // Both attempts failed at the transport layer against a live sandbox.
+    // Surface a loud, typed error with close diagnostics so callers can
+    // distinguish "your command failed" from "the sandbox transport is
+    // broken."
+    const result = lastResult!;
+    const lease = lastLease!;
+    // The lease from the failed second attempt is still cached; drop it so
+    // the next `executeCommand` doesn't waste its first attempt on the same
+    // implicated JWT before minting fresh. Identity-check first so a
+    // concurrent exec that has already cached a fresh, unrelated lease
+    // isn't collateral-damaged.
+    if (this._lease === lease) this._lease = null;
+    throw new SandboxExecTransportError(
+      `Direct-exec transport failed for sandbox ${this._sandboxId ?? '(unknown)'} after ${attemptsMade} attempt(s)` +
+        (result.closeCode !== undefined
+          ? ` (close ${result.closeCode}${result.closeReason ? ` ${result.closeReason}` : ''})`
+          : ''),
+      {
+        ...(this._sandboxId && { sandboxId: this._sandboxId }),
+        command: fullCommand,
+        attempts: attemptsMade,
+        opened: result.opened ?? false,
+        ...(result.closeCode !== undefined && { closeCode: result.closeCode }),
+        ...(result.closeReason !== undefined && { closeReason: result.closeReason }),
+        wsEndpoint: lease.wsEndpoint,
+      },
+    );
   }
 
   /**
