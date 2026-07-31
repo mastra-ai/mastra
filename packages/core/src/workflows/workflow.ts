@@ -15,7 +15,7 @@ import { MastraFGAPermissions } from '../auth/ee';
 import type { ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
-import { ErrorCategory, ErrorDomain, MastraError } from '../error';
+import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../error';
 import type { MastraScorers } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
@@ -97,7 +97,12 @@ import type {
   WorkflowRunStartOptions,
   ForeachOptions,
 } from './types';
-import { cleanStepResult, createRestartExecutionParams, createTimeTravelExecutionParams } from './utils';
+import {
+  cleanStepResult,
+  createRestartExecutionParams,
+  createTimeTravelExecutionParams,
+  hydrateSerializedStepErrors,
+} from './utils';
 
 // Options that can be passed when wrapping an agent with createStep
 // These work for both stream() (v2) and streamLegacy() (v1) methods
@@ -4221,6 +4226,51 @@ export class Run<
 
     if (!snapshot) {
       throw new Error(`Snapshot not found for run ${this.runId}`);
+    }
+
+    // Parent parallel activeStepsPath can lag behind nested child completion after a crash:
+    // children may already be terminal while the parent still lists them as active and
+    // re-invokes restart(). Treat terminal snapshots as authoritative and reuse them.
+    // See https://github.com/mastra-ai/mastra/issues/20225
+    const terminalStatuses: WorkflowRunStatus[] = ['success', 'failed', 'canceled', 'bailed', 'tripwire'];
+    if (terminalStatuses.includes(snapshot.status)) {
+      this.cleanup?.();
+      const steps = hydrateSerializedStepErrors({ ...(snapshot.context ?? {}) }) ?? {};
+      const input = (snapshot.context as { input?: TInput } | undefined)?.input as TInput;
+      const base = {
+        status: snapshot.status,
+        steps,
+        input,
+        runId: this.runId,
+        ...(snapshot.value && Object.keys(snapshot.value).length > 0 ? { state: snapshot.value as TState } : {}),
+        ...(snapshot.stepExecutionPath ? { stepExecutionPath: snapshot.stepExecutionPath } : {}),
+        ...(snapshot.resumeLabels ? { resumeLabels: snapshot.resumeLabels } : {}),
+      };
+
+      if (snapshot.status === 'success') {
+        return { ...base, status: 'success', result: snapshot.result as TOutput } as WorkflowResult<
+          TState,
+          TInput,
+          TOutput,
+          TSteps
+        >;
+      }
+      if (snapshot.status === 'failed') {
+        return {
+          ...base,
+          status: 'failed',
+          error: getErrorFromUnknown(snapshot.error, { serializeStack: false }),
+        } as WorkflowResult<TState, TInput, TOutput, TSteps>;
+      }
+      if (snapshot.status === 'tripwire') {
+        return { ...base, status: 'tripwire', tripwire: snapshot.tripwire } as WorkflowResult<
+          TState,
+          TInput,
+          TOutput,
+          TSteps
+        >;
+      }
+      return base as WorkflowResult<TState, TInput, TOutput, TSteps>;
     }
 
     const restartData = createRestartExecutionParams({ snapshot, graph: this.executionGraph });
