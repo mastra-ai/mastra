@@ -10,11 +10,11 @@ import TabItem from "@theme/TabItem";
 
 # PlatformSandbox
 
-Client for provisioning ephemeral sandboxes in a Mastra Platform environment. Each `PlatformSandbox` instance owns one remote sandbox: `start()` provisions it, `executeCommand()` runs against it, and `destroy()` tears it down. Agents typically construct many `PlatformSandbox` instances per session, one per isolated task, tenant, or background job, and let them go when they're done.
+Client for provisioning sandboxes in a Mastra Platform environment. Each `PlatformSandbox` instance owns one remote sandbox: `start()` provisions it, `executeCommand()` runs against it, and `destroy()` tears it down. Construct additional instances to own additional remote sandboxes; use `clone()` to derive them from a configured template (see [Cloning](#cloning-for-a-fleet-of-sandboxes)).
 
-Sandboxes boot from a pre-built recipe checkpoint with Python 3, Node 22, TypeScript, tsx, and common build tooling already installed. Use `clone()` to derive a fleet of sandboxes from one configured template (see [Cloning](#cloning-for-a-fleet-of-sandboxes)), and pass a stable `id` to opt into [checkpoint recovery](#checkpoint-recovery) so a new sandbox boots from the previous one's filesystem.
+Sandboxes boot from a pre-built recipe checkpoint with Python 3, Node 22, TypeScript, tsx, and common build tooling already installed. Pass a stable `id` to opt into [checkpoint recovery](#checkpoint-recovery) so a new sandbox boots from the previous one's filesystem.
 
-Use `PlatformSandbox` when your agent runs on a Mastra Platform deployment and you want the sandbox to be provisioned and managed by the platform. For self-hosted Railway sandboxes, see [`RailwaySandbox`](/reference/workspace/railway-sandbox). For a local sandbox during development, see [`LocalSandbox`](/reference/workspace/local-sandbox).
+Related providers: [`RailwaySandbox`](/reference/workspace/railway-sandbox) for self-hosted Railway sandboxes, [`LocalSandbox`](/reference/workspace/local-sandbox) for local sandboxes.
 
 :::info
 
@@ -99,7 +99,7 @@ The default `ISOLATED` mode allows outbound internet access only, with no privat
 
 ### Reattaching to a running sandbox
 
-Pass an existing `sandboxId` to reattach to a live sandbox instead of creating a new one. This is useful for stateful agents that resume between requests:
+Pass an existing `sandboxId` to reattach to a live sandbox instead of creating a new one:
 
 ```typescript
 const sandbox = new PlatformSandbox({
@@ -114,23 +114,23 @@ When `sandboxId` is set, `environmentId` isn't required because the sandbox alre
 
 ### Checkpoint recovery
 
-Every `PlatformSandbox` has an `id` — either the one you pass to the constructor or an auto-generated one — that is sent to the platform on `POST /sandbox` as an advisory recovery key. The platform uses it to opt into checkpoint-based sandbox recovery:
+The constructor `id` (explicit or auto-generated) is sent to the platform on `POST /sandbox` as an advisory recovery key:
 
 - If the platform recognises the `id` from a previous session, the new sandbox boots from the most recent checkpoint of that earlier sandbox's filesystem instead of the base recipe.
-- If the `id` isn't recognised, the platform falls through to a fresh sandbox from the base recipe. This is the default behavior when you don't pass an `id`.
+- If the `id` isn't recognised, the platform falls through to a fresh sandbox from the base recipe. Auto-generated ids never match, so omitting `id` disables checkpoint recovery.
 
-Pass a stable `id` when you want a sandbox's filesystem to survive across sessions or across a `destroy()`/`start()` cycle:
+Pass a stable `id` to preserve a sandbox's filesystem across sessions or across a `destroy()`/`start()` cycle:
 
 ```typescript
 const sandbox = new PlatformSandbox({
-  id: `project-${projectId}`, // stable across sessions
+  id: `project-${projectId}`,
 })
 await sandbox.start() // Boots from the most recent checkpoint for this id, or fresh if unknown
 ```
 
 Checkpoint recovery is coarser than `sandboxId` reattachment. Reattaching (via `sandboxId`) rejoins the exact live sandbox and its running processes. Checkpoint recovery constructs a brand new sandbox and restores its filesystem from the latest checkpoint the platform captured for the previous sandbox with that `id`. Running processes and any filesystem writes made after the last checkpoint aren't restored.
 
-Use one stable `id` for each independent filesystem. Don't share an `id` across unrelated sessions, tenants, or projects — the platform would boot them from each other's checkpoint.
+Each `id` maps to one independent filesystem. Reusing the same `id` across unrelated sandboxes causes the platform to boot them from each other's checkpoint.
 
 ### Cloning for a fleet of sandboxes
 
@@ -146,7 +146,7 @@ const perProject = template.clone({ id: `project-${projectId}` })
 await perProject.start()
 ```
 
-Use `clone()` when one configured `PlatformSandbox` acts as the template for a fleet of independent sandboxes, for example one per project, tenant, or task. Combine it with a stable `id` per clone to opt each clone into [checkpoint recovery](#checkpoint-recovery) independently.
+Combine `clone()` with a stable `id` per clone to opt each clone into [checkpoint recovery](#checkpoint-recovery) independently.
 
 ### Executing commands
 
