@@ -224,7 +224,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // Older publishers flattened fields onto the root; normalize so
           // consumers always see `payload` (see #19574).
           const raw = streamEvent.data as any;
-          if (raw && typeof raw === 'object' && 'type' in raw) {
+          if (raw && typeof raw === 'object') {
             const chunk =
               raw.payload !== undefined
                 ? (raw as ChunkType<OUTPUT>)
