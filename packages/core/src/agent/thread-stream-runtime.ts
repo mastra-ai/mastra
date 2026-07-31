@@ -1397,15 +1397,33 @@ export class AgentThreadStreamRuntime {
       }
       timer = setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS);
     };
-    const onEvent: EventCallback = event => {
+    const inFlightSettlements = new Set<Promise<void>>();
+    const settleEvent = (ack?: () => Promise<void>, nack?: () => Promise<void>) => {
+      const settlement = (async () => {
+        try {
+          await ack?.();
+        } catch (error) {
+          await nack?.().catch(() => {});
+          throw error;
+        }
+      })();
+      inFlightSettlements.add(settlement);
+      void settlement.then(
+        () => inFlightSettlements.delete(settlement),
+        () => inFlightSettlements.delete(settlement),
+      );
+      return settlement;
+    };
+    const onEvent: EventCallback = (event, ack, nack) => {
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
-      if (
+      const isTerminalEvent =
         (data?.type === 'run-completed' || data?.type === 'run-aborted' || data?.type === 'run-failed') &&
-        data.runId === runId
-      ) {
+        data.runId === runId;
+      if (isTerminalEvent) {
         clearRemoteActive(data.streamId);
-        finish();
       }
+      const settlement = settleEvent(ack, nack);
+      return isTerminalEvent ? settlement.finally(finish) : settlement;
     };
 
     try {
@@ -1418,6 +1436,9 @@ export class AgentThreadStreamRuntime {
       await wait;
     } finally {
       if (timer) clearTimeout(timer);
+      while (inFlightSettlements.size > 0) {
+        await Promise.allSettled([...inFlightSettlements]);
+      }
       if (subscribed) await resolvedPubSub.unsubscribe(topic, onEvent).catch(() => {});
     }
   }
@@ -1669,9 +1690,25 @@ export class AgentThreadStreamRuntime {
       }
     };
 
+    const processEvent = async (
+      event: Parameters<EventCallback>[0],
+      ack?: Parameters<EventCallback>[1],
+      nack?: Parameters<EventCallback>[2],
+    ) => {
+      try {
+        await handleEvent(event);
+        await ack?.();
+      } catch (error) {
+        await nack?.().catch(() => {});
+        throw error;
+      }
+    };
+
     let eventTail = Promise.resolve();
-    const onEvent: EventCallback = event => {
-      eventTail = eventTail.then(() => handleEvent(event)).catch(() => {});
+    const onEvent: EventCallback = (event, ack, nack) => {
+      const processing = eventTail.then(() => processEvent(event, ack, nack));
+      eventTail = processing.catch(() => {});
+      return processing;
     };
 
     await resolvedPubSub.subscribe(topic, onEvent);
@@ -1686,7 +1723,7 @@ export class AgentThreadStreamRuntime {
     const unsubscribe = () => {
       if (done) return;
       done = true;
-      void resolvedPubSub.unsubscribe(topic, onEvent).catch(() => {});
+      void eventTail.then(() => resolvedPubSub.unsubscribe(topic, onEvent)).catch(() => {});
       // Cancel current reader so the generator's inner loop breaks.
       if (currentReader) {
         try {
