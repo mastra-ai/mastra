@@ -14,3 +14,4 @@ export * as workspace from './handlers/workspace';
 export * as vector from './handlers/vector';
 export * as voice from './handlers/voice';
 export * as workflows from './handlers/workflows';
+export * as storedWorkflows from './handlers/stored-workflows';

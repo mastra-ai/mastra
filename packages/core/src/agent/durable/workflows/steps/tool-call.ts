@@ -486,22 +486,7 @@ export function createDurableToolCallStep() {
       }) => {
         if (!messageList) return;
         const metadataKey = opts.type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
-        const responseMessages = messageList.get.response.db();
-        const lastAssistantMessage = [...responseMessages].reverse().find(msg => msg.role === 'assistant');
-        if (!lastAssistantMessage?.content) return;
-
-        let metadata: Record<string, any>;
-        if (
-          typeof lastAssistantMessage.content.metadata === 'object' &&
-          lastAssistantMessage.content.metadata !== null
-        ) {
-          metadata = lastAssistantMessage.content.metadata as Record<string, any>;
-        } else {
-          metadata = {};
-          lastAssistantMessage.content.metadata = metadata;
-        }
-        metadata[metadataKey] = metadata[metadataKey] || {};
-        metadata[metadataKey][toolCallId] = {
+        const entry = {
           toolCallId,
           toolName,
           args,
@@ -515,6 +500,54 @@ export function createDurableToolCallStep() {
           ...(opts.type === 'suspension' ? { suspendPayload: opts.suspendPayload } : {}),
           ...(opts.resumeSchema ? { resumeSchema: opts.resumeSchema } : {}),
         };
+
+        const carriesToolCall = (msg: any) =>
+          msg.role === 'assistant' &&
+          (msg.content?.parts ?? []).some(
+            (part: any) => part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId,
+          );
+
+        const responseMessages = messageList.get.response.db();
+        const lastAssistantMessage = [...responseMessages].reverse().find(carriesToolCall);
+        if (lastAssistantMessage?.content) {
+          let metadata: Record<string, any>;
+          if (
+            typeof lastAssistantMessage.content.metadata === 'object' &&
+            lastAssistantMessage.content.metadata !== null
+          ) {
+            metadata = lastAssistantMessage.content.metadata as Record<string, any>;
+          } else {
+            metadata = {};
+            lastAssistantMessage.content.metadata = metadata;
+          }
+          metadata[metadataKey] = metadata[metadataKey] || {};
+          metadata[metadataKey][toolCallId] = entry;
+          return;
+        }
+
+        // The response view is empty: a sibling parallel tool call already
+        // suspended and its pre-suspension flush drained the unsaved response
+        // messages. Without a fallback this sibling's entry is silently lost
+        // and only the first suspension survives in persisted metadata. Merge
+        // the entry into the assistant message that carries this tool call via
+        // updateMessageMetadataByToolCallId, which also re-marks the message
+        // unsaved so the following flush persists this write too.
+        const allMessages = messageList.get.all.db();
+        const target = [...allMessages].reverse().find(carriesToolCall);
+        if (!target?.content) {
+          logger?.warn?.(
+            `[DurableAgent] addToolMetadata could not find an assistant message for tool call ${toolCallId} (${toolName}); ${metadataKey} entry was not persisted.`,
+          );
+          return;
+        }
+        const existingMeta =
+          typeof target.content.metadata === 'object' && target.content.metadata !== null
+            ? (target.content.metadata as Record<string, any>)
+            : {};
+        const existingEntries = (existingMeta[metadataKey] ?? {}) as Record<string, any>;
+        messageList.updateMessageMetadataByToolCallId(toolCallId, {
+          [metadataKey]: { ...existingEntries, [toolCallId]: entry },
+        });
       };
 
       // Remove suspended-tool / pending-approval metadata from the last
