@@ -42,6 +42,7 @@ const mocks = vi.hoisted(() => ({
   /** Org GitHub PATs surfaced via integration settings; null = not configured. */
   githubPat: null as string | null,
   githubReviewerPat: null as string | null,
+  githubPatReadError: null as Error | null,
   /** Run-binding role resolved for the session; null = no binding found. */
   runBindingRole: null as string | null,
   findRunBindingBySession: vi.fn(async () =>
@@ -81,6 +82,7 @@ afterEach(async () => {
   mocks.setEnvironmentVariable.mockClear();
   mocks.githubPat = null;
   mocks.githubReviewerPat = null;
+  mocks.githubPatReadError = null;
   mocks.runBindingRole = null;
   mocks.findRunBindingBySession.mockClear();
 });
@@ -192,14 +194,15 @@ function fakeGithubIntegration() {
     getInstallationOctokit: vi.fn(),
     integrationStorage: {
       settings: {
-        get: vi.fn(async () =>
-          mocks.githubPat || mocks.githubReviewerPat
+        get: vi.fn(async () => {
+          if (mocks.githubPatReadError) throw mocks.githubPatReadError;
+          return mocks.githubPat || mocks.githubReviewerPat
             ? {
                 ...(mocks.githubPat ? { pat: mocks.githubPat } : {}),
                 ...(mocks.githubReviewerPat ? { reviewerPat: mocks.githubReviewerPat } : {}),
               }
-            : null,
-        ),
+            : null;
+        }),
       },
     },
     sourceControlStorage: {
@@ -849,6 +852,28 @@ describe('GitHub session workspace preparation', () => {
     expect(getRegisteredGithubPatKind(requestContext)).toBe('reviewer');
   });
 
+  it('preserves a cached reviewer identity when the binding lookup fails during reuse', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    mocks.findRunBindingBySession.mockRejectedValueOnce(new Error('binding storage unavailable'));
+    mocks.setEnvironmentVariable.mockClear();
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({
+      requestContext,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+    expect(getRegisteredGithubPatKind(requestContext)).toBe('reviewer');
+  });
+
   it('reconciles the binding role for followers of an inflight materialization', async () => {
     mocks.githubPat = 'ghp_worker';
     mocks.githubReviewerPat = 'ghp_reviewer';
@@ -1053,6 +1078,30 @@ describe('GitHub session workspace preparation', () => {
 
     expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
     expect(getRegisteredGithubPatKind(requestContext)).toBe('default');
+  });
+
+  it('keeps the installed PAT when settings cannot be read during reuse', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    mocks.githubPatReadError = new Error('settings storage unavailable');
+    mocks.getRepositoryAccess.mockClear();
+    mocks.setEnvironmentVariable.mockClear();
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({
+      requestContext,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+    expect(getRegisteredGithubPatKind(requestContext)).toBe('reviewer');
   });
 
   it('does not re-inject an unchanged PAT on workspace reuse', async () => {

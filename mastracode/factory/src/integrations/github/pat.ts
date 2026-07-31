@@ -40,20 +40,22 @@ function asToken(value: unknown): string | null {
 
 /** The PAT to install for `kind`, or null. `reviewer` falls back to the
  * worker token so review sessions still authenticate when no dedicated
- * reviewer token is configured. Fail-soft: storage errors (e.g. integration
- * storage not initialized in a partial test harness) read as "no PAT
- * configured" so token minting still works. */
+ * reviewer token is configured. Storage errors read as "no PAT configured"
+ * by default so token minting still works; cached-credential reconciliation
+ * can opt into errors to avoid mistaking an unavailable store for a cleared PAT. */
 export async function getGithubPat(
   getStorage: () => GithubSubscriptionStorage,
   orgId: string,
   kind: GithubPatKind = 'default',
+  options: { throwOnError?: boolean } = {},
 ): Promise<string | null> {
   try {
     const settings = (await getStorage().settings.get(orgId, PAT_SETTINGS_USER_ID)) as GithubOrgSettings | null;
     if (!settings) return null;
     if (kind === 'reviewer') return asToken(settings.reviewerPat) ?? asToken(settings.pat);
     return asToken(settings.pat);
-  } catch {
+  } catch (error) {
+    if (options.throwOnError) throw error;
     return null;
   }
 }

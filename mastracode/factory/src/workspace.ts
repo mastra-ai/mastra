@@ -213,16 +213,17 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
     const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
     const configDir = sandboxConfig.workdir ?? DEFAULT_CONFIG_DIR;
-    const resolveGithubPatKind = async (): Promise<GithubPatKind> => {
+    const resolveGithubPatKind = async (): Promise<GithubPatKind | undefined> => {
       if (!workItems) return 'default';
       try {
         const address = getFactorySessionAddress(requestContext);
         const runBinding = address ? await workItems.findRunBindingBySession(address) : null;
         if (runBinding?.role === 'review' && runBinding.orgId === session.orgId) return 'reviewer';
+        return 'default';
       } catch {
-        // No resolvable binding — worker token.
+        // Reuse must preserve its cached identity when binding storage is unavailable.
+        return undefined;
       }
-      return 'default';
     };
     const getRepositoryToken = async (): Promise<string> => {
       const access = await github.versionControl.getRepositoryAccess({
@@ -239,10 +240,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
 
       registerGithubTokenInjector(requestContext, registered.inject);
       const patKind = await resolveGithubPatKind();
+      if (!patKind) {
+        registerGithubPatKind(requestContext, registered.patKind);
+        return;
+      }
       const patKindChanged = patKind !== registered.patKind;
       let credentialSourceChanged = false;
       try {
-        const pat = await getGithubPat(() => github.integrationStorage, session.orgId, patKind);
+        const pat = await getGithubPat(() => github.integrationStorage, session.orgId, patKind, { throwOnError: true });
         const credentialSource = pat ? 'pat' : 'repository';
         credentialSourceChanged = credentialSource !== registered.credentialSource;
         const ghToken = pat ?? (credentialSourceChanged ? await getRepositoryToken() : registered.ghToken);
@@ -304,7 +309,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // (run-binding role `review`) authenticate `gh` as the reviewer account
       // when a reviewer token is configured; everything else — including
       // sessions with no resolvable run binding — uses the worker token.
-      const patKind = await resolveGithubPatKind();
+      const patKind = (await resolveGithubPatKind()) ?? 'default';
       const pat = await getGithubPat(() => github.integrationStorage, session.orgId, patKind);
       const ghCliToken = pat ?? token;
       const credentialSource = pat ? 'pat' : 'repository';
