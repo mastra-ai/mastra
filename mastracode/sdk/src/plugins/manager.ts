@@ -42,6 +42,8 @@ export class PluginManager {
   private readonly toolRenderConfigs = new Map<string, NonNullable<LoadedPlugin['renderConfigs']>[string]>();
   private readonly watchedLocalEntries = new Set<string>();
   private readonly localEntryVersions = new Map<string, string>();
+  /** Last known git HEAD per GitHub checkout, kept current by the poller. */
+  private readonly githubCheckoutHeads = new Map<string, string>();
   private githubPollTimer: ReturnType<typeof setInterval> | undefined;
   private githubPollInFlight: Promise<boolean> | undefined;
   private reloadInFlight: Promise<LoadedPlugin[]> | undefined;
@@ -66,6 +68,7 @@ export class PluginManager {
 
     this.reloadInFlight = (async () => {
       this.loadedPlugins = await loadPlugins(this.options);
+      await this.stampLoadedPlugins(this.loadedPlugins);
       this.updateLocalEntryWatchers(this.loadedPlugins);
       this.updateGithubPoller(this.loadedPlugins);
       this.updatePluginRenderConfigs(this.loadedPlugins);
@@ -131,12 +134,49 @@ export class PluginManager {
 
   private collectActive<TValue>(select: (plugin: LoadedPlugin) => TValue[]): PluginContribution<TValue>[] {
     return this.loadedPlugins.flatMap(plugin =>
-      plugin.status === 'active' ? select(plugin).map(value => ({ pluginId: plugin.id, value })) : [],
+      plugin.status === 'active'
+        ? select(plugin).map(value => ({ pluginId: plugin.id, versionStamp: plugin.versionStamp ?? '', value }))
+        : [],
     );
   }
 
   private async notifyReloadListeners(plugins: LoadedPlugin[]): Promise<void> {
     await Promise.all([...this.reloadListeners].map(listener => Promise.resolve(listener(plugins))));
+  }
+
+  /**
+   * Stamps each plugin with a value that changes when its contributions should
+   * be rebuilt. Runs on every reload, so it stays off the network: GitHub heads
+   * come from the cache the poller keeps current and cost one `git rev-parse`
+   * per checkout the first time it is seen.
+   */
+  private async stampLoadedPlugins(plugins: LoadedPlugin[]): Promise<void> {
+    for (const plugin of plugins) {
+      plugin.versionStamp = [
+        plugin.status,
+        await this.readSourceStamp(plugin),
+        JSON.stringify(plugin.configValues ?? {}),
+      ].join('|');
+    }
+  }
+
+  private async readSourceStamp(plugin: LoadedPlugin): Promise<string> {
+    try {
+      if (plugin.source === 'github') {
+        const checkoutPath = this.resolvePluginSourcePath(plugin);
+        let head = this.githubCheckoutHeads.get(checkoutPath);
+        if (head === undefined) {
+          head = await this.readGitHead(checkoutPath);
+          this.githubCheckoutHeads.set(checkoutPath, head);
+        }
+        return head;
+      }
+      return getEntryVersion(resolvePluginEntryPath(plugin, this.options));
+    } catch {
+      // A plugin that failed to load has no readable source. Its stamp is then
+      // status + config, which is enough to notice when it starts working.
+      return '';
+    }
   }
 
   private updatePluginRenderConfigs(plugins: LoadedPlugin[]): void {
@@ -272,6 +312,9 @@ export class PluginManager {
       const before = await this.readGitHead(checkoutPath);
       const checkoutChanged = await this.refreshGithubCheckout(plugin, checkoutPath, before);
       const after = await this.readGitHead(checkoutPath);
+      // Feed the cache before reloading: the stamp is computed during reload and
+      // has to see the new head, or a real update would look unchanged.
+      this.githubCheckoutHeads.set(checkoutPath, after);
       if (checkoutChanged || before !== after) changedCheckouts.add(checkoutPath);
     }
 

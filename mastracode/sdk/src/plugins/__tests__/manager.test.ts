@@ -133,6 +133,37 @@ describe('PluginManager', () => {
     ).toBeUndefined();
   });
 
+  it('moves the version stamp when config changes, not just when source changes', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const pluginDir = path.join(tempDir, 'plugin');
+    fs.mkdirSync(path.join(pluginDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.stamp',
+        config: { answerModel: { type: 'model', default: 'default-model' } },
+        tools: context => ({ stamp_tool: { tool: { id: 'stamp_tool', description: context.config.answerModel } } })
+      };`,
+    );
+    const manager = new PluginManager({ projectRoot, homeDir });
+
+    await manager.installLocal(pluginDir, 'project');
+    const installed = (await manager.listPlugins())[0]?.versionStamp;
+    expect(installed).toBeTruthy();
+
+    // A reload with nothing changed must not move the stamp: consumers that own
+    // long-lived instances keep them only while the stamp holds still.
+    await manager.reload();
+    expect((await manager.listPlugins())[0]?.versionStamp).toBe(installed);
+
+    // Config edits fire a reload without touching a single file, and the plugin
+    // is handed different values — so the stamp has to move.
+    await manager.setConfigValue('acme.stamp', 'project', 'answerModel', 'chosen-model');
+    expect((await manager.listPlugins())[0]?.versionStamp).not.toBe(installed);
+  });
+
   it('hot reloads local plugin source changes into the stable tools object', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');
@@ -310,10 +341,14 @@ describe('PluginManager', () => {
     manager.onGithubPluginsUpdated(updateListener);
     await manager.reload();
     expect(pluginTools.github_tool?.description).toBe('first');
+    const stampBeforeUpdate = (await manager.listPlugins())[0]?.versionStamp;
 
     await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
 
     expect(pluginTools.github_tool?.description).toBe('second');
+    // The stamp for a GitHub plugin is its checkout's HEAD, so taking an update
+    // moves it — which is what tells the signal lane to cycle its providers.
+    expect((await manager.listPlugins())[0]?.versionStamp).not.toBe(stampBeforeUpdate);
     expect(updateListener).toHaveBeenCalledTimes(1);
     expect(updateListener).toHaveBeenCalledWith(['acme.github']);
     expect(execaMock).toHaveBeenCalledWith(
@@ -644,6 +679,9 @@ describe('PluginManager', () => {
     await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
 
     expect(execaMock.mock.calls.map(call => (call[0] === 'corepack' ? call[1][1] : call[1][0]))).toEqual([
+      // Reload stamps the plugin, which reads the checkout's HEAD once and
+      // caches it; the poller keeps that cache current from then on.
+      'rev-parse',
       'rev-parse',
       'fetch',
       'rev-parse',

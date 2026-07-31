@@ -22,6 +22,8 @@ export type LoadedPluginProcessors = {
  */
 export type PluginContribution<TValue> = {
   pluginId: string;
+  /** The owning plugin's {@link LoadedPlugin.versionStamp} at collection time. */
+  versionStamp: string;
   value: TValue;
 };
 
@@ -72,6 +74,17 @@ export type LoadedPlugin = ScopedInstalledPluginRecord & {
   configSchema?: MastraCodePluginConfigSchema;
   configValues?: Record<string, MastraCodePluginConfigValue>;
   conflicts?: string[];
+  /**
+   * Changes when this plugin's contributions should be rebuilt: source content
+   * (git HEAD for GitHub checkouts, entry file version for local plugins) plus
+   * the registry record's config values and enabled flag. Reload fires on
+   * non-content events too — a config edit hands the plugin different values
+   * while every file is untouched — so both halves matter.
+   *
+   * Consumers that own long-lived instances (the signal-provider lane) compare
+   * this to decide between keeping what they have and cycling it.
+   */
+  versionStamp?: string;
 };
 
 export type PluginScopePaths = {
