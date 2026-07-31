@@ -268,8 +268,11 @@ describe('transformAgent tool input streaming (issue #16422)', () => {
       }),
       bufferedSteps,
     );
+    const stepFinishSnapshot = Array.isArray(stepFinish)
+      ? stepFinish.find(chunk => chunk.type === 'data-tool-agent')
+      : stepFinish;
 
-    expect(stepFinish).toMatchObject({
+    expect(stepFinishSnapshot).toMatchObject({
       data: {
         pendingToolCalls: [],
         steps: [

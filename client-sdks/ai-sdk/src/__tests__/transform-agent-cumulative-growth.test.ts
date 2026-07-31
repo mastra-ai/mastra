@@ -1,6 +1,7 @@
+import { ChunkFrom } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 
-import { transformAgent } from '../transformers';
+import { AgentStreamToAISDKTransformer, transformAgent } from '../transformers';
 
 /**
  * Regression test for https://github.com/mastra-ai/mastra/issues/14932
@@ -31,7 +32,11 @@ describe('transformAgent cumulative growth (issue #14932)', () => {
     const emissions: any[] = [];
 
     function collect(result: any) {
-      if (result) emissions.push(result);
+      if (Array.isArray(result)) {
+        emissions.push(...result);
+      } else if (result) {
+        emissions.push(result);
+      }
     }
 
     for (let step = 0; step < numSteps; step++) {
@@ -180,6 +185,113 @@ describe('transformAgent cumulative growth (issue #14932)', () => {
     );
 
     expect(bufferedSteps.get(runId).object).toEqual({ key: 'value', nested: { a: 1 } });
+  });
+
+  it('emits full completed steps as data-tool-agent-step deltas', () => {
+    const { emissions } = simulateMultiStepAgentRun(3);
+    const stepChunks = emissions.filter(emission => emission.type === 'data-tool-agent-step');
+
+    expect(stepChunks).toHaveLength(3);
+    expect(stepChunks[0]).toMatchObject({
+      id: 'test-run:step-0',
+      data: {
+        runId: 'test-run',
+        stepIndex: 0,
+        step: {
+          text: expect.stringContaining('Step 0 response text.'),
+          toolResults: [
+            expect.objectContaining({
+              result: { output: `Result from step 0. `.repeat(50) },
+            }),
+          ],
+        },
+      },
+    });
+  });
+
+  it('emits data-tool-agent-step deltas through the nested tool-output transformer route', async () => {
+    const stream = new ReadableStream<any>({
+      start(controller) {
+        controller.enqueue({
+          type: 'tool-output',
+          runId: 'supervisor-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'agent-subAgent',
+            output: {
+              type: 'start',
+              runId: 'sub-agent-run',
+              from: ChunkFrom.AGENT,
+              payload: { id: 'agent-1' },
+            },
+          },
+        });
+        controller.enqueue({
+          type: 'tool-output',
+          runId: 'supervisor-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'agent-subAgent',
+            output: {
+              type: 'tool-result',
+              runId: 'sub-agent-run',
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: 'call-1',
+                toolName: 'search',
+                result: { output: 'large result '.repeat(20) },
+              },
+            },
+          },
+        });
+        controller.enqueue({
+          type: 'tool-output',
+          runId: 'supervisor-run',
+          from: ChunkFrom.AGENT,
+          payload: {
+            toolCallId: 'agent-subAgent',
+            output: {
+              type: 'step-finish',
+              runId: 'sub-agent-run',
+              from: ChunkFrom.AGENT,
+              payload: {
+                id: 'step-0',
+                stepResult: { reason: 'tool-calls', warnings: [] },
+                output: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+                metadata: { timestamp: new Date(), modelId: 'test-model' },
+              },
+            },
+          },
+        });
+        controller.close();
+      },
+    });
+
+    const chunks: any[] = [];
+    for await (const chunk of stream.pipeThrough(
+      AgentStreamToAISDKTransformer({ sendStart: false, sendFinish: false }),
+    )) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks.some(chunk => chunk.type === 'data-tool-agent-step')).toBe(true);
+  });
+
+  it('keeps intermediate data-tool-agent snapshots from repeating completed step payloads', () => {
+    const { emissions } = simulateMultiStepAgentRun(3);
+    const snapshots = emissions.filter(emission => emission.type === 'data-tool-agent');
+
+    for (const snapshot of snapshots) {
+      for (const step of snapshot.data.steps) {
+        expect(step.text).toBe('');
+        expect(step.reasoning).toEqual([]);
+        expect(step.toolCalls).toEqual([]);
+        expect(step.toolResults).toEqual([]);
+        expect(step.sources).toEqual([]);
+        expect(step.files).toEqual([]);
+        expect(step.response.messages).toEqual([]);
+      }
+    }
   });
 
   it('payload size should grow linearly, not super-quadratically', () => {

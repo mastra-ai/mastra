@@ -108,6 +108,16 @@ export type AgentDataPart = {
   data: LLMStepResult;
 };
 
+export type AgentStepDataPart = {
+  type: 'data-tool-agent-step';
+  id: string;
+  data: {
+    runId: string;
+    stepIndex: number;
+    step: LLMStepResult;
+  };
+};
+
 // used so it's not serialized to JSON
 const PRIMITIVE_CACHE_SYMBOL = Symbol('primitive-cache');
 
@@ -391,7 +401,13 @@ export function createAgentStreamToAISDKTransformer<OUTPUT>(
           if (transformedChunk.type === 'tool-agent') {
             const payload = transformedChunk.payload;
             const agentTransformed = transformAgent<OUTPUT>(payload, bufferedSteps);
-            if (agentTransformed) controller.enqueue(agentTransformed);
+            if (Array.isArray(agentTransformed)) {
+              for (const item of agentTransformed) {
+                controller.enqueue(item);
+              }
+            } else if (agentTransformed) {
+              controller.enqueue(agentTransformed);
+            }
           } else if (transformedChunk.type === 'tool-workflow') {
             const payload = transformedChunk.payload;
             const workflowChunk = transformWorkflow(
@@ -601,7 +617,61 @@ function removePendingToolCall(pendingToolCalls: PendingAgentToolCall[] = [], to
   return pendingToolCalls.filter(call => call.toolCallId !== toolCallId);
 }
 
-export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps: Map<string, any>) {
+function cloneAgentStepForSnapshot(step: any) {
+  const { request: _request, response, ...rest } = step;
+
+  return {
+    ...rest,
+    text: '',
+    reasoning: [],
+    reasoningText: '',
+    sources: [],
+    files: [],
+    toolCalls: [],
+    pendingToolCalls: [],
+    toolResults: [],
+    staticToolCalls: [],
+    dynamicToolCalls: [],
+    staticToolResults: [],
+    dynamicToolResults: [],
+    object: null,
+    response: response ? { ...response, messages: [] } : response,
+  };
+}
+
+function createAgentDataPart(runId: string, data: any, { includeStepDetails }: { includeStepDetails: boolean }) {
+  const { _textOffset: _to, _reasoningOffset: _ro, ...serializableData } = data;
+
+  return {
+    type: 'data-tool-agent',
+    id: runId,
+    data: {
+      ...serializableData,
+      steps: includeStepDetails ? serializableData.steps : serializableData.steps.map(cloneAgentStepForSnapshot),
+    },
+  } satisfies AgentDataPart;
+}
+
+function createAgentStepDataPart(runId: string, data: any): AgentStepDataPart | null {
+  const stepIndex = data.steps.length - 1;
+  const step = data.steps[stepIndex];
+
+  if (!step) {
+    return null;
+  }
+
+  return {
+    type: 'data-tool-agent-step',
+    id: `${runId}:step-${stepIndex}`,
+    data: {
+      runId,
+      stepIndex,
+      step,
+    },
+  };
+}
+
+export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps: Map<string, any>): any {
   let hasChanged = false;
   switch (payload.type) {
     case 'start':
@@ -851,13 +921,15 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
   }
 
   if (hasChanged) {
-    // Strip internal offset trackers so they don't leak over the wire.
-    const { _textOffset: _to, _reasoningOffset: _ro, ...data } = bufferedSteps.get(payload.runId!)!;
-    return {
-      type: 'data-tool-agent',
-      id: payload.runId!,
-      data,
-    } satisfies AgentDataPart;
+    const data = bufferedSteps.get(payload.runId!)!;
+    const agentDataPart = createAgentDataPart(payload.runId!, data, { includeStepDetails: payload.type === 'finish' });
+
+    if (payload.type === 'step-finish') {
+      const stepDataPart = createAgentStepDataPart(payload.runId!, data);
+      return stepDataPart ? ([agentDataPart, stepDataPart] as const) : agentDataPart;
+    }
+
+    return agentDataPart;
   }
   return null;
 }
@@ -1396,8 +1468,9 @@ export function transformNetwork(
 
         step[PRIMITIVE_CACHE_SYMBOL] = step[PRIMITIVE_CACHE_SYMBOL] || new Map();
         const result = transformAgent(payload.payload as ChunkType<any>, step[PRIMITIVE_CACHE_SYMBOL]);
-        if (result) {
-          const { request, response, ...data } = result.data;
+        const agentResult = Array.isArray(result) ? result.find(item => item.type === 'data-tool-agent') : result;
+        if (agentResult) {
+          const { request, response, ...data } = agentResult.data;
           step.task = data;
         }
 
