@@ -575,8 +575,11 @@ export class FactoryDecisionDispatcher {
         // either #dispatchPendingStart will deliver it (pending/leased/retry)
         // or it already did (sent). Returning prepared: true in both cases
         // prevents duplicate inline sending on retry.
-        const pendingStarts = await this.#storage.listPendingStarts(record.orgId, record.factoryProjectId);
-        const hasKickoff = pendingStarts.some(ps => ps.kickoffKey === record.id);
+        const hasKickoff = await this.#storage.hasPendingStartForKickoff(
+          record.orgId,
+          record.factoryProjectId,
+          record.id,
+        );
         return { binding, prepared: hasKickoff };
       }
     }
