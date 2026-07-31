@@ -9,6 +9,7 @@ This directory contains standalone Mastra project templates.
 - `template-meeting-notes`: Turns Zoom transcripts or uploaded transcripts into structured notes with decisions and action items.
 - `template-company-knowledge`: Indexes Linear and Notion content into pgvector and answers internal knowledge questions.
 - `template-claw-assistant`: Operates a workspace with filesystem, sandbox, browser, and web-search tools.
+- `template-circle-payment-agent`: Owns a Circle USDC wallet, finds x402 services on the Circle Agent Marketplace, and pays per call behind an approval gate.
 
 ## How to add a new template
 

@@ -1,0 +1,31 @@
+{
+  "name": "template-circle-payment-agent",
+  "version": "1.0.0",
+  "description": "An agent that owns a USDC wallet and pays for the services it calls. Searches the Circle Agent Marketplace for an x402 service that can answer your question, checks the price, and settles per call with no API keys, accounts, or prefunded billing.",
+  "main": "index.js",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.9",
+    "mastra": "latest",
+    "typescript": "^5.9.3"
+  }
+}
