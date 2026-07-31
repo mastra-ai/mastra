@@ -16,6 +16,7 @@ packages:
   - "@mastra/voice-openai-realtime"
   - "@mastra/voice-playai"
   - "@mastra/voice-sarvam"
+  - "@mastra/voice-smallest"
   - "@mastra/voice-speechify"
   - "@mastra/voice-inworld"
   - "@mastra/voice-xai-realtime"
@@ -330,6 +331,33 @@ For detailed configuration options and advanced features, check out our [Text-to
     Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
   </TabItem>
 
+  <TabItem value="smallest" label="Smallest AI">
+    ```typescript
+    import { Agent } from '@mastra/core/agent'
+    import { SmallestVoice } from '@mastra/voice-smallest'
+    import { playAudio } from '@mastra/node-audio'
+
+    const voiceAgent = new Agent({
+      id: 'voice-agent',
+      name: 'Voice Agent',
+      instructions: 'You are a voice assistant that can help users with their tasks.',
+      model: '__GATEWAY_OPENAI_MODEL__',
+      voice: new SmallestVoice(),
+    })
+
+    const { text } = await voiceAgent.generate('What color is the sky?')
+
+    // Convert text to speech to an Audio Stream
+    const audioStream = await voiceAgent.voice.speak(text, {
+      speaker: 'meher', // Optional: specify a voice from getSpeakers()
+    })
+
+    playAudio(audioStream)
+    ```
+
+    Visit the [Smallest AI Voice Reference](/reference/voice/smallest) for more information on the Smallest AI voice provider.
+  </TabItem>
+
   <TabItem value="murf" label="Murf">
     ```typescript
     import { Agent } from '@mastra/core/agent'
@@ -592,6 +620,34 @@ You can download a sample audio file from [here](https://github.com/mastra-ai/re
     ```
 
     Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
+  </TabItem>
+
+  <TabItem value="smallest" label="Smallest AI">
+    ```typescript
+    import { Agent } from '@mastra/core/agent'
+    import { SmallestVoice } from '@mastra/voice-smallest'
+    import { createReadStream } from 'fs'
+
+    const voiceAgent = new Agent({
+      id: 'voice-agent',
+      name: 'Voice Agent',
+      instructions: 'You are a voice assistant that can help users with their tasks.',
+      model: '__GATEWAY_OPENAI_MODEL__',
+      voice: new SmallestVoice(),
+    })
+
+    // Use a pre-recorded audio file
+    const audioStream = await createReadStream('./how_can_i_help_you.wav')
+
+    // Convert audio to text
+    const transcript = await voiceAgent.voice.listen(audioStream)
+    console.log(`User said: ${transcript}`)
+
+    // Generate a response based on the transcript
+    const { text } = await voiceAgent.generate(transcript)
+    ```
+
+    Visit the [Smallest AI Voice Reference](/reference/voice/smallest) for more information on the Smallest AI voice provider.
   </TabItem>
 </Tabs>
 
@@ -1026,6 +1082,27 @@ Each voice provider can be configured with different models and options. Below a
     ```
 
     Visit the [Sarvam Voice Reference](/reference/voice/sarvam) for more information on the Sarvam voice provider.
+  </TabItem>
+
+  <TabItem value="smallest" label="Smallest AI">
+    ```typescript
+    // Smallest AI Voice Configuration
+    const voice = new SmallestVoice({
+      speechModel: {
+        model: 'lightning_v3.1_pro', // TTS pool (lightning_v3.1 or lightning_v3.1_pro)
+        apiKey: process.env.SMALLEST_API_KEY,
+        language: 'auto', // ISO 639-1 code, or 'auto' to route on the input text
+        sampleRate: 24000,
+      },
+      listeningModel: {
+        model: 'pulse', // STT model (pulse or pulse-pro)
+        apiKey: process.env.SMALLEST_API_KEY,
+      },
+      speaker: 'meher', // Default voice id
+    })
+    ```
+
+    Visit the [Smallest AI Voice Reference](/reference/voice/smallest) for more information on the Smallest AI voice provider.
   </TabItem>
 
   <TabItem value="murf" label="Murf">

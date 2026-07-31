@@ -1,0 +1,254 @@
+---
+title: "Reference: Smallest AI | Voice"
+description: "Documentation for the Smallest AI class, providing text-to-speech and speech-to-text capabilities."
+packages:
+  - "@mastra/voice-smallest"
+---
+
+# Smallest AI
+
+The SmallestVoice class in Mastra provides text-to-speech using Smallest AI's Waves Lightning models and speech-to-text using their Pulse models.
+
+## Usage example
+
+```typescript
+import { SmallestVoice } from '@mastra/voice-smallest'
+
+// Initialize with default configuration using environment variables
+const voice = new SmallestVoice()
+
+// Or initialize with specific configuration
+const voiceWithConfig = new SmallestVoice({
+  speechModel: {
+    model: 'lightning_v3.1_pro',
+    apiKey: process.env.SMALLEST_API_KEY!,
+    language: 'auto',
+    sampleRate: 24000,
+    speed: 1.0,
+    outputFormat: 'wav',
+  },
+  listeningModel: {
+    model: 'pulse',
+    apiKey: process.env.SMALLEST_API_KEY!,
+    language: 'en',
+  },
+  speaker: 'meher',
+})
+
+// List the voices available on the configured model
+const speakers = await voice.getSpeakers()
+
+// Convert text to speech
+const audioStream = await voice.speak('Hello, how can I help you?')
+
+// Convert speech to text
+const text = await voice.listen(createReadStream('./audio.wav'))
+```
+
+### Smallest AI API Docs -
+
+[https://docs.smallest.ai/models/api-reference/text-to-speech/synthesize-speech](https://docs.smallest.ai/models/api-reference/text-to-speech/synthesize-speech)
+
+## Configuration
+
+### Constructor options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'speechModel',
+    type: 'SmallestSpeechConfig',
+    description: 'Configuration for text-to-speech synthesis.',
+    isOptional: true,
+    defaultValue: "{ model: 'lightning_v3.1_pro', language: 'auto', outputFormat: 'wav' }",
+    properties: [
+      {
+        type: 'SmallestSpeechConfig',
+        parameters: [
+          {
+            name: 'apiKey',
+            type: 'string',
+            description: 'Smallest AI API key. Falls back to SMALLEST_API_KEY environment variable.',
+            isOptional: true,
+          },
+          {
+            name: 'model',
+            type: 'SmallestTTSModel',
+            description:
+              'Specifies the Lightning pool to use. Available options: lightning_v3.1 (20 languages, supports cloned voices), lightning_v3.1_pro (31 languages, dedicated voices). Voice IDs are pool-specific.',
+            isOptional: true,
+            defaultValue: "'lightning_v3.1_pro'",
+          },
+          {
+            name: 'language',
+            type: 'string',
+            description:
+              "ISO 639-1 language code, or 'auto' to route on the input text. 'auto' is recommended for cross-language applications, and is what allows a single Indian-accent voice to code-switch between English and Hindi.",
+            isOptional: true,
+            defaultValue: "'auto'",
+          },
+          {
+            name: 'sampleRate',
+            type: '8000 | 16000 | 22050 | 24000 | 32000 | 44100',
+            description: "Output sample rate in Hz. 44100 is the model's native rate.",
+            isOptional: true,
+          },
+          {
+            name: 'speed',
+            type: 'number',
+            description: 'Playback speed. Range: 0.5–2.0.',
+            isOptional: true,
+          },
+          {
+            name: 'outputFormat',
+            type: "'wav' | 'mp3' | 'pcm' | 'ulaw' | 'alaw'",
+            description: 'Encoding of the returned audio.',
+            isOptional: true,
+            defaultValue: "'wav'",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'speaker',
+    type: 'string',
+    description:
+      'The default voice ID used for synthesis. Smallest AI ships 200+ voices across both pools, so IDs are plain strings resolved at runtime through getSpeakers() rather than a fixed union. Voices are not interchangeable between lightning_v3.1 and lightning_v3.1_pro.',
+    isOptional: true,
+    defaultValue: "'meher'",
+  },
+  {
+    name: 'listeningModel',
+    type: 'SmallestListeningConfig',
+    description: 'Configuration for speech-to-text recognition.',
+    isOptional: true,
+    defaultValue: "{ model: 'pulse' }",
+    properties: [
+      {
+        type: 'SmallestListeningConfig',
+        parameters: [
+          {
+            name: 'apiKey',
+            type: 'string',
+            description: 'Smallest AI API key. Falls back to SMALLEST_API_KEY environment variable.',
+            isOptional: true,
+          },
+          {
+            name: 'model',
+            type: 'SmallestSTTModel',
+            description:
+              'Specifies the Pulse model to use. Available options: pulse (multilingual), pulse-pro (English, optimized for pre-recorded audio).',
+            isOptional: true,
+            defaultValue: "'pulse'",
+          },
+          {
+            name: 'language',
+            type: 'string',
+            description: 'ISO 639-1 language code of the input audio. Omit to let Pulse detect it automatically.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Methods
+
+### `speak()`
+
+Converts text to speech using Smallest AI's Lightning models.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'input',
+    type: 'string | NodeJS.ReadableStream',
+    description:
+      'Text or text stream to convert to speech. Limited to 250 characters per request; longer input throws.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'SmallestSpeakOptions',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'SmallestSpeakOptions',
+        parameters: [
+          {
+            name: 'speaker',
+            type: 'string',
+            description: 'Voice ID to use for this call.',
+            isOptional: true,
+            defaultValue: "Constructor's speaker value",
+          },
+          {
+            name: 'speed',
+            type: 'number',
+            description: 'Playback speed for this call. Range: 0.5–2.0.',
+            isOptional: true,
+          },
+          {
+            name: 'sampleRate',
+            type: '8000 | 16000 | 22050 | 24000 | 32000 | 44100',
+            description: 'Output sample rate in Hz for this call.',
+            isOptional: true,
+          },
+          {
+            name: 'outputFormat',
+            type: "'wav' | 'mp3' | 'pcm' | 'ulaw' | 'alaw'",
+            description: 'Encoding of the returned audio for this call.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+Returns: `Promise<NodeJS.ReadableStream>`
+
+### `listen()`
+
+Transcribes pre-recorded audio using Smallest AI's Pulse models.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'input',
+    type: 'NodeJS.ReadableStream',
+    description: 'Audio stream to transcribe.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'SmallestListenOptions',
+    description: 'Configuration options for speech recognition. Accepts model, language, and wordTimestamps.',
+    isOptional: true,
+  },
+]}
+/>
+
+Returns: `Promise<string>`
+
+### `getSpeakers()`
+
+Returns the voices available on the configured model, each with its display name and descriptive tags (language, accent, gender, age, use cases).
+
+Returns: `Promise<Array<{voiceId: string, displayName?: string, tags?: SmallestVoiceTags}>>`
+
+## Notes
+
+- API key can be provided via constructor options or the `SMALLEST_API_KEY` environment variable
+- If no API key is provided, the constructor will throw an error
+- The service communicates with the Smallest AI API at `https://api.smallest.ai/waves/v1`
+- Audio is returned as a stream containing binary audio data
+- `speak()` accepts at most 250 characters per request, which is the model's own limit. Split longer replies on sentence boundaries and speak each segment in order — this also lowers time-to-first-audio in a live agent
+- Voice IDs are not interchangeable between `lightning_v3.1` and `lightning_v3.1_pro`. Pairing a voice with the wrong pool produces unintelligible audio rather than an error, so resolve IDs with `getSpeakers()` on the model you configured
+- Cloned voices are only supported on the `lightning_v3.1` pool
+- Smallest AI caps concurrent text-to-speech requests per account and answers the overflow with a 429, which is worth retrying with backoff
