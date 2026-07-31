@@ -2300,12 +2300,12 @@ describe('Tracing', () => {
         requestContext,
       });
 
-      // serializeForSpan() returns non-primitive values structurally; the
-      // downstream deepClean walks them (function -> [Function], nested object
-      // preserved) instead of collapsing them to '[object]'/'[function]'.
+      // Plain objects are handed to deepClean and walked (nested data stays
+      // visible in the trace); functions and other non-plain types are
+      // collapsed by serializeForSpan rather than walked.
       expect(span.requestContext).toEqual({
         userId: 'user-123',
-        callback: '[Function]',
+        callback: '[function]',
         nested: { data: 'value' },
       });
 

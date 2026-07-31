@@ -487,23 +487,30 @@ describe('RequestContext', () => {
       });
     });
 
-    it('should return non-primitive values structurally for the downstream deepClean to bound', () => {
+    it('should pass plain objects and arrays through for deepClean to walk, but collapse other types', () => {
+      class Widget {
+        secret = 'do-not-walk';
+      }
       const ctx = new RequestContext();
       const obj = { nested: 'value' };
       const arr = [1, 2, 3];
       const fn = () => {};
+      const instance = new Widget();
       ctx.set('obj', obj);
       ctx.set('arr', arr);
       ctx.set('fn', fn);
+      ctx.set('instance', instance);
 
       const result = ctx.serializeForSpan();
 
-      // Non-primitives are returned as-is (by reference); bounding and
-      // sanitization are the downstream deepClean's job, so nested objects
-      // stay walkable in traces instead of collapsing to '[object]'.
+      // Plain objects/arrays are returned by reference so the downstream
+      // deepClean walks them (nested data stays visible in traces).
       expect(result['obj']).toBe(obj);
       expect(result['arr']).toBe(arr);
-      expect(result['fn']).toBe(fn);
+      // Functions and class instances are collapsed, not walked — their
+      // internals never reach the trace serializer.
+      expect(result['fn']).toBe('[function]');
+      expect(result['instance']).toBe('[object]');
     });
 
     it('should return empty object for empty context', () => {
