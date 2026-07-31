@@ -1188,8 +1188,9 @@ describe('GitHub session workspace preparation', () => {
     const { workspace } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
+    const reviewerRequestContext = createGithubRequestContext('project-1', 'session-a');
 
-    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    await workspace({ requestContext: reviewerRequestContext });
     mocks.githubReviewerPat = null;
     mocks.setEnvironmentVariable.mockImplementationOnce(() => {
       throw new Error('runtime token injection failed');
@@ -1201,6 +1202,15 @@ describe('GitHub session workspace preparation', () => {
         mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
       }),
     ).rejects.toThrow('runtime token injection failed');
+
+    mocks.setEnvironmentVariable.mockClear();
+    expect(() => injectGithubToken(reviewerRequestContext, 'ghp_reviewer', 'reviewer', 'reviewer')).toThrow(
+      'GitHub token refresh no longer matches the active Factory workspace credential source.',
+    );
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+
+    injectGithubToken(reviewerRequestContext, 'ghp_worker', 'default', 'reviewer');
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
   });
 
   it('does not reuse a workspace when a cleared PAT cannot be replaced', async () => {

@@ -274,7 +274,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             });
             const credentialSource = pat.sourceKind ?? 'repository';
             credentialSourceChanged = credentialSource !== registered.credentialSource;
-            if (credentialSourceChanged) registered.reconciliationRequired = true;
+            if (credentialSourceChanged) {
+              // Persist the authoritative target before injection. If the
+              // replacement fails, an older refresh must not be able to
+              // restore the previous credential source and unblock reuse.
+              registered.credentialSource = credentialSource;
+              registered.reconciliationRequired = true;
+            }
             const ghToken = pat.token ?? (credentialSourceChanged ? await getRepositoryToken() : registered.ghToken);
             if (ghToken !== registered.ghToken) registered.inject(ghToken, credentialSource);
             registered.patKind = patKind;
@@ -408,6 +414,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         const registered = githubTokenInjectors.get(workspaceId);
         if (refreshedPatKind && registered?.patKind !== refreshedPatKind) {
           throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
+        }
+        if (
+          credentialSource &&
+          registered?.reconciliationRequired &&
+          registered.credentialSource !== credentialSource
+        ) {
+          throw new Error('GitHub token refresh no longer matches the active Factory workspace credential source.');
         }
         if (!sandbox.setEnvironmentVariable) {
           throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
