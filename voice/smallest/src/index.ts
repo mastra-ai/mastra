@@ -70,10 +70,11 @@ const defaultListeningModel = {
 const DEFAULT_SPEAKER = 'meher';
 
 /**
- * The catalog path spells the model with hyphens even though the synthesis body
- * spells the same model with underscores.
+ * The only catalog Smallest exposes. It spells the model with hyphens even
+ * though the synthesis body spells the same model with underscores, and it is
+ * not per-pool: `lightning-v3.1` returns the standard and Pro voices together.
  */
-const catalogSegment = (model: SmallestTTSModel): string => model.replaceAll('_', '-');
+const VOICE_CATALOG_PATH = 'lightning-v3.1/get_voices';
 
 async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -154,9 +155,9 @@ export class SmallestVoice extends MastraVoice {
   }
 
   /**
-   * Synthesize speech. Voices are pool-specific — pairing a voice id with the
-   * wrong model produces unintelligible audio rather than an error, so use
-   * `getSpeakers()` on the model you configured.
+   * Synthesize speech. Voices are pool-specific — pairing a Pro voice with the
+   * standard model produces unintelligible audio rather than an error, so check
+   * the model card for the pool you configured.
    *
    * @throws if `input` exceeds {@link SMALLEST_MAX_INPUT_CHARS}; split longer
    * text on sentence boundaries and stream the segments in order.
@@ -243,11 +244,13 @@ export class SmallestVoice extends MastraVoice {
   }
 
   /**
-   * List the configured model's voices. The catalog is pool-specific and large,
-   * so it is fetched rather than bundled.
+   * List the Lightning voices. The catalog is large and moves, so it is fetched
+   * rather than bundled. It covers the standard and Pro pools at once and
+   * carries no per-voice pool flag, so a voice taken from here may still need
+   * `model: 'lightning_v3.1_pro'` to synthesize.
    */
   async getSpeakers(): Promise<SmallestSpeaker[]> {
-    const response = await fetch(`${BASE_URL}/${catalogSegment(this.model)}/get_voices`, {
+    const response = await fetch(`${BASE_URL}/${VOICE_CATALOG_PATH}`, {
       headers: { Authorization: `Bearer ${this.apiKey}` },
     });
 

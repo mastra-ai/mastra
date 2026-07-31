@@ -35,7 +35,7 @@ const voiceWithConfig = new SmallestVoice({
   speaker: 'meher',
 })
 
-// List the voices available on the configured model
+// List the Lightning voice catalog
 const speakers = await voice.getSpeakers()
 
 // Convert text to speech
@@ -238,7 +238,7 @@ Returns: `Promise<string>`
 
 ### `getSpeakers()`
 
-Returns the voices available on the configured model, each with its display name and descriptive tags (language, accent, gender, age, use cases).
+Returns the Lightning voice catalog, each voice with its display name and descriptive tags (language, accent, gender, age, use cases). The catalog covers the standard and Pro pools at once and carries no per-voice pool flag.
 
 Returns: `Promise<Array<{voiceId: string, displayName?: string, tags?: SmallestVoiceTags}>>`
 
@@ -249,6 +249,6 @@ Returns: `Promise<Array<{voiceId: string, displayName?: string, tags?: SmallestV
 - The service communicates with the Smallest AI API at `https://api.smallest.ai/waves/v1`
 - Audio is returned as a stream containing binary audio data
 - `speak()` accepts at most 250 characters per request, which is the model's own limit. Split longer replies on sentence boundaries and speak each segment in order — this also lowers time-to-first-audio in a live agent
-- Voice IDs are not interchangeable between `lightning_v3.1` and `lightning_v3.1_pro`. Pairing a voice with the wrong pool produces unintelligible audio rather than an error, so resolve IDs with `getSpeakers()` on the model you configured
+- Voice IDs are not interchangeable between `lightning_v3.1` and `lightning_v3.1_pro`. Pairing a voice with the wrong pool produces unintelligible audio rather than an error, and `getSpeakers()` cannot tell them apart — it returns both pools as one list with no per-voice pool flag, so check the [Lightning v3.1](https://docs.smallest.ai/models/model-cards/text-to-speech/lightning-v-3-1) and [Lightning v3.1 Pro](https://docs.smallest.ai/models/model-cards/text-to-speech/lightning-v-3-1-pro) model cards
 - Cloned voices are only supported on the `lightning_v3.1` pool
 - Smallest AI caps concurrent text-to-speech requests per account and answers the overflow with a 429, which is worth retrying with backoff

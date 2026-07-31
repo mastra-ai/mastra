@@ -39,7 +39,7 @@ const voice = new SmallestVoice({
   speaker: 'meher',
 });
 
-// List the voices available on the configured model
+// List the Lightning voice catalog
 const speakers = await voice.getSpeakers();
 
 // Text-to-speech
@@ -59,7 +59,7 @@ const transcript = await voice.listen(createReadStream('./audio.wav'));
 
 ## Voice Options
 
-`speak()` accepts any voice id from the configured model's catalog. Voices are pool-specific: pairing a `lightning_v3.1` voice with `lightning_v3.1_pro` produces unintelligible audio rather than an error, so resolve ids with `getSpeakers()` on the model you configured.
+`speak()` accepts any voice id from the Lightning catalog, which `getSpeakers()` returns. The catalog is one list covering the standard and Pro pools and carries no per-voice pool flag, so check the [Lightning v3.1](https://docs.smallest.ai/models/model-cards/text-to-speech/lightning-v-3-1) and [Lightning v3.1 Pro](https://docs.smallest.ai/models/model-cards/text-to-speech/lightning-v-3-1-pro) model cards for which pool a voice belongs to — pairing one with the wrong `model` produces unintelligible audio rather than an error.
 
 ```typescript
 const speakers = await voice.getSpeakers();
@@ -94,7 +94,7 @@ Transcribes pre-recorded audio. Returns `Promise<string>`.
 
 #### getSpeakers()
 
-Returns `Promise<Array<{ voiceId: string; displayName?: string; tags?: SmallestVoiceTags }>>` for the configured model.
+Returns `Promise<Array<{ voiceId: string; displayName?: string; tags?: SmallestVoiceTags }>>` for the Lightning catalog.
 
 #### getListener()
 
