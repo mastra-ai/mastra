@@ -5,7 +5,6 @@ import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
 
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs'];
-const QUERY_RE = /([?#].*)$/;
 
 /**
  * @param {{ root?: string, disabled?: boolean }} options
@@ -26,7 +25,7 @@ export function workspaceSourceResolver(options = {}) {
       const resolved = resolveWorkspaceSource(id, index, importer);
       if (!resolved) return null;
 
-      if (importer && normalizePath(resolve(importer.split(QUERY_RE)[0])) === normalizePath(resolved.path)) {
+      if (importer && normalizePath(resolve(splitQuery(importer).specifier)) === normalizePath(resolved.path)) {
         return null;
       }
 
@@ -86,7 +85,7 @@ export function resolveWorkspaceSource(id, packages, importer) {
 
   if (
     importer &&
-    isInsidePath(source, dirname(importer.split(QUERY_RE)[0])) &&
+    isInsidePath(source, dirname(splitQuery(importer).specifier)) &&
     normalizePath(importer).startsWith(normalizePath(source))
   ) {
     return null;
@@ -117,9 +116,13 @@ function shouldIgnoreId(id) {
 }
 
 function splitQuery(id) {
-  const match = id.match(QUERY_RE);
-  if (!match) return { specifier: id, query: '' };
-  return { specifier: id.slice(0, match.index), query: match[1] };
+  const questionIndex = id.indexOf('?');
+  const hashIndex = id.indexOf('#');
+  const queryIndex =
+    questionIndex === -1 ? hashIndex : hashIndex === -1 ? questionIndex : Math.min(questionIndex, hashIndex);
+
+  if (queryIndex === -1) return { specifier: id, query: '' };
+  return { specifier: id.slice(0, queryIndex), query: id.slice(queryIndex) };
 }
 
 function expandWorkspacePattern(root, pattern) {
