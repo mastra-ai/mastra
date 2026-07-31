@@ -1,7 +1,12 @@
 import fs from 'node:fs/promises';
-import { createTestSuite, createClientAcceptanceTests, createDomainDirectTests } from '@internal/storage-test-utils';
+import {
+  createTestSuite,
+  createClientAcceptanceTests,
+  createDomainDirectTests,
+  createSampleMessageV2,
+} from '@internal/storage-test-utils';
 import { connect } from '@lancedb/lancedb';
-import { afterAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { StoreMemoryLance } from './domains/memory';
 import { StoreScoresLance } from './domains/scores';
@@ -31,6 +36,38 @@ createDomainDirectTests({
   createMemoryDomain: () => new StoreMemoryLance({ client: testClient }),
   createWorkflowsDomain: () => new StoreWorkflowsLance({ client: testClient }),
   createScoresDomain: () => new StoreScoresLance({ client: testClient }),
+});
+
+describe('StoreMemoryLance write integrity', () => {
+  const memory = new StoreMemoryLance({ client: testClient });
+
+  beforeEach(async () => {
+    await memory.init();
+    await memory.dangerouslyClearAll();
+  });
+
+  it('rejects a mixed batch when any parent thread is missing before saving messages', async () => {
+    const existingThread = {
+      id: 'existing-parent-thread',
+      resourceId: 'resource-1',
+      title: 'Existing thread',
+      metadata: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    await memory.saveThread({ thread: existingThread });
+
+    const messages = [
+      createSampleMessageV2({ threadId: existingThread.id, resourceId: existingThread.resourceId }),
+      createSampleMessageV2({ threadId: 'missing-parent-thread', resourceId: 'resource-2' }),
+    ];
+
+    await expect(memory.saveMessages({ messages })).rejects.toThrow(
+      'parent thread missing-parent-thread does not exist',
+    );
+    await expect(memory.listMessages({ threadId: existingThread.id })).resolves.toMatchObject({ messages: [] });
+    await expect(memory.listMessages({ threadId: 'missing-parent-thread' })).resolves.toMatchObject({ messages: [] });
+  });
 });
 
 // LanceStorage uses async factory methods (create/fromClient), so we test configuration manually
