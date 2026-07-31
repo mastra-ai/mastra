@@ -112,6 +112,38 @@ describe('custom route forwarding', () => {
     });
   });
 
+  it('warns when a channel webhook request falls through custom routes', async () => {
+    const mastra = new Mastra({
+      logger: false,
+      server: {
+        apiRoutes: [
+          {
+            path: '/health',
+            method: 'GET',
+            handler: async c => c.json({ ok: true }),
+          },
+        ],
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+    const warnSpy = vi.spyOn(mastra.getLogger(), 'warn');
+
+    await expect(adapter.buildCustomRouteHandlerForTest()).resolves.toBe(true);
+    await expect(
+      adapter.handleCustomRouteRequestForTest(
+        'http://localhost/api/agents/support/channels/slack/webhook',
+        'POST',
+        {},
+        undefined,
+      ),
+    ).resolves.toBeNull();
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('channels.adapters configuration'), {
+      agentId: 'support',
+      platform: 'slack',
+    });
+  });
+
   it('logs handler errors with method + path before returning the fallback 500', async () => {
     const mastra = new Mastra({
       logger: false,

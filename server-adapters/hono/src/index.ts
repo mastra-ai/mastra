@@ -623,11 +623,6 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
   }
 
   async registerCustomApiRoutes(): Promise<void> {
-    this.app.use('*', async (c, next) => {
-      await next();
-      this.warnIfUnregisteredChannelWebhook(c.req.path, c.req.method, c.res.status);
-    });
-
     if (!(await this.buildCustomRouteHandler())) return;
 
     const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [];
@@ -755,6 +750,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
   registerContextMiddleware(): void {
     this.app.use('*', this.createContextMiddleware());
+    this.app.use('*', async (c, next) => {
+      await next();
+      this.warnIfUnregisteredChannelWebhook(c.req.path, c.req.method, c.res.status);
+    });
   }
 
   registerAuthMiddleware(): void {

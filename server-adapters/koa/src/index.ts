@@ -876,14 +876,9 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
   }
 
   async registerCustomApiRoutes(): Promise<void> {
-    const server = this;
-    this.app.use(async function mastraChannelWebhookDiagnostic(ctx: Context, next: Next) {
-      await next();
-      server.warnIfUnregisteredChannelWebhook(ctx.path, ctx.method, ctx.status);
-    });
-
     if (!(await this.buildCustomRouteHandler())) return;
 
+    const server = this;
     this.app.use(async function mastraCustomRouteDispatcher(ctx: Context, next: Next) {
       // Check if this request matches a protected custom route and run auth
       const path = String(ctx.path || '/');
@@ -1006,6 +1001,12 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
   registerContextMiddleware(): void {
     this.app.use(this.createContextMiddleware());
+    this.app.use(async (ctx: Context, next: Next) => {
+      const path = String(ctx.path || '/');
+      const method = String(ctx.method || 'GET');
+      await next();
+      this.warnIfUnregisteredChannelWebhook(path, method, ctx.status);
+    });
   }
 
   registerAuthMiddleware(): void {

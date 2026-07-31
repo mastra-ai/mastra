@@ -746,11 +746,6 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
   }
 
   async registerCustomApiRoutes(): Promise<void> {
-    this.app.addHook('onResponse', async (request, reply) => {
-      const path = request.url.split('?')[0] || '/';
-      this.warnIfUnregisteredChannelWebhook(path, request.method, reply.statusCode);
-    });
-
     if (!(await this.buildCustomRouteHandler())) return;
 
     const routes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [];
@@ -914,6 +909,11 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     });
 
     this.app.addHook('preHandler', this.createContextMiddleware());
+
+    this.app.addHook('onResponse', async (request, reply) => {
+      const path = request.url.split('?')[0]!;
+      this.warnIfUnregisteredChannelWebhook(path, request.method, reply.statusCode);
+    });
   }
 
   registerAuthMiddleware(): void {
