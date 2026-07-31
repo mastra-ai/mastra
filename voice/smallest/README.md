@@ -19,6 +19,7 @@ SMALLEST_API_KEY=your_api_key
 ## Usage
 
 ```typescript
+import { createReadStream } from 'node:fs';
 import { SmallestVoice } from '@mastra/voice-smallest';
 
 // Defaults to the lightning_v3.1_pro pool with automatic language routing
