@@ -1,5 +1,20 @@
 # @internal/playground
 
+## 1.22.0-alpha.3
+
+### Patch Changes
+
+- Fixed the agent editor briefly flashing back to a loading spinner and remounting test chat shortly after the page first loads. The page's loading gate wasn't waiting on the agent version list, so it could render before that data arrived, then reload once it did. This also closed a narrow window where test chat could send a message before the version list had loaded, in which case it would use the published version instead of the correct one. ([#20462](https://github.com/mastra-ai/mastra/pull/20462))
+
+- Fixed test chat using the published agent version instead of the latest unpublished draft when the latest version is open in the editor. ([#20462](https://github.com/mastra-ai/mastra/pull/20462))
+
+- Updated dependencies [[`594f7b2`](https://github.com/mastra-ai/mastra/commit/594f7b28f5263fb9982fd50d95c471fb971ea984), [`311f943`](https://github.com/mastra-ai/mastra/commit/311f943bee60e8fdf5c84499ea50e884276c936c), [`0c89896`](https://github.com/mastra-ai/mastra/commit/0c8989673fb7d106837098398131e570c6023b68), [`23b4238`](https://github.com/mastra-ai/mastra/commit/23b423844ad0bcf2a502a68dd62866d6160f9f6d), [`e320a76`](https://github.com/mastra-ai/mastra/commit/e320a763feaf65c6be3cebecf746defcbde161b3), [`03b4918`](https://github.com/mastra-ai/mastra/commit/03b4918c80d188ce375334c393e131c6e94bd7eb), [`14ef73a`](https://github.com/mastra-ai/mastra/commit/14ef73a4bbd73e7808414816eb0628ce1d80b5d7), [`1d677d5`](https://github.com/mastra-ai/mastra/commit/1d677d5f99d7db403f7828585e8c25f299f72628), [`1d677d5`](https://github.com/mastra-ai/mastra/commit/1d677d5f99d7db403f7828585e8c25f299f72628), [`93e28ec`](https://github.com/mastra-ai/mastra/commit/93e28ecce9031c02397e0ae8406593e5c7a95883), [`729dab4`](https://github.com/mastra-ai/mastra/commit/729dab408faccfaef0cbb048e5a4338f9172847e), [`484003d`](https://github.com/mastra-ai/mastra/commit/484003d33ff59330c86b19863e4a38732d7e4155), [`933d291`](https://github.com/mastra-ai/mastra/commit/933d291146b789c19442ad206f94da3e4be90c64)]:
+  - @mastra/core@1.56.0-alpha.3
+  - @mastra/ai-sdk@1.7.1-alpha.0
+  - @mastra/client-js@1.36.1-alpha.3
+  - @mastra/react@1.3.5-alpha.3
+  - @mastra/playground-ui@45.1.0-alpha.3
+
 ## 1.22.0-alpha.2
 
 ### Patch Changes
