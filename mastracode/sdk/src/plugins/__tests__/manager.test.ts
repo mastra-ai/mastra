@@ -133,6 +133,40 @@ describe('PluginManager', () => {
     expect(manager.getPluginTools()).toBe(pluginTools);
   });
 
+  it('keeps runtime accessors available to plugin resolvers across reloads', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const pluginDir = path.join(tempDir, 'plugin');
+    fs.mkdirSync(path.join(pluginDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.runtime',
+        tools: context => ({
+          runtime_tool: {
+            tool: { id: 'runtime_tool', description: context.getController?.()?.id ?? 'no-controller' }
+          }
+        })
+      };`,
+    );
+
+    let controller: { id: string } | undefined;
+    const manager = new PluginManager({
+      projectRoot,
+      homeDir,
+      runtime: { getController: () => controller as never },
+    });
+
+    await manager.installLocal(pluginDir, 'project');
+    expect(manager.getPluginTools().runtime_tool?.description).toBe('no-controller');
+
+    controller = { id: 'mastra-code' };
+    await manager.reload();
+
+    expect(manager.getPluginTools().runtime_tool?.description).toBe('mastra-code');
+  });
+
   it('does not expose tools for plugins blocked by project config', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');

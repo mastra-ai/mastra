@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { execa } from 'execa';
 
-import type { MastraCodePluginConfigValue } from '../plugin.js';
+import type { MastraCodePluginConfigValue, MastraCodePluginRuntime } from '../plugin.js';
 import { getEntryPackageRoot, installPluginDependenciesForEntry } from './dependencies.js';
 import { discoverLocalPlugins, installGithubPlugin, installLocalPlugin, NON_INTERACTIVE_GIT_ENV } from './install.js';
 import type { InstallPluginOptions } from './install.js';
@@ -27,6 +27,11 @@ function getEntryVersion(entryPath: string): string {
 
 type PluginManagerOptions = PluginPathOptions & {
   githubCliPath?: string;
+  /**
+   * Lazy accessors for Mastra Code's runtime, handed to plugin field resolvers on
+   * every load and reload.
+   */
+  runtime?: MastraCodePluginRuntime;
 };
 
 export class PluginManager {
