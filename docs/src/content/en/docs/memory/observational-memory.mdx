@@ -417,7 +417,7 @@ Example: An agent using Playwright MCP might see 50,000+ tokens per page snapsho
 
 When observations exceed their threshold (default: 40,000 tokens), the Reflector condenses them and combines related items, plus reflects on patterns.
 
-Reflections don't accumulate as a separate, ever-growing layer. Each reflection rewrites the entire observation log: the Reflector's output becomes the new log, and new observations append after it. When the log next hits the threshold, the Reflector re-processes everything — including earlier reflections — condensing older information more aggressively while keeping recent detail. Memory stays bounded around the reflection threshold no matter how long the conversation runs.
+Reflections don't accumulate as a separate, ever-growing layer. Each reflection rewrites the entire observation log. The Reflector's output becomes the new log, and new observations append after it. When the log next hits the threshold, the Reflector re-processes everything, including earlier reflections. It condenses older information more aggressively while keeping recent detail. Memory stays bounded around the reflection threshold no matter how long the conversation runs.
 
 The result is a three-tier system:
 
@@ -425,7 +425,7 @@ The result is a three-tier system:
 1. **Observations**: A log of what the Observer has seen
 1. **Reflections**: Condensed observations when memory becomes too long
 
-### Context over time
+### How context changes over time
 
 With default settings, the context window doesn't grow unbounded. It oscillates through an observe-and-shrink cycle:
 
@@ -434,11 +434,11 @@ With default settings, the context window doesn't grow unbounded. It oscillates 
 1. **0 → 30k tokens**: Message history grows normally. In the background, the Observer buffers observations every \~6k tokens (`bufferTokens: 0.2`).
 1. **30k reached**: Buffered observations activate instantly. Observed messages are removed from the context window and only \~6k tokens of recent history remain (`bufferActivation: 0.8` retains 20% of the threshold). The \~24k tokens of removed messages become roughly 1-5k tokens of observations at typical 5-40x compression.
 1. **Repeat**: History grows from \~6k back toward 30k and shrinks again. Each cycle appends to the observation log, which grows much more slowly than raw history.
-1. **Observations reach 40k**: The Reflector condenses the observation log — including any earlier reflections — into a new, smaller log.
+1. **Observations reach 40k**: The Reflector creates a smaller log from the current observations and any earlier reflections.
 
-The result: in the normal buffered cycle, raw history oscillates between roughly 6k and 30k tokens and the observation log stays around 40k tokens, however long the conversation runs. These are activation thresholds rather than hard caps — if background buffering falls behind, history can grow past the threshold until `blockAfter` (default `1.2`) forces a synchronous observation at \~36k tokens (\~48k for reflection) as a safety ceiling.
+In the normal buffered cycle, raw history oscillates between roughly 6k and 30k tokens. The observation log stays around 40k tokens, however long the conversation runs. These are activation thresholds rather than hard caps. If background buffering doesn't keep pace, history can grow past the threshold until `blockAfter` (default `1.2`) forces a synchronous observation at \~36k tokens (\~48k for reflection) as a safety ceiling.
 
-With [`shareTokenBudget`](/reference/memory/observational-memory#shared-token-budget) enabled, the two budgets pool together: while the observation log is small, message history can expand into the unused observation space (up to \~70k tokens with the defaults) before observation triggers, then shrinks back as observations accumulate.
+With [`shareTokenBudget`](/reference/memory/observational-memory#shared-token-budget) enabled, the two budgets pool together. While the observation log is small, message history can expand into the unused observation space (up to \~70k tokens with the defaults) before observation triggers. It then shrinks as observations accumulate.
 
 ### Retrieval mode
 

@@ -8720,7 +8720,9 @@ export class Agent<
    * ```
    */
   async approveToolCall<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string } & {
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<MastraModelOutput<OUTPUT>> {
     // Route standalone `new Agent({ durable: true })` calls through the
     // durable execution path.
@@ -8951,7 +8953,9 @@ export class Agent<
    * ```
    */
   async declineToolCall<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string } & {
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<MastraModelOutput<OUTPUT>> {
     // Route standalone `new Agent({ durable: true })` calls through the
     // durable execution path.
@@ -8981,7 +8985,9 @@ export class Agent<
    * ```
    */
   async approveToolCallGenerate<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string } & {
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
     // @ts-expect-error - the types here are wrong
     return this.resumeGenerate({ approved: true }, options);
@@ -9004,7 +9010,9 @@ export class Agent<
    * ```
    */
   async declineToolCallGenerate<OUTPUT = undefined>(
-    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string },
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string } & {
+      model?: DynamicArgument<MastraModelConfig>;
+    },
   ): Promise<Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>> {
     // @ts-expect-error - the types here are wrong
     return this.resumeGenerate({ approved: false }, options);

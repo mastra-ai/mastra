@@ -800,7 +800,7 @@ importers:
   auth/supabase:
     dependencies:
       '@supabase/supabase-js':
-        specifier: ^2.110.8
+        specifier: ^2.110.9
         version: 2.111.0
     devDependencies:
       '@internal/auth':

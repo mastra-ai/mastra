@@ -639,6 +639,13 @@ export async function analyzeBundle(
   return {
     ...result,
     externalDependencies: mergedExternalDeps,
+    /**
+     * Workspace deps that were optimized (after isDev/externalsPreset pruning).
+     * Used by the watcher to re-run optimization when workspace sources change.
+     */
+    depsToOptimize,
+    workspaceRoot,
+    outputDir,
     ...(mastraConfigResult.projectType ? { projectType: mastraConfigResult.projectType } : {}),
   };
 }

@@ -27,7 +27,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@supabase/supabase-js": "^2.110.8"
+    "@supabase/supabase-js": "^2.110.9"
   },
   "devDependencies": {
     "@internal/auth": "workspace:*",
