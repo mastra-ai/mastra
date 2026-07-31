@@ -46,6 +46,7 @@ async function setup(permission: string | undefined) {
     sandboxWorkdir: '/workspace',
   });
   const github = {
+    slug: 'factory-app',
     getRepositoryCollaboratorPermission: vi.fn().mockResolvedValue(permission),
   } as unknown as GithubIntegration;
   return {
@@ -76,6 +77,61 @@ function issueOpened(deliveryId = 'delivery-1', createdAt = '2030-01-01T00:00:00
       },
     },
   };
+}
+
+function issueComment(
+  action: 'created' | 'edited' | 'deleted',
+  deliveryId: string,
+  options: { sender?: string; author?: string; body?: string } = {},
+) {
+  const sender = options.sender ?? 'contributor';
+  const author = options.author ?? sender;
+  const body = options.body ?? 'New details';
+  return {
+    event: 'issue_comment',
+    deliveryId,
+    payload: {
+      action,
+      installation: { id: 7 },
+      repository: { id: 10, full_name: 'acme/repo' },
+      sender: { login: sender },
+      issue: {
+        number: 42,
+        title: 'Issue 42',
+        html_url: 'https://github.com/acme/repo/issues/42',
+      },
+      comment: {
+        id: 100,
+        body,
+        user: { login: author, type: author.endsWith('[bot]') ? 'Bot' : 'User' },
+      },
+    },
+  };
+}
+
+async function createLinkedIssue(
+  workItems: Awaited<ReturnType<typeof createFactoryStorageForTests>>['workItems'],
+  projectId: string,
+) {
+  return (
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: projectId,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['planning'],
+        sessions: {},
+        metadata: {},
+      },
+    })
+  ).item;
 }
 
 function pullRequest(
@@ -124,6 +180,57 @@ describe('GithubRules', () => {
     expect(decisions).toHaveLength(1);
     expect(decisions[0]?.actor).toMatchObject({ type: 'github', login: 'maintainer', trusted: true });
     expect(decisions[0]?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', source: 'github-issue' });
+  });
+
+  it('retriages a human comment containing the handoff marker', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await createLinkedIssue(workItems, project.id);
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(
+      service.ingest(
+        issueComment('created', 'delivery-human-marker', { body: '<!-- mastra-factory-triage -->\nNew investigation lead' }),
+      ),
+    ).resolves.toEqual({ status: 'committed' });
+
+    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decision?.decision).toMatchObject({
+      type: 'invokeSkill',
+      skillName: 'factory-triage',
+      idempotencyKey: '7:delivery-human-marker:factory-triage',
+    });
+  });
+
+  it('ignores a marked handoff comment authored by the configured GitHub App', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await createLinkedIssue(workItems, project.id);
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(
+      service.ingest(
+        issueComment('edited', 'delivery-factory-handoff', {
+          sender: 'factory-app[bot]',
+          author: 'factory-app[bot]',
+          body: '<!-- mastra-factory-triage -->\nUpdated handoff',
+        }),
+      ),
+    ).resolves.toEqual({ status: 'ignored' });
+
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
   it('keeps trusted issues created before the Factory in Intake', async () => {

@@ -61,14 +61,7 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
   }
   if (parsed.event === 'issue_comment') {
     const issue = object(parsed.payload.issue);
-    const comment = object(parsed.payload.comment);
     if (object(issue?.pull_request)) return undefined;
-    if (
-      (action === 'created' || action === 'edited') &&
-      string(comment?.body)?.includes(FACTORY_TRIAGE_COMMENT_MARKER)
-    ) {
-      return undefined;
-    }
     if (action === 'created') return 'issueCommentCreated';
     if (action === 'edited') return 'issueCommentEdited';
     if (action === 'deleted') return 'issueCommentDeleted';
@@ -186,7 +179,7 @@ export class GithubRules {
     repositoryName: string,
     login: string,
     project: ExternalRepositoryProjectTarget,
-  ): Promise<{ status: 'committed' | 'replayed' | 'missing' }> {
+  ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const factoryProject = await this.options.projects.get({
       orgId: project.orgId,
       id: project.factoryProjectId,
@@ -223,6 +216,14 @@ export class GithubRules {
       login,
       factoryAuthored: provenance !== null || login === `${this.options.github.slug}[bot]`,
     });
+    if (
+      actor.type === 'github' &&
+      actor.factoryAuthored &&
+      (event === 'issueCommentCreated' || event === 'issueCommentEdited') &&
+      string(issueComment?.body)?.includes(FACTORY_TRIAGE_COMMENT_MARKER)
+    ) {
+      return { status: 'ignored' };
+    }
     const context: FactoryGithubRuleContext = {
       tenant: { orgId: project.orgId, projectId: project.factoryProjectId },
       actor,
