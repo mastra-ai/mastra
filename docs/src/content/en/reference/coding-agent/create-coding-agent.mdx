@@ -9,7 +9,7 @@ packages:
 
 `createCodingAgent()` builds a coding [`Agent`](/reference/agents/agent) with portable defaults for the pieces a coding agent always needs: a local workspace, the task-list signal provider, network-retry error processors, and the goal judge prompt. Supply only `model`, `instructions`, and `tools` to get a working agent, or override any default.
 
-The returned value is a standard `Agent`, so it works anywhere an `Agent` does — including as the agent passed to an [`AgentController`](/reference/agent-controller/agent-controller-class).
+The returned value is a standard `Agent`, so it works anywhere an `Agent` does: including as the agent passed to an [`AgentController`](/reference/agent-controller/agent-controller-class).
 
 ## Usage example
 
@@ -122,7 +122,7 @@ new Workspace({
 })
 ```
 
-To opt out — for example when the workspace is injected at the [`AgentController`](/reference/agent-controller/agent-controller-class) level — pass `workspace: undefined` explicitly:
+To opt out (for example, when the workspace is injected at the [`AgentController`](/reference/agent-controller/agent-controller-class) level), pass `workspace: undefined` explicitly:
 
 ```typescript
 const agent = createCodingAgent({

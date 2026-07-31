@@ -18,7 +18,7 @@ The Datadog Bridge enables bidirectional integration between Mastra's tracing sy
 
 :::info Not using dd-trace APM?
 
-If you only need to send LLM Observability data and don't use `dd-trace` APM auto-instrumentation, the [Datadog Exporter](/docs/observability/integrations/exporters/datadog) is simpler — it supports agentless mode and sends spans directly to Datadog without a local agent.
+If you only need to send LLM Observability data and don't use `dd-trace` APM auto-instrumentation, the [Datadog Exporter](/docs/observability/integrations/exporters/datadog) is simpler, it supports agentless mode and sends spans directly to Datadog without a local agent.
 
 :::
 
@@ -48,9 +48,9 @@ The DatadogBridge participates in two parts of the dd-trace pipeline:
 - Maintains parent-child relationships in Datadog LLM Observability using nested `llmobs.trace()` calls
 - Reuses the same data shape and span-kind mapping as the [Datadog Exporter](/docs/observability/integrations/exporters/datadog#span-type-mapping)
 
-## Why this matters
+## Trace and log correlation
 
-Without the bridge, the Datadog Exporter only creates LLM Observability spans after a trace completes. During execution, no `dd-trace` span is active in scope, so any HTTP or database call made by a tool falls back to whatever `dd-trace` span is active at the time — typically the incoming request handler. The result is that service calls from MCP tools or output processors appear as children of the request span instead of the agent or processor span that actually made them.
+Without the bridge, the Datadog Exporter only creates LLM Observability spans after a trace completes. During execution, no `dd-trace` span is active in scope, so any HTTP or database call made by a tool falls back to whatever `dd-trace` span is active at the time, typically the incoming request handler. The result is that service calls from MCP tools or output processors appear as children of the request span instead of the agent or processor span that actually made them.
 
 The bridge fixes this by creating real dd-trace spans up front, so the scope is correct when auto-instrumentation runs.
 
@@ -130,7 +130,7 @@ DD_LLMOBS_ML_APP=my-llm-app
 
 When `dd-trace` is initialized, it routes APM data to your local Datadog Agent on `localhost:8126`. The bridge enables LLM Observability on top of the same tracer, so both sets of data appear under the same service in Datadog.
 
-No Mastra exporters are required when using the bridge — both APM and LLM Observability data flow through `dd-trace`. You can still add Mastra exporters if you want to send traces to additional destinations.
+No Mastra exporters are required when using the bridge, both APM and LLM Observability data flow through `dd-trace`. You can still add Mastra exporters if you want to send traces to additional destinations.
 
 ## Agent vs. agentless mode
 
@@ -182,7 +182,7 @@ const result = await agent.generate('Hello', {
 })
 ```
 
-Tags formatted as `key:value` (e.g., `instance_name:career-scout-api`) are split into structured tag entries; tags without a colon are set with a `true` value.
+Tags formatted as `key:value` (e.g., `instance_name:career-scout-api`) are split into structured tag entries. Tags without a colon are set with a `true` value.
 
 ## Promoting context keys to flat tags
 
@@ -204,7 +204,7 @@ If APM spans aren't connecting to Mastra spans as expected:
 - Verify `dd-trace` is initialized **before** any other imports (it patches libraries at load time)
 - Verify a local Datadog Agent is running and reachable at `localhost:8126`
 - Ensure the DatadogBridge is set as `bridge` (not as an entry in `exporters`) in your observability config
-- Confirm you haven't also added the `DatadogExporter` to `exporters` — using both will double-emit LLM Observability data
+- Confirm you haven't also added the `DatadogExporter` to `exporters`: using both will double-emit LLM Observability data
 
 For native-module compatibility issues with `dd-trace` and bundler externals, see the [Datadog exporter troubleshooting](/docs/observability/integrations/exporters/datadog#troubleshooting) section.
 

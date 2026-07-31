@@ -1,18 +1,17 @@
 ---
-title: "Get started with Mastra"
+title: 'Get started with Mastra'
 sidebar_position: 1
-sidebar_label: "Get Started"
-description: "Create your first Mastra application in seconds. Build AI agents, workflows, and tools with TypeScript."
+sidebar_label: 'Get Started'
+description: 'Create your first Mastra application in seconds. Build AI agents, workflows, and tools with TypeScript.'
 ---
 
-import YouTube from "@site/src/components/YouTube-player";
-import { CardGrid, CardGridItem } from "@site/src/components/cards/card-grid";
-import QuickstartPrompt from "@site/src/content/en/docs/getting-started/_partial-quickstart-prompt.mdx";
-import AgentQuickstart from "@site/src/content/en/docs/getting-started/_partial-agent-quickstart.mdx";
+import { CardGrid, CardGridItem } from '@site/src/components/cards/card-grid';
+import QuickstartPrompt from '@site/src/content/en/docs/getting-started/_partial-quickstart-prompt.mdx';
+import AgentQuickstart from '@site/src/content/en/docs/getting-started/_partial-agent-quickstart.mdx';
 
 # Get started
 
-Build AI agents your users actually depend on. Mastra is a TypeScript framework that gives you everything you need to prototype fast and ship with confidence. Create your first agent with a single command and start building.
+Mastra is a TypeScript framework for building AI agents and applications. Create your first agent with a single command and start building.
 
 <Inject>
   <AgentQuickstart />
@@ -22,7 +21,7 @@ Build AI agents your users actually depend on. Mastra is a TypeScript framework 
 
 ## Quickstart
 
-Run this command to create a new project:
+Run this command to create a general-purpose agent harness with a local workspace, shell tools, memory, task tracking, web access, and recurring schedules. It also installs Mastra skills for your installed coding agent, so you can start prompting and editing it:
 
 ```bash npm2yarn
 npm create mastra@latest
@@ -169,84 +168,12 @@ Add Mastra to an existing project, or create a new app with your preferred frame
 
 For other frameworks, see the [framework integration guides](/guides/getting-started/next-js).
 
-## What you can build
+## Templates
 
-Here are some of the ways you can use Mastra:
+Browse [templates](https://mastra.ai/templates) for complete Mastra projects you can clone and adapt.
 
-<div class="accordion-group">
-  <details>
-    <summary>Embed agents in your product</summary>
+:::note
 
-    Add AI capabilities to your platform so your users can build or interact with agents.
+New to Mastra? Read [What is Mastra?](/docs/what-is-mastra) for an overview of the framework, its capabilities, and what you can build with it.
 
-    Used by [Replit](https://mastra.ai/blog/replitagent3), [Fireworks](https://mastra.ai/blog/fireworks-xml-prompting), [Medusa](https://mastra.ai/blog/medusa-ecommerce)
-  </details>
-
-  <details>
-    <summary>Customer-facing assistants</summary>
-
-    Build agents that handle inquiries, schedule appointments, send reminders, and answer questions via chat, WhatsApp, or voice.
-
-    Used by [Vetnio](https://mastra.ai/blog/vetnio), [Lua](https://mastra.ai/blog/lua-scaling)
-
-    Templates: [Docs Chatbot](https://mastra.ai/templates/docs-chatbot), [Slack Agent](https://mastra.ai/templates/slack-agent)
-  </details>
-
-  <details>
-    <summary>Internal copilots</summary>
-
-    Help employees work faster with AI that understands your domain—HR queries, clinical documentation, sales prep, or document generation.
-
-    Used by [Factorial](https://mastra.ai/blog/factorial-case-study), [Counsel Health](https://mastra.ai/blog/counsel-health), [Cedar](https://mastra.ai/blog/cedar-case-study), [SoftBank](https://mastra.ai/blog/softbank-productivity-mastra-2025-08-20)
-
-    Templates: [Chat with PDF](https://mastra.ai/templates/chat-with-pdf), [Google Sheet Analysis](https://mastra.ai/templates/google-sheets-analysis)
-  </details>
-
-  <details>
-    <summary>Data analysis agents</summary>
-
-    Let users query databases and dashboards in natural language. Connect to your data sources and return answers, charts, or reports.
-
-    Used by [Index](https://mastra.ai/blog/index-case-study), [PLAID Japan](https://mastra.ai/blog/plaid-jpn-gcp-agents)
-
-    Templates: [Chat with Database](https://mastra.ai/templates/text-to-sql), [CSV to Questions](https://mastra.ai/templates/csv-to-questions)
-  </details>
-
-  <details>
-    <summary>Content automation</summary>
-
-    Generate, transform, and manage structured content at scale—whether for a CMS, knowledge base, or documentation system.
-
-    Used by [Sanity](https://mastra.ai/blog/sanity)
-
-    Templates: [Chat with YouTube](https://mastra.ai/templates/chat-with-youtube), [Flash Cards from PDF](https://mastra.ai/templates/flash-cards-from-pdf)
-  </details>
-
-  <details>
-    <summary>DevOps & engineering automation</summary>
-
-    Automate deployments, debug production issues, manage infrastructure, and handle on-call workflows.
-
-    Used by [StarSling](https://mastra.ai/blog/starsling)
-
-    Templates: [GitHub PR Code Review](https://mastra.ai/templates/github-pr-code-review-agent), [Browser Agent](https://mastra.ai/templates/browsing-agent)
-  </details>
-
-  <details>
-    <summary>Sales & GTM workflows</summary>
-
-    Turn customer conversations into structured tasks, generate investment memos, or automate outreach sequences.
-
-    Used by [Kestral](https://mastra.ai/blog/kestral), [Orange Collective](https://mastra.ai/blog/orange-collective-vc-operating-system), [WorkOS](https://mastra.ai/blog/workos-teaching-mastra)
-
-    Templates: [Customer Feedback Summarization](https://mastra.ai/templates/customer-feedback-summarization)
-  </details>
-</div>
-
-Browse [templates](https://mastra.ai/templates) for working examples.
-
-## Want to learn more?
-
-Here's a quick introduction:
-
-<YouTube id="NosES9aJxCc" />
+:::

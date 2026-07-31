@@ -273,6 +273,23 @@ describe('resolveModel', () => {
     expect(mockGetCopilotModelCatalog).toHaveBeenCalled();
   });
 
+  it('claims models.dev providers authenticated by the injected credential store', () => {
+    const gateway = createMastraCodeGateway({
+      mastraGatewayBaseUrl: 'https://gateway-api.mastra.ai',
+      routeThroughMastraGateway: false,
+      credentialStore: {
+        allowEnvironmentFallback: false,
+        reload() {},
+        get: provider =>
+          provider === 'alibaba-coding-plan' ? { type: 'api_key', key: 'sk-alibaba-tenant' } : undefined,
+        getStoredApiKey: () => undefined,
+        getApiKey: async () => undefined,
+      },
+    });
+
+    expect(gateway.handlesModel('alibaba-coding-plan/glm-5')).toBe(true);
+  });
+
   describe('anthropic/* models', () => {
     it('prefers Claude Max OAuth when stored OAuth credential exists', () => {
       mockAuthStorageInstance.get.mockReturnValue({
@@ -566,6 +583,17 @@ describe('resolveModel', () => {
     it('uses model router for unknown providers', () => {
       const result = resolveModel('google/gemini-2.0-flash') as Record<string, unknown>;
       expect(result.__provider).toBe('model-router');
+    });
+
+    it('passes stored API keys to model router providers', () => {
+      mockAuthStorageInstance.get.mockImplementation((provider: string) =>
+        provider === 'alibaba-coding-plan' ? { type: 'api_key', key: 'sk-alibaba-stored' } : undefined,
+      );
+
+      const result = resolveModel('alibaba-coding-plan/glm-5') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('model-router');
+      expect(result.apiKey).toBe('sk-alibaba-stored');
     });
 
     it('resolves gateway auth through the MastraCode gateway hook', () => {

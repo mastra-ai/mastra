@@ -379,7 +379,7 @@ export const routes: RouteObject[] = [
         handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: ScorerCrumb, heading: 'Scorer' }]),
       },
       { path: '/metrics', element: <Metrics />, handle: navHandle('/metrics') },
-      { path: '/signals', element: <SignalsOverviewPage />, handle: navHandle('/signals') },
+      { path: '/intelligence', element: <SignalsOverviewPage />, handle: navHandle('/intelligence') },
       { path: '/observability', element: <Traces />, handle: navHandle('/observability') },
       {
         path: '/traces/:traceId',

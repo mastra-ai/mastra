@@ -10,6 +10,8 @@ import {
   normalizePerPage,
   calculatePagination,
   safelyParseJSON,
+  storageMessageMatchesMetadataFilter,
+  validateStorageMetadataFilter,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
@@ -151,12 +153,26 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       } catch (error) {
         // Fail loud: a silently missing index degrades query performance at scale.
         // Users who manage their own indexes can set skipDefaultIndexes.
+        const mongoCode = (error as any)?.code;
+        const isUniqueConflict = mongoCode === 85 && indexDef.options?.unique === true;
+        const field = Object.keys(indexDef.keys)[0] ?? 'id';
+        const indexName = Object.entries(indexDef.keys)
+          .map(([k, v]) => `${k}_${v}`)
+          .join('_');
+        const text = isUniqueConflict
+          ? `Index conflict on collection "${indexDef.collection}": an existing non-unique index on { ${field}: 1 } conflicts with Mastra's required unique index.\n\n` +
+            `To migrate:\n` +
+            `  1. Check for duplicates:  db.${indexDef.collection}.aggregate([{ $group: { _id: "$${field}", n: { $sum: 1 } } }, { $match: { n: { $gt: 1 } } }])\n` +
+            `  2. Drop the old index:    db.${indexDef.collection}.dropIndex("${indexName}")\n` +
+            `  3. Recreate as unique:    db.${indexDef.collection}.createIndex({ ${field}: 1 }, { unique: true })\n\n` +
+            `Alternatively, set skipDefaultIndexes: true to manage indexes yourself.`
+          : `Failed to create default index on collection "${indexDef.collection}". Set skipDefaultIndexes to manage indexes yourself.`;
         throw new MastraError(
           {
             id: createStorageErrorId('MONGODB', 'CREATE_DEFAULT_INDEXES', 'FAILED'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.THIRD_PARTY,
-            text: `Failed to create default index on collection "${indexDef.collection}". Set skipDefaultIndexes to manage indexes yourself.`,
+            text,
             details: { collection: indexDef.collection },
           },
           error,
@@ -326,6 +342,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     // Normalize threadId to array
     const threadIds = Array.isArray(threadId) ? threadId : [threadId];
@@ -399,24 +416,37 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         };
       }
 
-      // Get total count
-      const total = await collection.countDocuments(query);
-
       const messages: any[] = [];
+      let total = 0;
 
       // Step 1: Get paginated messages from the thread first (without excluding included ones)
       if (perPage !== 0) {
         const sortObj: any = { [field]: sortOrder };
-        let cursor = collection.find(query).sort(sortObj).skip(offset);
+        if (metadataFilter) {
+          const candidates = (await collection.find(query).sort(sortObj).toArray())
+            .map((row: any) => this.parseRow(row))
+            .filter(message => storageMessageMatchesMetadataFilter(message.content, metadataFilter));
+          total = candidates.length;
+          messages.push(...(perPageInput === false ? candidates : candidates.slice(offset, offset + perPage)));
+        } else {
+          total = await collection.countDocuments(query);
+          let cursor = collection.find(query).sort(sortObj).skip(offset);
 
-        // Only apply limit if not unlimited
-        // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
-        if (perPageInput !== false) {
-          cursor = cursor.limit(perPage);
+          // Only apply limit if not unlimited
+          // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
+          if (perPageInput !== false) {
+            cursor = cursor.limit(perPage);
+          }
+
+          const dataResult = await cursor.toArray();
+          messages.push(...dataResult.map((row: any) => this.parseRow(row)));
         }
-
-        const dataResult = await cursor.toArray();
-        messages.push(...dataResult.map((row: any) => this.parseRow(row)));
+      } else if (metadataFilter) {
+        total = (await collection.find(query).toArray())
+          .map((row: any) => this.parseRow(row))
+          .filter(message => storageMessageMatchesMetadataFilter(message.content, metadataFilter)).length;
+      } else {
+        total = await collection.countDocuments(query);
       }
 
       // Only return early if there are no messages AND no includes to process
@@ -449,15 +479,14 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const list = new MessageList().add(messages, 'memory');
       const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
-      // Calculate hasMore based on pagination window
-      // If all thread messages have been returned (through pagination or include), hasMore = false
-      // Otherwise, check if there are more pages in the pagination window
       const threadIdSet = new Set(threadIds);
       const returnedThreadMessageIds = new Set(
         finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
       );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
+      const hasMore = metadataFilter
+        ? perPageInput !== false && offset + perPage < total
+        : perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,
@@ -495,6 +524,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     args: StorageListMessagesByResourceIdInput,
   ): Promise<StorageListMessagesOutput> {
     const { resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     if (!resourceId || typeof resourceId !== 'string' || resourceId.trim().length === 0) {
       throw new MastraError(
@@ -567,24 +597,37 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         };
       }
 
-      // Get total count
-      const total = await collection.countDocuments(query);
-
       const messages: any[] = [];
+      let total = 0;
 
       // Step 1: Get paginated messages
       if (perPage !== 0) {
         const sortObj: any = { [field]: sortOrder };
-        let cursor = collection.find(query).sort(sortObj).skip(offset);
+        if (metadataFilter) {
+          const candidates = (await collection.find(query).sort(sortObj).toArray())
+            .map((row: any) => this.parseRow(row))
+            .filter(message => storageMessageMatchesMetadataFilter(message.content, metadataFilter));
+          total = candidates.length;
+          messages.push(...(perPageInput === false ? candidates : candidates.slice(offset, offset + perPage)));
+        } else {
+          total = await collection.countDocuments(query);
+          let cursor = collection.find(query).sort(sortObj).skip(offset);
 
-        // Only apply limit if not unlimited
-        // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
-        if (perPageInput !== false) {
-          cursor = cursor.limit(perPage);
+          // Only apply limit if not unlimited
+          // MongoDB's .limit(0) means "no limit" (returns all), not "return 0 documents"
+          if (perPageInput !== false) {
+            cursor = cursor.limit(perPage);
+          }
+
+          const dataResult = await cursor.toArray();
+          messages.push(...dataResult.map((row: any) => this.parseRow(row)));
         }
-
-        const dataResult = await cursor.toArray();
-        messages.push(...dataResult.map((row: any) => this.parseRow(row)));
+      } else if (metadataFilter) {
+        total = (await collection.find(query).toArray())
+          .map((row: any) => this.parseRow(row))
+          .filter(message => storageMessageMatchesMetadataFilter(message.content, metadataFilter)).length;
+      } else {
+        total = await collection.countDocuments(query);
       }
 
       // Only return early if there are no messages AND no includes to process
