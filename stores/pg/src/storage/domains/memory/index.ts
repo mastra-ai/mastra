@@ -225,7 +225,10 @@ export class MemoryPG extends MemoryStorage {
         indexName: OM_TABLE,
         schemaName: getSchemaName(this.#schema),
       });
-      await this.#db.client.none(`CREATE INDEX IF NOT EXISTS idx_om_lookup_key ON ${omTableName} ("lookupKey")`);
+      await this.#db.createIndexFromStatement(
+        'idx_om_lookup_key',
+        `CREATE INDEX IF NOT EXISTS idx_om_lookup_key ON ${omTableName} ("lookupKey")`,
+      );
     }
     await this.createDefaultIndexes();
     await this.createCustomIndexes();

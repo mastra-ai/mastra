@@ -12,6 +12,7 @@ import {
   expectSerializedStreamChunks,
   consumeSSEStream,
   createMultipartTestSuite,
+  createBodyLimitTestSuite,
 } from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
@@ -1059,5 +1060,38 @@ describe('Fastify Server Adapter', () => {
         await app.close();
       }
     });
+  });
+
+  createBodyLimitTestSuite({
+    suiteName: 'Body Size Limit',
+
+    createApp: () => Fastify({ logger: false }),
+
+    setupAdapter: (app, mastra, bodyLimitOptions) => {
+      const adapter = new MastraServer({ app, mastra, bodyLimitOptions });
+      adapter.registerContextMiddleware();
+      return { adapter, app };
+    },
+
+    registerRoute: (adapter, app, route) => adapter.registerRoute(app, route, { prefix: '' }),
+
+    executeRequest: async (app, method, url, options = {}) => {
+      const parsedUrl = new URL(url);
+      const injectOptions: any = {
+        method,
+        url: parsedUrl.pathname + parsedUrl.search,
+        headers: options.headers || {},
+      };
+
+      if (options.body) {
+        injectOptions.payload = options.body;
+        injectOptions.headers['content-type'] = 'application/json';
+      }
+
+      const response = await app.inject(injectOptions);
+      return { status: response.statusCode };
+    },
+
+    cleanupApp: app => app.close(),
   });
 });

@@ -286,6 +286,7 @@
                     "attributes": {
                       "toolDescription": "A tool that adds custom metadata",
                       "toolType": "tool",
+                      "toolCallId": "call-metadata-1",
                       "success": true
                     },
                     "metadata": {
