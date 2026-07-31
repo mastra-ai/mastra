@@ -73,7 +73,7 @@ export class PluginSignalLane {
    * Providers of plugins that went inactive, failed to load or were uninstalled
    * are absent from the contributions and get stopped here.
    */
-  async sync(contributions: PluginContribution<SignalProvider<string>>[]): Promise<void> {
+  sync(contributions: PluginContribution<SignalProvider<string>>[]): void {
     const seen = new Set<string>();
 
     for (const { pluginId, versionStamp, value: provider } of contributions) {
@@ -100,7 +100,7 @@ export class PluginSignalLane {
       if (!seen.has(key)) this.#retire(key, live);
     }
 
-    await this.#startPending();
+    this.#startPending();
     this.#rebuildProcessors();
   }
 
@@ -110,14 +110,14 @@ export class PluginSignalLane {
    * nothing else will ever hand it one: the Agent propagates Mastra only to the
    * providers in its own `signals` array, which these deliberately are not in.
    */
-  async setMastra(mastra: Mastra, agent: Agent): Promise<void> {
+  setMastra(mastra: Mastra, agent: Agent): void {
     this.#mastra = mastra;
     this.#agent = agent;
-    await this.#startPending();
+    this.#startPending();
     this.#rebuildProcessors();
   }
 
-  async #startPending(): Promise<void> {
+  #startPending(): void {
     const mastra = this.#mastra;
     const agent = this.#agent;
     if (!mastra || !agent) return;
@@ -128,17 +128,39 @@ export class PluginSignalLane {
         live.provider.__registerMastra(mastra);
         live.provider.connect(agent);
         live.provider.startPolling();
-        await live.provider.start?.();
         live.started = true;
+        // `start()` is the provider's own warm-up and may do network work, so it
+        // is not awaited — this runs on the boot path and on every plugin
+        // reload, and a slow provider must not hold either up. The Agent
+        // constructor treats it the same way (agent.ts: `void provider.start?.()`).
+        void this.#runStart(key, live);
       } catch (error) {
-        // Isolated: one failing provider does not take down its plugin's tools,
-        // commands, skills or sibling providers. A plugin author who wants a
-        // provider treated as required throws from the `signalProviders`
-        // resolver instead, which fails the whole plugin record.
-        this.#onError(`Plugin "${live.pluginId}" signal provider "${live.provider.id}" failed to start:`, error);
-        this.#retire(key, live);
+        this.#failProvider(key, live, error);
       }
     }
+  }
+
+  async #runStart(key: string, live: LiveProvider): Promise<void> {
+    try {
+      await live.provider.start?.();
+    } catch (error) {
+      // The provider may already have been retired or replaced while its
+      // `start()` was in flight; only the instance still live is torn down.
+      if (this.#live.get(key) !== live) return;
+      this.#failProvider(key, live, error);
+      this.#rebuildProcessors();
+    }
+  }
+
+  /**
+   * Isolated: one failing provider does not take down its plugin's tools,
+   * commands, skills or sibling providers. A plugin author who wants a provider
+   * treated as required throws from the `signalProviders` resolver instead,
+   * which fails the whole plugin record.
+   */
+  #failProvider(key: string, live: LiveProvider, error: unknown): void {
+    this.#onError(`Plugin "${live.pluginId}" signal provider "${live.provider.id}" failed to start:`, error);
+    this.#retire(key, live);
   }
 
   #retire(key: string, live: LiveProvider): void {
