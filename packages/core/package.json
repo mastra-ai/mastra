@@ -581,6 +581,16 @@
         "default": "./dist/workflows/index.cjs"
       }
     },
+    "./workflows/builder": {
+      "import": {
+        "types": "./dist/workflows/builder/index.d.ts",
+        "default": "./dist/workflows/builder/index.js"
+      },
+      "require": {
+        "types": "./dist/workflows/builder/index.d.ts",
+        "default": "./dist/workflows/builder/index.cjs"
+      }
+    },
     "./workflows/evented": {
       "import": {
         "types": "./dist/workflows/evented/index.d.ts",

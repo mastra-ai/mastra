@@ -244,6 +244,216 @@ describe('RequestContext', () => {
       const parsed = JSON.parse(serialized);
       expect(parsed).toEqual({ serializable: 'value' });
     });
+
+    it('should skip acyclic shared-reference values that expand past the serialization budget, in bounded time', () => {
+      // JSON.stringify expands shared references once per path: this value
+      // holds 31 heap objects but expands to 2^30 visited nodes. Without the
+      // probe budget the stringify probe burns 60-100s of synchronous CPU,
+      // throws RangeError past V8's string cap, and the key is filtered
+      // anyway — after blocking the event loop for the full expansion.
+      let node: unknown = { leaf: true };
+      for (let i = 0; i < 30; i++) node = { a: node, b: node };
+
+      const ctx = new RequestContext();
+      ctx.set('sharedDag', node);
+      ctx.set('serializable', 'value');
+
+      const start = Date.now();
+      const json = ctx.toJSON();
+      const elapsed = Date.now() - start;
+
+      // The unbudgeted probe takes minutes here; the budgeted one bails in
+      // tens of milliseconds. Loose threshold to assert "bounded", not "fast".
+      expect(elapsed).toBeLessThan(2000);
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('sharedDag');
+    });
+
+    it('should keep acyclic shared-reference values that stay within the serialization budget', () => {
+      // Same shape, but 2^10 expanded nodes — far under the budget.
+      let node: unknown = { leaf: true };
+      for (let i = 0; i < 10; i++) node = { a: node, b: node };
+
+      const ctx = new RequestContext();
+      ctx.set('smallDag', node);
+
+      const json = ctx.toJSON();
+
+      expect(json).toHaveProperty('smallDag');
+    });
+
+    it('should skip oversized typed arrays without materializing their elements, and keep small ones', () => {
+      const ctx = new RequestContext();
+      ctx.set('bigTyped', new Float64Array(8 * 1024 * 1024));
+      ctx.set('smallTyped', new Uint8Array(16));
+      ctx.set('smallBuffer', Buffer.alloc(64));
+
+      const start = Date.now();
+      const json = ctx.toJSON();
+      const elapsed = Date.now() - start;
+
+      expect(elapsed).toBeLessThan(2000);
+      expect(json).not.toHaveProperty('bigTyped');
+      expect(json).toHaveProperty('smallTyped');
+      expect(json).toHaveProperty('smallBuffer');
+    });
+
+    it('should still skip BigInt-element typed arrays like the unbudgeted probe did', () => {
+      const ctx = new RequestContext();
+      ctx.set('bigIntArray', new BigInt64Array([1n]));
+      ctx.set('serializable', 'value');
+
+      const json = ctx.toJSON();
+
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('bigIntArray');
+    });
+
+    it('should skip BigInt-element typed arrays whose brand tag is spoofed', () => {
+      // An own Symbol.toStringTag shadows the built-in typed-array tag, so
+      // detection must not rely on it — the elements are still BigInt and a
+      // real JSON.stringify still throws.
+      const spoofed = new BigInt64Array([1n]);
+      Object.defineProperty(spoofed, Symbol.toStringTag, { value: 'Uint8Array' });
+
+      const ctx = new RequestContext();
+      ctx.set('spoofedBigIntArray', spoofed);
+      ctx.set('serializable', 'value');
+
+      const json = ctx.toJSON();
+
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('spoofedBigIntArray');
+    });
+
+    it('should keep empty BigInt-element typed arrays, matching JSON.stringify', () => {
+      // No elements to throw on: JSON.stringify(new BigInt64Array(0)) is '{}',
+      // so the unbudgeted probe kept it and the budgeted probe must too.
+      const ctx = new RequestContext();
+      ctx.set('emptyBigIntArray', new BigInt64Array(0));
+
+      const json = ctx.toJSON();
+
+      expect(json).toHaveProperty('emptyBigIntArray');
+    });
+
+    it('should skip BigInt-element typed arrays created in another realm', async () => {
+      // A foreign-realm BigInt64Array passes ArrayBuffer.isView but fails
+      // `instanceof BigInt64Array`, so the fast path must detect it via the
+      // cross-realm brand tag — JSON.stringify still throws on its elements.
+      const vm = await import('node:vm');
+      const foreign = vm.runInNewContext('new BigInt64Array([1n])');
+
+      const ctx = new RequestContext();
+      ctx.set('foreignBigIntArray', foreign);
+      ctx.set('serializable', 'value');
+
+      const json = ctx.toJSON();
+
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('foreignBigIntArray');
+    });
+
+    it('should skip typed arrays whose custom enumerable getter throws', () => {
+      // The element fast path must not hide non-index properties from the
+      // probe: a throwing getter fails a real JSON.stringify, so it must
+      // fail the probe too.
+      const typed = new Uint8Array([1]);
+      Object.defineProperty(typed, 'boom', {
+        enumerable: true,
+        get() {
+          throw new Error('getter invoked');
+        },
+      });
+
+      const ctx = new RequestContext();
+      ctx.set('throwingTyped', typed);
+      ctx.set('serializable', 'value');
+
+      const json = ctx.toJSON();
+
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('throwingTyped');
+    });
+
+    it('should skip typed arrays whose custom property leads back into a cycle', () => {
+      const typed = new Uint8Array([1]);
+      const holder: Record<string, unknown> = { typed };
+      Object.defineProperty(typed, 'back', { enumerable: true, value: holder });
+
+      const ctx = new RequestContext();
+      ctx.set('cyclicTyped', typed);
+      ctx.set('serializable', 'value');
+
+      const json = ctx.toJSON();
+
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('cyclicTyped');
+    });
+
+    it('should keep plain DataViews, matching JSON.stringify', () => {
+      // A DataView has no intrinsic elements; JSON.stringify renders it '{}'.
+      const ctx = new RequestContext();
+      ctx.set('dataView', new DataView(new ArrayBuffer(8)));
+
+      const json = ctx.toJSON();
+
+      expect(json).toHaveProperty('dataView');
+    });
+
+    it('should skip DataViews whose own index-named property leads back into a cycle', () => {
+      // Unlike a typed array, an index-named own property on a DataView is
+      // ordinary data that a real serialization walks — the probe must not
+      // treat it as a skippable element.
+      const dataView = new DataView(new ArrayBuffer(8));
+      const holder: Record<string, unknown> = { dataView };
+      (dataView as unknown as Record<number, unknown>)[0] = holder;
+
+      const ctx = new RequestContext();
+      ctx.set('cyclicDataView', dataView);
+      ctx.set('serializable', 'value');
+
+      const json = ctx.toJSON();
+
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('cyclicDataView');
+    });
+
+    it('should budget typed-array elements by intrinsic length even when an own length property lies', () => {
+      const big = new Float64Array(8 * 1024 * 1024);
+      Object.defineProperty(big, 'length', { value: 0 });
+
+      const ctx = new RequestContext();
+      ctx.set('lyingLength', big);
+      ctx.set('serializable', 'value');
+
+      const start = Date.now();
+      const json = ctx.toJSON();
+      const elapsed = Date.now() - start;
+
+      expect(elapsed).toBeLessThan(2000);
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('lyingLength');
+    });
+
+    it('should skip typed arrays whose own enumerable __proto__ property leads back into a cycle', () => {
+      // An own enumerable `__proto__` data property is serialized by
+      // JSON.stringify; a plain-object surrogate would swallow it through
+      // the inherited setter and let the probe pass a value that a real
+      // serialization rejects.
+      const typed = new Uint8Array([1]);
+      const holder: Record<string, unknown> = { typed };
+      Object.defineProperty(typed, '__proto__', { enumerable: true, value: holder });
+
+      const ctx = new RequestContext();
+      ctx.set('protoCyclicTyped', typed);
+      ctx.set('serializable', 'value');
+
+      const json = ctx.toJSON();
+
+      expect(json).toEqual({ serializable: 'value' });
+      expect(json).not.toHaveProperty('protoCyclicTyped');
+    });
   });
 
   describe('serializeForSpan', () => {
