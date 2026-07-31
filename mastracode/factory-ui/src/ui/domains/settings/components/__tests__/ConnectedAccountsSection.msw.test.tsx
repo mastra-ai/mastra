@@ -51,7 +51,9 @@ describe('ConnectedAccountsSection', () => {
 
     expect(await screen.findByText('Not configured')).toBeInTheDocument();
     expect(
-      screen.getByText(/^The Slack integration is not registered on this server\. To enable it, set SLACK_APP_SIGNING_SECRET/),
+      screen.getByText(
+        /^The Slack integration is not registered on this server\. To enable it, set SLACK_APP_SIGNING_SECRET/,
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/^Missing required environment variables/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Connect/ })).not.toBeInTheDocument();
@@ -72,7 +74,9 @@ describe('ConnectedAccountsSection', () => {
 
     expect(await screen.findByText('Not configured')).toBeInTheDocument();
     expect(
-      screen.getByText(/^Slack is not available on this server: the Slack integration is not registered or its environment variables/),
+      screen.getByText(
+        /^Slack is not available on this server: the Slack integration is not registered or its environment variables/,
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/^Missing required environment variables/)).not.toBeInTheDocument();
     expect(screen.queryByText(/is not valid JSON/)).not.toBeInTheDocument();
