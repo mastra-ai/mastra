@@ -216,7 +216,16 @@ export function createDurableToolCallStep() {
     inputSchema: durableToolCallInputSchema,
     outputSchema: durableToolCallOutputSchema,
     execute: async params => {
-      const { inputData, mastra, suspend, resumeData: workflowResumeData, requestContext, actor, getInitData } = params;
+      const {
+        inputData,
+        mastra,
+        suspend,
+        resumeData: workflowResumeData,
+        suspendData,
+        requestContext,
+        actor,
+        getInitData,
+      } = params;
 
       // Access pubsub via symbol
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
@@ -473,6 +482,7 @@ export function createDurableToolCallStep() {
         type: 'approval' | 'suspension';
         resumeSchema?: string;
         suspendPayload?: unknown;
+        delegatedRunId?: string;
       }) => {
         if (!messageList) return;
         const metadataKey = opts.type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
@@ -496,7 +506,12 @@ export function createDurableToolCallStep() {
           toolName,
           args,
           type: opts.type,
+          // `runId` is the outer resumable durable run. When a delegated
+          // sub-agent/workflow suspends, its inner suspended run is preserved
+          // separately as `delegatedRunId` so the resume leg can recover it
+          // (mirrors the regular engine's tool-call-step metadata shape).
           runId,
+          ...(opts.delegatedRunId && opts.delegatedRunId !== runId ? { delegatedRunId: opts.delegatedRunId } : {}),
           ...(opts.type === 'suspension' ? { suspendPayload: opts.suspendPayload } : {}),
           ...(opts.resumeSchema ? { resumeSchema: opts.resumeSchema } : {}),
         };
@@ -670,6 +685,28 @@ export function createDurableToolCallStep() {
         delete (cleanedArgs as any)._background;
       }
 
+      // When resuming a delegated sub-agent/workflow tool, recover the inner
+      // suspended run id from this tool call's workflow suspend payload. The
+      // payload is partitioned by resumeLabel, so parallel calls to the same
+      // delegate cannot select each other's run. Auto-resume calls already pass
+      // suspendedToolRunId in their arguments and keep that value unchanged.
+      const isResumableTool = toolName?.startsWith('agent-') || toolName?.startsWith('workflow-');
+      const suspendedToolRunId = (suspendData as { suspendedToolRunId?: unknown } | undefined)?.suspendedToolRunId;
+      // When the delegation tool is itself approval-gated, an `{ approved: true }`
+      // resume is ambiguous: it can answer this step's pre-execution gate (execute
+      // fresh) or a delegated approval raised mid-execution by the sub-agent. The
+      // suspend payload disambiguates — only the delegated approval persists an
+      // inner suspended run id, so its decision must resume that inner run.
+      const isDelegatedApprovalResume = !!approvalGrant && isResumableTool && typeof suspendedToolRunId === 'string';
+      if (
+        (isResumingFromSuspension || isDelegatedApprovalResume) &&
+        isResumableTool &&
+        !cleanedArgs.suspendedToolRunId &&
+        typeof suspendedToolRunId === 'string'
+      ) {
+        cleanedArgs.suspendedToolRunId = suspendedToolRunId;
+      }
+
       // Fire onInputAvailable lifecycle hook before execution (matches non-durable path).
       if (tool && 'onInputAvailable' in tool && typeof (tool as any).onInputAvailable === 'function') {
         try {
@@ -720,7 +757,9 @@ export function createDurableToolCallStep() {
         // Use the actor supplied for this workflow segment. A resumed segment
         // must never recover the initial actor from serialized agent options.
         actor,
-        resumeData: isResumingFromSuspension ? resumeData : undefined,
+        // Delegated approval decisions must also flow to the wrapper tool: it only
+        // resumes the inner suspended run when resumeData is present.
+        resumeData: isResumingFromSuspension || isDelegatedApprovalResume ? resumeData : undefined,
         ...(toolAbortSignal ? { abortSignal: toolAbortSignal } : {}),
         // Provide outputWriter so context.writer.write() / context.writer.custom()
         // emit chunks through pubsub (matching the regular agent's tool streaming).
@@ -733,6 +772,15 @@ export function createDurableToolCallStep() {
         // In-execution suspend callback — allows tools to suspend mid-execution
         suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
           wasSuspended = true;
+          // When a delegated sub-agent requests approval, the delegation tool
+          // wrapper passes its inner suspended run id via `suspendOptions.runId`
+          // (see the agent-tool wrapper's `suspend(..., { runId, isAgentSuspend })`).
+          // Persist it with the approval so the resume leg targets that inner
+          // run instead of restarting the sub-agent from scratch.
+          const delegatedRunId =
+            typeof suspendOptions?.runId === 'string' && suspendOptions.runId !== runId
+              ? suspendOptions.runId
+              : undefined;
           if (suspendOptions?.requireToolApproval) {
             // Tool is requesting approval during execution
             const approvalResumeSchema = JSON.stringify({
@@ -765,7 +813,7 @@ export function createDurableToolCallStep() {
             }
 
             // Add approval metadata to message before persisting
-            addToolMetadata({ type: 'approval', resumeSchema: approvalResumeSchema });
+            addToolMetadata({ type: 'approval', resumeSchema: approvalResumeSchema, delegatedRunId });
 
             await doFlush();
 
@@ -775,6 +823,10 @@ export function createDurableToolCallStep() {
               {
                 type: 'approval',
                 requireToolApproval: { toolCallId, toolName, args },
+                // Persist the inner suspended run id in the workflow snapshot,
+                // partitioned per tool call (resumeLabel = toolCallId), so the
+                // resume leg can recover it even if message metadata is stale.
+                ...(delegatedRunId ? { suspendedToolRunId: delegatedRunId } : {}),
               },
               { resumeLabel: toolCallId },
             );
