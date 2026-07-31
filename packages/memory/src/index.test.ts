@@ -2407,7 +2407,12 @@ describe('Memory', () => {
     function createMemoryWithMockVector(indexSeparator = '_') {
       const mockVector = {
         deleteVectors: vi.fn(),
-        listIndexes: vi.fn().mockResolvedValue([`memory${indexSeparator}messages`]),
+        listIndexes: vi
+          .fn()
+          .mockResolvedValue([
+            `memory${indexSeparator}messages`,
+            `memory${indexSeparator}observations${indexSeparator}384`,
+          ]),
         query: vi.fn(),
         upsert: vi.fn(),
         createIndex: vi.fn(),
@@ -2439,6 +2444,7 @@ describe('Memory', () => {
       await memory.deleteMessages([messageId]);
 
       await vi.waitFor(() => {
+        expect(memory.mockVector.deleteVectors).toHaveBeenCalledTimes(1);
         expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
           indexName: 'memory_messages',
           filter: { message_id: { $in: [messageId] } },
@@ -2453,8 +2459,13 @@ describe('Memory', () => {
       await memory.deleteThread(threadId);
 
       await vi.waitFor(() => {
+        expect(memory.mockVector.deleteVectors).toHaveBeenCalledTimes(2);
         expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
           indexName: 'memory_messages',
+          filter: { thread_id: threadId },
+        });
+        expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+          indexName: 'memory_observations_384',
           filter: { thread_id: threadId },
         });
       });
@@ -2467,6 +2478,7 @@ describe('Memory', () => {
       await memory.deleteMessages([messageId]);
 
       await vi.waitFor(() => {
+        expect(memory.mockVector.deleteVectors).toHaveBeenCalledTimes(1);
         expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
           indexName: 'memory-messages',
           filter: { message_id: { $in: [messageId] } },
@@ -2481,8 +2493,13 @@ describe('Memory', () => {
       await memory.deleteThread(threadId);
 
       await vi.waitFor(() => {
+        expect(memory.mockVector.deleteVectors).toHaveBeenCalledTimes(2);
         expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
           indexName: 'memory-messages',
+          filter: { thread_id: threadId },
+        });
+        expect(memory.mockVector.deleteVectors).toHaveBeenCalledWith({
+          indexName: 'memory-observations-384',
           filter: { thread_id: threadId },
         });
       });

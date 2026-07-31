@@ -726,15 +726,18 @@ export class Memory extends MastraMemory {
   }
 
   /**
-   * Lists all vector indexes that match the memory messages prefix.
+   * Lists vector indexes managed by memory.
    * Handles separator differences across vector store backends (e.g. '_' vs '-').
    */
-  private async getMemoryVectorIndexes(): Promise<string[]> {
+  private async getMemoryVectorIndexes({ includeObservations = false } = {}): Promise<string[]> {
     if (!this.vector) return [];
     const separator = this.vector.indexSeparator ?? '_';
-    const prefix = `memory${separator}messages`;
+    const messagePrefix = `memory${separator}messages`;
+    const observationPrefix = `memory${separator}observations${separator}`;
     const indexes = await this.vector.listIndexes();
-    return indexes.filter(name => name.startsWith(prefix));
+    return indexes.filter(
+      name => name.startsWith(messagePrefix) || (includeObservations && name.startsWith(observationPrefix)),
+    );
   }
 
   /**
@@ -745,7 +748,7 @@ export class Memory extends MastraMemory {
    */
   private async deleteThreadVectors(threadId: string): Promise<void> {
     try {
-      const memoryIndexes = await this.getMemoryVectorIndexes();
+      const memoryIndexes = await this.getMemoryVectorIndexes({ includeObservations: true });
 
       await Promise.all(
         memoryIndexes.map(async (indexName: string) => {
