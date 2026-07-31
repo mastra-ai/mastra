@@ -401,6 +401,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // below. Config callbacks defined before then (e.g. notification stream
   // options) read it lazily through this holder.
   let activeSession: Session<MastraCodeState> | undefined;
+  // Same trick for the controller, which plugins reach through a lazy accessor.
+  // Plugins load well before the controller is constructed, and a closure over
+  // the `controller` binding itself would throw on early access rather than
+  // reporting "not ready yet", so the accessor reads this holder instead.
+  let pluginRuntimeController: AgentController<MastraCodeState> | undefined;
   if (configDir !== DEFAULT_CONFIG_DIR) {
     validateConfigDirName(configDir);
   }
@@ -633,7 +638,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   const pluginManager = config?.disablePlugins
     ? undefined
-    : (config?.pluginManager ?? new PluginManager({ projectRoot: project.rootPath, configDir, homeDir }));
+    : (config?.pluginManager ??
+      new PluginManager({
+        projectRoot: project.rootPath,
+        configDir,
+        homeDir,
+        runtime: {
+          getController: () => pluginRuntimeController,
+          getActiveSession: () => activeSession,
+        },
+      }));
   const loadedPlugins = pluginManager ? await pluginManager.reload() : [];
   const pluginTools = pluginManager?.getPluginTools() ?? {};
 
@@ -1021,6 +1035,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           release: releaseThreadLock,
         },
   });
+
+  // Publish the controller to the plugin runtime accessors now that it exists.
+  pluginRuntimeController = controller;
 
   // The AgentController is fully constructed but intentionally NOT inited here. Init and
   // session creation are deferred to the composition layer (see below) so the

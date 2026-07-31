@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { collectActivePluginTools, loadPluginFromEntry, loadPlugins } from '../loader.js';
 import type { PluginRegistry } from '../types.js';
@@ -170,6 +170,111 @@ describe('plugin loader', () => {
     expect(loaded[0]?.instructions).toBe(`Plugin instruction for ${projectRoot}`);
     expect(loaded[0]?.skillPaths).toEqual([path.join(pluginDir, 'skills')]);
     expect(loaded[0]?.commandPaths).toEqual([path.join(pluginDir, 'commands')]);
+  });
+
+  it('resolves runtime accessors at call time, reporting undefined before the controller exists', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginDir = path.join(projectRoot, '.mastracode', 'plugins', 'plugin');
+    writePlugin(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.runtime',
+        tools: context => ({
+          runtime_tool: {
+            tool: {
+              id: 'runtime_tool',
+              description: [
+                context.getController?.()?.id ?? 'no-controller',
+                context.getActiveSession?.()?.id ?? 'no-session'
+              ].join('|'),
+              // A plugin that holds the accessor and calls it later — the shape a
+              // signal provider needs, since it runs long after load.
+              resolveLater: () => [
+                context.getController?.()?.id ?? 'no-controller',
+                context.getActiveSession?.()?.id ?? 'no-session'
+              ].join('|')
+            }
+          }
+        })
+      };`,
+    );
+
+    // Mirrors the real ordering: plugins load before the controller and the
+    // session exist, and the same accessors later report them.
+    let controller: { id: string } | undefined;
+    let session: { id: string } | undefined;
+    const options = {
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      runtime: {
+        getController: () => controller as never,
+        getActiveSession: () => session as never,
+      },
+      projectRegistry: {
+        plugins: {
+          'acme.runtime': {
+            enabled: true,
+            source: 'local' as const,
+            specifier: '../plugin',
+            path: pluginDir,
+            entry: 'src/index.ts',
+          },
+        },
+      },
+      globalRegistry: { plugins: {} },
+    };
+
+    const beforeController = await loadPlugins(options);
+    expect(beforeController[0]?.status).toBe('active');
+    expect(beforeController[0]?.tools.runtime_tool?.description).toBe('no-controller|no-session');
+
+    controller = { id: 'mastra-code' };
+    session = { id: 'session-1' };
+
+    // The accessor the plugin captured at load time now reports the live values,
+    // with no reload — this is what makes it lazy rather than a snapshot.
+    const capturedAccessor = (beforeController[0]?.tools.runtime_tool as unknown as { resolveLater: () => string })
+      .resolveLater;
+    expect(capturedAccessor()).toBe('mastra-code|session-1');
+
+    const afterController = await loadPlugins(options);
+    expect(afterController[0]?.tools.runtime_tool?.description).toBe('mastra-code|session-1');
+  });
+
+  it('does not invoke runtime accessors while loading a plugin', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginDir = path.join(projectRoot, '.mastracode', 'plugins', 'plugin');
+    writePlugin(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default { id: 'acme.quiet', tools: { quiet_tool: { tool: { id: 'quiet_tool' } } } };`,
+    );
+
+    const getController = vi.fn(() => undefined as never);
+    const getActiveSession = vi.fn(() => undefined as never);
+
+    const loaded = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      runtime: { getController, getActiveSession },
+      projectRegistry: {
+        plugins: {
+          'acme.quiet': {
+            enabled: true,
+            source: 'local',
+            specifier: '../plugin',
+            path: pluginDir,
+            entry: 'src/index.ts',
+          },
+        },
+      },
+      globalRegistry: { plugins: {} },
+    });
+
+    expect(loaded[0]?.status).toBe('active');
+    expect(getController).not.toHaveBeenCalled();
+    expect(getActiveSession).not.toHaveBeenCalled();
   });
 
   it('surfaces load failures without throwing', async () => {

@@ -1,4 +1,7 @@
+import type { AgentController, Session } from '@mastra/core/agent-controller';
 import type { Tool, ToolAction, ToolExecutionContext } from '@mastra/core/tools';
+
+import type { MastraCodeState } from './schema.js';
 
 export { createTool } from '@mastra/core/tools';
 export type { Tool, ToolAction, ToolExecutionContext } from '@mastra/core/tools';
@@ -88,7 +91,39 @@ export type MastraCodePluginConfigOption = {
 export type MastraCodePluginConfigSchema = Record<string, MastraCodePluginConfigOption>;
 export type MastraCodePluginConfigValues = Record<string, MastraCodePluginConfigValue>;
 
-export type MastraCodePluginContext = {
+/** The running Mastra Code controller, as seen by a plugin. */
+export type MastraCodePluginController = AgentController<MastraCodeState>;
+
+/** The session a plugin's contributions are running alongside. */
+export type MastraCodePluginSession = Session<MastraCodeState>;
+
+/**
+ * Lazy accessors for Mastra Code's runtime, handed to every plugin field resolver.
+ *
+ * Plugins are loaded before the controller and the session exist, so these are
+ * accessors rather than instances: call them at the moment you need the value,
+ * never during plugin load. Both return `undefined` until Mastra Code has
+ * constructed the corresponding object.
+ *
+ * @experimental This is an evolving runtime API. It currently exposes the whole
+ * controller so real plugins can be built against it; once we know what plugin
+ * authors actually reach for, it may narrow to a smaller facade in a future
+ * release.
+ */
+export type MastraCodePluginRuntime = {
+  /**
+   * The running controller, or `undefined` when it does not exist yet.
+   * @experimental see {@link MastraCodePluginRuntime}
+   */
+  getController?: () => MastraCodePluginController | undefined;
+  /**
+   * The active session, or `undefined` before one has been created.
+   * @experimental see {@link MastraCodePluginRuntime}
+   */
+  getActiveSession?: () => MastraCodePluginSession | undefined;
+};
+
+export type MastraCodePluginContext = MastraCodePluginRuntime & {
   cwd: string;
   scope: 'global' | 'project';
   pluginDir: string;
