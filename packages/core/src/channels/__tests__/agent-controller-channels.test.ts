@@ -235,7 +235,12 @@ describe('AgentControllerChannels', () => {
     const { adapter, controller, mastra, channels } = await createSetup();
     const chatThread = createChatThread(adapter, 'chan-1:t-1');
 
-    await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hello controller'), mastra);
+    await (channels as any).processChatMessage(
+      chatThread,
+      createMessage('m-1', 'hello controller'),
+      mastra,
+      new RequestContext(),
+    );
 
     // One durable session keyed `channel:{platform}:{externalThreadId}`
     const session = await controller.getSessionByResource('channel:chan-1:t-1');
@@ -266,13 +271,18 @@ describe('AgentControllerChannels', () => {
     const { adapter, controller, mastra, channels } = await createSetup();
     const chatThread = createChatThread(adapter, 'chan-1:t-1');
 
-    await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'first'), mastra);
+    await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'first'), mastra, new RequestContext());
     const session = await controller.getSessionByResource('channel:chan-1:t-1');
     expect(session).toBeDefined();
     await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'first reply' });
     const boundThreadId = session!.thread.getId();
 
-    await (channels as any).processChatMessage(chatThread, createMessage('m-2', 'second'), mastra);
+    await (channels as any).processChatMessage(
+      chatThread,
+      createMessage('m-2', 'second'),
+      mastra,
+      new RequestContext(),
+    );
     await waitFor(() => chatThread.post.mock.calls.length >= 2, { what: 'second reply' });
 
     // Same session instance, same bound thread, still exactly one mapped thread
@@ -288,8 +298,8 @@ describe('AgentControllerChannels', () => {
     const threadA = createChatThread(adapter, 'chan-1:t-a');
     const threadB = createChatThread(adapter, 'chan-1:t-b');
 
-    await (channels as any).processChatMessage(threadA, createMessage('m-a', 'hello a'), mastra);
-    await (channels as any).processChatMessage(threadB, createMessage('m-b', 'hello b'), mastra);
+    await (channels as any).processChatMessage(threadA, createMessage('m-a', 'hello a'), mastra, new RequestContext());
+    await (channels as any).processChatMessage(threadB, createMessage('m-b', 'hello b'), mastra, new RequestContext());
 
     const sessionA = await controller.getSessionByResource('channel:chan-1:t-a');
     const sessionB = await controller.getSessionByResource('channel:chan-1:t-b');
@@ -303,7 +313,7 @@ describe('AgentControllerChannels', () => {
     const { adapter, mastra, channels } = await createSetup();
     const chatThread = createChatThread(adapter, 'chan-1:t-meta');
 
-    await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hello'), mastra);
+    await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hello'), mastra, new RequestContext());
     await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'reply' });
 
     // Re-read after the session's own thread saves during the run
@@ -321,7 +331,12 @@ describe('AgentControllerChannels', () => {
     const { adapter, controller, mastra, channels } = await createSetup({ agentMemory });
     const chatThread = createChatThread(adapter, 'chan-1:t-po');
 
-    await (channels as any).processChatMessage(chatThread, createMessage('m-po', 'hello metadata'), mastra);
+    await (channels as any).processChatMessage(
+      chatThread,
+      createMessage('m-po', 'hello metadata'),
+      mastra,
+      new RequestContext(),
+    );
     await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'reply' });
 
     const session = await controller.getSessionByResource('channel:chan-1:t-po');
@@ -375,7 +390,12 @@ describe('AgentControllerChannels', () => {
     });
 
     const chatThread = createChatThread(adapter, 'chan-1:t-pre');
-    await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hello again'), mastra);
+    await (channels as any).processChatMessage(
+      chatThread,
+      createMessage('m-1', 'hello again'),
+      mastra,
+      new RequestContext(),
+    );
 
     // Session keyed off the thread's own resourceId — no ownership throw
     const session = await controller.getSessionByResource('custom-owner');
@@ -422,7 +442,12 @@ describe('AgentControllerChannels', () => {
       });
       const chatThread = createChatThread(adapter, 'chan-1:t-appr');
 
-      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'please deploy'), mastra);
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'please deploy'),
+        mastra,
+        new RequestContext(),
+      );
 
       const session = (await controller.getSessionByResource('channel:chan-1:t-appr'))!;
       await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
@@ -452,7 +477,12 @@ describe('AgentControllerChannels', () => {
       });
       const chatThread = createChatThread(adapter, 'chan-1:t-deny');
 
-      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'please deploy'), mastra);
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'please deploy'),
+        mastra,
+        new RequestContext(),
+      );
 
       const session = (await controller.getSessionByResource('channel:chan-1:t-deny'))!;
       await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
@@ -473,7 +503,12 @@ describe('AgentControllerChannels', () => {
       const chatThread = createChatThread(adapter, 'chan-1:t-stale');
 
       // Full roundtrip completes — nothing is armed afterwards
-      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hello'), mastra);
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
       await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'reply' });
       const session = (await controller.getSessionByResource('channel:chan-1:t-stale'))!;
       expect(session.approval.isArmed()).toBe(false);
@@ -509,13 +544,23 @@ describe('AgentControllerChannels', () => {
       });
       const chatThread = createChatThread(adapter, 'chan-1:t-interrupt');
 
-      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'please deploy'), mastra);
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'please deploy'),
+        mastra,
+        new RequestContext(),
+      );
 
       const session = (await controller.getSessionByResource('channel:chan-1:t-interrupt'))!;
       await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
 
       // New inbound message while the approval is pending
-      await (channels as any).processChatMessage(chatThread, createMessage('m-2', 'actually, never mind'), mastra);
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-2', 'actually, never mind'),
+        mastra,
+        new RequestContext(),
+      );
 
       await waitFor(() => !session.approval.isArmed(), { what: 'pending approval auto-declined' });
       await waitFor(() => allPostedText(adapter, chatThread).includes('Okay, moving on.'), {
@@ -533,7 +578,12 @@ describe('AgentControllerChannels', () => {
       });
       const chatThread = createChatThread(adapter, 'chan-1:t-yolo');
 
-      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'please deploy'), mastra);
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'please deploy'),
+        mastra,
+        new RequestContext(),
+      );
 
       // The run never parks: the tool executes and the final text renders
       await waitFor(() => executeSpy.mock.calls.length >= 1, { what: 'tool auto-executed' });
@@ -563,7 +613,12 @@ describe('AgentControllerChannels', () => {
       });
       const chatThread = createChatThread(adapter, 'chan-1:t-schema');
 
-      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'please deploy'), mastra);
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'please deploy'),
+        mastra,
+        new RequestContext(),
+      );
 
       await waitFor(() => executeSpy.mock.calls.length >= 1, { what: 'tool auto-executed (strict schema)' });
       await waitFor(() => allPostedText(adapter, chatThread).includes('Deployed with schema.'), {
@@ -582,7 +637,12 @@ describe('AgentControllerChannels', () => {
       const { adapter, mastra, channels } = await createSetup({});
       const chatThread = createChatThread(adapter, 'discord:t-render');
 
-      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hello'), mastra);
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
 
       const memoryStore = await mastra.getStorage()!.getStore('memory');
       const { threads } = await memoryStore!.listThreads({

@@ -26,7 +26,7 @@ Storage powers:
 
 ## When to configure storage
 
-Configure a persistent storage adapter when state must survive restarts, be shared across processes, or be visible in Studio across sessions. The default in-memory store is useful for tests and short local experiments, but it loses data when the process exits.
+Configure a persistent storage adapter when state must survive restarts or be shared across processes. Persistent storage also keeps state visible in Studio across sessions. The default in-memory store is useful for tests and short local experiments, but it loses data when the process exits.
 
 Use storage when your application needs any of these behaviors:
 

@@ -201,6 +201,8 @@ export interface FactoryProjectPayload {
   name: string;
   /** Org-wide default model for factory runs; null when unset. */
   defaultModelId?: string | null;
+  /** Whether new Slack sessions create Work-board items for this Factory. */
+  slackWorkItemsEnabled?: boolean;
 }
 
 /** `{...projectRepository, repository}` payload from the Factory project routes. */
@@ -329,6 +331,25 @@ export async function updateFactoryDefaultModel(
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
     res,
     'Failed to update Factory default model',
+  );
+  return project;
+}
+
+/** Enable or disable Work-board item creation for new Slack sessions. */
+export async function updateFactorySlackWorkItems(
+  baseUrl: string,
+  factoryProjectId: string,
+  slackWorkItemsEnabled: boolean,
+): Promise<FactoryProjectPayload> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ slackWorkItemsEnabled }),
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
+    res,
+    'Failed to update Slack work-item setting',
   );
   return project;
 }
@@ -601,13 +622,18 @@ export interface FactoryUserSession {
   updatedAt: string;
 }
 
-export async function listUserSessions(baseUrl: string, projectRepositoryId: string): Promise<FactoryUserSession[]> {
+export async function listUserSessions(
+  baseUrl: string,
+  projectRepositoryId: string,
+  signal?: AbortSignal,
+): Promise<FactoryUserSession[]> {
   const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(projectRepositoryId)}/sessions`, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
+    signal,
   });
-  if (!res.ok) throw new Error(`Failed to list sessions (${res.status})`);
-  return ((await res.json()) as { sessions: FactoryUserSession[] }).sessions;
+  const body = await readJsonOrThrow<{ sessions: FactoryUserSession[] }>(res, 'Failed to list sessions');
+  return body.sessions;
 }
 
 export async function createUserSession(

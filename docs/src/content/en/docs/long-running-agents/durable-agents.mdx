@@ -233,6 +233,50 @@ Resume the suspended run after approval:
 await durableAgent.resume(runId, { approved: true })
 ```
 
+## Crash recovery
+
+If the server process crashes while a durable agent run is in progress, that run remains in `running` status in storage with no automatic retry. On the next server start you can re-drive these orphaned runs so they pick up where they left off.
+
+### Automatic recovery
+
+Set `recovery.durableAgents` to `'auto'` in the Mastra config. The deployer calls `recoverAllDurableAgents()` on boot, right after restarting active workflow runs:
+
+```typescript title="src/mastra/index.ts" {4}
+export const mastra = new Mastra({
+  agents: { myAgent: durableAgent },
+  storage: new PostgresStore({ connectionString: process.env.DATABASE_URL! }),
+  recovery: { durableAgents: 'auto' },
+})
+```
+
+On startup, this discovers every registered durable agent with runs stuck in `running` status and re-drives them from the last persisted snapshot.
+
+:::warning
+
+Recovery re-runs the agentic loop from the last snapshot, which re-issues LLM calls (real cost) and re-executes tool calls. Make sure your tools are idempotent before enabling automatic recovery.
+
+:::
+
+### Manual recovery
+
+If you need finer control — for example gating recovery behind a leader election or running it on a schedule — call the methods directly:
+
+```typescript
+// Recover all durable agents
+const result = await mastra.recoverAllDurableAgents()
+console.log(`Recovered ${result.recovered} runs (${result.succeeded} ok, ${result.failed} failed)`)
+
+// Recover a specific agent
+const agentResult = await durableAgent.recoverActiveRuns()
+
+// Recover a single known run
+await durableAgent.recoverActiveRuns({ runId: 'run-abc-123' })
+```
+
+### Multi-instance deployments
+
+There is no distributed lease or lock yet. In multi-replica deployments, every replica that starts with `recovery.durableAgents: 'auto'` will race to recover the same runs. For now, either gate recovery behind your own leader election or run it from a single replica.
+
 ## Related
 
 - [DurableAgent reference](/reference/agents/durable-agent)
@@ -240,3 +284,4 @@ await durableAgent.resume(runId, { approved: true })
 - [Background tasks](/docs/long-running-agents/background-tasks)
 - [Inngest deployment guide](/guides/deployment/inngest)
 - [Agent overview](/docs/agents/overview)
+- [Worker overview](/docs/deployment/workers)

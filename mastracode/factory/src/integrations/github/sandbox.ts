@@ -328,6 +328,40 @@ export async function materializeRepo(options: {
   await storage.markMaterialized({ id: sandboxRow.id });
 }
 
+/**
+ * Reset a pooled workdir that a new session just claimed: the previous
+ * session's branch and dirty state must not leak into the new session, so
+ * force-checkout the default branch and drop all local modifications. When
+ * the claimed VM was reaped and re-provisioned there is no checkout yet and
+ * this is a no-op (the clone path handles it). A wedged checkout falls back
+ * to wiping the workdir so `materializeRepo` re-clones inside the same VM
+ * instead of permanently failing the session.
+ */
+export async function recycleClaimedWorkdir(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  defaultBranch: string,
+): Promise<void> {
+  if (!/^[A-Za-z0-9_./-]+$/.test(defaultBranch)) {
+    throw new MaterializeError(`Refusing to recycle: invalid default branch '${defaultBranch}'.`, 'clone-failed');
+  }
+  const w = shellQuote(workdir);
+  const inspect = await sh(sandbox, `git -C ${w} rev-parse --is-inside-work-tree`);
+  if (inspect.exitCode !== 0) return;
+  const recycle = await sh(
+    sandbox,
+    // `-x` also drops gitignored files (.env, build caches) so no session
+    // state survives into the next claim.
+    `git -C ${w} checkout -f ${shellQuote(defaultBranch)} && git -C ${w} reset --hard && git -C ${w} clean -fdx`,
+    { phase: 'claimed workdir recycle' },
+  );
+  if (recycle.exitCode === 0) return;
+  const wipe = await sh(sandbox, `rm -rf ${w}`);
+  if (wipe.exitCode !== 0) {
+    throw new MaterializeError(`Failed to recycle claimed sandbox workdir: ${recycle.stderr}`, 'clone-failed');
+  }
+}
+
 /** Check out a session's branch inside its isolated repository clone. */
 export async function checkoutSessionBranch(
   sandbox: MaterializationSandbox,
@@ -352,7 +386,16 @@ export async function checkoutSessionBranch(
   );
   if (local.exitCode === 0) {
     const checkout = await sh(sandbox, `git -C ${shellQuote(workdir)} checkout ${shellQuote(branch)}`);
-    if (checkout.exitCode !== 0) throw classifyGitFailure(checkout, 'clone-failed');
+    if (checkout.exitCode !== 0) {
+      // The session's agent may have switched branches itself (e.g. `gh pr
+      // checkout`) and left uncommitted work in the tree. Git refuses to
+      // switch back over those files — that work must win. The checkout is
+      // intact and usable on its current branch; keep it as-is rather than
+      // fail the workspace open, and never reset or stash to force the
+      // switch through.
+      if (isBlockedByLocalWork(checkout)) return;
+      throw classifyGitFailure(checkout, 'clone-failed');
+    }
     return;
   }
 
@@ -365,10 +408,28 @@ export async function checkoutSessionBranch(
       `git -C ${shellQuote(workdir)} fetch origin ${shellQuote(baseBranch)} && git -C ${shellQuote(workdir)} checkout -b ${shellQuote(branch)} FETCH_HEAD`,
       { timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS, phase: 'branch checkout' },
     );
-    if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'clone-failed');
+    if (fetch.exitCode !== 0) {
+      // Same rule as above: uncommitted work in the tree blocks the switch
+      // to the new branch. Leave the checkout on its current branch.
+      if (isBlockedByLocalWork(fetch)) return;
+      throw classifyGitFailure(fetch, 'clone-failed');
+    }
   } finally {
     await sh(sandbox, `git -C ${shellQuote(workdir)} remote set-url origin ${shellQuote(cleanUrl(repoFullName))}`);
   }
+}
+
+/**
+ * True when a failed `git checkout` just means uncommitted or untracked files
+ * in the working tree would be clobbered by the branch switch. Those files are
+ * a session's work in progress — the switch must yield to them, never the
+ * other way around.
+ */
+function isBlockedByLocalWork(result: SandboxCommandResult): boolean {
+  const output = `${result.stderr || ''}\n${result.stdout || ''}`;
+  return /Your local changes to the following files would be overwritten by checkout|untracked working tree files would be overwritten by checkout/i.test(
+    output,
+  );
 }
 
 /**
@@ -418,13 +479,17 @@ async function scrubRemote(
  * branch can't be fast-forwarded — not that anything is broken. The shared
  * workdir is routinely left on a session's working branch, which may have
  * local commits diverging from upstream, no upstream at all (session branches
- * are created from `FETCH_HEAD`), or a detached HEAD. In all of those cases
- * the checkout is intact and holds the session's work; materialization must
- * keep it rather than fail the workspace open.
+ * are created from `FETCH_HEAD`), or a detached HEAD. A checkout can also
+ * hold uncommitted or untracked files (a build or script run left residue,
+ * or an older session worked directly in the shared checkout), which makes
+ * git refuse the merge outright. In all of these cases the checkout is
+ * intact and may hold real work; materialization must keep it as-is rather
+ * than fail the workspace open — and must never discard the local state to
+ * force the pull through.
  */
 function isBenignNonFastForward(result: SandboxCommandResult): boolean {
   const output = `${result.stderr || ''}\n${result.stdout || ''}`;
-  return /Not possible to fast-forward|Diverging branches can't be fast-forwarded|no tracking information for the current branch|You are not currently on a branch/i.test(
+  return /Not possible to fast-forward|Diverging branches can't be fast-forwarded|no tracking information for the current branch|You are not currently on a branch|Your local changes to the following files would be overwritten by merge|untracked working tree files would be overwritten by merge/i.test(
     output,
   );
 }

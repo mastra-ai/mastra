@@ -26,7 +26,7 @@ function AgentPlayground() {
   const { isMastraPlatform, mastraPlatformApiEndpoint, mastraPlatformProjectId } = useMastraPlatform();
 
   // Fetch versions first — this endpoint returns an empty array for code-only agents
-  const { data: versionsData } = useAgentVersions({
+  const { data: versionsData, isLoading: isLoadingVersions } = useAgentVersions({
     agentId,
     params: { orderBy: { direction: 'DESC' } },
   });
@@ -44,7 +44,7 @@ function AgentPlayground() {
   const showCodeModeActions = isCodeSourceAgent && isCodeAgentEditable;
   const canOpenPr = showCodeModeActions && isMastraPlatform && !!mastraPlatformApiEndpoint && !!mastraPlatformProjectId;
   const openPrTitle = canOpenPr ? 'Open a pull request for these JSON changes' : undefined;
-  const isLoading = isLoadingCodeAgent || (hasVersions && isLoadingStoredAgent);
+  const isLoading = isLoadingCodeAgent || isLoadingVersions || (hasVersions && isLoadingStoredAgent);
   const hasMemory = Boolean(memory?.result);
 
   // Fetch version data when a specific version is selected
@@ -160,7 +160,7 @@ function AgentPlayground() {
         agentId={agentId!}
         agentName={codeAgent?.name}
         modelVersion={codeAgent?.modelVersion}
-        agentVersionId={isViewingPreviousVersion ? (selectedVersionId ?? undefined) : undefined}
+        agentVersionId={selectedVersionId ?? latestVersion?.id}
         hasMemory={hasMemory}
         activeVersionId={activeVersionId}
         selectedVersionId={selectedVersionId ?? undefined}
