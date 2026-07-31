@@ -129,12 +129,12 @@ describe('PlatformGithubIntegration', () => {
     ]);
     expect(fetchImpl).toHaveBeenNthCalledWith(
       1,
-      'https://platform.example.com/v1/server/github-app/installations',
+      'https://integrations.mastra.ai/v1/server/github-app/installations',
       expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer platform-token' }) }),
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(
       2,
-      'https://platform.example.com/v1/server/github-app/installations/7/repositories',
+      'https://integrations.mastra.ai/v1/server/github-app/installations/7/repositories',
       expect.anything(),
     );
     const [storedInstallation] = await storage.installations.list({ orgId: 'org-1' });
@@ -354,10 +354,10 @@ describe('PlatformGithubIntegration', () => {
     });
 
     expect(fetchImpl.mock.calls.map(call => [String(call[0]), (call[1] as RequestInit).method])).toEqual([
-      ['https://platform.example.com/v1/server/github/repos/acme/app/pulls', 'POST'],
-      ['https://platform.example.com/v1/server/github/repos/acme/app/pulls/34/reviews', 'POST'],
-      ['https://platform.example.com/v1/server/github/repos/acme/app/pulls/34/comments', 'POST'],
-      ['https://platform.example.com/v1/server/github/repos/acme/app/pulls/34/requested-reviewers', 'POST'],
+      ['https://integrations.mastra.ai/v1/server/github/repos/acme/app/pulls', 'POST'],
+      ['https://integrations.mastra.ai/v1/server/github/repos/acme/app/pulls/34/reviews', 'POST'],
+      ['https://integrations.mastra.ai/v1/server/github/repos/acme/app/pulls/34/comments', 'POST'],
+      ['https://integrations.mastra.ai/v1/server/github/repos/acme/app/pulls/34/requested-reviewers', 'POST'],
     ]);
     expect(JSON.parse(String((fetchImpl.mock.calls[1]?.[1] as RequestInit).body))).toMatchObject({ event: 'APPROVE' });
     expect(JSON.parse(String((fetchImpl.mock.calls[2]?.[1] as RequestInit).body))).toMatchObject({ side: 'RIGHT' });
@@ -724,7 +724,7 @@ describe('PlatformGithubIntegration', () => {
     expect(integration.workers(context).map(worker => worker.name)).toEqual(['platform-github-events']);
     expect(integration.diagnostics()).toEqual({
       mode: 'platform',
-      endpointHost: 'platform.example.com',
+      endpointHost: 'integrations.mastra.ai',
       polling: { enabled: true },
     });
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
@@ -870,7 +870,7 @@ describe('PlatformGithubIntegration', () => {
       reason: 'ready',
     });
     expect(fetchImpl).toHaveBeenCalledWith(
-      'https://platform.example.com/v1/server/github-app/user-connection?userId=user-1',
+      'https://integrations.mastra.ai/v1/server/github-app/user-connection?userId=user-1',
       expect.anything(),
     );
     await expect(context.storage.sourceControl.installations.list({ orgId: 'org-1' })).resolves.toEqual([
@@ -883,7 +883,7 @@ describe('PlatformGithubIntegration', () => {
       'https://github.com/apps/mastra/installations/new?state=platform-state',
     );
     expect(fetchImpl).toHaveBeenCalledWith(
-      'https://platform.example.com/v1/server/github-app/install-url?action=install&redirectTo=%2F&originator=https%3A%2F%2Ffactory.example',
+      'https://integrations.mastra.ai/v1/server/github-app/install-url?action=install&redirectTo=%2F&originator=https%3A%2F%2Ffactory.example',
       expect.anything(),
     );
 
@@ -893,7 +893,7 @@ describe('PlatformGithubIntegration', () => {
       'https://github.com/login/oauth/authorize?client_id=abc&state=platform-state',
     );
     expect(fetchImpl).toHaveBeenCalledWith(
-      'https://platform.example.com/v1/server/github-app/authenticate?userId=user-1&redirectTo=%2F&originator=https%3A%2F%2Ffactory.example',
+      'https://integrations.mastra.ai/v1/server/github-app/authenticate?userId=user-1&redirectTo=%2F&originator=https%3A%2F%2Ffactory.example',
       expect.anything(),
     );
   });
@@ -996,9 +996,17 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
-  it('defaults the Platform base URL and requires MASTRA_PLATFORM_SECRET_KEY', () => {
+  it('defaults the Platform integrations URL, honors regional overrides, and requires MASTRA_PLATFORM_SECRET_KEY', () => {
     vi.stubEnv('MASTRA_SHARED_API_URL', '');
-    expect(new PlatformGithubIntegration().diagnostics()).toMatchObject({ endpointHost: 'platform.mastra.ai' });
+    expect(new PlatformGithubIntegration().diagnostics()).toMatchObject({ endpointHost: 'integrations.mastra.ai' });
+
+    vi.stubEnv('MASTRA_PLATFORM_REGION', 'EU');
+    expect(new PlatformGithubIntegration().diagnostics()).toMatchObject({
+      endpointHost: 'integrations.eu.mastra.ai',
+    });
+    expect(new PlatformGithubIntegration({ region: 'US' }).diagnostics()).toMatchObject({
+      endpointHost: 'integrations.mastra.ai',
+    });
 
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'legacy-token');
@@ -1019,12 +1027,12 @@ describe('PlatformGithubIntegration', () => {
 
     await expect(integration.getRepositoryCollaboratorPermission(7, 'acme/app', 'grace')).resolves.toBe('maintain');
     expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
-      'https://platform.example.com/v1/server/github/repos/acme/app/collaborators/grace/permission',
+      'https://integrations.mastra.ai/v1/server/github/repos/acme/app/collaborators/grace/permission',
     );
     expect(integration.workers({} as IntegrationContext)).toEqual([]);
     expect(integration.diagnostics()).toEqual({
       mode: 'platform',
-      endpointHost: 'platform.example.com',
+      endpointHost: 'integrations.mastra.ai',
       polling: { enabled: false, intervalMs: 9_000 },
     });
   });

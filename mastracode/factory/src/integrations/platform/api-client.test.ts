@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { PlatformApiClient, PlatformApiError, platformApiClientConfigFromEnv } from './api-client.js';
+import {
+  PlatformApiClient,
+  PlatformApiError,
+  platformApiClientConfigFromEnv,
+  platformIntegrationsClientConfigFromEnv,
+} from './api-client.js';
 
 const accessToken = 'platform-secret-token';
 
@@ -39,6 +44,26 @@ describe('PlatformApiClient', () => {
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'legacy-token');
     expect(() => platformApiClientConfigFromEnv()).toThrow(/MASTRA_PLATFORM_SECRET_KEY/);
+  });
+
+  it('routes integration clients from MASTRA_PLATFORM_REGION with constructor override precedence', () => {
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', accessToken);
+    vi.stubEnv('MASTRA_PLATFORM_REGION', 'EU');
+
+    expect(platformIntegrationsClientConfigFromEnv()).toEqual({
+      baseUrl: 'https://integrations.eu.mastra.ai',
+      accessToken,
+    });
+    expect(platformIntegrationsClientConfigFromEnv({ region: 'US' })).toEqual({
+      baseUrl: 'https://integrations.mastra.ai',
+      accessToken,
+    });
+
+    vi.stubEnv('MASTRA_PLATFORM_REGION', 'unknown');
+    expect(platformIntegrationsClientConfigFromEnv()).toEqual({
+      baseUrl: 'https://integrations.mastra.ai',
+      accessToken,
+    });
   });
 
   it('uses bearer authentication without ambient cookie credentials', async () => {

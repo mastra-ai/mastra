@@ -19,7 +19,11 @@ import {
   PlatformApiClient,
   PlatformApiError,
   platformApiClientConfigFromEnv,
+  platformIntegrationsClientConfigFromEnv,
+  type PlatformIntegrationsClientOptions,
 } from '../api-client.js';
+
+export interface PlatformLinearIntegrationOptions extends PlatformIntegrationsClientOptions {}
 
 type PageInfo = { hasNextPage: boolean; endCursor: string | null };
 type LinearUser = {
@@ -95,6 +99,7 @@ function routeBaseUrl(ctx: IntegrationContext, requestUrl: string): string {
 export class PlatformLinearIntegration implements FactoryIntegration {
   readonly id = 'linear';
   readonly #client: PlatformApiClient;
+  readonly #platformClient: PlatformApiClient;
   readonly #endpointHost: string;
   #projects: FactoryProjectsStorage | undefined;
   #auth: RouteAuth | undefined;
@@ -243,9 +248,10 @@ export class PlatformLinearIntegration implements FactoryIntegration {
     },
   };
 
-  constructor() {
-    const config = platformApiClientConfigFromEnv();
+  constructor(options: PlatformLinearIntegrationOptions = {}) {
+    const config = platformIntegrationsClientConfigFromEnv(options);
     this.#client = new PlatformApiClient(config);
+    this.#platformClient = new PlatformApiClient(platformApiClientConfigFromEnv());
     this.#endpointHost = new URL(config.baseUrl).host;
   }
 
@@ -387,7 +393,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
           originator,
         });
         const query = new URLSearchParams({ return_to: returnTo, originator });
-        const location = await this.#client.requestRedirect('GET', `${API_PREFIX}/authorize?${query}`);
+        const location = await this.#platformClient.requestRedirect('GET', `${API_PREFIX}/authorize?${query}`);
         return c.redirect(location);
       },
     });

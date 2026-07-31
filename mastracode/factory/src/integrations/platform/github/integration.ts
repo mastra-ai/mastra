@@ -57,10 +57,13 @@ import {
   logPlatformWarn,
   PlatformApiClient,
   PlatformApiError,
-  platformApiClientConfigFromEnv,
+  platformIntegrationsClientConfigFromEnv,
+  type PlatformIntegrationsClientOptions,
 } from '../api-client.js';
 import { PlatformGithubEventWorker } from './event-worker.js';
 import type { PlatformGithubEventStorage } from './event-worker.js';
+
+export interface PlatformGithubIntegrationOptions extends PlatformIntegrationsClientOptions {}
 
 type GithubActor = { login: string; avatarUrl: string | null; htmlUrl: string | null } | null;
 
@@ -399,8 +402,8 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     removeRequestedReviewers: input => this.#requestedReviewers('DELETE', input),
   };
 
-  constructor() {
-    const config = platformApiClientConfigFromEnv();
+  constructor(options: PlatformGithubIntegrationOptions = {}) {
+    const config = platformIntegrationsClientConfigFromEnv(options);
     this.#client = new PlatformApiClient(config);
     this.#endpointHost = new URL(config.baseUrl).host;
     this.#pollingEnabled = process.env.MASTRA_PLATFORM_GITHUB_POLLING_ENABLED?.trim().toLowerCase() !== 'false';

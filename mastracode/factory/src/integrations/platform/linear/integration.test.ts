@@ -146,7 +146,7 @@ describe('PlatformLinearIntegration', () => {
     ]);
     expect(fetchImpl).toHaveBeenNthCalledWith(
       1,
-      'https://platform.example.com/v1/server/linear/workspaces',
+      'https://integrations.mastra.ai/v1/server/linear/workspaces',
       expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer platform-token' }) }),
     );
   });
@@ -480,7 +480,7 @@ describe('PlatformLinearIntegration', () => {
     await expect(integration.agentTools({ requestContext })).resolves.toEqual(
       expect.objectContaining({ linear_get_issue: expect.anything(), linear_create_comment: expect.anything() }),
     );
-    expect(integration.diagnostics()).toEqual({ mode: 'platform', endpointHost: 'platform.example.com' });
+    expect(integration.diagnostics()).toEqual({ mode: 'platform', endpointHost: 'integrations.mastra.ai' });
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
   });
 
@@ -549,11 +549,21 @@ describe('PlatformLinearIntegration', () => {
     );
   });
 
-  it('defaults the Platform base URL and requires MASTRA_PLATFORM_SECRET_KEY', () => {
+  it('defaults the Platform integrations URL, honors regional overrides, and requires MASTRA_PLATFORM_SECRET_KEY', () => {
     vi.stubEnv('MASTRA_SHARED_API_URL', '');
     expect(new PlatformLinearIntegration().diagnostics()).toEqual({
       mode: 'platform',
-      endpointHost: 'platform.mastra.ai',
+      endpointHost: 'integrations.mastra.ai',
+    });
+
+    vi.stubEnv('MASTRA_PLATFORM_REGION', 'EU');
+    expect(new PlatformLinearIntegration().diagnostics()).toEqual({
+      mode: 'platform',
+      endpointHost: 'integrations.eu.mastra.ai',
+    });
+    expect(new PlatformLinearIntegration({ region: 'US' }).diagnostics()).toEqual({
+      mode: 'platform',
+      endpointHost: 'integrations.mastra.ai',
     });
 
     vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');

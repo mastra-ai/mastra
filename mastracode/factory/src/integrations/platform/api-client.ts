@@ -4,17 +4,44 @@ export interface PlatformApiClientConfig {
   fetchImpl?: typeof fetch;
 }
 
+export interface PlatformIntegrationsClientOptions {
+  region?: string;
+}
+
+const DEFAULT_PLATFORM_API_URL = 'https://platform.mastra.ai/v1';
+const DEFAULT_INTEGRATIONS_URL = 'https://integrations.mastra.ai';
+const REGIONAL_INTEGRATIONS_URLS: Record<string, string> = {
+  EU: 'https://integrations.eu.mastra.ai',
+  US: DEFAULT_INTEGRATIONS_URL,
+};
+
 export function platformApiClientConfigFromEnv(): PlatformApiClientConfig {
-  const sharedApiUrl = process.env.MASTRA_SHARED_API_URL?.trim() || 'https://platform.mastra.ai/v1';
+  return {
+    baseUrl: normalizeBaseUrl(process.env.MASTRA_SHARED_API_URL?.trim() || DEFAULT_PLATFORM_API_URL),
+    accessToken: requirePlatformSecretKey(),
+  };
+}
+
+export function platformIntegrationsClientConfigFromEnv(
+  options: PlatformIntegrationsClientOptions = {},
+): PlatformApiClientConfig {
+  const region = (options.region ?? process.env.MASTRA_PLATFORM_REGION)?.trim().toUpperCase();
+  return {
+    baseUrl: normalizeBaseUrl((region ? REGIONAL_INTEGRATIONS_URLS[region] : undefined) ?? DEFAULT_INTEGRATIONS_URL),
+    accessToken: requirePlatformSecretKey(),
+  };
+}
+
+function requirePlatformSecretKey(): string {
   const accessToken = process.env.MASTRA_PLATFORM_SECRET_KEY?.trim();
   if (!accessToken) {
     throw new Error('Platform integration: missing required environment variable MASTRA_PLATFORM_SECRET_KEY.');
   }
-  return { baseUrl: normalizeSharedApiUrl(sharedApiUrl), accessToken };
+  return accessToken;
 }
 
-function normalizeSharedApiUrl(sharedApiUrl: string): string {
-  return sharedApiUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, '').replace(/\/v1$/, '');
 }
 
 export class PlatformApiError extends Error {
