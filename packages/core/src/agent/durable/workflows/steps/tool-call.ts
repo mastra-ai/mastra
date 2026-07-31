@@ -501,8 +501,14 @@ export function createDurableToolCallStep() {
           ...(opts.resumeSchema ? { resumeSchema: opts.resumeSchema } : {}),
         };
 
+        const carriesToolCall = (msg: any) =>
+          msg.role === 'assistant' &&
+          (msg.content?.parts ?? []).some(
+            (part: any) => part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId,
+          );
+
         const responseMessages = messageList.get.response.db();
-        const lastAssistantMessage = [...responseMessages].reverse().find(msg => msg.role === 'assistant');
+        const lastAssistantMessage = [...responseMessages].reverse().find(carriesToolCall);
         if (lastAssistantMessage?.content) {
           let metadata: Record<string, any>;
           if (
@@ -527,16 +533,13 @@ export function createDurableToolCallStep() {
         // updateMessageMetadataByToolCallId, which also re-marks the message
         // unsaved so the following flush persists this write too.
         const allMessages = messageList.get.all.db();
-        const target = [...allMessages]
-          .reverse()
-          .find(
-            msg =>
-              msg.role === 'assistant' &&
-              (msg.content?.parts ?? []).some(
-                (part: any) => part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId,
-              ),
+        const target = [...allMessages].reverse().find(carriesToolCall);
+        if (!target?.content) {
+          logger?.warn?.(
+            `[DurableAgent] addToolMetadata could not find an assistant message for tool call ${toolCallId} (${toolName}); ${metadataKey} entry was not persisted.`,
           );
-        if (!target?.content) return;
+          return;
+        }
         const existingMeta =
           typeof target.content.metadata === 'object' && target.content.metadata !== null
             ? (target.content.metadata as Record<string, any>)
