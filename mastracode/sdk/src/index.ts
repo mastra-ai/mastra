@@ -84,6 +84,7 @@ import {
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
 import { PluginManager } from './plugins/manager.js';
+import type { PluginProcessorEntries } from './plugins/types.js';
 import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
 import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
 import { setAuthStorage } from './providers/claude-max.js';
@@ -716,6 +717,67 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           },
         })
       : undefined;
+  // Mastra Code's own processors are constructed once, here, rather than inside
+  // the resolver below: the resolver runs before every LLM call, and rebuilding
+  // stateful processors per request would reset them.
+  const mastraCodeInputProcessors: InputProcessor[] = [
+    ...(config?.inputProcessors ?? []),
+    new PlanRejectionAbortProcessor(),
+    new AgentsMDInjector({
+      // Untrusted checkouts (review sessions on PR branches) must not have
+      // the working tree's instruction files injected as system reminders —
+      // those files are attacker-writable content, not configuration. When
+      // the session carries a trusted base ref, reminders are served from
+      // that ref instead (see getReader); without one they are disabled.
+      isEnabled: ({ requestContext }) => {
+        const state = getInjectorSessionState(requestContext);
+        return state?.untrustedCheckout !== true || typeof state?.baseRef === 'string';
+      },
+      getReader: ({ requestContext }) => {
+        const state = getInjectorSessionState(requestContext);
+        if (state?.untrustedCheckout !== true || typeof state?.baseRef !== 'string') return undefined;
+        return createGitRefReminderReader(state?.projectPath ?? project.rootPath, state.baseRef);
+      },
+      getIgnoredInstructionPaths: ({ requestContext }) => {
+        const state = getInjectorSessionState(requestContext);
+        const projectPath = state?.projectPath ?? project.rootPath;
+        // On untrusted checkouts the static prompt loads from the base ref,
+        // so compute the statically-loaded paths through the same reader to
+        // keep the dedup consistent.
+        const projectReader =
+          state?.untrustedCheckout === true && typeof state?.baseRef === 'string'
+            ? createGitRefInstructionReader(projectPath, state.baseRef)
+            : undefined;
+        return getStaticallyLoadedInstructionPaths(projectPath, undefined, projectReader);
+      },
+    }),
+    new ProviderHistoryCompat(),
+  ];
+
+  const NO_PLUGIN_PROCESSORS: PluginProcessorEntries = { input: [], output: [] };
+  let pluginProcessorReadWarned = false;
+
+  /**
+   * Plugin processors are read through a function so that enabling, disabling or
+   * updating a plugin takes effect on the next request rather than requiring a
+   * new agent. This runs before every LLM call, and also outside the request
+   * path when the Agent catalogues its configured processors — where a throw is
+   * swallowed into a debug log. So it only reads already-resolved state: no
+   * filesystem, no network, no construction, and it never throws.
+   */
+  const readPluginProcessors = (): PluginProcessorEntries => {
+    try {
+      return pluginManager?.getPluginProcessors() ?? NO_PLUGIN_PROCESSORS;
+    } catch (error) {
+      // Warn once: this is on the hot path, and a broken read repeats.
+      if (!pluginProcessorReadWarned) {
+        pluginProcessorReadWarned = true;
+        console.warn('Failed to read plugin processors:', error);
+      }
+      return NO_PLUGIN_PROCESSORS;
+    }
+  };
+
   const codeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
@@ -765,39 +827,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // per-request from the active workspace (mirrors `judge`).
       tools: getGoalJudgeTools,
     },
-    inputProcessors: [
-      ...(config?.inputProcessors ?? []),
-      new PlanRejectionAbortProcessor(),
-      new AgentsMDInjector({
-        // Untrusted checkouts (review sessions on PR branches) must not have
-        // the working tree's instruction files injected as system reminders —
-        // those files are attacker-writable content, not configuration. When
-        // the session carries a trusted base ref, reminders are served from
-        // that ref instead (see getReader); without one they are disabled.
-        isEnabled: ({ requestContext }) => {
-          const state = getInjectorSessionState(requestContext);
-          return state?.untrustedCheckout !== true || typeof state?.baseRef === 'string';
-        },
-        getReader: ({ requestContext }) => {
-          const state = getInjectorSessionState(requestContext);
-          if (state?.untrustedCheckout !== true || typeof state?.baseRef !== 'string') return undefined;
-          return createGitRefReminderReader(state?.projectPath ?? project.rootPath, state.baseRef);
-        },
-        getIgnoredInstructionPaths: ({ requestContext }) => {
-          const state = getInjectorSessionState(requestContext);
-          const projectPath = state?.projectPath ?? project.rootPath;
-          // On untrusted checkouts the static prompt loads from the base ref,
-          // so compute the statically-loaded paths through the same reader to
-          // keep the dedup consistent.
-          const projectReader =
-            state?.untrustedCheckout === true && typeof state?.baseRef === 'string'
-              ? createGitRefInstructionReader(projectPath, state.baseRef)
-              : undefined;
-          return getStaticallyLoadedInstructionPaths(projectPath, undefined, projectReader);
-        },
-      }),
-      new ProviderHistoryCompat(),
-    ],
+    inputProcessors: () => [...mastraCodeInputProcessors, ...readPluginProcessors().input.map(entry => entry.value)],
+    // Mastra Code contributes no output processors of its own; the lane exists
+    // so plugins can. Like the input lane, plugin processors sit last — after
+    // the layers they customize, before the channel and memory layers the
+    // Agent appends.
+    outputProcessors: () => readPluginProcessors().output.map(entry => entry.value),
     errorProcessors: [
       // ProviderHistoryCompat must run before StreamErrorRetryProcessor: both react to
       // HTTP 400s, but ProviderHistoryCompat repairs the incompatible history (e.g.
