@@ -121,6 +121,11 @@ type LinkedSenderResult =
  * shared by `SlackIntegration.messaging.resolveWorkspaceContext` and the Slack
  * dispatch gate (`resolveLinkedSender`), so both surfaces read the account
  * link exactly once via the same code path.
+ *
+ * INVARIANT: do not inline this at either call site. It is deliberately a
+ * one-line passthrough so the capability method and the dispatch path stay
+ * on one code path; inlining would recreate the parallel-paths bug that the
+ * Messaging capability rationale exists to prevent.
  */
 export async function readSenderLink(
   accountLinks: ChannelIdentityStorage,
