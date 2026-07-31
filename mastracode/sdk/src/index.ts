@@ -25,7 +25,7 @@ import {
   ProviderHistoryCompat,
   StreamErrorRetryProcessor,
 } from '@mastra/core/processors';
-import type { InputProcessor } from '@mastra/core/processors';
+import type { InputProcessor, Processor } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
@@ -1174,6 +1174,30 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       if (!pluginSignalLane || !mastra) return;
       pluginSignalLane.setMastra(mastra, codeAgent);
     },
+    /**
+     * Hands Mastra to the statically configured input processors.
+     *
+     * The Agent does this itself, but only for processors configured as a
+     * plain array (`Array.isArray` in `__registerMastra`). This lane is a
+     * function so plugins can contribute to it, which takes those processors
+     * out of that branch — including any an embedder passed as
+     * `config.inputProcessors`, some of which need Mastra to work at all
+     * (`CostGuardProcessor` reads observability storage there). Doing it here
+     * keeps that unchanged.
+     *
+     * Plugin processors are deliberately not included: they come and go with
+     * their plugin, and the registry keeps the first instance registered under
+     * an id forever, which would leave a retired instance behind. Plugins
+     * reach Mastra through `getController()` on the plugin context instead.
+     */
+    registerConfiguredProcessorsWithMastra: () => {
+      const mastra = controller.getMastra();
+      if (!mastra) return;
+      for (const processor of mastraCodeInputProcessors) {
+        mastra.addProcessor(processor as Processor);
+        mastra.addProcessorConfiguration(processor as Processor, CODE_AGENT_ID, 'input');
+      }
+    },
   };
 }
 
@@ -1256,6 +1280,7 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
 
   await controller.init();
   await controller.getMastra()?.startWorkers();
+  base.registerConfiguredProcessorsWithMastra();
   base.startPluginSignalProviders();
   const session = await controller.createSession({ id: sessionId, ownerId });
   await wireSessionConcerns(base, session);
@@ -1367,6 +1392,7 @@ export async function prepareAgentControllerMount(
     // in every mount path (caller-supplied Mastra, SDK-constructed Mastra, and
     // the platform entry that constructs its own), so plugin providers start
     // exactly once regardless of how Mastra Code was mounted.
+    base.registerConfiguredProcessorsWithMastra();
     base.startPluginSignalProviders();
   };
 
