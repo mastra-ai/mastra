@@ -1,6 +1,5 @@
 import type { Schema as AISdkSchema } from '@internal/ai-sdk-v4';
 import { jsonSchema } from '@mastra/schema-compat';
-import type { InferPublicSchemaInput } from '@mastra/schema-compat';
 import { describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -29,15 +28,13 @@ describe('createTool execute return type inference (issue #12426)', () => {
       upper: string;
     }>();
 
-    // The callback returns the input shape, so post-transform fields are rejected.
+    // The callback is checked against the pre-transform shape rather than unknown.
     createTool({
       id: 'transform-output-invalid',
       description: 'Test',
       outputSchema,
-      execute: async () => {
-        // @ts-expect-error - `upper` is a post-transform field.
-        return { name: 'test', upper: 'TEST' } satisfies InferPublicSchemaInput<typeof outputSchema>;
-      },
+      // @ts-expect-error - `name` remains a string in the pre-transform shape.
+      execute: async () => ({ name: 42 }),
     });
 
     createTool({
