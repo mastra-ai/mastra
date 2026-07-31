@@ -5036,6 +5036,7 @@ export class Mastra<
    */
   async #detectExistingAgentSchedules(): Promise<void> {
     if (this.#schedulerRequested) return;
+    if (this.#schedulerConfig?.enabled === false) return;
     if (!this.#storage) return;
     try {
       const schedulesStore = await this.#storage.getStore('schedules');

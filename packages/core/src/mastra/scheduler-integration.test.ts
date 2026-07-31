@@ -93,6 +93,26 @@ describe('Mastra — workflow scheduler integration', () => {
     await mastra.shutdown();
   });
 
+  it('does not query for existing agent schedules when the scheduler is explicitly disabled', async () => {
+    const storage = new MockStore();
+    const schedulesStore = (await storage.getStore('schedules'))!;
+    const listSchedules = vi.spyOn(schedulesStore, 'listSchedules');
+
+    const mastra = new Mastra({
+      logger: false,
+      ...withoutNotificationDispatch,
+      storage,
+      scheduler: { enabled: false },
+    });
+
+    await mastra.startWorkers();
+
+    expect(listSchedules).not.toHaveBeenCalled();
+    expect(mastra.scheduler).toBeUndefined();
+
+    await mastra.shutdown();
+  });
+
   it('does not instantiate the scheduler when only unscheduled workflows are registered', async () => {
     const storage = new MockStore();
 
