@@ -47,6 +47,22 @@ import { applyToolPayloadTransformToChunk } from '../../utils/apply-tool-payload
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
 
 /**
+ * Provider tool calls are stashed at call time and their PROVIDER_TOOL_CALL span is
+ * created when the result arrives, so the span can parent under the MODEL_STEP that
+ * is open at that moment — a span's parent cannot be changed after creation, and at
+ * call time we can't know which step (same or a later one) will deliver the result.
+ * Mirrors the regular agent's PendingProviderToolCall in llm-execution-step.ts.
+ */
+type PendingProviderToolCall = {
+  toolName: string;
+  args?: unknown;
+  startTime: Date;
+  toolDescription?: string;
+  /** Anchor for calls whose result never arrives (run ends or stream errors). */
+  fallbackParentSpan: AnySpan;
+};
+
+/**
  * Input schema for the durable LLM execution step
  */
 const durableLLMInputSchema = z.object({
@@ -714,7 +730,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // (which may carry only a toolCallId, no toolName) can still find the
             // tool resolved during the preceding `tool-call-input-streaming-start`.
             const resolvedToolByCallId = new Map<string, CoreTool>();
-            const providerToolSpansByToolCallId = new Map<string, { span: AnySpan; ended: boolean }>();
+            const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
+            // Guards against a re-delivered tool-result minting a second span for the same call.
+            const materializedProviderToolCallIds = new Set<string>();
 
             const resolveToolDef = (toolName: string): CoreTool | undefined => {
               const directTool = (currentTools as unknown as Record<string, CoreTool> | undefined)?.[toolName];
@@ -821,7 +839,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               return { toolDef };
             };
 
-            const injectProviderToolObservability = ({
+            const resolveAgentRunFallback = (span: AnySpan): AnySpan =>
+              span.type === ('agent_run' as string)
+                ? span
+                : (((span as any).findParent?.('agent_run') ?? span) as AnySpan);
+
+            const recordProviderToolCall = ({
               toolCallId,
               toolName,
               args,
@@ -837,42 +860,57 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               const toolDef = resolveToolDef(toolName);
               const inferredProviderExecuted = inferProviderExecuted(providerExecuted, toolDef);
               if (!inferredProviderExecuted) return;
-              const existingEntry = providerToolSpansByToolCallId.get(toolCallId);
+              const existingEntry = pendingProviderToolCallsByToolCallId.get(toolCallId);
               if (existingEntry) {
-                if (args !== undefined && existingEntry.span.input === undefined) {
-                  (existingEntry.span as any).update?.({ input: args });
+                if (args !== undefined && existingEntry.args === undefined) {
+                  existingEntry.args = args;
                 }
                 return;
               }
 
-              try {
-                const parentSpan =
-                  tracingContext.currentSpan.type === ('agent_run' as string)
-                    ? tracingContext.currentSpan
-                    : ((tracingContext.currentSpan as any).findParent?.('agent_run') ?? tracingContext.currentSpan);
+              pendingProviderToolCallsByToolCallId.set(toolCallId, {
+                toolName,
+                args,
+                startTime: new Date(),
+                toolDescription: (toolDef as { description?: string } | undefined)?.description,
+                fallbackParentSpan: resolveAgentRunFallback(tracingContext.currentSpan),
+              });
+            };
 
+            const endPendingProviderToolSpan = ({
+              toolCallId,
+              pending,
+              parentSpan,
+              result,
+            }: {
+              toolCallId: string;
+              pending: Omit<PendingProviderToolCall, 'fallbackParentSpan'>;
+              parentSpan: AnySpan;
+              result?: { output: unknown; isError?: boolean };
+            }) => {
+              try {
                 const span = (parentSpan as any).createChildSpan?.({
                   type: 'provider_tool_call',
-                  name: `provider_tool: '${toolName}'`,
+                  name: `provider_tool: '${pending.toolName}'`,
                   entityType: EntityType.TOOL,
-                  entityId: toolName,
-                  entityName: toolName,
+                  entityId: pending.toolName,
+                  entityName: pending.toolName,
                   attributes: {
                     toolType: 'provider-tool',
-                    toolDescription: (toolDef as { description?: string } | undefined)?.description,
+                    toolDescription: pending.toolDescription,
                     toolCallId,
                   },
                   metadata: { toolCallId },
-                  ...(args !== undefined ? { input: args } : {}),
+                  startTime: pending.startTime,
+                  ...(pending.args !== undefined ? { input: pending.args } : {}),
                 });
-
-                if (span) {
-                  providerToolSpansByToolCallId.set(toolCallId, { span: span as AnySpan, ended: false });
-                }
+                (span as any)?.end?.(
+                  result ? { output: result.output, attributes: { success: !result.isError } } : undefined,
+                );
               } catch (err) {
                 logger?.warn?.('[ProviderToolObservability] failed to create PROVIDER_TOOL_CALL span', {
                   error: err instanceof Error ? err.message : String(err),
-                  toolName,
+                  toolName: pending.toolName,
                 });
               }
             };
@@ -887,13 +925,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               }
               clientToolArgsTextByToolCallId.clear();
 
-              for (const [, entry] of providerToolSpansByToolCallId.entries()) {
-                if (!entry.ended) {
-                  entry.span.end();
-                  entry.ended = true;
-                }
+              for (const [toolCallId, pending] of pendingProviderToolCallsByToolCallId.entries()) {
+                endPendingProviderToolSpan({ toolCallId, pending, parentSpan: pending.fallbackParentSpan });
               }
-              providerToolSpansByToolCallId.clear();
+              pendingProviderToolCallsByToolCallId.clear();
             };
 
             // 8. Start MODEL_STEP span at the beginning of LLM execution
@@ -1103,7 +1138,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   if (toolInputStartToolDef) {
                     resolvedToolByCallId.set(rawChunk.payload.toolCallId, toolInputStartToolDef);
                   }
-                  injectProviderToolObservability({
+                  recordProviderToolCall({
                     toolCallId: rawChunk.payload.toolCallId,
                     toolName: rawChunk.payload.toolName,
                     providerExecuted: rawChunk.payload.providerExecuted,
@@ -1128,7 +1163,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     providerExecuted: rawChunk.payload.providerExecuted,
                     payload: (clientChunk as any).payload as Record<string, unknown> & { observability?: unknown },
                   });
-                  injectProviderToolObservability({
+                  recordProviderToolCall({
                     toolCallId: rawChunk.payload.toolCallId,
                     toolName: rawChunk.payload.toolName,
                     args: rawChunk.payload.args,
@@ -1233,16 +1268,23 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
                   case 'tool-result': {
                     const payload = rawChunk.payload as any;
-                    // Close PROVIDER_TOOL_CALL span if one was opened for this tool call
-                    const providerEntry = providerToolSpansByToolCallId.get(payload.toolCallId);
-                    if (providerEntry && !providerEntry.ended) {
-                      providerEntry.span.end({
-                        output: payload.result,
-                        attributes: { success: !payload.isError },
+                    // The result determines which MODEL_STEP owns the provider tool call, so
+                    // the PROVIDER_TOOL_CALL span is created now, backdated to the tool-call chunk.
+                    const pending = pendingProviderToolCallsByToolCallId.get(payload.toolCallId);
+                    if (pending) {
+                      endPendingProviderToolSpan({
+                        toolCallId: payload.toolCallId,
+                        pending,
+                        parentSpan: modelSpanTracker?.getTracingContext()?.currentSpan ?? pending.fallbackParentSpan,
+                        result: { output: payload.result, isError: payload.isError },
                       });
-                      providerEntry.ended = true;
-                    } else if (!providerEntry && tracingContext?.currentSpan) {
-                      // Deferred result: no span was opened in this step invocation.
+                      pendingProviderToolCallsByToolCallId.delete(payload.toolCallId);
+                      materializedProviderToolCallIds.add(payload.toolCallId);
+                    } else if (
+                      tracingContext?.currentSpan &&
+                      !materializedProviderToolCallIds.has(payload.toolCallId)
+                    ) {
+                      // Deferred result: the call arrived in a previous step invocation.
                       // Only create a synthetic span if this is actually a provider-executed tool.
                       const resultToolDef2 = resolveToolDef(payload.toolName);
                       const isProviderExec = inferProviderExecuted(payload.providerExecuted, resultToolDef2);
@@ -1266,20 +1308,20 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           if (spanInput !== undefined) break;
                         }
                       }
-                      injectProviderToolObservability({
+                      endPendingProviderToolSpan({
                         toolCallId: payload.toolCallId,
-                        toolName: payload.toolName,
-                        args: spanInput,
-                        providerExecuted: true,
+                        pending: {
+                          toolName: payload.toolName,
+                          args: spanInput,
+                          startTime: new Date(),
+                          toolDescription: (resultToolDef2 as { description?: string } | undefined)?.description,
+                        },
+                        parentSpan:
+                          modelSpanTracker?.getTracingContext()?.currentSpan ??
+                          resolveAgentRunFallback(tracingContext.currentSpan),
+                        result: { output: payload.result, isError: payload.isError },
                       });
-                      const deferredEntry = providerToolSpansByToolCallId.get(payload.toolCallId);
-                      if (deferredEntry && !deferredEntry.ended) {
-                        deferredEntry.span.end({
-                          output: payload.result,
-                          attributes: { success: !payload.isError },
-                        });
-                        deferredEntry.ended = true;
-                      }
+                      materializedProviderToolCallIds.add(payload.toolCallId);
                     }
                     break;
                   }

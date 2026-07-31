@@ -150,9 +150,62 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   mastra?: Mastra;
   /** Active tracing context. Parent of any CLIENT_TOOL_CALL spans we create. */
   tracingContext?: TracingContext;
-  /** Closure-scoped map for PROVIDER_TOOL_CALL spans that may persist across iterations. */
-  providerToolSpansByToolCallId?: Map<string, { span: AnySpan; ended: boolean }>;
+  /** Closure-scoped map for provider tool calls awaiting a result, which may arrive in a later iteration. */
+  pendingProviderToolCallsByToolCallId?: Map<string, PendingProviderToolCall>;
 };
+
+/**
+ * Provider tool calls are stashed at call time and their PROVIDER_TOOL_CALL span is
+ * created when the result arrives, so the span can parent under the MODEL_STEP that
+ * is open at that moment — a span's parent cannot be changed after creation, and at
+ * call time we can't know which step (same or a later one) will deliver the result.
+ */
+type PendingProviderToolCall = {
+  toolName: string;
+  args?: unknown;
+  startTime: Date;
+  toolDescription?: string;
+  /** Anchor for calls whose result never arrives (run ends or stream errors). */
+  fallbackParentSpan: AnySpan;
+};
+
+function endPendingProviderToolSpan({
+  toolCallId,
+  pending,
+  parentSpan,
+  result,
+  logger,
+}: {
+  toolCallId: string;
+  pending: PendingProviderToolCall;
+  parentSpan: AnySpan;
+  result?: { output: unknown; isError?: boolean };
+  logger?: IMastraLogger;
+}): void {
+  try {
+    const span = parentSpan.createChildSpan({
+      type: SpanType.PROVIDER_TOOL_CALL,
+      name: `provider_tool: '${pending.toolName}'`,
+      entityType: EntityType.TOOL,
+      entityId: pending.toolName,
+      entityName: pending.toolName,
+      attributes: {
+        toolType: 'provider-tool',
+        toolDescription: pending.toolDescription,
+        toolCallId,
+      },
+      metadata: { toolCallId },
+      startTime: pending.startTime,
+      ...(pending.args !== undefined ? { input: pending.args } : {}),
+    });
+    span?.end(result ? { output: result.output, attributes: { success: !result.isError } } : undefined);
+  } catch (err) {
+    logger?.warn?.('[ProviderToolObservability] failed to create PROVIDER_TOOL_CALL span', {
+      error: err instanceof Error ? err.message : String(err),
+      toolName: pending.toolName,
+    });
+  }
+}
 
 type ToolResolvers = {
   resolveTool: (toolName: string) => ToolSet[string] | undefined;
@@ -438,7 +491,7 @@ async function processOutputStream<OUTPUT = undefined>({
   toolPayloadTransform,
   mastra,
   tracingContext,
-  providerToolSpansByToolCallId,
+  pendingProviderToolCallsByToolCallId,
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
@@ -519,6 +572,9 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     try {
+      // Unlike PROVIDER_TOOL_CALL, this span must exist at call time so proxy.inject
+      // can place its trace carrier into the outgoing tool-call payload, and the tool
+      // runs outside the step lifecycle — so it anchors to AGENT_RUN, not the step.
       const parentSpan =
         tracingContext.currentSpan.type === SpanType.AGENT_RUN
           ? tracingContext.currentSpan
@@ -554,7 +610,7 @@ async function processOutputStream<OUTPUT = undefined>({
     return { toolDef, inferredProviderExecuted };
   };
 
-  const injectProviderToolObservability = ({
+  const recordProviderToolCall = ({
     toolCallId,
     toolName,
     args,
@@ -565,7 +621,7 @@ async function processOutputStream<OUTPUT = undefined>({
     args?: unknown;
     providerExecuted?: boolean;
   }) => {
-    if (!providerToolSpansByToolCallId || !tracingContext?.currentSpan) {
+    if (!pendingProviderToolCallsByToolCallId || !tracingContext?.currentSpan) {
       return;
     }
 
@@ -576,46 +632,28 @@ async function processOutputStream<OUTPUT = undefined>({
       return;
     }
 
-    const existingEntry = providerToolSpansByToolCallId.get(toolCallId);
+    const existingEntry = pendingProviderToolCallsByToolCallId.get(toolCallId);
     if (existingEntry) {
-      // If args are now available and the span was created without them (e.g. from
-      // tool-call-input-streaming-start), update the span input.
-      if (args !== undefined && existingEntry.span.input === undefined) {
-        existingEntry.span.update({ input: args });
+      // If args arrive after the call was first recorded (e.g. from
+      // tool-call-input-streaming-start), fill them in.
+      if (args !== undefined && existingEntry.args === undefined) {
+        existingEntry.args = args;
       }
       return;
     }
 
-    try {
-      const parentSpan =
-        tracingContext.currentSpan.type === SpanType.AGENT_RUN
-          ? tracingContext.currentSpan
-          : (tracingContext.currentSpan.findParent(SpanType.AGENT_RUN) ?? tracingContext.currentSpan);
+    const fallbackParentSpan =
+      tracingContext.currentSpan.type === SpanType.AGENT_RUN
+        ? tracingContext.currentSpan
+        : (tracingContext.currentSpan.findParent(SpanType.AGENT_RUN) ?? tracingContext.currentSpan);
 
-      const span = parentSpan.createChildSpan({
-        type: SpanType.PROVIDER_TOOL_CALL,
-        name: `provider_tool: '${toolName}'`,
-        entityType: EntityType.TOOL,
-        entityId: toolName,
-        entityName: toolName,
-        attributes: {
-          toolType: 'provider-tool',
-          toolDescription: (toolDef as { description?: string } | undefined)?.description,
-          toolCallId,
-        },
-        metadata: { toolCallId },
-        ...(args !== undefined ? { input: args } : {}),
-      });
-
-      if (span) {
-        providerToolSpansByToolCallId.set(toolCallId, { span, ended: false });
-      }
-    } catch (err) {
-      logger?.warn?.('[ProviderToolObservability] failed to create PROVIDER_TOOL_CALL span', {
-        error: err instanceof Error ? err.message : String(err),
-        toolName,
-      });
-    }
+    pendingProviderToolCallsByToolCallId.set(toolCallId, {
+      toolName,
+      args,
+      startTime: new Date(),
+      toolDescription: (toolDef as { description?: string } | undefined)?.description,
+      fallbackParentSpan,
+    });
   };
 
   for await (let chunk of outputStream._getBaseStream()) {
@@ -658,7 +696,7 @@ async function processOutputStream<OUTPUT = undefined>({
         providerExecuted: chunk.payload.providerExecuted,
         payload: chunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
       }));
-      injectProviderToolObservability({
+      recordProviderToolCall({
         toolCallId: chunk.payload.toolCallId,
         toolName: chunk.payload.toolName,
         providerExecuted: chunk.payload.providerExecuted,
@@ -683,7 +721,7 @@ async function processOutputStream<OUTPUT = undefined>({
         providerExecuted: chunk.payload.providerExecuted,
         payload: chunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
       });
-      injectProviderToolObservability({
+      recordProviderToolCall({
         toolCallId: chunk.payload.toolCallId,
         toolName: chunk.payload.toolName,
         args: chunk.payload.args,
@@ -813,15 +851,23 @@ async function processOutputStream<OUTPUT = undefined>({
             providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
           });
         }
-        // Close PROVIDER_TOOL_CALL span if one was opened for this tool call
-        if (providerToolSpansByToolCallId) {
-          const providerEntry = providerToolSpansByToolCallId.get(chunk.payload.toolCallId);
-          if (providerEntry && !providerEntry.ended) {
-            providerEntry.span.end({
-              output: chunk.payload.result,
-              attributes: { success: !chunk.payload.isError },
+        // The result determines which MODEL_STEP owns the provider tool call, so the
+        // PROVIDER_TOOL_CALL span is created now, backdated to the tool-call chunk.
+        if (pendingProviderToolCallsByToolCallId) {
+          const pending = pendingProviderToolCallsByToolCallId.get(chunk.payload.toolCallId);
+          if (pending) {
+            // The iteration snapshot can hold a step span that already ended when a
+            // deferred result trails behind a slow consumer — anchor those to the
+            // fallback instead of parenting under a closed span.
+            const stepSpan = tracingContext?.currentSpan;
+            endPendingProviderToolSpan({
+              toolCallId: chunk.payload.toolCallId,
+              pending,
+              parentSpan: stepSpan && !stepSpan.endTime ? stepSpan : pending.fallbackParentSpan,
+              result: { output: chunk.payload.result, isError: chunk.payload.isError },
+              logger,
             });
-            providerEntry.ended = true;
+            pendingProviderToolCallsByToolCallId.delete(chunk.payload.toolCallId);
           }
         }
         safeEnqueue(controller, chunk);
@@ -959,18 +1005,16 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
 
   let currentIteration = 0;
-  const providerToolSpansByToolCallId = new Map<string, { span: AnySpan; ended: boolean }>();
+  const pendingProviderToolCallsByToolCallId = new Map<string, PendingProviderToolCall>();
 
   const cleanupProviderToolSpans = (terminal: boolean) => {
-    for (const [toolCallId, entry] of providerToolSpansByToolCallId.entries()) {
-      if (entry.ended) {
-        providerToolSpansByToolCallId.delete(toolCallId);
-      } else if (terminal) {
-        entry.span.end();
-        entry.ended = true;
-        providerToolSpansByToolCallId.delete(toolCallId);
-      }
+    if (!terminal) {
+      return;
     }
+    for (const [toolCallId, pending] of pendingProviderToolCallsByToolCallId.entries()) {
+      endPendingProviderToolSpan({ toolCallId, pending, parentSpan: pending.fallbackParentSpan, logger });
+    }
+    pendingProviderToolCallsByToolCallId.clear();
   };
 
   return createStep({
@@ -1535,7 +1579,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               toolPayloadTransform: readScoped(scopeCtx, TOOL_PAYLOAD_TRANSFORM_KEY, 'toolPayloadTransform'),
               mastra,
               tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
-              providerToolSpansByToolCallId,
+              pendingProviderToolCallsByToolCallId,
             });
 
             // Build messages from the full chunk sequence and add to messageList.
@@ -2145,8 +2189,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const shouldContinue =
         shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || !TERMINAL_FINISH_REASONS.includes(finishReason)));
 
-      // Clean up server tool spans: remove ended entries, force-close unclosed on terminal exit.
-      // On retry (shouldRetry), unclosed spans from the rejected attempt must also be closed —
+      // On terminal exit, materialize spans for provider tool calls whose result never arrived.
+      // On retry (shouldRetry), pending calls from the rejected attempt must also be flushed —
       // the LLM will produce a fresh response with new tool calls.
       cleanupProviderToolSpans(!shouldContinue || shouldRetry);
 

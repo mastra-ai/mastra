@@ -2599,4 +2599,225 @@ describe('PROVIDER_TOOL_CALL observability spans', () => {
     );
     expect(serverToolCalls).toHaveLength(0);
   });
+
+  it('parents the PROVIDER_TOOL_CALL span under the span active when the result arrives', async () => {
+    const providerToolSpan = {
+      id: 'server-span-1',
+      type: SpanType.PROVIDER_TOOL_CALL,
+      end: vi.fn(),
+    };
+    const agentRunSpan = {
+      id: 'agent-span',
+      type: SpanType.AGENT_RUN,
+      createChildSpan: vi.fn(),
+      findParent: vi.fn(),
+    };
+    const modelStepSpan = {
+      id: 'step-span',
+      type: SpanType.MODEL_STEP,
+      createChildSpan: vi.fn(() => providerToolSpan),
+      findParent: vi.fn(() => agentRunSpan),
+    };
+
+    const tools = {
+      web_search: {
+        type: 'provider' as const,
+        id: 'anthropic.web_search',
+        args: {},
+      },
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'anthropic',
+            modelId: 'claude-sonnet-4-20250514',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'response-metadata',
+                  id: 'resp-1',
+                  modelId: 'claude-sonnet-4-20250514',
+                  timestamp: new Date(0),
+                },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'srvtoolu_123',
+                  toolName: 'web_search',
+                  input: '{"query":"AI news"}',
+                },
+                {
+                  type: 'tool-result',
+                  toolCallId: 'srvtoolu_123',
+                  toolName: 'web_search',
+                  result: { answer: 'Latest AI news results' },
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: { headers: undefined },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const executeParams = createExecuteParams(createIterationInput());
+    executeParams.tracingContext = { currentSpan: modelStepSpan } as any;
+
+    await llmExecutionStep.execute(executeParams);
+
+    // The span is created under the active span (the model step), not hoisted to AGENT_RUN,
+    // and is backdated to the tool-call chunk.
+    expect(modelStepSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.PROVIDER_TOOL_CALL,
+        name: "provider_tool: 'web_search'",
+        startTime: expect.any(Date),
+      }),
+    );
+    expect(agentRunSpan.createChildSpan).not.toHaveBeenCalled();
+    expect(providerToolSpan.end).toHaveBeenCalledWith({
+      output: { answer: 'Latest AI news results' },
+      attributes: { success: true },
+    });
+  });
+
+  it('anchors PROVIDER_TOOL_CALL spans to AGENT_RUN when the result never arrives', async () => {
+    const providerToolSpan = {
+      id: 'server-span-1',
+      type: SpanType.PROVIDER_TOOL_CALL,
+      end: vi.fn(),
+    };
+    const agentRunSpan = {
+      id: 'agent-span',
+      type: SpanType.AGENT_RUN,
+      createChildSpan: vi.fn(() => providerToolSpan),
+      findParent: vi.fn(),
+    };
+    const modelStepSpan = {
+      id: 'step-span',
+      type: SpanType.MODEL_STEP,
+      createChildSpan: vi.fn(),
+      findParent: vi.fn(() => agentRunSpan),
+    };
+
+    const tools = {
+      web_search: {
+        type: 'provider' as const,
+        id: 'anthropic.web_search',
+        args: {},
+      },
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'anthropic',
+            modelId: 'claude-sonnet-4-20250514',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'response-metadata',
+                  id: 'resp-1',
+                  modelId: 'claude-sonnet-4-20250514',
+                  timestamp: new Date(0),
+                },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'srvtoolu_123',
+                  toolName: 'web_search',
+                  input: '{"query":"AI news"}',
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: { headers: undefined },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const executeParams = createExecuteParams(createIterationInput());
+    executeParams.tracingContext = { currentSpan: modelStepSpan } as any;
+
+    await llmExecutionStep.execute(executeParams);
+
+    // With no tool-result, terminal cleanup materializes the span under AGENT_RUN
+    // (resolved via findParent at call time) and ends it without output.
+    expect(agentRunSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.PROVIDER_TOOL_CALL,
+        name: "provider_tool: 'web_search'",
+        startTime: expect.any(Date),
+      }),
+    );
+    expect(modelStepSpan.createChildSpan).not.toHaveBeenCalled();
+    expect(providerToolSpan.end).toHaveBeenCalledWith(undefined);
+  });
 });
