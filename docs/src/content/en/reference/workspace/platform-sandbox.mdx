@@ -171,7 +171,7 @@ The `command` argument is a shell string and is concatenated verbatim into the r
 
 #### Working directory and writable paths
 
-`executeCommand` does not set a default working directory. When `cwd` is omitted the command inherits the exec transport's default directory, which is the container root (`/`). The container root is read-only, so commands that create files there fail (for example `git clone` succeeds but the checkout fails with `cannot create directory ... No such file or directory`).
+`executeCommand` doesn't set a default working directory. When `cwd` is omitted the command inherits the exec transport's default directory, which is the container root (`/`). The container root is read-only, so commands that create files there fail (for example `git clone` succeeds but the checkout fails with `cannot create directory ... No such file or directory`).
 
 Pass an explicit `cwd` (or prefix the command with `cd <dir> &&`) pointing at a writable directory, for example under `/tmp`, and use absolute paths when writing:
 
@@ -182,7 +182,7 @@ await sandbox.executeCommand('git', ['status'], { cwd: '/tmp/work/repo' })
 
 :::note
 
-The sandbox exec container and [`PlatformFilesystem`](/reference/workspace/platform-filesystem) are separate storage planes. Files written through `PlatformFilesystem` (bucket-backed) are not visible to `executeCommand`, and files written by `executeCommand` are not visible through `PlatformFilesystem`.
+The sandbox exec container and [`PlatformFilesystem`](/reference/workspace/platform-filesystem) are separate storage planes. Files written through `PlatformFilesystem` (bucket-backed) aren't visible to `executeCommand`, and files written by `executeCommand` aren't visible through `PlatformFilesystem`.
 
 :::
 
