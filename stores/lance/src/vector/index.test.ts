@@ -2306,16 +2306,21 @@ describe('Lance vector store tests', () => {
       // 256+ rows are required for index creation; place the exact/far vectors deterministically.
       const rows = Array.from({ length: 300 }, (_, i) => ({
         id: String(i + 1),
-        vector: i === 0 ? [1, 0, 0] : i === 1 ? [0, 1, 0] : [0.2, 0.2, 0.2 + i / 1000],
+        vector:
+          i === 0
+            ? [1, 0, 0, 0, 0, 0, 0, 0]
+            : i === 1
+              ? [0, 1, 0, 0, 0, 0, 0, 0]
+              : [0.2, 0.2, 0.2 + i / 1000, 0, 0, 0, 0, 0],
       }));
       await vectorDB.createTable(tableName, rows);
-      await vectorDB.createIndex({ tableName, indexName: 'vector', dimension: 3, metric: 'euclidean' });
+      await vectorDB.createIndex({ tableName, indexName: 'vector', dimension: 8, metric: 'euclidean' });
 
       // No metric passed: resolveQueryMetric should read 'euclidean' from the index stats.
       const results = await vectorDB.query({
         indexName: 'vector',
         tableName,
-        queryVector: [1, 0, 0],
+        queryVector: [1, 0, 0, 0, 0, 0, 0, 0],
         topK: 300,
       });
 
@@ -2338,15 +2343,20 @@ describe('Lance vector store tests', () => {
       const tableName = 'score_semantics_index_metric_conflict_' + Date.now();
       const rows = Array.from({ length: 300 }, (_, i) => ({
         id: String(i + 1),
-        vector: i === 0 ? [1, 0, 0] : i === 1 ? [0, 1, 0] : [0.2, 0.2, 0.2 + i / 1000],
+        vector:
+          i === 0
+            ? [1, 0, 0, 0, 0, 0, 0, 0]
+            : i === 1
+              ? [0, 1, 0, 0, 0, 0, 0, 0]
+              : [0.2, 0.2, 0.2 + i / 1000, 0, 0, 0, 0, 0],
       }));
       await vectorDB.createTable(tableName, rows);
-      await vectorDB.createIndex({ tableName, indexName: 'vector', dimension: 3, metric: 'euclidean' });
+      await vectorDB.createIndex({ tableName, indexName: 'vector', dimension: 8, metric: 'euclidean' });
 
       const results = await vectorDB.query({
         indexName: 'vector',
         tableName,
-        queryVector: [1, 0, 0],
+        queryVector: [1, 0, 0, 0, 0, 0, 0, 0],
         topK: 300,
         metric: 'cosine',
       });

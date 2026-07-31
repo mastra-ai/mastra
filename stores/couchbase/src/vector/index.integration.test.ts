@@ -51,7 +51,7 @@ async function setupCluster() {
 }
 
 async function waitForFtsReady(bucket: Bucket): Promise<void> {
-  const maxAttempts = 30;
+  const maxAttempts = 120;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const report = await bucket.ping({ serviceTypes: [ServiceType.Search] });
     const endpoints = report.services[ServiceType.Search] ?? [];
