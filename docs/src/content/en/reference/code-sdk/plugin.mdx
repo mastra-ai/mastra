@@ -189,6 +189,8 @@ export default defineMastraCodePlugin({
 
 State-signal processors track history under a state id that defaults to the processor id. Derive that id from your plugin id and keep it constant, because a processor rebuilt with a new id orphans its tracking record and re-injects a full snapshot.
 
+Plugin processors don't receive `__registerMastra()`, and they aren't added to the Mastra processor registry, because a processor that leaves with its plugin would stay registered under its id. Reach Mastra through `getController()` on the plugin context instead.
+
 ## Signal providers
 
 A [signal provider](/reference/signals/signal-provider) monitors an external source and pushes notification signals into a thread. Providers are long-lived objects, so Mastra Code owns their lifecycle rather than handing them to the agent:

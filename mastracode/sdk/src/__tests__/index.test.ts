@@ -132,7 +132,14 @@ function createMockSettings() {
 }
 
 /** Stand-in for the Mastra the controller builds on init(). */
-const mastraStub = { startWorkers: vi.fn(async () => {}), stopWorkers: vi.fn(async () => {}) };
+const mastraStub = {
+  startWorkers: vi.fn(async () => {}),
+  stopWorkers: vi.fn(async () => {}),
+  addProcessor: vi.fn((processor: { id: string; __registerMastra?: (mastra: unknown) => void }) => {
+    processor.__registerMastra?.(mastraStub);
+  }),
+  addProcessorConfiguration: vi.fn(),
+};
 
 vi.mock('@mastra/core/agent-controller', () => ({
   AgentController: class {
@@ -926,7 +933,9 @@ describe('createMastraCode', () => {
     const { createMastraCode } = await import('../index.js');
     const customProcessor = { id: 'embedding-reconciler', processInputStep: vi.fn() };
 
-    await createMastraCode({ inputProcessors: [customProcessor] });
+    // Plugins off: this asserts the no-plugin baseline, and the machine running
+    // the test may have real plugins installed that contribute processors.
+    await createMastraCode({ inputProcessors: [customProcessor], disablePlugins: true });
 
     const processors = resolveInputProcessors();
     expect(processors[0]).toBe(customProcessor);
@@ -939,6 +948,31 @@ describe('createMastraCode', () => {
       'provider-history-compat',
     ]);
     expect(resolveOutputProcessors()).toEqual([]);
+  });
+
+  it('hands Mastra to configured input processors, which the function lane takes out of the Agent path', async () => {
+    const { createMastraCode } = await import('../index.js');
+    // A processor that needs Mastra to work — CostGuardProcessor reads
+    // observability storage in this hook and throws without it.
+    mastraStub.addProcessor.mockClear();
+    const registeredWith: unknown[] = [];
+    const needsMastra = {
+      id: 'needs-mastra',
+      processInputStep: vi.fn(),
+      __registerMastra: (mastra: unknown) => registeredWith.push(mastra),
+    };
+
+    await createMastraCode({ inputProcessors: [needsMastra], disablePlugins: true });
+
+    expect(registeredWith).toEqual([mastraStub]);
+    expect(mastraStub.addProcessorConfiguration).toHaveBeenCalledWith(needsMastra, 'code-agent', 'input');
+    // The built-ins go through the same path, as they did when the lane was an array.
+    expect(mastraStub.addProcessor.mock.calls.map(([processor]) => processor.id)).toEqual([
+      'needs-mastra',
+      'plan-rejection-abort',
+      'agents-md-injector',
+      'provider-history-compat',
+    ]);
   });
 
   it('resolves plugin processors last, in both lanes, without rebuilding the agent', async () => {
