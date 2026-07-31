@@ -33,7 +33,7 @@
     "chat": "^4.34.0"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^3.0.86",
+    "@ai-sdk/openai": "^3.0.88",
     "@copilotkit/aimock": "^1.29.0",
     "@mastra/client-js": "link:../../client-sdks/client-js",
     "@mastra/hono": "link:../../server-adapters/hono",
