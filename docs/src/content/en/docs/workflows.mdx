@@ -1,38 +1,147 @@
 ---
 title: "Workflows"
-description: Build workflows with Mastra.
+description: Define typed, multi-step processes with explicit control flow.
 packages:
-  - "mastra"
+  - "@mastra/core"
 ---
 
 # Workflows
 
-Placeholder content for this page.
+A Mastra workflow is a typed sequence of steps with explicit control flow. Each step receives validated input and runs application logic. Its return value becomes data for the next part of the workflow.
+
+Use a workflow when the process is known in advance and your application needs to control what runs next. A step can still call an [agent](/docs/agents) for open-ended work, while the workflow controls the surrounding sequence, branches, and failure behavior.
+
+Define workflows as files under `src/mastra/workflows`. Mastra discovers each default export when you run `mastra dev` or `mastra build`:
+
+```typescript title="src/mastra/workflows/order-total.ts"
+import { createStep, createWorkflow } from '@mastra/core/workflows'
+import { z } from 'zod'
+
+const orderSchema = z.object({
+  items: z.array(
+    z.object({
+      price: z.number(),
+      quantity: z.number(),
+    }),
+  ),
+})
+
+const calculateTotal = createStep({
+  id: 'calculate-total',
+  inputSchema: orderSchema,
+  outputSchema: z.object({ total: z.number() }),
+  execute: async ({ inputData }) => ({
+    total: inputData.items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+  }),
+})
+
+export default createWorkflow({
+  id: 'order-total',
+  inputSchema: orderSchema,
+  outputSchema: z.object({ total: z.number() }),
+})
+  .then(calculateTotal)
+  .commit()
+```
+
+The filename registers this workflow under the `order-total` key. Retrieve it from the Mastra instance, create a run, and pass input that matches the workflow schema:
+
+```typescript
+const workflow = mastra.getWorkflow('order-total')
+const run = await workflow.createRun()
+
+const result = await run.start({
+  inputData: {
+    items: [{ price: 12, quantity: 2 }],
+  },
+})
+
+if (result.status === 'success') {
+  console.log(result.result.total)
+}
+```
+
+Each run has its own ID, status, step results, and final result.
 
 ## Steps
 
-Placeholder content for this section.
+A step is one unit of work. Its `execute` function can call your application code, an external API, a registered agent, a tool, or another workflow. Keeping steps focused makes individual failures and outputs easier to inspect.
+
+The step receives `inputData` validated against its `inputSchema`. Its return value must match `outputSchema`. Mastra uses these schemas for runtime validation and TypeScript inference. The <a href="/guides/workflows/overview" target="_blank" rel="noreferrer">workflow guide</a> covers step creation and execution in more detail.
 
 ## Control flow
 
-Placeholder content for this section.
+Compose steps with `.then()` when order matters or `.parallel()` when independent work can run simultaneously. Use `.branch()` when runtime data determines which path should execute. Mapping methods let you reshape data when adjacent schemas don't match.
+
+```typescript
+export default createWorkflow({
+  id: 'fulfill-order',
+  inputSchema: orderSchema,
+  outputSchema: fulfillmentSchema,
+})
+  .then(validateOrder)
+  .parallel([reserveInventory, calculateDeliveryCost])
+  .then(createShipment)
+  .commit()
+```
+
+Here, validation runs first, inventory reservation and delivery-cost calculations run concurrently, and their combined output becomes the shipment step's input.
+
+Control flow belongs in the workflow definition rather than inside a model prompt. This makes the allowed paths visible in code and keeps the model focused on the steps that need judgment. The <a href="/guides/workflows/control-flow" target="_blank" rel="noreferrer">control flow guide</a> explains sequencing, parallel work, branches, loops, and data mapping.
 
 ## Inputs and outputs
 
-Placeholder content for this section.
+The workflow's `inputSchema` is the contract for starting a run, and its `outputSchema` is the contract for a successful result. The first step must accept the workflow input. The final step must return the workflow output.
 
-## Suspend and resume
+Between steps, one step's output becomes the next step's input. Keep durable business results in this data flow. If the shapes differ, add an explicit mapping rather than passing an unvalidated object between steps.
 
-Placeholder content for this section.
+## Suspend and human input
 
-## Human-in-the-loop
+A step can call `suspend()` when the workflow must wait for an approval, webhook, timer, or missing value. Mastra records a snapshot of the run, and `resume()` continues from the suspended step with data validated against its `resumeSchema`.
 
-Placeholder content for this section.
+```typescript
+const approveOrder = createStep({
+  id: 'approve-order',
+  inputSchema: z.object({ orderId: z.string() }),
+  outputSchema: z.object({ approved: z.boolean() }),
+  suspendSchema: z.object({ orderId: z.string() }),
+  resumeSchema: z.object({ approved: z.boolean() }),
+  execute: async ({ inputData, resumeData, suspend }) => {
+    if (!resumeData) {
+      return await suspend({ orderId: inputData.orderId })
+    }
+
+    return { approved: resumeData.approved }
+  },
+})
+```
+
+The first execution returns the order ID to the application. After a person or external system supplies `{ approved: boolean }`, the step resumes and returns a normal step result.
+
+Human-in-the-loop workflows use the same mechanism. Return a `suspendPayload` that tells the application what needs review, then resume with the person's decision. Use persistent storage when suspended runs must survive restarts or deployments. The <a href="/guides/workflows/suspend-and-resume" target="_blank" rel="noreferrer">suspend and resume guide</a> covers snapshots and recovery, while the <a href="/guides/workflows/human-in-the-loop" target="_blank" rel="noreferrer">human input guide</a> covers approvals and rejection paths.
 
 ## Error handling
 
-Placeholder content for this section.
+Workflow execution returns a status such as `success`, `failed`, or `suspended`. Check the status before reading status-specific fields such as `result` or `error`. The `steps` record shows which step failed and what completed before it.
+
+Use retry policies for transient failures and handle expected business outcomes as typed step output. Lifecycle callbacks can send failures to your logging or alerting system. The <a href="/guides/workflows/error-handling" target="_blank" rel="noreferrer">error handling guide</a> covers result checks, retries, and callbacks.
 
 ## Workflow state
 
-Placeholder content for this section.
+Workflow state shares values across steps without adding them to every input and output schema. Define a `stateSchema`, provide `initialState` when the run starts, then read `state` and call `setState()` inside steps.
+
+Use state for run-level progress or accumulated context. Keep values that form the workflow's public result in step outputs instead. State persists when a workflow suspends and resumes. See the <a href="/guides/workflows/workflow-state" target="_blank" rel="noreferrer">workflow state guide</a> for schemas and nested workflows.
+
+## Relevant guides
+
+Guides provide longer, task-oriented coverage of workflow design and execution:
+
+- <a href="/guides/workflows/overview" target="_blank" rel="noreferrer">Workflow guide</a>: Create, run, and inspect workflows.
+- <a href="/guides/workflows/control-flow" target="_blank" rel="noreferrer">Control flow</a>: Compose sequential, parallel, conditional, and repeated work.
+- <a href="/guides/workflows/suspend-and-resume" target="_blank" rel="noreferrer">Suspend and resume</a>: Pause runs and continue them from stored snapshots.
+
+## What to do next
+
+- <a href="/guides/workflows/agents-and-tools" target="_blank" rel="noreferrer">Call an agent from a workflow step</a> when one part of the process needs model judgment.
+- <a href="/guides/workflows/human-in-the-loop" target="_blank" rel="noreferrer">Add a human approval step</a> before a sensitive or irreversible action.
+- <a href="/guides/studio/overview" target="_blank" rel="noreferrer">Run the workflow in Studio</a> and inspect each step's input, output, and status.

@@ -1,42 +1,146 @@
 ---
 title: "Agents"
-description: Build agents with Mastra.
+description: Define and run agents that use models, tools, structured output, and runtime controls.
 packages:
-  - "mastra"
+  - "@mastra/core"
 ---
 
 # Agents
 
-Placeholder content for this page.
+A Mastra agent is a model configured with instructions and optional capabilities such as tools, memory, and processors. It runs an agentic loop: the model decides whether to answer or call a tool. After a tool returns data, the model can continue until it produces a final answer.
+
+Use an agent when the task is open-ended and the model needs to decide what to do next. For fixed control flow, a [workflow](/docs/workflows) is usually a better fit. Agent capabilities connect the model to application data and constrain its behavior. They can also return results in a form your code can use.
+
+Define an agent as a directory under `src/mastra/agents`:
+
+```text
+src/mastra/agents/docs-agent/
+├── config.ts
+├── instructions.md
+└── tools/
+    └── searchDocs.ts
+```
+
+Set the model in `config.ts`:
+
+```typescript title="src/mastra/agents/docs-agent/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: 'openai/gpt-5.6',
+})
+```
+
+Put the agent's always-on instructions in `instructions.md`:
+
+```markdown title="src/mastra/agents/docs-agent/instructions.md"
+Answer questions using the `searchDocs` tool.
+```
+
+Mastra discovers and registers the directory when you run `mastra dev` or `mastra build`. The directory name becomes the agent's default ID and name. Once the agent is registered, retrieve it from the Mastra instance and invoke it:
+
+```typescript
+const docsAgent = mastra.getAgentById('docs-agent')
+
+const response = await docsAgent.generate('How do I add memory to an agent?')
+console.log(response.text)
+```
+
+The `generate()` call runs the model and any tool calls to completion, then returns the final text along with step, tool, and usage data.
 
 ## Model and instructions
 
-Placeholder content for this section.
+The model in `config.ts` determines the agent's underlying language and reasoning behavior. The `instructions.md` file defines its role, constraints, and how it should use the capabilities you provide. Keep instructions specific to behavior that should apply to every request. Pass request-specific details in the user message or request context.
+
+Pass any model from the [Mastra model router](/models) as a `provider/model` string. The router supports model providers such as OpenAI and Anthropic, plus [model gateways](/models/gateways) such as OpenRouter. You can also use local models by passing a model instance from a supported AI SDK provider.
+
+For per-request behavior, define `model` or `instructions` as a function in `config.ts`. Dynamic configuration is useful when the same agent needs different models, languages, or policies for different requests. See the <a href="/guides/agents/overview" target="_blank" rel="noreferrer">agent guide</a> for a deeper look at defining and using agents.
 
 ## Tools
 
-Placeholder content for this section.
+Tools give an agent typed functions for reading data or taking actions. A tool has a description and input schema that help the model decide when and how to call it, plus an `execute` function that runs in your application. The agent can use a tool result in a later model step before returning its answer.
+
+Place each tool in the agent's `tools` directory and default-export it. The filename becomes the key the model calls:
+
+```typescript title="src/mastra/agents/docs-agent/tools/searchDocs.ts"
+export { searchDocs as default } from '../../../tools/search-docs'
+```
+
+Use tools for operations the model can't perform from its own context, such as querying a database, calling an API, or updating a record. Tool descriptions and schemas are part of the model's context, so narrow tools are easier for it to select correctly. The <a href="/guides/agents/using-tools" target="_blank" rel="noreferrer">agent tools guide</a> covers tool definitions and selection.
+
+### Stream responses
+
+`generate()` waits for the complete result. Use `stream()` when the application should render text or inspect events as the agent runs.
+
+```typescript
+const stream = await docsAgent.stream('Explain agent memory.')
+
+for await (const text of stream.textStream) {
+  process.stdout.write(text)
+}
+```
+
+`textStream` contains incremental text. `fullStream` also exposes tool calls, tool results, approvals, structured output, and lifecycle events. The <a href="/guides/concepts/streaming" target="_blank" rel="noreferrer">streaming guide</a> covers the event shape and common consumption patterns.
+
+For multiplayer agents, input and output don't need to share one request. Multiple clients can subscribe to the same thread and receive its stream. A user can send a message into an active run or wake the agent when the thread is idle. This decouples the request that supplies input from the connection that consumes the response. See the <a href="/guides/long-running-agents/signals" target="_blank" rel="noreferrer">thread messaging guide</a> for subscriptions, immediate messages, and queued messages. These thread APIs are currently beta.
 
 ## Structured output
 
-Placeholder content for this section.
+Structured output validates an agent's final response against a schema and exposes it as `response.object`. Use it when another part of your application consumes the result, rather than when the response is only displayed as text.
 
-## Streaming
+You can assign a separate, smaller model to the supporting task of converting the final response into the requested shape:
 
-Placeholder content for this section.
+```typescript
+import { z } from 'zod'
 
-## Guardrails
+const response = await docsAgent.generate('Compare agent memory options.', {
+  structuredOutput: {
+    schema: z.object({
+      recommendation: z.string(),
+      options: z.array(z.string()),
+    }),
+    model: 'openai/gpt-5.6-luna',
+  },
+})
 
-Placeholder content for this section.
+console.log(response.object)
+```
 
-## Processors
+This makes a second model call, which adds latency and cost. If the main model supports tools and structured output together, you can omit the supporting `model`. See the <a href="/guides/agents/structured-output" target="_blank" rel="noreferrer">structured output guide</a> for schema modes and model compatibility.
 
-Placeholder content for this section.
+## Processors and guardrails
 
-## Human-in-the-loop
+Processors run around model execution to inspect, transform, or stop messages. Input processors run before model calls, output processors run during or after responses, and error processors can handle provider API errors. Their order matters because each processor receives the result of the previous one.
 
-Placeholder content for this section.
+Guardrails are processors configured for policy enforcement. They can detect prompt injection and moderate content. Other guardrails redact personally identifiable information or limit tokens, and any guardrail can stop a request with a tripwire result. Treat model-based guardrails as additional model calls when estimating latency and cost. The <a href="/guides/agents/processors" target="_blank" rel="noreferrer">processors guide</a> explains the pipeline and custom processors, while the <a href="/guides/agents/guardrails" target="_blank" rel="noreferrer">guardrails guide</a> covers built-in policies.
 
-## Request context
+## Runtime control
 
-Placeholder content for this section.
+Agents sometimes need information or authorization that the model can't supply. A tool can require approval before it executes or suspend during execution and resume after your application provides data. This keeps destructive or sensitive actions behind an explicit decision without moving the whole task into application code. See the <a href="/guides/agents/agent-approval" target="_blank" rel="noreferrer">agent approval guide</a> for approval and resume flows.
+
+Request context carries per-request values through the agent, its tools, and any workflows it calls. Use it for authenticated user IDs, tenant settings, feature flags, or dynamic agent configuration. Request context doesn't store conversation history. Memory handles data that should persist across calls. The <a href="/guides/server/request-context" target="_blank" rel="noreferrer">request context guide</a> covers typed values and runtime validation.
+
+```typescript
+import { RequestContext } from '@mastra/core/request-context'
+
+const requestContext = new RequestContext()
+requestContext.set('userId', 'user_123')
+
+await docsAgent.generate('Summarize my open tickets.', {
+  requestContext,
+})
+```
+
+## Relevant guides
+
+Guides provide longer, task-oriented coverage of agent setup and implementation choices:
+
+- <a href="/guides/agents/overview" target="_blank" rel="noreferrer">Agent guide</a>: Register agents with Mastra and use shared runtime services.
+- <a href="/guides/agents/using-tools" target="_blank" rel="noreferrer">Tools for agents</a>: Define tools and control how agents select them.
+- <a href="/guides/agents/structured-output" target="_blank" rel="noreferrer">Structured output</a>: Choose schemas and output modes, including separate structuring models.
+
+## What to do next
+
+- <a href="/guides/memory/overview" target="_blank" rel="noreferrer">Give your agent memory</a> so it can retain conversation history and working context across calls.
+- <a href="/guides/capabilities/channels/overview" target="_blank" rel="noreferrer">Connect your agent to a shared channel</a> so several people can interact with it in Slack, Teams, Discord, or another messaging platform.
+- <a href="/guides/studio/overview" target="_blank" rel="noreferrer">Test your agent in Studio</a> and inspect its responses, tool calls, and traces.
