@@ -7,6 +7,7 @@ import type {
   MastraCodePluginConfigSchema,
   MastraCodePluginConfigValues,
   MastraCodePluginContext,
+  MastraCodePluginRuntime,
   MastraCodePluginToolEntries,
   MastraCodePluginTools,
   MastraCodeToolRenderConfig,
@@ -16,7 +17,12 @@ import type { PluginPathOptions } from './paths.js';
 import { loadPluginRegistry, mergePluginRegistries } from './registry.js';
 import type { LoadedPlugin, PluginRegistry, ScopedInstalledPluginRecord } from './types.js';
 
-export type LoadPluginsOptions = PluginPathOptions & {
+export type LoadPluginRecordOptions = PluginPathOptions & {
+  /** Lazy accessors for Mastra Code's runtime, passed on to plugin field resolvers. */
+  runtime?: MastraCodePluginRuntime;
+};
+
+export type LoadPluginsOptions = LoadPluginRecordOptions & {
   globalRegistry?: PluginRegistry;
   projectRegistry?: PluginRegistry;
 };
@@ -47,7 +53,7 @@ export async function loadPlugins(options: LoadPluginsOptions): Promise<LoadedPl
 
 export async function loadPluginRecord(
   record: ScopedInstalledPluginRecord,
-  options: PluginPathOptions,
+  options: LoadPluginRecordOptions,
 ): Promise<LoadedPlugin> {
   try {
     const entryPath = resolvePluginEntryPath(record, options);
@@ -65,6 +71,10 @@ export async function loadPluginRecord(
       scope: record.scope,
       pluginDir,
       config: configValues,
+      // Accessors, not instances: plugins load before the controller and the
+      // session exist, so a plugin resolves these when it needs them, not now.
+      getController: options.runtime?.getController,
+      getActiveSession: options.runtime?.getActiveSession,
     };
     const { tools, renderConfigs } = await resolvePluginTools(plugin, context);
     const instructions = await resolvePluginInstructions(plugin, context);
