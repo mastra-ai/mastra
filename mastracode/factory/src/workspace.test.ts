@@ -923,6 +923,14 @@ describe('GitHub session workspace preparation', () => {
     expect(existing.setToolsConfig).toHaveBeenCalled();
     expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
     expect(getRegisteredGithubPatKind(requestContext)).toBe('default');
+    mocks.githubPatReadError = new Error('PAT settings unavailable');
+    await expect(
+      workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+      }),
+    ).rejects.toThrow('PAT settings unavailable');
+
     mocks.setEnvironmentVariable.mockClear();
     expect(() => injectGithubToken(reviewerRequestContext, 'ghp_stale_reviewer', 'reviewer', 'reviewer')).toThrow(
       'GitHub token refresh no longer matches the active Factory workspace role.',

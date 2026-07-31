@@ -138,6 +138,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       patKind: GithubPatKind;
       ghToken: string;
       credentialSource: GithubTokenSource | 'unknown';
+      reconciliationRequired: boolean;
     }
   >();
   // Concurrent requests for the same session (thread list + activity polling +
@@ -252,16 +253,20 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           if (!registered) return;
 
           registerGithubTokenInjector(requestContext, registered.inject);
-          const patKind = await resolveGithubPatKind();
-          if (!patKind) {
+          const resolvedPatKind = await resolveGithubPatKind();
+          if (!resolvedPatKind && !registered.reconciliationRequired) {
             registerGithubPatKind(requestContext, registered.patKind);
             return;
           }
+          const patKind = resolvedPatKind ?? registered.patKind;
           const patKindChanged = patKind !== registered.patKind;
           // Make the authoritative role effective before any credential I/O.
           // If replacement fails, stale requests must not be able to restore
           // the previous role's token through the runtime refresh injector.
-          if (patKindChanged) registered.patKind = patKind;
+          if (patKindChanged) {
+            registered.patKind = patKind;
+            registered.reconciliationRequired = true;
+          }
           let credentialSourceChanged = false;
           try {
             const pat = await resolveGithubPat(() => github.integrationStorage, session.orgId, patKind, {
@@ -269,14 +274,16 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             });
             const credentialSource = pat.sourceKind ?? 'repository';
             credentialSourceChanged = credentialSource !== registered.credentialSource;
+            if (credentialSourceChanged) registered.reconciliationRequired = true;
             const ghToken = pat.token ?? (credentialSourceChanged ? await getRepositoryToken() : registered.ghToken);
             if (ghToken !== registered.ghToken) registered.inject(ghToken, credentialSource);
             registered.patKind = patKind;
             registered.credentialSource = credentialSource;
+            registered.reconciliationRequired = false;
           } catch (error) {
             // Same-source PAT refreshes remain best-effort. Role and credential
             // source transitions fail closed instead of retaining a stale identity.
-            if (patKindChanged || credentialSourceChanged) throw error;
+            if (registered.reconciliationRequired) throw error;
           } finally {
             registerGithubPatKind(requestContext, registered.patKind);
           }
@@ -410,6 +417,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           registered.ghToken = freshToken;
           // Unknown sources are re-resolved on the next reuse instead of being trusted as a PAT or repository token.
           registered.credentialSource = credentialSource ?? 'unknown';
+          if (refreshedPatKind === registered.patKind && credentialSource) {
+            registered.reconciliationRequired = false;
+          }
         }
       };
       githubTokenInjectors.set(workspaceId, {
@@ -417,6 +427,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         patKind,
         ghToken: ghCliToken,
         credentialSource,
+        reconciliationRequired: false,
       });
       registerGithubTokenInjector(requestContext, injectGithubToken);
       registerGithubPatKind(requestContext, patKind);
