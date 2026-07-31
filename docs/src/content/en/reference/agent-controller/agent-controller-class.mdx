@@ -13,9 +13,9 @@ The `AgentController` feature is in beta stage and subject to breaking changes i
 
 :::
 
-The `AgentController` class orchestrates multiple agent modes, shared state, memory, and storage. It provides a control layer that a TUI or other UI can drive to manage threads, switch models and modes, send messages, handle tool approvals, and track events.
+The `AgentController` class coordinates agent modes with shared state, memory, and storage. It provides a control layer that a TUI or other UI can drive. The layer manages threads and model or mode switches. It sends messages and handles tool approvals while tracking events.
 
-Per-conversation state — identity, the active thread, mode and model selection, run state, grants, and the display snapshot — lives on the [`Session`](/reference/agent-controller/session), accessed through `agentController.session`.
+Per-conversation state (identity, the active thread, mode and model selection, run state, grants, and the display snapshot) lives on the [`Session`](/reference/agent-controller/session), accessed through `agentController.session`.
 
 For a conceptual introduction, see the [AgentController overview](/docs/agent-controller/overview).
 
@@ -175,7 +175,7 @@ await agentController.sendMessage({ content: 'Hello!' })
             name: 'availableTools',
             type: 'string[]',
             description:
-              "Per-mode tool visibility allowlist. When set, only tools whose final exposed names appear in this list are visible to the model and executable during this mode's runs. `undefined` = all tools visible; `[]` = no tools. Per-tool and per-category `deny` rules take precedence over this list. Workspace tools use the same list — reference them by exposed names (`view`, `write_file`, etc.).",
+              "Per-mode tool visibility allowlist. When set, only tools whose final exposed names appear in this list are visible to the model and executable during this mode's runs. `undefined` = all tools visible; `[]` = no tools. Per-tool and per-category `deny` rules take precedence over this list. Workspace tools use the same list: reference them by exposed names (`view`, `write_file`, etc.).",
             isOptional: true,
           },
           {
@@ -432,7 +432,7 @@ await agentController.sendMessage({ content: 'Hello!' })
 
 #### `init()`
 
-Initialize the agentController. Loads storage, initializes a static workspace (dynamic factory workspaces are resolved per-session during `createSession`), propagates memory and workspace to mode agents, and starts interval handlers. Call this before using the agentController.
+Initialize the agentController. Loads storage, initializes a static workspace (runtime-defined factory workspaces are resolved per-session during `createSession`), propagates memory and workspace to mode agents, and starts interval handlers. Call this before using the agentController.
 
 ```typescript
 await agentController.init()
@@ -442,11 +442,11 @@ await agentController.init()
 
 Create a new, fully-wired `Session` and bring it online. The session starts in the default mode with the seeded model, connects to the AgentController's shared machinery (agent, storage/lock, config catalog), and has a current thread (the most recent thread for the resource, or a freshly created one). Call `init()` once before creating sessions so shared storage is ready.
 
-The AgentController owns no session of its own — every consumer creates its own session and drives all work through it. A `resourceId` maps to exactly one session per AgentController (get-or-create): calling `createSession` with the same `resourceId` returns the existing session, so reconnects resume rather than fork the conversation. Different `resourceId`s produce independent sessions with isolated event bus, mode, model, state, and current thread. Use `session.thread.create()` and `session.thread.switch()` to manage multiple conversations within one session.
+The AgentController owns no session of its own: every consumer creates its own session and drives all work through it. A `resourceId` maps to exactly one session per AgentController (get-or-create): calling `createSession` with the same `resourceId` returns the existing session, so reconnects resume rather than fork the conversation. Different `resourceId`s produce independent sessions with isolated event bus, mode, model, state, and current thread. Use `session.thread.create()` and `session.thread.switch()` to manage multiple conversations within one session.
 
-`id` and `ownerId` are required — they mirror `SessionRecord.id` and `SessionRecord.ownerId` and are stable for the life of the session. `resourceId` is optional and defaults to `config.resourceId` then `config.id`.
+`id` and `ownerId` are required: they mirror `SessionRecord.id` and `SessionRecord.ownerId` and are stable for the life of the session. `resourceId` is optional and defaults to `config.resourceId` then `config.id`.
 
-Each session owns its own `Workspace` and `Browser` instance. When `workspace` is omitted, the AgentController resolves its configured workspace (a static instance or a dynamic factory) and passes it to the session. Pass a `workspace` override to give a specific session a different workspace than the AgentController default. The workspace is initialized during session creation; `workspace_ready` and `workspace_status_changed` events are emitted on the session bus after `init()` completes, and late subscribers receive a replay of the last workspace status.
+Each session owns its own `Workspace` and `Browser` instance. When `workspace` is omitted, the AgentController resolves its configured workspace (a static instance or a runtime-defined factory) and passes it to the session. Pass a `workspace` override to give a specific session a different workspace than the AgentController default. The workspace is initialized during session creation; `workspace_ready` and `workspace_status_changed` events are emitted on the session bus after `init()` completes, and late subscribers receive a replay of the last workspace status.
 
 ```typescript
 const session = await agentController.createSession({
@@ -538,7 +538,7 @@ const mastra = agentController.getMastra()
 
 #### `getWorkspace()`
 
-Return the AgentController-level workspace if it's a static `Workspace` instance. Dynamic factory workspaces aren't resolved here — use [`resolveWorkspace()`](#resolveworkspace-session-requestcontext-) to resolve a factory against a session's request context.
+Return the AgentController-level workspace if it's a static `Workspace` instance. Dynamic factory workspaces aren't resolved here: use [`resolveWorkspace()`](#resolveworkspace-session-requestcontext-) to resolve a factory against a session's request context.
 
 ```typescript
 const workspace = agentController.getWorkspace()
@@ -546,7 +546,7 @@ const workspace = agentController.getWorkspace()
 
 #### `resolveWorkspace({ session, requestContext? })`
 
-Eagerly resolve and cache the workspace. For dynamic workspaces (factory function), this triggers the factory against the given session's request context and caches the result so `getWorkspace()` returns it. Returns the resolved workspace or `undefined` if none is configured.
+Eagerly resolve and cache the workspace. For runtime-defined workspaces (factory function), this triggers the factory against the session's request context and caches the result so `getWorkspace()` returns it. Returns the resolved workspace or `undefined` if none is configured.
 
 ```typescript
 const workspace = await agentController.resolveWorkspace({ session })
@@ -560,7 +560,7 @@ const workspace = await agentController.resolveWorkspace({ session, requestConte
 
 #### `hasWorkspace()`
 
-Whether a workspace is configured on this AgentController (static instance or dynamic factory). Sessions without an explicit workspace override fall back to this.
+Whether a workspace is configured on this AgentController (static instance or runtime-defined factory). Sessions without an explicit workspace override fall back to this.
 
 ```typescript
 if (agentController.hasWorkspace()) {
@@ -614,11 +614,11 @@ const models = await agentController.listAvailableModels()
 
 ### Threads
 
-The agentController owns thread lifecycle transitions — creating, switching, cloning, renaming, and deleting threads — because they coordinate the shared thread lock and emit events. The active thread binding and thread/message reads live on [`session.thread`](/reference/agent-controller/session#thread).
+The agentController owns thread lifecycle transitions (creating, switching, cloning, renaming, and deleting threads) because they coordinate the shared thread lock and emit events. The active thread binding and thread/message reads live on [`session.thread`](/reference/agent-controller/session#thread).
 
 #### `createThread({ title? })`
 
-Create a new thread. Initializes thread metadata, saves it to storage, acquires a thread lock, and emits a `thread_created` event.
+Creates a new thread and initializes its metadata. The method saves it to storage and acquires a thread lock before emitting a `thread_created` event.
 
 ```typescript
 const thread = await agentController.createThread({ title: 'New conversation' })
@@ -626,13 +626,13 @@ const thread = await agentController.createThread({ title: 'New conversation' })
 
 #### `switchThread({ threadId })`
 
-Switch to a different thread. Aborts any in-progress operations, acquires a lock on the new thread, releases the lock on the previous thread, loads the thread's metadata, and emits a `thread_changed` event.
+Switch to a different thread. This aborts in-progress operations and acquires a lock on the new thread. It releases the previous thread lock and loads the new thread metadata. It then emits a `thread_changed` event.
 
 ```typescript
 await agentController.switchThread({ threadId: 'thread-abc123' })
 ```
 
-To list threads from storage, use [`session.thread.list()`](/reference/agent-controller/session#thread). By default it returns only threads for the current resource and hides transient [forked subagent](#forked-subagents) threads; pass `includeForkedSubagents: true` to opt back into seeing them — e.g. for a debug panel.
+To list threads from storage, use [`session.thread.list()`](/reference/agent-controller/session#thread). By default it returns only threads for the current resource and hides transient [forked subagent](#forked-subagents) threads. Pass `includeForkedSubagents: true` to opt back into seeing them: e.g. for a debug panel.
 
 #### `renameThread({ title })`
 
@@ -644,7 +644,7 @@ await agentController.renameThread({ title: 'Updated title' })
 
 #### `cloneThread({ sourceThreadId?, title?, resourceId? })`
 
-Clone an existing thread and switch to the clone. Copies all messages, acquires a lock on the new thread, releases the lock on the previous thread, and emits a `thread_created` event. If `sourceThreadId` is omitted, the current thread is cloned. When [Observational Memory](/docs/memory/observational-memory) is enabled, OM records are cloned with remapped message IDs.
+Clone an existing thread and switch to the clone. Copies all messages and acquires a lock on the new thread. It then releases the lock on the previous thread and emits a `thread_created` event. If `sourceThreadId` is omitted, the current thread is cloned. When [Observational Memory](/docs/memory/observational-memory) is enabled, OM records are cloned with remapped message IDs.
 
 ```typescript
 // Clone the current thread
@@ -700,7 +700,7 @@ Reading messages is owned by [`session.thread`](/reference/agent-controller/sess
 
 ### Memory
 
-The `memory` property bundles thread management operations into a single namespace. `memory.createThread`, `memory.switchThread`, and `memory.renameThread` delegate to the corresponding AgentController lifecycle methods documented above; `memory.listThreads` delegates to [`session.thread.list()`](/reference/agent-controller/session#thread).
+The `memory` property bundles thread management operations into a single namespace. `memory.createThread`, `memory.switchThread`, and `memory.renameThread` delegate to the corresponding AgentController lifecycle methods documented above. `memory.listThreads` delegates to [`session.thread.list()`](/reference/agent-controller/session#thread).
 
 #### `memory.deleteThread({ threadId })`
 
@@ -738,7 +738,7 @@ agentController.followUp({ content: 'Now apply those changes' })
 
 ### Tool approvals
 
-Responding to a pending tool approval is owned by the session — see [`session.respondToToolApproval()`](/reference/agent-controller/session#tool-approvals). The agentController owns the permission _policy_ that decides when approval is required, documented under [Permissions](#permissions) below.
+Responding to a pending tool approval is owned by the session: see [`session.respondToToolApproval()`](/reference/agent-controller/session#tool-approvals). The agentController owns the permission _policy_ that decides when approval is required, documented under [Permissions](#permissions) below.
 
 ### Tool suspensions and plans
 
@@ -746,7 +746,7 @@ Responding to a pending tool approval is owned by the session — see [`session.
 
 Respond to a pending tool suspension. Interactive built-in tools such as `ask_user` and `request_access` pause through the native tool-suspension primitive, which emits a `tool_suspended` event carrying `toolCallId`, `toolName`, and `suspendPayload`. Pass `resumeData` to resume the suspended tool with the user's response.
 
-Provide `toolCallId` to select which suspension to resume. It's required when more than one tool is suspended at the same time (for example, parallel `ask_user` calls). When omitted, it resolves to the sole pending suspension.
+Provide `toolCallId` to select which suspension to resume. It's required when more than one tool is suspended concurrently (for example, parallel `ask_user` calls). When omitted, it resolves to the sole pending suspension.
 
 ```typescript
 agentController.subscribe(event => {
@@ -826,14 +826,14 @@ The observer/reflector model selection and observation/reflection thresholds liv
 
 ### Forked subagents
 
-By default, a subagent runs with a fresh context — it doesn't see the parent conversation. **Forked subagents** opt into a different model: the subagent runs on a clone of the parent thread and reuses the parent agent's full configuration. This is useful when the subagent needs the full context of the conversation so far (e.g., recalling earlier user-supplied facts), and when prompt-cache hit rates matter.
+By default, a subagent runs with a fresh context: it doesn't see the parent conversation. **Forked subagents** opt into a different model: the subagent runs on a clone of the parent thread and reuses the parent agent's full configuration. This is useful when the subagent needs the full context of the conversation so far (e.g., recalling earlier user-supplied facts), and when prompt-cache hit rates matter.
 
 #### Enabling forked mode
 
 Set `forked: true` either on the `AgentControllerSubagent` definition (per-type default) or on each `subagent` tool call (per-invocation override):
 
 ```typescript
-// Per-type default — every call to this subagent forks unless overridden.
+// Per-type default: every call to this subagent forks unless overridden.
 const subagents: AgentControllerSubagent[] = [
   {
     id: 'collaborator',
@@ -845,20 +845,20 @@ const subagents: AgentControllerSubagent[] = [
 ]
 ```
 
-The model can also pass `forked: true` (or `forked: false`) per-invocation in the `subagent` tool input; the per-invocation value wins.
+The model can also pass `forked: true` (or `forked: false`) per-invocation in the `subagent` tool input. The per-invocation value wins.
 
 #### Semantics and constraints
 
 - **Memory required.** Forked mode calls `memory.cloneThread` to create the fork, so the agentController must have `memory` configured and an active parent thread. Calls without those return a structured error rather than throwing.
-- **Parent agent reused.** The fork runs through the parent agent's `stream(...)` call. The parent's instructions, tools, model, `maxSteps`, and `stopWhen` apply. The subagent definition's `instructions`, `tools`, `allowedAgentControllerTools`, `allowedWorkspaceTools`, `defaultModelId`, `maxSteps`, and `stopWhen` are ignored in forked mode — this is what preserves the prompt-cache prefix.
-- **Toolsets inherited, recursive forks blocked at runtime.** Forks inherit the parent's toolsets verbatim (`ask_user`, `submit_plan`, user-configured agentController tools, _including the `subagent` tool itself_) so the LLM request prefix — system prompt + tool list + tool schemas + tool descriptions — stays byte-identical to the parent's. This is what preserves the prompt cache. The `subagent` entry is kept on the model side but its `execute` is replaced inside the fork with a stub that returns a non-error "tool unavailable inside a forked subagent" message: nested forks are blocked at the runtime layer without perturbing the cached prefix.
+- **Parent agent reused.** The fork runs through the parent agent's `stream(...)` call. The parent's instructions, tools, model, `maxSteps`, and `stopWhen` apply. The subagent definition's `instructions`, `tools`, `allowedAgentControllerTools`, `allowedWorkspaceTools`, `defaultModelId`, `maxSteps`, and `stopWhen` are ignored in forked mode. This preserves the prompt-cache prefix.
+- **Toolsets inherited, recursive forks blocked at runtime.** Forks inherit the parent's toolsets verbatim (`ask_user`, `submit_plan`, user-configured agentController tools, _including the `subagent` tool itself_) so the LLM request prefix, system prompt + tool list + tool schemas + tool descriptions, stays byte-identical to the parent's. This is what preserves the prompt cache. The `subagent` entry is kept on the model side but its `execute` is replaced inside the fork with a stub that returns a non-error "tool unavailable inside a forked subagent" message: nested forks are blocked at the runtime layer without perturbing the cached prefix.
 - **Fork threads are tagged.** Each fork thread is created with `metadata.forkedSubagent === true` and `metadata.parentThreadId === <parent>`. By default, [`session.thread.list()`](/reference/agent-controller/session#thread) hides these so they don't show up in user-facing thread pickers / startup flows. Pass `includeForkedSubagents: true` to see them in admin / debug tooling.
-- **Save-queue flushed before clone.** The agent stream batches message saves through a debounced `SaveQueueManager`, so the parent's latest user / assistant turn may not be on disk yet when the subagent tool call fires. The fork tool flushes pending saves first via the `flushMessages` callback on `AgentToolExecutionContext` before cloning, so the fork actually carries the latest turn. Flush failures are non-fatal — the clone still runs.
+- **Save-queue flushed before clone.** The agent stream batches message saves through a debounced `SaveQueueManager`, so the parent's latest user / assistant turn may not be on disk yet when the subagent tool call fires. The fork tool flushes pending saves first via the `flushMessages` callback on `AgentToolExecutionContext` before cloning, so the fork actually carries the latest turn. Flush failures are non-fatal: the clone still runs.
 - **Parent thread untouched.** All subagent activity (messages, OM writes) lands on the fork. The parent thread is never appended to during a forked subagent run.
 
 #### When to prefer non-forked mode
 
-Forked mode trades isolation for context inheritance. If the subagent should run with a strictly smaller toolset, a different system prompt, or a cheaper model, use the default (non-forked) mode and pass any required context explicitly in the `task` description.
+Forked mode trades isolation for context inheritance. Use the default (non-forked) mode when the subagent needs a restricted toolset or a different system prompt. The same applies when using a cheaper model. Pass any required context explicitly in the `task` description.
 
 ### Events
 
@@ -866,7 +866,7 @@ Forked mode trades isolation for context inheritance. If the subagent should run
 
 Register an event listener. Returns an unsubscribe function.
 
-Use this method for all consumers — UI, Server-Sent Events (SSE), terminal UI (TUI), bridge rendering, audit logs, debugging, analytics, and deterministic replay. For display rendering, watch for the `display_state_changed` event and read the latest snapshot from [`session.displayState.get()`](/reference/agent-controller/session#display-state). After every event the agentController emits `display_state_changed`, so high-frequency events such as `message_update`, `tool_update`, and `tool_input_delta` are coalesced into the next snapshot.
+Use this method for all consumers: UI, Server-Sent Events (SSE), terminal UI (TUI), bridge rendering, audit logs, debugging, analytics, and deterministic replay. For display rendering, watch for the `display_state_changed` event and read the latest snapshot from [`session.displayState.get()`](/reference/agent-controller/session#display-state). After every event the agentController emits `display_state_changed`, so high-frequency events such as `message_update`, `tool_update`, and `tool_input_delta` are coalesced into the next snapshot.
 
 ```typescript
 // Render from the coalesced display-state snapshot:
@@ -962,7 +962,7 @@ The agentController emits events through registered listeners. The following tab
 | `shell_output` | A tool emitted shell output (stdout or stderr). |
 | `display_state_changed` | The canonical `AgentControllerDisplayState` snapshot changed. Read it from [`session.displayState.get()`](/reference/agent-controller/session#display-state). |
 
-The agentController also emits low-level streaming content chunks — `text`, `thinking`, `tool_call`, `tool_result`, `image`, and `file`. These are the raw pieces that get assembled into messages; most UIs render from `message_update` (or read the [`session.displayState`](/reference/agent-controller/session#display-state) snapshot) rather than subscribing to them directly.
+The agentController also emits low-level streaming content chunks: `text`, `thinking`, `tool_call`, `tool_result`, `image`, and `file`. These are the raw pieces that get assembled into messages. Most UIs render from `message_update` (or read the [`session.displayState`](/reference/agent-controller/session#display-state) snapshot) rather than subscribing to them directly.
 
 ## Built-in tools
 
@@ -976,7 +976,7 @@ The agentController provides built-in tools to agents in every mode:
 | `task_update` | Update one tracked task by ID and return the structured task list snapshot. |
 | `task_complete` | Mark one tracked task completed by ID and return the structured task list snapshot. |
 | `task_check` | Check the completion status of the current task list and return `tasks`, `summary`, `incompleteTasks`, and `isError` fields. |
-| `subagent` | Spawn a focused subagent with constrained tools (only available when `subagents` is configured). Pass `forked: true` to inherit the parent conversation — see [Forked subagents](#forked-subagents). |
+| `subagent` | Spawn a focused subagent with constrained tools (only available when `subagents` is configured). Pass `forked: true` to inherit the parent conversation. See [Forked subagents](#forked-subagents). |
 
 ### `ask_user` selections
 

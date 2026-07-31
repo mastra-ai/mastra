@@ -9,12 +9,14 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
+  StorageMetadataFilter,
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
+  validateStorageMetadataFilter,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
@@ -52,6 +54,32 @@ function parseMetadata(metadata: unknown): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function appendClickhouseMessageMetadataFilter(
+  query: string,
+  params: Record<string, unknown>,
+  metadataFilter: StorageMetadataFilter | undefined,
+): string {
+  if (!metadataFilter) return query;
+
+  let nextQuery = query;
+  Object.entries(metadataFilter).forEach(([key, value], index) => {
+    const keyParam = `metadataKey${index}`;
+    params[keyParam] = key;
+    nextQuery += ` AND isValidJSON(content) AND JSONHas(content, 'metadata') AND JSONHas(JSONExtractRaw(content, 'metadata'), {${keyParam}:String})`;
+
+    if (value === null) {
+      nextQuery += ` AND JSONExtractRaw(content, 'metadata', {${keyParam}:String}) = 'null'`;
+      return;
+    }
+
+    const valueParam = `metadataValue${index}`;
+    params[valueParam] = JSON.stringify(value);
+    nextQuery += ` AND JSONExtractRaw(content, 'metadata', {${keyParam}:String}) = {${valueParam}:String}`;
+  });
+
+  return nextQuery;
 }
 
 export class MemoryStorageClickhouse extends MemoryStorage {
@@ -184,6 +212,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
 
   public async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
 
     // Normalize threadId to array, coerce to strings, trim, and filter out empty/non-string values
     const rawThreadIds = Array.isArray(threadId) ? threadId : [threadId];
@@ -270,6 +299,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         dataParams.toDate = endDate;
       }
 
+      dataQuery = appendClickhouseMessageMetadataFilter(dataQuery, dataParams, metadataFilter);
+
       // Build ORDER BY clause
       const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
       dataQuery += ` ORDER BY "${field}" ${direction}`;
@@ -348,6 +379,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         countParams.toDate = endDate;
       }
 
+      countQuery = appendClickhouseMessageMetadataFilter(countQuery, countParams, metadataFilter);
+
       const countResult = await this.client.query({
         query: countQuery,
         query_params: countParams,
@@ -391,16 +424,19 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       const list = new MessageList().add(paginatedMessages, 'memory');
       const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
-      // Calculate hasMore based on pagination window
-      // If all thread messages have been returned (through pagination or include), hasMore = false
-      // Otherwise, check if there are more pages in the pagination window
       const threadIdSet = new Set(threadIds);
       const returnedThreadMessageIds = new Set(
         finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
       );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
       const hasMore =
-        perPageForResponse === false ? false : allThreadMessagesReturned ? false : offset + paginatedCount < total;
+        metadataFilter && perPageForResponse !== false
+          ? offset + paginatedCount < total
+          : perPageForResponse === false
+            ? false
+            : allThreadMessagesReturned
+              ? false
+              : offset + paginatedCount < total;
 
       return {
         messages: finalMessages,

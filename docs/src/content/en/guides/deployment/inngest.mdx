@@ -11,11 +11,11 @@ For a complete example with advanced flow control features, see the [Inngest wor
 
 ## How Inngest works with Mastra
 
-Inngest and Mastra integrate by aligning their workflow models: Inngest organizes logic into functions composed of steps, and Mastra workflows defined using `createWorkflow()` and `createStep()` map directly onto this paradigm. Each Mastra workflow becomes an Inngest function with a unique identifier, and each step within the workflow maps to an Inngest step.
+Inngest and Mastra integrate by aligning their workflow models: Inngest organizes logic into functions composed of steps, and Mastra workflows defined using `createWorkflow()` and `createStep()` map directly onto this structure. Each Mastra workflow becomes an Inngest function with a unique identifier, and each step within the workflow maps to an Inngest step.
 
 The `serve()` function bridges the two systems by registering Mastra workflows as Inngest functions and setting up the necessary event handlers for execution and monitoring.
 
-When an event triggers a workflow, Inngest executes it step by step, memoizing each step's result. This means if a workflow is retried or resumed, completed steps are skipped, ensuring efficient and reliable execution. Control flow primitives in Mastra, such as loops, conditionals, and nested workflows are seamlessly translated into the same Inngest's function/step model, preserving advanced workflow features like composition, branching, and suspension.
+When an event triggers a workflow, Inngest executes it step by step and memoizes each result. On retry or resume, Inngest skips completed steps based on those saved results. Mastra control flow primitives, such as loops, conditionals, and nested workflows, map to the same Inngest function and step model while preserving composition, branching, and suspension.
 
 Real-time monitoring, suspend/resume, and step-level observability are enabled via Inngest's publish-subscribe system and dashboard. As each step executes, its state and output are tracked using Mastra storage and can be resumed as needed.
 
@@ -185,7 +185,7 @@ The path is `/inngest/api`, not `/api/inngest`. Mastra reserves the `/api` prefi
 
 1. Open the Inngest Dashboard at [http://localhost:8288](http://localhost:8288) and go to the **Apps** section in the sidebar to verify your Mastra workflow is registered
 
-1. Invoke the workflow by going to **Functions**, selecting your workflow, and selecting **Invoke** with the following input:
+1. In **Functions**, open your workflow. Select **Invoke** and provide the following input:
 
    ```json
    {
@@ -249,7 +249,7 @@ Before you begin, make sure you have:
    Inngest's auto-discover convention assumes `/api/inngest`. Because this guide uses `/inngest/api`, set the **URL** field on the Inngest app to your deployed origin plus `/inngest/api` (for example `https://your-app.vercel.app/inngest/api`). If you leave it on the default, the Inngest dashboard won't find your app's functions.
    :::
 
-1. Invoke the workflow by going to **Functions**, selecting `workflow.increment-workflow`, selecting **All actions** > **Invoke**, and providing the following input:
+1. In **Functions**, open `workflow.increment-workflow`. Select **All actions** > **Invoke** and provide the following input:
 
    ```json
    {
@@ -491,7 +491,7 @@ When migrating an existing production app from `serve()` to `connect()`, test th
 - `functions`: Optional array of additional Inngest functions to register alongside Mastra workflows.
 - `instanceId`: Stable identifier for the worker, shown in the Inngest dashboard. Defaults to the machine hostname.
 - `maxWorkerConcurrency`: Maximum number of steps the worker runs at a time. Defaults to unlimited.
-- `registerOptions`: Forwarded to Inngest during app registration (for example `signingKey`). When a field is set both here and at the top level, `registerOptions` wins — this matches the behavior of `serve()`.
+- `registerOptions`: Forwarded to Inngest during app registration (for example `signingKey`). When a field is set both here and at the top level, `registerOptions` wins. This matches the behavior of `serve()`.
 
 `connect()` returns Inngest's `WorkerConnection`. The Inngest SDK handles `SIGINT` and `SIGTERM` by default. Store the returned connection and call `.close()` only when your worker needs custom shutdown control.
 
@@ -660,7 +660,7 @@ All flow control options are optional. If not specified, workflows run with Inng
 
 ## Cron scheduling
 
-Inngest workflows can be automatically triggered on a schedule using cron expressions. This allows you to run workflows at regular intervals, such as daily reports, hourly data syncs, or maintenance tasks.
+Use cron expressions to trigger Inngest workflows on a schedule. Common uses include daily reports and hourly data syncs, as well as maintenance tasks.
 
 ### Basic cron scheduling
 

@@ -110,6 +110,7 @@ const sidebars = {
         { type: 'doc', id: 'auth/auth0', label: 'Auth0' },
         { type: 'doc', id: 'auth/better-auth', label: 'Better Auth' },
         { type: 'doc', id: 'auth/clerk', label: 'Clerk' },
+        { type: 'doc', id: 'auth/fga', label: 'Fine-Grained Authorization' },
         { type: 'doc', id: 'auth/firebase', label: 'Firebase' },
         { type: 'doc', id: 'auth/google', label: 'Google' },
         { type: 'doc', id: 'auth/jwt', label: 'JSON Web Token' },
@@ -320,6 +321,7 @@ const sidebars = {
             { type: 'doc', id: 'evals/noise-sensitivity', label: 'Noise Sensitivity Scorer' },
             { type: 'doc', id: 'evals/prompt-alignment', label: 'Prompt Alignment Scorer' },
             { type: 'doc', id: 'evals/rubric', label: 'Rubric Scorer' },
+            { type: 'doc', id: 'evals/summarization', label: 'Summarization Scorer' },
             { type: 'doc', id: 'evals/textual-difference', label: 'Textual Difference Scorer' },
             { type: 'doc', id: 'evals/tone-consistency', label: 'Tone Consistency Scorer' },
             { type: 'doc', id: 'evals/tool-call-accuracy', label: 'Tool Call Accuracy Scorers' },
@@ -670,6 +672,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'streaming/ChunkType', label: 'ChunkType' },
+        { type: 'doc', id: 'streaming/smoothStream', label: 'smoothStream()' },
         {
           type: 'category',
           label: 'Agents',
@@ -719,6 +722,12 @@ const sidebars = {
         { type: 'doc', id: 'tools/graph-rag-tool', label: 'createGraphRAGTool()' },
         { type: 'doc', id: 'tools/create-tool', label: 'createTool()' },
         { type: 'doc', id: 'tools/vector-query-tool', label: 'createVectorQueryTool()' },
+        {
+          type: 'doc',
+          id: 'tools/isolated-vm-transport',
+          label: 'IsolatedVmCodeModeTransport',
+          customProps: { tags: ['beta'] },
+        },
         { type: 'doc', id: 'tools/mcp-client', label: 'MCPClient' },
         { type: 'doc', id: 'tools/mcp-server', label: 'MCPServer' },
         { type: 'doc', id: 'tools/perplexity', label: 'Perplexity Tools' },
@@ -790,6 +799,12 @@ const sidebars = {
         { type: 'doc', id: 'voice/voice.speak', label: '.speak()' },
         { type: 'doc', id: 'voice/voice.updateConfig', label: '.updateConfig()' },
       ],
+    },
+    {
+      type: 'category',
+      label: 'Workers',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'workers/overview', label: 'Overview' }],
     },
     {
       type: 'category',

@@ -9,7 +9,7 @@ packages:
 
 Mastra provides built-in processors that add security and safety controls to your agent. These processors detect, transform, or block harmful content before it reaches the language model or the user.
 
-For an introduction to how processors work, how to add them to an agent, and how to create custom processors, see [Processors](/docs/agents/processors).
+For an introduction to processor behavior and custom processors, including how to add them to an agent, see [Processors](/docs/agents/processors).
 
 ## Input processors
 
@@ -17,7 +17,7 @@ Input processors run before user messages reach the language model. They handle 
 
 ### Normalize user messages
 
-The `UnicodeNormalizer()` cleans and normalizes user input by unifying Unicode characters, standardizing whitespace, and removing problematic symbols.
+The `UnicodeNormalizer()` cleans and normalizes user input by unifying Unicode characters and standardizing whitespace. It also removes problematic symbols.
 
 ```typescript {7-10} title="src/mastra/agents/normalized-agent.ts"
 import { UnicodeNormalizer } from '@mastra/core/processors'
@@ -195,7 +195,7 @@ Visit [`PIIDetector()`](/reference/processors/pii-detector) reference for a full
 
 ### Enforce cost limits
 
-The `CostGuardProcessor()` monitors cumulative estimated cost across the agentic loop, blocking or warning when a monetary limit is exceeded. It queries cost data from observability storage before each LLM call. Cost checks are approximate — metrics are persisted asynchronously, so fast-running agents may briefly exceed the configured limit before the guard triggers.
+The `CostGuardProcessor()` monitors cumulative estimated cost across the agentic loop, blocking or warning when a monetary limit is exceeded. It queries cost data from observability storage before each LLM call. Cost checks are approximate, metrics are persisted asynchronously, so fast-running agents may briefly exceed the configured limit before the guard triggers.
 
 ```typescript {7-11} title="src/mastra/agents/budgeted-agent.ts"
 import { CostGuardProcessor } from '@mastra/core/processors'
@@ -264,7 +264,7 @@ moderation.onViolation = ({ processorId, message, detail }) => {
 }
 ```
 
-The `onViolation` property is part of the base [`Processor` interface](/reference/processors/processor-interface), so any processor — including custom ones — can use it. The runner automatically invokes `onViolation` when any processor calls `abort()`. For processors using a `warn` strategy (like `CostGuardProcessor`), the callback also fires on warnings without blocking the request.
+The `onViolation` property is part of the base [`Processor` interface](/reference/processors/processor-interface), so any processor, including custom ones, can use it. The runner automatically invokes `onViolation` when any processor calls `abort()`. For processors using a `warn` strategy (like `CostGuardProcessor`), the callback also fires on warnings without blocking the request.
 
 Errors thrown by the callback are silently caught to prevent interfering with the processor's main logic.
 
@@ -304,11 +304,11 @@ for await (const chunk of stream.fullStream) {
 
 ## Speed up guardrails
 
-Guardrail processors that use an LLM (moderation, PII detection, prompt injection) add latency to every request. Three techniques reduce this overhead.
+Guardrail processors that use an LLM (moderation, PII detection, prompt injection) add latency to every request. These techniques reduce this overhead.
 
 ### Run guardrails in parallel
 
-By default, processors run sequentially. Guardrails that only `block` (and never mutate messages) are independent and can run at the same time using a [workflow processor](/docs/agents/processors#use-workflows-as-processors).
+By default, processors run sequentially. Guardrails that only `block` (and never mutate messages) are independent and can run using a [workflow processor](/docs/agents/processors#use-workflows-as-processors).
 
 You can also mix `block` and `redact` strategies in a single parallel step. Map to the `redact` branch so its transformed messages carry forward.
 
@@ -391,7 +391,7 @@ outputProcessors: [
 
 ## Related
 
-- [Processors](/docs/agents/processors): How processors work, execution order, custom processors, and retry mechanism
+- [Processors](/docs/agents/processors): Processor behavior and execution order. Also covers custom processors and retry behavior
 - [`Processor` Interface](/reference/processors/processor-interface): API reference for the `Processor` interface
-- [Memory Processors](/docs/memory/memory-processors): Processors for message history, semantic recall, and working memory
+- [Memory Processors](/docs/memory/memory-processors): Processors for message history plus semantic recall and working memory
 - 📹 [Mastra processors and guardrails workshop](https://www.youtube.com/watch?v=4Vpp7xQYvl0)
