@@ -3,8 +3,17 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { defineMastraCodePlugin, SignalProvider } from '../../plugin.js';
 import { collectActivePluginTools, loadPluginFromEntry, loadPlugins } from '../loader.js';
 import type { PluginRegistry } from '../types.js';
+
+/** Minimal concrete provider — `SignalProvider` only requires an `id`. */
+class FixtureSignalProvider extends SignalProvider<'fixture-signals'> {
+  readonly id = 'fixture-signals' as const;
+  constructor(readonly cwd: string) {
+    super();
+  }
+}
 
 let tempDir: string | undefined;
 
@@ -275,6 +284,58 @@ describe('plugin loader', () => {
     expect(loaded[0]?.status).toBe('active');
     expect(getController).not.toHaveBeenCalled();
     expect(getActiveSession).not.toHaveBeenCalled();
+  });
+
+  it('accepts plugins declaring processors and signal providers', async () => {
+    // Compile-time half: `sdk check` fails if either field rejects these shapes.
+    const inputOnly = defineMastraCodePlugin({
+      id: 'acme.input-only',
+      processors: [{ id: 'plugin-input', processInputStep: async () => {} }],
+    });
+    const bothLanes = defineMastraCodePlugin({
+      id: 'acme.both-lanes',
+      processors: async () => ({
+        input: [{ id: 'plugin-input', processInputStep: async () => undefined }],
+        output: [{ id: 'plugin-output', processOutputStep: async ({ messageList }) => messageList }],
+      }),
+      signalProviders: context => [new FixtureSignalProvider(context.cwd)],
+    });
+    expect(Array.isArray(inputOnly.processors)).toBe(true);
+    expect(typeof bothLanes.signalProviders).toBe('function');
+
+    // Runtime half: a plugin carrying both fields still loads.
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginDir = path.join(projectRoot, '.mastracode', 'plugins', 'plugin');
+    writePlugin(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.contributor',
+        processors: [{ id: 'plugin-input', processInputStep: async () => {} }],
+        signalProviders: () => [],
+        tools: { still_works: { tool: { id: 'still_works' } } }
+      };`,
+    );
+
+    const loaded = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: {
+        plugins: {
+          'acme.contributor': {
+            enabled: true,
+            source: 'local',
+            specifier: '../plugin',
+            path: pluginDir,
+            entry: 'src/index.ts',
+          },
+        },
+      },
+      globalRegistry: { plugins: {} },
+    });
+
+    expect(loaded[0]).toMatchObject({ id: 'acme.contributor', status: 'active' });
+    expect(Object.keys(loaded[0]?.tools ?? {})).toEqual(['still_works']);
   });
 
   it('surfaces load failures without throwing', async () => {
