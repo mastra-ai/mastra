@@ -59,7 +59,7 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
 }));
 
 import { MaterializeError } from './integrations/github/sandbox.js';
-import { injectGithubToken } from './integrations/github/token-refresh.js';
+import { getRegisteredGithubPatKind, injectGithubToken } from './integrations/github/token-refresh.js';
 import { SandboxFleet } from './sandbox/fleet.js';
 import { checkpointNameForSession, createWorkspaceFactory, getFactoryWorkspace } from './workspace.js';
 
@@ -763,12 +763,14 @@ describe('GitHub session workspace preparation', () => {
     // review binding, so the first request can cache the worker PAT selection.
     mocks.runBindingRole = 'review';
     mocks.setEnvironmentVariable.mockClear();
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
     await workspace({
-      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      requestContext,
       mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
 
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
+    expect(getRegisteredGithubPatKind(requestContext)).toBe('reviewer');
   });
 
   it('switches a cached workspace back to the worker PAT when a work binding replaces the review binding', async () => {
@@ -789,12 +791,78 @@ describe('GitHub session workspace preparation', () => {
 
     mocks.runBindingRole = 'work';
     mocks.setEnvironmentVariable.mockClear();
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
     await workspace({
-      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      requestContext,
       mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
 
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+    expect(getRegisteredGithubPatKind(requestContext)).toBe('default');
+  });
+
+  it('removes a stale reviewer PAT when the replacement work binding has no worker PAT', async () => {
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    mocks.runBindingRole = 'work';
+    mocks.setEnvironmentVariable.mockClear();
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({
+      requestContext,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
+    expect(getRegisteredGithubPatKind(requestContext)).toBe('default');
+  });
+
+  it('reconciles the binding role for followers of an inflight materialization', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    let releaseMaterialization!: () => void;
+    let markMaterializationStarted!: () => void;
+    const materializationStarted = new Promise<void>(resolve => {
+      markMaterializationStarted = resolve;
+    });
+    let markFollowerLookupStarted!: () => void;
+    const followerLookupStarted = new Promise<void>(resolve => {
+      markFollowerLookupStarted = resolve;
+    });
+    mocks.materializeRepo.mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          releaseMaterialization = resolve;
+          markMaterializationStarted();
+        }),
+    );
+
+    const leader = workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    await materializationStarted;
+    mocks.runBindingRole = 'review';
+    const followerRequestContext = createGithubRequestContext('project-1', 'session-a');
+    const follower = workspace({
+      requestContext: followerRequestContext,
+      mastra: {
+        getWorkspaceById: vi.fn(() => {
+          markFollowerLookupStarted();
+          return undefined;
+        }),
+      } as any,
+    });
+    await followerLookupStarted;
+    releaseMaterialization();
+    await Promise.all([leader, follower]);
+
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
+    expect(getRegisteredGithubPatKind(followerRequestContext)).toBe('reviewer');
   });
 
   it('falls back to the worker PAT for review sessions without a reviewer token', async () => {

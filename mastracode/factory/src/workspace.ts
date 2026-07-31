@@ -208,27 +208,55 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
     const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
     const configDir = sandboxConfig.workdir ?? DEFAULT_CONFIG_DIR;
+    const resolveGithubPatKind = async (): Promise<GithubPatKind> => {
+      if (!workItems) return 'default';
+      try {
+        const address = getFactorySessionAddress(requestContext);
+        const runBinding = address ? await workItems.findRunBindingBySession(address) : null;
+        if (runBinding?.role === 'review' && runBinding.orgId === session.orgId) return 'reviewer';
+      } catch {
+        // No resolvable binding — worker token.
+      }
+      return 'default';
+    };
+    const getRepositoryToken = async (): Promise<string> => {
+      const access = await github.versionControl.getRepositoryAccess({
+        orgId: session.orgId,
+        repositoryId: repository.id,
+      });
+      const token = access.authorization?.token;
+      if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
+      return token;
+    };
+    const reconcileGithubToken = async (): Promise<void> => {
+      const registered = githubTokenInjectors.get(workspaceId);
+      if (!registered) return;
+
+      registerGithubTokenInjector(requestContext, registered.inject);
+      const patKind = await resolveGithubPatKind();
+      try {
+        let ghToken = await getGithubPat(() => github.integrationStorage, session.orgId, patKind);
+        if (!ghToken) {
+          // Preserve the existing fail-soft behavior for unchanged roles, but
+          // never keep a stale reviewer credential after moving to worker.
+          if (patKind === registered.patKind) return;
+          ghToken = await getRepositoryToken();
+        }
+        if (ghToken !== registered.ghToken) registered.inject(ghToken);
+        registered.patKind = patKind;
+      } catch {
+        // Keep the token already installed in the sandbox.
+      } finally {
+        registerGithubPatKind(requestContext, registered.patKind);
+      }
+    };
     try {
       const existing = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
       if (existing) {
         existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
-        const registered = githubTokenInjectors.get(workspaceId);
-        if (registered) {
-          registerGithubTokenInjector(requestContext, registered.inject);
-          registerGithubPatKind(requestContext, registered.patKind);
-          // A PAT saved in Settings after this sandbox was provisioned must
-          // reach the running sandbox without a server restart — re-read it
-          // on every reuse and push it into the live sandbox when it changed.
-          // Best-effort: a failed read or inject keeps the installed token.
-          try {
-            const pat = await getGithubPat(() => github.integrationStorage, session.orgId, registered.patKind);
-            if (pat && pat !== registered.ghToken) {
-              registered.inject(pat);
-            }
-          } catch {
-            // Keep the token already installed in the sandbox.
-          }
-        }
+        // Re-resolve the binding role on every reuse so the live sandbox and
+        // request-scoped refresh tool use the current worker/reviewer identity.
+        await reconcileGithubToken();
         return existing;
       }
     } catch {
@@ -260,12 +288,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
       }
 
-      const access = await github.versionControl.getRepositoryAccess({
-        orgId: session.orgId,
-        repositoryId: repository.id,
-      });
-      const token = access.authorization?.token;
-      if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
+      const token = await getRepositoryToken();
 
       // The `gh` CLI needs a PAT when the org configured one (installation
       // tokens 403 on integration-restricted endpoints); git clone/checkout
@@ -273,16 +296,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // (run-binding role `review`) authenticate `gh` as the reviewer account
       // when a reviewer token is configured; everything else — including
       // sessions with no resolvable run binding — uses the worker token.
-      let patKind: GithubPatKind = 'default';
-      if (workItems) {
-        try {
-          const address = getFactorySessionAddress(requestContext);
-          const runBinding = address ? await workItems.findRunBindingBySession(address) : null;
-          if (runBinding?.role === 'review' && runBinding.orgId === session.orgId) patKind = 'reviewer';
-        } catch {
-          // No resolvable binding — worker token.
-        }
-      }
+      const patKind = await resolveGithubPatKind();
       const ghCliToken = (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? token;
 
       const ensureSandbox = () =>
@@ -378,11 +392,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const inflight = inflightMaterializations.get(workspaceId);
     if (inflight) {
       const workspace = await inflight;
-      const registered = githubTokenInjectors.get(workspaceId);
-      if (registered) {
-        registerGithubTokenInjector(requestContext, registered.inject);
-        registerGithubPatKind(requestContext, registered.patKind);
-      }
+      // A binding can appear while the leader is materializing. Treat an
+      // inflight follower like any other cached-workspace reuse.
+      await reconcileGithubToken();
       return workspace;
     }
     const materialization = materialize();
