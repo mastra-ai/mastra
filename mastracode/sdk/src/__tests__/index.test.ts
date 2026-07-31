@@ -40,6 +40,22 @@ vi.mock('@mastra/core/coding-agent', () => ({
 
 const agentConstructorMock = vi.fn();
 
+/**
+ * Both processor lanes are functions so plugin contributions can change without
+ * rebuilding the agent — call them to read the array the next request would get.
+ */
+function resolveInputProcessors(): Array<{ id?: string }> {
+  const config = agentConstructorMock.mock.calls[0]?.[0] as { inputProcessors?: unknown } | undefined;
+  expect(typeof config?.inputProcessors).toBe('function');
+  return (config!.inputProcessors as () => Array<{ id?: string }>)();
+}
+
+function resolveOutputProcessors(): Array<{ id?: string }> {
+  const config = agentConstructorMock.mock.calls[0]?.[0] as { outputProcessors?: unknown } | undefined;
+  expect(typeof config?.outputProcessors).toBe('function');
+  return (config!.outputProcessors as () => Array<{ id?: string }>)();
+}
+
 const controllerConstructorMock = vi.fn();
 const loadSettingsMock = vi.fn();
 const getAvailableModePacksMock = vi.fn(() => []);
@@ -907,17 +923,85 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ inputProcessors: [customProcessor] });
 
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      | { inputProcessors?: Array<{ id?: string }> }
-      | undefined;
-    const processors = agentConfig?.inputProcessors ?? [];
+    const processors = resolveInputProcessors();
     expect(processors[0]).toBe(customProcessor);
+    // With no plugins installed the plugin slot is empty, so the order is
+    // exactly what it was before the lane existed.
     expect(processors.map(processor => processor.id)).toEqual([
       'embedding-reconciler',
       'plan-rejection-abort',
       'agents-md-injector',
       'provider-history-compat',
     ]);
+    expect(resolveOutputProcessors()).toEqual([]);
+  });
+
+  it('resolves plugin processors last, in both lanes, without rebuilding the agent', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const pluginInput = { id: 'acme-input', processInputStep: vi.fn() };
+    const pluginOutput = { id: 'acme-output', processOutputStep: vi.fn() };
+    let entries: {
+      input: Array<{ pluginId: string; value: unknown }>;
+      output: Array<{ pluginId: string; value: unknown }>;
+    } = {
+      input: [{ pluginId: 'acme.plugin', value: pluginInput }],
+      output: [{ pluginId: 'acme.plugin', value: pluginOutput }],
+    };
+    const pluginManager = {
+      reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
+      getPluginTools: vi.fn(() => ({})),
+      getPluginProcessors: vi.fn(() => entries),
+    };
+
+    await createMastraCode({ pluginManager: pluginManager as any });
+
+    // Plugin processors are the customization layer over Mastra Code's own
+    // scaffolding, so they run after it — last in each configured array.
+    expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
+      'plan-rejection-abort',
+      'agents-md-injector',
+      'provider-history-compat',
+      'acme-input',
+    ]);
+    expect(resolveOutputProcessors()).toEqual([pluginOutput]);
+
+    // A plugin disabled or updated mid-session changes what the manager reports;
+    // the next request picks it up through the same agent.
+    entries = { input: [], output: [] };
+
+    expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
+      'plan-rejection-abort',
+      'agents-md-injector',
+      'provider-history-compat',
+    ]);
+    expect(resolveOutputProcessors()).toEqual([]);
+  });
+
+  it('swallows a failing plugin processor read instead of throwing out of the lane', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const pluginManager = {
+      reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
+      getPluginTools: vi.fn(() => ({})),
+      getPluginProcessors: vi.fn(() => {
+        throw new Error('plugin blew up');
+      }),
+    };
+
+    await createMastraCode({ pluginManager: pluginManager as any });
+
+    // The lanes also run outside the request path, where a throw is swallowed
+    // into a debug log and the agent silently loses every processor.
+    expect(() => resolveInputProcessors()).not.toThrow();
+    expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
+      'plan-rejection-abort',
+      'agents-md-injector',
+      'provider-history-compat',
+    ]);
+    expect(resolveOutputProcessors()).toEqual([]);
+    // Warned once, not once per request: this is the hot path.
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 
   it('configures ProviderHistoryCompat for prompt and API error compatibility', async () => {
@@ -926,10 +1010,8 @@ describe('createMastraCode', () => {
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
-    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      | { inputProcessors?: Array<{ id?: string }>; errorProcessors?: Array<{ id?: string }> }
-      | undefined;
-    expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { errorProcessors?: Array<{ id?: string }> };
+    expect(resolveInputProcessors().map(processor => processor.id)).toContain('provider-history-compat');
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
   });
 
