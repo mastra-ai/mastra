@@ -19,4 +19,4 @@ export const mastra = new Mastra({
 
 `POST /my/webhook` now returns `{"ok":true}` instead of Studio's `index.html`.
 
-This also fixes Studio deployments that set a custom `server.apiPrefix`, which previously lost the entire built-in API to the same fallback.
+Requests to a custom `server.apiPrefix` now reach your server too, instead of being answered with the Studio page. Studio's own UI still calls `/api`, so pointing Studio at a custom prefix is not supported yet.
