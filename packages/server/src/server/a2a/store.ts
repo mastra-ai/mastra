@@ -15,6 +15,7 @@ export class InMemoryTaskStore {
   private store: Map<string, Task> = new Map();
   private versions: Map<string, number> = new Map();
   private listeners: Map<string, Set<(update: { task: Task; version: number }) => void>> = new Map();
+  private abortControllers: Map<string, AbortController> = new Map();
   public activeCancellations = new Set<string>();
 
   private getKey(agentId: string, taskId: string) {
@@ -81,6 +82,33 @@ export class InMemoryTaskStore {
 
   getVersion({ agentId, taskId }: { agentId: string; taskId: string }): number {
     return this.versions.get(this.getKey(agentId, taskId)) ?? 0;
+  }
+
+  registerAbortController({
+    agentId,
+    taskId,
+    controller,
+  }: {
+    agentId: string;
+    taskId: string;
+    controller: AbortController;
+  }): () => void {
+    const key = this.getKey(agentId, taskId);
+    this.abortControllers.set(key, controller);
+
+    return () => {
+      if (this.abortControllers.get(key) === controller) {
+        this.abortControllers.delete(key);
+      }
+    };
+  }
+
+  abortTask({ agentId, taskId, reason }: { agentId: string; taskId: string; reason?: unknown }): void {
+    const controller = this.abortControllers.get(this.getKey(agentId, taskId));
+
+    if (controller && !controller.signal.aborted) {
+      controller.abort(reason);
+    }
   }
 
   async waitForNextUpdate({

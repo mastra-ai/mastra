@@ -1885,6 +1885,110 @@ describe('A2A Handler', () => {
       expect(done.done).toBe(true);
     });
 
+    it('passes request abortSignal to agent stream execution', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const requestAbortController = new AbortController();
+      let streamAbortSignal: AbortSignal | undefined;
+
+      const params: MessageSendParams = {
+        message: { messageId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: 'Hello' }] },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockImplementation is not available on the Agent class
+      mockAgent.stream.mockImplementation((_messages, options) => {
+        streamAbortSignal = options.abortSignal;
+        return createStreamResult({ chunks: ['Hello'] });
+      });
+
+      const gen = handleMessageStream({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agentId,
+        agent: mockAgent,
+        requestContext: new RequestContext(),
+        abortSignal: requestAbortController.signal,
+      });
+
+      await gen.next();
+      requestAbortController.abort('client disconnected');
+      await gen.next();
+
+      expect(streamAbortSignal?.aborted).toBe(true);
+      expect(streamAbortSignal?.reason).toBe('client disconnected');
+    });
+
+    it('aborts the active stream and does not let late chunks overwrite a canceled task', async () => {
+      const requestId = 'test-request-id';
+      const messageId = 'test-message-id';
+      const agentId = 'test-agent';
+      const taskId = 'cancel-stream-task';
+      const continueStream = createDeferred<void>();
+      let streamAbortSignal: AbortSignal | undefined;
+
+      const params: MessageSendParams = {
+        message: { messageId, taskId, kind: 'message', role: 'user', parts: [{ kind: 'text', text: 'Hello' }] },
+      };
+
+      const mockAgent = mockMastra.getAgentById(agentId);
+      // @ts-expect-error - mockImplementation is not available on the Agent class
+      mockAgent.stream.mockImplementation((_messages, options) => {
+        streamAbortSignal = options.abortSignal;
+        return {
+          ...createStreamResult({ chunks: [], text: 'First second' }),
+          fullStream: (async function* () {
+            yield { type: 'text-delta', textDelta: 'First ' };
+            await continueStream.promise;
+            yield { type: 'text-delta', textDelta: 'second' };
+          })(),
+        };
+      });
+
+      const gen = handleMessageStream({
+        requestId,
+        params,
+        taskStore: mockTaskStore,
+        agentId,
+        agent: mockAgent,
+        requestContext: new RequestContext(),
+      });
+
+      await gen.next();
+      const nextStreamEvent = gen.next();
+      await Promise.resolve();
+
+      const cancelResult = await handleTaskCancel({
+        requestId: 'cancel-request-id',
+        taskStore: mockTaskStore,
+        agentId,
+        taskId,
+      });
+
+      expect(cancelResult.result?.status.state).toBe('canceled');
+      expect(streamAbortSignal?.aborted).toBe(true);
+
+      continueStream.resolve();
+      const canceledUpdate = await nextStreamEvent;
+      expect(canceledUpdate.value).toMatchObject({
+        id: requestId,
+        jsonrpc: '2.0',
+        result: {
+          final: true,
+          kind: 'status-update',
+          status: {
+            state: 'canceled',
+          },
+          taskId,
+        },
+      });
+
+      const savedTask = await mockTaskStore.load({ agentId, taskId });
+      expect(savedTask?.status.state).toBe('canceled');
+    });
+
     it('should stream structured output as a data artifact part', async () => {
       const requestId = 'test-request-id';
       const messageId = 'test-message-id';
