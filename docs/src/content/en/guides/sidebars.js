@@ -16,11 +16,6 @@ const sidebars = {
   // Docs sidebar - main documentation
   guidesSidebar: [
     {
-      type: 'doc',
-      id: 'index',
-      label: 'Get Started',
-    },
-    {
       type: 'category',
       label: 'Essentials',
       collapsible: false,
@@ -38,11 +33,6 @@ const sidebars = {
           type: 'doc',
           id: 'getting-started/manual-install',
           label: 'Manual Install',
-        },
-        {
-          type: 'doc',
-          id: 'getting-started/build-with-ai',
-          label: 'Build with AI',
         },
         {
           type: 'doc',
@@ -436,68 +426,6 @@ const sidebars = {
               type: 'doc',
               id: 'capabilities/channels/other-adapters',
               label: 'More',
-            },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'RAG',
-          items: [
-            {
-              type: 'doc',
-              id: 'rag/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'rag/chunking-and-embedding',
-              label: 'Chunking and Embedding',
-            },
-            {
-              type: 'doc',
-              id: 'rag/vector-databases',
-              label: 'Vector Databases',
-            },
-            {
-              type: 'doc',
-              id: 'rag/retrieval',
-              label: 'Retrieval',
-            },
-            {
-              type: 'doc',
-              id: 'rag/graph-rag',
-              label: 'GraphRAG',
-            },
-          ],
-        },
-        {
-          type: 'category',
-          label: 'Voice',
-          items: [
-            {
-              type: 'doc',
-              id: 'voice/overview',
-              label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'voice/text-to-speech',
-              label: 'Text to Speech',
-            },
-            {
-              type: 'doc',
-              id: 'voice/speech-to-text',
-              label: 'Speech to Text',
-            },
-            {
-              type: 'doc',
-              id: 'voice/speech-to-speech',
-              label: 'Speech to Speech',
-            },
-            {
-              type: 'doc',
-              id: 'voice/realtime-voice',
-              label: 'Realtime Voice',
             },
           ],
         },

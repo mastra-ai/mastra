@@ -1,26 +1,105 @@
 ---
 title: "Storage"
-description: Store Mastra application data.
+description: Store runtime state for Mastra agents, workflows, memory, and observability.
 packages:
-  - "mastra"
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/pg"
 ---
 
 # Storage
 
-Placeholder content for this page.
+Mastra storage gives runtime features a shared place to keep state. An adapter can hold that state in process or persist it in a database. Without a configured adapter, Mastra uses an in-memory store. That is useful for tests, but all data is lost when the process exits.
+
+Persistent storage keeps memory and other records available across restarts. For workflows, stored snapshots enable recovery or resume after the process restarts; storage doesn't keep workflow code running while the process is stopped.
+
+For local development, configure a file-backed libSQL store on the Mastra instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: `file:${process.cwd()}/mastra.db`,
+  }),
+})
+```
+
+Mastra initializes the adapter's storage structures on first use. Use a durable remote database when multiple processes need the same state or when local files won't survive a deployment.
 
 ## Storage domains
 
-Placeholder content for this section.
+Storage is split into domains. Each domain defines the operations for one kind of runtime data, and an adapter can implement one or more domains. Mastra features request the domain they need instead of depending on a specific database.
+
+The main domains are:
+
+| Domain | Stored data |
+| - | - |
+| `memory` | Conversation threads, messages, resources, and working memory |
+| `workflows` | Run snapshots used for durable execution, suspend, and resume |
+| `observability` | Traces, spans, logs, metrics, and feedback |
+| `scores`, `datasets`, `experiments` | Evaluation inputs and results |
+| `backgroundTasks`, `schedules`, `threadState` | Long-running work, triggers, and agent task state |
+| Editor domains | Agents, prompt blocks, skills, workspaces, and related configuration |
+
+Domain support differs between adapters. Before choosing one, check that it implements every domain your application uses. Memory also needs a separate vector store and embedder when you enable semantic recall; the storage adapter persists the underlying memory records.
 
 ## Storage scope
 
-Placeholder content for this section.
+Storage configured on `new Mastra({ storage })` is instance-scoped. Registered agents, workflows, evaluations, schedules, and other runtime features share it. A `Memory` instance without its own adapter also receives this storage and uses its `memory` domain.
+
+You can give one `Memory` instance its own storage when an agent needs a separate database or isolation boundary. Pass the adapter as `new Memory({ storage })`. This override affects that memory instance, not workflow or observability data.
+
+Resource scope is different from storage-instance scope. In memory calls, a stable `resource` identifies the owner of data, such as a user or account, while a `thread` identifies one conversation. Resource-scoped memory can be shared across that resource's threads, but it remains in the same configured backend. Resource IDs partition queries; they don't select a provider or enforce authorization. Verify access in your application before reading or writing a resource.
 
 ## Composite storage
 
-Placeholder content for this section.
+Use a composite store when one backend isn't suitable for every domain. Set a default adapter, then replace selected domains. Explicit domain overrides take precedence over the default.
+
+This example keeps most data in libSQL and routes workflow snapshots to PostgreSQL:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { LibSQLStore } from '@mastra/libsql'
+import { WorkflowsPG } from '@mastra/pg'
+
+const storage = new MastraCompositeStore({
+  id: 'composite-storage',
+  default: new LibSQLStore({
+    id: 'default-storage',
+    url: `file:${process.cwd()}/mastra.db`,
+  }),
+  domains: {
+    workflows: new WorkflowsPG({
+      connectionString: process.env.DATABASE_URL!,
+    }),
+  },
+})
+
+export const mastra = new Mastra({ storage })
+```
+
+Composite storage is useful for routing high-volume observability data to an analytics backend, keeping durable workflow state in a transactional database, or separating editor configuration from runtime records. Start with one adapter and add routing only when domain requirements differ.
 
 ## Providers
 
-Placeholder content for this section.
+Choose a provider by workload and operating environment, not by feature count alone:
+
+- **Local development**: A file-backed adapter such as libSQL starts without a separate database service.
+- **Production runtime state**: Prefer a durable managed database with backups, connection pooling, and support for concurrent application instances.
+- **Domain coverage**: Confirm support for memory, schedules, observability, or other domains your application enables.
+- **Workload shape**: Memory and workflow state favor transactional reads and writes. High-volume telemetry may fit a dedicated analytics store.
+- **Deployment constraints**: Check network access, credentials, latency, data residency, and whether the platform has an ephemeral filesystem.
+
+The same application can move from a local adapter to a managed provider without changing feature code because domains provide the common boundary.
+
+## What to read next
+
+- <a href="/guides/storage/overview" target="_blank" rel="noreferrer">Storage guide</a>: Configure local and production storage in more depth.
+- <a href="/guides/memory/overview" target="_blank" rel="noreferrer">Memory guide</a>: Persist conversation history and resource-scoped context.
+- <a href="/guides/workflows/overview" target="_blank" rel="noreferrer">Workflow guide</a>: Store snapshots for suspend, resume, and durable execution.
+- <a href="/guides/observability/storage" target="_blank" rel="noreferrer">Observability storage</a>: Route telemetry through storage exporters and dedicated backends.

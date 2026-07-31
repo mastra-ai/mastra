@@ -1,26 +1,83 @@
 ---
 title: "Browser"
-description: Automate browsers with Mastra.
+description: "Give Mastra agents browser tools for local, hosted, and command-line automation."
 packages:
-  - "mastra"
+  - "@mastra/core"
+  - "@mastra/agent-browser"
+  - "@mastra/stagehand"
+  - "@mastra/browser-firecrawl"
+  - "@mastra/browser-viewer"
 ---
 
 # Browser
 
-Placeholder content for this page.
+Mastra browser providers give agents tools for navigating websites, interacting with page elements, and extracting data. Use them when a task needs a real browser for rendered pages, authentication, forms, or multi-step interactions.
 
 ## Introduction
 
-Placeholder content for this section. Show screencast in Studio.
+Attach an SDK browser provider to an agent through its `browser` property. Mastra adds that provider's tools to the agent and starts the browser when a tool first needs it.
+
+```typescript title="src/mastra/agents/browser-agent.ts"
+import { AgentBrowser } from '@mastra/agent-browser'
+import { Agent } from '@mastra/core/agent'
+
+export const browserAgent = new Agent({
+  id: 'browser-agent',
+  name: 'Browser Agent',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  instructions: 'Use browser tools to complete web tasks and verify each result.',
+  browser: new AgentBrowser(),
+})
+```
+
+Local providers launch headless Chromium by default. Each agent thread gets an isolated browser unless you select shared scope. Providers can also connect to an existing local or hosted browser through a Chrome DevTools Protocol (CDP) URL. A CDP connection is shared because Mastra doesn't control the external browser's process or isolation.
 
 ## Providers
 
-Placeholder content for this section.
+Choose a provider based on how the agent should identify elements and where the browser should run:
+
+| Provider | Interaction model | Browser runtime |
+| - | - | - |
+| `AgentBrowser` | Takes an accessibility snapshot, then targets stable element refs for explicit actions | Local Chromium or any CDP-compatible service |
+| `StagehandBrowser` | Uses natural-language instructions to observe, act, and extract | Local Chromium or Browserbase |
+| `FirecrawlBrowser` | Uses the same accessibility-ref tools as `AgentBrowser` | Firecrawl Browser Sandbox |
+| `BrowserViewer` | Lets an agent run a supported browser CLI through workspace commands | Mastra-managed Chrome or an existing CDP browser |
+
+`AgentBrowser`, `StagehandBrowser`, and `FirecrawlBrowser` are SDK providers assigned to `Agent.browser`. `BrowserViewer` is a CLI provider assigned to `Workspace.browser`; it doesn't add SDK browser tools.
+
+Start with `AgentBrowser` for predictable, fine-grained actions. Use Stagehand when natural-language element selection or AI-assisted extraction is useful. Choose Firecrawl when the runtime can't launch Chromium or when hosted sessions and profiles should be managed by Firecrawl.
 
 ## Recording
 
-Placeholder content for this section.
+Browser recording is an opt-in beta feature for `AgentBrowser`, `FirecrawlBrowser`, and `StagehandBrowser`. Enabling it adds `browser_record` for starting, stopping, and checking a recording, plus `browser_record_caption` for adding short captions.
+
+```typescript
+const browser = new AgentBrowser({
+  recording: {
+    outputDir: './browser-recordings',
+  },
+})
+```
+
+Recordings are written as Motion-JPEG AVI files without `ffmpeg`. They are intended for short reviews and debugging sessions, not continuous capture. Recording is disabled by default and is separate from Studio's live browser viewer.
+
+## Studio browser viewer
+
+Studio can display a live screencast for an active browser session. The viewer shows the current URL and browser tool history, and it forwards mouse and keyboard input when the agent isn't executing a browser tool. It follows the selected thread, so isolated threads don't expose each other's browser sessions.
+
+Live viewing requires WebSocket support from `ws` and `@hono/node-ws`. If those optional packages aren't available, browser tools still work, but Studio doesn't open a live stream. The viewer waits for the agent to launch a browser and reconnects when a provider restarts or changes tabs.
 
 ## CLI browser automation
 
-Placeholder content for this section.
+Use `BrowserViewer` when an agent already knows a command-line browser tool such as `agent-browser`, `browser-use`, or `browse`. Configure it on a workspace, install the selected CLI in that workspace's environment, and give the agent the corresponding skill. When the agent calls `workspace_execute_command`, Mastra launches Chrome if needed and injects the correct CDP flag into recognized CLI commands. Studio can show the same browser through the live viewer.
+
+This path is useful for coding and workspace agents whose browser procedures are expressed as shell commands. Use an SDK provider instead when you want typed browser tools directly in the agent's toolset.
+
+Mastra Code also has a `/browser` setup command. It enables `AgentBrowser` or `StagehandBrowser` for the current coding session and supports local Chromium, Browserbase through Stagehand, custom browser executables, profiles, storage state, and existing CDP endpoints. Use `/browser status`, `/browser on`, or `/browser off` to inspect or change the active setup.
+
+## What to read next
+
+- <a href="/guides/browser/agent-browser" target="_blank" rel="noreferrer">Automate with AgentBrowser</a>: Use accessibility snapshots and element refs for explicit browser actions.
+- <a href="/ecosystem/browser-integrations/stagehand" target="_blank" rel="noreferrer">Automate with Stagehand</a>: Use natural-language actions and Browserbase-hosted sessions.
+- <a href="/ecosystem/browser-integrations/firecrawl" target="_blank" rel="noreferrer">Automate with Firecrawl</a>: Run accessibility-ref browser tools in hosted Firecrawl sessions.
+- <a href="/guides/browser/browser-viewer" target="_blank" rel="noreferrer">Run browser CLI tools</a>: Connect workspace commands to a managed browser and Studio viewer.

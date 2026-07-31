@@ -1,42 +1,122 @@
 ---
 title: "Evals"
-description: Evaluate Mastra applications.
+description: Measure agent and workflow quality with scorers, datasets, feedback, and repeatable checks.
 packages:
-  - "mastra"
+  - "@mastra/core"
+  - "@mastra/evals"
 ---
 
 # Evals
 
-Placeholder content for this page.
+Evals measure how an agent or workflow behaves when exact output varies between runs. A scorer evaluates a run and returns a numeric score, usually from 0 to 1. Use scores to catch regressions, compare changes, and inspect failures instead of treating one good response as proof of quality.
+
+Start with one criterion on a few representative inputs. Add deterministic checks and pass criteria next. Move stable cases into a versioned dataset, then run the same evaluation in continuous integration (CI).
 
 ## Built-in scorers
 
-Placeholder content for this section.
+Mastra provides model-graded and code-based scorers in `@mastra/evals`. Choose a scorer for one behavior at a time, such as answer relevancy, faithfulness to supplied context, semantic similarity to ground truth, toxicity, or tool-call accuracy. Check the scorer's direction before setting a target because some scores are better when low.
+
+Run a scorer against a small input set with `runEvals()`:
+
+```typescript title="src/mastra/evals/support.ts"
+import { runEvals } from '@mastra/core/evals'
+import { createAnswerRelevancyScorer } from '@mastra/evals/scorers/prebuilt'
+import { supportAgent } from '../agents/support-agent'
+
+const result = await runEvals({
+  target: supportAgent,
+  data: [{ input: 'How do I reset my password?' }],
+  scorers: [createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' })],
+})
+
+console.log(result.scores)
+```
+
+`result.scores` contains each scorer's average across the data items. Model-graded scorers add latency and cost, so use them for criteria that need semantic judgment. Scorers can also be attached to agents or workflow steps for sampled, asynchronous scoring of live runs.
 
 ## Custom scorers
 
-Placeholder content for this section.
+Create a scorer when the built-in criteria don't express an application requirement. `createScorer()` supports a four-stage pipeline: optional preprocessing, optional analysis, required score generation, and an optional reason. Each stage can use code, while prompt-based stages can use a judge model.
+
+Prefer code when the rule is deterministic. This scorer checks that an agent produced output:
+
+```typescript title="src/mastra/scorers/has-output.ts"
+import { createScorer } from '@mastra/core/evals'
+
+export const hasOutput = createScorer({
+  id: 'has-output',
+  name: 'Has output',
+  description: 'Checks whether the agent returned at least one message',
+  type: 'agent',
+}).generateScore(({ run }) => (run.output.length > 0 ? 1 : 0))
+```
+
+Use a judge model for criteria such as clarity or policy adherence that can't be reduced to a stable rule. Keep the rubric narrow, return a reason when failures need diagnosis, and validate a judge against human-reviewed examples before trusting its score.
 
 ## Quick checks
 
-Placeholder content for this section.
+Quick checks are deterministic scorers from `@mastra/evals/checks`. They cover common text and tool assertions without a model call. For example, `checks.includes('refund')`, `checks.calledTool('lookupOrder')`, and `checks.noToolErrors()` can all be passed to the same `scorers` array as a model-graded scorer.
+
+Use checks first for requirements that code can prove. They run quickly, cost no model tokens, and make failures easier to explain. Add model-graded scoring only for the remaining qualitative behavior.
 
 ## Gates and verdicts
 
-Placeholder content for this section.
+For agent targets, use `gates` for hard requirements and threshold-bearing scorer configs for quality targets. These options aren't supported by the workflow overloads of `runEvals()`.
+
+An agent eval with a gate or threshold returns one verdict:
+
+- `passed`: All gates and thresholds passed.
+- `scored`: Gates passed, but at least one threshold was missed.
+- `failed`: At least one gate failed.
+
+For example, use `gates: [checks.noToolErrors()]` and `scorers: [{ scorer: relevancy, threshold: 0.8 }]`. Keep other scorers bare when you want to track them without affecting the verdict.
 
 ## Multi-turn evals
 
-Placeholder content for this section.
+Multi-turn evals apply to agents. Use them when quality depends on conversation history, follow-up questions, or a sequence of tool calls. An item with `inputs: ['My order is 123', 'Where is it?']` runs both turns on one thread and scores the combined output. The agent needs memory to recall earlier turns.
+
+Use `turns` instead when a check must apply to one specific response. Each turn can define its own gates and scorers, while top-level scorers can still assess the conversation as a whole.
 
 ## Datasets
 
-Placeholder content for this section.
+Move representative cases into a dataset after the criteria settle. Items hold inputs and optional ground truth, metadata, or tool mocks. Dataset versions make past experiment runs reproducible.
+
+With supported storage configured, use `mastra.datasets` to create a dataset and run experiments against agents or workflows. Stored results let you compare prompts, models, and code changes. Use tool mocks when an agent experiment must avoid selected side effects.
 
 ## Feedback
 
-Placeholder content for this section.
+Feedback captures human signals such as ratings, comments, and corrections. It isn't an automated score. With a supported observability implementation, attach feedback to a persisted trace or span so it stays connected to the run that produced it.
+
+Use feedback to find weak production cases, compare automated scores with user judgment, and choose examples for a dataset.
 
 ## CI
 
-Placeholder content for this section.
+Run a small, stable agent suite on each change. Use quick checks as gates, threshold-bearing scorer configs for quality, and assert the verdict:
+
+```typescript title="src/mastra/evals/support.test.ts"
+import { expect, it } from 'vitest'
+import { runEvals } from '@mastra/core/evals'
+import { checks } from '@mastra/evals/checks'
+import { relevancy } from '../scorers/relevancy'
+import { supportAgent } from '../agents/support-agent'
+
+it('meets the support baseline', async () => {
+  const result = await runEvals({
+    target: supportAgent,
+    data: [{ input: 'Cancel order 123' }],
+    gates: [checks.calledTool('cancelOrder'), checks.noToolErrors()],
+    scorers: [{ scorer: relevancy, threshold: 0.8 }],
+  })
+
+  expect(result.verdict).toBe('passed')
+})
+```
+
+Keep this suite fast. Move larger regressions to a pinned dataset version, mock side effects, and tighten thresholds only after reviewing normal score variation.
+
+## What to read next
+
+- <a href="/guides/evals/overview" target="_blank" rel="noreferrer">Evals guide</a>: Configure scorers and run evaluations in more depth.
+- <a href="/guides/evals/quick-checks" target="_blank" rel="noreferrer">Add quick checks</a>: Cover deterministic text and tool behavior first.
+- <a href="/guides/evals/datasets/overview" target="_blank" rel="noreferrer">Build a dataset</a>: Store versioned cases and ground truth.
+- <a href="/guides/evals/running-in-ci" target="_blank" rel="noreferrer">Run evals in CI</a>: Add repeatable quality checks to a test suite.

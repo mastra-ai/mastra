@@ -27,9 +27,9 @@ export const pages: PageConfig[] = [
   { path: '/models', name: 'Models – Index' },
   { path: '/models/providers/openai', name: 'Models – OpenAI' },
 
-  // --- Ecosystem ---
-  { path: '/ecosystem/agent-frameworks-and-ui/ai-sdk-ui', name: 'Ecosystem – AI SDK UI' },
-  { path: '/ecosystem/app-frameworks/next-js', name: 'Ecosystem – Next.js' },
+  // --- Integrations ---
+  { path: '/ecosystem/agent-frameworks-and-ui/ai-sdk-ui', name: 'Integrations – AI SDK UI' },
+  { path: '/ecosystem/app-frameworks/next-js', name: 'Integrations – Next.js' },
 
   // --- Reference ---
   { path: '/reference/configuration', name: 'Reference – Configuration' },

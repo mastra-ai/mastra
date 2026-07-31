@@ -66,6 +66,8 @@ const SECTIONS: SectionConfig[] = [
       /\/guides\/concepts\/.*/,
       /\/guides\/guide\/.*/,
       /\/guides\/migrations\/.*/,
+      /\/guides\/rag\/.*/,
+      /\/guides\/voice\/.*/,
       /\/agents\/networks/,
     ],
   },

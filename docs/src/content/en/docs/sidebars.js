@@ -7,7 +7,19 @@
 /** @type {import('@docusaurus/plugin-content-docs').SidebarsConfig} */
 const sidebars = {
   docsSidebar: [
-    { type: 'doc', id: 'index', label: 'Get Started' },
+    {
+      type: 'category',
+      label: 'Introduction',
+      collapsed: false,
+      collapsible: false,
+      customProps: {
+        displayAsGroup: true,
+      },
+      items: [
+        { type: 'doc', id: 'index', label: 'Getting Started' },
+        { type: 'doc', id: 'build-with-ai', label: 'Build with AI' },
+      ],
+    },
     {
       type: 'category',
       label: 'Build',
@@ -32,7 +44,7 @@ const sidebars = {
         displayAsGroup: true,
       },
       items: [
-        { type: 'doc', id: 'extend', label: 'Overview' },
+        { type: 'doc', id: 'extend', label: 'Skills' },
         { type: 'doc', id: 'sandboxes', label: 'Sandboxes' },
         { type: 'doc', id: 'browser', label: 'Browser' },
         { type: 'doc', id: 'channels', label: 'Channels' },
@@ -50,7 +62,7 @@ const sidebars = {
         displayAsGroup: true,
       },
       items: [
-        { type: 'doc', id: 'develop-deploy', label: 'Overview' },
+        { type: 'doc', id: 'develop-deploy', label: 'Local development' },
         { type: 'doc', id: 'deploy', label: 'Deploy' },
         { type: 'doc', id: 'storage', label: 'Storage' },
       ],
@@ -64,7 +76,7 @@ const sidebars = {
         displayAsGroup: true,
       },
       items: [
-        { type: 'doc', id: 'observe', label: 'Overview' },
+        { type: 'doc', id: 'observe', label: 'Tracing' },
         { type: 'doc', id: 'metrics', label: 'Metrics' },
         { type: 'doc', id: 'evals', label: 'Evals' },
       ],

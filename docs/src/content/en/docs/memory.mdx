@@ -1,34 +1,102 @@
 ---
 title: "Memory"
-description: Add memory to Mastra agents.
+description: Give Mastra agents persistent conversation context and recall.
 packages:
-  - "mastra"
+  - "@mastra/core"
+  - "@mastra/memory"
 ---
 
 # Memory
 
-Placeholder content for this page.
+Memory gives an agent context from earlier interactions. Use it when an agent needs to continue a conversation across requests, retain user or task information, or retrieve relevant details from a larger history.
+
+Memory does not train or modify the model. Mastra stores information outside the model and adds the relevant context to later requests.
+
+Add a `Memory` instance to an agent, then pass stable `resource` and `thread` identifiers when you call it:
+
+```typescript title="src/mastra/agents/assistant.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+
+export const assistant = new Agent({
+  id: 'assistant',
+  name: 'Assistant',
+  instructions: 'Answer questions using relevant conversation context.',
+  model: 'openai/gpt-5.6',
+  memory: new Memory({
+    options: {
+      generateTitle: {
+        model: 'openai/gpt-5.6-luna',
+        instructions: 'Generate a short conversation title.',
+      },
+    },
+  }),
+})
+
+const memory = {
+  resource: 'user-123',
+  thread: 'conversation-456',
+}
+
+await assistant.generate('Remember that I prefer concise answers.', { memory })
+const response = await assistant.generate('How should you answer me?', { memory })
+
+console.log(response.text)
+```
+
+The second request can use the preference stored with the first request because both calls use the same resource and thread. In a real application, derive these identifiers from your authenticated user and conversation records. Memory scopes data; it does not enforce authorization, so your application must still verify access.
 
 ## Message history
 
-Placeholder content for this section.
+Message history stores the messages in a thread and includes recent messages in later requests. It is the starting point for multi-turn chat, support conversations, and any agent that must understand what was said earlier.
+
+A `resource` usually represents the entity that owns the memory, such as a user or account. A `thread` identifies one conversation within that resource. Reuse both values to continue the same conversation; use a new thread to start a separate one.
+
+Message history requires persistent storage if it must survive process restarts or run across multiple application instances. See [message history](/guides/memory/message-history) for storage setup, thread creation, and history configuration.
 
 ## Observational Memory
 
-Placeholder content for this section.
+Long conversations eventually contain more messages than an agent should send to the model on every request. Observational Memory converts older conversation content into compact observations while preserving recent messages in detail.
+
+An Observer extracts useful facts, events, and continuity from accumulated messages. A Reflector can compress growing observations further. Use this when conversations are long-running and the agent needs durable continuity without repeatedly loading the full transcript.
+
+See [Observational Memory](/guides/memory/observational-memory) for thresholds, scope, and model configuration.
 
 ## Working memory
 
-Placeholder content for this section.
+Working memory stores durable context that is useful across requests but does not belong in the conversation transcript. Examples include user preferences, project requirements, a support case summary, or the current state of a task.
+
+It can use a Markdown template or structured JSON schema. Resource-scoped working memory can follow a user across threads, while thread-scoped working memory stays with one conversation. The agent can update it through the built-in working-memory tool unless you configure it as read-only.
+
+See [working memory](/guides/memory/working-memory) for templates, schemas, and scope options.
 
 ## Semantic recall
 
-Placeholder content for this section.
+Semantic recall retrieves earlier messages by meaning rather than only by recency. When a user refers to an older topic, Mastra embeds the latest query, searches stored message vectors, and adds relevant matches to the model context.
+
+Use it when important information may sit outside the recent message window. Semantic recall requires persistent storage, a vector store, and an embedding model. Retrieval can also include messages surrounding each match to preserve conversational context.
+
+See [semantic recall](/guides/memory/semantic-recall) for vector-store setup and retrieval controls.
 
 ## Memory processors
 
-Placeholder content for this section.
+Memory features run as processors around agent execution. Input processors retrieve and shape context before model calls; output processors can persist messages or derived information afterward. Processors run in their configured order, so each one receives the context produced by earlier processors.
+
+You can combine built-in processors or add custom ones to filter sensitive messages, trim context, prioritize information, or control what is stored. Keep the pipeline focused: more retrieved context is not always better context.
+
+See [memory processors](/guides/memory/memory-processors) for lifecycle behavior and custom processor configuration.
 
 ## Multi-user threads
 
-Placeholder content for this section.
+Multiple people can participate in the same thread by using the same resource and thread identifiers. This is useful for shared support cases, collaborative assistants, and group conversations.
+
+A shared thread does not automatically tell the model which person wrote each message. Include speaker identity in the message content or application-defined signals, and enforce membership and authorization in your application. Do not use `resource` as a substitute for participant identity.
+
+See [multi-user threads](/guides/memory/multi-user-threads) for patterns that preserve speaker context.
+
+## What to read next
+
+- [Memory overview guide](/guides/memory/overview): configure storage and add memory to an agent.
+- [Message history](/guides/memory/message-history): persist and continue conversations with resources and threads.
+- [Working memory](/guides/memory/working-memory): retain structured user or task context outside the transcript.
+- [Observational Memory](/guides/memory/observational-memory): maintain continuity across long-running conversations.

@@ -1,28 +1,161 @@
 ---
 title: "Harness"
-description: Build an ongoing agent application around sessions, state, and long-running work.
+description: Build AI systems where the model directs work across tools, turns, schedules, and long-running execution.
 packages:
   - "@mastra/core"
 ---
 
 # Harness
 
-An agent harness is the runtime around an agent that turns model calls into an ongoing application. It manages conversations, state, permissions, and outside events while the agent handles messages and tools.
+An agent harness is the runtime around a model. The model supplies the intelligence, while the harness gives it an environment where that intelligence can do useful work.
 
-Use a harness for coding assistants, research operators, or collaborative agents that continue across many interactions. A direct [agent](/docs/agents) call is a better fit when one request produces one response. In Mastra, `AgentController` is the current API for the interactive harness layer.
+On its own, a model accepts input and returns output. It can't preserve work after the call ends, execute a command, inspect a file, search current information, or wake itself later. A harness connects the model to those capabilities and keeps the resulting decision loop running.
 
-Unlike file-based agents and workflows, an `AgentController` is configured in code. Give it a backing agent and at least one mode, then create a session for each user or resource:
+This changes who controls the work. In a conventional model-powered application, code defines each step and calls the model along the way. In a harness, the model interprets the objective, chooses tools, observes what happened, and decides what to do next. Application code sets the context, capabilities, and boundaries rather than prescribing every action.
+
+## Harness components
+
+A harness isn't one API. It is the set of capabilities the model can use to understand its environment, act within it, and continue making progress:
+
+- **[Workspace and filesystem](/docs/sandboxes)**: Give the agent a place to read, write, search, and preserve work outside its context window.
+- **[Tools](/docs/tools) and [MCP](/docs/mcp)**: Let the agent query systems and take actions instead of only describing what someone else should do.
+- **[Sandbox](/docs/sandboxes) and [browser](/docs/browser)**: Provide an execution environment where the agent can run commands, use software, inspect results, and correct its work.
+- **[Memory](/docs/memory)**: Carry conversation history and learned context across model calls.
+- **[Skills](/docs/extend) and [subagents](/docs/subagents)**: Load specialized instructions when needed and delegate focused work without filling the main context.
+- **Runtime**: Keep the agent working across tool calls, model turns, background events, disconnects, and restarts.
+
+Mastra lets you compose these pieces around an agent. For example, a workspace can supply a filesystem, command execution, and discoverable skills while the agent also receives application tools and memory:
+
+```typescript title="src/mastra/agents/coding-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace'
+import { memory } from '../memory'
+import { searchCode } from '../tools/search-code'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  skills: ['skills'],
+})
+
+export const codingAgent = new Agent({
+  id: 'coding-agent',
+  name: 'Coding Agent',
+  instructions: 'Inspect the project, make changes, and verify your work.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  workspace,
+  memory,
+  tools: { searchCode },
+})
+```
+
+Building the harness means choosing the context and capabilities the model needs, then defining where it can act and what limits apply.
+
+## Long-running runtime
+
+The runtime sustains the model's work beyond one request. It can preserve execution across turns, run for a long time, pause and wake when new input arrives, start work on a schedule, and respond to background events.
+
+### Durable agents
+
+Persistent session data doesn't make an in-flight model run durable by itself. A durable agent runs the agentic loop inside a workflow and publishes events through PubSub, so clients can disconnect and reconnect without losing the stream. Persisted run state can survive process restarts.
+
+Use durable execution when work may outlive an HTTP request or another client needs to observe an existing run. Regular `stream()` and `generate()` calls remain simpler for short, connected interactions. The <a href="/guides/long-running-agents/durable-agents" target="_blank" rel="noreferrer">durable agents guide</a> covers local, evented, and managed execution.
+
+Wrap an existing agent with `createDurableAgent()`, then consume its stream as usual:
+
+```typescript title="src/mastra/agents/durable-researcher.ts"
+import { createDurableAgent } from '@mastra/core/agent/durable'
+import { researcher } from './researcher'
+
+export const durableResearcher = createDurableAgent({ agent: researcher })
+
+const { output, runId } = await durableResearcher.stream('Research this topic')
+
+for await (const chunk of output.fullStream) {
+  console.log(chunk)
+}
+```
+
+Use `runId` to reconnect to the same execution with `observe()`.
+
+### Background tasks
+
+Background tasks let the agent dispatch a slow tool call and continue responding. When the task completes, Mastra writes the result to memory and can re-enter the agent loop so the model can act on it.
+
+Use this for long research jobs, queued external work, or delegated subagents that shouldn't block the first response. Background tasks require storage and explicit configuration on both the Mastra runtime and eligible tools. See the <a href="/guides/long-running-agents/background-tasks" target="_blank" rel="noreferrer">background tasks guide</a> for dispatch, progress events, and concurrency controls.
+
+### Goals
+
+A durable goal attaches an objective to a thread. After each agent iteration, a judge model evaluates progress and keeps the loop working until the objective passes or its run budget is exhausted.
+
+Goals fit work that spans messages and needs explicit completion criteria. They require memory, storage, and a judge model. For a one-call completion check, use an agent scorer instead. The <a href="/guides/long-running-agents/goals" target="_blank" rel="noreferrer">goals guide</a> explains objective state and evaluation. Goals are currently beta.
+
+Set an objective on a memory-backed thread, then start or wake the agent on that thread:
+
+```typescript
+await worker.setObjective('Add and test a health endpoint', {
+  threadId: 'thread_123',
+  resourceId: 'project_456',
+})
+
+await worker.stream('Start working on the objective.', {
+  memory: { thread: 'thread_123', resource: 'project_456' },
+})
+```
+
+### Schedules
+
+Schedules send a prompt to an agent on a cron cadence. A threadless schedule starts an isolated run, while a threaded schedule adds the prompt to an existing conversation and can wake its agent.
+
+Use schedules for recurring reports, checks, or reminders. Schedule records are persisted and require a storage adapter with schedule support. The <a href="/guides/long-running-agents/schedules" target="_blank" rel="noreferrer">schedules guide</a> covers cadence, thread delivery, and lifecycle hooks. Schedules are currently beta.
+
+Create a schedule through the Mastra runtime. Add `threadId` and `resourceId` when each run should join an existing conversation:
+
+```typescript
+await mastra.schedules.create({
+  agentId: 'researcher',
+  cron: '0 9 * * 1-5',
+  prompt: 'Summarize new findings since the previous report.',
+  threadId: 'thread_123',
+  resourceId: 'project_456',
+})
+```
+
+### Waking agents
+
+Input doesn't need to originate from the request that started a run. When the thread is active, a message or system event can enter the loop or queue for later. When the thread is idle, the same input can wake the agent.
+
+This makes the harness responsive to webhooks, background systems, and multiplayer conversations. Subscribe to the thread before sending input when a client needs to receive the stream that wakes in response. The <a href="/guides/long-running-agents/signals" target="_blank" rel="noreferrer">thread messaging guide</a> covers delivery behavior and reconnectable subscriptions.
+
+### Steering agents
+
+Steering changes what an active agent is doing. Call `sendMessage()` to inject user input into the running loop. Call `queueMessage()` when the current run should finish before the next message starts.
+
+```typescript
+const thread = {
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+}
+
+await agent.sendMessage('Stop editing and explain the current failure first.', thread)
+await agent.queueMessage('After that, add a regression test.', thread)
+```
+
+The distinction matters in interactive products: immediate messages redirect current work, while queued messages preserve turn order. Both operate on a thread and emit events your interface can render.
+
+## AgentController
+
+Use `AgentController` when an interactive application needs explicit sessions, structured state, or modes. It is currently beta.
+
+### Sessions and state
+
+A session holds one user's live runtime state, including its active thread, mode, model, approvals, queued follow-ups, and display snapshot. One controller can serve multiple isolated sessions.
+
+Give the controller a backing agent and at least one mode, then create a session for each user or resource:
 
 ```typescript title="src/mastra/agent-controller.ts"
-import { Agent } from '@mastra/core/agent'
 import { AgentController } from '@mastra/core/agent-controller'
-
-const assistant = new Agent({
-  id: 'assistant',
-  name: 'Assistant',
-  instructions: 'Help the user plan and complete technical work.',
-  model: 'openai/gpt-5.6',
-})
+import { assistant } from './agents/assistant'
 
 export const agentController = new AgentController({
   id: 'assistant-controller',
@@ -42,66 +175,11 @@ const session = await agentController.createSession({
   id: 'session_123',
   ownerId: 'user_123',
 })
-
-session.subscribe(event => console.log(event))
-await session.sendMessage({ content: 'Plan a migration for this service.' })
 ```
-
-`sendMessage()` runs the backing agent in the session's active thread. The subscription receives typed events for messages, tools, approvals, mode changes, and display state. `AgentController` is currently beta.
-
-## Durable agents
-
-Persistent session data doesn't make an in-flight model run durable by itself. A durable agent runs the agentic loop inside a workflow and publishes events through PubSub, so clients can disconnect and reconnect without losing the stream. Persisted run state can survive process restarts.
-
-Use durable execution when work may outlive an HTTP request or another client needs to observe an existing run. Regular `stream()` and `generate()` calls remain simpler for short, connected interactions. The <a href="/guides/long-running-agents/durable-agents" target="_blank" rel="noreferrer">durable agents guide</a> covers local, evented, and managed execution.
-
-## Background tasks
-
-Background tasks let the agent dispatch a slow tool call and continue responding. When the task completes, Mastra writes the result to memory and can re-enter the agent loop so the model can act on it.
-
-Use this for long research jobs, queued external work, or delegated subagents that shouldn't block the first response. Background tasks require storage and explicit configuration on both the Mastra runtime and eligible tools. See the <a href="/guides/long-running-agents/background-tasks" target="_blank" rel="noreferrer">background tasks guide</a> for dispatch, progress events, and concurrency controls.
-
-## Goals
-
-A durable goal attaches an objective to a thread. After each agent iteration, a judge model evaluates progress and keeps the loop working until the objective passes or its run budget is exhausted.
-
-Goals fit work that spans messages and needs explicit completion criteria. They require memory, storage, and a judge model. For a one-call completion check, use an agent scorer instead. The <a href="/guides/long-running-agents/goals" target="_blank" rel="noreferrer">goals guide</a> explains objective state and evaluation. Goals are currently beta.
-
-## Schedules
-
-Schedules send a prompt to an agent on a cron cadence. A threadless schedule starts an isolated run, while a threaded schedule adds the prompt to an existing conversation and can wake its agent.
-
-Use schedules for recurring reports, checks, or reminders. Schedule records are persisted and require a storage adapter with schedule support. The <a href="/guides/long-running-agents/schedules" target="_blank" rel="noreferrer">schedules guide</a> covers cadence, thread delivery, and lifecycle hooks. Schedules are currently beta.
-
-## Waking agents
-
-Input doesn't need to originate from the request that started a run. When the thread is active, a message or system event can enter the loop or queue for later. When the thread is idle, the same input can wake the agent.
-
-This makes the harness responsive to webhooks, background systems, and multiplayer conversations. Subscribe to the thread before sending input when a client needs to receive the stream that wakes in response. The <a href="/guides/long-running-agents/signals" target="_blank" rel="noreferrer">thread messaging guide</a> covers delivery behavior and reconnectable subscriptions.
-
-## Steering agents
-
-Steering changes what an active agent is doing. Call `session.steer()` to inject a new instruction into the running loop. Call `session.followUp()` when the current run should finish before the next message starts.
-
-```typescript
-await session.steer({
-  content: 'Stop editing and explain the current failure first.',
-})
-
-await session.followUp({
-  content: 'After that, add a regression test.',
-})
-```
-
-The distinction matters in interactive products: steering redirects current work, while follow-ups preserve turn order. Both operate on the session's active thread and emit events your interface can render.
-
-## Sessions and state
-
-The `AgentController` is the shared host. A session holds one user's live runtime state, including its active thread, mode, model, approvals, queued follow-ups, and display snapshot. One controller can serve multiple isolated sessions.
 
 Configure storage when threads and structured state must survive restarts. Use a `stateSchema` for application values shared by the agent and interface, such as project settings or progress. The <a href="/guides/agent-controller/session" target="_blank" rel="noreferrer">session guide</a> explains the live runtime, while <a href="/guides/agent-controller/threads-and-state" target="_blank" rel="noreferrer">threads and state</a> covers persistence.
 
-## Modes
+### Modes
 
 Modes change the agent's operating profile without replacing its conversation. Each mode can layer instructions, tools, tool visibility, and a default model over the shared backing agent. The session keeps its thread and state when it switches modes.
 
@@ -129,16 +207,13 @@ await session.mode.switch({ modeId: 'build' })
 
 Every controller requires at least one mode. Multiple modes fit phase changes such as plan, build, and review, especially when each phase needs different permissions. The <a href="/guides/agent-controller/modes" target="_blank" rel="noreferrer">modes guide</a> covers tool policies and transitions.
 
-## Relevant guides
+## What to read next
 
-Guides provide longer, task-oriented coverage of harness behavior:
+Continue with guides that cover harness behavior, persistence, and runtime controls:
 
-- <a href="/guides/agent-controller/overview" target="_blank" rel="noreferrer">AgentController guide</a>: Build the interactive session layer around an agent.
-- <a href="/guides/long-running-agents/durable-agents" target="_blank" rel="noreferrer">Durable agents</a>: Keep execution observable across disconnects and restarts.
-- <a href="/guides/long-running-agents/signals" target="_blank" rel="noreferrer">Thread messaging</a>: Wake, steer, and send outside input to agents.
-
-## What to do next
-
-- <a href="/guides/agent-controller/threads-and-state" target="_blank" rel="noreferrer">Persist sessions and state</a> so users can resume ongoing work.
-- <a href="/guides/agent-controller/tool-approvals" target="_blank" rel="noreferrer">Add tool approval policies</a> before the agent performs sensitive actions.
-- <a href="/guides/getting-started/quickstart" target="_blank" rel="noreferrer">Create a starter harness</a> with memory, workspace tools, storage, and observability already configured.
+- <a href="/guides/long-running-agents/durable-agents" target="_blank" rel="noreferrer">Keep agent runs durable</a>: Preserve execution and streams across disconnects and restarts.
+- <a href="/guides/long-running-agents/background-tasks" target="_blank" rel="noreferrer">Dispatch background tasks</a>: Move slow tool calls out of the initial response.
+- <a href="/guides/long-running-agents/signals" target="_blank" rel="noreferrer">Wake and steer agents</a>: Send messages and outside events to active or idle threads.
+- <a href="/guides/agent-controller/threads-and-state" target="_blank" rel="noreferrer">Persist sessions and state</a>: Let users resume ongoing work.
+- <a href="/guides/agent-controller/modes" target="_blank" rel="noreferrer">Define session modes</a>: Change instructions, tools, and models without replacing the conversation.
+- <a href="/guides/long-running-agents/schedules" target="_blank" rel="noreferrer">Schedule recurring work</a>: Run prompts on a cadence or wake an existing thread.

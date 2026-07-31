@@ -1,34 +1,117 @@
 ---
 title: "Channels"
-description: Connect channels to Mastra agents.
+description: Connect Mastra agents to messaging and collaboration platforms.
 packages:
-  - "mastra"
+  - "@mastra/core"
 ---
 
 # Channels
 
-Placeholder content for this page.
+Channels let an agent receive and answer messages in tools such as Slack, Discord, and Microsoft Teams. Mastra connects the agent to each platform through a Chat SDK adapter, maps platform conversations to Mastra memory threads, and returns agent output to the originating conversation.
+
+Use channels when people should interact with an agent where they already communicate. The same agent pipeline still applies, including tools, memory, processors, streaming, and tool approval.
 
 ## Supported channels
 
-Placeholder content for this section.
+Mastra has setup guides for Slack, Microsoft Teams, Discord, Telegram, and WhatsApp. Compatible Chat SDK adapters also connect platforms such as GitHub, Linear, Google Chat, and Mattermost. Adapter capabilities vary by platform, especially for streaming, cards, attachments, and event delivery.
+
+One agent can register several adapters. Each adapter key identifies the platform in webhook routes and channel context.
 
 ## Add a channel
 
-Placeholder content for this section.
+Install the adapter for your platform, add it to the agent's `channels.adapters`, then register the agent and storage with Mastra. Channels require storage for thread mappings, subscriptions, and message state.
+
+This minimal Slack agent reads its platform credentials from the environment and stores channel state in a local database:
+
+```typescript title="src/mastra/index.ts"
+import { createSlackAdapter } from '@chat-adapter/slack'
+import { Agent } from '@mastra/core/agent'
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+
+const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Answer product questions clearly.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+  },
+})
+
+export const mastra = new Mastra({
+  agents: { supportAgent },
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: `file:${process.cwd()}/mastra.db`,
+  }),
+})
+```
+
+Mastra creates a `POST` webhook route at `/api/agents/<AGENT_ID>/channels/<PLATFORM>/webhook`. Configure that public URL in the platform. Some adapters, such as Discord, may also use a long-running gateway connection for regular messages and reactions.
 
 ## Handling events
 
-Placeholder content for this section.
+By default, Mastra handles direct messages, new mentions, and later messages in subscribed threads. Each event receives a fresh request context. Mastra adds channel, thread, message, and sender details under the `channel` key before the agent runs.
+
+Override a handler to reject an event, add request-scoped identity, or wrap the default behavior. Call `defaultHandler` to continue into the agent pipeline:
+
+```typescript
+channels: {
+  adapters: { slack: createSlackAdapter() },
+  handlers: {
+    onDirectMessage: async (thread, message, defaultHandler, ctx) => {
+      const user = await findUserBySlackId(message.author.userId)
+
+      if (!user) {
+        await thread.post('This account is not authorized.')
+        return
+      }
+
+      ctx.requestContext.set('userId', user.id)
+      await defaultHandler(thread, message)
+    },
+  },
+}
+```
+
+Set a built-in handler to `false` to disable that event type. After Mastra initializes, use `agent.getChannels()?.sdk` to register additional Chat SDK events such as reactions or new-message listeners.
 
 ## Sending messages
 
-Placeholder content for this section.
+The default handlers send the agent's response back to the source thread. Per-adapter options control whether text streams live or is buffered, how tool calls appear, and whether typing status is shown. Platform support determines whether streaming uses a native interface or repeated message edits.
+
+Inside a custom event handler, call `thread.post()` to send text or a platform-supported card. For messages outside an inbound event, retrieve the agent's channel instance and use the underlying adapter. Keep the platform thread ID with application state because outbound calls need a destination.
+
+Tools marked `requireApproval` can appear as interactive approval cards when the adapter supports them.
+
+:::warning
+
+When the resolved tool display is `text`, the approval message has no actionable buttons. Mastra sets `autoResumeSuspendedTools: true`, so suspended approval tools auto-resume and run without waiting for a user to approve them. AgentController channels use the equivalent auto-approval behavior. Don't treat `requireApproval` as a safety boundary on a plain-text-only adapter. For sensitive tools, enforce authorization in the handler, a processor, or the tool itself, or use an adapter mode that renders approval buttons.
+
+:::
 
 ## Security and authentication
 
-Placeholder content for this section.
+Channel webhook routes don't use Mastra server authentication because messaging platforms don't send your application's bearer token. The adapter instead verifies requests with platform credentials such as a signing secret, app secret, or webhook verification token. Configure the exact credentials and permissions required by the adapter, keep secrets in environment variables or a secret manager, and expose the webhook only over HTTPS.
+
+A valid platform request isn't necessarily an authorized application user. Check `message.author.userId` in a handler, or read `requestContext.get('channel')` in a processor or tool, before exposing private data or privileged actions. Treat membership in shared or external channels as access to the agent and everything its tools can reach.
+
+Grant the bot only the platform scopes it needs. Don't log raw credentials, webhook bodies containing secrets, or sensitive message content.
 
 ## Handling rich content
 
-Placeholder content for this section.
+Mastra converts formatted platform text to Markdown and passes supported uploads to the model as file parts. By default, PNG, JPEG, WebP, and PDF attachments are sent inline. Other attachment types become text metadata so models that don't accept them can still see that a file was attached.
+
+Set `inlineMedia` to the Multipurpose Internet Mail Extensions (MIME) types your model accepts, such as `['image/*', 'video/*']`. Use `inlineLinks` to promote links from selected domains to file parts. A string rule checks the URL's content type first; an object rule supplies a MIME type directly. Only allow trusted domains because the Mastra server may make a request to inspect matching links.
+
+Rich output depends on the adapter. Text works everywhere, while native streaming, cards, tool timelines, reactions, and generated-file uploads require platform support.
+
+## What to read next
+
+- <a href="/guides/capabilities/channels/overview" target="_blank" rel="noreferrer">Build with channels</a>: Configure webhooks, thread context, tool approval, and production deployment.
+- <a href="/guides/capabilities/channels/slack" target="_blank" rel="noreferrer">Connect Slack</a>: Create the Slack app, set credentials, and test direct messages and mentions.
+- <a href="/guides/capabilities/channels/discord" target="_blank" rel="noreferrer">Connect Discord</a>: Configure interactions and gateway events.
+- <a href="/guides/capabilities/channels/other-adapters" target="_blank" rel="noreferrer">Choose another adapter</a>: Check credentials, event delivery, and rich-content support for other platforms.

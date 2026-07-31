@@ -1,34 +1,108 @@
 ---
-title: "Observe"
-description: Observe Mastra applications.
+title: "Tracing"
+description: Trace agents, workflows, tools, and model calls in Mastra applications.
 packages:
-  - "mastra"
+  - "@mastra/core"
+  - "@mastra/observability"
 ---
 
-# Observe
+# Tracing
 
-Placeholder content for this page.
+Tracing records how a request moves through your Mastra application. It gives you a timeline for debugging agent decisions, workflow failures, tool calls, model latency, token use, and errors.
 
-## Tracing
+Start with a console exporter. Mastra instruments registered agents, workflows, tools, and model calls, so no manual spans are required for the main execution path:
 
-Placeholder content for this section.
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { ConsoleExporter, Observability } from '@mastra/observability'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'support-app',
+        exporters: [new ConsoleExporter()],
+      },
+    },
+  }),
+})
+```
+
+Run an agent or workflow and inspect the emitted spans. Replace or supplement the console exporter when you need persisted traces or a tracing backend.
+
+## Traces and spans
+
+A **trace** is one end-to-end execution. A **span** is one operation within it. An agent run or workflow run is usually the root span, with child spans for model generations, tool calls, memory operations, and workflow steps.
+
+Every span records a trace ID, span ID, parent relationship, timing, status, and operation-specific data. Inputs, outputs, attributes, metadata, and errors can also be included. Together, the parent-child relationships show what ran, in what order, and where time or failures occurred.
+
+Mastra creates this hierarchy automatically. Add a child span only when application code inside a tool or workflow step contains an operation worth measuring separately, such as a database query or external API call. Agent and workflow results expose `traceId` when the execution was sampled, which lets you correlate a user-visible failure with its trace.
 
 ## Sampling
 
-Placeholder content for this section.
+Sampling controls whether Mastra records a trace. The decision is made once at the root span and inherited by every child, so sampled traces remain complete rather than containing random gaps.
+
+Tracing uses `always` sampling when `sampling` is omitted. Keep that default during development, then use ratio sampling to reduce production volume:
+
+```typescript
+sampling: {
+  type: 'ratio',
+  probability: 0.1, // Record 10% of traces
+}
+```
+
+The available strategies are `always`, `never`, `ratio`, and `custom`. A ratio probability ranges from `0` to `1`. A custom sampler can inspect request context and root-span metadata, but it still decides before the trace runs. It can't retain a trace based on an error discovered later. When a trace isn't sampled, no spans are exported and the result's `traceId` is undefined.
 
 ## Logs
 
-Placeholder content for this section.
+Logs answer a different question from traces. A trace shows the structure and timing of one execution; logs record discrete messages and structured application data. Use spans for lifecycle and latency, and logs for details that don't belong in span fields.
+
+When a logger call runs inside a traced context, Mastra adds the current trace and span IDs. This lets supported destinations connect a log entry to the operation that produced it. Logs outside a trace are still valid but don't have that correlation.
+
+Observability log forwarding is enabled by default with a minimum level of `warn`. Set `logging.level` to `debug`, `info`, `warn`, `error`, or `fatal`, or set `logging.enabled` to `false`. This threshold is independent of the output level on your configured application logger. Exporter support for log events varies.
 
 ## Configuration
 
-Placeholder content for this section.
+Each entry in `configs` defines an observability pipeline with a service name, sampling policy, exporters or a bridge, log settings, and span processors. A config requires at least one exporter or bridge. With one config, Mastra uses it by default.
+
+Use multiple named configs only when requests need different destinations or sampling policies. Multiple configs require `configSelector`; if its selection is invalid, Mastra falls back to the first registered config. Keep one config until this routing is necessary.
+
+After the basic pipeline works, reduce noise with `excludeSpanTypes` or `spanFilter`, extract selected request-context values with `requestContextKeys`, and control payload truncation with `serializationOptions`. Internal framework spans remain hidden unless `includeInternalSpans` is enabled.
 
 ## Exporters
 
-Placeholder content for this section.
+Exporters send completed observability events to one or more destinations. Choose them by where you inspect traces:
+
+- `MastraStorageExporter`: Persists traces for Mastra Studio. It requires an observability-capable storage backend.
+- `MastraPlatformExporter`: Sends traces to the hosted Mastra platform when its credentials are configured.
+- Provider exporters: Send traces to systems such as Braintrust, Datadog, Langfuse, Sentry, or an OpenTelemetry Protocol (OTLP) endpoint.
+
+You can attach several exporters to one config. Keep `MastraStorageExporter` when you want Studio access alongside an external provider. In short-lived or serverless runtimes, call `await mastra.observability.flush()` before the process pauses or exits.
+
+An exporter sends Mastra spans out. A bridge instead connects Mastra to an existing distributed trace context. Use the [OpenTelemetry exporter](/ecosystem/observability-integrations/exporters/otel) for direct OTLP delivery, or the [OpenTelemetry bridge](/ecosystem/observability-integrations/bridges/otel) when Mastra spans must join active OpenTelemetry traces and preserve context in both directions.
 
 ## Sensitive data filtering
 
-Placeholder content for this section.
+Plain `configs` automatically receive a `SensitiveDataFilter` before export. It checks span input, output, attributes, metadata, and error information. Matching field names are case-insensitive, ignore separators, and must match exactly after normalization. Scalar values under common keys such as `password`, `token`, `apiKey`, `authorization`, and `ssn` are replaced with `[REDACTED]`. Objects and arrays under matching keys are filtered recursively, so non-sensitive nested fields can remain in the exported span.
+
+Key-based filtering doesn't detect secrets embedded in unstructured text or fields with application-specific names. Configure `sensitiveDataFilter.sensitiveFields` for your schema. That list replaces the defaults, so include every default and custom field you need. Test exported data before enabling a new destination.
+
+For a request whose entire payload is sensitive, omit all span inputs and outputs at export time:
+
+```typescript
+await supportAgent.generate('Summarize this private case.', {
+  tracingOptions: {
+    hideInput: true,
+    hideOutput: true,
+  },
+})
+```
+
+These options apply across the trace. They preserve execution structure and timing while excluding payloads from every child span. They don't redact separate application logs, so avoid logging sensitive values or filter them in the logging pipeline.
+
+## What to read next
+
+- <a href="/guides/observability/tracing/overview" target="_blank" rel="noreferrer">Trace metadata and custom spans</a>: Add tags, metadata, custom child spans, and external trace context.
+- <a href="/guides/studio/observability" target="_blank" rel="noreferrer">Inspect traces in Studio</a>: Persist and explore traces, logs, and metrics locally.
+- <a href="/guides/observability/logging" target="_blank" rel="noreferrer">Configure logging</a>: Set log levels and write correlated structured logs.
+- <a href="/ecosystem/observability-integrations/overview" target="_blank" rel="noreferrer">Choose an integration</a>: Compare exporters, bridges, and processors.

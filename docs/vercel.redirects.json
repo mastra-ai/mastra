@@ -7,7 +7,17 @@
     },
     {
       "source": "/docs/voice/livekit",
-      "destination": "/guides/voice/realtime-voice",
+      "destination": "/ecosystem/voice-integrations/livekit",
+      "permanent": true
+    },
+    {
+      "source": "/guides/voice/realtime-voice",
+      "destination": "/ecosystem/voice-integrations/livekit",
+      "permanent": true
+    },
+    {
+      "source": "/ecosystem/voice-integrations/realtime-voice",
+      "destination": "/ecosystem/voice-integrations/livekit",
       "permanent": true
     },
     {
@@ -42,6 +52,11 @@
     },
     {
       "source": "/docs/index",
+      "destination": "/docs",
+      "permanent": true
+    },
+    {
+      "source": "/guides",
       "destination": "/docs",
       "permanent": true
     },
@@ -657,7 +672,7 @@
     },
     {
       "source": "/docs/getting-started/mcp-docs-server",
-      "destination": "/guides/getting-started/build-with-ai",
+      "destination": "/docs/build-with-ai",
       "permanent": true
     },
     {
@@ -812,12 +827,17 @@
     },
     {
       "source": "/docs/build-with-ai/skills",
-      "destination": "/guides/getting-started/build-with-ai",
+      "destination": "/docs/build-with-ai",
       "permanent": true
     },
     {
       "source": "/docs/build-with-ai/mcp-docs-server",
-      "destination": "/guides/getting-started/build-with-ai",
+      "destination": "/docs/build-with-ai",
+      "permanent": true
+    },
+    {
+      "source": "/guides/getting-started/build-with-ai",
+      "destination": "/docs/build-with-ai",
       "permanent": true
     },
     {

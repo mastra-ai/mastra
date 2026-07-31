@@ -1,22 +1,102 @@
 ---
-title: "Extend"
-description: Extend Mastra with skills.
+title: "Skills"
+description: Give agents reusable, task-specific instructions that they load only when needed.
 packages:
-  - "mastra"
+  - "@mastra/core"
 ---
 
-# Extend
+# Skills
 
-Placeholder content for this page.
+Skills package instructions and supporting files for a specific kind of work. An agent sees which skills are available, then loads the relevant instructions when a request calls for them. This keeps specialized guidance out of the agent's base instructions until it is needed.
 
-## Skills
+Mastra skills follow the [Agent Skills specification](https://agentskills.io). You can define a skill in code, load it from the filesystem, or combine both approaches.
 
-Placeholder content for this section.
+## Define a skill in code
 
-## Import a skill
+Use `createSkill()` for a skill that belongs to one agent and doesn't need a workspace:
 
-Placeholder content for this section.
+```typescript title="src/mastra/agents/reviewer.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSkill } from '@mastra/core/skills'
+
+const codeReview = createSkill({
+  name: 'code-review',
+  description: 'Use when reviewing code changes.',
+  instructions: 'Check correctness, edge cases, and consistency.',
+})
+
+export const reviewer = new Agent({
+  id: 'reviewer',
+  name: 'Reviewer',
+  instructions: 'Review software changes.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  skills: [codeReview],
+})
+```
+
+The name identifies the skill. The description tells the model when to load it, and the instructions tell the model how to perform the task. Inline skills can also include reference documents that the agent reads on demand.
+
+## Load skills from files
+
+Use a skill folder when instructions need related references, scripts, or assets, or when several agents share the same skill:
+
+```text title="Skill folder"
+skills/
+  code-review/
+    SKILL.md
+    references/
+      review-checklist.md
+    scripts/
+      run-lint.sh
+```
+
+`SKILL.md` contains YAML frontmatter with a `name` and `description`, followed by Markdown instructions. The name must use lowercase letters, numbers, and hyphens, and it must match the folder name.
+
+Pass a skill folder path directly to an agent, or configure a workspace with one or more directories to discover:
+
+```typescript
+const reviewer = new Agent({
+  // ...
+  skills: ['./skills/code-review'],
+})
+
+const workspace = new Workspace({
+  filesystem,
+  skills: ['skills'],
+})
+```
+
+Agent paths suit a small, explicit set of skills. Workspace directories suit skills discovered from a shared filesystem. If an agent and its workspace provide a skill with the same name, the agent-level skill takes precedence.
+
+## How skills work
+
+Mastra adds available skill names and descriptions to the agent's system context. It also supplies three tools:
+
+- `skill`: Loads a skill's full instructions.
+- `skill_read`: Reads a file from the skill's `references`, `scripts`, or `assets` directory.
+- `skill_search`: Searches across skill content.
+
+The model chooses when to call these tools. Loading a skill returns its instructions as a tool result, so they remain in the conversation like other tool output. Skills don't maintain separate activation state. If compaction removes the instructions from context, the model can load the skill again.
+
+This is progressive disclosure: short metadata stays visible for selection, while detailed instructions and files enter context only when required. A skill can explain how to use existing tools, but it doesn't grant new permissions or execute a packaged script by itself. The agent still needs the relevant tools or workspace capabilities.
+
+## Choose where to attach skills
+
+Attach skills directly to an agent when they are part of that agent's definition. The `skills` option accepts skills created with `createSkill()`, filesystem paths, or a function that resolves either form from request context.
+
+Configure skills on a workspace when multiple agents should discover the same filesystem content. Workspace configuration also supports multiple directories, glob patterns, custom skill sources, and indexed search. Agents using that workspace receive its skills automatically.
+
+Both scopes can be used together. This lets a workspace provide shared organizational guidance while an individual agent overrides or adds task-specific behavior.
 
 ## When to use a skill
 
-Placeholder content for this section.
+Use a skill for reusable guidance that applies only to some requests, such as a release process, code review policy, research method, or support procedure. Skills work best when the description clearly states when to use them and the instructions define an actionable process.
+
+Keep behavior needed on every request in the agent's base instructions. Use a [tool](/docs/tools) when the agent must call application code, query a service, or take an action. A skill may teach the agent how and when to use that tool, but it doesn't replace the tool itself.
+
+## What to read next
+
+- <a href="/guides/agents/skills" target="_blank" rel="noreferrer">Define agent skills</a>: Start here for inline skills, filesystem paths, dynamic resolution, and programmatic access.
+- <a href="/guides/workspace/skills" target="_blank" rel="noreferrer">Configure workspace skills</a>: Discover shared skill folders and configure search or custom sources.
+- <a href="/docs/tools" target="_blank" rel="noreferrer">Create agent tools</a>: Add the operations that skill instructions can direct an agent to use.
+- <a href="https://agentskills.io/specification" target="_blank" rel="noreferrer">Read the Agent Skills specification</a>: Review the portable `SKILL.md` format and package conventions.

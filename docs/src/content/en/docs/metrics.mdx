@@ -1,22 +1,88 @@
 ---
 title: "Metrics"
-description: Track Mastra metrics.
+description: "Monitor the performance, usage, and estimated cost of Mastra applications."
 packages:
-  - "mastra"
+  - "@mastra/core"
+  - "@mastra/observability"
 ---
 
 # Metrics
 
-Placeholder content for this page.
+Metrics turn completed Mastra operations into numbers you can aggregate over time. Use them to monitor latency, token usage, estimated cost, throughput, and error trends across agents, workflows, tools, model calls, and processors.
+
+Use metrics when you need an aggregate view, such as a dashboard, trend, or alert. Use traces to inspect the sequence and data for one execution. Use evals to measure output quality against criteria or examples.
+
+Before running an in-process metrics query:
+
+1. Configure Mastra observability with `MastraStorageExporter` so completed spans and their metrics are persisted.
+1. Configure the observability storage domain with an analytics-capable store. A store that persists other Mastra data doesn't necessarily support metric queries.
+
+The following query returns average agent run duration from the last hour:
+
+```typescript title="src/metrics.ts"
+import { mastra } from './mastra'
+
+const observability = await mastra.getStorage()?.getStore('observability')
+if (!observability) throw new Error('Observability storage is not configured')
+
+const result = await observability.getMetricAggregate({
+  name: ['mastra_agent_duration_ms'],
+  aggregation: 'avg',
+  filters: {
+    timestamp: { start: new Date(Date.now() - 60 * 60 * 1000) },
+  },
+})
+
+console.log(result.value)
+```
 
 ## Automatic metrics
 
-Placeholder content for this section.
+Mastra derives metrics from spans when they finish. You don't need to add counters or timers to standard agent, workflow, tool, model, or processor operations.
+
+Automatic metrics reach storage when observability exports the completed spans to a store that supports metric queries. Sampling also applies: a span that isn't recorded can't produce stored automatic metrics. If you use local storage, remember that an in-memory store loses its data when the process exits.
+
+Each observation includes correlation context from its span, such as the trace and span IDs, entity names, environment, service, and request context when available. This lets a metrics dashboard link a latency or usage spike back to the execution that produced it.
 
 ## What Mastra measures
 
-Placeholder content for this section.
+Mastra emits these automatic measurements:
+
+- **Duration**: Execution time in milliseconds for agent runs, workflow runs, tool calls, model generations, and processor runs. Duration observations include a `status` label of `ok` or `error`.
+- **Token usage**: Total input and output tokens for model generations. When the model provider reports more detail, Mastra also records text, cache read, cache write, audio, image, and reasoning token counts.
+- **Estimated cost**: Cost context attached to token observations when Mastra can match the provider and model to pricing data. Token metrics still exist if a price can't be estimated.
+
+Common metric names include:
+
+| Metric | Measures |
+| - | - |
+| `mastra_agent_duration_ms` | Agent run duration |
+| `mastra_tool_duration_ms` | Tool call duration |
+| `mastra_workflow_duration_ms` | Workflow run duration |
+| `mastra_model_duration_ms` | Model generation duration |
+| `mastra_processor_duration_ms` | Processor run duration |
+| `mastra_model_total_input_tokens` | Total model input tokens |
+| `mastra_model_total_output_tokens` | Total model output tokens |
+
+Token details depend on the provider response. A missing cache, audio, image, or reasoning metric usually means the provider didn't report that category, not that its value was zero.
 
 ## Querying metrics
 
-Placeholder content for this section.
+Read metrics from the observability storage domain. Choose a query based on the result you need:
+
+- `getMetricAggregate()`: Return one value, such as total tokens or average duration.
+- `getMetricBreakdown()`: Group an aggregate by a dimension, such as agent name or status.
+- `getMetricTimeSeries()`: Bucket values by time for charts and trends.
+- `getMetricPercentiles()`: Calculate latency percentiles over time.
+- `listMetrics()`: Inspect individual metric observations.
+
+Queries can filter by time, metric name, entity, provider, model, environment, service, tags, and exact label values. Always set a time range for production queries. It limits the data scanned and makes the result's meaning explicit.
+
+Metric aggregates answer questions such as "Did p95 latency increase this week?" They don't explain why. After finding an outlier, use its trace correlation to inspect the relevant spans. If the question is whether responses are correct, relevant, or safe rather than how the system performs, use an eval instead.
+
+## What to read next
+
+- <a href="/guides/observability/metrics/overview" target="_blank" rel="noreferrer">Configure metrics</a>: Set up exporters and analytics-capable storage.
+- <a href="/guides/observability/metrics/querying" target="_blank" rel="noreferrer">Query metrics</a>: Use in-process, HTTP, and CLI query options.
+- [Inspect an execution with tracing](/docs/observe) when an aggregate reveals an outlier.
+- [Measure output quality with evals](/docs/evals) when latency and usage don't answer whether a result is correct.

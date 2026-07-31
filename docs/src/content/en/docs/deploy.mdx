@@ -1,42 +1,111 @@
 ---
 title: "Deploy"
-description: Deploy Mastra applications.
+description: Build and deploy Mastra applications as standalone servers, framework integrations, or worker processes.
 packages:
   - "mastra"
 ---
 
 # Deploy
 
-Placeholder content for this page.
+Deploy Mastra as a standalone API server or add it to an existing application. Start with the generated server unless your application already owns its HTTP stack.
 
 ## Deployment
 
-Placeholder content for this section.
+Build and run the default production artifact from the project root:
+
+```bash npm2yarn
+npm run build
+npm run start
+```
+
+`npm run build` writes a deployable Node.js server to `.mastra/output`. `npm run start` runs `.mastra/output/index.mjs`; you can also execute that file with Node.js. Deploy the output to a virtual machine, container, or platform as a service and provide production secrets through the host's environment.
+
+Use Node.js `v22.13.0` or later. For serverless or multi-instance deployments, use remote storage instead of a local database file. The local filesystem may be ephemeral, and separate instances don't share it.
 
 ## Mastra server
 
-Placeholder content for this section.
+The generated server uses Hono and exposes registered agents, workflows, tools, and other Mastra features over HTTP. Built-in application routes use the `/api` prefix, while `GET /health` provides a health check.
+
+Configure network behavior in the `server` property of your Mastra instance. Keep `server`, `bundler`, and `deployer` as direct properties of the object passed to `new Mastra()` so the build can read them:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  server: {
+    host: '0.0.0.0',
+    port: Number(process.env.PORT ?? 4111),
+  },
+})
+```
+
+The server configuration also controls cross-origin resource sharing (CORS), request timeouts, middleware, authentication, custom routes, and production OpenAPI output. See the <a href="/guides/server/mastra-server" target="_blank" rel="noreferrer">server guide</a> for the settings that affect a generated server.
 
 ## Server adapters
 
-Placeholder content for this section.
+Server adapters mount Mastra's routes into an application that already runs an HTTP framework. Official adapters support Express, Fastify, Hono, Koa, and Express-based NestJS. Create the framework app, pass it and your Mastra instance to the adapter, then call `init()` to register context, authentication, and routes.
+
+Use the framework to configure listening, CORS, and framework-native middleware. Mastra authentication and routes declared with `registerApiRoute()` remain part of the Mastra configuration. Routes mounted directly on the framework aren't protected by Mastra automatically; apply the adapter's auth middleware when they need the same protection. Read the <a href="/guides/server/server-adapters" target="_blank" rel="noreferrer">server adapters guide</a> for setup and middleware ordering.
 
 ## Authentication
 
-Placeholder content for this section.
+Configure authentication before exposing a Mastra server publicly. Without an auth provider, built-in routes, custom routes, and Studio are publicly accessible.
+
+Set `server.auth` to Simple Auth, JSON Web Token (JWT) auth, a supported identity provider, or a custom provider. Once configured, Mastra requires authentication for built-in and custom API routes by default. Set `requiresAuth: false` only on routes that must be public, such as a health check or verified webhook. The <a href="/guides/server/auth" target="_blank" rel="noreferrer">authentication guide</a> covers providers and Studio access.
 
 ## Custom API routes
 
-Placeholder content for this section.
+Use `registerApiRoute()` for HTTP behavior that isn't already exposed by Mastra. The handler receives request context and access to the Mastra instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { registerApiRoute } from '@mastra/core/server'
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute('/ready', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => c.json({ ready: true }),
+      }),
+    ],
+  },
+})
+```
+
+Custom paths are mounted as written, so this route is available at `/ready`, not `/api/ready`. Routes require authentication by default when server auth is configured. Add route middleware or OpenAPI metadata only when the endpoint needs it. See the <a href="/guides/server/custom-api-routes" target="_blank" rel="noreferrer">custom API routes guide</a> for request handling and streaming.
 
 ## Web frameworks
 
-Placeholder content for this section.
+Inside a full-stack framework, either call Mastra directly from the framework's server routes or mount the complete Mastra API through an adapter. Direct calls fit application-specific endpoints. The `@mastra/next` and `@mastra/tanstack-start` adapters create catch-all route handlers for clients that expect Mastra's standard HTTP API.
+
+Deploy the combined application with the framework's normal build and hosting process. The framework and host still determine function duration, request size, streaming support, and filesystem behavior. Mastra has integration guides for <a href="/ecosystem/app-frameworks/next-js" target="_blank" rel="noreferrer">Next.js</a>, <a href="/ecosystem/app-frameworks/astro" target="_blank" rel="noreferrer">Astro</a>, <a href="/ecosystem/app-frameworks/express" target="_blank" rel="noreferrer">Express</a>, <a href="/ecosystem/app-frameworks/hono" target="_blank" rel="noreferrer">Hono</a>, and <a href="/ecosystem/app-frameworks/nestjs" target="_blank" rel="noreferrer">NestJS</a>. Check the <a href="/guides/deployment/web-framework" target="_blank" rel="noreferrer">web framework deployment guide</a> for host-specific build settings.
 
 ## Cloud providers
 
-Placeholder content for this section.
+For managed Mastra hosting, deploy to <a href="/docs/mastra-platform/overview" target="_blank" rel="noreferrer">Mastra platform</a>. For your own account, Mastra deployers generate provider-native output for Vercel, Netlify, and Cloudflare when you run `npm run build` with a `deployer` configured.
+
+Standard server output works on containers, Kubernetes, Amazon EC2, Azure App Service, and similar Node.js hosts. Provider-specific guides also cover <a href="/ecosystem/deployment-targets/aws-lambda" target="_blank" rel="noreferrer">AWS Lambda</a>, <a href="/ecosystem/deployment-targets/vercel" target="_blank" rel="noreferrer">Vercel</a>, <a href="/ecosystem/deployment-targets/netlify" target="_blank" rel="noreferrer">Netlify</a>, and <a href="/ecosystem/deployment-targets/cloudflare" target="_blank" rel="noreferrer">Cloudflare Workers</a>. Match storage and execution time to the target; serverless functions need external persistence and may stop background work after a response completes.
 
 ## Workers
 
-Placeholder content for this section.
+Mastra runs workflow orchestration, schedules, and enabled background tasks in the API process by default. Keep this topology until traffic, execution time, or failure isolation requires separate processes.
+
+For a split deployment, build and start a selected worker role through the project-local CLI:
+
+```bash npm2yarn
+npx mastra worker build --output-dir .mastra/worker
+npx mastra worker start orchestration --dir .mastra/worker
+```
+
+Without `--output-dir`, `worker build` writes to `.mastra/output` and can overwrite the server artifact. Use separate build hosts or jobs when each host keeps only its own artifact. Use `--output-dir` and the matching `worker start --dir` when one build host must preserve both artifacts.
+
+Dedicated workers need shared durable storage and a distributed, pull-capable PubSub backend. The orchestration worker uses `MASTRA_STEP_EXECUTION_URL` to call the API for step execution. If the API uses authentication, set `MASTRA_WORKER_AUTH_TOKEN` to a credential accepted by the same auth provider. Keep workers on a private network, don't expose them to clients, and run only one scheduler instance. Workers are currently beta; follow the <a href="/guides/deployment/mastra-workers" target="_blank" rel="noreferrer">Mastra workers deployment guide</a> before splitting the deployment.
+
+## What to read next
+
+- <a href="/guides/deployment/mastra-server" target="_blank" rel="noreferrer">Deploy a Mastra server</a>: Inspect the build output and production runtime behavior.
+- <a href="/guides/server/server-adapters" target="_blank" rel="noreferrer">Use a server adapter</a>: Mount Mastra into an existing backend.
+- <a href="/guides/server/auth" target="_blank" rel="noreferrer">Secure the server</a>: Choose and configure an auth provider.
+- <a href="/guides/deployment/cloud-providers" target="_blank" rel="noreferrer">Choose a cloud provider</a>: Compare supported deployment targets.

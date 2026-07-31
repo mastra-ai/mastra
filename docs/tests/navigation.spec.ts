@@ -72,7 +72,8 @@ test.describe('Tab switcher navigation', () => {
     // Click through remaining tabs
     const tabs = [
       { label: 'Models', expectedPath: '/models' },
-      { label: 'Ecosystem', expectedPath: '/ecosystem' },
+      { label: 'Guides', expectedPath: '/guides/what-is-mastra' },
+      { label: 'Integrations', expectedPath: '/ecosystem' },
       { label: 'Reference', expectedPath: '/reference' },
     ]
 
@@ -182,7 +183,7 @@ test.describe('Sidebar navigation', () => {
     await expect(mobileSidebar).toBeVisible()
 
     // Find a navigation link in the mobile sidebar (exclude category headers)
-    const mobileLink = mobileSidebar.locator('a.menu__link:not(.menu__link--sublist)').first()
+    const mobileLink = mobileSidebar.locator('a.menu__link:not(.menu__link--sublist)[href]').first()
     const href = await mobileLink.getAttribute('href')
     expect(href).toBeTruthy()
 

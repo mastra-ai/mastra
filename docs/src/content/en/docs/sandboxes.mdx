@@ -1,50 +1,121 @@
 ---
 title: "Sandboxes"
-description: Run work in sandboxes with Mastra.
+description: Understand how Mastra workspaces combine filesystems, sandboxes, storage mounts, search, and lifecycle management.
 packages:
-  - "mastra"
+  - "@mastra/core"
 ---
 
 # Sandboxes
 
-Placeholder content for this page.
+A Mastra `Workspace` gives an agent a working environment outside the model's context window. It coordinates two independent capabilities:
+
+- A **filesystem** stores files and provides file tools such as read, write, list, and grep.
+- A **sandbox** executes commands and can manage background processes.
+
+A workspace can use either capability alone or combine both. Assign it globally on `Mastra` or directly to an agent. Mastra exposes tools for only the capabilities you configure.
 
 ## Local sandboxes
 
-Placeholder content for this section.
+`LocalSandbox` runs commands on the same machine as your Mastra process. Pair it with a `LocalFilesystem` rooted at the same directory so file tools and shell commands see the same files:
+
+```typescript title="src/mastra/workspace.ts"
+import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace'
+
+export const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+})
+```
+
+This is the smallest full local setup. `LocalSandbox` starts commands in `workingDirectory`, passes only `PATH` plus explicitly configured environment variables, and applies command timeouts. It does **not** provide operating-system isolation by default. Optional native isolation uses Seatbelt on macOS or Bubblewrap on Linux.
 
 ## Remote sandboxes
 
-Placeholder content for this section.
+Remote providers run commands in provider-managed environments rather than in the Mastra server process. Available integrations include E2B, Daytona, Modal, Railway, Vercel, AWS Bedrock AgentCore, Blaxel, and Mastra Platform.
+
+Use a remote sandbox when code is untrusted, workloads need per-session compute, or commands must not run on the application host. Provider capabilities differ. Check whether a provider supports background processes, networking, persistent state, mounts, pause and resume, and expiration before choosing one.
 
 ## Filesystems
 
-Placeholder content for this section.
+A filesystem is storage, not compute. It defines the paths that file tools can access and whether writes are allowed. A sandbox doesn't automatically expose its internal disk through workspace file tools, and a filesystem doesn't let an agent run commands.
+
+When the two providers don't share storage, use supported mounts or handle synchronization in application code. Keeping this boundary explicit prevents file tools from reading one location while commands operate in another.
 
 ## Local filesystems
 
-Placeholder content for this section.
+`LocalFilesystem` maps workspace paths to a directory on the Mastra host. It uses contained mode by default: reads and writes must remain under `basePath` or an explicitly allowed path, including after resolving symlinks. Set `readOnly: true` to block mutations and remove write tools from a static workspace.
+
+Filesystem containment applies only to filesystem operations. It doesn't restrict commands executed by `LocalSandbox`. Pointing both providers at the same directory aligns their view of files but doesn't merge their security boundaries.
 
 ## Remote filesystems
 
-Placeholder content for this section.
+Remote filesystem providers store files outside the application host. Mastra integrations cover object storage such as Amazon S3, Google Cloud Storage, and Azure Blob Storage, plus Google Drive, database-backed storage, versioned storage, and Mastra Platform buckets.
+
+Choose based on persistence, consistency, latency, versioning, and mount support. Credentials stay in server-side configuration. A remote filesystem can be used without a sandbox when the agent only needs file tools.
 
 ## Mounts and seeds
 
-Placeholder content for this section.
+`mounts` combines multiple filesystems behind path prefixes. Mastra creates a composite filesystem for file tools and asks a static sandbox to expose each provider at its mount path:
+
+```typescript title="src/mastra/workspace.ts"
+const workspace = new Workspace({
+  mounts: {
+    '/data': dataFilesystem,
+    '/instructions': readOnlyInstructionsFilesystem,
+  },
+  sandbox: remoteSandbox,
+})
+```
+
+Mount paths must be unique and non-overlapping. `filesystem` and `mounts` are mutually exclusive, and mounts can't be attached to a sandbox resolver. Whether a mount uses Filesystem in Userspace (FUSE), a local symlink, or another mechanism depends on the providers.
+
+Seeds are different: file-based agents can include a `workspace/` directory whose files are copied into the bundled runtime workspace at build time. Seeds provide initial content; mounts connect live storage. Symlinked seed files are skipped.
 
 ## Search and indexing
 
-Placeholder content for this section.
+Workspace search operates on an index, not directly on every filesystem read. Enable BM25 for keyword search, configure a vector store and embedder for semantic search, or configure both for hybrid ranking.
+
+Index content explicitly with `workspace.index()`, or set `autoIndexPaths` to index matching files during `workspace.init()`. Directory entries are recursive and glob patterns can limit file types. Later file changes don't automatically refresh the index, so applications that mutate indexed content need an indexing strategy.
 
 ## Multi-tenant sandboxes
 
-Placeholder content for this section.
+Static providers are shared by every request that uses the workspace. For tenant isolation, resolve filesystems and sandboxes from authenticated `RequestContext` values:
+
+```typescript title="src/mastra/workspace.ts"
+const workspace = new Workspace({
+  filesystem: ({ requestContext }) =>
+    getTenantFilesystem(requestContext.get('tenant-id') as string),
+  sandbox: ({ requestContext }) => getTenantSandbox(requestContext.get('tenant-id') as string),
+  sandboxCacheKey: ({ requestContext }) => requestContext.get('tenant-id') as string,
+})
+```
+
+Use an unforgeable tenant identifier established by server authentication, not a model-provided value. `sandboxCacheKey` keeps follow-up operations and background-process tools on the same sandbox. Resolver-returned providers belong to your application, so your tenancy layer must provision, expire, and destroy them.
 
 ## Sandbox lifecycle
 
-Placeholder content for this section.
+Registering a workspace with Mastra doesn't call `workspace.init()`. Most built-in filesystem operations initialize their provider lazily on first use, and sandbox command or process operations start their provider lazily when needed.
+
+Call `workspace.init()` explicitly in standalone scripts and tests, when static providers and mounts must be ready before the first operation, or when you configure `autoIndexPaths`. Automatic indexing runs only during `workspace.init()`; lazy filesystem or sandbox initialization doesn't build the search index. The call initializes the static filesystem, starts the static sandbox and its mounts, then indexes configured paths.
+
+Stopping a sandbox is resumable when the provider supports it; destroying one is permanent cleanup. Exact persistence differs by provider: some preserve only files, some snapshot a full virtual machine, and some are ephemeral. `workspace.destroy()` cleans up static providers, but it doesn't destroy providers returned by resolver functions. `LocalFilesystem.destroy()` doesn't delete its files from disk.
 
 ## Security boundaries
 
-Placeholder content for this section.
+Treat each layer as a separate boundary:
+
+- **Filesystem scope** controls which paths file operations can reach. Prefer containment, read-only providers, and narrow allowed paths.
+- **Execution scope** controls where commands run. A working directory isn't isolation; use native isolation or a remote provider for untrusted code.
+- **Tool policy** controls what the model may request. Disable unnecessary tools, require approval for sensitive operations, and use read-before-write protection where appropriate.
+- **Provider access** controls storage, network, and credentials. Scope credentials per environment or tenant, restrict outbound network access, and don't expose provider secrets to browser code.
+- **Application authorization** controls who receives a workspace. A sandbox doesn't replace authentication, tenant checks, quotas, or audit logging.
+
+Mounting storage expands the command environment's access. Grant each sandbox only the mounts and credentials its workload needs.
+
+## What to read next
+
+Start with the <a href="/guides/workspace/overview" target="_blank" rel="noreferrer">workspace overview</a> to configure and assign a workspace.
+
+- <a href="/guides/workspace/filesystem" target="_blank" rel="noreferrer">Filesystem guide</a>
+- <a href="/guides/workspace/sandbox" target="_blank" rel="noreferrer">Sandbox guide</a>
+- <a href="/guides/workspace/search" target="_blank" rel="noreferrer">Search and indexing guide</a>

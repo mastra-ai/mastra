@@ -11,33 +11,33 @@ A Mastra agent is a model configured with instructions and optional capabilities
 
 Use an agent when the task is open-ended and the model needs to decide what to do next. For fixed control flow, a [workflow](/docs/workflows) is usually a better fit. Agent capabilities connect the model to application data and constrain its behavior. They can also return results in a form your code can use.
 
-Define an agent as a directory under `src/mastra/agents`:
+Define an agent by creating an `Agent` instance. Pass its model, instructions, and any tools it can call:
 
-```text
-src/mastra/agents/docs-agent/
-├── config.ts
-├── instructions.md
-└── tools/
-    └── searchDocs.ts
-```
+```typescript title="src/mastra/agents/docs-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { searchDocs } from '../tools/search-docs'
 
-Set the model in `config.ts`:
-
-```typescript title="src/mastra/agents/docs-agent/config.ts"
-import { agentConfig } from '@mastra/core/agent'
-
-export default agentConfig({
+export const docsAgent = new Agent({
+  id: 'docs-agent',
+  name: 'Docs Agent',
+  instructions: 'Answer questions using the searchDocs tool.',
   model: 'openai/gpt-5.6',
+  tools: { searchDocs },
 })
 ```
 
-Put the agent's always-on instructions in `instructions.md`:
+Register the agent with your Mastra instance so it can use shared services such as storage, logging, and observability:
 
-```markdown title="src/mastra/agents/docs-agent/instructions.md"
-Answer questions using the `searchDocs` tool.
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { docsAgent } from './agents/docs-agent'
+
+export const mastra = new Mastra({
+  agents: { docsAgent },
+})
 ```
 
-Mastra discovers and registers the directory when you run `mastra dev` or `mastra build`. The directory name becomes the agent's default ID and name. Once the agent is registered, retrieve it from the Mastra instance and invoke it:
+Once registered, retrieve the agent from the Mastra instance and invoke it:
 
 ```typescript
 const docsAgent = mastra.getAgentById('docs-agent')
@@ -50,25 +50,28 @@ The `generate()` call runs the model and any tool calls to completion, then retu
 
 ## Model and instructions
 
-The model in `config.ts` determines the agent's underlying language and reasoning behavior. The `instructions.md` file defines its role, constraints, and how it should use the capabilities you provide. Keep instructions specific to behavior that should apply to every request. Pass request-specific details in the user message or request context.
+The `model` determines the agent's underlying language and reasoning behavior. The `instructions` define its role, constraints, and how it should use the capabilities you provide. Keep instructions specific to behavior that should apply to every request. Pass request-specific details in the user message or request context.
 
 Pass any model from the [Mastra model router](/models) as a `provider/model` string. The router supports model providers such as OpenAI and Anthropic, plus [model gateways](/models/gateways) such as OpenRouter. You can also use local models by passing a model instance from a supported AI SDK provider.
 
-For per-request behavior, define `model` or `instructions` as a function in `config.ts`. Dynamic configuration is useful when the same agent needs different models, languages, or policies for different requests. See the <a href="/guides/agents/overview" target="_blank" rel="noreferrer">agent guide</a> for a deeper look at defining and using agents.
+For per-request behavior, define `model` or `instructions` as a function in the `Agent` configuration. Dynamic configuration is useful when the same agent needs different models, languages, or policies for different requests. See the <a href="/guides/agents/overview" target="_blank" rel="noreferrer">agent guide</a> for a deeper look at defining and using agents.
 
 ## Tools
 
 Tools give an agent typed functions for reading data or taking actions. A tool has a description and input schema that help the model decide when and how to call it, plus an `execute` function that runs in your application. The agent can use a tool result in a later model step before returning its answer.
 
-Place each tool in the agent's `tools` directory and default-export it. The filename becomes the key the model calls:
+Add tools to the `tools` object when you create the agent. The object key becomes the name the model calls:
 
-```typescript title="src/mastra/agents/docs-agent/tools/searchDocs.ts"
-export { searchDocs as default } from '../../../tools/search-docs'
+```typescript
+export const docsAgent = new Agent({
+  // ...
+  tools: { searchDocs },
+})
 ```
 
 Use tools for operations the model can't perform from its own context, such as querying a database, calling an API, or updating a record. Tool descriptions and schemas are part of the model's context, so narrow tools are easier for it to select correctly. The <a href="/guides/agents/using-tools" target="_blank" rel="noreferrer">agent tools guide</a> covers tool definitions and selection.
 
-### Stream responses
+## Stream responses
 
 `generate()` waits for the complete result. Use `stream()` when the application should render text or inspect events as the agent runs.
 
@@ -131,16 +134,13 @@ await docsAgent.generate('Summarize my open tickets.', {
 })
 ```
 
-## Relevant guides
+## What to read next
 
-Guides provide longer, task-oriented coverage of agent setup and implementation choices:
+Continue with guides that cover agent setup, implementation choices, and common capabilities:
 
-- <a href="/guides/agents/overview" target="_blank" rel="noreferrer">Agent guide</a>: Register agents with Mastra and use shared runtime services.
-- <a href="/guides/agents/using-tools" target="_blank" rel="noreferrer">Tools for agents</a>: Define tools and control how agents select them.
-- <a href="/guides/agents/structured-output" target="_blank" rel="noreferrer">Structured output</a>: Choose schemas and output modes, including separate structuring models.
-
-## What to do next
-
-- <a href="/guides/memory/overview" target="_blank" rel="noreferrer">Give your agent memory</a> so it can retain conversation history and working context across calls.
-- <a href="/guides/capabilities/channels/overview" target="_blank" rel="noreferrer">Connect your agent to a shared channel</a> so several people can interact with it in Slack, Teams, Discord, or another messaging platform.
-- <a href="/guides/studio/overview" target="_blank" rel="noreferrer">Test your agent in Studio</a> and inspect its responses, tool calls, and traces.
+- <a href="/guides/agents/supervisor-agents" target="_blank" rel="noreferrer">Coordinate multiple agents</a>: Route work to specialized agents while one supervisor manages the result.
+- <a href="/guides/agents/using-tools" target="_blank" rel="noreferrer">Give your agent tools</a>: Define tools and control how the agent selects them.
+- <a href="/guides/agents/structured-output" target="_blank" rel="noreferrer">Return structured output</a>: Choose schemas and output modes, including separate structuring models.
+- <a href="/guides/memory/overview" target="_blank" rel="noreferrer">Give your agent memory</a>: Retain conversation history and working context across calls.
+- <a href="/guides/capabilities/channels/overview" target="_blank" rel="noreferrer">Connect your agent to a shared channel</a>: Let several people interact with it in Slack, Teams, Discord, or another messaging platform.
+- <a href="/guides/studio/overview" target="_blank" rel="noreferrer">Test your agent in Studio</a>: Inspect its responses, tool calls, and traces.

@@ -1,18 +1,85 @@
 ---
 title: "Tools"
-description: Add tools to Mastra agents.
+description: Give Mastra agents typed access to application code, external services, and workflows.
 packages:
-  - "mastra"
+  - "@mastra/core"
 ---
 
 # Tools
 
-Placeholder content for this page.
+Tools are typed functions that an agent can call to read data, run application code, or take an action. The model chooses a tool from its description and input schema, Mastra validates the arguments, and the tool result returns to the agent for its next step.
+
+Define a tool with `createTool()` and add it to an agent's `tools` record:
+
+```typescript title="src/mastra/agents/conversion-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+const convertTemperature = createTool({
+  id: 'convert-temperature',
+  description: 'Converts a Celsius temperature to Fahrenheit',
+  inputSchema: z.object({ celsius: z.number() }),
+  outputSchema: z.object({ fahrenheit: z.number() }),
+  execute: async ({ celsius }) => ({
+    fahrenheit: (celsius * 9) / 5 + 32,
+  }),
+})
+
+export const conversionAgent = new Agent({
+  id: 'conversion-agent',
+  name: 'Conversion Agent',
+  instructions: 'Use the conversion tool for temperature conversions.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { convertTemperature },
+})
+```
+
+Here, `convertTemperature` is the name exposed to the model. When the model calls it, `execute` receives input validated against `inputSchema`. Mastra also validates the returned value when you provide an `outputSchema`.
+
+Use tools for bounded operations with a clear contract, such as querying a database, calling an API, or updating a record. Keep descriptions specific and schemas narrow. Both are included in the model's context and affect when it selects the tool.
+
+## Custom tools
+
+A custom tool runs your `execute` function in the Mastra application. Its second argument provides execution context such as the abort signal, request context, Mastra instance, and agent run metadata. Use that context instead of adding runtime-only values to the model-visible input schema.
+
+Tools can also require approval or suspend while waiting for application or user input. These controls fit sensitive actions such as deleting data, sending messages, or confirming a purchase. They pause the run before it continues rather than relying on the model to enforce authorization.
+
+An agent can have several tools and may call none, one, or many during a run. Prefer a small set of distinct tools. For large catalogs, load tools through Model Context Protocol (MCP) servers or use dynamic tool search instead of putting every definition into each model request.
 
 ## Built-in tools
 
-Placeholder content for this section.
+Mastra exports built-in tools from `@mastra/core/tools` for common agent behavior:
+
+- `webSearchTool`: Uses the active model provider's native web search on supported OpenAI, Anthropic, Google, and xAI models.
+- `webFetchTool`: Fetches a public HTTP or HTTPS page with limits and private-network protections.
+- `askUserTool`: Suspends a run to ask for free-text or selected input, then continues when the application resumes it.
+- `submitPlanTool`: Accepts the path to an already-written Markdown plan, then suspends for host presentation and approval. A separate filesystem capability must write or edit the file.
+- Task tools: Create, update, complete, and inspect a durable task list. The recommended setup adds them through `TaskSignalProvider` and requires memory.
+
+Add a built-in tool to an agent's `tools` record like a custom tool. Built-ins that suspend still need application code or a user interface to display the request and resume the run. `AgentController` supplies its supported built-ins automatically unless they are disabled.
 
 ## Workflows as tools
 
-Placeholder content for this section.
+A workflow is useful when the operation needs several predetermined steps, branches, retries, or suspension. Pass it through an agent's `workflows` record, and Mastra exposes it to the model as `workflow-<key>`:
+
+```typescript
+export const researchAgent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  instructions: 'Use the research workflow for detailed investigations.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  workflows: { research: researchWorkflow },
+})
+```
+
+The generated `workflow-research` tool takes the workflow input under `inputData` and returns its result to the agent. Define a clear workflow `description`, `inputSchema`, and `outputSchema` so the model knows when to call it and what data to provide.
+
+Use a custom tool for one bounded operation. Use a workflow as a tool when your application, rather than the model, must control the internal sequence. The agent still decides whether to start the workflow.
+
+## What to read next
+
+- <a href="/guides/agents/using-tools" target="_blank" rel="noreferrer">Tools guide</a>: Define tools, attach them to agents, and control tool execution.
+- <a href="/guides/agents/agent-approval" target="_blank" rel="noreferrer">Tool approval and suspension</a>: Pause sensitive or interactive calls and resume the agent run.
+- <a href="/guides/mcp/overview" target="_blank" rel="noreferrer">MCP overview</a>: Load tools from remote Model Context Protocol servers.
+- <a href="/guides/workflows/overview" target="_blank" rel="noreferrer">Workflows guide</a>: Build typed multi-step operations with explicit control flow.

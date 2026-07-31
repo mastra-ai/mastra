@@ -88,6 +88,12 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Voice integrations',
+      collapsed: false,
+      items: [{ type: 'doc', id: 'voice-integrations/livekit', label: 'LiveKit' }],
+    },
+    {
+      type: 'category',
       label: 'Workspace integrations',
       collapsed: false,
       items: [

@@ -1,22 +1,99 @@
 ---
 title: "MCP"
-description: Use Model Context Protocol with Mastra.
+description: Connect Mastra to MCP servers, expose Mastra capabilities over MCP, and render MCP Apps in Studio.
 packages:
-  - "mastra"
+  - "@mastra/mcp"
 ---
 
 # MCP
 
-Placeholder content for this page.
+Model Context Protocol (MCP) is a standard for exchanging tools, resources, and prompts between AI applications. In Mastra, MCP has two directions: `MCPClient` brings capabilities from MCP servers into your application, while `MCPServer` publishes Mastra capabilities to other MCP clients.
+
+Use MCP when a capability already has an MCP server, or when tools need to work across several MCP-compatible hosts. Use a regular [Mastra tool](/docs/tools) when the capability only runs inside one Mastra application and doesn't need the protocol boundary.
+
+Install `@mastra/mcp`, then start with the client or server path that matches the direction of the connection.
+
+## Choose client or server
+
+Use `MCPClient` when Mastra consumes another server. It can connect to remote Streamable HTTP or Server-Sent Events (SSE) endpoints and launch local servers over standard input/output (stdio). Its most common job is to convert remote MCP tools into Mastra tools for an agent.
+
+Use `MCPServer` when another application consumes capabilities from Mastra. A server can expose tools directly. It can also convert registered agents and workflows into callable tools, and serve MCP resources and prompts.
 
 ## Connect MCP servers
 
-Placeholder content for this section.
+Create one client for a stable set of server connections, then pass `listTools()` to an agent. Tool names are prefixed with the configured server name to avoid collisions.
+
+```typescript title="src/mastra/agents/research-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { MCPClient } from '@mastra/mcp'
+
+const mcp = new MCPClient({
+  id: 'research-mcp',
+  servers: {
+    research: { url: new URL('https://mcp.example.com/mcp') },
+  },
+})
+
+export const researchAgent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  instructions: 'Use the research tools when you need external information.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: await mcp.listTools(),
+})
+```
+
+For a local server, replace `url` with `command`, `args`, and optional `env`. For an authenticated remote server, add headers through `requestInit`. Treat server URLs and credentials as secrets when they contain access tokens.
+
+`listTools()` fits applications whose MCP configuration is shared and known at startup. For per-user credentials or a changing server set, create the client in request scope, pass `await client.listToolsets()` to the agent's `generate()` or `stream()` call, and call `disconnect()` when the request finishes.
+
+MCP connections cross a trust boundary. Review the server and the tools it publishes, limit credentials to the required scope, and require approval for tools that can change external state.
 
 ## Expose an MCP server
 
-Placeholder content for this section.
+Create an `MCPServer` from Mastra primitives and register it in the root `Mastra` instance. Registration attaches Mastra services and exposes the server through the built-in Streamable HTTP endpoint at `/api/mcp/<server-id>/mcp` when the Mastra server runs.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { createTool } from '@mastra/core/tools'
+import { MCPServer } from '@mastra/mcp'
+import { z } from 'zod'
+
+const statusTool = createTool({
+  id: 'service-status',
+  description: 'Returns the current service status.',
+  inputSchema: z.object({ service: z.string() }),
+  execute: async ({ service }) => ({ service, status: 'operational' }),
+})
+
+const operationsServer = new MCPServer({
+  id: 'operations',
+  name: 'Operations',
+  version: '1.0.0',
+  tools: { statusTool },
+})
+
+export const mastra = new Mastra({
+  mcpServers: { operationsServer },
+})
+```
+
+An agent supplied to `agents` becomes an `ask_<key>` tool. A workflow supplied to `workflows` becomes a `run_<key>` tool. Keep the public surface narrow: descriptions and schemas become the contract seen by every connected client.
+
+Registering the server is the normal path for a deployed Mastra application. Use `startStdio()` instead when the MCP host launches your server as a local subprocess. Protect network endpoints with authentication and authorization before exposing tools that access private data or perform writes.
 
 ## MCP apps
 
-Placeholder content for this section.
+MCP Apps extend a tool with an interactive HTML interface. A Mastra MCP server serves the interface as an `appResources` entry under a `ui://` URI, and the tool points to that URI through `mcp._meta.ui.resourceUri`. Mastra Studio detects this metadata and renders the HTML in a sandboxed iframe on the tool page or inside agent chat.
+
+Use an MCP App for interaction that plain text can't express well, such as a chart, form, picker, or multi-step control. Keep a short model-readable summary in the tool result's `content`, and put UI data in `structuredContent`. The app can receive tool input, call tools on its server, and send a user message back to the host through the MCP Apps bridge.
+
+For a local `MCPServer`, register that server in `mcpServers` so Studio can resolve its app resources. For an external server connected through `MCPClient`, give the agent `listTools()` and also spread `client.toMCPServerProxies()` into the Mastra `mcpServers` configuration. The proxies let Studio read the remote `ui://` resources.
+
+Only render apps from servers you trust. The iframe limits access to the host page, but app code can still make requests allowed by its content security policy and invoke server tools.
+
+## What to read next
+
+- <a href="/guides/mcp/overview" target="_blank" rel="noreferrer">MCP guide</a>: Configure transports, authentication, approval, and runtime toolsets.
+- <a href="/guides/mcp/mcp-apps" target="_blank" rel="noreferrer">MCP Apps guide</a>: Build an app resource and connect it to a tool.
+- <a href="/guides/guide/publishing-mcp-server" target="_blank" rel="noreferrer">Publish an MCP server</a>: Package and distribute a server for other MCP hosts.

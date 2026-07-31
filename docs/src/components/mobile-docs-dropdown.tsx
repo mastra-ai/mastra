@@ -22,7 +22,7 @@ const docsTabs = [
   {
     id: 'Guides',
     label: 'Guides',
-    href: '/guides/',
+    href: '/guides/what-is-mastra',
     basePath: '/guides',
   },
   {
@@ -32,8 +32,8 @@ const docsTabs = [
     basePath: '/reference',
   },
   {
-    id: 'Ecosystem',
-    label: 'Ecosystem',
+    id: 'Integrations',
+    label: 'Integrations',
     href: '/ecosystem/',
     basePath: '/ecosystem',
   },
@@ -56,7 +56,7 @@ export function MobileDocsDropdown({ className }: { className?: string }) {
         return true
       }
       return false
-    }) || docsTabs[0]
+    }) || docsTabs.find(tab => tab.id === 'Docs')!
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>

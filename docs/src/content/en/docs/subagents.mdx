@@ -1,50 +1,126 @@
 ---
 title: "Subagents"
-description: Delegate work to subagents in Mastra.
+description: Delegate work across agents and choose a coordination pattern in Mastra.
 packages:
-  - "mastra"
+  - "@mastra/core"
 ---
 
 # Subagents
 
-Placeholder content for this page.
+A subagent is an agent that another agent invokes for a focused task. Delegation separates instructions, tools, models, and context so each agent has a narrower responsibility.
+
+Use multiple agents only when those boundaries improve the system. One agent is usually easier to run and debug when the work shares the same context and tools.
 
 ## Delegate work
 
-Placeholder content for this section.
+Add agents to a parent agent's `agents` map. Mastra exposes each child to the parent model as a tool. The parent decides when to call it and uses the returned text in later model steps.
 
-## Choosing an approach
+```typescript title="src/mastra/agents/research-supervisor.ts"
+import { Agent } from '@mastra/core/agent'
 
-Placeholder content for this section.
+const researcher = new Agent({
+  id: 'researcher',
+  name: 'Researcher',
+  description: 'Finds relevant facts and returns a short summary.',
+  instructions: 'Research only the task you receive. Cite your sources.',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+})
 
-| Approach | When to use it |
-| - | - |
-| Workflows | Use for structured, deterministic steps. |
-| Supervisor agents | Use for flexible delegation. |
-| Agent tools | Use when one agent should call another as a tool. |
-| Councils | Use when multiple agents should compare or vote. |
-| AgentController subagents | Use when you need explicit controller-managed delegation. |
+export const supervisor = new Agent({
+  id: 'research-supervisor',
+  name: 'Research supervisor',
+  instructions: 'Delegate research tasks, then answer with the findings.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  agents: { researcher },
+})
+```
+
+The map key identifies the delegated agent. Write a specific `description` because the parent model uses it to select a child. Give the child a prompt, tools, and model suited to one role.
+
+## Choose an approach
+
+Choose based on who should control execution and how much context each worker needs.
+
+| Approach | Control | Use when |
+| - | - | - |
+| Workflows | Application code | The sequence, branches, or parallel work are known in advance |
+| Supervisor agents | A lead agent | The task is open-ended and delegation must adapt |
+| Agents as tools | A calling agent | One specialist should be a bounded capability inside another agent |
+| Councils | A workflow and final synthesizer | Several independent answers should be compared |
+| `AgentController` subagents | An interactive controller and parent agent | A session needs constrained child runs or isolated conversation forks |
+
+These approaches compose. A workflow can call a supervisor, and a supervisor can delegate a fixed process to a workflow-backed tool.
 
 ## Workflows
 
-Placeholder content for this section.
+Use a [workflow](/docs/workflows) when the coordination logic belongs in code. Steps make ordering, parallelism, schemas, retries, suspension, and failure behavior explicit. A step can call an agent only where model judgment is needed.
+
+Workflows fit repeatable business processes and tasks that must be inspected or audited. They trade some flexibility for predictable execution.
 
 ## Supervisor agents
 
-Placeholder content for this section.
+A supervisor is a parent agent with multiple agents in its `agents` map. The model chooses a specialist, writes its delegation prompt, receives its result, and decides what to do next. This works well when discoveries during execution change the plan.
 
-## Agent tools
+The supervisor remains responsible for the final answer. Its instructions should define delegation boundaries and completion criteria, while each child description should state when to use that child. Mastra also supports delegation hooks and message filtering when the application needs to inspect or restrict those decisions.
 
-Placeholder content for this section.
+## Agents as tools
+
+Agents as tools are the mechanism behind supervisor delegation. Each entry in `agents` becomes a callable tool internally named `agent-<key>`. Use this framing when the parent needs one or a few specialist capabilities but doesn't need a broader coordinator role.
+
+This pattern keeps the parent in control and gives the specialist its own instructions, tools, and model. It also adds another model call, so use a normal tool when deterministic application code can perform the same operation.
 
 ## Councils
 
-Placeholder content for this section.
+A council sends the same problem to several agents independently, then compares, ranks, or synthesizes their answers. Use it for ambiguous or high-stakes evaluation where independent perspectives justify extra latency and token use.
 
-## AgentController subagents
+Mastra has no dedicated council primitive. Build the pattern with workflow parallelism and a final agent or application step. Unlike a supervisor, a council duplicates the main task instead of dividing it into specialist subtasks.
 
-Placeholder content for this section.
+## `AgentController` subagents
+
+`AgentController` provides a separate subagent system for interactive, session-based applications. Subagent definitions describe child types, their instructions, models, and allowed controller or workspace tools. The controller adds one built-in `subagent` tool that lets the parent choose a type and pass it a task.
+
+```typescript title="src/mastra/agent-controller.ts"
+import { AgentController } from '@mastra/core/agent-controller'
+import { WORKSPACE_TOOLS } from '@mastra/core/workspace'
+import { codingAgent } from './agents/coding-agent'
+
+const agentController = new AgentController({
+  id: 'coding-controller',
+  agent: codingAgent,
+  modes: [{ id: 'default', name: 'Default', metadata: { default: true } }],
+  subagents: [
+    {
+      id: 'explore',
+      name: 'Explore',
+      description: 'Inspects the workspace without changing files.',
+      instructions: 'Return focused findings for the requested task.',
+      allowedWorkspaceTools: [
+        WORKSPACE_TOOLS.FILESYSTEM.READ_FILE,
+        WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES,
+        WORKSPACE_TOOLS.FILESYSTEM.GREP,
+      ],
+      defaultModelId: '__GATEWAY_OPENAI_MODEL_MINI__',
+    },
+  ],
+})
+```
+
+Use this system when the product already needs `AgentController` sessions, modes, structured state, workspace permissions, or subagent lifecycle events. For a standard agent that only needs model-directed delegation, use the `agents` map instead.
 
 ## Context and isolation
 
-Placeholder content for this section.
+Context behavior differs by approach:
+
+- **Supervisor and agents-as-tools:** The child receives the parent conversation by default. A message filter can reduce or redact what is forwarded. If the child uses memory, Mastra creates a fresh thread for each delegation and saves only the delegation prompt and response to that thread.
+- **`AgentController` child:** A normal child starts with fresh conversation context. It receives a copy of request context, but the parent thread and resource identifiers are cleared. Put all required information in the task.
+- **`AgentController` fork:** A fork clones the parent thread and runs the parent agent on that clone. It inherits the parent's history, instructions, tools, and model, requires controller memory, and doesn't write into the parent conversation. The child definition's instructions, tools, and model don't apply to that run.
+- **Workflow:** Context is explicit step input, workflow state, or data passed to an agent call. The execution graph doesn't copy an agent conversation unless the workflow code requests it.
+
+Isolation reduces irrelevant context and limits tool access, but it also removes information a child may need. Pass the smallest complete task and treat sensitive data, tool permissions, memory, latency, and token cost as part of the delegation design.
+
+## What to read next
+
+- <a href="/guides/concepts/multi-agent-systems" target="_blank" rel="noreferrer">Multi-agent systems</a>: Compare coordination patterns and how they compose.
+- <a href="/guides/agents/supervisor-agents" target="_blank" rel="noreferrer">Supervisor agents</a>: Configure delegation controls, memory, and approvals.
+- <a href="/guides/workflows/agents-and-tools" target="_blank" rel="noreferrer">Agents and tools in workflows</a>: Call agents from explicit workflow steps.
+- <a href="/guides/agent-controller/subagents" target="_blank" rel="noreferrer">AgentController subagents</a>: Configure fresh and forked child runs.

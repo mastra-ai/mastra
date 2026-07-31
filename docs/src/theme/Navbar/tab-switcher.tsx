@@ -18,7 +18,7 @@ const docsTabs = [
   {
     id: 'Guides',
     label: 'Guides',
-    href: '/guides',
+    href: '/guides/what-is-mastra',
     basePath: '/guides',
   },
   {
@@ -28,8 +28,8 @@ const docsTabs = [
     basePath: '/reference',
   },
   {
-    id: 'Ecosystem',
-    label: 'Ecosystem',
+    id: 'Integrations',
+    label: 'Integrations',
     href: '/ecosystem',
     basePath: '/ecosystem',
   },

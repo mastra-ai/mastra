@@ -1,42 +1,83 @@
 ---
-title: "Develop / Deploy"
-description: Develop and deploy Mastra applications.
+title: "Local development"
+description: Run, inspect, and iterate on a Mastra application locally.
 packages:
   - "mastra"
 ---
 
-# Develop / Deploy
+# Local development
 
-Placeholder content for this page.
+Mastra's development server runs your application and Studio together. It watches your project, rebuilds when files change, and restarts the local runtime so you can test agents, workflows, and tools as you work.
 
-## Local development
+From your project root, run the generated development script:
 
-Placeholder content for this section.
+```bash npm2yarn
+npm run dev
+```
 
-## Build with AI
-
-Placeholder content for this section.
+By default, Studio opens at [`http://localhost:4111`](http://localhost:4111), and the application API is available under `http://localhost:4111/api`. The startup output shows the actual URLs if your server configuration changes the host, port, Studio base path, or API prefix.
 
 ## Local server
 
-Placeholder content for this section.
+The development script runs `mastra dev`. The command bundles the code under `src/mastra`, loads environment variables, starts the server, and watches for changes. Keep it running while you edit the project.
+
+Provider credentials and other secrets belong in your local environment file, usually `.env`. If the default port is unavailable, Mastra selects an open port between `4111` and `4131`. Use the URLs printed in the terminal rather than assuming the default.
 
 ## Studio
 
-Placeholder content for this section.
+<a href="/guides/studio/overview" target="_blank" rel="noreferrer">Studio</a> is the browser interface included with the development server. It discovers the agents, workflows, tools, Model Context Protocol (MCP) servers, processors, and workspaces registered with your Mastra instance.
+
+Use Studio to:
+
+- Chat with agents and inspect streamed responses and tool calls.
+- Run tools independently before giving them to an agent.
+- Execute workflows and follow their active steps, inputs, and outputs.
+- Set request context values for different test conditions.
+- Create datasets and compare experiments across prompts, models, or code changes.
+
+The Swagger UI at `http://localhost:4111/swagger-ui` provides another way to discover and call the local server endpoints.
 
 ## Interact and iterate
 
-Placeholder content for this section.
+Start with one representative input in Studio. Check the response, tool arguments and results, workflow path, and trace. Change one part of the implementation or instructions, wait for the server to restart, then run the same input again.
+
+Test tools in isolation when an agent result is unclear. Once the basic path works, put stable cases into a dataset and run an experiment. This separates regressions from normal model variation and gives prompt or model changes a repeatable comparison.
+
+## Build with AI
+
+`create-mastra` installs Mastra skills for supported coding agents unless you opt out. These skills teach an AI coding tool how to use current Mastra patterns and find package documentation embedded in `node_modules`.
+
+For an existing project, install the skills directly:
+
+```bash npm2yarn
+npx skills add mastra-ai/skills
+```
+
+An AI coding agent can also use the Mastra CLI against the running server to invoke agents, execute tools, run workflows, and inspect traces or logs. This gives it runtime evidence instead of relying only on source code. See [Build with AI](/docs/build-with-ai) for the available context sources and setup options.
 
 ## Observability
 
-Placeholder content for this section.
+Configure observability early enough that local failures produce useful evidence. An `Observability` instance instruments agent runs, model calls, tool executions, and workflow steps. Its exporters decide where traces and correlated logs are sent. Adding storage to the Mastra instance alone doesn't capture or export this data.
+
+Studio's **Traces**, **Logs**, and **Metrics** views populate only when observability and appropriate exporters are configured. Metrics also require analytics-capable observability storage, such as DuckDB for local development. Follow a trace to inspect an operation's input, output, timing, and related logs. See the <a href="/guides/observability/overview" target="_blank" rel="noreferrer">observability overview</a> for setup and storage choices.
 
 ## Editor
 
-Placeholder content for this section.
+<a href="/guides/editor/overview" target="_blank" rel="noreferrer">Editor</a> separates selected agent configuration from application code. Enable it when prompt engineers or subject-matter experts need to change instructions and tools through Studio without changing the underlying agent implementation.
+
+Database-backed editor content supports drafts, publishing, version history, and version targeting. The code-backed mode writes deterministic JSON overrides that can be reviewed in Git. Developers still control which parts of a code-defined agent are editable.
 
 ## Agent Builder
 
-Placeholder content for this section.
+<a href="/guides/agent-builder/overview" target="_blank" rel="noreferrer">Agent Builder</a> is a separate Mastra Enterprise Edition surface for creating and operating complete stored agents in the browser. It is for teams that need users to choose allowed models, memory, tools, skills, workspaces, browsers, or channels within policies set by an administrator.
+
+Local setup requires storage, model credentials, a registered builder agent, and Agent Builder enabled through the editor configuration. It runs with the same development server and is available at `http://localhost:4111/agent-builder` by default.
+
+Use Editor to override approved parts of agents defined in code. Use Agent Builder when users need to create and manage the agents themselves.
+
+## What to read next
+
+- <a href="/guides/studio/overview" target="_blank" rel="noreferrer">Develop with Studio</a>: Test local agents, workflows, tools, and datasets from the browser.
+- <a href="/guides/observability/overview" target="_blank" rel="noreferrer">Configure observability</a>: Persist traces and logs, and add a local metrics store.
+- <a href="/guides/editor/overview" target="_blank" rel="noreferrer">Enable Editor</a>: Version and publish selected agent configuration outside the codebase.
+- <a href="/guides/agent-builder/overview" target="_blank" rel="noreferrer">Set up Agent Builder</a>: Configure the browser-based agent creation surface and its prerequisites.
