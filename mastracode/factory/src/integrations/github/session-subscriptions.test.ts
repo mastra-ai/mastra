@@ -154,7 +154,7 @@ describe('GitHub subscription entry points', () => {
 
     await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
 
-    expect(inject).toHaveBeenCalledWith('ghp_org_pat', 'pat', 'default');
+    expect(inject).toHaveBeenCalledWith('ghp_org_pat', 'default', 'default');
     expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
   });
 
@@ -167,7 +167,19 @@ describe('GitHub subscription entry points', () => {
 
     await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
 
-    expect(inject).toHaveBeenCalledWith('ghp_reviewer', 'pat', 'reviewer');
+    expect(inject).toHaveBeenCalledWith('ghp_reviewer', 'reviewer', 'reviewer');
+  });
+
+  it('records worker-PAT fallback when refreshing a reviewer sandbox', async () => {
+    integrationStorage.settings = { get: vi.fn(async () => ({ pat: 'ghp_worker' })) };
+    const requestContext = authenticatedRequestContext();
+    const inject = vi.fn();
+    registerGithubTokenInjector(requestContext, inject);
+    registerGithubPatKind(requestContext, 'reviewer');
+
+    await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
+
+    expect(inject).toHaveBeenCalledWith('ghp_worker', 'default', 'reviewer');
   });
 
   it('silently skips auto-subscription outside repository sessions', async () => {

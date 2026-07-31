@@ -14,7 +14,7 @@ import { getFactoryAuthUserId } from './auth.js';
 import type { FactoryAuthUser } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
-import { getGithubPat } from './integrations/github/pat.js';
+import { resolveGithubPat } from './integrations/github/pat.js';
 import type { GithubPatKind } from './integrations/github/pat.js';
 import {
   checkoutSessionBranch,
@@ -258,12 +258,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const patKindChanged = patKind !== registered.patKind;
           let credentialSourceChanged = false;
           try {
-            const pat = await getGithubPat(() => github.integrationStorage, session.orgId, patKind, {
+            const pat = await resolveGithubPat(() => github.integrationStorage, session.orgId, patKind, {
               throwOnError: true,
             });
-            const credentialSource = pat ? 'pat' : 'repository';
+            const credentialSource = pat.sourceKind ?? 'repository';
             credentialSourceChanged = credentialSource !== registered.credentialSource;
-            const ghToken = pat ?? (credentialSourceChanged ? await getRepositoryToken() : registered.ghToken);
+            const ghToken = pat.token ?? (credentialSourceChanged ? await getRepositoryToken() : registered.ghToken);
             if (ghToken !== registered.ghToken) registered.inject(ghToken, credentialSource);
             registered.patKind = patKind;
             registered.credentialSource = credentialSource;
@@ -332,9 +332,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // when a reviewer token is configured; everything else — including
       // sessions with no resolvable run binding — uses the worker token.
       const patKind = (await resolveGithubPatKind()) ?? 'default';
-      const pat = await getGithubPat(() => github.integrationStorage, session.orgId, patKind);
-      const ghCliToken = pat ?? token;
-      const credentialSource = pat ? 'pat' : 'repository';
+      const pat = await resolveGithubPat(() => github.integrationStorage, session.orgId, patKind);
+      const ghCliToken = pat.token ?? token;
+      const credentialSource = pat.sourceKind ?? 'repository';
 
       const ensureSandbox = () =>
         fleet.ensureSandbox(

@@ -5,7 +5,7 @@ import type { GithubPatKind } from './pat.js';
 const GITHUB_TOKEN_INJECTOR_CONTEXT_KEY = 'factoryGithubTokenInjector';
 const GITHUB_PAT_KIND_CONTEXT_KEY = 'factoryGithubPatKind';
 
-export type GithubTokenSource = 'pat' | 'repository';
+export type GithubTokenSource = GithubPatKind | 'repository';
 
 type GithubTokenInjector = (token: string, source?: GithubTokenSource, patKind?: GithubPatKind) => void;
 

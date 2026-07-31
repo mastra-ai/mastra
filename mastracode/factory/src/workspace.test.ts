@@ -812,7 +812,7 @@ describe('GitHub session workspace preparation', () => {
     const reviewerRequestContext = createGithubRequestContext('project-1', 'session-a');
 
     await workspace({ requestContext: reviewerRequestContext });
-    injectGithubToken(reviewerRequestContext, 'ghp_runtime_reviewer', 'pat');
+    injectGithubToken(reviewerRequestContext, 'ghp_runtime_reviewer', 'reviewer');
 
     mocks.runBindingRole = 'work';
     mocks.setEnvironmentVariable.mockClear();
@@ -845,7 +845,7 @@ describe('GitHub session workspace preparation', () => {
     });
     mocks.setEnvironmentVariable.mockClear();
 
-    expect(() => injectGithubToken(reviewerRequestContext, 'ghp_stale_reviewer', 'pat', 'reviewer')).toThrow(
+    expect(() => injectGithubToken(reviewerRequestContext, 'ghp_stale_reviewer', 'reviewer', 'reviewer')).toThrow(
       'GitHub token refresh no longer matches the active Factory workspace role.',
     );
     expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
@@ -1122,6 +1122,47 @@ describe('GitHub session workspace preparation', () => {
     });
 
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
+  });
+
+  it('replaces a cleared reviewer PAT with the worker PAT fallback on the next reuse', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    mocks.githubReviewerPat = null;
+    mocks.setEnvironmentVariable.mockClear();
+    await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+  });
+
+  it('does not reuse stale reviewer credentials when worker-PAT fallback injection fails', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    mocks.githubReviewerPat = null;
+    mocks.setEnvironmentVariable.mockImplementationOnce(() => {
+      throw new Error('runtime token injection failed');
+    });
+
+    await expect(
+      workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+      }),
+    ).rejects.toThrow('runtime token injection failed');
   });
 
   it('does not reuse a workspace when a cleared PAT cannot be replaced', async () => {

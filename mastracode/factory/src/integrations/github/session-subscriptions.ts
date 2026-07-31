@@ -9,7 +9,7 @@ import type {
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
 import type { GithubIntegration } from './integration.js';
-import { getGithubPat } from './pat.js';
+import { resolveGithubPat } from './pat.js';
 import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions.js';
 import { getRegisteredGithubPatKind, injectGithubToken } from './token-refresh.js';
 
@@ -160,9 +160,9 @@ export async function refreshGithubToken(requestContext: RequestContext, github:
   // workspace records which PAT kind the sandbox was provisioned with, so a
   // review-board sandbox keeps its reviewer token on refresh.
   const patKind = getRegisteredGithubPatKind(requestContext);
-  const pat = await getGithubPat(() => github.integrationStorage, target.orgId, patKind);
-  if (pat) {
-    injectGithubToken(requestContext, pat, 'pat', patKind);
+  const pat = await resolveGithubPat(() => github.integrationStorage, target.orgId, patKind);
+  if (pat.token && pat.sourceKind) {
+    injectGithubToken(requestContext, pat.token, pat.sourceKind, patKind);
     return;
   }
   const access = await github.versionControl.getRepositoryAccess({
