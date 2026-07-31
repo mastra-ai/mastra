@@ -4232,13 +4232,17 @@ export class Run<
     // children may already be terminal while the parent still lists them as active and
     // re-invokes restart(). Treat terminal snapshots as authoritative and reuse them.
     // See https://github.com/mastra-ai/mastra/issues/20225
-    const terminalStatuses: WorkflowRunStatus[] = ['success', 'failed', 'canceled', 'bailed', 'tripwire'];
-    if (terminalStatuses.includes(snapshot.status)) {
+    //
+    // Only statuses already represented on WorkflowResult are reconstructed here.
+    // Other terminal statuses (canceled/bailed) keep the existing createRestartExecutionParams
+    // "was not active" behavior — expanding WorkflowResult is out of scope for this fix.
+    if (snapshot.status === 'success' || snapshot.status === 'failed' || snapshot.status === 'tripwire') {
       this.cleanup?.();
+      // Match fmtReturnValue: context keeps `input` alongside step results, and `input`
+      // is also surfaced as a top-level field on the returned WorkflowResult.
       const steps = hydrateSerializedStepErrors({ ...(snapshot.context ?? {}) }) ?? {};
       const input = (snapshot.context as { input?: TInput } | undefined)?.input as TInput;
       const base = {
-        status: snapshot.status,
         steps,
         input,
         runId: this.runId,
@@ -4262,15 +4266,12 @@ export class Run<
           error: getErrorFromUnknown(snapshot.error, { serializeStack: false }),
         } as WorkflowResult<TState, TInput, TOutput, TSteps>;
       }
-      if (snapshot.status === 'tripwire') {
-        return { ...base, status: 'tripwire', tripwire: snapshot.tripwire } as WorkflowResult<
-          TState,
-          TInput,
-          TOutput,
-          TSteps
-        >;
-      }
-      return base as WorkflowResult<TState, TInput, TOutput, TSteps>;
+      return { ...base, status: 'tripwire', tripwire: snapshot.tripwire } as WorkflowResult<
+        TState,
+        TInput,
+        TOutput,
+        TSteps
+      >;
     }
 
     const restartData = createRestartExecutionParams({ snapshot, graph: this.executionGraph });
