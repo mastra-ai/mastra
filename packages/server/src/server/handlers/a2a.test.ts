@@ -1958,7 +1958,9 @@ describe('A2A Handler', () => {
 
       await gen.next();
       const nextStreamEvent = gen.next();
-      await Promise.resolve();
+      await vi.waitFor(() => {
+        expect(streamAbortSignal).toBeDefined();
+      });
 
       const cancelResult = await handleTaskCancel({
         requestId: 'cancel-request-id',
@@ -1987,6 +1989,7 @@ describe('A2A Handler', () => {
 
       const savedTask = await mockTaskStore.load({ agentId, taskId });
       expect(savedTask?.status.state).toBe('canceled');
+      await gen.return(undefined);
     });
 
     it('should stream structured output as a data artifact part', async () => {
