@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI tricolon: '%s'. Exactly three parallel verbs in series. Restructure or vary the count."
+message: "AI tricolon: '%s'. Rewrite the structure or vary the count. Don't remove the Oxford comma; preserve the serial comma in real lists."
 level: error
 nonword: true
 tokens:

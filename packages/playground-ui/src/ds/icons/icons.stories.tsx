@@ -104,12 +104,12 @@ const IconGrid = ({ size = 'default' }: { size?: 'sm' | 'default' | 'lg' }) => (
     {icons.map(({ name, component: IconComponent }) => (
       <div
         key={name}
-        className="flex flex-col items-center gap-2 rounded-lg bg-surface3 p-3 transition-colors hover:bg-surface4"
+        className="bg-surface3 hover:bg-surface4 flex flex-col items-center gap-2 rounded-lg p-3 transition-colors"
       >
         <Icon size={size} className="text-neutral5">
           <IconComponent />
         </Icon>
-        <span className="text-center text-xs text-neutral3">{name.replace('Icon', '')}</span>
+        <span className="text-neutral3 text-center text-xs">{name.replace('Icon', '')}</span>
       </div>
     ))}
   </div>
@@ -146,19 +146,19 @@ export const IconSizes: Story = {
         <Icon size="sm" className="text-neutral5">
           <AgentIcon />
         </Icon>
-        <span className="text-xs text-neutral3">Small</span>
+        <span className="text-neutral3 text-xs">Small</span>
       </div>
       <div className="flex flex-col items-center gap-2">
         <Icon size="default" className="text-neutral5">
           <AgentIcon />
         </Icon>
-        <span className="text-xs text-neutral3">Default</span>
+        <span className="text-neutral3 text-xs">Default</span>
       </div>
       <div className="flex flex-col items-center gap-2">
         <Icon size="lg" className="text-neutral5">
           <AgentIcon />
         </Icon>
-        <span className="text-xs text-neutral3">Large</span>
+        <span className="text-neutral3 text-xs">Large</span>
       </div>
     </div>
   ),
@@ -192,23 +192,23 @@ export const IconColors: Story = {
 export const AgentIcons: Story = {
   render: () => (
     <div className="flex gap-4">
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-surface3 p-3">
+      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-neutral5">
           <AgentIcon />
         </Icon>
-        <span className="text-xs text-neutral3">Agent</span>
+        <span className="text-neutral3 text-xs">Agent</span>
       </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-surface3 p-3">
+      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-neutral5">
           <AgentCoinIcon />
         </Icon>
-        <span className="text-xs text-neutral3">AgentCoin</span>
+        <span className="text-neutral3 text-xs">AgentCoin</span>
       </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-surface3 p-3">
+      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-neutral5">
           <AgentNetworkCoinIcon />
         </Icon>
-        <span className="text-xs text-neutral3">AgentNetworkCoin</span>
+        <span className="text-neutral3 text-xs">AgentNetworkCoin</span>
       </div>
     </div>
   ),
@@ -217,17 +217,17 @@ export const AgentIcons: Story = {
 export const WorkflowIcons: Story = {
   render: () => (
     <div className="flex gap-4">
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-surface3 p-3">
+      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-neutral5">
           <WorkflowIcon />
         </Icon>
-        <span className="text-xs text-neutral3">Workflow</span>
+        <span className="text-neutral3 text-xs">Workflow</span>
       </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-surface3 p-3">
+      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-neutral5">
           <WorkflowCoinIcon />
         </Icon>
-        <span className="text-xs text-neutral3">WorkflowCoin</span>
+        <span className="text-neutral3 text-xs">WorkflowCoin</span>
       </div>
     </div>
   ),
@@ -236,17 +236,17 @@ export const WorkflowIcons: Story = {
 export const ToolIcons: Story = {
   render: () => (
     <div className="flex gap-4">
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-surface3 p-3">
+      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-neutral5">
           <ToolsIcon />
         </Icon>
-        <span className="text-xs text-neutral3">Tools</span>
+        <span className="text-neutral3 text-xs">Tools</span>
       </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-surface3 p-3">
+      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-neutral5">
           <ToolCoinIcon />
         </Icon>
-        <span className="text-xs text-neutral3">ToolCoin</span>
+        <span className="text-neutral3 text-xs">ToolCoin</span>
       </div>
     </div>
   ),
@@ -255,29 +255,29 @@ export const ToolIcons: Story = {
 export const BrandIcons: Story = {
   render: () => (
     <div className="flex gap-4">
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-surface3 p-3">
+      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-neutral5">
           <GithubIcon />
         </Icon>
-        <span className="text-xs text-neutral3">Github</span>
+        <span className="text-neutral3 text-xs">Github</span>
       </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-surface3 p-3">
+      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-neutral5">
           <GithubCoinIcon />
         </Icon>
-        <span className="text-xs text-neutral3">GithubCoin</span>
+        <span className="text-neutral3 text-xs">GithubCoin</span>
       </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-surface3 p-3">
+      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-neutral5">
           <GoogleIcon />
         </Icon>
-        <span className="text-xs text-neutral3">Google</span>
+        <span className="text-neutral3 text-xs">Google</span>
       </div>
-      <div className="flex flex-col items-center gap-2 rounded-lg bg-surface3 p-3">
+      <div className="bg-surface3 flex flex-col items-center gap-2 rounded-lg p-3">
         <Icon size="lg" className="text-neutral5">
           <OpenAIIcon />
         </Icon>
-        <span className="text-xs text-neutral3">OpenAI</span>
+        <span className="text-neutral3 text-xs">OpenAI</span>
       </div>
     </div>
   ),

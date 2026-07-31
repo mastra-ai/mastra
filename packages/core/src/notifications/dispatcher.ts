@@ -3,6 +3,7 @@ import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { SendAgentSignalOptions, SendAgentSignalResult } from '../agent/types';
 import type { PubSub } from '../events';
 import type { Mastra } from '../mastra';
+import { resolveDeliveryFailureUpdate } from './delivery-policy';
 import { createNotificationSignal, createNotificationSummarySignal, summarizeNotifications } from './signals';
 import type { NotificationsStorage } from './storage';
 import type { NotificationDeliveryThreadState, NotificationRecord } from './types';
@@ -85,7 +86,7 @@ async function recordDeliveryFailure({
   await storage.updateNotification({
     id: record.id,
     threadId: record.threadId,
-    deliveryAttempts: (record.deliveryAttempts ?? 0) + 1,
+    ...resolveDeliveryFailureUpdate(record),
     lastDeliveryAttemptAt: now,
     lastDeliveryError: errorMessage(error),
   });

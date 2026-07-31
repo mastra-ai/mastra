@@ -69,6 +69,16 @@ describe('AgentController Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ resourceId: 'user-1' });
   });
 
+  it('requests an exact thread binding when creating a session', async () => {
+    mockJson({ controllerId: 'code', resourceId: 'factory-session-1', threadId: 'factory-session-1' });
+    await client.getAgentController('code').session('factory-session-1').create({ threadId: 'factory-session-1' });
+    const [, init] = lastCall();
+    expect(JSON.parse(init.body as string)).toEqual({
+      resourceId: 'factory-session-1',
+      threadId: 'factory-session-1',
+    });
+  });
+
   it('sends a message to the resource-scoped session', async () => {
     mockJson({ ok: true });
     await client.getAgentController('code').session('user-1').sendMessage('hello');

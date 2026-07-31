@@ -8,6 +8,7 @@ import {
   MemoryStorage,
   normalizePerPage,
   calculatePagination,
+  validateStorageMetadataFilter,
   TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_THREADS,
@@ -19,12 +20,53 @@ import type {
   StorageListMessagesOutput,
   StorageListThreadsInput,
   StorageListThreadsOutput,
+  StorageMetadataFilter,
   CreateIndexOptions,
 } from '@mastra/core/storage';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig } from '../../db';
 import { quoteIdent } from '../../db/utils';
 import { buildDateRangeFilter, transformFromSpannerRow } from '../utils';
+
+function buildSpannerMessageMetadataFilter(metadataFilter: StorageMetadataFilter | undefined): {
+  clauses: string[];
+  params: Record<string, unknown>;
+} {
+  if (!metadataFilter) return { clauses: [], params: {} };
+
+  const clauses: string[] = [];
+  const params: Record<string, unknown> = {};
+
+  Object.entries(metadataFilter).forEach(([key, value], index) => {
+    const path = `$.metadata.${key}`;
+    const valueExpr = `JSON_VALUE(SAFE.PARSE_JSON(content), '${path}')`;
+    const queryExpr = `JSON_QUERY(SAFE.PARSE_JSON(content), '${path}')`;
+    const typeExpr = `JSON_TYPE(${queryExpr})`;
+
+    if (value === null) {
+      clauses.push(`${queryExpr} = 'null'`);
+      return;
+    }
+
+    const paramName = `metadataValue${index}`;
+    if (typeof value === 'string') {
+      params[paramName] = value;
+      clauses.push(`${typeExpr} = 'string' AND ${valueExpr} = @${paramName}`);
+      return;
+    }
+
+    if (typeof value === 'number') {
+      params[paramName] = String(value);
+      clauses.push(`${typeExpr} = 'number' AND ${valueExpr} = @${paramName}`);
+      return;
+    }
+
+    params[paramName] = value ? 'true' : 'false';
+    clauses.push(`${typeExpr} = 'boolean' AND ${valueExpr} = @${paramName}`);
+  });
+
+  return { clauses, params };
+}
 
 /**
  * Spanner-backed storage for memory primitives: threads, messages, and resources
@@ -553,6 +595,7 @@ export class MemorySpanner extends MemoryStorage {
   /** Paginated message listing for a thread, with optional pinned-include and date-range filters. */
   async listMessages(args: StorageListMessagesInput): Promise<StorageListMessagesOutput> {
     const { threadId, resourceId, include, filter, perPage: perPageInput, page = 0, orderBy } = args;
+    const metadataFilter = validateStorageMetadataFilter(filter?.metadata);
     const threadIds = Array.isArray(threadId) ? threadId : [threadId];
     if (threadIds.length === 0 || threadIds.some(id => !id || !id.trim())) {
       throw new MastraError(
@@ -584,10 +627,16 @@ export class MemorySpanner extends MemoryStorage {
         ...buildDateRangeFilter(filter?.dateRange, 'createdAt'),
       };
       const {
-        sql: whereSql,
+        sql: preparedWhereSql,
         params: whereParams,
         types: whereTypes,
       } = this.db.prepareWhereClause(filters, TABLE_MESSAGES);
+      const metadataWhere = buildSpannerMessageMetadataFilter(metadataFilter);
+      const whereSql = [preparedWhereSql, ...metadataWhere.clauses].reduce((sql, clause) => {
+        if (!clause) return sql;
+        return sql ? `${sql} AND ${clause}` : ` WHERE ${clause}`;
+      }, '');
+      Object.assign(whereParams, metadataWhere.params);
 
       if (perPage === 0 && (!include || include.length === 0)) {
         return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
@@ -654,6 +703,7 @@ export class MemorySpanner extends MemoryStorage {
       const messages: Record<string, any>[] = baseRows.map(r =>
         transformFromSpannerRow<Record<string, any>>({ tableName: TABLE_MESSAGES, row: r }),
       );
+      const primaryPageCount = messages.length;
 
       if (total === 0 && messages.length === 0 && (!include || include.length === 0)) {
         return { messages: [], total: 0, page, perPage: perPageForResponse, hasMore: false };
@@ -687,17 +737,14 @@ export class MemorySpanner extends MemoryStorage {
         return a.id.localeCompare(b.id) * mult;
       });
 
-      // Counting `include`d rows toward "all returned" is intentional: the
-      // shared storage contract treats hasMore=false once the caller has the
-      // entire thread in hand, regardless of whether the base page or the
-      // include path delivered the trailing messages. The shared
-      // `should respect pagination when using include` test pins this.
       const threadIdSet = new Set(threadIds);
       const returnedThreadMessageIds = new Set(
         finalMessages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
       );
       const allThreadMessagesReturned = returnedThreadMessageIds.size >= total;
-      const hasMore = perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
+      const hasMore = metadataFilter
+        ? perPageInput !== false && offset + primaryPageCount < total
+        : perPageInput !== false && !allThreadMessagesReturned && offset + perPage < total;
 
       return {
         messages: finalMessages,

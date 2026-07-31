@@ -56,7 +56,7 @@ Here are some questions to consider:
 
 ### Agent stream properties
 
-An agent stream provides access to various response properties:
+An agent stream provides access to these response properties:
 
 - **`stream.textStream`**: A readable stream that emits text chunks.
 - **`stream.text`**: Promise that resolves to the full text response.
@@ -134,13 +134,13 @@ The event structure includes `runId` and `from` at the top level, making it easi
 
 ### Workflow stream properties
 
-A workflow stream provides access to various response properties:
+A workflow stream provides access to these response properties:
 
 - **`stream.status`**: The status of the workflow run.
 - **`stream.result`**: The result of the workflow run.
 - **`stream.usage`**: The total token usage of the workflow run.
 
-Streaming from agents or workflows provides real-time visibility into either the LLM’s output or the status of a workflow run. This feedback can be passed directly to the user, or used within applications to handle workflow status more effectively, creating a smoother and more responsive experience.
+Streaming from agents or workflows provides real-time visibility into either the LLM’s output or the status of a workflow run. Pass this feedback directly to the user, or use it in an application to display workflow status as it changes.
 
 Events emitted from agents or workflows represent different stages of generation and execution, such as when a run starts, when text is produced, or when a tool is invoked.
 
@@ -204,11 +204,11 @@ Below is an example of events that may be emitted. Each event always includes a 
 
 ## Writer API
 
-The `writer` API is shared by tools and workflow steps — see the Tools and Workflows docs for feature-specific examples.
+The `writer` API is shared by tools and workflow steps. See the Tools and Workflows docs for feature-specific examples.
 
 ## Agent using tool
 
-Agent streaming can be combined with tool calls, allowing tool outputs to be written directly into the agent’s streaming response. This makes it possible to surface tool activity as part of the overall interaction.
+Agent streaming can be combined with tool calls, allowing tool outputs to be written directly into the agent’s streaming response. This surfaces tool activity as part of the interaction.
 
 ```typescript {2,9}
 import { Agent } from '@mastra/core/agent'
@@ -225,7 +225,7 @@ export const testAgent = new Agent({
 
 ### Using `context.writer`
 
-The `context.writer` object is available in a tool's `execute()` function and can be used to emit custom events, data, or values into the active stream. This enables tools to provide intermediate results or status updates while execution is still in progress.
+The `context.writer` object is available in a tool's `execute()` function and can emit custom events, data, or values into the active stream. Tools use these events to provide intermediate results or status updates during execution.
 
 :::warning
 
@@ -289,7 +289,7 @@ export const testTool = createTool({
 
 ### Transient data chunks
 
-By default, `data-*` chunks emitted with `writer.custom()` are persisted to storage as part of the message history. For chunks that are only needed during live streaming — such as progress updates or verbose log output — set `transient: true` to skip storage persistence. Transient chunks are still streamed to the client in real time but aren't saved to the database.
+By default, `data-*` chunks emitted with `writer.custom()` are persisted to storage as part of the message history. For chunks that are only needed during live streaming, such as progress updates or verbose log output, set `transient: true` to skip storage persistence. Transient chunks are still streamed to the client in real time but aren't saved to the database.
 
 ```typescript {4}
 await context?.writer?.custom({
@@ -299,11 +299,11 @@ await context?.writer?.custom({
 })
 ```
 
-Use transient chunks when the data is large or high-frequency and only relevant during the live session. After a page refresh, transient chunks are no longer available — only the tool's return value and any non-transient chunks are loaded from storage.
+Use transient chunks when the data is large or high-frequency and only relevant during the live session. After a page refresh, transient chunks are no longer available. Only the tool's return value and any non-transient chunks are loaded from storage.
 
 ## Using the `writer` argument
 
-The `writer` argument is passed to a workflow step's `execute` function and can be used to emit custom events, data, or values into the active stream. This enables workflow steps to provide intermediate results or status updates while execution is still in progress.
+The `writer` argument is passed to a workflow step's `execute` function and can emit custom events, data, or values into the active stream. Workflow steps use these events to provide intermediate results or status updates during execution.
 
 :::warning
 

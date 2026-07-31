@@ -7,7 +7,6 @@
  *
  * Usage:
  *   node scripts/monorepo-deps.mjs pin              # link: -> exact monorepo versions
- *   node scripts/monorepo-deps.mjs link             # exact versions -> link: specs
  *   node scripts/monorepo-deps.mjs run -- <cmd...>  # pin, run command, always restore
  */
 import { spawn } from 'node:child_process';
@@ -15,23 +14,24 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** Package name -> monorepo directory, relative to mastracode/web. */
-const LINKED_PACKAGES = {
-  '@mastra/auth-workos': '../../auth/workos',
-  '@mastra/client-js': '../../client-sdks/client-js',
-  '@mastra/code-sdk': '../sdk',
-  '@mastra/core': '../../packages/core',
-  '@mastra/hono': '../../server-adapters/hono',
-  '@mastra/libsql': '../../stores/libsql',
-  '@mastra/playground-ui': '../../packages/playground-ui',
-  '@mastra/railway': '../../workspaces/railway',
-  '@mastra/react': '../../client-sdks/react',
-  '@mastra/redis-streams': '../../pubsub/redis-streams',
-  mastra: '../../packages/cli',
-};
-
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const packageJsonPath = path.join(webRoot, 'package.json');
+
+function linkedPackages(manifest) {
+  const packages = new Map();
+  for (const section of ['dependencies', 'devDependencies']) {
+    for (const [name, spec] of Object.entries(manifest[section] ?? {})) {
+      if (!spec.startsWith('link:')) continue;
+      const relPath = spec.slice('link:'.length);
+      const previous = packages.get(name);
+      if (previous && previous !== relPath) {
+        throw new Error(`monorepo-deps: ${name} has conflicting link specs: ${previous} and ${relPath}`);
+      }
+      packages.set(name, relPath);
+    }
+  }
+  return packages;
+}
 
 function monorepoVersion(name, relPath) {
   const pkgJsonPath = path.join(webRoot, relPath, 'package.json');
@@ -40,7 +40,7 @@ function monorepoVersion(name, relPath) {
   }
   const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
   if (pkg.name !== name) {
-    throw new Error(`monorepo-deps: ${pkgJsonPath} is named ${pkg.name}, expected ${name} — update LINKED_PACKAGES`);
+    throw new Error(`monorepo-deps: ${pkgJsonPath} is named ${pkg.name}, expected ${name}`);
   }
   if (!pkg.version) {
     throw new Error(`monorepo-deps: ${pkgJsonPath} has no version`);
@@ -48,37 +48,23 @@ function monorepoVersion(name, relPath) {
   return pkg.version;
 }
 
-function rewriteSpecs(specFor) {
+function pin() {
   const manifest = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
   const changes = [];
-  for (const [name, relPath] of Object.entries(LINKED_PACKAGES)) {
+  for (const [name, relPath] of linkedPackages(manifest)) {
+    const version = monorepoVersion(name, relPath);
     for (const section of ['dependencies', 'devDependencies']) {
       const deps = manifest[section];
-      if (!deps?.[name]) continue;
-      const next = specFor(name, relPath);
-      if (deps[name] !== next) {
-        changes.push(`  ${name}: ${deps[name]} -> ${next}`);
-        deps[name] = next;
-      }
+      if (!deps || !deps[name]?.startsWith('link:')) continue;
+      changes.push(`  ${name}: ${deps[name]} -> ${version}`);
+      deps[name] = version;
     }
   }
   fs.writeFileSync(packageJsonPath, `${JSON.stringify(manifest, null, 2)}\n`);
-  return changes;
-}
-
-function pin() {
-  const changes = rewriteSpecs((name, relPath) => monorepoVersion(name, relPath));
   console.log(
     changes.length
       ? `monorepo-deps: pinned exact monorepo versions\n${changes.join('\n')}`
       : 'monorepo-deps: already pinned',
-  );
-}
-
-function link() {
-  const changes = rewriteSpecs((_name, relPath) => `link:${relPath}`);
-  console.log(
-    changes.length ? `monorepo-deps: restored link: specs\n${changes.join('\n')}` : 'monorepo-deps: already linked',
   );
 }
 
@@ -133,13 +119,10 @@ switch (mode) {
   case 'pin':
     pin();
     break;
-  case 'link':
-    link();
-    break;
   case 'run':
     await run(command);
     break;
   default:
-    console.error('monorepo-deps: usage: monorepo-deps.mjs <pin|link|run -- <cmd...>>');
+    console.error('monorepo-deps: usage: monorepo-deps.mjs <pin|run -- <cmd...>>');
     process.exit(1);
 }

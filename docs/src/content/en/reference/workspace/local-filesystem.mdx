@@ -611,7 +611,7 @@ await filesystem.readFile('docs/guide.md')
 
 ### Relative paths and execution context
 
-When you use a relative path for `basePath`, it resolves from `process.cwd()`. In Mastra projects, cwd varies depending on how you run your code:
+When you use a relative path for `basePath`, it resolves from `process.cwd()`. In Mastra projects, the cwd changes based on how you run your code:
 
 | Context | Working directory | `./workspace` resolves to |
 | - | - | - |
@@ -633,7 +633,7 @@ const filesystem = new LocalFilesystem({
 })
 ```
 
-Set `WORKSPACE_PATH` in your environment to an absolute path like `/home/user/my-project/workspace`. This ensures the workspace path is consistent regardless of how you run your code.
+Set `WORKSPACE_PATH` in your environment to an absolute path like `/home/user/my-project/workspace`. It ensures the workspace path is consistent regardless of how you run your code.
 
 ## Related
 

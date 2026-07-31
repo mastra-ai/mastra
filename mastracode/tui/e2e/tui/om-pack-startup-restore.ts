@@ -40,8 +40,8 @@ export const omPackStartupRestoreScenario: McE2eScenario = {
 
     terminal.submit('/om');
     await runtime.waitForScreenText(/Observational Memory Settings/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Observer model\s+gemini-2\.5-flash/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Reflector model\s+gemini-2\.5-flash/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Observer model\s+gemini-3\.5-flash/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Reflector model\s+gemini-3\.5-flash/i, terminal, 8_000);
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Observational Memory Settings/i, terminal, 8_000);
 

@@ -47,7 +47,7 @@ export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
   if (isLoading) {
     return (
       <div className="p-6">
-        <Skeleton className="h-8 w-48 mb-4" />
+        <Skeleton className="mb-4 h-8 w-48" />
         <Skeleton className="h-32 w-full" />
       </div>
     );
@@ -57,7 +57,7 @@ export function ProcessorPanel({ processorId }: ProcessorPanelProps) {
 
   if (!processor)
     return (
-      <div className="py-12 text-center px-6">
+      <div className="px-6 py-12 text-center">
         <Txt variant="header-md" className="text-neutral3">
           Processor not found
         </Txt>
@@ -121,10 +121,10 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
 
   return (
     <MainContentContent hasLeftServiceColumn={true} className="relative">
-      <div className="bg-surface2 border-r border-border1 w-[22rem] overflow-y-auto">
+      <div className="bg-surface2 border-border1 w-[22rem] overflow-y-auto border-r">
         <ProcessorInformation processor={processor} />
 
-        <div className="p-5 space-y-5">
+        <div className="space-y-5 p-5">
           <div className="space-y-2">
             <Txt as="label" variant="ui-sm" className="text-neutral3">
               Phase
@@ -176,7 +176,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTestMessage(e.target.value)}
               placeholder="Enter a test message..."
               rows={4}
-              className="w-full bg-transparent border border-border1 rounded-md p-3 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:outline-hidden focus:ring-2 focus:ring-accent1"
+              className="border-border1 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:ring-accent1 w-full rounded-md border bg-transparent p-3 focus:ring-2 focus:outline-hidden"
             />
           </div>
 
@@ -195,7 +195,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
           )}
 
           {result && (
-            <div className="space-y-2 pt-4 border-t border-border1">
+            <div className="border-border1 space-y-2 border-t pt-4">
               <Txt variant="ui-sm" className="text-neutral3">
                 Status
               </Txt>
@@ -204,7 +204,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
                 {result.tripwire?.triggered && <Badge variant="info">Tripwire Triggered</Badge>}
               </div>
               {result.tripwire?.triggered && result.tripwire.reason && (
-                <div className="mt-2 p-3 bg-accent6Dark rounded-md border border-accent6/20">
+                <div className="bg-accent6Dark border-accent6/20 mt-2 rounded-md border p-3">
                   <Txt variant="ui-sm" className="text-accent6 font-medium">
                     Tripwire Reason
                   </Txt>
@@ -222,7 +222,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
         <CopyButton content={resultCode} tooltip="Copy JSON result to clipboard" />
       </div>
 
-      <div className="p-5 h-full relative overflow-x-auto overflow-y-auto">
+      <div className="relative h-full overflow-x-auto overflow-y-auto p-5">
         <CodeMirror value={errorString || resultCode} editable={true} theme={theme} extensions={[jsonLanguage]} />
       </div>
     </MainContentContent>
@@ -235,7 +235,7 @@ interface ProcessorInformationProps {
 
 function ProcessorInformation({ processor }: ProcessorInformationProps) {
   return (
-    <div className="px-5 pt-5 pb-4 border-b border-border1">
+    <div className="border-border1 border-b px-5 pt-5 pb-4">
       <Txt variant="header-md" className="text-neutral1 mb-2">
         {processor.name || processor.id}
       </Txt>
@@ -244,7 +244,7 @@ function ProcessorInformation({ processor }: ProcessorInformationProps) {
           {processor.id}
         </Txt>
       )}
-      <div className="flex flex-wrap gap-1 mt-3">
+      <div className="mt-3 flex flex-wrap gap-1">
         {processor.phases.map(phase => (
           <Badge key={phase} variant="default">
             {phase}
