@@ -397,7 +397,7 @@ describe('@mastra/inngest actor signal threading (hermetic)', () => {
         suspendedPaths: {},
         state: {},
       } as any,
-      resume: { steps: ['nested-step'], resumePayload: { value: 'ok' } },
+      resume: { steps: [nestedWorkflow.id, nestedStep.id], resumePayload: { value: 'ok' } },
       prevOutput: {},
       inputData: { value: 'ok' },
       pubsub,
