@@ -218,7 +218,8 @@ Filesystem-specific errors match the standard workspace error types:
 Other Platform API failures raise `PlatformApiError`. Structured `{ error: { message, type } }` responses are parsed into `.code` (machine-readable kind) and `.proxyMessage` (human string):
 
 ```typescript
-import { FileNotFoundError, PlatformApiError } from '@mastra/platform-workspace'
+import { FileNotFoundError } from '@mastra/core/workspace'
+import { PlatformApiError } from '@mastra/platform-workspace'
 
 try {
   await fs.readFile('/missing.txt')
@@ -233,6 +234,8 @@ try {
   }
 }
 ```
+
+`FileNotFoundError`, `FileExistsError`, and `WorkspaceReadOnlyError` are re-exports of the standard workspace error types from `@mastra/core/workspace`. `PlatformApiError` is specific to `@mastra/platform-workspace`.
 
 `code` and `proxyMessage` are `undefined` when the response body isn't JSON, for example an HTML 502 from a load balancer.
 
