@@ -2698,6 +2698,11 @@ describe('PROVIDER_TOOL_CALL observability spans', () => {
         warn: vi.fn(),
         debug: vi.fn(),
       } as any,
+      modelSpanTracker: {
+        startStep: vi.fn(),
+        updateGeneration: vi.fn(),
+        getTracingContext: vi.fn(() => ({ currentSpan: modelStepSpan })),
+      },
     } as unknown as OuterLLMRun<typeof tools>);
 
     const executeParams = createExecuteParams(createIterationInput());
@@ -2705,7 +2710,7 @@ describe('PROVIDER_TOOL_CALL observability spans', () => {
 
     await llmExecutionStep.execute(executeParams);
 
-    // The span is created under the active span (the model step), not hoisted to AGENT_RUN,
+    // The span is created under the live step from the tracker, not hoisted to AGENT_RUN,
     // backdated to the exact tool-call chunk time, with the stashed args as input.
     expect(modelStepSpan.createChildSpan).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2724,7 +2729,7 @@ describe('PROVIDER_TOOL_CALL observability spans', () => {
     vi.useRealTimers();
   });
 
-  it('falls back to the AGENT_RUN anchor when the step span has already ended', async () => {
+  it('anchors to the AGENT_RUN fallback when no live model step is available', async () => {
     const providerToolSpan = {
       id: 'server-span-1',
       type: SpanType.PROVIDER_TOOL_CALL,
@@ -2739,7 +2744,6 @@ describe('PROVIDER_TOOL_CALL observability spans', () => {
     const modelStepSpan = {
       id: 'step-span',
       type: SpanType.MODEL_STEP,
-      endTime: new Date(),
       createChildSpan: vi.fn(),
       findParent: vi.fn(() => agentRunSpan),
     };
@@ -2824,7 +2828,8 @@ describe('PROVIDER_TOOL_CALL observability spans', () => {
 
     await llmExecutionStep.execute(executeParams);
 
-    // An ended step span is not a valid parent — the span anchors to AGENT_RUN instead.
+    // Without a step tracker there is no live step to parent under — the span
+    // anchors to the AGENT_RUN fallback recorded at call time.
     expect(modelStepSpan.createChildSpan).not.toHaveBeenCalled();
     expect(agentRunSpan.createChildSpan).toHaveBeenCalledWith(
       expect.objectContaining({

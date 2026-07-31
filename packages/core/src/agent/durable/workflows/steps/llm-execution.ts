@@ -1259,6 +1259,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           if (spanInput !== undefined) break;
                         }
                       }
+                      // startTime is result time, not the call time: the call was observed in a
+                      // previous invocation whose in-memory state (including its timestamp) does
+                      // not survive the invocation boundary.
                       endPendingProviderToolSpan({
                         toolCallId: payload.toolCallId,
                         pending: {

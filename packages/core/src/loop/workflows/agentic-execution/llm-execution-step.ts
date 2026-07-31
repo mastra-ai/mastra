@@ -15,7 +15,7 @@ import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
 import type { Mastra } from '../../../mastra';
 import { createObservabilityContext, EntityType, SpanType } from '../../../observability';
-import type { AnySpan, ModelInferenceContext, TracingContext } from '../../../observability';
+import type { AnySpan, IModelSpanTracker, ModelInferenceContext, TracingContext } from '../../../observability';
 import { executeWithContextSync, getStepAvailableToolNames } from '../../../observability/utils';
 import type { CachedLLMStepResponse, InputProcessorOrWorkflow, ProcessorStreamWriter } from '../../../processors/index';
 import { isProcessorWorkflow } from '../../../processors/index';
@@ -154,6 +154,8 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   tracingContext?: TracingContext;
   /** Closure-scoped map for provider tool calls awaiting a result, which may arrive in a later iteration. */
   pendingProviderToolCallsByToolCallId?: Map<string, PendingProviderToolCall>;
+  /** Live step tracker, consulted at tool-result time to parent PROVIDER_TOOL_CALL spans. */
+  modelSpanTracker?: IModelSpanTracker;
 };
 
 type ToolResolvers = {
@@ -441,6 +443,7 @@ async function processOutputStream<OUTPUT = undefined>({
   mastra,
   tracingContext,
   pendingProviderToolCallsByToolCallId,
+  modelSpanTracker,
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
@@ -805,14 +808,13 @@ async function processOutputStream<OUTPUT = undefined>({
         if (pendingProviderToolCallsByToolCallId) {
           const pending = pendingProviderToolCallsByToolCallId.get(chunk.payload.toolCallId);
           if (pending) {
-            // The iteration snapshot can hold a step span that already ended when a
-            // deferred result trails behind a slow consumer — anchor those to the
-            // fallback instead of parenting under a closed span.
-            const stepSpan = tracingContext?.currentSpan;
+            // Re-fetch the live step context so the span parents under whichever
+            // MODEL_STEP is open right now (mirrors the durable path); a live
+            // lookup never returns a closed step.
             endPendingProviderToolSpan({
               toolCallId: chunk.payload.toolCallId,
               pending,
-              parentSpan: stepSpan && !stepSpan.endTime ? stepSpan : pending.fallbackParentSpan,
+              parentSpan: modelSpanTracker?.getTracingContext()?.currentSpan ?? pending.fallbackParentSpan,
               result: { output: chunk.payload.result, isError: chunk.payload.isError },
               logger,
             });
@@ -1529,6 +1531,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               mastra,
               tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
               pendingProviderToolCallsByToolCallId,
+              modelSpanTracker,
             });
 
             // Build messages from the full chunk sequence and add to messageList.
