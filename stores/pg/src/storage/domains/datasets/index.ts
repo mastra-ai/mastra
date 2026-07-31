@@ -119,6 +119,9 @@ export class DatasetsPG extends DatasetsStorage {
     if (!exists) {
       const fullTableName = getTableName({ indexName: table, schemaName: getSchemaName(this.#schema) });
       await this.#db.client.none(`ALTER TABLE ${fullTableName} ADD COLUMN "${column}" ${sqlType}`);
+      // Raw DDL bypasses alterTable's snapshot maintenance — report it so later
+      // init-path checks in the same window see the column.
+      this.#db.noteColumnAdded(table, column);
     }
   }
 

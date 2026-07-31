@@ -4981,6 +4981,8 @@ export type ProviderModelsMap = {
     'google/gemini-2.5-pro',
     'google/gemini-3-flash-preview',
     'google/gemini-3.1-pro-preview',
+    'moonshot-ai/kimi-k2.7-code',
+    'moonshot-ai/kimi-k3',
     'nvidia/nemotron-3-super-120b-a12b',
     'openai/gpt-5-mini',
     'openai/gpt-5.1',
