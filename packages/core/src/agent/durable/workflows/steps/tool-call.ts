@@ -863,6 +863,7 @@ export function createDurableToolCallStep() {
               type: 'suspension',
               suspendPayload,
               resumeSchema: suspendOptions?.resumeSchema,
+              delegatedRunId,
             });
 
             await doFlush();
@@ -876,6 +877,11 @@ export function createDurableToolCallStep() {
                 toolCallId,
                 toolName,
                 resumeLabel: suspendOptions?.resumeLabel,
+                // Persist the inner suspended run id in the workflow snapshot,
+                // partitioned per tool call (resumeLabel = toolCallId), so the
+                // resume leg continues the delegate's suspended run instead of
+                // restarting it (#20496; mirrors the approval branch above).
+                ...(delegatedRunId ? { suspendedToolRunId: delegatedRunId } : {}),
               },
               { resumeLabel: toolCallId },
             );
