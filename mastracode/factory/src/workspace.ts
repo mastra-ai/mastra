@@ -258,6 +258,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             return;
           }
           const patKindChanged = patKind !== registered.patKind;
+          // Make the authoritative role effective before any credential I/O.
+          // If replacement fails, stale requests must not be able to restore
+          // the previous role's token through the runtime refresh injector.
+          if (patKindChanged) registered.patKind = patKind;
           let credentialSourceChanged = false;
           try {
             const pat = await resolveGithubPat(() => github.integrationStorage, session.orgId, patKind, {

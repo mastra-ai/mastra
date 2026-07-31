@@ -896,7 +896,7 @@ describe('GitHub session workspace preparation', () => {
     expect(getRegisteredGithubPatKind(requestContext)).toBe('default');
   });
 
-  it('does not reuse a reviewer workspace when the worker credential cannot be installed', async () => {
+  it('does not reuse or reauthorize a reviewer workspace when the worker credential cannot be installed', async () => {
     mocks.githubPat = 'ghp_worker';
     mocks.githubReviewerPat = 'ghp_reviewer';
     mocks.runBindingRole = 'review';
@@ -904,7 +904,8 @@ describe('GitHub session workspace preparation', () => {
     addProject();
     addSession({ id: 'session-a' });
 
-    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    const reviewerRequestContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({ requestContext: reviewerRequestContext });
     mocks.runBindingRole = 'work';
     mocks.setEnvironmentVariable.mockImplementationOnce(() => {
       throw new Error('runtime token injection failed');
@@ -921,7 +922,12 @@ describe('GitHub session workspace preparation', () => {
 
     expect(existing.setToolsConfig).toHaveBeenCalled();
     expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
-    expect(getRegisteredGithubPatKind(requestContext)).toBe('reviewer');
+    expect(getRegisteredGithubPatKind(requestContext)).toBe('default');
+    mocks.setEnvironmentVariable.mockClear();
+    expect(() => injectGithubToken(reviewerRequestContext, 'ghp_stale_reviewer', 'reviewer', 'reviewer')).toThrow(
+      'GitHub token refresh no longer matches the active Factory workspace role.',
+    );
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
   });
 
   it('preserves a cached reviewer identity when the binding lookup fails during reuse', async () => {
