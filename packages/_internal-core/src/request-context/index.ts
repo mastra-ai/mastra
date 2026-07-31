@@ -351,7 +351,7 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
           // engine still throws TypeError on their elements, matching the
           // unbudgeted probe's verdict. (An empty BigInt view has no elements
           // to throw on and stringifies to '{}' either way.)
-          if (typeof (probed as ArrayLike<unknown>)[0] === 'bigint') {
+          if (typeof (probed as unknown as ArrayLike<unknown>)[0] === 'bigint') {
             return probed;
           }
           // Charge the intrinsic element count — an own `length` data
