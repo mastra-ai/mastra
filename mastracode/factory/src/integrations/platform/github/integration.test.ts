@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { defaultFactoryRules } from '../../../rules/defaults.js';
+import type { SourceControlStorageHandle } from '../../../storage/domains/source-control/base.js';
 import type { IntegrationContext } from '../../base.js';
 
 import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
@@ -1162,6 +1163,85 @@ describe('PlatformGithubIntegration', () => {
       // Verify the repository's installation_id was migrated to the new installation
       const migratedRepository = await storage.repositories.get({ orgId: 'org-1', id: oldRepository.id });
       expect(migratedRepository?.installationId).toBe(newInstallation.id);
+    });
+
+    /** Old installation on `7`, new one on `456`, both owned by `acme`. */
+    async function seedReinstalledOrg(storage: SourceControlStorageHandle) {
+      const oldInstallation = await storage.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '7',
+        accountName: 'acme',
+        accountType: 'Organization',
+      });
+      const oldRepository = await storage.repositories.upsert({
+        orgId: 'org-1',
+        input: { installationId: oldInstallation.id, externalId: '101', slug: 'acme/app', defaultBranch: 'main' },
+      });
+      const newInstallation = await storage.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: '456',
+        accountName: 'acme',
+        accountType: 'Organization',
+      });
+      return { oldInstallation, oldRepository, newInstallation };
+    }
+
+    it('recovers when Platform reports the installation as suspended or soft-deleted', async () => {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const storage = sourceControl.forIntegration('github');
+      const { oldRepository, newInstallation } = await seedReinstalledOrg(storage);
+
+      // Platform answers 409 while its own row still exists but is unusable.
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ type: 'conflict', detail: 'GitHub App installation is not available.' }), {
+            status: 409,
+            headers: { 'content-type': 'application/json' },
+          }),
+        )
+        .mockResolvedValueOnce(json({ token: 'ghs_recovered', expiresAt: '2026-07-21T18:00:00Z' }));
+
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage });
+
+      await expect(
+        integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: oldRepository.id }),
+      ).resolves.toEqual({
+        cloneUrl: 'https://github.com/acme/app.git',
+        authorization: { scheme: 'bearer', token: 'ghs_recovered' },
+      });
+
+      const migratedRepository = await storage.repositories.get({ orgId: 'org-1', id: oldRepository.id });
+      expect(migratedRepository?.installationId).toBe(newInstallation.id);
+    });
+
+    it('leaves the repository alone when the mint fails for a transient reason', async () => {
+      const { sourceControl } = await createPlatformStorageForTests();
+      const storage = sourceControl.forIntegration('github');
+      const { oldInstallation, oldRepository } = await seedReinstalledOrg(storage);
+
+      // A 502 covers a dead installation and a GitHub outage alike — migrating on it
+      // would repoint healthy repositories during an incident.
+      const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(JSON.stringify({ type: 'github_app_token_mint_failed' }), {
+          status: 502,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+
+      const integration = createIntegration(fetchImpl);
+      integration.versionControl.initialize({ storage });
+
+      await expect(
+        integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: oldRepository.id }),
+      ).rejects.toThrow();
+
+      const repository = await storage.repositories.get({ orgId: 'org-1', id: oldRepository.id });
+      expect(repository?.installationId).toBe(oldInstallation.id);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
     });
   });
 

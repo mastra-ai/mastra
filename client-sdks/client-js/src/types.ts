@@ -638,6 +638,24 @@ export type ListWorkflowRunsResponse = WorkflowRuns;
 
 export type GetWorkflowRunByIdResponse = WorkflowState;
 
+export type ListStoredWorkflowsParams = GeneratedRequest<QueryParams<'GET /stored/workflows'>>;
+export type ListStoredWorkflowsResponse = GeneratedResponse<'GET /stored/workflows'>;
+export type UpsertStoredWorkflowParams = GeneratedRequest<Body<'POST /stored/workflows'>>;
+export type UpsertStoredWorkflowResponse = GeneratedResponse<'POST /stored/workflows'>;
+type StoredWorkflowDefinitionField =
+  | 'description'
+  | 'inputSchema'
+  | 'outputSchema'
+  | 'stateSchema'
+  | 'requestContextSchema'
+  | 'graph';
+export type StoredWorkflowDefinition = Omit<
+  GeneratedResponse<'GET /stored/workflows/:storedWorkflowId'>,
+  StoredWorkflowDefinitionField
+> &
+  Pick<UpsertStoredWorkflowParams, StoredWorkflowDefinitionField>;
+export type DeleteStoredWorkflowResponse = GeneratedResponse<'DELETE /stored/workflows/:storedWorkflowId'>;
+
 export interface GetWorkflowResponse {
   name: string;
   description?: string;
@@ -675,6 +693,12 @@ export interface GetWorkflowResponse {
   requestContextSchema?: string;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
   isProcessorWorkflow?: boolean;
+  /**
+   * How this workflow got into the live registry. `'code'` for statically
+   * authored or `addWorkflow()`-added workflows, `'stored'` for anything
+   * hydrated or added via `addStoredWorkflow()`. Absent on older servers.
+   */
+  origin?: 'code' | 'stored';
 }
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;

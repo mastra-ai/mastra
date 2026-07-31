@@ -272,9 +272,12 @@ describe('createInngestAgent observe-replay wiring', () => {
     const collectNested = (steps: any[]): any[] => {
       const found: any[] = [];
       for (const step of steps ?? []) {
-        if ((step.type === 'step' || step.type === 'loop' || step.type === 'foreach') && step.step?.executionGraph) {
-          found.push(step.step);
-          found.push(...collectNested(step.step.executionGraph.steps));
+        // `type: 'step'` holds the workflow directly; loop/foreach wrap their
+        // body in a `SingleStepEntry`, so the workflow lives at `step.step.step`.
+        const inner = step.type === 'step' ? step.step : (step.step?.step ?? step.step);
+        if ((step.type === 'step' || step.type === 'loop' || step.type === 'foreach') && inner?.executionGraph) {
+          found.push(inner);
+          found.push(...collectNested(inner.executionGraph.steps));
         } else if (step.type === 'parallel' || step.type === 'conditional') {
           found.push(...collectNested(step.steps));
         }

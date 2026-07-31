@@ -116,7 +116,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const res = await fetch(`http://localhost:${port}/transitive-workspace`);
       const body = await res.json();
       expect(res.status).toBe(200);
-      expect(body).toEqual({ value: 'a -> b -> c' });
+      expect(body).toEqual({ value: 'a -> b -> c', app: 'App value is BEFORE.' });
     });
 
     it('should return tools from the api', async () => {
@@ -186,6 +186,73 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     }, timeout);
 
     runApiTests(port);
+
+    it(
+      'hot-reloads workspace package changes without a full process restart',
+      async () => {
+        const packageSource = join(fixturePath, 'packages', 'transitive-c', 'src', 'index.js');
+        const appRoute = join(
+          fixturePath,
+          'apps',
+          'custom',
+          'src',
+          'mastra',
+          'api',
+          'route',
+          'transitive-workspace.ts',
+        );
+
+        const originalPackageSource = await readFile(packageSource, 'utf-8');
+        const originalAppRoute = await readFile(appRoute, 'utf-8');
+
+        const waitForReload = async (predicate: (body: { value: string; app: string }) => boolean) => {
+          const started = Date.now();
+          let lastBody: { value: string; app: string } | undefined;
+          while (Date.now() - started < 60_000) {
+            try {
+              const res = await fetch(`http://localhost:${port}/transitive-workspace`);
+              if (res.ok) {
+                lastBody = (await res.json()) as { value: string; app: string };
+                if (predicate(lastBody)) {
+                  return lastBody;
+                }
+              }
+            } catch {
+              // Server may be restarting.
+            }
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+          throw new Error(`Timed out waiting for hot reload. Last body: ${JSON.stringify(lastBody)}`);
+        };
+
+        try {
+          // 1. Baseline
+          const baseline = await waitForReload(
+            body => body.value === 'a -> b -> c' && body.app === 'App value is BEFORE.',
+          );
+          expect(baseline).toEqual({ value: 'a -> b -> c', app: 'App value is BEFORE.' });
+
+          // 2. Edit workspace package only
+          await writeFile(packageSource, `export const valueC = 'c-AFTER';\n`);
+          const afterPackage = await waitForReload(
+            body => body.value === 'a -> b -> c-AFTER' && body.app === 'App value is BEFORE.',
+          );
+          expect(afterPackage).toEqual({ value: 'a -> b -> c-AFTER', app: 'App value is BEFORE.' });
+
+          // 3. Edit app only — package AFTER must still be present (no stale optimizer cache)
+          await writeFile(appRoute, originalAppRoute.replace('App value is BEFORE.', 'App value is AFTER.'));
+          const afterApp = await waitForReload(
+            body => body.value === 'a -> b -> c-AFTER' && body.app === 'App value is AFTER.',
+          );
+          expect(afterApp).toEqual({ value: 'a -> b -> c-AFTER', app: 'App value is AFTER.' });
+        } finally {
+          // Restore fixture so subsequent build/start suites see the original sources.
+          await writeFile(packageSource, originalPackageSource);
+          await writeFile(appRoute, originalAppRoute);
+        }
+      },
+      timeout,
+    );
   });
 
   describe.sequential('build', async () => {
