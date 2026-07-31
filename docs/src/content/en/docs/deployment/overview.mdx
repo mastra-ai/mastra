@@ -73,12 +73,6 @@ Use these guides when adding Mastra to an existing Next.js or Astro application.
 - [With Astro on Vercel](/docs/deployment/web-framework#with-astro-on-vercel)
 - [With Astro on Netlify](/docs/deployment/web-framework#with-astro-on-netlify)
 
-### Workers
-
-For production workloads, you can move background processing into separate processes or containers. Workers handle workflow orchestration, cron schedules, and background tool execution. Each worker type scales independently from the API.
-
-See the [Workers overview](/docs/deployment/workers) for concepts and the [worker deployment guide](/guides/deployment/mastra-workers) for Docker Compose and Kubernetes setup.
-
 ## Workflow runners
 
 Mastra workflows run using the built-in execution engine by default. For production workloads requiring managed infrastructure, workflows can also be deployed to specialized platforms like [Inngest](https://www.inngest.com) that provide step memoization, automatic retries, and real-time monitoring.
