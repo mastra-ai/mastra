@@ -2624,6 +2624,8 @@ type Shared_Type_116 = {
   expectedTrajectory?: unknown | undefined;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
   toolMocks?: Shared_Type_114[] | undefined;
+  /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
+  unmockedToolPolicy?: ('allow' | 'deny') | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -2949,7 +2951,7 @@ type Shared_Type_133 = {
   }[];
   failure?:
     | {
-        code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED';
+        code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED' | 'TOOL_MOCK_NOT_DECLARED';
         toolName: string;
         args: unknown;
       }
@@ -2976,6 +2978,7 @@ type Shared_Type_134 = {
   traceId: string | null;
   status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
   tags?: (string[] | null) | undefined;
+  comment?: (string | null) | undefined;
   /** Diagnostic receipt for item-level tool mocks */
   toolMockReport?: (Shared_Type_133 | undefined) | null;
   createdAt: Date;
@@ -17032,6 +17035,8 @@ export type PostDatasetsDatasetIdItems_Body = {
   expectedTrajectory?: (Shared_Type_131 | undefined) | null;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
   toolMocks?: Shared_Type_114[] | undefined;
+  /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
+  unmockedToolPolicy?: ('allow' | 'deny') | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -17083,6 +17088,8 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
     expectedTrajectory?: (Shared_Type_131 | undefined) | null;
     /** Ordered item-level static tool mocks served in place of executing the real tool */
     toolMocks?: Shared_Type_114[] | undefined;
+    /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
+    unmockedToolPolicy?: ('allow' | 'deny') | undefined;
     requestContext?:
       | {
           [key: string]: unknown;
@@ -17202,6 +17209,8 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
   expectedTrajectory?: (Shared_Type_131 | undefined) | null;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
   toolMocks?: Shared_Type_114[] | undefined;
+  /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
+  unmockedToolPolicy?: ('allow' | 'deny') | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -17321,6 +17330,8 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     expectedTrajectory?: unknown | undefined;
     /** Ordered item-level static tool mocks served in place of executing the real tool */
     toolMocks?: Shared_Type_114[] | undefined;
+    /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
+    unmockedToolPolicy?: ('allow' | 'deny') | undefined;
     metadata?:
       | {
           [key: string]: unknown;
@@ -17650,6 +17661,7 @@ export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_PathPar
 export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Body = {
   status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
   tags?: string[] | undefined;
+  comment?: (string | null) | undefined;
 };
 
 export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Response = Shared_Type_134;

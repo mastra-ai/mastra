@@ -269,6 +269,28 @@ try {
 
 `code` and `proxyMessage` are `undefined` when the response body isn't JSON, for example an HTML 502 from a load balancer.
 
+`executeCommand` runs over the direct-exec data plane (a WebSocket to the Railway tcp-proxy) and can also throw two typed sandbox errors on unrecoverable failure:
+
+```typescript
+import { SandboxDestroyedError, SandboxExecTransportError } from '@mastra/platform-workspace'
+
+try {
+  await sandbox.executeCommand('pytest')
+} catch (err) {
+  if (err instanceof SandboxDestroyedError) {
+    // /exec-lease returned 410; the sandbox has been destroyed.
+    // The cached sandbox id and lease have already been cleared,
+    // so reusing the instance will reprovision on the next call.
+  } else if (err instanceof SandboxExecTransportError) {
+    // Both the initial WebSocket attempt and the built-in retry
+    // closed without an exit frame against a live sandbox.
+    console.error(err.closeCode, err.closeReason, err.wsEndpoint)
+  }
+}
+```
+
+`SandboxExecTransportError` carries diagnostic fields (`opened`, `closeCode`, `closeReason`, `wsEndpoint`, plus `sandboxId`, `command`, and `attempts`) so operators can distinguish a broken Railway data plane from a failed command.
+
 ## Related
 
 - [PlatformFilesystem reference](/reference/workspace/platform-filesystem)

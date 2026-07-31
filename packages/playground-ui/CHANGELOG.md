@@ -1,5 +1,99 @@
 # @mastra/playground-ui
 
+## 45.1.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`594f7b2`](https://github.com/mastra-ai/mastra/commit/594f7b28f5263fb9982fd50d95c471fb971ea984), [`311f943`](https://github.com/mastra-ai/mastra/commit/311f943bee60e8fdf5c84499ea50e884276c936c), [`0c89896`](https://github.com/mastra-ai/mastra/commit/0c8989673fb7d106837098398131e570c6023b68), [`23b4238`](https://github.com/mastra-ai/mastra/commit/23b423844ad0bcf2a502a68dd62866d6160f9f6d), [`e320a76`](https://github.com/mastra-ai/mastra/commit/e320a763feaf65c6be3cebecf746defcbde161b3), [`03b4918`](https://github.com/mastra-ai/mastra/commit/03b4918c80d188ce375334c393e131c6e94bd7eb), [`14ef73a`](https://github.com/mastra-ai/mastra/commit/14ef73a4bbd73e7808414816eb0628ce1d80b5d7), [`1d677d5`](https://github.com/mastra-ai/mastra/commit/1d677d5f99d7db403f7828585e8c25f299f72628), [`bc3b722`](https://github.com/mastra-ai/mastra/commit/bc3b72225921ebcb05704c3fdf051d69b2f8c3ae), [`93e28ec`](https://github.com/mastra-ai/mastra/commit/93e28ecce9031c02397e0ae8406593e5c7a95883), [`729dab4`](https://github.com/mastra-ai/mastra/commit/729dab408faccfaef0cbb048e5a4338f9172847e), [`484003d`](https://github.com/mastra-ai/mastra/commit/484003d33ff59330c86b19863e4a38732d7e4155), [`933d291`](https://github.com/mastra-ai/mastra/commit/933d291146b789c19442ad206f94da3e4be90c64)]:
+  - @mastra/core@1.56.0-alpha.3
+  - @mastra/memory@1.25.0-alpha.0
+  - @mastra/client-js@1.36.1-alpha.3
+  - @mastra/react@1.3.5-alpha.3
+
+## 45.1.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`322daa6`](https://github.com/mastra-ai/mastra/commit/322daa6d90552909204044790d850958f6745fed), [`cadaa13`](https://github.com/mastra-ai/mastra/commit/cadaa1372e1077c8e85eb64c5499ba8803caa323), [`06000d7`](https://github.com/mastra-ai/mastra/commit/06000d73712911572e913b8a83339270296d0a22), [`3de0188`](https://github.com/mastra-ai/mastra/commit/3de0188bfaf9a9c09c95fe322b53838cf52c70b6)]:
+  - @mastra/core@1.56.0-alpha.2
+  - @mastra/client-js@1.36.1-alpha.2
+  - @mastra/react@1.3.5-alpha.2
+
+## 45.1.0-alpha.1
+
+### Minor Changes
+
+- Added `ChatShell`, a chat page frame with a single scroll container. Bars sit above the scroller, the composer docks inside it as `sticky bottom-0`, and every region — transcript, notices, task list, composer — is centred by one `ChatShell.Column`. That removes the band of background that used to separate the transcript from the composer, and keeps absolutely positioned affordances such as jump-to-latest anchored to the shell instead of escaping to a full-width page wrapper and centring on the wrong axis. ([#20455](https://github.com/mastra-ai/mastra/pull/20455))
+
+  ```tsx
+  <ChatShell
+    className="[--chat-column:44rem]"
+    scroller={{ autoScroll: true, preserveScrollOnPrepend: true, onReachStart: loadOlderHistory }}
+  >
+    <ChatShell.Bar>
+      <SessionHeader />
+    </ChatShell.Bar>
+    <ChatShell.Stage>
+      <ChatShell.Viewport>
+        <ChatShell.Content>
+          <ChatShell.Column>{messages}</ChatShell.Column>
+        </ChatShell.Content>
+        <ChatShell.Dock>
+          <ChatShell.ScrollButton />
+          <ChatShell.Column>
+            <Composer />
+          </ChatShell.Column>
+        </ChatShell.Dock>
+      </ChatShell.Viewport>
+    </ChatShell.Stage>
+  </ChatShell>
+  ```
+
+  The dock keeps its place in flow, so its own height is the room the transcript scrolls behind and nothing has to measure it. A composer that grows as the reader types therefore leaves the transcript exactly where it was, instead of dragging it up a line at a time.
+
+  Custom properties tune it: `--chat-column` for the column width, `--chat-surface` for the page colour, `--chat-gutter` for the room kept above and below the composer, `--chat-veil` for what the dock paints with (translucent by default, so a line passing behind the composer stays faintly readable), and `--chat-inset-end` for room an overlay panel claims on the end edge.
+
+  **MessageScroller** `MessageScrollerProvider` gained `onReachStart`, called when the reader reaches the start of the transcript, and `preserveScrollOnPrepend`, which holds the reading position when older messages land above the current ones. `autoScroll` now also follows content that grows mid-stream, and leaves a reader who scrolled away alone instead of pulling them back to the end. `preserveScrollOnPrepend` moved off `MessageScrollerViewport`, where it set a data attribute and nothing else. `MessageScrollerItem` no longer throws outside a scroller, so the same row renderer can be reused on draft pages and previews. `MessageScrollerButton` now carries a minimum size and a soft two-layer shadow, so it reads as a floating control rather than a bare icon.
+
+  **Migration**
+
+  ```tsx
+  // Before
+  <MessageScrollerViewport preserveScrollOnPrepend />
+
+  // After
+  <MessageScrollerProvider preserveScrollOnPrepend>
+    <MessageScrollerViewport />
+  </MessageScrollerProvider>
+  ```
+
+- Added reusable command palette primitives for consistent application search layouts. ([#20453](https://github.com/mastra-ai/mastra/pull/20453))
+
+      import { CommandPaletteDialog } from "@mastra/playground-ui/components/CommandPalette";
+
+      <CommandPaletteDialog open={open} onOpenChange={setOpen}>...</CommandPaletteDialog>
+
+- Added `size` variants to `Kbd` so keyboard hints can sit inside compact controls without hand-written overrides. Sizes are `default` (24px), `sm` (20px) and `xs` (16px), each with a fixed height so the scale stays even across fonts. ([#20453](https://github.com/mastra-ai/mastra/pull/20453))
+
+      <Kbd size="sm">Esc</Kbd>
+      <Kbd size="xs">⌘ K</Kbd>
+
+### Patch Changes
+
+- Updated dependencies [[`c5e56ff`](https://github.com/mastra-ai/mastra/commit/c5e56ff3bcabdf062708f2d48744fec304df6792), [`c5e56ff`](https://github.com/mastra-ai/mastra/commit/c5e56ff3bcabdf062708f2d48744fec304df6792), [`4e35a56`](https://github.com/mastra-ai/mastra/commit/4e35a56cdf8d74a5ff6d5eda01f2c1deaf6cc7be)]:
+  - @mastra/core@1.56.0-alpha.1
+  - @mastra/client-js@1.36.1-alpha.1
+  - @mastra/react@1.3.5-alpha.1
+
+## 45.0.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`7f4e26d`](https://github.com/mastra-ai/mastra/commit/7f4e26dd57bd9b23c278ea21235ab823a3810a6c), [`b582f7f`](https://github.com/mastra-ai/mastra/commit/b582f7fa2f9c1f87d19efc63d344fbe5dda2608c), [`b582f7f`](https://github.com/mastra-ai/mastra/commit/b582f7fa2f9c1f87d19efc63d344fbe5dda2608c)]:
+  - @mastra/core@1.56.0-alpha.0
+  - @mastra/client-js@1.36.1-alpha.0
+  - @mastra/react@1.3.5-alpha.0
+
 ## 45.0.0
 
 ### Patch Changes
