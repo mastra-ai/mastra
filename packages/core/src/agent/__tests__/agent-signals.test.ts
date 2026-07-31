@@ -1266,7 +1266,7 @@ describe('Agent signals', () => {
   it('delivers high-priority notification records with owning processor context while idle', async () => {
     const notifications = new InMemoryNotificationsStorage();
     const storage = new MastraCompositeStore({ id: 'notification-storage', domains: { notifications } });
-    const processorAgents: unknown[] = [];
+    const notificationProcessorObservations: Array<{ hook: string; agent: unknown }> = [];
     const agent = new Agent({
       id: 'notification-agent',
       name: 'Notification Agent',
@@ -1276,14 +1276,14 @@ describe('Agent signals', () => {
         {
           id: 'notification-agent-context',
           processInput: async ({ agent, messages }) => {
-            processorAgents.push(agent);
+            notificationProcessorObservations.push({ hook: 'processInput', agent });
             return messages;
           },
           processInputStep: async ({ agent }) => {
-            processorAgents.push(agent);
+            notificationProcessorObservations.push({ hook: 'processInputStep', agent });
           },
           processLLMRequest: async ({ agent, prompt }) => {
-            processorAgents.push(agent);
+            notificationProcessorObservations.push({ hook: 'processLLMRequest', agent });
             return { prompt };
           },
         },
@@ -1334,8 +1334,10 @@ describe('Agent signals', () => {
     await expect(
       notifications.getNotification({ threadId: 'notification-thread', id: result.record.id }),
     ).resolves.toMatchObject({ status: 'delivered', deliveredSignalId: result.signal?.id });
-    expect(processorAgents.length).toBeGreaterThanOrEqual(3);
-    expect(processorAgents.every(processorAgent => processorAgent === agent)).toBe(true);
+    expect(new Set(notificationProcessorObservations.map(observation => observation.hook))).toEqual(
+      new Set(['processInput', 'processInputStep', 'processLLMRequest']),
+    );
+    expect(notificationProcessorObservations.every(observation => observation.agent === agent)).toBe(true);
 
     subscription.unsubscribe();
   });
