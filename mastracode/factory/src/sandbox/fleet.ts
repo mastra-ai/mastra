@@ -181,10 +181,11 @@ function toMaterializationSandbox(
 }
 
 /**
- * The provider's reattach id for a started sandbox. For Railway this is the
- * underlying `railwaySandboxId` in `getInfo().metadata`. Providers without a
- * provider-native id (e.g. local) reattach by construction id, so fall back
- * to the sandbox's own logical id.
+ * The provider's reattach id for a started sandbox. Providers publish this as
+ * `metadata.sandboxId` (or historically `metadata.railwaySandboxId`); when
+ * absent, we fall back to the sandbox's own logical id, which every current
+ * provider except Vercel MicroVM already uses as its reattach key inside
+ * `start()`. Vercel MicroVM publishes its assigned name as `metadata.sandboxId`.
  */
 async function readProviderSandboxId(sandbox: MaterializationSandbox): Promise<string | undefined> {
   const info = await sandbox.getInfo();

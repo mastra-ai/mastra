@@ -334,6 +334,19 @@ describe('VercelSandbox', () => {
       expect(info.metadata?.timeout).toBe(120_000);
       expect(info.metadata?.domains).toEqual({ 8080: 'https://port-8080.vercel.run' });
     });
+
+    it('publishes the Vercel-assigned name as sandboxId so fleet pools can reattach', async () => {
+      const fake = makeFakeSandbox();
+      createMock.mockResolvedValue(fake);
+
+      const sandbox = new VercelSandbox();
+      await sandbox._start();
+
+      // fake sandbox's `.name` becomes the reattach handle the fleet pool
+      // serializes and later hands back via `clone({ sandboxId })`.
+      const info = sandbox.getInfo();
+      expect(info.metadata?.sandboxId).toBe(fake.name);
+    });
   });
 
   describe('getInstructions()', () => {
@@ -538,5 +551,20 @@ describe('VercelSandbox.clone', () => {
 
     expect(child.id).not.toBe(template.id);
     expect(child['_constructorOptions']).toMatchObject({ token: 'vc-tok', timeout: 120_000, env: { BASE: '1' } });
+  });
+
+  it('honors options.sandboxId as the reattach name so pooled sandboxes resume', () => {
+    // Vercel sandboxes reattach by `name`, not `id`. Fleet pools serialize a
+    // reattach handle as `sandboxId`; on clone we must map that back to
+    // `sandboxName` so `start()` calls `Sandbox.getOrCreate({ name })` and
+    // resumes the pooled sandbox instead of provisioning a fresh one.
+    const template = new VercelSandbox({ token: 'vc-tok', teamId: 'team-1', projectId: 'proj-1' });
+
+    const child = template.clone({ id: 'session-42', sandboxId: 'vercel-pooled-abc' });
+
+    expect(child['_constructorOptions']).toMatchObject({
+      id: 'session-42',
+      sandboxName: 'vercel-pooled-abc',
+    });
   });
 });

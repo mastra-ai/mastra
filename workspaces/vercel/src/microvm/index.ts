@@ -186,6 +186,10 @@ export class VercelSandbox extends MastraSandbox {
       ...(options.id !== undefined && { id: options.id }),
       ...(options.env !== undefined && { env: options.env }),
       ...(options.idleTimeoutMinutes !== undefined && { timeout: options.idleTimeoutMinutes * 60_000 }),
+      // Reattach key: Vercel sandboxes are looked up by `name`, not `id`.
+      // Callers pooling sandboxes pass `sandboxId` — treat it as the sandbox
+      // name so `start()`'s `Sandbox.getOrCreate({ name })` resumes it.
+      ...(options.sandboxId !== undefined && { sandboxName: options.sandboxId }),
     });
   }
 
@@ -419,6 +423,9 @@ export class VercelSandbox extends MastraSandbox {
       metadata: {
         ...this._metadata,
         sandboxName: this._sandbox?.name,
+        // Reattach key surfaced for fleet pools: prefer the Vercel-assigned
+        // name (survives across sessions), fall back to the sandbox's own id.
+        sandboxId: this._sandbox?.name ?? this._sandboxName ?? this.id,
         runtime: this._runtime,
         timeout: this._timeout,
         ...(this._vcpus ? { vcpus: this._vcpus } : {}),
