@@ -490,6 +490,10 @@ export class PluginManager {
     options: Pick<InstallPluginOptions, 'entry' | 'ref' | 'onOutput' | 'signal'> = {},
   ): Promise<string> {
     const id = await installGithubPlugin(url, scope, { ...this.options, ...options });
+    // Installing over an existing checkout replaces it at the same path, so the
+    // cached head would make a genuinely different commit stamp as unchanged and
+    // leave the previous signal providers running.
+    this.githubCheckoutHeads.clear();
     await this.reload();
     return id;
   }
@@ -545,6 +549,7 @@ export class PluginManager {
       if (isInsideDirectory(checkoutPath, githubSourcesPath)) {
         fs.rmSync(checkoutPath, { recursive: true, force: true });
       }
+      this.githubCheckoutHeads.delete(checkoutPath);
     }
     await this.reload();
   }

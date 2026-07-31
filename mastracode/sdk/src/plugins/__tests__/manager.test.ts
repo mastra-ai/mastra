@@ -371,6 +371,51 @@ describe('PluginManager', () => {
     );
   });
 
+  it('moves the version stamp when a GitHub plugin is installed over its own checkout', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-plugin');
+    writePlugin(checkoutDir, 'acme.github', 'github_tool', 'first');
+    fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, '.mastracode/plugins'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.mastracode/plugins/plugins.json'),
+      JSON.stringify({
+        plugins: {
+          'acme.github': {
+            enabled: true,
+            source: 'github',
+            specifier: 'https://github.com/acme/plugin',
+            path: 'sources/github/acme-plugin',
+            entry: 'src/index.ts',
+          },
+        },
+      }),
+    );
+    let head = 'old';
+    execaMock.mockImplementation(async (command: string, args: string[]) => {
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') return { stdout: head };
+      if (command === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
+        head = 'new';
+        writePlugin(checkoutDir, 'acme.github', 'github_tool', 'second');
+        fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
+      }
+      return { stdout: '' };
+    });
+
+    const manager = new PluginManager({ projectRoot, homeDir });
+    await manager.reload();
+    const stampBeforeReinstall = (await manager.listPlugins())[0]?.versionStamp;
+
+    await manager.installGithub('https://github.com/acme/plugin', 'project');
+
+    // Reinstalling replaces the checkout at the same path, so a cached head from
+    // the previous install would report a different commit as no change and
+    // leave the plugin's signal providers running on the old code.
+    expect((await manager.listPlugins())[0]?.versionStamp).not.toBe(stampBeforeReinstall);
+  });
+
   it('reports post-reload display names when an update renames a plugin', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');
