@@ -410,6 +410,101 @@ describe('Extractor', () => {
     expect(generate.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
   });
 
+  it('retries structured extraction when native output omits the extractor slug wrapper', async () => {
+    const workingMemory = new Extractor({
+      name: 'Working Memory',
+      instructions: 'Extract working memory.',
+      schema: z.object({
+        preferences: z.object({
+          responseStyle: z.string(),
+        }),
+      }),
+    });
+    let generateCalls = 0;
+    const agent = new Agent({
+      id: 'structured-extraction-wrapper-test',
+      name: 'Structured Extraction Wrapper Test',
+      instructions: 'Extract values.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          generateCalls += 1;
+          const text =
+            generateCalls === 1
+              ? '{"preferences":{"responseStyle":"concise"}}'
+              : '{"working-memory":{"preferences":{"responseStyle":"concise"}}}';
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            content: [{ type: 'text', text }],
+            warnings: [],
+          };
+        },
+      }),
+    });
+    const generate = vi.spyOn(agent, 'generate');
+
+    const result = await extractStructuredValues({
+      agent,
+      source: 'observer',
+      extractors: [workingMemory],
+    });
+
+    expect(generateCalls).toBe(2);
+    expect(generate.mock.calls[1]?.[1]?.structuredOutput?.jsonPromptInjection).toBe('inline');
+    expect(result).toEqual({
+      values: {
+        'working-memory': {
+          preferences: {
+            responseStyle: 'concise',
+          },
+        },
+      },
+      failures: [],
+    });
+  });
+
+  it('accepts an empty structured extraction without retrying', async () => {
+    const workingMemory = new Extractor({
+      name: 'Working Memory',
+      instructions: 'Extract working memory.',
+      schema: z.object({
+        preferences: z.object({
+          responseStyle: z.string(),
+        }),
+      }),
+    });
+    let generateCalls = 0;
+    const agent = new Agent({
+      id: 'empty-structured-extraction-test',
+      name: 'Empty Structured Extraction Test',
+      instructions: 'Extract values.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => {
+          generateCalls += 1;
+
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            content: [{ type: 'text', text: '{}' }],
+            warnings: [],
+          };
+        },
+      }),
+    });
+
+    const result = await extractStructuredValues({
+      agent,
+      source: 'observer',
+      extractors: [workingMemory],
+    });
+
+    expect(generateCalls).toBe(1);
+    expect(result).toEqual({ values: {}, failures: [] });
+  });
+
   it('falls back to system json prompt injection when inline support is not advertised', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
     const generate = vi

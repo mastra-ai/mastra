@@ -35,12 +35,13 @@ export async function extractStructuredValues(opts: {
     return { values: {}, failures: [] };
   }
 
-  const schema = z.object(
-    Object.fromEntries(structuredExtractors.map(extractor => [extractor.slug, extractor.schema.optional()])) as Record<
-      string,
-      z.ZodTypeAny
-    >,
-  );
+  const schema = z
+    .object(
+      Object.fromEntries(
+        structuredExtractors.map(extractor => [extractor.slug, extractor.schema.optional()]),
+      ) as Record<string, z.ZodTypeAny>,
+    )
+    .strict();
   const priorLines = buildExtractorPriorLines(structuredExtractors, opts.priorExtractedValues);
   const extractorInstructions = structuredExtractors
     .map(extractor => `- ${extractor.slug}: ${extractor.instructions}`)
