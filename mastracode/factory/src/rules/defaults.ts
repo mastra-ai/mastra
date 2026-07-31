@@ -33,10 +33,6 @@ function invokeIssueInvestigation(context: FactoryStageRuleContext) {
   } as const;
 }
 
-function investigateIntakeIssue(context: FactoryStageRuleContext) {
-  return invokeIssueInvestigation(context);
-}
-
 function investigateTriagedIssue(context: FactoryStageRuleContext) {
   if (context.cause === 'linked_item_materialized' && context.fromStage === 'intake' && context.toStage === 'triage') {
     return;
@@ -257,9 +253,6 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
 
 const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
   work: {
-    intake: {
-      issue: { onEnter: investigateIntakeIssue },
-    },
     triage: {
       issue: { onEnter: investigateTriagedIssue },
       linearIssue: { onEnter: investigateTriagedLinearIssue },

@@ -127,7 +127,7 @@ describe('defaultFactoryRules', () => {
   it('ships ordinary visible default leaves', () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     expect(rules.version).toBe('deployment-7');
-    expect(rules.work.intake?.issue?.onEnter).toBeTypeOf('function');
+    expect(rules.work.intake?.issue?.onEnter).toBeUndefined();
     expect(rules.work.triage?.issue?.onEnter).toBeTypeOf('function');
     expect(rules.review.intake?.pullRequest?.onEnter).toBeUndefined();
     expect(rules.review.review?.pullRequest?.onEnter).toBeTypeOf('function');
@@ -196,19 +196,6 @@ describe('defaultFactoryRules', () => {
       role: 'triage',
       skillName: 'factory-triage',
       arguments: 'Linear issue ENG-42 (https://linear.app/acme/issue/ENG-42)',
-    });
-  });
-
-  it('starts investigation when a GitHub issue enters Intake', async () => {
-    const rule = defaultFactoryRules({ version: 'deployment-7' }).work.intake?.issue?.onEnter;
-
-    expect(
-      await rule?.(stageContext({ type: 'github', login: 'author', trusted: true, factoryAuthored: false }, 'work')),
-    ).toMatchObject({
-      type: 'invokeSkill',
-      role: 'triage',
-      skillName: 'factory-triage',
-      arguments: 'GitHub issue (https://github.test/acme/repo/issues/42)',
     });
   });
 

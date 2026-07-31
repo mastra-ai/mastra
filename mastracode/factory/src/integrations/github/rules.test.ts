@@ -146,7 +146,24 @@ describe('GithubRules', () => {
   it('moves a trusted issue through Intake to Triage with one investigation and rematerializes it after deletion', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project, projectRepository } =
       await setup('write');
-    const rules = builtInFactoryRules();
+    const rules = defaultFactoryRules({
+      version: 'test-web-policy',
+      overrides: {
+        work: {
+          intake: {
+            issue: {
+              onEnter: context => ({
+                type: 'invokeSkill',
+                idempotencyKey: `${context.ingress.id}:factory-triage`,
+                role: 'triage',
+                skillName: 'factory-triage',
+                arguments: context.item.url ? `GitHub issue (${context.item.url})` : context.item.title,
+              }),
+            },
+          },
+        },
+      },
+    });
     const transitionService = new FactoryTransitionService({ storage: workItems, rules });
     const service = new GithubRules({
       github,

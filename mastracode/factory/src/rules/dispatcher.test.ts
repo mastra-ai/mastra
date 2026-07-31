@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { defaultFactoryRules } from './defaults.js';
-import { FactoryDecisionDispatcher, type FactoryBindingPreparationInput } from './dispatcher.js';
+import { FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryStartCoordinator } from './start-coordinator.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision } from './types.js';
@@ -25,31 +25,6 @@ async function createItem(storage: WorkItemsStorage, sourceKey = 'github-issue:1
       },
     })
   ).item;
-}
-
-function createBindingPreparer(storage: WorkItemsStorage) {
-  return vi.fn(async ({ item, role, record }: FactoryBindingPreparationInput) => {
-    await storage.prepareRunStart({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: PROJECT_ID,
-      workItem: {
-        id: item.id,
-        input: {
-          externalSource: item.externalSource,
-          title: item.title,
-          stages: item.stages,
-          sessions: item.sessions,
-          metadata: item.metadata,
-        },
-      },
-      role,
-      session: { sessionId: 'session-1', branch: `factory/${item.id}`, threadId: 'thread-1' },
-      resourceId: PROJECT_ID,
-      kickoffKey: record.idempotencyKey,
-      kickoffMessage: null,
-    });
-  });
 }
 
 function createSession(accepted?: Promise<unknown>) {
@@ -1106,84 +1081,6 @@ describe('FactoryDecisionDispatcher', () => {
     expect(sendNotificationSignal).toHaveBeenCalledTimes(2);
     expect(delivered).toEqual(['message-1']);
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
-  });
-
-  it('dispatches one investigation when a linked GitHub issue remains in Intake', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { transitionService } = await queueDecision(storage, {
-      type: 'upsertLinkedWorkItem',
-      idempotencyKey: 'linked-intake',
-      board: 'work',
-      source: 'github-issue',
-      sourceKey: 'github-issue:2',
-      title: 'Linked issue',
-      url: null,
-      stage: 'intake',
-    });
-    const { controller, session } = createSession();
-    const prepareBinding = createBindingPreparer(storage);
-    const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
-      transitionService,
-      storage,
-      ownerId: 'worker-1',
-      prepareBinding,
-    });
-    const first = new Date('2030-01-01T00:00:00Z');
-
-    await dispatcher.runOnce(first);
-    await dispatcher.runOnce(new Date(first.getTime() + 2_000));
-    await dispatcher.runOnce(new Date(first.getTime() + 4_000));
-
-    const investigations = (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
-      decision => decision.decision.type === 'invokeSkill' && decision.decision.skillName === 'factory-triage',
-    );
-    expect(investigations).toHaveLength(1);
-    expect(investigations[0]).toMatchObject({ status: 'succeeded' });
-    expect(session.sendSignal).toHaveBeenCalledTimes(1);
-    expect(session.sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ contents: expect.stringContaining('<skill name="factory-triage">') }),
-      expect.anything(),
-    );
-  });
-
-  it('dispatches one investigation when a linked GitHub issue materializes through Intake into Triage', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { transitionService } = await queueDecision(storage, {
-      type: 'upsertLinkedWorkItem',
-      idempotencyKey: 'linked-triage',
-      board: 'work',
-      source: 'github-issue',
-      sourceKey: 'github-issue:2',
-      title: 'Linked issue',
-      url: null,
-      stage: 'triage',
-    });
-    const { controller, session } = createSession();
-    const prepareBinding = createBindingPreparer(storage);
-    const dispatcher = new FactoryDecisionDispatcher({
-      controller: controller as never,
-      transitionService,
-      storage,
-      ownerId: 'worker-1',
-      prepareBinding,
-    });
-    const first = new Date('2030-01-01T00:00:00Z');
-
-    await dispatcher.runOnce(first);
-    await dispatcher.runOnce(new Date(first.getTime() + 2_000));
-    await dispatcher.runOnce(new Date(first.getTime() + 4_000));
-
-    const linked = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).find(
-      item => item.externalSource?.externalId === 'github-issue:2',
-    );
-    expect(linked).toMatchObject({ stages: ['triage'] });
-    expect(session.sendSignal).toHaveBeenCalledTimes(1);
-    const investigations = (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
-      decision => decision.decision.type === 'invokeSkill' && decision.decision.skillName === 'factory-triage',
-    );
-    expect(investigations).toHaveLength(1);
-    expect(investigations[0]).toMatchObject({ status: 'succeeded' });
   });
 
   it('recovers linked-item materialization after an upsert crash and fires Intake onEnter exactly once', async () => {
