@@ -304,6 +304,21 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   }
 
   /**
+   * Release the OTEL span held for a Mastra span that ended without being exported.
+   *
+   * The OTEL span is deliberately not ended: ending it would hand it to the OTEL
+   * span processors and export a span the user's filtering just removed. Dropping
+   * the reference is enough, since span processors only queue spans on end.
+   */
+  releaseSpan(spanId: string): void {
+    if (this.otelSpanMap.delete(spanId)) {
+      this.logger.debug(
+        `[OtelBridge.releaseSpan] Released unexported span [spanId=${spanId}] [mapSize=${this.otelSpanMap.size}]`,
+      );
+    }
+  }
+
+  /**
    * Execute a function (sync or async) within the OTEL context of a Mastra span.
    * Retrieves the stored OTEL context for the span and executes the function within it.
    *

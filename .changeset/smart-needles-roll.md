@@ -2,7 +2,7 @@
 '@mastra/mongodb': patch
 ---
 
-Added MongoDB persistence for versioned dataset item scorer ID overrides, including cleared overrides and explicit empty arrays.
+Dataset item scorer selections now persist across MongoDB writes and reads. Setting `scorerIds` to `null` clears an item override, while `[]` remains an explicit override with no scorers.
 
 ```typescript
 await dataset.addItem({

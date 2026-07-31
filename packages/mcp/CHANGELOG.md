@@ -1,5 +1,14 @@
 # @mastra/mcp
 
+## 1.15.1-alpha.0
+
+### Patch Changes
+
+- Speed up MCP discovery when an `MCPClient` is configured with multiple servers. `listTools()`, `listToolsets()`, `resources.list()`, `resources.templates()`, and `prompts.list()` now query all configured servers concurrently instead of one at a time, so total discovery time is roughly the slowest single server rather than the sum of all of them, and one slow or unresponsive server no longer stalls discovery for the rest. Tool, resource, and prompt ordering and per-server error reporting are unchanged. ([#19919](https://github.com/mastra-ai/mastra/pull/19919))
+
+- Updated dependencies [[`4844167`](https://github.com/mastra-ai/mastra/commit/4844167cff2d5ec5004e94edd34970833040fa3f), [`5faf93f`](https://github.com/mastra-ai/mastra/commit/5faf93f03e19daea394b9e2a923f2e4f833407f2), [`80ad891`](https://github.com/mastra-ai/mastra/commit/80ad891f8cd10379aa5b5af7510c763783b2ab56), [`a1cb98d`](https://github.com/mastra-ai/mastra/commit/a1cb98d11990b560b98482292a1f34aa1a2d9092), [`598ad82`](https://github.com/mastra-ai/mastra/commit/598ad82d41c41389a686338a1d0e50b7400e1938), [`1fd6aad`](https://github.com/mastra-ai/mastra/commit/1fd6aad1ea4a9d32f65efa832307c35e981a4c0a)]:
+  - @mastra/core@1.56.0-alpha.4
+
 ## 1.15.0
 
 ### Minor Changes

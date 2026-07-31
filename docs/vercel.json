@@ -16,6 +16,11 @@
   ],
   "redirects": [
     {
+      "source": "/docs/mastra-platform/workspace",
+      "destination": "/docs/mastra-platform/workspaces",
+      "permanent": true
+    },
+    {
       "source": "/docs/agents/channels",
       "destination": "/docs/capabilities/channels/overview",
       "permanent": true
@@ -1028,6 +1033,11 @@
     {
       "source": "/docs/guide/tools",
       "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/workspace/llms.txt",
+      "destination": "/docs/mastra-platform/workspaces/llms.txt",
       "permanent": true
     },
     {
