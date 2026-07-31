@@ -658,6 +658,7 @@ export class CoreToolBuilder extends MastraBase {
             const { suspend, resumeData, threadId, resourceId, ...restBaseContext } = baseContext;
             toolContext = {
               ...restBaseContext,
+              ...(execOptions.mcp ? { mcp: execOptions.mcp } : {}),
               agent: {
                 agentId: options.agentId || '',
                 toolCallId: execOptions.toolCallId || '',
