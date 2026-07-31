@@ -131,10 +131,24 @@ describe('LocalSandbox', () => {
       }
     });
 
-    it('ignores sandboxId and idleTimeoutMinutes (no local equivalent)', () => {
+    it('ignores idleTimeoutMinutes (no local equivalent)', () => {
       const template = new LocalSandbox({ workingDirectory: tempDir });
-      const child = template.clone({ sandboxId: 'ignored', idleTimeoutMinutes: 15, id: 'local-child' });
+      const child = template.clone({ idleTimeoutMinutes: 15, id: 'local-child' });
       expect(child.id).toBe('local-child');
+    });
+
+    it('adopts sandboxId as the reattach handle so the id round-trips through the fleet pool', async () => {
+      const template = new LocalSandbox({ workingDirectory: tempDir });
+      const child = template.clone({ sandboxId: 'reattach-handle-42' });
+      expect(child.id).toBe('reattach-handle-42');
+      const info = await child.getInfo();
+      expect(info.metadata?.sandboxId).toBe('reattach-handle-42');
+    });
+
+    it('prefers sandboxId over id when both are set (mirrors remote reattach semantics)', () => {
+      const template = new LocalSandbox({ workingDirectory: tempDir });
+      const child = template.clone({ id: 'construction-id', sandboxId: 'reattach-id' });
+      expect(child.id).toBe('reattach-id');
     });
   });
 
