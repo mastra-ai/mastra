@@ -1039,17 +1039,7 @@ describe('FactoryDecisionDispatcher', () => {
       if (completeCalls === 1) return null;
       return realComplete(...args);
     });
-    const { controller, session } = createSession();
-    // First sendNotificationSignal call (cycle-1 preceding-message or kickoff
-    // attempt) throws so the dispatcher records a retry. Subsequent calls
-    // succeed normally.
-    const realSend = session.sendNotificationSignal;
-    let sendCalls = 0;
-    session.sendNotificationSignal = vi.fn(async (...args: Parameters<typeof realSend>) => {
-      sendCalls += 1;
-      if (sendCalls === 1) throw new Error('notification persist failed');
-      return realSend(...args);
-    });
+    const { controller, session, delivered } = createSession();
     const prepareBinding = vi.fn(async (input: { record: { id: string }; invocation?: { skillName: string } }) => {
       const kickoffMessage = input.invocation ? `<skill name="${input.invocation.skillName}">\n</skill>` : null;
       await storage.prepareRunStart({
@@ -1088,6 +1078,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     const [recordAfterCycle1] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(recordAfterCycle1?.status).toBe('retry');
+    expect(recordAfterCycle1).toBeDefined();
     expect(session.sendSignal).not.toHaveBeenCalled();
 
     // Cycle 2: claimPendingStarts picks up the pending start from cycle 1
@@ -1110,6 +1101,14 @@ describe('FactoryDecisionDispatcher', () => {
         ifIdle: { behavior: 'wake' },
       }),
     );
+
+    // Verify the kickoff was delivered (not just attempted)
+    const kickoffDedupeKey = `factory-kickoff:${recordAfterCycle1!.id}`;
+    expect(delivered).toContain(kickoffDedupeKey);
+
+    // Verify the pending start is marked as 'sent'
+    const [pendingStart] = await storage.listPendingStarts('org-1', PROJECT_ID);
+    expect(pendingStart?.status).toBe('sent');
 
     const [recordAfterCycle2] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(recordAfterCycle2?.status).toBe('succeeded');
