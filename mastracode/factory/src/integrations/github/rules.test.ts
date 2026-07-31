@@ -106,6 +106,19 @@ function pullRequest(
   };
 }
 
+function pullRequestSynchronized(deliveryId: string) {
+  const opened = pullRequest('opened', deliveryId);
+  return {
+    ...opened,
+    payload: {
+      ...opened.payload,
+      action: 'synchronize',
+      before: '1'.repeat(40),
+      after: '2'.repeat(40),
+    },
+  };
+}
+
 describe('GithubRules', () => {
   it('commits one trusted issue intake decision and replays immutable delivery ingress', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
@@ -494,6 +507,154 @@ describe('GithubRules', () => {
     ]);
   });
 
+  it('re-enters Reviewing with the pushed head range when a reviewed PR gets new commits', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['done'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules: builtInFactoryRules(),
+    });
+
+    await expect(service.ingest(pullRequestSynchronized('delivery-pushed'))).resolves.toEqual({ status: 'committed' });
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toEqual([
+      expect.objectContaining({
+        workItemId: card.item.id,
+        decision: expect.objectContaining({
+          type: 'transition',
+          board: 'review',
+          stage: 'review',
+          message: expect.objectContaining({ text: expect.stringContaining('1111111 → 2222222') }),
+        }),
+      }),
+    ]);
+  });
+
+  it('re-invokes the review skill end to end when a pushed card returns to Reviewing', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project, projectRepository } =
+      await setup('read');
+    const rules = builtInFactoryRules();
+    const transitionService = new FactoryTransitionService({ storage: workItems, rules });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      rules,
+    });
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['done'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await sourceControl.sessions.create({
+      sessionId: 'session-pr-17',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'factory/review-pr-17',
+      baseBranch: 'main',
+    });
+
+    const deliveredSignals: Array<{ contents: string }> = [];
+    const session = {
+      thread: {
+        list: vi.fn(async () => []),
+        create: vi.fn(async () => ({ id: 'session-pr-17' })),
+        switch: vi.fn(async () => {}),
+        setSetting: vi.fn(async () => {}),
+        rename: vi.fn(async () => {}),
+        requireId: vi.fn(() => 'session-pr-17'),
+        listActiveMessages: vi.fn(async () => []),
+      },
+      getWorkspace: () => ({
+        skills: {
+          maybeRefresh: vi.fn(async () => {}),
+          get: vi.fn(async (name: string) => ({ name, instructions: 'Review the pull request.' })),
+        },
+      }),
+      sendSignal: vi.fn((input: { contents: string }) => {
+        deliveredSignals.push({ contents: input.contents });
+        return { accepted: Promise.resolve({ accepted: true, action: 'wake' }) };
+      }),
+      state: { set: vi.fn(async () => {}) },
+      sendMessage: vi.fn(async () => {}),
+      sendNotificationSignal: vi.fn(async () => ({ persisted: Promise.resolve(), accepted: Promise.resolve() })),
+    };
+    const controller = {
+      createSession: vi.fn(async () => session),
+      getSessionByResource: vi.fn(async () => session),
+    };
+    const coordinator = new FactoryStartCoordinator(controller as never, workItems, transitionService, sourceControl);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage: workItems,
+      ownerId: 'worker-1',
+      primeCredentials: vi.fn(async () => {}),
+      prepareBinding: async ({ record, item, role }) => {
+        await coordinator.prepare({
+          orgId: record.orgId,
+          userId: 'user-1',
+          factoryProjectId: record.factoryProjectId,
+          sessionId: 'session-pr-17',
+          threadTitle: `Review: ${item.title}`,
+          kickoffKey: record.idempotencyKey,
+          destinationStage: 'review',
+          workItem: { id: item.id, role, input: item },
+        });
+      },
+    });
+
+    await service.ingest(pullRequestSynchronized('delivery-push-e2e'));
+    // First pass commits the transition back into Reviewing, which enqueues the
+    // stage's own review invocation; the second pass dispatches it.
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+
+    expect(await workItems.get({ orgId: 'org-1', id: card.item.id })).toMatchObject({ stages: ['review'] });
+    expect(deliveredSignals).toEqual([
+      expect.objectContaining({ contents: expect.stringContaining('<skill name="factory-review">') }),
+    ]);
+    expect((await workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.status)).toEqual([
+      'succeeded',
+      'succeeded',
+    ]);
+  });
+
   it('moves the merged Review card to Done when the PR has no Factory provenance', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
     const card = await workItems.upsert({
@@ -618,10 +779,7 @@ describe('createGithubPullRequestReconciler', () => {
     });
   }
 
-  function createReconciler(
-    context: Awaited<ReturnType<typeof setup>>,
-    fetchPullRequest: ReturnType<typeof vi.fn>,
-  ) {
+  function createReconciler(context: Awaited<ReturnType<typeof setup>>, fetchPullRequest: ReturnType<typeof vi.fn>) {
     return createGithubPullRequestReconciler(
       {
         github: context.github,
@@ -641,7 +799,14 @@ describe('createGithubPullRequestReconciler', () => {
     const fetchPullRequest = vi.fn(async () => mergedState(17));
     const reconcile = createReconciler(context, fetchPullRequest);
 
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 1, merged: 1, closed: 0, failed: 0, errors: [] });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 1,
+      merged: 1,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
     expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 17 });
     const decisions = await context.workItems.listDeferredDecisions('org-1', context.project.id);
     expect(decisions).toEqual([
@@ -653,7 +818,14 @@ describe('createGithubPullRequestReconciler', () => {
 
     // A later sweep re-checks live state but the ingress replays: no
     // duplicate decisions are committed for the same merge.
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 1, merged: 1, closed: 0, failed: 0, errors: [] });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 1,
+      merged: 1,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(1);
   });
 
@@ -664,7 +836,14 @@ describe('createGithubPullRequestReconciler', () => {
     const fetchPullRequest = vi.fn(async () => ({ ...mergedState(18), state: 'open' as const, merged: false }));
     const reconcile = createReconciler(context, fetchPullRequest);
 
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 1, merged: 0, closed: 0, failed: 0, errors: [] });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 1,
+      merged: 0,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
     expect(fetchPullRequest).toHaveBeenCalledTimes(1);
     expect(fetchPullRequest).toHaveBeenCalledWith({ installationId: 7, repository: 'acme/repo', number: 18 });
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
@@ -676,7 +855,14 @@ describe('createGithubPullRequestReconciler', () => {
     const fetchPullRequest = vi.fn(async () => mergedState(19));
     const reconcile = createReconciler(context, fetchPullRequest);
 
-    await expect(reconcile([repositoryTarget])).resolves.toEqual({ repositories: 1, checked: 0, merged: 0, closed: 0, failed: 0, errors: [] });
+    await expect(reconcile([repositoryTarget])).resolves.toEqual({
+      repositories: 1,
+      checked: 0,
+      merged: 0,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    });
     expect(fetchPullRequest).not.toHaveBeenCalled();
   });
 

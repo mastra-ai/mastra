@@ -182,6 +182,38 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
   } as const;
 }
 
+function pullRequestUpdated(context: FactoryGithubRuleContext) {
+  if (!context.item || context.board !== 'review') return;
+  if (!context.pullRequest || context.pullRequest.state !== 'open' || context.pullRequest.merged) return;
+  // Only cards the Factory actually picked up. A PR parked in Intake was never
+  // accepted for review and a canceled card was closed out deliberately —
+  // pushing to either must not drag it onto the board.
+  if (!context.item.stages.some(stage => stage === 'review' || stage === 'done')) return;
+  const moved = context.update ? ` (${shortSha(context.update.before)} → ${shortSha(context.update.after)})` : '';
+  // Re-entering Reviewing is the whole mechanism: the stage's own onEnter rule
+  // re-invokes the review skill for a card sitting in Done, and a card already
+  // in Reviewing sees no stage rules (from === to) but still gets the message,
+  // so an in-flight review learns the head moved under it. The skill decides
+  // whether the push deserves a fresh verdict — a rule cannot read a diff.
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:pull-request-updated`,
+    board: 'review',
+    stage: 'review',
+    message: {
+      role: 'review',
+      text:
+        `Pull request #${context.pullRequest.number} received new commits${moved}. ` +
+        'Re-run the re-review triage against the new head before you finish: any verification you already ' +
+        'did describes the old commits.',
+    },
+  } as const;
+}
+
+function shortSha(sha: string) {
+  return sha.slice(0, 7);
+}
+
 function pullRequestClosed(context: FactoryGithubRuleContext) {
   if (!context.item || !context.pullRequest || context.pullRequest.merged) return;
   if (context.board !== 'review') return;
@@ -240,6 +272,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
   github: {
     issueOpened: { onEvent: issueOpened },
     pullRequestOpened: { onEvent: pullRequestOpened },
+    pullRequestUpdated: { onEvent: pullRequestUpdated },
     pullRequestMerged: { onEvent: pullRequestMerged },
     pullRequestClosed: { onEvent: pullRequestClosed },
   },

@@ -108,6 +108,8 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
     headBranch: string;
     baseBranch: string;
   };
+  /** Head movement carried by a `pullRequestUpdated` (push) event. */
+  update?: { before: string; after: string };
 }
 
 export interface FactoryLinearRuleContext extends FactoryRuleContextBase {

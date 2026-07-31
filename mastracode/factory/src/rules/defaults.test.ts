@@ -134,6 +134,7 @@ describe('defaultFactoryRules', () => {
     expect(rules.tools.submit_plan?.onResult).toBeTypeOf('function');
     expect(rules.github.issueOpened?.onEvent).toBeTypeOf('function');
     expect(rules.github.pullRequestOpened?.onEvent).toBeTypeOf('function');
+    expect(rules.github.pullRequestUpdated?.onEvent).toBeTypeOf('function');
     expect(rules.github.pullRequestMerged?.onEvent).toBeTypeOf('function');
     expect(rules.linear.issueObserved?.onEvent).toBeTypeOf('function');
     expect(rules.work.triage?.linearIssue?.onEnter).toBeTypeOf('function');
@@ -350,6 +351,80 @@ describe('defaultFactoryRules', () => {
     const rules = defaultFactoryRules({ version: 'deployment-7' });
     expect(await rules.github.pullRequestOpened?.onEvent?.(githubContext('pullRequestOpened'))).toMatchObject({
       metadata: { headBranch: 'feature', baseBranch: 'main' },
+    });
+  });
+
+  describe('pull request updated', () => {
+    function updatedContext(stages: string[]) {
+      const context = githubContext('pullRequestUpdated');
+      context.item = { ...item, source: 'github-pr', sourceKey: 'github-pr:17', stages };
+      context.board = 'review';
+      context.update = { before: 'a'.repeat(40), after: 'b'.repeat(40) };
+      return context;
+    }
+
+    it('re-enters Reviewing when a reviewed PR gets new commits, so the stage rule re-invokes the review', async () => {
+      const rules = defaultFactoryRules({ version: 'deployment-7' });
+      const decision = await rules.github.pullRequestUpdated?.onEvent?.(updatedContext(['done']));
+
+      expect(decision).toMatchObject({
+        type: 'transition',
+        board: 'review',
+        stage: 'review',
+        message: { role: 'review', text: expect.stringContaining('aaaaaaa → bbbbbbb') },
+      });
+    });
+
+    it('re-enters Reviewing for a card already under review so the in-flight pass hears about the push', async () => {
+      const rules = defaultFactoryRules({ version: 'deployment-7' });
+
+      expect(await rules.github.pullRequestUpdated?.onEvent?.(updatedContext(['review']))).toMatchObject({
+        type: 'transition',
+        stage: 'review',
+      });
+    });
+
+    it('leaves a PR that was never accepted for review in Intake', async () => {
+      const rules = defaultFactoryRules({ version: 'deployment-7' });
+
+      expect(await rules.github.pullRequestUpdated?.onEvent?.(updatedContext(['intake']))).toBeUndefined();
+    });
+
+    it('does not pull a canceled card back onto the board', async () => {
+      const rules = defaultFactoryRules({ version: 'deployment-7' });
+
+      expect(await rules.github.pullRequestUpdated?.onEvent?.(updatedContext(['canceled']))).toBeUndefined();
+    });
+
+    it('ignores pushes to a closed or merged pull request', async () => {
+      const rules = defaultFactoryRules({ version: 'deployment-7' });
+      const closed = updatedContext(['done']);
+      closed.pullRequest = { ...closed.pullRequest!, state: 'closed' };
+      const merged = updatedContext(['done']);
+      merged.pullRequest = { ...merged.pullRequest!, merged: true };
+
+      expect(await rules.github.pullRequestUpdated?.onEvent?.(closed)).toBeUndefined();
+      expect(await rules.github.pullRequestUpdated?.onEvent?.(merged)).toBeUndefined();
+    });
+
+    it('ignores pushes bound to a Work item, which owns its own PR', async () => {
+      const rules = defaultFactoryRules({ version: 'deployment-7' });
+      const context = updatedContext(['done']);
+      context.board = 'work';
+
+      expect(await rules.github.pullRequestUpdated?.onEvent?.(context)).toBeUndefined();
+    });
+
+    it('still transitions when the payload carried no head movement', async () => {
+      const rules = defaultFactoryRules({ version: 'deployment-7' });
+      const context = updatedContext(['done']);
+      delete context.update;
+
+      expect(await rules.github.pullRequestUpdated?.onEvent?.(context)).toMatchObject({
+        type: 'transition',
+        stage: 'review',
+        message: { text: expect.stringContaining('new commits.') },
+      });
     });
   });
 

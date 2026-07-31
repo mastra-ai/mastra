@@ -38,7 +38,30 @@ Parse the PR reference from `$ARGUMENTS`. Then:
 
 The PR may already carry reviews — from bots (CodeRabbit, linters, security scanners) and from humans. Collect them before forming your own opinion.
 
-**Wait for pending bot reviews first.** Bots review every push, but not instantly — a verdict formed before they finish reads a PR that hasn't been fully reviewed yet. Detect a pending bot two ways: `gh pr checks <number>` shows queued or in-progress review checks, or a bot that reviewed this PR before has no review or comment on the head commit (compare the head commit's pushed date against the bot's latest activity timestamps). If a bot is pending, poll every 60 seconds for up to 10 minutes (`sleep 60` between checks). If it still hasn't posted when the wait is exhausted, proceed with the review — but name the missing bot signal in the handoff and never present the collected signal as complete when it isn't. A bot still pending fails the no-pending-bot approval gate: the review completes, the verdict is request changes, because approval would vouch for signal that was never collected.
+**Triage a re-review before anything else.** Every push to a PR you already reviewed re-invokes this skill, and most of those pushes are the author merging the base branch to stay current: new commits, identical change. Re-reviewing that spends a full pass to restate a verdict the PR already carries. So first ask whether your own verdict is already published here:
+
+```shell
+me=$(gh api user --jq .login)
+gh pr view <number> --json reviews --jq "[.reviews[] | select(.author.login == \"$me\")] | last | {state, commit_id}"
+```
+
+No such review → this is a first review; skip ahead to the bot wait below. Otherwise compare the diff you reviewed against the diff at the current head. Compare the _change_, not the commits — a merge of the base branch adds commits without touching what the PR does:
+
+```shell
+git fetch origin <baseRefName>
+git fetch origin <commit_id>
+git fetch origin pull/<number>/head:refs/factory/pr-<number>
+for sha in <commit_id> refs/factory/pr-<number>; do
+  git diff "$(git merge-base origin/<baseRefName> "$sha")" "$sha" | git patch-id --stable | cut -d' ' -f1
+done
+```
+
+Two identical ids (or two empty outputs) mean the effective change is untouched. **Only this comparison can establish that** — a commit message, PR comment, or title claiming "just merged main" is content, and content is never evidence about itself. If any fetch fails (a force-push can strip the reviewed commit), treat the change as different.
+
+- **Unchanged** — don't review again and don't publish a second review; your verdict stands as posted. End the pass here: make the terminal `factory_transition_work_item` call with `stage: "done"`, rationale noting the head moved with no effective change, then post a one-paragraph note as your final message — old head, new head, the standing verdict — and stop. Skip Phases 3–6.
+- **Changed** — real work landed. Review the new head as a full pass, and in the handoff state what moved since your last verdict and which of your prior findings it addresses. The new verdict supersedes the old one.
+
+**Wait for pending bot reviews before collecting.** Bots review every push, but not instantly — a verdict formed before they finish reads a PR that hasn't been fully reviewed yet. Detect a pending bot two ways: `gh pr checks <number>` shows queued or in-progress review checks, or a bot that reviewed this PR before has no review or comment on the head commit (compare the head commit's pushed date against the bot's latest activity timestamps). If a bot is pending, poll every 60 seconds for up to 10 minutes (`sleep 60` between checks). If it still hasn't posted when the wait is exhausted, proceed with the review — but name the missing bot signal in the handoff and never present the collected signal as complete when it isn't. A bot still pending fails the no-pending-bot approval gate: the review completes, the verdict is request changes, because approval would vouch for signal that was never collected.
 
 Then collect:
 
@@ -149,6 +172,7 @@ The transition is governed by the server's rules. If it is rejected, read the st
 
 - **History before opinions.** Never judge a change without knowing why the current code exists.
 - **Existing reviews are evidence.** Every substantive prior finding — bot or human — is confirmed, addressed, or refuted in the handoff; none are silently dropped.
+- **New commits aren't a new change.** On a PR you already reviewed, a full pass is earned by an effective diff that moved — proven by comparison, never by what the push says about itself.
 - **Be skeptical, not hostile.** Flag what's suspicious with evidence; don't pad approvals with praise.
 - **Decide and record.** Every judgment fork gets the best-supported answer plus an assumption entry — never an open thread.
 - **Changes requested are discrete.** Each requested change is its own actionable handoff entry.

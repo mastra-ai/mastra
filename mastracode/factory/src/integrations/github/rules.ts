@@ -251,6 +251,9 @@ export class GithubRules {
             },
           }
         : {}),
+      ...(string(parsed.payload.before) && string(parsed.payload.after)
+        ? { update: { before: string(parsed.payload.before)!, after: string(parsed.payload.after)! } }
+        : {}),
       ...(object(parsed.payload.review)
         ? {
             review: {
@@ -520,7 +523,10 @@ export function createGithubPullRequestReconciler(
   };
 }
 
-function githubRulesOptions(github: GithubRulesIntegration, context: IntegrationContext): GithubRulesOptions | undefined {
+function githubRulesOptions(
+  github: GithubRulesIntegration,
+  context: IntegrationContext,
+): GithubRulesOptions | undefined {
   if (!context.rules) return undefined;
   return {
     github,
