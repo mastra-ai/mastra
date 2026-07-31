@@ -821,6 +821,34 @@ describe('GitHub session workspace preparation', () => {
     expect(getRegisteredGithubPatKind(requestContext)).toBe('default');
   });
 
+  it('does not reuse a reviewer workspace when the worker credential cannot be installed', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    mocks.runBindingRole = 'work';
+    mocks.setEnvironmentVariable.mockImplementationOnce(() => {
+      throw new Error('runtime token injection failed');
+    });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const existing = { setToolsConfig: vi.fn() };
+
+    await expect(
+      workspace({
+        requestContext,
+        mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+      }),
+    ).rejects.toThrow('runtime token injection failed');
+
+    expect(existing.setToolsConfig).toHaveBeenCalled();
+    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+    expect(getRegisteredGithubPatKind(requestContext)).toBe('reviewer');
+  });
+
   it('reconciles the binding role for followers of an inflight materialization', async () => {
     mocks.githubPat = 'ghp_worker';
     mocks.githubReviewerPat = 'ghp_reviewer';
@@ -944,6 +972,31 @@ describe('GitHub session workspace preparation', () => {
     });
 
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_saved_later');
+  });
+
+  it('keeps same-role PAT refresh failures best-effort', async () => {
+    mocks.githubPat = 'ghp_original';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    mocks.githubPat = 'ghp_updated';
+    mocks.setEnvironmentVariable.mockImplementationOnce(() => {
+      throw new Error('runtime token injection failed');
+    });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const existing = { setToolsConfig: vi.fn() };
+
+    await expect(
+      workspace({
+        requestContext,
+        mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+      }),
+    ).resolves.toBe(existing);
+
+    expect(mocks.ensureSandbox).toHaveBeenCalledTimes(1);
+    expect(getRegisteredGithubPatKind(requestContext)).toBe('default');
   });
 
   it('does not re-inject an unchanged PAT on workspace reuse', async () => {

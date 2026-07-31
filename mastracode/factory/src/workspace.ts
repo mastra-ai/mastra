@@ -234,33 +234,37 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
 
       registerGithubTokenInjector(requestContext, registered.inject);
       const patKind = await resolveGithubPatKind();
+      const patKindChanged = patKind !== registered.patKind;
       try {
         let ghToken = await getGithubPat(() => github.integrationStorage, session.orgId, patKind);
         if (!ghToken) {
           // Preserve the existing fail-soft behavior for unchanged roles, but
           // never keep a stale reviewer credential after moving to worker.
-          if (patKind === registered.patKind) return;
+          if (!patKindChanged) return;
           ghToken = await getRepositoryToken();
         }
         if (ghToken !== registered.ghToken) registered.inject(ghToken);
         registered.patKind = patKind;
-      } catch {
-        // Keep the token already installed in the sandbox.
+      } catch (error) {
+        // Same-role PAT refreshes remain best-effort. A role transition must
+        // fail closed instead of returning a workspace with the old identity.
+        if (patKindChanged) throw error;
       } finally {
         registerGithubPatKind(requestContext, registered.patKind);
       }
     };
+    let existing: Workspace | undefined;
     try {
-      const existing = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
-      if (existing) {
-        existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
-        // Re-resolve the binding role on every reuse so the live sandbox and
-        // request-scoped refresh tool use the current worker/reviewer identity.
-        await reconcileGithubToken();
-        return existing;
-      }
+      existing = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
     } catch {
       // Not registered yet.
+    }
+    if (existing) {
+      existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
+      // Re-resolve the binding role on every reuse so the live sandbox and
+      // request-scoped refresh tool use the current worker/reviewer identity.
+      await reconcileGithubToken();
+      return existing;
     }
 
     const materialize = async (): Promise<Workspace> => {
