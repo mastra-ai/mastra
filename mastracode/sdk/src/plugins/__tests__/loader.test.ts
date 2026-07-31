@@ -452,9 +452,44 @@ describe('plugin loader', () => {
     expect(loaded[0]?.error).toBe('Plugin processors must be an array, object, or function');
     expect(loaded[1]?.error).toBe('Plugin signal providers function must return an array');
     expect(loaded[2]?.error).toBe(
-      'Plugin signal provider at index 0 must be a SignalProvider imported from "mastracode/plugin"',
+      'Plugin signal provider at index 0 must be a SignalProvider (an object with an id that implements connect, startPolling, stop and __registerMastra)',
     );
     expect(loaded[3]?.error).toBe('needs a token');
+  });
+
+  it('accepts a provider from a plugin that carries its own copy of the signals class', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginDir = path.join(tempDir, 'foreign-provider');
+    // A plugin depending on a published provider package (the motivating case: a plugin wrapping
+    // `@mastra/github-signals`) gets that package's own `@mastra/core`, so its provider is not an
+    // instance of the class Mastra Code loaded. Nothing in the lifecycle needs class identity.
+    writePlugin(
+      path.join(pluginDir, 'index.ts'),
+      `class ForeignSignalProvider {
+         id = 'foreign-signals';
+         connect() {}
+         startPolling() {}
+         stopPolling() {}
+         stop() {}
+         __registerMastra() {}
+       }
+       export default { id: 'a.foreign', signalProviders: () => [new ForeignSignalProvider()] };`,
+    );
+
+    const loaded = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: {
+        plugins: {
+          'a.foreign': { enabled: true, source: 'local', specifier: 'a', path: pluginDir, entry: 'index.ts' },
+        },
+      },
+      globalRegistry: { plugins: {} },
+    });
+
+    expect(loaded[0]?.status).toBe('active');
+    expect(loaded[0]?.signalProviders?.map(provider => provider.id)).toEqual(['foreign-signals']);
   });
 
   it('contributes no processors or signal providers from inactive or blocked plugins', async () => {

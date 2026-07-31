@@ -6,6 +6,7 @@ import type { Tool, ToolAction, ToolExecutionContext } from '@mastra/core/tools'
 import type { MastraCodeState } from './schema.js';
 
 export { createTool } from '@mastra/core/tools';
+export { RequestContext } from '@mastra/core/di';
 export type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 export { SignalProvider } from '@mastra/core/signals';
 export type { Tool, ToolAction, ToolExecutionContext } from '@mastra/core/tools';

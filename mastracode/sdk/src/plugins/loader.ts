@@ -3,6 +3,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { isSignalProvider } from '@mastra/core/signals';
+import type { SignalProvider } from '@mastra/core/signals';
 
 import type {
   MastraCodePlugin,
@@ -234,16 +235,36 @@ async function resolvePluginSignalProviders(
     throw new Error('Plugin signal providers function must return an array');
   }
   for (const [index, provider] of entries.entries()) {
-    if (!isSignalProvider(provider)) {
-      // `isSignalProvider` is an instanceof check, so a plugin that resolves its
-      // own copy of @mastra/core fails here too — say so, since the object can
-      // look perfectly correct from the plugin author's side.
+    if (!isPluginSignalProvider(provider)) {
       throw new Error(
-        `Plugin signal provider at index ${index} must be a SignalProvider imported from "mastracode/plugin"`,
+        `Plugin signal provider at index ${index} must be a SignalProvider (an object with an id that implements connect, startPolling, stop and __registerMastra)`,
       );
     }
   }
   return entries;
+}
+
+/**
+ * Structural, not `instanceof`.
+ *
+ * A plugin that depends on a published provider package — the motivating case, a plugin wrapping
+ * `@mastra/github-signals` — installs that package's own copy of `@mastra/core`, so its provider is
+ * never an instance of the `SignalProvider` class Mastra Code loaded. `isSignalProvider` would reject
+ * a perfectly working provider. Nothing in the lifecycle needs class identity: the lane only calls
+ * these methods, so the methods are what is checked.
+ */
+function isPluginSignalProvider(value: unknown): value is SignalProvider<string> {
+  if (isSignalProvider(value)) return true;
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<SignalProvider<string>> & { __registerMastra?: unknown };
+  return (
+    typeof candidate.id === 'string' &&
+    candidate.id.length > 0 &&
+    typeof candidate.connect === 'function' &&
+    typeof candidate.startPolling === 'function' &&
+    typeof candidate.stop === 'function' &&
+    typeof candidate.__registerMastra === 'function'
+  );
 }
 
 /** A bare array is shorthand for the input lane, the common case. */
