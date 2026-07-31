@@ -148,6 +148,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public entityName?: string;
   /** Parent span ID (for root spans that are children of external spans) */
   protected parentSpanId?: string;
+  /** Whether parentSpanId refers to a span outside Mastra's stored trace */
+  protected isExternalParent?: boolean;
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
   /**
@@ -399,6 +401,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       parentSpanId: this.getParentSpanId(includeInternalSpans),
+      isExternalParent: this.isExternalParent,
       // Tags are only included for root spans
       ...(this.isRootSpan && this.tags?.length ? { tags: this.tags } : {}),
     };

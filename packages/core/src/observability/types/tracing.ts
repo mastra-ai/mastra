@@ -956,6 +956,8 @@ export interface AIModelGenerationSpan extends Span<SpanType.MODEL_GENERATION> {
 export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
   /** Parent span id reference (undefined for root spans) */
   parentSpanId?: string;
+  /** Whether parentSpanId refers to a span outside Mastra's stored trace */
+  isExternalParent?: boolean;
   /** `TRUE` if the span is the root span of a trace */
   isRootSpan: boolean;
   /**
@@ -1205,6 +1207,8 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
    * Only used for root spans without a parent.
    */
   parentSpanId?: string;
+  /** Whether parentSpanId refers to a span outside Mastra's stored trace. */
+  isExternalParent?: boolean;
   /**
    * Start time for this span.
    * Only used when rebuilding a span from cached data.
@@ -1370,6 +1374,8 @@ export interface TracingOptions {
    * If provided, the root span will be created as a child of this span.
    */
   parentSpanId?: string;
+  /** @internal Whether parentSpanId refers to a span outside Mastra's stored trace. */
+  isExternalParent?: boolean;
   /**
    * Tags to apply to this trace.
    * Tags are string labels that can be used to categorize and filter traces

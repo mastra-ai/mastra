@@ -489,7 +489,7 @@ export class MastraStorageExporter extends BaseExporter {
       this.flushCreates('tracing', createSpanEvents, async events => {
         const records = events.map(t =>
           buildCreateSpanRecord(
-            t.exportedSpan.isRootSpan ? { ...t.exportedSpan, parentSpanId: undefined } : t.exportedSpan,
+            t.exportedSpan.isExternalParent ? { ...t.exportedSpan, parentSpanId: undefined } : t.exportedSpan,
           ),
         );
         await this.#observabilityStorage!.batchCreateSpans({ records });

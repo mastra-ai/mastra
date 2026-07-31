@@ -6869,6 +6869,9 @@ export class Agent<
             ...options.tracingOptions,
             traceId: effectiveTraceId,
             parentSpanId: shouldUsePersistedParentSpan ? persistedTracingContext?.spanId : userProvidedParentSpanId,
+            isExternalParent: shouldUsePersistedParentSpan
+              ? false
+              : (options.tracingOptions?.isExternalParent ?? userProvidedParentSpanId !== undefined),
           }
         : options.tracingOptions;
 

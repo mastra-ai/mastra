@@ -2,4 +2,4 @@
 '@mastra/observability': patch
 ---
 
-Store externally parented Mastra root spans as trace roots
+Fix traces created under OpenTelemetry parent spans not appearing in Mastra Studio.
