@@ -227,7 +227,7 @@ const slack = slackSigningSecret
 
 const integrations = [...(github ? [github] : []), ...(linear ? [linear] : []), ...(slack ? [slack] : [])];
 
-const rules = defaultFactoryRules({
+export const factoryRules = defaultFactoryRules({
   version: 'mastracode-web-v1',
   overrides: {
     work: {
@@ -241,7 +241,7 @@ const rules = defaultFactoryRules({
 export const factory = new MastraFactory({
   auth,
   integrations,
-  rules,
+  rules: factoryRules,
   sandbox: {
     machine: sandbox,
     // Remote checkout base (nested `owner/name` per repo). LocalSandbox ignores
