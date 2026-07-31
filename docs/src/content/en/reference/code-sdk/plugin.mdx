@@ -198,7 +198,7 @@ A [signal provider](/reference/signals/signal-provider) monitors an external sou
 1. Starts it polling and calls its `start()` hook. That hook isn't awaited, because it runs during startup and on every plugin reload.
 1. Stops it when the plugin is updated, disabled, or uninstalled.
 
-Stopping a provider calls its `stop()` method and drops every reference to it. Anything the provider started itself is its own to clear: override `stop()` to cancel timers, requests, and listeners you own, or a replaced provider keeps running against the thread its successor is now watching.
+Stopping a provider calls its `stop()` method and drops every reference to it. Anything the provider started itself is its own to clear: override `stop()` to cancel timers, requests, and listeners you own, or a replaced provider keeps running against the thread its successor is now watching. A provider replaced while it's still warming up is stopped a second time once its `start()` settles, so expect `stop()` to be callable before `start()` returns and to run twice.
 
 A provider's `getInputProcessors()` and `getOutputProcessors()` feed the same lanes as the `processors` field. Its `getTools()` is ignored: that method is only read by the agent constructor, which plugin providers deliberately never reach. To expose a tool from a provider, inject it from inside one of its processors.
 

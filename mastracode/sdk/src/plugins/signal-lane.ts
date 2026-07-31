@@ -143,10 +143,16 @@ export class PluginSignalLane {
   async #runStart(key: string, live: LiveProvider): Promise<void> {
     try {
       await live.provider.start?.();
+      // Retired or replaced while warming up: whatever `start()` just armed was
+      // armed after this provider was stopped, so it is stopped again. Without
+      // this a provider replaced mid-warm-up keeps working against the thread
+      // its successor is now watching.
+      if (this.#live.get(key) !== live) this.#stopProvider(live);
     } catch (error) {
-      // The provider may already have been retired or replaced while its
-      // `start()` was in flight; only the instance still live is torn down.
-      if (this.#live.get(key) !== live) return;
+      if (this.#live.get(key) !== live) {
+        this.#stopProvider(live);
+        return;
+      }
       this.#failProvider(key, live, error);
       this.#rebuildProcessors();
     }
@@ -164,12 +170,16 @@ export class PluginSignalLane {
   }
 
   #retire(key: string, live: LiveProvider): void {
+    this.#stopProvider(live);
+    this.#live.delete(key);
+  }
+
+  #stopProvider(live: LiveProvider): void {
     try {
       live.provider.stop();
     } catch (error) {
       this.#onError(`Plugin "${live.pluginId}" signal provider "${live.provider.id}" failed to stop:`, error);
     }
-    this.#live.delete(key);
   }
 
   #isProviderIdTaken(providerId: string): boolean {
