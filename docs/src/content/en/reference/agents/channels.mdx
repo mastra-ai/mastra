@@ -384,18 +384,34 @@ type ChannelHandler = (
   thread: Thread,
   message: Message,
   defaultHandler: (thread: Thread, message: Message) => Promise<void>,
-  ctx?: ChannelHandlerContext,
+  ctx: ChannelHandlerContext,
 ) => Promise<void>
+
+type ChannelHandlerContext = {
+  mastra?: Mastra
+  requestContext: RequestContext
+}
 ```
 
-`ctx` carries the resolved `mastra` instance, so a handler can reach storage or other registered primitives without being passed an external accessor:
+`ctx.mastra` is the resolved `mastra` instance, so a handler can reach storage or other registered primitives without being passed an external accessor:
 
 ```typescript
 onDirectMessage: async (thread, message, defaultHandler, ctx) => {
-  const store = await ctx?.mastra?.getStorage()?.getStore('memory')
+  const store = await ctx.mastra?.getStorage()?.getStore('memory')
   await defaultHandler(thread, message)
 }
 ```
+
+`ctx.requestContext` is the [`RequestContext`](/docs/server/request-context) for the run this message is about to start, built fresh for every message. Write to it before calling `defaultHandler` and the value reaches the run, alongside the channel entries Mastra adds afterward:
+
+```typescript
+onDirectMessage: async (thread, message, defaultHandler, ctx) => {
+  ctx.requestContext.set('locale', 'en-GB')
+  await defaultHandler(thread, message)
+}
+```
+
+Anything the run reads from its request context can be decided per message this way, such as which user a platform sender maps to.
 
 ## Resource ID resolution
 

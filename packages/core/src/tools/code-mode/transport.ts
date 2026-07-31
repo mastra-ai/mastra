@@ -16,6 +16,7 @@ import { pathToFileURL } from 'node:url';
 
 import { SandboxFeatureNotSupportedError } from '../../workspace/errors';
 import { buildRunner, buildProgramModule, FRAME_PREFIX } from './runner';
+import { sanitizeToolId } from './stub-generator';
 import type { CodeModeRunnerFrame, CodeModeToolResult, CodeModeTransport } from './types';
 
 /**
@@ -26,11 +27,14 @@ export class StdioCodeModeTransport implements CodeModeTransport {
   async run(opts: Parameters<CodeModeTransport['run']>[0]): Promise<CodeModeToolResult> {
     const { sandbox, program, toolIds, dispatch, timeout, abortSignal, onExternalCall, onExternalResult } = opts;
 
+    if (!sandbox) {
+      throw new Error('StdioCodeModeTransport requires a sandbox');
+    }
     if (!sandbox.processes) {
       throw new SandboxFeatureNotSupportedError('processes');
     }
 
-    const externals = toolIds.map(toolId => ({ toolId, externalName: sanitize(toolId) }));
+    const externals = toolIds.map(toolId => ({ toolId, externalName: sanitizeToolId(toolId) }));
     const allowList = new Set(toolIds);
 
     const dir = await mkdtemp(join(tmpdir(), 'mastra-code-mode-'));
@@ -194,9 +198,4 @@ export class StdioCodeModeTransport implements CodeModeTransport {
       await rm(dir, { recursive: true, force: true }).catch(() => {});
     }
   }
-}
-
-function sanitize(id: string): string {
-  const cleaned = id.replace(/[^A-Za-z0-9_$]/g, '_');
-  return /^[A-Za-z_$]/.test(cleaned) ? cleaned : `_${cleaned}`;
 }

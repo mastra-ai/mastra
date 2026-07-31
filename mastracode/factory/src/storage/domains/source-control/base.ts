@@ -7,6 +7,7 @@ const REPOSITORIES = 'source_control_repositories';
 const CONNECTIONS = 'factory_project_source_control_connections';
 const PROJECT_REPOSITORIES = 'factory_project_repositories';
 const SANDBOXES = 'source_control_project_repository_sandboxes';
+const SANDBOX_POOL = 'source_control_sandbox_pool';
 const WORKTREES = 'source_control_worktrees';
 const SESSIONS = 'source_control_sessions';
 
@@ -120,6 +121,30 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
     uniqueIndexes: [
       {
         name: 'source_control_project_repository_sandboxes_link_user_unique',
+        columns: ['project_repository_id', 'user_id'],
+      },
+    ],
+  },
+  {
+    name: SANDBOX_POOL,
+    columns: {
+      id: { type: 'uuid-pk' },
+      org_id: { type: 'text' },
+      project_repository_id: { type: 'text' },
+      user_id: { type: 'text' },
+      sandbox_id: { type: 'text' },
+      sandbox_workdir: { type: 'text' },
+      released_at: { type: 'timestamp' },
+    },
+    uniqueIndexes: [
+      {
+        name: 'source_control_sandbox_pool_sandbox_unique',
+        columns: ['sandbox_id'],
+      },
+    ],
+    indexes: [
+      {
+        name: 'source_control_sandbox_pool_repository_user_idx',
         columns: ['project_repository_id', 'user_id'],
       },
     ],
@@ -279,6 +304,33 @@ export interface ProjectRepositorySandbox {
   createdAt: Date;
 }
 
+/**
+ * A provider sandbox that is no longer bound to any session and can be handed
+ * to the next session for the same project-repository link instead of
+ * provisioning a fresh VM. Pooling is per-repository, not per-user: no
+ * credentials are baked into the VM (tokens are injected per command), so any
+ * user's session can safely claim it. `userId` records who released it,
+ * purely as provenance.
+ */
+export interface PooledSandbox {
+  id: string;
+  orgId: string;
+  projectRepositoryId: string;
+  /** User whose session released this sandbox (provenance, not a claim key). */
+  userId: string;
+  sandboxId: string;
+  sandboxWorkdir: string;
+  releasedAt: Date;
+}
+
+export interface ReleasePooledSandboxInput {
+  orgId: string;
+  projectRepositoryId: string;
+  userId: string;
+  sandboxId: string;
+  sandboxWorkdir: string;
+}
+
 export interface SourceControlWorktree {
   id: string;
   projectRepositoryId: string;
@@ -383,6 +435,20 @@ export interface SourceControlStorageHandle {
     clearBinding(args: { id: string }): Promise<void>;
     markMaterialized(args: { id: string }): Promise<void>;
   };
+  readonly sandboxPool: {
+    /**
+     * Return a sandbox to the reuse pool. Idempotent per provider sandbox ID —
+     * releasing the same sandbox twice keeps one pool row.
+     */
+    release(args: ReleasePooledSandboxInput): Promise<void>;
+    /**
+     * Atomically take one pooled sandbox for the given project-repository
+     * link, preferring the most recently released (warmest) VM. Returns
+     * `null` when the pool is empty. Each pooled sandbox is handed to exactly
+     * one claimer even under concurrent claims.
+     */
+    claim(args: { projectRepositoryId: string }): Promise<PooledSandbox | null>;
+  };
   readonly worktrees: {
     upsert(args: UpsertSourceControlWorktreeInput): Promise<void>;
     list(args: { projectRepositoryId: string; userId: string }): Promise<SourceControlWorktree[]>;
@@ -462,6 +528,16 @@ interface SandboxDbRow extends Record<string, unknown> {
   sandbox_workdir: string;
   materialized_at: Date | null;
   created_at: Date;
+}
+
+interface SandboxPoolDbRow extends Record<string, unknown> {
+  id: string;
+  org_id: string;
+  project_repository_id: string;
+  user_id: string;
+  sandbox_id: string;
+  sandbox_workdir: string;
+  released_at: Date;
 }
 
 interface WorktreeDbRow extends Record<string, unknown> {
@@ -554,6 +630,18 @@ function toSandbox(row: SandboxDbRow): ProjectRepositorySandbox {
   };
 }
 
+function toPooledSandbox(row: SandboxPoolDbRow): PooledSandbox {
+  return {
+    id: row.id,
+    orgId: row.org_id,
+    projectRepositoryId: row.project_repository_id,
+    userId: row.user_id,
+    sandboxId: row.sandbox_id,
+    sandboxWorkdir: row.sandbox_workdir,
+    releasedAt: row.released_at,
+  };
+}
+
 function toWorktree(row: WorktreeDbRow): SourceControlWorktree {
   return {
     id: row.id,
@@ -595,6 +683,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
   async dangerouslyClearAll(): Promise<void> {
     await this.ops.deleteMany(SESSIONS, {});
     await this.ops.deleteMany(WORKTREES, {});
+    await this.ops.deleteMany(SANDBOX_POOL, {});
     await this.ops.deleteMany(SANDBOXES, {});
     await this.ops.deleteMany(PROJECT_REPOSITORIES, {});
     await this.ops.deleteMany(CONNECTIONS, {});
@@ -848,6 +937,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           for (const projectRepository of projectRepositories) {
             await db().deleteMany(SESSIONS, { project_repository_id: projectRepository.id });
             await db().deleteMany(WORKTREES, { project_repository_id: projectRepository.id });
+            await db().deleteMany(SANDBOX_POOL, { project_repository_id: projectRepository.id });
             await db().deleteMany(SANDBOXES, { project_repository_id: projectRepository.id });
           }
           await db().deleteMany(PROJECT_REPOSITORIES, { connection_id: id });
@@ -962,6 +1052,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           if (!existing) return false;
           await db().deleteMany(SESSIONS, { project_repository_id: id });
           await db().deleteMany(WORKTREES, { project_repository_id: id });
+          await db().deleteMany(SANDBOX_POOL, { project_repository_id: id });
           await db().deleteMany(SANDBOXES, { project_repository_id: id });
           await db().deleteMany(PROJECT_REPOSITORIES, { id });
           return true;
@@ -1005,6 +1096,39 @@ export class SourceControlStorage extends FactoryStorageDomain {
         markMaterialized: async ({ id }) => {
           await requireSandbox(id);
           await db().updateMany(SANDBOXES, { id }, { materialized_at: new Date() });
+        },
+      },
+      sandboxPool: {
+        release: async input => {
+          // Mirror claim(): a concurrently unlinked project repository makes
+          // the release a silent no-op (the unlink cascade drops pool rows
+          // anyway) — callers treat release as best-effort and must not throw.
+          if (!(await getProjectRepositoryById(input.projectRepositoryId))) return;
+          try {
+            await db().insertOne<SandboxPoolDbRow>(SANDBOX_POOL, {
+              org_id: input.orgId,
+              project_repository_id: input.projectRepositoryId,
+              user_id: input.userId,
+              sandbox_id: input.sandboxId,
+              sandbox_workdir: input.sandboxWorkdir,
+              released_at: new Date(),
+            });
+          } catch (error) {
+            if (!(error instanceof UniqueViolationError)) throw error;
+            // The provider sandbox is already pooled — keep the existing row.
+          }
+        },
+        claim: async ({ projectRepositoryId }) => {
+          if (!(await getProjectRepositoryById(projectRepositoryId))) return null;
+          const rows = await db().findMany<SandboxPoolDbRow>(SANDBOX_POOL, {
+            project_repository_id: projectRepositoryId,
+          });
+          rows.sort((left, right) => right.released_at.getTime() - left.released_at.getTime());
+          for (const row of rows) {
+            // Delete-by-id succeeds for exactly one concurrent claimer.
+            if ((await db().deleteMany(SANDBOX_POOL, { id: row.id })) === 1) return toPooledSandbox(row);
+          }
+          return null;
         },
       },
       worktrees: {

@@ -13,7 +13,7 @@ To give your agent access to Mastra's documentation, we recommend using **skills
 
 ## Mastra skills
 
-Agent Skills are folders of instructions, scripts, and resources that agents can discover and use to do things more accurately and efficiently. Mastra skills contain setup instructions, best practices, CLI commands, and instructions on how to fetch up-to-date information from Mastra's documentation.
+Agent Skills are folders of instructions, scripts, and resources that agents can discover and use to do things accurately and efficiently. Mastra skills contain setup instructions, best practices, CLI commands, and instructions on how to fetch up-to-date information from Mastra's documentation.
 
 To install all available Mastra skills, run the following command:
 
@@ -35,7 +35,9 @@ npx skills update mastra
 
 ## Mastra CLI
 
-The [Mastra CLI](/reference/cli/mastra) gives your coding agent a direct line to your Mastra runtime. Agents can invoke agents, run workflows, execute tools, inspect memory, run evals, and query traces and logs.
+The [Mastra CLI](/reference/cli/mastra) gives your coding agent a direct line to your Mastra runtime.
+
+Agents can invoke other agents and run workflows. They can execute tools and inspect memory. They can also run evals or query traces and logs.
 
 ```bash npm2yarn
 npm install mastra@latest -g
@@ -52,7 +54,7 @@ Install the [Mastra skills](#mastra-skills) to teach your agent how to use the C
 
 ## Embedded package docs
 
-Mastra packages ship with embedded documentation in `dist/docs`. When you install a Mastra package, your AI agent can read these files directly from `node_modules` to understand the package's APIs and patterns.
+Mastra packages come with embedded documentation in `dist/docs`. When you install a Mastra package, your AI agent can read these files directly from `node_modules` to understand the package's APIs and patterns.
 
 Each `dist/docs` includes:
 
@@ -81,7 +83,7 @@ In addition to the [context files](#context-files) each documentation page also 
 
 The `@mastra/mcp-docs-server` package provides direct local access to Mastra’s full documentation via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/getting-started/intro). It works with Cursor, Windsurf, Cline, Claude Code, VS Code, Codex or any tool that supports MCP.
 
-These tools are designed to help agents retrieve precise, task-specific information, whether you're adding a feature to an agent, scaffolding a new project, or exploring how something works.
+These tools are designed to help agents retrieve precise, task-specific information, whether you're adding a feature to an agent or scaffolding a new project, or alternatively exploring how something works.
 
 If you're unable to use a local MCP server and need to connect to a remote server, use this URL: `https://mastra.mcp.kapa.ai`. You need to authenticate with your Google Account (only an anonymous ID is transmitted) for rate-limiting purposes. If possible, Mastra recommends using a local MCP server for better performance and reliability.
 

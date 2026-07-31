@@ -14,7 +14,7 @@ The editor gives you three ways to add tools to agents:
 - **Integration providers**: Third-party tool platforms like Composio and Arcade.
 - **MCP clients**: Tools from MCP servers, configured as reusable client definitions.
 
-You can manage all three sources through the Studio UI or programmatically through the server API. Non-technical team members can browse tool catalogs, add tools to agents, and test different tool combinations without code changes. Tool configurations are versioned alongside the rest of the agent, so you can roll back tool changes, compare versions, and experiment safely.
+You can manage all three sources through the Studio UI or programmatically through the server API. Non-technical team members can browse tool catalogs and add tools to agents, plus test different tool combinations without code changes. Tool configurations are versioned alongside the rest of the agent, so you can roll back tool changes and compare versions, plus experiment safely.
 
 ## Description overrides
 
@@ -30,7 +30,7 @@ In the Studio, select a tool in the agent's tool list and edit the **Description
 
 ## Display conditions
 
-Each tool in an agent can have display conditions — rule groups that control whether the tool is available at runtime. This uses the same rule system as [prompt blocks](/docs/editor/prompts#display-conditions).
+Each tool in an agent can have display conditions, rule groups that control whether the tool is available at runtime. This uses the same rule system as [prompt blocks](/docs/editor/prompts#display-conditions).
 
 When a request comes in, the editor evaluates each tool's rules against the current context (agent variables and request context). Tools whose conditions aren't met are excluded from that run.
 
@@ -130,7 +130,7 @@ You can filter MCP tools at two levels:
 
 ### Tool namespacing
 
-Tools from MCP servers are namespaced as `serverName_toolName` to avoid conflicts. For example, a tool called `search` from a server named `docs` becomes `docs_search`.
+Tools from MCP servers are namespaced as `serverName_toolName` to avoid conflicts. For example, a `search` tool from the `docs` server becomes `docs_search`.
 
 ### Conditional activation
 

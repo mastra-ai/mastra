@@ -12,6 +12,7 @@
     "intellect-3",
     "kimi-k2-thinking",
     "kimi-k2.7-code",
+    "kimi-k3",
     "llama-4-maverick",
     "minimax-m3",
     "mistral-large-2512"
@@ -71,5 +72,14 @@
     "qwen3.5-122b-a10b",
     "qwen3.5-397b-a17b"
   ],
-  "structuredOutput": ["glm-5-turbo", "glm-5.1", "glm-5.2", "gpt-5.4", "hy3", "kimi-k2.7-code", "minimax-m2.7"]
+  "structuredOutput": [
+    "glm-5-turbo",
+    "glm-5.1",
+    "glm-5.2",
+    "gpt-5.4",
+    "hy3",
+    "kimi-k2.7-code",
+    "kimi-k3",
+    "minimax-m2.7"
+  ]
 }
