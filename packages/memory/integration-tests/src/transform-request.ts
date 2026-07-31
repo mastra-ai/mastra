@@ -179,10 +179,11 @@ function normalizeGoogleToolCallMessages(body: unknown): unknown {
 
 export function transformRequest({ url, body }: { url: string; body: unknown }): { url: string; body: unknown } {
   let normalizedBody = normalizeOpenAIResponseFunctionCalls(normalizeNetworkFinalResultMessages(body));
-  if (url.includes('generativelanguage.googleapis.com')) {
+  const { hostname } = new URL(url);
+  if (hostname === 'generativelanguage.googleapis.com') {
     normalizedBody = normalizeGoogleToolCallMessages(normalizedBody);
   }
-  if (url.includes('openrouter.ai')) {
+  if (hostname === 'openrouter.ai') {
     normalizedBody = normalizeOpenRouterTextContent(normalizedBody);
   }
   let stringifiedBody = JSON.stringify(normalizedBody);

@@ -70,4 +70,14 @@ describe('transformRequest', () => {
       ],
     });
   });
+
+  it('only applies Google normalization to the Google API hostname', () => {
+    const body = {
+      contents: [{ role: 'model', parts: [{ functionCall: { id: 'call-1', name: 'get_weather', args: {} } }] }],
+    };
+
+    expect(transformRequest({ url: `https://example.com/${googleUrl}`, body }).body).toEqual({
+      contents: [{ role: 'model', parts: [{ functionCall: { id: 'REDACTED', name: 'get_weather', args: {} } }] }],
+    });
+  });
 });
