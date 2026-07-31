@@ -396,6 +396,32 @@ describe('MastraFactory.prepare', () => {
     await expect(extraTools({ requestContext })).resolves.toEqual({});
   });
 
+  it('serves the not-registered /web/channel-accounts stub when no slack integration is registered', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+    const buildApiRoutes = config.buildApiRoutes as (
+      deps: object,
+    ) => Array<{ path: string; method: string; handler: (c: unknown) => unknown }>;
+    const routes = buildApiRoutes({ controller: {}, authStorage: {} });
+    const stub = routes.find(r => r.path === '/web/channel-accounts');
+    expect(stub).toBeDefined();
+    expect(stub!.method).toBe('GET');
+    const json = vi.fn((payload: unknown) => payload);
+    stub!.handler({ json } as never);
+    expect(json).toHaveBeenCalledWith({ accounts: [], canConnect: false, reason: 'not_registered' });
+  });
+
+  it('does not mount the /web/channel-accounts stub when a slack integration is registered', async () => {
+    // A registered slack integration owns the path via its own connect
+    // routes — the stub colliding with them would shadow the real answer.
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      integrations: [fakeIntegration({ id: 'slack' })],
+    });
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+    const paths = buildApiRoutes({ controller: {}, authStorage: {} }).map(r => r.path);
+    expect(paths).not.toContain('/web/channel-accounts');
+  });
+
   it('omits auth routes when auth is explicitly disabled (auth: null)', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
     const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;

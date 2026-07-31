@@ -292,6 +292,28 @@ function disabledIntegrationStatusRoutes(deps: FactoryApiRoutesDeps, id: string,
 }
 
 /**
+ * Stub for `GET /web/channel-accounts` when NO Slack integration is
+ * registered. The SPA's Connections section polls the path unconditionally;
+ * without a stub the SPA fallback serves HTML, which the UI can only read as
+ * "old server / unknown". The machine-readable reason lets it say the truth:
+ * the integration isn't registered.
+ *
+ * Mounted only for ABSENT slack — a registered integration owns the path via
+ * its connect routes (or, when the state signer is unstable, gets no routes
+ * at all and the UI falls back to the generic copy). Static payload, leaks
+ * nothing → no auth needed, same posture as the github/linear stubs.
+ */
+function absentSlackChannelAccountsRoutes(): ApiRoute[] {
+  return [
+    registerApiRoute('/web/channel-accounts', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: c => c.json({ accounts: [], canConnect: false, reason: 'not_registered' }),
+    }),
+  ];
+}
+
+/**
  * Assemble the custom `/web/*` API routes as Mastra `server.apiRoutes`:
  *   - fs browser routes (project picker), confined to `fsRoot`
  *   - config routes (provider/API-key/model-pack/OM management)
@@ -323,6 +345,11 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   const absentStubs = ['github', 'linear']
     .filter(id => !registrations.some(({ integration }) => integration.id === id))
     .flatMap(id => disabledIntegrationStatusRoutes(deps, id));
+  // Absent slack gets the channel-accounts not-registered stub (registered
+  // slack owns the path via its own connect routes).
+  const slackAbsentStubs = registrations.some(({ integration }) => integration.id === 'slack')
+    ? []
+    : absentSlackChannelAccountsRoutes();
 
   const transitionService = deps.factoryReady
     ? (deps.factoryTransitionService ??
@@ -384,6 +411,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     }).routes(),
     ...integrationRoutes,
     ...absentStubs,
+    ...slackAbsentStubs,
     ...(deps.intakeReady
       ? new IntakeRoutes({
           auth: deps.auth,
