@@ -27,7 +27,6 @@ import { hasAuthInit } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
-import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import type { FactoryAuthUser } from './auth.js';
 import {
@@ -518,10 +517,12 @@ export class MastraFactory {
     const workItemsReady = storage.isDomainReady('work-items');
     // Terminal work items release their session sandboxes back to the reuse
     // pool so the next session for the same repository/user claims a warm VM
-    // instead of provisioning fresh. Remote providers only: local "sandboxes"
-    // are the host machine with per-session workdirs — nothing to pool.
+    // instead of provisioning fresh. Local participates too: its "reattach"
+    // is a no-op (there is no host VM to warm), but running the same code
+    // path keeps behavior consistent across providers and lets the pool
+    // primitive stay provider-agnostic.
     const releaseTerminalSandboxes =
-      machine && !(machine instanceof LocalSandbox) && workItemsReady && storage.isDomainReady('source-control')
+      machine && workItemsReady && storage.isDomainReady('source-control')
         ? async ({ orgId, workItemId }: { orgId: string; workItemId: string }) =>
             releaseWorkItemSandboxes({
               workItems: workItemsStorage,

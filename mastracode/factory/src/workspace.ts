@@ -129,6 +129,9 @@ export interface CreateWorkspaceFactoryOptions {
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
   const { sandbox: sandboxConfig, github, fleet, workItems } = options;
+  // Local dev without GitHub sessions is still allowed (see the null-session
+  // branch below), but every provider — local included — routes through the
+  // same fleet release/claim path once a session exists.
   const isLocalSandbox = sandboxConfig?.machine instanceof LocalSandbox;
   const githubTokenInjectors = new Map<
     string,
@@ -174,9 +177,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     if (!installation) throw new Error(`GitHub installation ${connection.installationId} was not found`);
     const repoFullName = repository.slug;
 
-    let workdir = isLocalSandbox
-      ? fleet.computeLocalSessionWorkdir(repoFullName, session.id)
-      : (session.sandboxWorkdir ?? projectRepository.sandboxWorkdir);
+    // One workdir scheme across providers: sessions inherit the per-project
+    // workdir the fleet computes for this repo. On remote providers that
+    // lives inside each pooled VM; on local it lives on the host under the
+    // configured local root. Either way, sessions for the same repository
+    // share it — which is what makes the release/claim pool coherent.
+    let workdir = session.sandboxWorkdir ?? projectRepository.sandboxWorkdir;
     // The system prompt derives its working directory from `state.projectPath`
     // and falls back to the server's own process.cwd() when unset — which
     // points the agent at the host checkout (and lets it run `git checkout`
@@ -243,7 +249,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // scrubbed on release and again below), so any user's session for this
       // repository can claim one.
       let claimedPooledSandbox = false;
-      if (!isLocalSandbox && !session.sandboxId) {
+      if (!session.sandboxId) {
         const pooled = await storage.sandboxPool.claim({
           projectRepositoryId: session.projectRepositoryId,
         });
@@ -286,12 +292,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       const ghCliToken = (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? token;
 
       const ensureSandbox = () =>
-        fleet.ensureSandbox(
-          binding,
-          { GH_TOKEN: ghCliToken },
-          undefined,
-          isLocalSandbox ? { workingDirectory: workdir } : {},
-        );
+        fleet.ensureSandbox(binding, { GH_TOKEN: ghCliToken }, undefined, { workingDirectory: workdir });
       const runMaterialize = (target: Awaited<ReturnType<typeof ensureSandbox>>) =>
         materializeRepo({
           row: { id: session.id, sandboxWorkdir: workdir, materializedAt: session.materializedAt },

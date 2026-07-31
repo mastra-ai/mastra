@@ -1354,12 +1354,13 @@ function buildProjectGitRoutes({
         if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        if (session.sandboxId && fleet.provider !== 'local' && session.sandboxWorkdir) {
-          // Keep the remote VM alive: return it to the reuse pool so the next
-          // session for this repository link and user claims it (repo already
-          // cloned) instead of provisioning a fresh sandbox. Scrub the
-          // session's work off the VM first so it doesn't idle with stale
-          // branches or dirty state.
+        if (session.sandboxId && session.sandboxWorkdir) {
+          // Return the sandbox to the reuse pool so the next session for this
+          // repository link and user claims it (repo already cloned) instead
+          // of provisioning fresh. Scrub the session's work off the workdir
+          // first so it doesn't idle with stale branches or dirty state. On
+          // local this is effectively a no-op reattach — the pool row is
+          // still written for parity with remote providers.
           await cleanReleasedSandbox({
             fleet,
             sourceControl: github.sourceControlStorage,
