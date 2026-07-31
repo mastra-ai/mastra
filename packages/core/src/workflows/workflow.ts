@@ -2996,6 +2996,47 @@ export class Workflow<
  * Represents a workflow run that can be executed
  */
 
+type WorkflowRunResumeParams<TResume, TEngineType, TRequestContext extends Record<string, any> | unknown> = {
+  resumeData?: TResume;
+  step?:
+    | Step<string, any, any, TResume, any, any, TEngineType, any>
+    | [
+        ...Step<string, any, any, any, any, any, TEngineType, any>[],
+        Step<string, any, any, TResume, any, any, TEngineType, any>,
+      ]
+    | string
+    | string[];
+  label?: string;
+  requestContext?: RequestContext<TRequestContext>;
+  retryCount?: number;
+  tracingOptions?: TracingOptions;
+  outputWriter?: OutputWriter;
+  format?: 'legacy' | 'vnext' | undefined;
+  isVNext?: boolean;
+  outputOptions?: {
+    includeState?: boolean;
+    includeResumeLabels?: boolean;
+  };
+  forEachIndex?: number;
+  perStep?: boolean;
+  actor?: ActorSignal;
+} & Partial<ObservabilityContext>;
+
+function getWorkflowRunResumeKey<TResume, TEngineType, TRequestContext extends Record<string, any> | unknown>(
+  params: WorkflowRunResumeParams<TResume, TEngineType, TRequestContext>,
+) {
+  if (params.label) {
+    return `label:${params.label}:foreach:${params.forEachIndex ?? 'none'}`;
+  }
+
+  const stepPath = (Array.isArray(params.step) ? params.step : [params.step])
+    .filter(step => step !== undefined)
+    .map(step => (typeof step === 'string' ? step : step.id))
+    .join('.');
+
+  return `step:${stepPath || 'auto'}:foreach:${params.forEachIndex ?? 'none'}`;
+}
+
 export class Run<
   TEngineType = DefaultEngineType,
   TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
@@ -3088,6 +3129,7 @@ export class Run<
   streamOutput?: WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>>;
   protected closeStreamAction?: () => Promise<void>;
   protected executionResults?: Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>;
+  #resumeExecutions = new Map<string, Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>>();
   protected stateSchema?: StandardSchemaWithJSON<TState>;
   protected inputSchema?: StandardSchemaWithJSON<TInput>;
   protected requestContextSchema?: StandardSchemaWithJSON<any>;
@@ -3972,32 +4014,30 @@ export class Run<
     return this._restart(args);
   }
 
-  protected async _resume<TResume>(
-    params: {
-      resumeData?: TResume;
-      step?:
-        | Step<string, any, any, TResume, any, any, TEngineType, any>
-        | [
-            ...Step<string, any, any, any, any, any, TEngineType, any>[],
-            Step<string, any, any, TResume, any, any, TEngineType, any>,
-          ]
-        | string
-        | string[];
-      label?: string;
-      requestContext?: RequestContext<TRequestContext>;
-      retryCount?: number;
-      tracingOptions?: TracingOptions;
-      outputWriter?: OutputWriter;
-      format?: 'legacy' | 'vnext' | undefined;
-      isVNext?: boolean;
-      outputOptions?: {
-        includeState?: boolean;
-        includeResumeLabels?: boolean;
-      };
-      forEachIndex?: number;
-      perStep?: boolean;
-      actor?: ActorSignal;
-    } & Partial<ObservabilityContext>,
+  protected _resume<TResume>(
+    params: WorkflowRunResumeParams<TResume, TEngineType, TRequestContext>,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    const key = getWorkflowRunResumeKey(params);
+    const inFlightExecution = this.#resumeExecutions.get(key);
+    if (inFlightExecution) {
+      return inFlightExecution;
+    }
+
+    const execution = this.#executeResume(params);
+    this.#resumeExecutions.set(key, execution);
+
+    const clearExecution = () => {
+      if (this.#resumeExecutions.get(key) === execution) {
+        this.#resumeExecutions.delete(key);
+      }
+    };
+    void execution.then(clearExecution, clearExecution);
+
+    return execution;
+  }
+
+  async #executeResume<TResume>(
+    params: WorkflowRunResumeParams<TResume, TEngineType, TRequestContext>,
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(params);
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
