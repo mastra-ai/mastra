@@ -232,6 +232,23 @@ describe('PluginSignalLane', () => {
     expect(processorIds(lane.getInputProcessors())).toEqual(['new-input']);
   });
 
+  it('stops every live provider on teardown', () => {
+    const first = new TestProvider('first-signals');
+    const second = new TestProvider('second-signals');
+    const lane = laneWithMastra();
+    lane.sync([...contributions('acme.one', 'v1', [first]), ...contributions('acme.two', 'v1', [second])]);
+    expect(processorIds(lane.getInputProcessors())).toEqual(['first-signals-input', 'second-signals-input']);
+
+    // A pluginManager can outlive the controller that used it, so a controller
+    // that is done with the lane must leave nothing polling behind.
+    lane.stopAll();
+
+    expect(first.stopped).toBe(1);
+    expect(second.stopped).toBe(1);
+    expect(lane.getInputProcessors()).toEqual([]);
+    expect(lane.getOutputProcessors()).toEqual([]);
+  });
+
   it('does not mutate the processor array a request already resolved', () => {
     const first = new TestProvider('demo-signals', 'old');
     const lane = laneWithMastra();
