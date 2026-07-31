@@ -200,7 +200,9 @@ describe('GithubRules', () => {
       ),
     ).resolves.toEqual({ status: 'committed' });
 
-    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toHaveLength(1);
+    const [decision] = decisions;
     expect(decision?.decision).toMatchObject({
       type: 'invokeSkill',
       skillName: 'factory-triage',
