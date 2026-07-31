@@ -98,5 +98,6 @@ Keep `config.ts` focused on runtime options. Use sibling files for concerns that
 | Skills | Function `config.skills` | [`skills/`](/reference/file-based-agents/skills) | Function `config.skills`; discovered skills are ignored |
 | Memory | `config.memory` | [`memory.ts`](/reference/file-based-agents/memory) | `config.memory` |
 | Workspace | `config.workspace` | [`workspace.ts`](/reference/file-based-agents/workspace) | `config.workspace` |
+| Workspace | `config.workspace: true` | [`workspace/` seed directory](/reference/file-based-agents/workspace#seed-files) | Both opt into the managed workspace |
 
 Missing both `instructions.md` and `config.instructions` fails the build. Missing both `config.memory` and `memory.ts` leaves the agent without memory.

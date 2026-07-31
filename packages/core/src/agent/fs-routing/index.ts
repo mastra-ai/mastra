@@ -27,9 +27,16 @@ import type { AgentConfig, AgentInstructions, ToolsInput } from '../types';
  * });
  * ```
  */
-export type FsAgentConfig = Partial<Omit<AgentConfig, 'id' | 'name'>> & {
+export type FsAgentConfig = Partial<Omit<AgentConfig, 'id' | 'name' | 'workspace'>> & {
   id?: string;
   name?: string;
+  /**
+   * A `Workspace` (or a function returning one) to use for this agent, or the
+   * literal `true` to opt into the managed default workspace rooted at the
+   * per-agent directory the build provides. Omit it to give the agent no
+   * workspace and therefore no file/shell tools.
+   */
+  workspace?: AgentConfig['workspace'] | true;
 };
 
 export function agentConfig(config: FsAgentConfig): FsAgentConfig {
@@ -85,13 +92,19 @@ export interface FsAgentEntry {
    */
   memory?: MastraMemory;
   /**
-   * Base path for the convention default workspace. When provided and neither
-   * `config.workspace` nor `workspace.ts` supplies one, an FS agent gets a
-   * default `Workspace` (a contained `LocalFilesystem` rooted here plus a
-   * `LocalSandbox`), giving file-based agents file/shell tools automatically.
-   * Callers (the deployer codegen layer) pass a per-agent directory here.
+   * Where the managed default workspace lives when the agent opts into one —
+   * a contained `LocalFilesystem` rooted here plus a `LocalSandbox` with the
+   * same working directory. Callers (the deployer codegen layer) pass a
+   * per-agent directory here. This path alone does not attach a workspace; the
+   * agent must opt in via `config.workspace: true` or `hasWorkspaceSeeds`.
    */
   defaultWorkspaceBasePath?: string;
+  /**
+   * Whether the agent directory ships seed files under `workspace/`. Authoring
+   * those files is an opt-in to the managed default workspace, since they are
+   * mirrored into `defaultWorkspaceBasePath` at build time.
+   */
+  hasWorkspaceSeeds?: boolean;
   /**
    * Input processors discovered under `processors/input/`, already loaded.
    * Merged with `config.inputProcessors`; config takes precedence on collision.
@@ -148,6 +161,10 @@ export const MAX_FS_SUBAGENT_DEPTH = 3;
  * - `memory`: `memory.ts`'s default export is used unless `config.memory` is
  *   set, in which case `config.memory` wins (a warning is surfaced via
  *   `onWarn`). Missing both leaves the agent without memory.
+ * - `workspace` is opt-in: `config.workspace` wins over `workspace.ts`, and
+ *   `config.workspace: true` or seed files under `workspace/` opt into the
+ *   managed default workspace. Asking for none leaves the agent without a
+ *   workspace and without file/shell tools.
  *
  * If `config` is already an `Agent` instance (the author wrote
  * `export default new Agent({...})` in `config.ts`), it is used as-is — no
@@ -172,6 +189,7 @@ function assembleAtDepth(entry: FsAgentEntry, depth: number, options?: { onWarn?
     workspace,
     memory,
     defaultWorkspaceBasePath,
+    hasWorkspaceSeeds = false,
     subagents = [],
   } = entry;
   const onWarn = options?.onWarn ?? (() => {});
@@ -238,15 +256,26 @@ function assembleAtDepth(entry: FsAgentEntry, depth: number, options?: { onWarn?
 
   const mergedTools = mergeTools(name, tools, config.tools, onWarn);
   const mergedSkills = mergeSkills(name, skills, config.skills, onWarn);
-  const mergedWorkspace = mergeWorkspace(name, workspace, config.workspace, defaultWorkspaceBasePath, onWarn);
+  const mergedWorkspace = mergeWorkspace(
+    name,
+    workspace,
+    config.workspace,
+    defaultWorkspaceBasePath,
+    hasWorkspaceSeeds,
+    onWarn,
+  );
   const mergedMemory = mergeMemory(name, memory, config.memory, onWarn);
   const mergedAgents = mergeSubAgents(name, subagents, config.agents, mergedTools, depth, options);
   const mergedInputProcessors = mergeProcessors(name, 'input', inputProcessors, config.inputProcessors, onWarn);
   const mergedOutputProcessors = mergeProcessors(name, 'output', outputProcessors, config.outputProcessors, onWarn);
   const mergedScorers = mergeScorers(name, scorers, config.scorers, onWarn);
 
+  // `config.workspace` is resolved into `mergedWorkspace` below; it is stripped
+  // here so the opt-in literal `true` can never reach the Agent constructor.
+  const { workspace: _configWorkspace, ...configRest } = config;
+
   const assembled = {
-    ...config,
+    ...configRest,
     id: config.id ?? name,
     name: config.name ?? name,
     instructions,
@@ -459,12 +488,18 @@ function mergeSubAgents(
 /**
  * Resolve the workspace for a file-based agent.
  *
+ * A workspace is opt-in: an agent that asks for none gets none, and therefore
+ * no file or shell tools, matching a code-defined `new Agent({...})`.
+ *
  * Precedence (explicit > convention > default):
- * - `config.workspace` (from `config.ts`) wins over everything.
+ * - `config.workspace` (from `config.ts`) wins over everything. The literal
+ *   `true` opts into the managed default workspace at
+ *   `defaultWorkspaceBasePath`.
  * - `workspace.ts`'s default export wins over the convention default.
- * - Otherwise, when `defaultWorkspaceBasePath` is provided, a default
- *   `Workspace` (contained `LocalFilesystem` + `LocalSandbox`) is created so
- *   file-based agents get file/shell tools automatically (Eve sandbox parity).
+ * - Otherwise, seed files under `agents/<name>/workspace/` opt the agent into
+ *   the managed default workspace (a contained `LocalFilesystem` +
+ *   `LocalSandbox`) rooted at `defaultWorkspaceBasePath`, where those seeds
+ *   were mirrored at build time.
  * - If none of the above apply, returns `undefined` (no workspace).
  */
 function mergeWorkspace(
@@ -472,8 +507,22 @@ function mergeWorkspace(
   fsWorkspace: AnyWorkspace | undefined,
   configWorkspace: FsAgentConfig['workspace'],
   defaultWorkspaceBasePath: string | undefined,
+  hasWorkspaceSeeds: boolean,
   onWarn: (message: string) => void,
-): FsAgentConfig['workspace'] | undefined {
+): AgentConfig['workspace'] | undefined {
+  if (configWorkspace === true) {
+    if (fsWorkspace !== undefined) {
+      onWarn(`Agent "${name}": workspace defined in both config.ts and workspace.ts; config.workspace wins.`);
+    }
+    if (defaultWorkspaceBasePath === undefined) {
+      onWarn(
+        `Agent "${name}": config.workspace is true but no default workspace path is available, so no workspace was attached. The default workspace path is provided by 'mastra dev' and 'mastra build'.`,
+      );
+      return undefined;
+    }
+    return createDefaultWorkspace(name, defaultWorkspaceBasePath);
+  }
+
   if (configWorkspace !== undefined) {
     if (fsWorkspace !== undefined) {
       onWarn(`Agent "${name}": workspace defined in both config.ts and workspace.ts; config.workspace wins.`);
@@ -485,7 +534,7 @@ function mergeWorkspace(
     return fsWorkspace;
   }
 
-  if (defaultWorkspaceBasePath !== undefined) {
+  if (hasWorkspaceSeeds && defaultWorkspaceBasePath !== undefined) {
     return createDefaultWorkspace(name, defaultWorkspaceBasePath);
   }
 

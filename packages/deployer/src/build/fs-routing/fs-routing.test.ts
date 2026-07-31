@@ -479,7 +479,7 @@ describe('generateFsAgentsModule', () => {
     expect(source).not.toContain('__createSkill');
   });
 
-  it('always emits a defaultWorkspaceBasePath for each agent (default-on parity)', async () => {
+  it('emits a defaultWorkspaceBasePath without opting the agent into a workspace', async () => {
     await writeAgent('weather', {
       config: `export default { model: 'openai/gpt-4o' };`,
       instructions: 'hi',
@@ -491,7 +491,22 @@ describe('generateFsAgentsModule', () => {
     // points at `<bundle>/workspace/<name>` wherever the bundle is deployed.
     expect(source).toContain('defaultWorkspaceBasePath: __workspaceBasePath("weather")');
     expect(source).toContain('const __bundleDir = __dirname(__fileURLToPath(import.meta.url));');
+    // No opt-in signal, so assembly attaches no workspace.
+    expect(source).not.toContain('hasWorkspaceSeeds');
     expect(source).not.toContain('workspace:');
+  });
+
+  it('emits hasWorkspaceSeeds when the agent ships a workspace/ seed directory', async () => {
+    await writeAgent('weather', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+      workspaceSeed: { 'README.md': 'seed' },
+    });
+    const agents = await discoverFsAgents(dir);
+
+    const source = await generateFsAgentsModule('/project/index.ts', agents);
+    expect(source).toContain('hasWorkspaceSeeds: true');
+    expect(source).toContain('defaultWorkspaceBasePath: __workspaceBasePath("weather")');
   });
 
   it('imports workspace.ts and threads it into the entry when present', async () => {
@@ -1495,10 +1510,32 @@ describe('subagents', () => {
     expect(source).toContain('name: "editor"');
     expect(source).toContain(JSON.stringify('You are the editor subagent.'));
     expect(source).toContain('defaultWorkspaceBasePath: __workspaceBasePath("supervisor/writer/editor")');
+    // Neither the parent nor its subagents ship seeds, so none opt into a workspace.
+    expect(source).not.toContain('hasWorkspaceSeeds');
     // Generated identifiers are unique across parent/child/grandchild.
     expect(source).toMatch(/import config_0_supervisor from /);
     expect(source).toMatch(/import config_0_0_writer from /);
     expect(source).toMatch(/import config_0_0_0_editor from /);
+  });
+
+  it('emits hasWorkspaceSeeds per agent so only seeded subagents opt in', async () => {
+    await writeAgent('supervisor', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+      subagents: {
+        writer: {
+          config: `export default { model: 'openai/gpt-4o', description: 'Writes' };`,
+          instructions: 'You are the writer subagent.',
+          workspaceSeed: { 'draft.md': 'seed' },
+        },
+      },
+    });
+    const agents = await discoverFsAgents(dir);
+
+    const source = await generateFsAgentsModule('/project/index.ts', agents);
+    // Only the seeded subagent carries the opt-in signal.
+    expect(source.match(/hasWorkspaceSeeds: true/g)).toHaveLength(1);
+    expect(source).toMatch(/name: "writer"[\s\S]*?hasWorkspaceSeeds: true/);
   });
 
   it('mirrors subagent workspace seeds to <bundle>/workspace/<parent>/<child>', async () => {

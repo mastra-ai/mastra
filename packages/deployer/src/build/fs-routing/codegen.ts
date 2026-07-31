@@ -145,11 +145,15 @@ async function emitAgentEntry(
   if (memoryIdent) {
     entryFields.push(`memory: ${memoryIdent}`);
   }
-  // Default-on parity: every FS agent gets a default workspace (file + shell
-  // tools) rooted at a per-agent `workspace/` dir next to the bundle, unless
-  // config.ts or workspace.ts supplies one. Assembly applies the explicit >
-  // convention > default precedence. Subagents nest under `<parent>/<child>` so
-  // their seed directories never collide with the parent's.
+  // A workspace is opt-in, so seed files under `workspace/` are reported to
+  // assembly as one of the opt-in signals (`config.workspace: true` being the
+  // other). The base path is always emitted because it is where the managed
+  // default workspace lives once an agent opts in; on its own it attaches
+  // nothing. Subagents nest under `<parent>/<child>` so their seed directories
+  // never collide with the parent's.
+  if (agent.workspaceSeedDir) {
+    entryFields.push(`hasWorkspaceSeeds: true`);
+  }
   entryFields.push(`defaultWorkspaceBasePath: __workspaceBasePath(${JSON.stringify(workspaceName)})`);
 
   return `{ ${entryFields.join(', ')} }`;

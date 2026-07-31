@@ -272,7 +272,7 @@ describe('assembleAgentFromFsEntry', () => {
   });
 
   describe('workspace', () => {
-    it('attaches a default workspace when defaultWorkspaceBasePath is provided', async () => {
+    it('does not attach a workspace when the agent has not opted in', async () => {
       const agent = assembleAgentFromFsEntry({
         name: 'weather',
         config: { model: 'openai/gpt-4o' },
@@ -281,8 +281,51 @@ describe('assembleAgentFromFsEntry', () => {
       });
 
       const workspace = await agent.getWorkspace({ requestContext: new RequestContext() });
+      expect(workspace).toBeUndefined();
+    });
+
+    it('attaches the default workspace when config.workspace is true', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'weather',
+        config: { model: 'openai/gpt-4o', workspace: true },
+        instructionsMd: 'hi',
+        defaultWorkspaceBasePath: '/tmp/mastra-fs/weather',
+      });
+
+      const workspace = await agent.getWorkspace({ requestContext: new RequestContext() });
       expect(workspace).toBeDefined();
       expect(workspace?.name).toBe('weather-workspace');
+    });
+
+    it('attaches the default workspace when the agent ships workspace seed files', async () => {
+      const agent = assembleAgentFromFsEntry({
+        name: 'weather',
+        config: { model: 'openai/gpt-4o' },
+        instructionsMd: 'hi',
+        hasWorkspaceSeeds: true,
+        defaultWorkspaceBasePath: '/tmp/mastra-fs/weather',
+      });
+
+      const workspace = await agent.getWorkspace({ requestContext: new RequestContext() });
+      expect(workspace).toBeDefined();
+      expect(workspace?.name).toBe('weather-workspace');
+    });
+
+    it('warns and attaches nothing when config.workspace is true without a default base path', async () => {
+      const onWarn = vi.fn();
+
+      const agent = assembleAgentFromFsEntry(
+        {
+          name: 'weather',
+          config: { model: 'openai/gpt-4o', workspace: true },
+          instructionsMd: 'hi',
+        },
+        { onWarn },
+      );
+
+      const workspace = await agent.getWorkspace({ requestContext: new RequestContext() });
+      expect(workspace).toBeUndefined();
+      expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('no default workspace path is available'));
     });
 
     it('does not attach a workspace when no basePath and no config workspace', async () => {
@@ -296,22 +339,51 @@ describe('assembleAgentFromFsEntry', () => {
       expect(workspace).toBeUndefined();
     });
 
-    it('uses workspace.ts over the default workspace', async () => {
+    it('uses workspace.ts over the seed-file default workspace', async () => {
+      const onWarn = vi.fn();
       const custom = new Workspace({
         name: 'custom-ws',
         filesystem: new LocalFilesystem({ basePath: '/tmp/mastra-fs/custom' }),
       });
 
-      const agent = assembleAgentFromFsEntry({
-        name: 'weather',
-        config: { model: 'openai/gpt-4o' },
-        instructionsMd: 'hi',
-        workspace: custom,
-        defaultWorkspaceBasePath: '/tmp/mastra-fs/weather',
-      });
+      const agent = assembleAgentFromFsEntry(
+        {
+          name: 'weather',
+          config: { model: 'openai/gpt-4o' },
+          instructionsMd: 'hi',
+          workspace: custom,
+          hasWorkspaceSeeds: true,
+          defaultWorkspaceBasePath: '/tmp/mastra-fs/weather',
+        },
+        { onWarn },
+      );
 
       const workspace = await agent.getWorkspace({ requestContext: new RequestContext() });
       expect(workspace).toBe(custom);
+      expect(onWarn).not.toHaveBeenCalled();
+    });
+
+    it('config.workspace true wins over workspace.ts and warns', async () => {
+      const onWarn = vi.fn();
+      const fromFile = new Workspace({
+        name: 'file-ws',
+        filesystem: new LocalFilesystem({ basePath: '/tmp/mastra-fs/file' }),
+      });
+
+      const agent = assembleAgentFromFsEntry(
+        {
+          name: 'weather',
+          config: { model: 'openai/gpt-4o', workspace: true },
+          instructionsMd: 'hi',
+          workspace: fromFile,
+          defaultWorkspaceBasePath: '/tmp/mastra-fs/weather',
+        },
+        { onWarn },
+      );
+
+      const workspace = await agent.getWorkspace({ requestContext: new RequestContext() });
+      expect(workspace?.name).toBe('weather-workspace');
+      expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('config.workspace wins'));
     });
 
     it('config.workspace wins over workspace.ts and warns', async () => {
@@ -357,6 +429,31 @@ describe('assembleAgentFromFsEntry', () => {
       assembleAgentFromFsEntry({ name: 'weather', config: coded, workspace: fromFile }, { onWarn });
 
       expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('workspace.ts is ignored'));
+    });
+
+    it('leaves a code-defined Agent without a workspace, matching an opted-out config.ts', async () => {
+      const coded = new Agent({
+        id: 'weather',
+        name: 'weather',
+        instructions: 'Code-defined.',
+        model: 'openai/gpt-4o',
+      });
+
+      const fromCode = assembleAgentFromFsEntry({
+        name: 'weather',
+        config: coded,
+        defaultWorkspaceBasePath: '/tmp/mastra-fs/weather',
+      });
+      const fromConfig = assembleAgentFromFsEntry({
+        name: 'weather',
+        config: { model: 'openai/gpt-4o' },
+        instructionsMd: 'hi',
+        defaultWorkspaceBasePath: '/tmp/mastra-fs/weather',
+      });
+
+      const requestContext = new RequestContext();
+      expect(await fromCode.getWorkspace({ requestContext })).toBeUndefined();
+      expect(await fromConfig.getWorkspace({ requestContext })).toBeUndefined();
     });
   });
 
