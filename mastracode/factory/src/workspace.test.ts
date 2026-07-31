@@ -804,6 +804,28 @@ describe('GitHub session workspace preparation', () => {
     expect(getRegisteredGithubPatKind(requestContext)).toBe('default');
   });
 
+  it('removes a reviewer PAT installed by runtime refresh when the session becomes a worker', async () => {
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const reviewerRequestContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({ requestContext: reviewerRequestContext });
+    injectGithubToken(reviewerRequestContext, 'ghp_runtime_reviewer', 'pat');
+
+    mocks.runBindingRole = 'work';
+    mocks.setEnvironmentVariable.mockClear();
+    const workerRequestContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({
+      requestContext: workerRequestContext,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
+    expect(getRegisteredGithubPatKind(workerRequestContext)).toBe('default');
+  });
+
   it('removes a stale reviewer PAT when the replacement work binding has no worker PAT', async () => {
     mocks.githubReviewerPat = 'ghp_reviewer';
     mocks.runBindingRole = 'review';

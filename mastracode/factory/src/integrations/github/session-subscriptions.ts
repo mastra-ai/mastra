@@ -165,7 +165,7 @@ export async function refreshGithubToken(requestContext: RequestContext, github:
     getRegisteredGithubPatKind(requestContext),
   );
   if (pat) {
-    injectGithubToken(requestContext, pat);
+    injectGithubToken(requestContext, pat, 'pat');
     return;
   }
   const access = await github.versionControl.getRepositoryAccess({
@@ -174,7 +174,7 @@ export async function refreshGithubToken(requestContext: RequestContext, github:
   });
   const token = access.authorization?.token;
   if (!token) throw new Error('Repository access did not include a bearer token for the Factory session.');
-  injectGithubToken(requestContext, token);
+  injectGithubToken(requestContext, token, 'repository');
 }
 
 export function createGithubSubscriptionTools(requestContext: RequestContext, github: GithubIntegration) {

@@ -143,7 +143,7 @@ describe('GitHub subscription entry points', () => {
     await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
 
     expect(mocks.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-1' });
-    expect(inject).toHaveBeenCalledWith('fresh-gh-token');
+    expect(inject).toHaveBeenCalledWith('fresh-gh-token', 'repository');
   });
 
   it('re-injects a configured org PAT instead of minting an installation token', async () => {
@@ -154,7 +154,7 @@ describe('GitHub subscription entry points', () => {
 
     await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
 
-    expect(inject).toHaveBeenCalledWith('ghp_org_pat');
+    expect(inject).toHaveBeenCalledWith('ghp_org_pat', 'pat');
     expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
   });
 
@@ -167,7 +167,7 @@ describe('GitHub subscription entry points', () => {
 
     await expect(refreshGithubToken(requestContext, githubStub)).resolves.toBeUndefined();
 
-    expect(inject).toHaveBeenCalledWith('ghp_reviewer');
+    expect(inject).toHaveBeenCalledWith('ghp_reviewer', 'pat');
   });
 
   it('silently skips auto-subscription outside repository sessions', async () => {

@@ -24,6 +24,7 @@ import {
   runWorktreeSetup,
 } from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
+import type { GithubTokenSource } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
 import type { SandboxBindingStore, SandboxFleet } from './sandbox/fleet.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
@@ -133,10 +134,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   const githubTokenInjectors = new Map<
     string,
     {
-      inject: (token: string) => void;
+      inject: (token: string, source?: GithubTokenSource) => void;
       patKind: GithubPatKind;
       ghToken: string;
-      credentialSource: 'pat' | 'repository';
+      credentialSource: GithubTokenSource | 'unknown';
     }
   >();
   // Concurrent requests for the same session (thread list + activity polling +
@@ -263,7 +264,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             const credentialSource = pat ? 'pat' : 'repository';
             credentialSourceChanged = credentialSource !== registered.credentialSource;
             const ghToken = pat ?? (credentialSourceChanged ? await getRepositoryToken() : registered.ghToken);
-            if (ghToken !== registered.ghToken) registered.inject(ghToken);
+            if (ghToken !== registered.ghToken) registered.inject(ghToken, credentialSource);
             registered.patKind = patKind;
             registered.credentialSource = credentialSource;
           } catch (error) {
@@ -386,13 +387,17 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       });
       if (projectRepository.setupCommand) await runWorktreeSetup(sandbox, workdir, projectRepository.setupCommand);
 
-      const injectGithubToken = (freshToken: string) => {
+      const injectGithubToken = (freshToken: string, credentialSource?: GithubTokenSource) => {
         if (!sandbox.setEnvironmentVariable) {
           throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
         }
         sandbox.setEnvironmentVariable('GH_TOKEN', freshToken);
         const registered = githubTokenInjectors.get(workspaceId);
-        if (registered) registered.ghToken = freshToken;
+        if (registered) {
+          registered.ghToken = freshToken;
+          // Unknown sources are re-resolved on the next reuse instead of being trusted as a PAT or repository token.
+          registered.credentialSource = credentialSource ?? 'unknown';
+        }
       };
       githubTokenInjectors.set(workspaceId, {
         inject: injectGithubToken,
