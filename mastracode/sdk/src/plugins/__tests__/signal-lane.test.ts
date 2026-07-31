@@ -212,6 +212,26 @@ describe('PluginSignalLane', () => {
     expect(lane.getInputProcessors()).toEqual([]);
   });
 
+  it('stops a provider that finishes warming up after it was replaced', async () => {
+    const slow = new TestProvider('demo-signals', 'old');
+    let finishStart: (() => void) | undefined;
+    slow.start = () =>
+      new Promise<void>(resolve => {
+        finishStart = resolve;
+      });
+    const lane = laneWithMastra();
+    lane.sync(contributions('acme.demo', 'v1', [slow]));
+
+    // Replaced mid-warm-up: stop() already ran, so anything start() arms after
+    // that would outlive the instance and double up on its replacement.
+    lane.sync(contributions('acme.demo', 'v2', [new TestProvider('demo-signals', 'new')]));
+    expect(slow.stopped).toBe(1);
+
+    finishStart?.();
+    await vi.waitFor(() => expect(slow.stopped).toBe(2));
+    expect(processorIds(lane.getInputProcessors())).toEqual(['new-input']);
+  });
+
   it('does not mutate the processor array a request already resolved', () => {
     const first = new TestProvider('demo-signals', 'old');
     const lane = laneWithMastra();
