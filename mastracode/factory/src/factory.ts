@@ -38,6 +38,8 @@ import {
   getFactoryAuthOrgId,
   getFactoryAuthUserId,
 } from './auth.js';
+import { mergeChannelsConfigs } from './channels-merge.js';
+import type { ChannelsContribution } from './channels-merge.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
 import type { GithubIssueTriageInput, GithubIssueTriageResult } from './integrations/github/issue-triage.js';
@@ -499,8 +501,10 @@ export class MastraFactory {
         'integrations',
         ...(integration.versionControl ? ['source-control'] : []),
         // Channels resolve an inbound sender to a tenant through the reverse
-        // index; without it every message would dispatch tenant-less.
-        ...(integration.channels ? ['channel-identity'] : []),
+        // index; without it every message would dispatch tenant-less. The
+        // deprecated top-level slot remains in the gate until Phase 3 removes
+        // the migration shim.
+        ...(integration.messaging || integration.channels ? ['channel-identity'] : []),
       ];
       return {
         integration,
@@ -786,43 +790,39 @@ export class MastraFactory {
     // means the `channel-identity` domain's `init()` succeeded, so its link
     // table is queryable. Without it a sender can't be resolved to a tenant,
     // and attaching anyway would dispatch runs on default credentials.
-    const channelRegistrations = integrationRegistrations.filter(
-      ({ integration, ready }) => ready && integration.channels,
-    );
-    // `setChannels` replaces rather than merges, so a second provider would
-    // silently never receive a message. Fail loud instead.
-    if (channelRegistrations.length > 1) {
-      throw new Error(
-        `MastraFactory: integrations [${channelRegistrations
-          .map(({ integration }) => integration.id)
-          .join(', ')}] all provide channels, but only one may. Remove all but one.`,
+    const channelContributions: ChannelsContribution[] = [];
+    for (const { integration, ready } of integrationRegistrations) {
+      if (!ready || (!integration.messaging && !integration.channels)) continue;
+
+      const ctx = buildIntegrationContext(
+        {
+          controller: prepared.base.controller,
+          publicOrigin,
+          auth: routeAuth,
+          stateSigner,
+          fleet,
+          factoryStorage: storage,
+          integrationStorage,
+          sourceControlStorage,
+          rules,
+          factoryReady,
+          domains,
+          ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+        },
+        integration.id,
       );
+      const integrationClassName = integration.constructor.name || integration.id;
+      channelContributions.push({
+        integrationClassName,
+        config: integration.messaging ? integration.messaging.channels(ctx) : integration.channels!(ctx),
+      });
     }
-    for (const { integration } of channelRegistrations) {
-      // Integrations return a channels CONFIG; the factory owns construction.
-      prepared.base.controller.setChannels(
-        new AgentControllerChannels(
-          integration.channels!(
-            buildIntegrationContext(
-              {
-                controller: prepared.base.controller,
-                publicOrigin,
-                auth: routeAuth,
-                stateSigner,
-                fleet,
-                factoryStorage: storage,
-                integrationStorage,
-                sourceControlStorage,
-                rules,
-                factoryReady,
-                domains,
-                ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
-              },
-              integration.id,
-            ),
-          ),
-        ),
-      );
+
+    if (channelContributions.length === 0) {
+      console.debug('[MastraFactory] no channels contributions; skipping controller channels attach');
+    } else {
+      const mergedChannelsConfig = mergeChannelsConfigs(channelContributions);
+      prepared.base.controller.setChannels(new AgentControllerChannels(mergedChannelsConfig));
     }
 
     // Integration lifecycle workers (e.g. polling an upstream without

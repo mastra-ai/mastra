@@ -9,6 +9,7 @@ import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Messaging } from './capabilities/messaging.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
 import type { FactoryIntegration, IntegrationContext } from './integrations/base.js';
@@ -17,6 +18,7 @@ import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
 import { defaultFactoryRules, DEFAULT_FACTORY_RULE_VERSION } from './rules/defaults.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { getFactoryWorkspace } from './workspace.js';
+
 /** A real in-memory FactoryStorage with init spied for boot-order assertions. */
 function fakeStorage(): LibSQLFactoryStorage {
   const storage = new LibSQLFactoryStorage({ url: ':memory:', id: 'factory-test-storage' });
@@ -840,8 +842,15 @@ describe('MastraFactory.prepare integrations', () => {
     }
 
     /** Minimal valid FactoryChannelsConfig (config-form adapter entry). */
-    function fakeChannelsConfig() {
-      return { adapters: { fake: { adapter: { name: 'fake' } as never } } };
+    function fakeChannelsConfig(platform = 'fake') {
+      return { adapters: { [platform]: { adapter: { name: platform } as never } } };
+    }
+
+    function fakeMessaging(channels: Messaging['channels']): Messaging {
+      return {
+        channels,
+        resolveWorkspaceContext: vi.fn(async () => null),
+      };
     }
 
     it("constructs an AgentControllerChannels from a ready integration's config and attaches it", async () => {
@@ -862,6 +871,27 @@ describe('MastraFactory.prepare integrations', () => {
       const ctx = channels.mock.calls[0]![0];
       expect(ctx.storage.channelIdentity).toBeDefined();
       expect(ctx.auth).toBeDefined();
+    });
+
+    it('merges channels from two ready messaging integrations and attaches once', async () => {
+      const setChannels = withController();
+      const slackChannels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig('slack'));
+      const discordChannels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig('discord'));
+      const factory = new MastraFactory({
+        storage: fakeStorage(),
+        integrations: [
+          fakeIntegration({ id: 'slack', messaging: fakeMessaging(slackChannels) }),
+          fakeIntegration({ id: 'discord', messaging: fakeMessaging(discordChannels) }),
+        ],
+      });
+
+      await factory.prepare();
+
+      expect(slackChannels).toHaveBeenCalledOnce();
+      expect(discordChannels).toHaveBeenCalledOnce();
+      expect(setChannels).toHaveBeenCalledOnce();
+      const channels = setChannels.mock.calls[0]![0] as AgentControllerChannels;
+      expect(Object.keys(channels.channelConfig.adapters)).toEqual(['slack', 'discord']);
     });
 
     it('exposes the source-control owner on the channels context when github is registered', async () => {
@@ -892,16 +922,19 @@ describe('MastraFactory.prepare integrations', () => {
       expect(channels.mock.calls[0]![0].storage.sourceControlOwner).toBeUndefined();
     });
 
-    it('leaves the controller alone when no integration provides channels', async () => {
+    it('leaves the controller alone and omits channel-identity readiness when no integration provides channels', async () => {
       const setChannels = withController();
+      const storage = fakeStorage();
+      const isDomainReady = vi.spyOn(storage, 'isDomainReady');
       const factory = new MastraFactory({
-        storage: fakeStorage(),
+        storage,
         integrations: [fakeIntegration({ id: 'custom' })],
       });
 
       await factory.prepare();
 
       expect(setChannels).not.toHaveBeenCalled();
+      expect(isDomainReady).not.toHaveBeenCalledWith('channel-identity');
     });
 
     it('does not attach channels from an integration that is not ready', async () => {
@@ -913,7 +946,7 @@ describe('MastraFactory.prepare integrations', () => {
       const channels = vi.fn(() => ({}) as never);
       const factory = new MastraFactory({
         storage,
-        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+        integrations: [fakeIntegration({ id: 'chat-platform', messaging: fakeMessaging(channels) })],
       });
 
       await factory.prepare();
@@ -922,7 +955,7 @@ describe('MastraFactory.prepare integrations', () => {
       expect(setChannels).not.toHaveBeenCalled();
     });
 
-    it('requires the channel-identity domain before a channel integration is ready', async () => {
+    it('requires the channel-identity domain before a messaging integration is ready', async () => {
       const setChannels = withController();
       const storage = fakeStorage();
       // Everything the integration needs EXCEPT its reverse index. Without the
@@ -932,7 +965,7 @@ describe('MastraFactory.prepare integrations', () => {
       const channels = vi.fn(() => ({}) as never);
       const factory = new MastraFactory({
         storage,
-        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+        integrations: [fakeIntegration({ id: 'chat-platform', messaging: fakeMessaging(channels) })],
       });
 
       await factory.prepare();
@@ -941,19 +974,24 @@ describe('MastraFactory.prepare integrations', () => {
       expect(setChannels).not.toHaveBeenCalled();
     });
 
-    it('fails loud when two integrations both provide channels', async () => {
-      withController();
-      // setChannels replaces rather than merges, so the loser would silently
-      // never receive a message.
+    it('merges a deprecated channels-slot contribution alongside messaging during the migration shim', async () => {
+      const setChannels = withController();
       const factory = new MastraFactory({
         storage: fakeStorage(),
         integrations: [
-          fakeIntegration({ id: 'slack', channels: vi.fn(() => ({}) as never) }),
-          fakeIntegration({ id: 'discord', channels: vi.fn(() => ({}) as never) }),
+          fakeIntegration({
+            id: 'slack',
+            messaging: fakeMessaging(vi.fn(() => fakeChannelsConfig('slack'))),
+          }),
+          fakeIntegration({ id: 'discord', channels: vi.fn(() => fakeChannelsConfig('discord')) }),
         ],
       });
 
-      await expect(factory.prepare()).rejects.toThrow(/\[slack, discord\] all provide channels/);
+      await factory.prepare();
+
+      expect(setChannels).toHaveBeenCalledOnce();
+      const channels = setChannels.mock.calls[0]![0] as AgentControllerChannels;
+      expect(Object.keys(channels.channelConfig.adapters)).toEqual(['slack', 'discord']);
     });
   });
 });
