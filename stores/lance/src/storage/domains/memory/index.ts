@@ -1149,7 +1149,13 @@ export class StoreMemoryLance extends MemoryStorage {
         };
 
         const table = await this.client.openTable(TABLE_RESOURCES);
-        await table.mergeInsert('id').whenMatchedUpdateAll().execute([record]);
+        const result = await table.mergeInsert('id').whenMatchedUpdateAll().execute([record]);
+        if (result.numUpdatedRows === 0) {
+          if (attempt < maxRetries - 1) {
+            continue;
+          }
+          throw new Error(`Resource ${resourceId} disappeared while it was being updated`);
+        }
 
         return updatedResource;
       } catch (error: any) {
