@@ -9,6 +9,7 @@ export { createTool } from '@mastra/core/tools';
 export { RequestContext } from '@mastra/core/di';
 export type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 export { SignalProvider } from '@mastra/core/signals';
+export type { SignalProviderTarget, SignalSubscription } from '@mastra/core/signals';
 export type { Tool, ToolAction, ToolExecutionContext } from '@mastra/core/tools';
 export { z } from 'zod';
 

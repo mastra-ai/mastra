@@ -176,6 +176,12 @@ const sidebars = {
       items: [
         {
           type: 'doc',
+          id: 'code-sdk/plugin',
+          label: 'defineMastraCodePlugin()',
+          customProps: { tags: ['beta', 'new'] },
+        },
+        {
+          type: 'doc',
           id: 'code-sdk/mount-agent-controller',
           label: 'mountAgentControllerOnMastra()',
           customProps: { tags: ['beta'] },

@@ -57,6 +57,22 @@ const prepared = await prepareAgentControllerMount({
 
 Configured processors run before Mastra Code's built-in input processors. Keep processor instances stateless because the mounted agent shares them across sessions and runs.
 
+### Plugins
+
+Mastra Code loads plugins from `.mastracode/plugins`. A plugin can contribute tools, commands, skills, system instructions, processors, and signal providers:
+
+```ts
+import { defineMastraCodePlugin } from '@mastra/code-sdk/plugin';
+
+export default defineMastraCodePlugin({
+  id: 'acme.reviewer',
+  processors: { input: [auditLog] },
+  signalProviders: [new AcmeSignals()],
+});
+```
+
+Plugin processors run last among the processors Mastra Code configures, in a slot that is not configurable, and are resolved before every LLM call so enabling or updating a plugin applies on the next request. Signal providers are long-lived, so the SDK owns their lifecycle: it registers Mastra on them, connects them to the coding agent, starts them polling, and stops them when the plugin is updated, disabled, or uninstalled. See the [`defineMastraCodePlugin()` reference](https://mastra.ai/reference/code-sdk/plugin).
+
 Deep modules are available as subpath imports, e.g.:
 
 ```ts
