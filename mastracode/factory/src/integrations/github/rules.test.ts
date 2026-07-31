@@ -143,7 +143,7 @@ describe('GithubRules', () => {
     expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', stage: 'intake' });
   });
 
-  it('moves a trusted issue to Triage and rematerializes it after deletion', async () => {
+  it('moves a trusted issue through Intake to Triage with one investigation and rematerializes it after deletion', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project, projectRepository } =
       await setup('write');
     const rules = builtInFactoryRules();
@@ -258,10 +258,14 @@ describe('GithubRules', () => {
         user: { workosId: 'user-1', organizationId: 'org-1' },
       }),
     ]);
-    expect((await workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.status)).toEqual([
-      'succeeded',
-      'succeeded',
-    ]);
+    const deferredDecisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(deferredDecisions).toHaveLength(2);
+    expect(deferredDecisions.map(decision => decision.status)).toEqual(['succeeded', 'succeeded']);
+    expect(
+      deferredDecisions.filter(
+        decision => decision.decision.type === 'invokeSkill' && decision.decision.skillName === 'factory-triage',
+      ),
+    ).toHaveLength(1);
 
     await workItems.delete({ orgId: 'org-1', id: item!.id });
     await expect(service.ingest(issueOpened('delivery-full-flow'))).resolves.toEqual({ status: 'replayed' });
