@@ -18,7 +18,7 @@
  */
 
 import type { MastraCodeConfig, MountedMastraCode } from '@mastra/code-sdk';
-import type { AgentControllerChannels } from '@mastra/core/channels';
+import type { AgentControllerChannelsConfig, ChannelAdapterConfig } from '@mastra/core/channels';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
@@ -123,6 +123,37 @@ export interface IntegrationContext {
 }
 
 /**
+ * One adapter entry in a {@link FactoryChannelsConfig} adapter map.
+ *
+ * Core's adapter-map entry is `ChannelAdapterConfig | Adapter<any, any>`, and
+ * `ChannelAdapterConfig` is itself a union — so this MUST be a type alias, not
+ * an interface extends (illegal on unions). Factory's contract deliberately
+ * EXCLUDES the bare-`Adapter` shorthand core accepts: entries use the config
+ * form so future per-platform extras (e.g. a `resolveWorkspaceId`, connect
+ * handlers) have a home. Today the alias adds no fields; it is the stable
+ * extension point.
+ */
+export type FactoryChannelAdapterEntry = ChannelAdapterConfig;
+
+/**
+ * The channels contribution a {@link FactoryIntegration} returns from
+ * `channels()`. A config object, not a built instance — the factory constructs
+ * the `AgentControllerChannels` at the attach site.
+ *
+ * The adapter-map key is the platform identity (`'slack'`, `'discord'`, …).
+ * One integration = one platform = one entry is the norm: the map shape is
+ * inherited from core (one `AgentControllerChannels` instance drives multiple
+ * adapters) and is where cross-integration merging will happen later — it is
+ * NOT an invitation for a single integration to bundle multiple platforms.
+ * Note the top-level `handlers` and resolvers are shared across all adapters
+ * in the map. Entries use the config form; the bare-`Adapter` shorthand core
+ * accepts is deliberately excluded (see {@link FactoryChannelAdapterEntry}).
+ */
+export interface FactoryChannelsConfig extends Omit<AgentControllerChannelsConfig, 'adapters'> {
+  adapters: Record<string, FactoryChannelAdapterEntry>;
+}
+
+/**
  * A pluggable web integration. Implementations own their credentials
  * (validated at construction), their API surface, and their HTTP routes.
  */
@@ -176,9 +207,10 @@ export interface FactoryIntegration {
   workers?(ctx: IntegrationContext): MastraWorker[];
   /**
    * Chat-platform channels this integration contributes (Slack, Discord, …).
-   * Called once at boot for READY integrations only; the factory attaches the
-   * result to the mounted agent controller via `setChannels`, so inbound
-   * platform messages reach the same agents the web UI drives.
+   * Called once at boot for READY integrations only; the factory constructs an
+   * `AgentControllerChannels` from the returned config and attaches it to the
+   * mounted agent controller via `setChannels`, so inbound platform messages
+   * reach the same agents the web UI drives.
    *
    * An integration providing this slot also declares a dependency on the
    * `channel-identity` domain, which the factory folds into its readiness
@@ -190,7 +222,7 @@ export interface FactoryIntegration {
    * on a second, because `setChannels` replaces rather than merges and the
    * loser would silently never receive a message.
    */
-  channels?(ctx: IntegrationContext): AgentControllerChannels;
+  channels?(ctx: IntegrationContext): FactoryChannelsConfig;
   /**
    * Non-secret config snapshot (booleans + names only, never values). The
    * factory merges it into system diagnostics/startup logs.

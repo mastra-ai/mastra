@@ -18,13 +18,12 @@
  * capabilities by implementing `FactoryIntegration` from outside the package.
  */
 
-import type { AgentControllerChannels } from '@mastra/core/channels';
 import type { ApiRoute } from '@mastra/core/server';
 
-import type { FactoryIntegration, IntegrationContext } from '../base.js';
+import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '../base.js';
 
 import { createSlackConnectRoutes } from './connect-route.js';
-import { createAgentControllerSlackChannels, createGithubSourceControl } from './slack.js';
+import { createSlackChannelsConfig, createGithubSourceControl } from './slack.js';
 
 /**
  * Slack app credentials, read from env ONCE by the deploy entry. `signingSecret`
@@ -79,12 +78,12 @@ export class SlackIntegration implements FactoryIntegration {
     this.#config = config;
   }
 
-  channels(ctx: IntegrationContext): AgentControllerChannels {
+  channels(ctx: IntegrationContext): FactoryChannelsConfig {
     // Repo-backed sessions come from the factory's source-control owner
     // (GitHub, when registered) — no config-level wiring by the entry.
     const sourceControlOwner = ctx.storage.sourceControlOwner;
     this.#repoBackedSessions = Boolean(sourceControlOwner);
-    return createAgentControllerSlackChannels({
+    return createSlackChannelsConfig({
       slack: {
         clientId: this.#config.clientId,
         clientSecret: this.#config.clientSecret,

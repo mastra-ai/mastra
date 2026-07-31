@@ -1,4 +1,5 @@
 import type * as authStudioModule from '@mastra/auth-studio';
+import { AgentControllerChannels } from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
 import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
@@ -812,10 +813,14 @@ describe('MastraFactory.prepare integrations', () => {
       return setChannels;
     }
 
-    it("attaches a ready integration's channels to the mounted controller", async () => {
+    /** Minimal valid FactoryChannelsConfig (config-form adapter entry). */
+    function fakeChannelsConfig() {
+      return { adapters: { fake: { adapter: { name: 'fake' } as never } } };
+    }
+
+    it("constructs an AgentControllerChannels from a ready integration's config and attaches it", async () => {
       const setChannels = withController();
-      const channelsInstance = { __channels: true } as never;
-      const channels = vi.fn((_ctx: IntegrationContext) => channelsInstance);
+      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
       const factory = new MastraFactory({
         storage: fakeStorage(),
         integrations: [fakeIntegration({ id: 'chat-platform', channels })],
@@ -823,7 +828,9 @@ describe('MastraFactory.prepare integrations', () => {
 
       await factory.prepare();
 
-      expect(setChannels).toHaveBeenCalledWith(channelsInstance);
+      // Integrations return a CONFIG; the factory owns instance construction.
+      expect(setChannels).toHaveBeenCalledOnce();
+      expect(setChannels.mock.calls[0]![0]).toBeInstanceOf(AgentControllerChannels);
       // Channels get the same context shape as routes()/workers(), plus the
       // storage domain only a channel integration needs.
       const ctx = channels.mock.calls[0]![0];
@@ -833,7 +840,7 @@ describe('MastraFactory.prepare integrations', () => {
 
     it('exposes the source-control owner on the channels context when github is registered', async () => {
       withController();
-      const channels = vi.fn((_ctx: IntegrationContext) => ({}) as never);
+      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
       const factory = new MastraFactory({
         storage: fakeStorage(),
         integrations: [fakeIntegration({ id: 'github' }), fakeIntegration({ id: 'chat-platform', channels })],
@@ -848,7 +855,7 @@ describe('MastraFactory.prepare integrations', () => {
 
     it('omits the source-control owner from the channels context when github is absent', async () => {
       withController();
-      const channels = vi.fn((_ctx: IntegrationContext) => ({}) as never);
+      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
       const factory = new MastraFactory({
         storage: fakeStorage(),
         integrations: [fakeIntegration({ id: 'chat-platform', channels })],

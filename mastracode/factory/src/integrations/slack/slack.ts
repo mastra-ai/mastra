@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
-import {
-  AgentControllerChannels,
-  type ChannelHandler,
-  type ChannelHandlerContext,
-  type ChannelHandlers,
-  type ResolveResourceId,
-  type ResolveThreadId,
+import type {
+  ChannelHandler,
+  ChannelHandlerContext,
+  ChannelHandlers,
+  ResolveResourceId,
+  ResolveThreadId,
 } from '@mastra/core/channels';
 import type { Mastra } from '@mastra/core/mastra';
 import { createSlackAdapter } from '@mastra/slack';
@@ -19,6 +18,7 @@ import type {
 } from '../../storage/domains/channel-identity/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { FactoryChannelsConfig } from '../base.js';
 
 // Derive the thread/message types from the core handler signature rather than
 // importing them from `chat` directly: mc-web can resolve a different `chat`
@@ -692,10 +692,8 @@ interface SlackCredentials {
   botToken?: string;
 }
 
-export function createAgentControllerSlackChannels(
-  deps: SlackChannelDeps & { slack: SlackCredentials },
-): AgentControllerChannels {
-  const channels = new AgentControllerChannels({
+export function createSlackChannelsConfig(deps: SlackChannelDeps & { slack: SlackCredentials }): FactoryChannelsConfig {
+  return {
     adapters: {
       slack: {
         adapter: createSlackAdapter(deps.slack),
@@ -707,7 +705,5 @@ export function createAgentControllerSlackChannels(
     // resourceId, which is what makes the controller session repo-backed.
     resolveResourceId: createChannelResourceIdResolver(deps),
     resolveThreadId: resolveChannelThreadId,
-  });
-
-  return channels;
+  };
 }
