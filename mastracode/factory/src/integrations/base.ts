@@ -137,9 +137,9 @@ export interface IntegrationContext {
 export type FactoryChannelAdapterEntry = ChannelAdapterConfig;
 
 /**
- * The channels contribution a {@link FactoryIntegration} returns from
- * `channels()`. A config object, not a built instance — the factory constructs
- * the `AgentControllerChannels` at the attach site.
+ * The channels contribution a {@link Messaging} capability returns from
+ * `Messaging.channels()`. A config object, not a built instance — the factory
+ * constructs the `AgentControllerChannels` at the attach site.
  *
  * The adapter-map key is the platform identity (`'slack'`, `'discord'`, …).
  * One integration = one platform = one entry is the norm: the map shape is
@@ -217,26 +217,6 @@ export interface FactoryIntegration {
    * duplicates fail the `new Mastra(...)` construction loudly.
    */
   workers?(ctx: IntegrationContext): MastraWorker[];
-  /**
-   * Chat-platform channels this integration contributes (Slack, Discord, …).
-   * Called once at boot for READY integrations only; the factory constructs an
-   * `AgentControllerChannels` from the returned config and attaches it to the
-   * mounted agent controller via `setChannels`, so inbound platform messages
-   * reach the same agents the web UI drives.
-   *
-   * An integration providing this slot also declares a dependency on the
-   * `channel-identity` domain, which the factory folds into its readiness
-   * gate — so an integration whose reverse index isn't migrated yet reports
-   * not-ready and its channels never attach, rather than dispatching runs it
-   * can't resolve a tenant for.
-   *
-   * @deprecated Use {@link FactoryIntegration.messaging} (`Messaging.channels()`)
-   * instead. This top-level slot is preserved through Phase 2 of the
-   * `feat/messaging-capability` segment as a shim so the tree keeps compiling
-   * mid-segment; Phase 3 removes it in the same commit that migrates
-   * `SlackIntegration` onto `messaging`.
-   */
-  channels?(ctx: IntegrationContext): FactoryChannelsConfig;
   /**
    * Non-secret config snapshot (booleans + names only, never values). The
    * factory merges it into system diagnostics/startup logs.

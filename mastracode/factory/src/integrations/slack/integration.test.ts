@@ -9,8 +9,8 @@ const { createGithubSourceControl } = vi.hoisted(() => ({
   createGithubSourceControl: vi.fn(() => ({ __sourceControl: true })),
 }));
 
-vi.mock('./slack.js', async importOriginal => ({
-  ...(await importOriginal<typeof import('./slack.js')>()),
+vi.mock('./gates.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('./gates.js')>()),
   createGithubSourceControl,
 }));
 
@@ -23,11 +23,11 @@ function ctxWith(overrides: Record<string, unknown> = {}) {
   } as any;
 }
 
-describe('SlackIntegration.channels', () => {
+describe('SlackIntegration.messaging.channels', () => {
   it('returns a channels config (not a built instance) with the slack adapter entry in config form', () => {
     const integration = new SlackIntegration({ signingSecret: 'secret' });
 
-    const config = integration.channels(ctxWith());
+    const config = integration.messaging.channels(ctxWith());
 
     expect(config).not.toBeInstanceOf(AgentControllerChannels);
     expect(config.adapters.slack).toMatchObject({ adapter: { __adapter: true } });
@@ -42,7 +42,7 @@ describe('SlackIntegration.channels', () => {
     const integration = new SlackIntegration({ signingSecret: 'secret' });
     const sourceControlOwner = { integrationId: 'github' };
 
-    integration.channels(ctxWith({ sourceControlOwner }));
+    integration.messaging.channels(ctxWith({ sourceControlOwner }));
 
     expect(createGithubSourceControl).toHaveBeenCalledWith(sourceControlOwner);
     expect(integration.diagnostics()).toMatchObject({ repoBackedSessions: true });
@@ -52,9 +52,41 @@ describe('SlackIntegration.channels', () => {
     createGithubSourceControl.mockClear();
     const integration = new SlackIntegration({ signingSecret: 'secret' });
 
-    integration.channels(ctxWith());
+    integration.messaging.channels(ctxWith());
 
     expect(createGithubSourceControl).not.toHaveBeenCalled();
     expect(integration.diagnostics()).toMatchObject({ repoBackedSessions: false });
+  });
+});
+
+describe('SlackIntegration.messaging.resolveWorkspaceContext', () => {
+  const ref = { platform: 'slack', externalTeamId: 'T-1', externalUserId: 'U-1' };
+
+  it('returns the linked workspace context when the sender is linked', async () => {
+    const integration = new SlackIntegration({ signingSecret: 'secret' });
+    const link = { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fac-1', linkedAt: new Date() };
+    const ctx = ctxWith({
+      channelIdentity: {
+        getAccountLink: vi.fn(async () => link),
+      },
+    });
+
+    const result = await integration.messaging.resolveWorkspaceContext(ctx, ref);
+
+    expect(result).toEqual({ orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fac-1' });
+    expect(ctx.storage.channelIdentity.getAccountLink).toHaveBeenCalledWith(ref);
+  });
+
+  it('returns null for an unlinked sender', async () => {
+    const integration = new SlackIntegration({ signingSecret: 'secret' });
+    const ctx = ctxWith({
+      channelIdentity: {
+        getAccountLink: vi.fn(async () => null),
+      },
+    });
+
+    const result = await integration.messaging.resolveWorkspaceContext(ctx, ref);
+
+    expect(result).toBeNull();
   });
 });

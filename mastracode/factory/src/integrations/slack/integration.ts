@@ -1,9 +1,9 @@
 /**
  * `SlackIntegration` — Slack as a `FactoryIntegration`.
  *
- * Slack contributes two things to a factory: the chat channels that carry
- * inbound messages into agent runs (`channels()`), and the browser-facing
- * account-link routes that bind a Slack sender to a Mastra tenant (`routes()`).
+ * Slack contributes two things to a factory: the `messaging` capability that
+ * carries inbound messages into agent runs, and the browser-facing account-link
+ * routes that bind a Slack sender to a Mastra tenant (`routes()`).
  * Both used to be assembled by hand in the deploy entry, which had to reach
  * into the prepared agent controller by string key, resolve storage domains
  * itself, mint its own state signer, and splice routes onto the factory's
@@ -20,10 +20,16 @@
 
 import type { ApiRoute } from '@mastra/core/server';
 
+import type {
+  Messaging,
+  MessagingSenderRef,
+  MessagingWorkspaceContext,
+} from '../../capabilities/messaging.js';
 import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '../base.js';
 
 import { createSlackConnectRoutes } from './connect-route.js';
-import { createSlackChannelsConfig, createGithubSourceControl } from './slack.js';
+import { createGithubSourceControl, resolveWorkspaceContext } from './gates.js';
+import { createSlackChannelsConfig } from './slack.js';
 
 /**
  * Slack app credentials, read from env ONCE by the deploy entry. `signingSecret`
@@ -60,12 +66,13 @@ export class SlackIntegration implements FactoryIntegration {
    * replica signed.
    */
   readonly requiresStableStateSigner = true;
+  readonly messaging: Messaging;
 
   readonly #config: SlackIntegrationConfig;
   /**
-   * Whether `channels()` found a source-control owner on the context and wired
-   * repo-backed sessions. Set at the channels() attach path, which runs once at
-   * boot before diagnostics are served.
+   * Whether `messaging.channels()` found a source-control owner on the context
+   * and wired repo-backed sessions. Set at the channels attach path, which runs
+   * once at boot before diagnostics are served.
    */
   #repoBackedSessions = false;
 
@@ -76,9 +83,13 @@ export class SlackIntegration implements FactoryIntegration {
       );
     }
     this.#config = config;
+    this.messaging = {
+      channels: ctx => this.#buildChannels(ctx),
+      resolveWorkspaceContext: (ctx, ref) => this.#resolveWorkspaceContext(ctx, ref),
+    };
   }
 
-  channels(ctx: IntegrationContext): FactoryChannelsConfig {
+  #buildChannels(ctx: IntegrationContext): FactoryChannelsConfig {
     // Repo-backed sessions come from the factory's source-control owner
     // (GitHub, when registered) — no config-level wiring by the entry.
     const sourceControlOwner = ctx.storage.sourceControlOwner;
@@ -95,6 +106,13 @@ export class SlackIntegration implements FactoryIntegration {
       sourceControl: sourceControlOwner ? createGithubSourceControl(sourceControlOwner) : undefined,
       workItems: ctx.rules?.workItems,
     });
+  }
+
+  #resolveWorkspaceContext(
+    ctx: IntegrationContext,
+    ref: MessagingSenderRef,
+  ): Promise<MessagingWorkspaceContext | null> {
+    return resolveWorkspaceContext(ctx.storage.channelIdentity, ref);
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {

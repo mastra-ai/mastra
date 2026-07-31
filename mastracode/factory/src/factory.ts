@@ -500,11 +500,9 @@ export class MastraFactory {
       const requiredDomains = [
         'integrations',
         ...(integration.versionControl ? ['source-control'] : []),
-        // Channels resolve an inbound sender to a tenant through the reverse
-        // index; without it every message would dispatch tenant-less. The
-        // deprecated top-level slot remains in the gate until Phase 3 removes
-        // the migration shim.
-        ...(integration.messaging || integration.channels ? ['channel-identity'] : []),
+        // Messaging resolves an inbound sender to a tenant through the reverse
+        // index; without it every message would dispatch tenant-less.
+        ...(integration.messaging ? ['channel-identity'] : []),
       ];
       return {
         integration,
@@ -792,7 +790,7 @@ export class MastraFactory {
     // and attaching anyway would dispatch runs on default credentials.
     const channelContributions: ChannelsContribution[] = [];
     for (const { integration, ready } of integrationRegistrations) {
-      if (!ready || (!integration.messaging && !integration.channels)) continue;
+      if (!ready || !integration.messaging) continue;
 
       const ctx = buildIntegrationContext(
         {
@@ -814,7 +812,7 @@ export class MastraFactory {
       const integrationClassName = integration.constructor.name || integration.id;
       channelContributions.push({
         integrationClassName,
-        config: integration.messaging ? integration.messaging.channels(ctx) : integration.channels!(ctx),
+        config: integration.messaging.channels(ctx),
       });
     }
 

@@ -1,13 +1,8 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import {
-  createChannelResourceIdResolver,
-  resolveChannelThreadId,
-  createHandlers,
-  resolveLinkedSender,
-  resolveFactoryForLink,
-} from './slack.js';
+import { resolveLinkedSender, resolveFactoryForLink } from './gates.js';
+import { createChannelResourceIdResolver, resolveChannelThreadId, createHandlers } from './slack.js';
 
 /**
  * The 4th argument core hands every channel handler. The handlers write the

@@ -858,7 +858,7 @@ describe('MastraFactory.prepare integrations', () => {
       const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
       const factory = new MastraFactory({
         storage: fakeStorage(),
-        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+        integrations: [fakeIntegration({ id: 'chat-platform', messaging: fakeMessaging(channels) })],
       });
 
       await factory.prepare();
@@ -899,7 +899,10 @@ describe('MastraFactory.prepare integrations', () => {
       const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
       const factory = new MastraFactory({
         storage: fakeStorage(),
-        integrations: [fakeIntegration({ id: 'github' }), fakeIntegration({ id: 'chat-platform', channels })],
+        integrations: [
+          fakeIntegration({ id: 'github' }),
+          fakeIntegration({ id: 'chat-platform', messaging: fakeMessaging(channels) }),
+        ],
       });
 
       await factory.prepare();
@@ -914,7 +917,7 @@ describe('MastraFactory.prepare integrations', () => {
       const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
       const factory = new MastraFactory({
         storage: fakeStorage(),
-        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+        integrations: [fakeIntegration({ id: 'chat-platform', messaging: fakeMessaging(channels) })],
       });
 
       await factory.prepare();
@@ -972,26 +975,6 @@ describe('MastraFactory.prepare integrations', () => {
 
       expect(channels).not.toHaveBeenCalled();
       expect(setChannels).not.toHaveBeenCalled();
-    });
-
-    it('merges a deprecated channels-slot contribution alongside messaging during the migration shim', async () => {
-      const setChannels = withController();
-      const factory = new MastraFactory({
-        storage: fakeStorage(),
-        integrations: [
-          fakeIntegration({
-            id: 'slack',
-            messaging: fakeMessaging(vi.fn(() => fakeChannelsConfig('slack'))),
-          }),
-          fakeIntegration({ id: 'discord', channels: vi.fn(() => fakeChannelsConfig('discord')) }),
-        ],
-      });
-
-      await factory.prepare();
-
-      expect(setChannels).toHaveBeenCalledOnce();
-      const channels = setChannels.mock.calls[0]![0] as AgentControllerChannels;
-      expect(Object.keys(channels.channelConfig.adapters)).toEqual(['slack', 'discord']);
     });
   });
 });
