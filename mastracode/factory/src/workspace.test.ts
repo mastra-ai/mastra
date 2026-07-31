@@ -874,6 +874,64 @@ describe('GitHub session workspace preparation', () => {
     expect(getRegisteredGithubPatKind(requestContext)).toBe('reviewer');
   });
 
+  it('serializes concurrent role reconciliation so an older lookup cannot restore stale credentials', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    mocks.setEnvironmentVariable.mockClear();
+
+    let releaseWorkerLookup!: () => void;
+    let markWorkerLookupStarted!: () => void;
+    const workerLookupStarted = new Promise<void>(resolve => {
+      markWorkerLookupStarted = resolve;
+    });
+    mocks.findRunBindingBySession
+      .mockImplementationOnce(
+        () =>
+          new Promise(resolve => {
+            releaseWorkerLookup = () => resolve({ role: 'work', orgId: 'org-1' });
+            markWorkerLookupStarted();
+          }),
+      )
+      .mockResolvedValueOnce({ role: 'review', orgId: 'org-1' });
+
+    const existing = { setToolsConfig: vi.fn() };
+    const workerReuse = workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+    });
+    await workerLookupStarted;
+
+    let markReviewerReuseStarted!: () => void;
+    const reviewerReuseStarted = new Promise<void>(resolve => {
+      markReviewerReuseStarted = resolve;
+    });
+    const reviewerRequestContext = createGithubRequestContext('project-1', 'session-a');
+    const reviewerReuse = workspace({
+      requestContext: reviewerRequestContext,
+      mastra: {
+        getWorkspaceById: vi.fn(() => {
+          markReviewerReuseStarted();
+          return existing;
+        }),
+      } as any,
+    });
+    await reviewerReuseStarted;
+    releaseWorkerLookup();
+    await Promise.all([workerReuse, reviewerReuse]);
+
+    expect(mocks.setEnvironmentVariable.mock.calls).toEqual([
+      ['GH_TOKEN', 'ghp_worker'],
+      ['GH_TOKEN', 'ghp_reviewer'],
+    ]);
+    expect(getRegisteredGithubPatKind(reviewerRequestContext)).toBe('reviewer');
+  });
+
   it('reconciles the binding role for followers of an inflight materialization', async () => {
     mocks.githubPat = 'ghp_worker';
     mocks.githubReviewerPat = 'ghp_reviewer';

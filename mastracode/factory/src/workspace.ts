@@ -143,6 +143,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   // chat) must not each provision a sandbox and clone the repository. The
   // first caller materializes; followers await the same promise.
   const inflightMaterializations = new Map<string, Promise<Workspace>>();
+  // Credential reconciliation mutates one shared sandbox and cache entry.
+  // Serialize it per workspace so an older lookup cannot finish last and
+  // overwrite a newer worker/reviewer decision.
+  const githubTokenReconciliations = new Map<string, Promise<void>>();
 
   return async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const effectiveSkillExtension = skillExtension ?? factorySkillExtension;
@@ -235,31 +239,48 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       return token;
     };
     const reconcileGithubToken = async (): Promise<void> => {
-      const registered = githubTokenInjectors.get(workspaceId);
-      if (!registered) return;
+      if (!githubTokenInjectors.has(workspaceId)) return;
 
-      registerGithubTokenInjector(requestContext, registered.inject);
-      const patKind = await resolveGithubPatKind();
-      if (!patKind) {
-        registerGithubPatKind(requestContext, registered.patKind);
-        return;
-      }
-      const patKindChanged = patKind !== registered.patKind;
-      let credentialSourceChanged = false;
+      const previous = githubTokenReconciliations.get(workspaceId) ?? Promise.resolve();
+      const reconciliation = previous
+        .catch(() => {})
+        .then(async () => {
+          const registered = githubTokenInjectors.get(workspaceId);
+          if (!registered) return;
+
+          registerGithubTokenInjector(requestContext, registered.inject);
+          const patKind = await resolveGithubPatKind();
+          if (!patKind) {
+            registerGithubPatKind(requestContext, registered.patKind);
+            return;
+          }
+          const patKindChanged = patKind !== registered.patKind;
+          let credentialSourceChanged = false;
+          try {
+            const pat = await getGithubPat(() => github.integrationStorage, session.orgId, patKind, {
+              throwOnError: true,
+            });
+            const credentialSource = pat ? 'pat' : 'repository';
+            credentialSourceChanged = credentialSource !== registered.credentialSource;
+            const ghToken = pat ?? (credentialSourceChanged ? await getRepositoryToken() : registered.ghToken);
+            if (ghToken !== registered.ghToken) registered.inject(ghToken);
+            registered.patKind = patKind;
+            registered.credentialSource = credentialSource;
+          } catch (error) {
+            // Same-source PAT refreshes remain best-effort. Role and credential
+            // source transitions fail closed instead of retaining a stale identity.
+            if (patKindChanged || credentialSourceChanged) throw error;
+          } finally {
+            registerGithubPatKind(requestContext, registered.patKind);
+          }
+        });
+      githubTokenReconciliations.set(workspaceId, reconciliation);
       try {
-        const pat = await getGithubPat(() => github.integrationStorage, session.orgId, patKind, { throwOnError: true });
-        const credentialSource = pat ? 'pat' : 'repository';
-        credentialSourceChanged = credentialSource !== registered.credentialSource;
-        const ghToken = pat ?? (credentialSourceChanged ? await getRepositoryToken() : registered.ghToken);
-        if (ghToken !== registered.ghToken) registered.inject(ghToken);
-        registered.patKind = patKind;
-        registered.credentialSource = credentialSource;
-      } catch (error) {
-        // Same-source PAT refreshes remain best-effort. Role and credential
-        // source transitions fail closed instead of retaining a stale identity.
-        if (patKindChanged || credentialSourceChanged) throw error;
+        await reconciliation;
       } finally {
-        registerGithubPatKind(requestContext, registered.patKind);
+        if (githubTokenReconciliations.get(workspaceId) === reconciliation) {
+          githubTokenReconciliations.delete(workspaceId);
+        }
       }
     };
     let existing: Workspace | undefined;
