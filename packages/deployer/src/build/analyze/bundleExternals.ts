@@ -503,14 +503,26 @@ export async function bundleExternals(
    * and add them directly to usedExternals instead of bundling them.
    */
   const extractedExternals = new Map<string, string>();
+  /**
+   * Deps the preset would externalize but `exclude` pulls back into the bundle. The preset run
+   * turns bundling off for the whole rollup pass (no `nodeResolve`, plus an `alias-optimized-deps`
+   * resolver that only understands workspace cache paths), so these get their own regular run.
+   */
+  const forceBundledDeps = new Map<string, DependencyMetadata>();
   if (externalsPreset) {
     for (const [dep, metadata] of depsToOptimize.entries()) {
-      if (!metadata.isWorkspace && !isForceBundled(dep, normalizedExternals)) {
+      if (metadata.isWorkspace) {
+        continue;
+      }
+
+      if (isForceBundled(dep, normalizedExternals)) {
+        forceBundledDeps.set(dep, metadata);
+      } else {
         // Add to extracted externals - use rootPath or fallback to package name
         extractedExternals.set(dep, metadata.rootPath ?? dep);
-        // Remove from depsToOptimize so it won't be bundled
-        depsToOptimize.delete(dep);
       }
+      // Remove from depsToOptimize so it isn't bundled by the no-bundling pass
+      depsToOptimize.delete(dep);
     }
   }
 
@@ -524,18 +536,41 @@ export async function bundleExternals(
     },
   });
 
-  const output = await buildExternalDependencies(optimizedDependencyEntries, {
+  const buildOptions = {
     externals: allExternals,
     packagesToTranspile,
     workspaceMap,
     rootDir: workspaceRoot || projectRoot,
     outputDir,
-    bundlerOptions: {
-      isDev,
-      externalsPreset,
-    },
     platform,
-  });
+  };
+
+  const output: (OutputChunk | OutputAsset)[] = [
+    ...(await buildExternalDependencies(optimizedDependencyEntries, {
+      ...buildOptions,
+      bundlerOptions: { isDev, externalsPreset },
+    })),
+  ];
+
+  if (forceBundledDeps.size) {
+    const forceBundled = createVirtualDependencies(forceBundledDeps, {
+      workspaceRoot,
+      outputDir,
+      projectRoot,
+      bundlerOptions: { isDev: false, externalsPreset: false },
+    });
+
+    output.push(
+      ...(await buildExternalDependencies(forceBundled.optimizedDependencyEntries, {
+        ...buildOptions,
+        bundlerOptions: { isDev: false, externalsPreset: false },
+      })),
+    );
+
+    for (const [fileName, dep] of forceBundled.fileNameToDependencyMap) {
+      fileNameToDependencyMap.set(fileName, dep);
+    }
+  }
 
   const moduleResolveMap = new Map<string, Map<string, string>>();
   const filteredChunks = output.filter(o => o.type === 'chunk');

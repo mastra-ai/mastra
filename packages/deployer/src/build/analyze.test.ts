@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { noopLogger } from '@mastra/core/logger';
@@ -263,6 +263,83 @@ describe('external dependency versions', () => {
       expect(result.externalDependencies.has('@internal/a')).toBe(false);
       expect(result.externalDependencies.has('@internal/b')).toBe(false);
       expect(result.externalDependencies.has('@internal/c')).toBe(false);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  }, 15000);
+});
+
+describe('externals object form', () => {
+  it('bundles an excluded dependency from its own source under preset: all', async () => {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'mastra-externals-exclude-'));
+    tempDirs.push(tempDir);
+
+    const entryFile = join(tempDir, 'entry.ts');
+    const outputDir = join(tempDir, '.mastra', '.build');
+    const bundledPackageDir = join(tempDir, 'node_modules', 'force-bundled-pkg');
+    const externalPackageDir = join(tempDir, 'node_modules', 'stays-external-pkg');
+
+    await mkdir(outputDir, { recursive: true });
+    await mkdir(bundledPackageDir, { recursive: true });
+    await mkdir(externalPackageDir, { recursive: true });
+
+    // `main` plus a same-named export recreate the failure mode where a force-bundled dep
+    // resolved to the project's own entry file instead of the dependency.
+    await writeFile(
+      join(tempDir, 'package.json'),
+      JSON.stringify({
+        name: 'externals-exclude-project',
+        version: '1.0.0',
+        type: 'module',
+        main: './index.js',
+        dependencies: { 'force-bundled-pkg': '1.0.0', 'stays-external-pkg': '2.0.0' },
+      }),
+    );
+    await writeFile(join(tempDir, 'index.js'), `export const bundledValue = 'PROJECT_MAIN_WRONG_MODULE';`);
+
+    await writeFile(
+      join(bundledPackageDir, 'package.json'),
+      JSON.stringify({ name: 'force-bundled-pkg', version: '1.0.0', type: 'module', main: './index.js' }),
+    );
+    await writeFile(join(bundledPackageDir, 'index.js'), `export const bundledValue = 'FORCE_BUNDLED_SOURCE';`);
+
+    await writeFile(
+      join(externalPackageDir, 'package.json'),
+      JSON.stringify({ name: 'stays-external-pkg', version: '2.0.0', type: 'module', main: './index.js' }),
+    );
+    await writeFile(join(externalPackageDir, 'index.js'), `export const externalValue = 'external';`);
+
+    await writeFile(
+      entryFile,
+      `import { bundledValue } from 'force-bundled-pkg';\nimport { externalValue } from 'stays-external-pkg';\nexport const value = bundledValue + externalValue;`,
+    );
+
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      const result = await analyzeBundle(
+        [entryFile],
+        entryFile,
+        {
+          outputDir,
+          projectRoot: tempDir,
+          platform: 'node',
+          bundlerOptions: {
+            externals: { preset: 'all', exclude: ['force-bundled-pkg'] },
+            enableSourcemap: false,
+          },
+        },
+        noopLogger,
+      );
+
+      expect(result.externalDependencies.has('force-bundled-pkg')).toBe(false);
+      expect(result.externalDependencies.has('stays-external-pkg')).toBe(true);
+      expect(result.dependencies.has('force-bundled-pkg')).toBe(true);
+
+      const bundled = await readFile(join(outputDir, 'force-bundled-pkg.mjs'), 'utf-8');
+      expect(bundled).toContain('FORCE_BUNDLED_SOURCE');
+      expect(bundled).not.toContain('PROJECT_MAIN_WRONG_MODULE');
     } finally {
       process.chdir(originalCwd);
     }

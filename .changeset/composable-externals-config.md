@@ -1,5 +1,6 @@
 ---
 '@mastra/deployer': minor
+'@mastra/core': minor
 ---
 
 Added an object form to `bundler.externals` so you can compose a preset with per-package overrides.
@@ -30,4 +31,4 @@ export const mastra = new Mastra({
 })
 ```
 
-`exclude` only overrides what `preset` would externalize. It cannot remove Mastra's built-in runtime externals, and `include` wins when a package appears in both lists. The existing `boolean` and `string[]` forms are unchanged.
+`exclude` only overrides what `preset` would externalize. It cannot remove Mastra's built-in runtime externals, and `include` wins when a package appears in both lists. It applies to `mastra build` only — `mastra dev` never bundles packages from `node_modules`. The existing `boolean` and `string[]` forms are unchanged.

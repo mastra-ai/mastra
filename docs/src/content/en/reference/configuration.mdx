@@ -710,6 +710,12 @@ export const mastra = new Mastra({
 
 `exclude` only overrides what `preset` would externalize. It never removes Mastra's own runtime externals, and `include` takes precedence when a package appears in both lists.
 
+:::note
+
+`exclude` applies to `mastra build` only. `mastra dev` never bundles packages from `node_modules`, so an excluded package is still loaded from `node_modules` while developing.
+
+:::
+
 ### bundler.sourcemap
 
 **Type:** `boolean`\
