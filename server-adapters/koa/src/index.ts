@@ -1004,8 +1004,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     this.app.use(async (ctx: Context, next: Next) => {
       const path = String(ctx.path || '/');
       const method = String(ctx.method || 'GET');
+      ctx.res.once('finish', () => {
+        this.warnIfUnregisteredChannelWebhook(path, method, ctx.res.statusCode);
+      });
       await next();
-      this.warnIfUnregisteredChannelWebhook(path, method, ctx.status);
     });
   }
 

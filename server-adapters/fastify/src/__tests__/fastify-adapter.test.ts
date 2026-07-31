@@ -1041,21 +1041,23 @@ describe('Fastify Server Adapter', () => {
       const app = Fastify();
       const adapter = new MastraServer({ app, mastra: new Mastra({}) });
 
-      await adapter.init();
+      try {
+        await adapter.init();
 
-      const response = await app.inject({
-        method: 'POST',
-        url: '/api/agents/support/channels/slack/webhook',
-      });
+        const response = await app.inject({
+          method: 'POST',
+          url: '/api/agents/support/channels/slack/webhook',
+        });
 
-      expect(response.statusCode).toBe(404);
-      expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('channels.adapters configuration'),
-        expect.objectContaining({ agentId: 'support', platform: 'slack' }),
-      );
-
-      warnSpy.mockRestore();
-      await app.close();
+        expect(response.statusCode).toBe(404);
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('channels.adapters configuration'),
+          expect.objectContaining({ agentId: 'support', platform: 'slack' }),
+        );
+      } finally {
+        warnSpy.mockRestore();
+        await app.close();
+      }
     });
   });
 });
