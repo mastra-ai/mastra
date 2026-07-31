@@ -389,30 +389,25 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   }
 
   /**
-   * Custom span serialization to prevent leaking internal state (like auth
-   * tokens stored in the private `registry` Map) into observability spans.
+   * Custom span serialization. Exposes the registry *entries* (never the
+   * instance's own private fields) so `deepClean` in `@mastra/observability`
+   * doesn't walk the runtime-enumerable `registry` Map — which would
+   * serialize its raw entries (including bearer tokens) into exported spans.
    *
-   * `deepClean` in `@mastra/observability` calls this method before falling
-   * back to `Object.keys()` — which would walk the runtime-enumerable
-   * `registry` field and serialize its raw Map entries (including any
-   * bearer tokens) into exported spans.
+   * The framework-managed auth token is redacted by key. Every other value
+   * is returned structurally (by reference) so the downstream `deepClean`
+   * pass walks and bounds it — depth/size limits, functions → `[Function]`,
+   * circular refs, etc. This keeps nested request-context values visible in
+   * traces instead of collapsing them to `[object]`.
+   *
+   * Callers MUST pass this output through `deepClean` (or an equivalent
+   * bounding pass) before exporting: the returned values are the raw stored
+   * objects, not a pre-bounded representation.
    */
   serializeForSpan(): Record<string, unknown> {
     const safe: Record<string, unknown> = {};
     for (const [key, value] of this.registry.entries()) {
-      if (key === MASTRA_AUTH_TOKEN_KEY) {
-        safe[key] = '[REDACTED]';
-      } else if (
-        value === null ||
-        value === undefined ||
-        typeof value === 'string' ||
-        typeof value === 'number' ||
-        typeof value === 'boolean'
-      ) {
-        safe[key] = value;
-      } else {
-        safe[key] = `[${typeof value}]`;
-      }
+      safe[key] = key === MASTRA_AUTH_TOKEN_KEY ? '[REDACTED]' : value;
     }
     return safe;
   }

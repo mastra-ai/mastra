@@ -2281,7 +2281,7 @@ describe('Tracing', () => {
       span.end();
     });
 
-    it('should use the span-safe representation of requestContext values', () => {
+    it('should preserve nested requestContext values by walking them through deepClean', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
         name: 'test',
@@ -2300,10 +2300,13 @@ describe('Tracing', () => {
         requestContext,
       });
 
+      // serializeForSpan() returns non-primitive values structurally; the
+      // downstream deepClean walks them (function -> [Function], nested object
+      // preserved) instead of collapsing them to '[object]'/'[function]'.
       expect(span.requestContext).toEqual({
         userId: 'user-123',
-        callback: '[function]',
-        nested: '[object]',
+        callback: '[Function]',
+        nested: { data: 'value' },
       });
 
       span.end();

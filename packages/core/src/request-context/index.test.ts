@@ -487,17 +487,23 @@ describe('RequestContext', () => {
       });
     });
 
-    it('should replace non-primitive values with type placeholders', () => {
+    it('should return non-primitive values structurally for the downstream deepClean to bound', () => {
       const ctx = new RequestContext();
-      ctx.set('obj', { nested: 'value' });
-      ctx.set('arr', [1, 2, 3]);
-      ctx.set('fn', () => {});
+      const obj = { nested: 'value' };
+      const arr = [1, 2, 3];
+      const fn = () => {};
+      ctx.set('obj', obj);
+      ctx.set('arr', arr);
+      ctx.set('fn', fn);
 
       const result = ctx.serializeForSpan();
 
-      expect(result['obj']).toBe('[object]');
-      expect(result['arr']).toBe('[object]');
-      expect(result['fn']).toBe('[function]');
+      // Non-primitives are returned as-is (by reference); bounding and
+      // sanitization are the downstream deepClean's job, so nested objects
+      // stay walkable in traces instead of collapsing to '[object]'.
+      expect(result['obj']).toBe(obj);
+      expect(result['arr']).toBe(arr);
+      expect(result['fn']).toBe(fn);
     });
 
     it('should return empty object for empty context', () => {
