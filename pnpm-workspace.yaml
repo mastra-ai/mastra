@@ -42,7 +42,7 @@ catalog:
   date-fns: 4.4.0
   react: ^19.2.5
   react-dom: ^19.2.5
-  typescript: ^6.0.3
+  typescript: ^7.0.2
   vitest: 4.1.10
   zod: ^4.4.3
   tsx: ^4.23.1
@@ -162,7 +162,7 @@ trustPolicyExclude:
 overrides:
   # Temporarily pinning to 7.2.0; will unpin shortly.
   bson: 7.2.0
-  typescript: ^6.0.3
+  typescript: ^7.0.2
   '@types/node': 22.19.15
   # Capped below 2: cookie@2 renamed parse/serialize to parseCookie/stringifyCookie,
   # which breaks react-router's build when renovate's pnpm dedupe floats it up.
