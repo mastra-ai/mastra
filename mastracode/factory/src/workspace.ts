@@ -134,7 +134,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   const githubTokenInjectors = new Map<
     string,
     {
-      inject: (token: string, source?: GithubTokenSource) => void;
+      inject: (token: string, source?: GithubTokenSource, patKind?: GithubPatKind) => void;
       patKind: GithubPatKind;
       ghToken: string;
       credentialSource: GithubTokenSource | 'unknown';
@@ -387,12 +387,19 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       });
       if (projectRepository.setupCommand) await runWorktreeSetup(sandbox, workdir, projectRepository.setupCommand);
 
-      const injectGithubToken = (freshToken: string, credentialSource?: GithubTokenSource) => {
+      const injectGithubToken = (
+        freshToken: string,
+        credentialSource?: GithubTokenSource,
+        refreshedPatKind?: GithubPatKind,
+      ) => {
+        const registered = githubTokenInjectors.get(workspaceId);
+        if (refreshedPatKind && registered?.patKind !== refreshedPatKind) {
+          throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
+        }
         if (!sandbox.setEnvironmentVariable) {
           throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
         }
         sandbox.setEnvironmentVariable('GH_TOKEN', freshToken);
-        const registered = githubTokenInjectors.get(workspaceId);
         if (registered) {
           registered.ghToken = freshToken;
           // Unknown sources are re-resolved on the next reuse instead of being trusted as a PAT or repository token.
