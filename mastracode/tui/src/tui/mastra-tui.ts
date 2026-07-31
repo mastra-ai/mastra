@@ -1158,6 +1158,13 @@ export class MastraTUI {
             return;
           }
 
+          if (text.startsWith('!')) {
+            // Shell passthrough runs locally and never touches the agent, so
+            // run it immediately instead of steering the active run with it.
+            void handleShellPassthrough(this.state, text.slice(1).trim());
+            return;
+          }
+
           const { content, images } = consumePendingImages(text, this.state.pendingImages);
           this.state.pendingImages = [];
           if (images?.length) {

@@ -31,6 +31,7 @@ import { MastraFactory } from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
+import { SlackIntegration, createGithubSourceControl } from '../web/channels/slack/integration.js';
 
 /**
  * Parse a positive-integer env knob; anything else means "use the default".
@@ -187,7 +188,32 @@ const storage = databaseUrl
     });
 const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectionString: databaseUrl }) : undefined;
 
-const integrations = [...(github ? [github] : []), ...(linear ? [linear] : [])];
+// Deployment-stable secret for OAuth/link `state` signing. Shared by the
+// factory's integration signer and the channel-account-link deep link so both
+// sign/verify with the same key: webhook secret first, then the WorkOS cookie
+// password. Unset → per-process random secret (single-process local dev only).
+const stateSecret = process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined;
+
+// Slack channels + account linking. Optional: the Slack adapter validates the
+// signing secret at construction, so the integration is only built when the
+// Slack app env is configured. Repo-backed Slack threads additionally need the
+// direct GitHub App wiring, hence the source-control slice.
+const slackSigningSecret = process.env.SLACK_APP_SIGNING_SECRET?.trim();
+const slack = slackSigningSecret
+  ? new SlackIntegration({
+      signingSecret: slackSigningSecret,
+      botToken: process.env.SLACK_APP_BOT_TOKEN,
+      clientId: process.env.SLACK_APP_CLIENT_ID?.trim(),
+      clientSecret: process.env.SLACK_APP_CLIENT_SECRET?.trim(),
+      // Slack requires an HTTPS redirect_uri, which locally is the tunnel
+      // origin rather than the app's own public URL.
+      oidcRedirectBaseUrl: process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL,
+      uiOrigin: process.env.MASTRACODE_PUBLIC_URL,
+      sourceControl: github ? createGithubSourceControl(github) : undefined,
+    })
+  : undefined;
+
+const integrations = [...(github ? [github] : []), ...(linear ? [linear] : []), ...(slack ? [slack] : [])];
 
 export const factory = new MastraFactory({
   auth,
@@ -217,19 +243,18 @@ export const factory = new MastraFactory({
     .map(o => o.trim())
     .filter(Boolean),
   // Deployment-stable secret for OAuth `state` signing (GitHub/Linear connect
-  // flows). Same resolution the state signer used before it moved into the
-  // factory: webhook secret first, then the WorkOS cookie password. Unset →
-  // per-process random secret (single-process local dev only).
-  stateSecret: process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_COOKIE_PASSWORD || undefined,
+  // flows). See `stateSecret` above.
+  stateSecret,
 });
+
+const preparedArgs = await factory.prepare();
 
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
 // in the entry file (see module docs). `prepare()` returns the constructor args
 // carrying the controller (via `agentControllers`), storage, and the assembled
 // `server` config (middleware + apiRoutes + cors).
-const prepared = await factory.prepare();
 export const mastra = new Mastra({
-  ...prepared,
+  ...preparedArgs,
 });
 
 // Post-construct boot: initialize the controller (which now inherits this

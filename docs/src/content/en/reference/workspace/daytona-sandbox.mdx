@@ -108,7 +108,7 @@ const workspace = new Workspace({
 
 ### Ephemeral sandbox
 
-For one-shot tasks — sandbox is deleted immediately on stop:
+For one-shot tasks: sandbox is deleted immediately on stop:
 
 ```typescript
 const workspace = new Workspace({
@@ -159,7 +159,7 @@ Mount S3 or GCS buckets as local directories inside the sandbox.
 
 #### Via workspace mounts config
 
-The simplest way — filesystems are mounted automatically when the sandbox starts:
+The simplest way: filesystems are mounted automatically when the sandbox starts:
 
 ```typescript
 import { Workspace } from '@mastra/core/workspace'
@@ -529,7 +529,7 @@ await daytona.snapshot.create(
 )
 ```
 
-**Option 2: Dockerfile** — using [`Image.fromDockerfile()`](https://www.daytona.io/docs/typescript-sdk/image#fromdockerfile)
+**Option 2: Dockerfile:** Use [`Image.fromDockerfile()`](https://www.daytona.io/docs/typescript-sdk/image#fromdockerfile)
 
 ```dockerfile
 FROM daytonaio/sandbox

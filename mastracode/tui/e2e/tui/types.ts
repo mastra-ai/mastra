@@ -125,6 +125,7 @@ export type ScenarioName =
   | 'setup-nested-model-selector'
   | 'settings-api-keys-navigation'
   | 'settings-startup-model-restore'
+  | 'shell-passthrough-during-run'
   | 'shell-passthrough-configured-settings'
   | 'shell-passthrough-env-override'
   | 'shell-passthrough-long-output'

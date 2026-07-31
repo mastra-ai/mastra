@@ -153,6 +153,25 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
 
 function pullRequestMerged(context: FactoryGithubRuleContext) {
   if (!context.item || !context.pullRequest?.merged) return;
+  if (context.board === 'review') {
+    // The event is bound to the PR's own Review card: a merged PR is finished
+    // review work, so always move the card to Done. The message only reaches
+    // an active session (if any) — cards without one just move, instead of
+    // failing retries against a binding that never existed.
+    return {
+      type: 'transition',
+      idempotencyKey: `${context.ingress.id}:pull-request-merged`,
+      board: 'review',
+      stage: 'done',
+      message: {
+        text:
+          `Pull request #${context.pullRequest.number} merged; this Review card was moved to Done. ` +
+          'No further review is needed unless follow-up work was requested.',
+      },
+    } as const;
+  }
+  // Provenance bound the event to the originating Work item instead: remind
+  // its agent to assess completion — never auto-complete the Work item.
   return {
     type: 'sendMessage',
     idempotencyKey: `${context.ingress.id}:assess-work-completion`,
@@ -160,6 +179,24 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
     message:
       `Pull request #${context.pullRequest.number} merged. Assess whether the linked Work item is complete. ` +
       'Do not mark it Done solely because this PR merged; use factory_transition_work_item only after verifying the work.',
+  } as const;
+}
+
+function pullRequestClosed(context: FactoryGithubRuleContext) {
+  if (!context.item || !context.pullRequest || context.pullRequest.merged) return;
+  if (context.board !== 'review') return;
+  // A PR closed without merging is abandoned review work: clear the card off
+  // the board instead of leaving it in Reviewing forever.
+  return {
+    type: 'transition',
+    idempotencyKey: `${context.ingress.id}:pull-request-closed`,
+    board: 'review',
+    stage: 'canceled',
+    message: {
+      text:
+        `Pull request #${context.pullRequest.number} was closed without merging; ` +
+        'this Review card was moved to Canceled.',
+    },
   } as const;
 }
 
@@ -204,6 +241,7 @@ const BUILT_IN_DEFAULTS: FactoryRulesOverrides = {
     issueOpened: { onEvent: issueOpened },
     pullRequestOpened: { onEvent: pullRequestOpened },
     pullRequestMerged: { onEvent: pullRequestMerged },
+    pullRequestClosed: { onEvent: pullRequestClosed },
   },
   linear: { issueObserved: { onEvent: linearIssueObserved } },
 };

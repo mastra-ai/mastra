@@ -95,7 +95,7 @@ To migrate historical spans from the legacy `mastra_ai_spans` table to the vNext
 npx mastra migrate
 ```
 
-The migration copies span data from `mastra_ai_spans` into `mastra_span_events` in day-sized batches. It handles column mapping, deduplicates legacy rows, and preserves the original table as a backup. After migration, traces appear in Studio through the vNext adapter.
+The migration copies span data from `mastra_ai_spans` into `mastra_span_events` in day-sized batches. It handles column mapping and deduplicates legacy rows. The original table remains as a backup. After migration, traces appear in Studio through the vNext adapter.
 
 :::note
 The legacy table isn't deleted. Drop it manually after verifying the migration.
@@ -273,7 +273,7 @@ Set `cluster` to add `ON CLUSTER` to Mastra-owned DDL such as table creation, ma
 
 Manual maintenance such as `optimizeTable()` and `materializeTtl()` runs on every replica when `cluster` is set. These operations can be expensive on a large cluster. Prefer running them outside peak hours, and let routine merges happen on the background merge queue rather than triggering them on every restart.
 
-If existing Mastra tables use local `MergeTree` or `ReplacingMergeTree` engines, initialization fails while `replication` is enabled. Mastra refuses to silently convert local tables because copy-and-swap is unsafe across replicas. To migrate, recreate the affected tables as `Replicated*` before enabling replication. The typical sequence is: rename the local table, run `CREATE TABLE ... ENGINE = ReplicatedMergeTree(...) ON CLUSTER ...`, run `INSERT INTO ... SELECT * FROM <renamed_local>`, then drop the renamed local table.
+If existing Mastra tables use local `MergeTree` or `ReplacingMergeTree` engines, initialization fails while `replication` is enabled. Mastra refuses to silently convert local tables because copy-and-swap is unsafe across replicas. To migrate, recreate the affected tables as `Replicated*` before enabling replication. To migrate safely, rename the local table, run `CREATE TABLE ... ENGINE = ReplicatedMergeTree(...) ON CLUSTER ...`, run `INSERT INTO ... SELECT * FROM <renamed_local>`, then drop `<renamed_local>`.
 
 Don't set `replication` on ClickHouse Cloud. Cloud rewrites `MergeTree` to `SharedMergeTree` server-side, and explicit `ReplicatedMergeTree` engines produce incorrect DDL. `replication` is only for self-managed multi-replica clusters.
 
@@ -283,7 +283,7 @@ Don't set `replication` on ClickHouse Cloud. Cloud rewrites `MergeTree` to `Shar
 
 ## Hosting options
 
-ClickHouse runs anywhere you can reach it over HTTP. Two common choices:
+ClickHouse runs anywhere you can reach it over HTTP. Common choices include:
 
 - **[ClickHouse Cloud](https://clickhouse.com/cloud)**: Managed service with a free trial tier. Provides connection details directly compatible with `url`, `username`, and `password`.
 - **Self-hosted**: Run the official [`clickhouse/clickhouse-server`](https://hub.docker.com/r/clickhouse/clickhouse-server) container or install from the [official packages](https://clickhouse.com/docs/en/install). Suitable for VPS, dedicated hardware, or Kubernetes.
@@ -345,7 +345,7 @@ export const mastra = new Mastra({
 })
 ```
 
-Two ways to provision the database:
+Provision the database with either option:
 
 - **Managed**: Use ClickHouse Cloud. Set `CLICKHOUSE_URL`, `CLICKHOUSE_USERNAME`, and `CLICKHOUSE_PASSWORD` as environment variables in your hosting platform.
 - **Self-hosted on Railway**: Add a ClickHouse service to your Railway project from the official Docker image, then reference it in the application service through Railway's private networking.

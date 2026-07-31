@@ -10,6 +10,8 @@ import {
   useSaveGithubPatMutation,
 } from '../../../../hooks/useGithubPat';
 import type { GithubPatKind } from '../../workspaces/services/github';
+import { SettingsCard } from './SettingsCard';
+import { SettingsSubsection } from './SettingsSubsection';
 
 /**
  * Org-wide GitHub Personal Access Tokens used only for `gh` CLI auth inside
@@ -25,31 +27,25 @@ export function GithubPatBlock() {
   const statusQuery = useGithubPatStatusQuery();
 
   return (
-    <div className="border-border1 flex flex-col gap-4 border-t pt-4">
-      <div className="flex flex-col">
-        <Txt variant="ui-md" className="font-medium">
-          GitHub CLI tokens
-        </Txt>
-        <Txt variant="ui-xs">
-          Personal Access Tokens agents use for `gh` CLI commands in sandboxes. Tokens must be classic PATs, and the
-          token&apos;s account must have access to the linked repositories. Git and API access keep using the GitHub App
-          connection.
-        </Txt>
-      </div>
-
-      <TokenRow
-        kind="default"
-        title="Worker token"
-        description="Used by every sandbox for gh CLI commands (issues, PRs, comments)."
-        configured={statusQuery.data?.configured === true}
-      />
-      <TokenRow
-        kind="reviewer"
-        title="Reviewer token (optional)"
-        description="Used by review-board sessions so PR reviews come from a different account. Falls back to the worker token when not set."
-        configured={statusQuery.data?.reviewerConfigured === true}
-      />
-    </div>
+    <SettingsSubsection
+      title="GitHub CLI tokens"
+      description="Classic PATs agents use for gh CLI commands in sandboxes. The token's account needs access to the linked repositories."
+    >
+      <SettingsCard>
+        <TokenRow
+          kind="default"
+          title="Worker token"
+          description="Used by every sandbox."
+          configured={statusQuery.data?.configured === true}
+        />
+        <TokenRow
+          kind="reviewer"
+          title="Reviewer token (optional)"
+          description="Used by review sessions so PR reviews come from a different account. Falls back to the worker token."
+          configured={statusQuery.data?.reviewerConfigured === true}
+        />
+      </SettingsCard>
+    </SettingsSubsection>
   );
 }
 
@@ -86,18 +82,20 @@ function TokenRow({
   };
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 px-4 py-3">
       <div className="flex items-center justify-between gap-4">
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center gap-2">
-            <Txt variant="ui-sm" className="font-medium">
+            <Txt variant="ui-md" className="text-icon5">
               {title}
             </Txt>
             <Badge size="sm" variant={configured ? 'success' : 'default'}>
               {configured ? 'Configured' : 'Not set'}
             </Badge>
           </div>
-          <Txt variant="ui-xs">{description}</Txt>
+          <Txt variant="ui-sm" className="text-icon3">
+            {description}
+          </Txt>
         </div>
         {!editing && (
           <div className="flex shrink-0 items-center gap-2">

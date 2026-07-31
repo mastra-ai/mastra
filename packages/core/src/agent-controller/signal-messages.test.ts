@@ -458,6 +458,50 @@ describe('AgentController signal messages', () => {
     );
   });
 
+  it('propagates delayed wake failures to callers that opt into requireDelivery', async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'await-acceptance-agent',
+      name: 'await-acceptance-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('World'),
+    });
+    const { session } = await createController(storage, agent);
+    await session.thread.create();
+
+    const delayedRejection = () =>
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('wake stream setup failed')), 20));
+    const sendSignal = vi.spyOn(agent, 'sendSignal').mockImplementation(
+      () =>
+        ({
+          accepted: delayedRejection(),
+          signal: createSignal({ type: 'user-message', contents: 'kickoff' }),
+        }) as any,
+    );
+
+    // Default fire-and-forget semantics: a failure after the first tick is
+    // swallowed and `accepted` resolves.
+    const fireAndForget = session.sendSignal({ content: 'kickoff' });
+    await expect(fireAndForget.accepted).resolves.toEqual({ accepted: true, runId: undefined });
+
+    // Delivery-guaranteed semantics: the same failure rejects so callers
+    // (e.g. the Factory rule dispatcher) can retry instead of assuming the
+    // kickoff reached the agent.
+    const guaranteed = session.sendSignal({ content: 'kickoff' }, { requireDelivery: true });
+    await expect(guaranteed.accepted).rejects.toThrow('wake stream setup failed');
+
+    // And on success it surfaces the real acceptance decision.
+    sendSignal.mockImplementation(
+      () =>
+        ({
+          accepted: Promise.resolve({ action: 'deliver', runId: 'run-2' }),
+          signal: createSignal({ type: 'user-message', contents: 'kickoff' }),
+        }) as any,
+    );
+    const accepted = session.sendSignal({ content: 'kickoff' }, { requireDelivery: true });
+    await expect(accepted.accepted).resolves.toEqual({ accepted: true, runId: 'run-2', action: 'deliver' });
+  });
+
   it('tracks queued follow-ups in display state while running', async () => {
     const storage = new InMemoryStore();
     const { session } = await createController(storage);

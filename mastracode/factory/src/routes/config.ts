@@ -68,6 +68,12 @@ export interface ProviderInfo {
   envVar?: string;
   /** Where the active credential comes from. */
   source: ProviderCredentialSource;
+  /**
+   * Tenant mode: whether an org-wide API key exists for this provider, even
+   * when the caller's personal credential shadows it. Lets the UI tell
+   * "shared with the org" apart from "only works for me".
+   */
+  orgKey?: boolean;
   /** Web OAuth sign-in capability, when the provider supports it. */
   oauth?: { supported: true; modes: LoginSessionKind[] };
 }
@@ -148,9 +154,11 @@ export async function listProviders({
 
     const authProviderId = getAuthProviderId(model.provider);
     let source: ProviderInfo['source'] = 'none';
+    let orgKey: boolean | undefined;
     if (tenantCredentials) {
       const userRec = tenantCredentials.find(r => r.scope === 'user' && r.provider === authProviderId);
       const orgRec = tenantCredentials.find(r => r.scope === 'org' && r.provider === authProviderId);
+      orgKey = orgRec?.credential.type === 'api_key';
       if (userRec?.credential.type === 'oauth') {
         source = 'oauth-user';
       } else if (userRec?.credential.type === 'api_key') {
@@ -173,6 +181,7 @@ export async function listProviders({
       provider: model.provider,
       envVar: model.apiKeyEnvVar,
       source,
+      ...(orgKey !== undefined ? { orgKey } : {}),
       ...(flowKind ? { oauth: { supported: true as const, modes: [flowKind] } } : {}),
     });
   }
@@ -651,12 +660,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               auth,
               credentials: options.modelCredentials,
             });
+            // Tenant mode also reports whether the caller may write org-wide
+            // keys, so the settings UI can gate the "Everyone in org" option.
+            const tenant = auth.tenant(loose(c));
+            const orgKeyAdmin = tenant ? await auth.isOrganizationAdmin(loose(c), tenantOrgId(tenant)) : undefined;
             return c.json({
               providers: await listProviders({
                 controller,
                 authStorage: tenantCredentials ? undefined : authStorage,
                 tenantCredentials,
               }),
+              ...(orgKeyAdmin !== undefined ? { orgKeyAdmin } : {}),
             });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);

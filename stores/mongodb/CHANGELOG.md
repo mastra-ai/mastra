@@ -1,5 +1,190 @@
 # @mastra/mongodb
 
+## 1.16.0-alpha.1
+
+### Patch Changes
+
+- When MongoDB storage initialization fails because an existing non-unique index conflicts with Mastra's required unique index, the error now includes step-by-step migration commands instead of a generic failure message. ([#20486](https://github.com/mastra-ai/mastra/pull/20486))
+
+  **Before:** `Failed to create default index on collection "mastra_threads". Set skipDefaultIndexes to manage indexes yourself.`
+
+  **After:**
+
+  ```text
+  Index conflict on collection "mastra_threads": an existing non-unique index on { id: 1 }
+  conflicts with Mastra's required unique index.
+
+  To migrate:
+    1. Check for duplicates:  db.mastra_threads.aggregate([{ $group: { _id: "$id", n: { $sum: 1 } } }, { $match: { n: { $gt: 1 } } }])
+    2. Drop the old index:    db.mastra_threads.dropIndex("id_1")
+    3. Recreate as unique:    db.mastra_threads.createIndex({ id: 1 }, { unique: true })
+
+  Alternatively, set skipDefaultIndexes: true to manage indexes yourself.
+  ```
+
+- Updated dependencies [[`594f7b2`](https://github.com/mastra-ai/mastra/commit/594f7b28f5263fb9982fd50d95c471fb971ea984), [`311f943`](https://github.com/mastra-ai/mastra/commit/311f943bee60e8fdf5c84499ea50e884276c936c), [`0c89896`](https://github.com/mastra-ai/mastra/commit/0c8989673fb7d106837098398131e570c6023b68), [`23b4238`](https://github.com/mastra-ai/mastra/commit/23b423844ad0bcf2a502a68dd62866d6160f9f6d), [`e320a76`](https://github.com/mastra-ai/mastra/commit/e320a763feaf65c6be3cebecf746defcbde161b3), [`03b4918`](https://github.com/mastra-ai/mastra/commit/03b4918c80d188ce375334c393e131c6e94bd7eb), [`14ef73a`](https://github.com/mastra-ai/mastra/commit/14ef73a4bbd73e7808414816eb0628ce1d80b5d7), [`1d677d5`](https://github.com/mastra-ai/mastra/commit/1d677d5f99d7db403f7828585e8c25f299f72628), [`93e28ec`](https://github.com/mastra-ai/mastra/commit/93e28ecce9031c02397e0ae8406593e5c7a95883), [`729dab4`](https://github.com/mastra-ai/mastra/commit/729dab408faccfaef0cbb048e5a4338f9172847e), [`484003d`](https://github.com/mastra-ai/mastra/commit/484003d33ff59330c86b19863e4a38732d7e4155), [`933d291`](https://github.com/mastra-ai/mastra/commit/933d291146b789c19442ad206f94da3e4be90c64)]:
+  - @mastra/core@1.56.0-alpha.3
+
+## 1.16.0-alpha.0
+
+### Minor Changes
+
+- Added persistence for dataset item undeclared tool policies. ([#19643](https://github.com/mastra-ai/mastra/pull/19643))
+
+  ```typescript
+  await dataset.addItem({
+    input: 'What is the weather?',
+    unmockedToolPolicy: 'deny',
+  });
+  ```
+
+### Patch Changes
+
+- Added a comment column to experiment results so review comments persist. The column is added automatically and non-destructively on startup for existing databases (https://github.com/mastra-ai/mastra/issues/19857). ([#19865](https://github.com/mastra-ai/mastra/pull/19865))
+
+- Updated dependencies [[`c5e56ff`](https://github.com/mastra-ai/mastra/commit/c5e56ff3bcabdf062708f2d48744fec304df6792), [`4e35a56`](https://github.com/mastra-ai/mastra/commit/4e35a56cdf8d74a5ff6d5eda01f2c1deaf6cc7be)]:
+  - @mastra/core@1.56.0-alpha.1
+
+## 1.15.1
+
+### Patch Changes
+
+- dependencies updates: ([#19779](https://github.com/mastra-ai/mastra/pull/19779))
+  - Updated dependency [`mongodb@^7.5.0` ↗︎](https://www.npmjs.com/package/mongodb/v/7.5.0) (from `^7.2.0`, in `dependencies`)
+- Updated dependencies [[`3f472b4`](https://github.com/mastra-ai/mastra/commit/3f472b468892a1ff14ccb43cc0343b86f7d8fd7d), [`ba369f2`](https://github.com/mastra-ai/mastra/commit/ba369f2a0aaf998da0d6aa033d26f64f96bef8ac), [`35b929b`](https://github.com/mastra-ai/mastra/commit/35b929b7abc3d20d85c7985880960ac2d04a6c86), [`55c9e24`](https://github.com/mastra-ai/mastra/commit/55c9e248c27c1d72b5bb7e94ea6b8a3999eee49f), [`dcfed93`](https://github.com/mastra-ai/mastra/commit/dcfed93e1e256c6abfa792cbb7ca836f5d0e8638), [`2876e15`](https://github.com/mastra-ai/mastra/commit/2876e15b4d2f616a3bc1ed3af57d546c268384ce), [`9b3626a`](https://github.com/mastra-ai/mastra/commit/9b3626aeb1d16fcd34b0a8e94c114ddb80a3b240), [`4696963`](https://github.com/mastra-ai/mastra/commit/469696312ac4c618bc8475b0c5ed7949b8a3455e), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`07f5b4b`](https://github.com/mastra-ai/mastra/commit/07f5b4ba9d608d88865030732e580298296adf99), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`598080f`](https://github.com/mastra-ai/mastra/commit/598080f224edb3f0f5b801035b067fac50a56a03)]:
+  - @mastra/core@1.55.0
+
+## 1.15.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#19779](https://github.com/mastra-ai/mastra/pull/19779))
+  - Updated dependency [`mongodb@^7.5.0` ↗︎](https://www.npmjs.com/package/mongodb/v/7.5.0) (from `^7.2.0`, in `dependencies`)
+- Updated dependencies [[`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73), [`723aa54`](https://github.com/mastra-ai/mastra/commit/723aa5437106bdb708ae03c0ef6b77aa11291e73)]:
+  - @mastra/core@1.55.0-alpha.3
+
+## 1.15.0
+
+### Minor Changes
+
+- Added exact metadata filtering to message history queries across Memory APIs and supported storage providers. ([#19991](https://github.com/mastra-ai/mastra/pull/19991))
+
+  ```ts
+  const messages = await memory.recall({
+    threadId: 'thread-1',
+    filter: {
+      metadata: {
+        status: 'done',
+        priority: 'high',
+      },
+    },
+  });
+  ```
+
+  Multiple fields use AND semantics. Supported values are strings, finite numbers, booleans, and `null`.
+
+- MongoDBVector can now index an existing (operational) collection instead of a managed one. Pass `collectionName` (and optionally `searchIndexName`) to `createIndex`, and query with `metadataMode: 'document'` to get the full source document back as metadata. ([#19805](https://github.com/mastra-ai/mastra/pull/19805))
+
+  **Bring-your-own collections are read-only by default.** The store never modifies or deletes caller-owned operational documents: `upsert`, `updateVector`, `deleteVector`, and `deleteVectors` throw a clear USER-category error on a BYO index unless it was created with `allowWrites: true`. The write policy is persisted alongside the index registration (surviving restarts) and fails closed for entries that predate it. Managed collections are unaffected and remain always writable.
+
+  The bring-your-own index target (collection name, search-index name, and the `isByo` safety flag) is now persisted durably in a mastra-owned registry collection and hydrated on demand, so BYO classification survives a process restart: `deleteIndex` from a fresh process drops only the Atlas search index and never drops the caller's operational collection. `listIndexes` now returns **logical** Mastra index names (not physical collection names), so its output round-trips correctly back into `deleteIndex`/`describeIndex`. `metadataMode: 'document'` now returns a clean source document (the synthetic relevance score is no longer merged into `metadata`, so a real source field named `score` is preserved).
+
+  **Example**
+
+  ```ts
+  await vectorStore.createIndex({ indexName: 'precedents', dimension: 1024, collectionName: 'transactions' });
+  const hits = await vectorStore.query({ indexName: 'precedents', queryVector, metadataMode: 'document' });
+  ```
+
+- MongoDBVector now supports full-text and hybrid retrieval. `createSearchIndex` provisions an Atlas Search index, `textQuery` runs a BM25 search, and `hybridQuery` fuses vector + text results server-side with $rankFusion (requires MongoDB 8.0+; on 8.0.x it may need a MongoDB support case to enable). ([#19805](https://github.com/mastra-ai/mastra/pull/19805))
+
+  A custom or field-restricted text-search index name is now persisted and resolved automatically by `textQuery`/`hybridQuery` (with a per-call override), so a `searchIndexName` passed to `createSearchIndex` is reachable; when `fields` is supplied without an explicit name, the field-mapped index is created under a distinct name so its mapping is not shadowed by the auto-created dynamic index. `hybridQuery`'s vector branch now reuses the same pushdown-vs-fallback filter logic as `query`, so metadata filters on undeclared fields no longer hard-error on bring-your-own collections.
+
+  Hardening for bring-your-own (BYO) operational collections:
+
+  - Full-text/hybrid search on a BYO collection is now **opt-in**: `createIndex` no longer auto-creates a billable dynamic full-text index on a caller-owned collection. Call `createSearchIndex` to enable `textQuery`/`hybridQuery` (which otherwise throw a clear error); managed collections keep auto-creating it for back-compat.
+  - `deleteIndex` on a BYO index now also drops the companion full-text search index (when one was provisioned), not just the vector index, so it no longer leaks an untracked index onto the caller's collection. The collection and its documents are still preserved.
+  - `createIndex` now throws a clear error when a logical index is retargeted to a different collection than the one already registered, instead of silently orphaning the previous collection's index; idempotent re-creation against the same collection still succeeds.
+  - `metadataMode: 'document'` now omits the (large) embedding field from `metadata` by default; set `includeVector: true` to retain it and also expose it as a top-level `vector`. A real source field named `score` is still preserved.
+  - BYO operational collections with native **`ObjectId` `_id`s** are now fully supported: query results coerce `_id` to a string (the `QueryResult.id` contract), and `deleteVector`/`updateVector`/`deleteVectors` accept that string and match the underlying `ObjectId` document. Managed (string `_id`) collections are unaffected.
+  - In `metadataMode: 'document'`, metadata filters now operate on **root document fields** instead of being rewritten to `metadata.<field>`, so filters like `{ lane: 'fraud' }` match a BYO collection's top-level operational fields (both the pushdown and `$match` fallback paths). Managed `'field'` mode keeps the `metadata.` rewriting.
+  - The full-text search index builds asynchronously; a new `waitForSearchIndexReady()` (and a `waitUntilReady` option on `createSearchIndex`) blocks until the text index reports READY, so an immediate `textQuery`/`hybridQuery` no longer intermittently fails. The field-mapped default text-index name is now unique per logical index so two logical indexes on one collection no longer collide.
+  - `hybridQuery` floors its vector-branch `numCandidates` at the branch limit, so `numCandidates` smaller than the internal limit no longer triggers a server-side error. `describeIndex().count` now counts only documents that actually carry the embedding field (relevant on BYO collections with a mix of embedded and non-embedded documents).
+  - The `$rankFusion` support probe (`buildInfo`) is memoized per instance, and `textQuery` guards its score consistently with `hybridQuery`.
+
+  **Example**
+
+  ```ts
+  await store.createSearchIndex({ indexName: 'precedents', fields: ['note'] });
+  const hits = await store.hybridQuery({
+    indexName: 'precedents',
+    queryVector,
+    query: 'shell company',
+    paths: ['note'],
+    topK: 10,
+  });
+  ```
+
+### Patch Changes
+
+- Temporarily pin bson to 7.2.0 to work around a hang in an edge case with the newer bson version. Will unpin shortly. ([#20178](https://github.com/mastra-ai/mastra/pull/20178))
+
+- Updated dependencies [[`ce93a3c`](https://github.com/mastra-ai/mastra/commit/ce93a3c114ea1cbfbd576f3db41d7c26c9844f5b), [`5718a22`](https://github.com/mastra-ai/mastra/commit/5718a229281dcfd36bcd1f42a242e3717e510a33), [`a211d09`](https://github.com/mastra-ai/mastra/commit/a211d09185dc65a746534914cf38b67f21ee9bac), [`0dca9d0`](https://github.com/mastra-ai/mastra/commit/0dca9d0b1356024a53b72ea6f040db528b126caa), [`6218217`](https://github.com/mastra-ai/mastra/commit/62182171b6cfca0b099f1c6a77a2e65e7639ab86), [`5807d3a`](https://github.com/mastra-ai/mastra/commit/5807d3ae1d259b8b7d6df7e5bf2b485c694af9c8), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`05db566`](https://github.com/mastra-ai/mastra/commit/05db566fcbdcbf33d0bffca0c72ec30129e2e3ca), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`5718a22`](https://github.com/mastra-ai/mastra/commit/5718a229281dcfd36bcd1f42a242e3717e510a33), [`57661af`](https://github.com/mastra-ai/mastra/commit/57661afeca52ff9af4e72675ede2134fa503d5a5), [`d1b7e3a`](https://github.com/mastra-ai/mastra/commit/d1b7e3a978a309a5653eeaa490d2d6c7c53bd093), [`29c584a`](https://github.com/mastra-ai/mastra/commit/29c584a13a88831e5ed1fdeb0ff8e82eae180433), [`c093146`](https://github.com/mastra-ai/mastra/commit/c0931466404d3c521308ea119cb165bb7e695155), [`8124754`](https://github.com/mastra-ai/mastra/commit/8124754ae89fbc69f8136d1df4a91904d0f84c4e), [`d12b2e4`](https://github.com/mastra-ai/mastra/commit/d12b2e4023fd9e3d3e93a9169f5088bcee2a849c)]:
+  - @mastra/core@1.54.0
+
+## 1.15.0-alpha.1
+
+### Minor Changes
+
+- MongoDBVector can now index an existing (operational) collection instead of a managed one. Pass `collectionName` (and optionally `searchIndexName`) to `createIndex`, and query with `metadataMode: 'document'` to get the full source document back as metadata. ([#19805](https://github.com/mastra-ai/mastra/pull/19805))
+
+  **Bring-your-own collections are read-only by default.** The store never modifies or deletes caller-owned operational documents: `upsert`, `updateVector`, `deleteVector`, and `deleteVectors` throw a clear USER-category error on a BYO index unless it was created with `allowWrites: true`. The write policy is persisted alongside the index registration (surviving restarts) and fails closed for entries that predate it. Managed collections are unaffected and remain always writable.
+
+  The bring-your-own index target (collection name, search-index name, and the `isByo` safety flag) is now persisted durably in a mastra-owned registry collection and hydrated on demand, so BYO classification survives a process restart: `deleteIndex` from a fresh process drops only the Atlas search index and never drops the caller's operational collection. `listIndexes` now returns **logical** Mastra index names (not physical collection names), so its output round-trips correctly back into `deleteIndex`/`describeIndex`. `metadataMode: 'document'` now returns a clean source document (the synthetic relevance score is no longer merged into `metadata`, so a real source field named `score` is preserved).
+
+  **Example**
+
+  ```ts
+  await vectorStore.createIndex({ indexName: 'precedents', dimension: 1024, collectionName: 'transactions' });
+  const hits = await vectorStore.query({ indexName: 'precedents', queryVector, metadataMode: 'document' });
+  ```
+
+- MongoDBVector now supports full-text and hybrid retrieval. `createSearchIndex` provisions an Atlas Search index, `textQuery` runs a BM25 search, and `hybridQuery` fuses vector + text results server-side with $rankFusion (requires MongoDB 8.0+; on 8.0.x it may need a MongoDB support case to enable). ([#19805](https://github.com/mastra-ai/mastra/pull/19805))
+
+  A custom or field-restricted text-search index name is now persisted and resolved automatically by `textQuery`/`hybridQuery` (with a per-call override), so a `searchIndexName` passed to `createSearchIndex` is reachable; when `fields` is supplied without an explicit name, the field-mapped index is created under a distinct name so its mapping is not shadowed by the auto-created dynamic index. `hybridQuery`'s vector branch now reuses the same pushdown-vs-fallback filter logic as `query`, so metadata filters on undeclared fields no longer hard-error on bring-your-own collections.
+
+  Hardening for bring-your-own (BYO) operational collections:
+
+  - Full-text/hybrid search on a BYO collection is now **opt-in**: `createIndex` no longer auto-creates a billable dynamic full-text index on a caller-owned collection. Call `createSearchIndex` to enable `textQuery`/`hybridQuery` (which otherwise throw a clear error); managed collections keep auto-creating it for back-compat.
+  - `deleteIndex` on a BYO index now also drops the companion full-text search index (when one was provisioned), not just the vector index, so it no longer leaks an untracked index onto the caller's collection. The collection and its documents are still preserved.
+  - `createIndex` now throws a clear error when a logical index is retargeted to a different collection than the one already registered, instead of silently orphaning the previous collection's index; idempotent re-creation against the same collection still succeeds.
+  - `metadataMode: 'document'` now omits the (large) embedding field from `metadata` by default; set `includeVector: true` to retain it and also expose it as a top-level `vector`. A real source field named `score` is still preserved.
+  - BYO operational collections with native **`ObjectId` `_id`s** are now fully supported: query results coerce `_id` to a string (the `QueryResult.id` contract), and `deleteVector`/`updateVector`/`deleteVectors` accept that string and match the underlying `ObjectId` document. Managed (string `_id`) collections are unaffected.
+  - In `metadataMode: 'document'`, metadata filters now operate on **root document fields** instead of being rewritten to `metadata.<field>`, so filters like `{ lane: 'fraud' }` match a BYO collection's top-level operational fields (both the pushdown and `$match` fallback paths). Managed `'field'` mode keeps the `metadata.` rewriting.
+  - The full-text search index builds asynchronously; a new `waitForSearchIndexReady()` (and a `waitUntilReady` option on `createSearchIndex`) blocks until the text index reports READY, so an immediate `textQuery`/`hybridQuery` no longer intermittently fails. The field-mapped default text-index name is now unique per logical index so two logical indexes on one collection no longer collide.
+  - `hybridQuery` floors its vector-branch `numCandidates` at the branch limit, so `numCandidates` smaller than the internal limit no longer triggers a server-side error. `describeIndex().count` now counts only documents that actually carry the embedding field (relevant on BYO collections with a mix of embedded and non-embedded documents).
+  - The `$rankFusion` support probe (`buildInfo`) is memoized per instance, and `textQuery` guards its score consistently with `hybridQuery`.
+
+  **Example**
+
+  ```ts
+  await store.createSearchIndex({ indexName: 'precedents', fields: ['note'] });
+  const hits = await store.hybridQuery({
+    indexName: 'precedents',
+    queryVector,
+    query: 'shell company',
+    paths: ['note'],
+    topK: 10,
+  });
+  ```
+
+### Patch Changes
+
+- Temporarily pin bson to 7.2.0 to work around a hang in an edge case with the newer bson version. Will unpin shortly. ([#20178](https://github.com/mastra-ai/mastra/pull/20178))
+
+- Updated dependencies [[`a211d09`](https://github.com/mastra-ai/mastra/commit/a211d09185dc65a746534914cf38b67f21ee9bac), [`05db566`](https://github.com/mastra-ai/mastra/commit/05db566fcbdcbf33d0bffca0c72ec30129e2e3ca), [`8124754`](https://github.com/mastra-ai/mastra/commit/8124754ae89fbc69f8136d1df4a91904d0f84c4e)]:
+  - @mastra/core@1.54.0-alpha.2
+
 ## 1.15.0-alpha.0
 
 ### Minor Changes
