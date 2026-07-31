@@ -90,6 +90,14 @@ export interface IntegrationContext {
   storage: {
     generic: IntegrationStorageHandle;
     sourceControl: SourceControlStorageHandle;
+    /**
+     * The factory's source-control-owning integration's storage handle
+     * (today: GitHub when registered; the handle carries its own
+     * `integrationId`). Channel integrations use it to make sessions
+     * repo-backed without the entry hand-wiring a source-control slice.
+     * Absent when no source-control owner is registered.
+     */
+    sourceControlOwner?: SourceControlStorageHandle;
     /** Factory projects domain — e.g. resolving a project's default model. */
     projects: FactoryProjectsStorage;
     /** Cross-integration intake selection (which sources are synced). */

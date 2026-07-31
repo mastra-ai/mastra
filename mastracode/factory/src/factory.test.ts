@@ -762,6 +762,20 @@ describe('MastraFactory.prepare integrations', () => {
     expect(ctx.storage.sourceControl).toBeDefined();
   });
 
+  it('exposes the source-control owner on the routes context when github is registered', async () => {
+    const ctx = await prepareIntegrationContext({
+      storage: fakeStorage(),
+      integrations: [fakeIntegration({ id: 'github' })],
+    });
+    expect(ctx.storage.sourceControlOwner).toBeDefined();
+    expect(ctx.storage.sourceControlOwner!.integrationId).toBe('github');
+  });
+
+  it('omits the source-control owner from the routes context when github is absent', async () => {
+    const ctx = await prepareIntegrationContext({ storage: fakeStorage() });
+    expect(ctx.storage.sourceControlOwner).toBeUndefined();
+  });
+
   it('does not collect workers from integrations that are not ready', async () => {
     const storage = fakeStorage();
     vi.spyOn(storage, 'isDomainReady').mockReturnValue(false);
@@ -815,6 +829,34 @@ describe('MastraFactory.prepare integrations', () => {
       const ctx = channels.mock.calls[0]![0];
       expect(ctx.storage.channelIdentity).toBeDefined();
       expect(ctx.auth).toBeDefined();
+    });
+
+    it('exposes the source-control owner on the channels context when github is registered', async () => {
+      withController();
+      const channels = vi.fn((_ctx: IntegrationContext) => ({}) as never);
+      const factory = new MastraFactory({
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'github' }), fakeIntegration({ id: 'chat-platform', channels })],
+      });
+
+      await factory.prepare();
+
+      const ctx = channels.mock.calls[0]![0];
+      expect(ctx.storage.sourceControlOwner).toBeDefined();
+      expect(ctx.storage.sourceControlOwner!.integrationId).toBe('github');
+    });
+
+    it('omits the source-control owner from the channels context when github is absent', async () => {
+      withController();
+      const channels = vi.fn((_ctx: IntegrationContext) => ({}) as never);
+      const factory = new MastraFactory({
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+      });
+
+      await factory.prepare();
+
+      expect(channels.mock.calls[0]![0].storage.sourceControlOwner).toBeUndefined();
     });
 
     it('leaves the controller alone when no integration provides channels', async () => {

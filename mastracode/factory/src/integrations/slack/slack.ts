@@ -95,65 +95,64 @@ export interface SlackSourceControl {
 }
 
 /**
- * Structural slice of `GithubIntegration` the source-control adapter reads.
- * `sourceControlStorage` is bound during `factory.prepare()`; all access here
- * is lazy (request time), well after preparation.
+ * Structural slice of the source-control owner's storage handle
+ * (`IntegrationContext.storage.sourceControlOwner`, a `SourceControlStorageHandle`)
+ * the adapter reads. Structural so slack.ts stays decoupled from the storage
+ * module graph and tests can stub it. The handle is bound during
+ * `factory.prepare()`; all access here is lazy (request time).
  */
-interface GithubIntegrationSlice {
-  id: string;
-  sourceControlStorage: {
-    connections: {
-      list(args: { orgId: string; factoryProjectId: string }): Promise<Array<{ id: string; integrationId: string }>>;
-    };
-    projectRepositories: {
-      list(args: {
-        orgId: string;
-        connectionId: string;
-      }): Promise<Array<{ id: string; repositoryId: string; branch?: string | null }>>;
-    };
-    repositories: {
-      get(args: { orgId: string; id: string }): Promise<{ defaultBranch: string } | null>;
-    };
-    sessions: {
-      getForBranch(args: {
-        projectRepositoryId: string;
-        userId: string;
-        branch: string;
-      }): Promise<{ sessionId: string } | null>;
-      create(input: {
-        sessionId: string;
-        projectRepositoryId: string;
-        orgId: string;
-        userId: string;
-        branch: string;
-        baseBranch: string;
-      }): Promise<{ sessionId: string }>;
-    };
+interface SourceControlOwnerSlice {
+  integrationId: string;
+  connections: {
+    list(args: { orgId: string; factoryProjectId: string }): Promise<Array<{ id: string; integrationId: string }>>;
+  };
+  projectRepositories: {
+    list(args: {
+      orgId: string;
+      connectionId: string;
+    }): Promise<Array<{ id: string; repositoryId: string; branch?: string | null }>>;
+  };
+  repositories: {
+    get(args: { orgId: string; id: string }): Promise<{ defaultBranch: string } | null>;
+  };
+  sessions: {
+    getForBranch(args: {
+      projectRepositoryId: string;
+      userId: string;
+      branch: string;
+    }): Promise<{ sessionId: string } | null>;
+    create(input: {
+      sessionId: string;
+      projectRepositoryId: string;
+      orgId: string;
+      userId: string;
+      branch: string;
+      baseBranch: string;
+    }): Promise<{ sessionId: string }>;
   };
 }
 
 /**
- * Adapt the GitHub integration's source-control storage into the
+ * Adapt the source-control owner's storage handle into the
  * {@link SlackSourceControl} surface. Repo resolution mirrors the factory's
  * own `ensureFactoryRuleSession`: the factory's GitHub connection → its first
  * linked repository → pinned branch or repo default as the base.
  */
-export function createGithubSourceControl(github: GithubIntegrationSlice): SlackSourceControl {
+export function createGithubSourceControl(owner: SourceControlOwnerSlice): SlackSourceControl {
   return {
     async resolveProjectRepository({ orgId, factoryProjectId }) {
-      const storage = github.sourceControlStorage;
-      const connections = await storage.connections.list({ orgId, factoryProjectId });
-      const connection = connections.find(candidate => candidate.integrationId === github.id);
+      const connections = await owner.connections.list({ orgId, factoryProjectId });
+      const connection = connections.find(candidate => candidate.integrationId === owner.integrationId);
       if (!connection) return null;
-      const projectRepositories = await storage.projectRepositories.list({ orgId, connectionId: connection.id });
+      const projectRepositories = await owner.projectRepositories.list({ orgId, connectionId: connection.id });
       const first = projectRepositories[0];
       if (!first) return null;
-      const repository = await storage.repositories.get({ orgId, id: first.repositoryId });
+      const repository = await owner.repositories.get({ orgId, id: first.repositoryId });
       if (!repository) return null;
       return { projectRepositoryId: first.id, baseBranch: first.branch ?? repository.defaultBranch };
     },
-    getSessionForBranch: args => github.sourceControlStorage.sessions.getForBranch(args),
-    createSession: args => github.sourceControlStorage.sessions.create({ sessionId: randomUUID(), ...args }),
+    getSessionForBranch: args => owner.sessions.getForBranch(args),
+    createSession: args => owner.sessions.create({ sessionId: randomUUID(), ...args }),
   };
 }
 

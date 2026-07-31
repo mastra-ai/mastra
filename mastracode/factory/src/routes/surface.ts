@@ -208,6 +208,12 @@ export function buildIntegrationContext(
     rules: FactoryRules;
     factoryReady: boolean;
     domains: Pick<FactoryApiRoutesDeps['domains'], 'projects' | 'intake' | 'workItems' | 'channelIdentity'>;
+    /**
+     * Stable id of the registered source-control-owning integration (today:
+     * `'github'` when registered). Every call site must derive and pass it so
+     * `routes()`, `channels()`, and `workers()` all see the same context shape.
+     */
+    sourceControlOwnerId?: string;
   },
   integrationId: string,
 ): IntegrationContext {
@@ -221,6 +227,9 @@ export function buildIntegrationContext(
     storage: {
       generic: deps.integrationStorage.forIntegration(integrationId),
       sourceControl: deps.sourceControlStorage.forIntegration(integrationId),
+      ...(deps.sourceControlOwnerId
+        ? { sourceControlOwner: deps.sourceControlStorage.forIntegration(deps.sourceControlOwnerId) }
+        : {}),
       projects: deps.domains.projects,
       intake: deps.domains.intake,
       channelIdentity: deps.domains.channelIdentity,
@@ -299,7 +308,15 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   const integrationRoutes = registrations.flatMap(registration => {
     const { integration } = registration;
     if (!deps.stateSigner) return disabledIntegrationStatusRoutes(deps, integration.id, true);
-    const context = buildIntegrationContext({ ...deps, stateSigner: deps.stateSigner, emitAudit }, integration.id);
+    const context = buildIntegrationContext(
+      {
+        ...deps,
+        stateSigner: deps.stateSigner,
+        emitAudit,
+        ...(githubRegistration ? { sourceControlOwnerId: 'github' } : {}),
+      },
+      integration.id,
+    );
     return guardIntegrationRoutes({ ...registration, routes: integration.routes(context) });
   });
   // Absent known integrations still get their disabled-status stub.

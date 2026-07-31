@@ -25,7 +25,6 @@ import type { FactoryIntegration, IntegrationContext } from '../base.js';
 
 import { createSlackConnectRoutes } from './connect-route.js';
 import { createAgentControllerSlackChannels, createGithubSourceControl } from './slack.js';
-import type { SlackSourceControl } from './slack.js';
 
 /**
  * Slack app credentials, read from env ONCE by the deploy entry. `signingSecret`
@@ -52,12 +51,6 @@ export interface SlackIntegrationConfig {
   oidcRedirectBaseUrl?: string;
   /** SPA origin the post-connect redirect returns to. */
   uiOrigin?: string;
-  /**
-   * Source-control slice that makes new Slack threads repo-backed. Supplied by
-   * the entry from the GitHub integration when one is configured; absent →
-   * chat-only Slack sessions.
-   */
-  sourceControl?: SlackSourceControl;
 }
 
 export class SlackIntegration implements FactoryIntegration {
@@ -70,6 +63,12 @@ export class SlackIntegration implements FactoryIntegration {
   readonly requiresStableStateSigner = true;
 
   readonly #config: SlackIntegrationConfig;
+  /**
+   * Whether `channels()` found a source-control owner on the context and wired
+   * repo-backed sessions. Set at the channels() attach path, which runs once at
+   * boot before diagnostics are served.
+   */
+  #repoBackedSessions = false;
 
   constructor(config: SlackIntegrationConfig) {
     if (!config.signingSecret) {
@@ -81,6 +80,10 @@ export class SlackIntegration implements FactoryIntegration {
   }
 
   channels(ctx: IntegrationContext): AgentControllerChannels {
+    // Repo-backed sessions come from the factory's source-control owner
+    // (GitHub, when registered) — no config-level wiring by the entry.
+    const sourceControlOwner = ctx.storage.sourceControlOwner;
+    this.#repoBackedSessions = Boolean(sourceControlOwner);
     return createAgentControllerSlackChannels({
       slack: {
         clientId: this.#config.clientId,
@@ -90,7 +93,7 @@ export class SlackIntegration implements FactoryIntegration {
       },
       accountLinks: ctx.storage.channelIdentity,
       projects: ctx.storage.projects,
-      sourceControl: this.#config.sourceControl,
+      sourceControl: sourceControlOwner ? createGithubSourceControl(sourceControlOwner) : undefined,
       workItems: ctx.rules?.workItems,
     });
   }
@@ -110,14 +113,12 @@ export class SlackIntegration implements FactoryIntegration {
   }
 
   diagnostics(): Record<string, unknown> {
-    const { clientId, clientSecret, botToken, oidcRedirectBaseUrl, sourceControl } = this.#config;
+    const { clientId, clientSecret, botToken, oidcRedirectBaseUrl } = this.#config;
     return {
       configured: true,
       botTokenConfigured: Boolean(botToken),
       oidcConfigured: Boolean(clientId && clientSecret && oidcRedirectBaseUrl),
-      repoBackedSessions: Boolean(sourceControl),
+      repoBackedSessions: this.#repoBackedSessions,
     };
   }
 }
-
-export { createGithubSourceControl };

@@ -30,7 +30,7 @@ import { DEFAULT_RETENTION } from '@mastra/code-sdk/utils/storage-maintenance';
 import { MastraFactory } from '@mastra/factory';
 import { GithubIntegration } from '@mastra/factory/integrations/github/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
-import { SlackIntegration, createGithubSourceControl } from '@mastra/factory/integrations/slack/integration';
+import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 
 /**
@@ -196,8 +196,8 @@ const stateSecret = process.env.GITHUB_APP_WEBHOOK_SECRET || process.env.WORKOS_
 
 // Slack channels + account linking. Optional: the Slack adapter validates the
 // signing secret at construction, so the integration is only built when the
-// Slack app env is configured. Repo-backed Slack threads additionally need the
-// direct GitHub App wiring, hence the source-control slice.
+// Slack app env is configured. Repo-backed Slack threads come from the
+// factory's source-control owner (GitHub) — the integration wires itself.
 const slackSigningSecret = process.env.SLACK_APP_SIGNING_SECRET?.trim();
 const slack = slackSigningSecret
   ? new SlackIntegration({
@@ -209,7 +209,6 @@ const slack = slackSigningSecret
       // origin rather than the app's own public URL.
       oidcRedirectBaseUrl: process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL,
       uiOrigin: process.env.MASTRACODE_PUBLIC_URL,
-      sourceControl: github ? createGithubSourceControl(github) : undefined,
     })
   : undefined;
 
