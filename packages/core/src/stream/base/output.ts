@@ -880,7 +880,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               controller.terminate();
               return;
             case 'finish':
-              if (self.#status !== 'failed' && self.#status !== 'suspended' && self.#status !== 'canceled') {
+              // 'suspended' is not terminal: a resume leg rehydrates the persisted 'suspended'
+              // status and must be able to finish as 'success'. Only 'failed' and 'canceled'
+              // block the success transition.
+              if (self.#status !== 'failed' && self.#status !== 'canceled') {
                 self.#status = 'success';
               }
               if (chunk.payload.stepResult.reason) {
