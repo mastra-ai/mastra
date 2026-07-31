@@ -1,5 +1,83 @@
 # @mastra/core
 
+## 1.56.0-alpha.3
+
+### Minor Changes
+
+- Add optional `idleTimeoutMs` and `isAlive` options to `DurableAgent.observe()`. ([#20442](https://github.com/mastra-ai/mastra/pull/20442))
+
+  When the process running a durable agent stops unexpectedly, the run stops producing updates but never emits a completion event — so a client that reconnects with `observe()` previously waited forever, with no way to tell the run was gone. With `idleTimeoutMs` set, the observed stream ends after that many milliseconds of silence. An optional `isAlive` check is consulted first: if it reports the run is still being worked on (for example a long-running tool call, or a run paused waiting for human input), the stream keeps waiting instead of ending. Fully backward-compatible — with neither option set, `observe()` behaves exactly as before.
+
+  ```ts
+  // Reconnect to an in-flight run, but stop waiting if the run is no longer running.
+  const { output } = await agent.observe(runId, {
+    idleTimeoutMs: 30_000,
+    // Consulted only after idleTimeoutMs of silence. Return true while the run is
+    // still being worked on to keep waiting; false (or omitted) ends the stream.
+    isAlive: () => runHeartbeat.isFresh(runId),
+  });
+
+  // Omit both options for the previous behavior (wait indefinitely):
+  const { output: legacy } = await agent.observe(runId);
+  ```
+
+### Patch Changes
+
+- Fixed conversations becoming permanently stuck after approving or declining a `requireApproval` tool call with Anthropic extended thinking enabled. Resuming now saves the model's continuation in a new assistant message, so the paused response stays intact and later turns keep working. ([#19486](https://github.com/mastra-ai/mastra/pull/19486))
+
+- Fixed dropped non-text stream parts when `emitOnNonText: false`. ([#18561](https://github.com/mastra-ai/mastra/pull/18561))
+
+  Tool calls, tool results, objects, and reasoning parts now stay in order with the text output instead of being silently lost during batching.
+
+- Added an optional `releaseSpan` method to the observability bridge interface. ([#20463](https://github.com/mastra-ai/mastra/pull/20463))
+
+  Bridges hold per-span state from `createSpan()` until the span ends, but span-end events are only delivered for spans that survive export filtering, so a bridge had no way to learn that a filtered span had finished. `releaseSpan(spanId, traceId)` is now called for those spans.
+
+  If you maintain a custom bridge, implement it to drop whatever `createSpan()` allocated. Do not end or send the span — it was filtered out on purpose.
+
+  ```typescript
+  class MyBridge implements ObservabilityBridge {
+    private spans = new Map<string, MySpan>();
+
+    createSpan(options) {
+      const span = myTracer.start(options.name);
+      this.spans.set(span.id, span);
+      return { spanId: span.id, traceId: span.traceId };
+    }
+
+    // Called when a span ends but is dropped by excludeSpanTypes,
+    // a spanFilter, or a span output processor.
+    releaseSpan(spanId: string, _traceId: string) {
+      this.spans.delete(spanId);
+    }
+  }
+  ```
+
+  The method is optional, so bridges that omit it keep working unchanged.
+
+  Fixes [#20368](https://github.com/mastra-ai/mastra/issues/20368).
+
+- Fixed an issue in the agentic loop where an aborted or failed LLM stream would still trigger output processors and improperly persist the user's input message as an orphaned record. ([#19716](https://github.com/mastra-ai/mastra/pull/19716))
+
+- Fixed a bug where disconnecting one consumer of a workflow's `fullStream` (or a model's evented stream) would silently stop every other concurrent consumer of the same run from receiving further chunks. This affected cases like two `/stream` requests for the same `runId`, or `/stream` combined with `/observe` — one client disconnecting no longer breaks the others, which now keep receiving chunks and close normally. ([#19745](https://github.com/mastra-ai/mastra/pull/19745))
+
+- Fixed tool executions silently losing request context when a bundler or monorepo loads more than one copy of @mastra/core. Previously, a request context created by a different copy of the package was not recognized, so the tool received an empty context or the entries passed at execution time were dropped from the merge. Request context values now reach the tool regardless of which copy of the package created them. Closes #19772. ([#19863](https://github.com/mastra-ai/mastra/pull/19863))
+
+- Added toolCallId to TOOL_CALL and MCP_TOOL_CALL span attributes so observability exporters can pair tool results with their calls. Previously the tool call ID was available at the call site but never forwarded to the span, causing downstream exporters to lose the association between a tool call and its result. ([#19405](https://github.com/mastra-ai/mastra/pull/19405))
+
+- Fixed agent thread subscriptions so every instance in a multi-instance deployment sees the same conversation: ([#19806](https://github.com/mastra-ai/mastra/pull/19806))
+
+  - Subscribers on any instance now replay completed runs identically instead of diverging from the instance that ran them.
+  - Reconnecting to a thread no longer wedges `agent.stream()` behind a stale run left by a crashed or finished process.
+  - Aborting a thread now works from any instance — the request is routed to the process that owns the run.
+  - A `stream()`/`generate()` call started while another instance is mid-run on the same thread now waits its turn instead of interleaving output.
+
+- Fixed `declineToolCall` and `declineToolCallGenerate` so declined approval-gated tools no longer execute or cause side effects after resume. Fixes https://github.com/mastra-ai/mastra/issues/20470 ([#20487](https://github.com/mastra-ai/mastra/pull/20487))
+
+- Fixed durable delegated tool approvals so persisted approvals resume the suspended sub-agent, including after a server restart. ([#20492](https://github.com/mastra-ai/mastra/pull/20492))
+
+- Fixed suspended DurableAgent tools to receive primitive resume data such as native ask_user answers. ([#19750](https://github.com/mastra-ai/mastra/pull/19750))
+
 ## 1.56.0-alpha.2
 
 ### Patch Changes

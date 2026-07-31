@@ -1,5 +1,35 @@
 # @mastra/otel-bridge
 
+## 1.4.5-alpha.1
+
+### Patch Changes
+
+- Fixed a memory leak where spans removed by export filtering were never released. ([#20463](https://github.com/mastra-ai/mastra/pull/20463))
+
+  The bridge creates an OpenTelemetry span when a Mastra span starts and frees it when the span ends. Span-end events are only delivered for spans that survive export filtering, so every span dropped by `excludeSpanTypes`, a `spanFilter`, or a span output processor left one entry behind for the life of the process. There was no bound or sweep on it, so long-running services grew steadily.
+
+  The filtered spans are still not exported, so what you see in your tracing backend is unchanged.
+
+  ```typescript
+  new Observability({
+    configs: {
+      default: {
+        serviceName: 'my-service',
+        bridge: new OtelBridge(),
+        // Previously leaked one entry per excluded span; now released on span end.
+        excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP],
+      },
+    },
+  });
+  ```
+
+  Fixes [#20368](https://github.com/mastra-ai/mastra/issues/20368).
+
+- Updated dependencies [[`594f7b2`](https://github.com/mastra-ai/mastra/commit/594f7b28f5263fb9982fd50d95c471fb971ea984), [`311f943`](https://github.com/mastra-ai/mastra/commit/311f943bee60e8fdf5c84499ea50e884276c936c), [`0c89896`](https://github.com/mastra-ai/mastra/commit/0c8989673fb7d106837098398131e570c6023b68), [`23b4238`](https://github.com/mastra-ai/mastra/commit/23b423844ad0bcf2a502a68dd62866d6160f9f6d), [`e320a76`](https://github.com/mastra-ai/mastra/commit/e320a763feaf65c6be3cebecf746defcbde161b3), [`03b4918`](https://github.com/mastra-ai/mastra/commit/03b4918c80d188ce375334c393e131c6e94bd7eb), [`14ef73a`](https://github.com/mastra-ai/mastra/commit/14ef73a4bbd73e7808414816eb0628ce1d80b5d7), [`14ef73a`](https://github.com/mastra-ai/mastra/commit/14ef73a4bbd73e7808414816eb0628ce1d80b5d7), [`1d677d5`](https://github.com/mastra-ai/mastra/commit/1d677d5f99d7db403f7828585e8c25f299f72628), [`0c89896`](https://github.com/mastra-ai/mastra/commit/0c8989673fb7d106837098398131e570c6023b68), [`93e28ec`](https://github.com/mastra-ai/mastra/commit/93e28ecce9031c02397e0ae8406593e5c7a95883), [`729dab4`](https://github.com/mastra-ai/mastra/commit/729dab408faccfaef0cbb048e5a4338f9172847e), [`484003d`](https://github.com/mastra-ai/mastra/commit/484003d33ff59330c86b19863e4a38732d7e4155), [`933d291`](https://github.com/mastra-ai/mastra/commit/933d291146b789c19442ad206f94da3e4be90c64)]:
+  - @mastra/core@1.56.0-alpha.3
+  - @mastra/otel-exporter@1.3.7-alpha.1
+  - @mastra/observability@1.16.4-alpha.1
+
 ## 1.4.5-alpha.0
 
 ### Patch Changes
