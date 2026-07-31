@@ -721,13 +721,14 @@ export class PgDB extends MastraBase {
       }
 
       const columnsSignature = columns.join('\u0000');
-      const hasPendingColumns = pendingColumns !== undefined;
+      const currentPendingColumns = pendingColumns;
       const isSpans = tableName === TABLE_SPANS;
       const conflictDuplicate = isSpans && conflictKey !== undefined && pendingConflictKeys.has(conflictKey);
       const exceedsLimit = pendingRows.length >= pendingLimit;
-      const incompatibleColumns = !hasPendingColumns || columnsSignature !== pendingColumns.join('\u0000');
+      const incompatibleColumns =
+        currentPendingColumns === undefined || columnsSignature !== currentPendingColumns.join('\u0000');
 
-      if (!hasPendingColumns || conflictDuplicate || exceedsLimit || incompatibleColumns) {
+      if (incompatibleColumns || conflictDuplicate || exceedsLimit) {
         await flush();
 
         pendingColumns = columns;
