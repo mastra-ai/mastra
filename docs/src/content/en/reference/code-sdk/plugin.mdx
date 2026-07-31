@@ -1,0 +1,246 @@
+---
+title: 'Reference: defineMastraCodePlugin() | Code SDK'
+description: 'API reference for defineMastraCodePlugin, which defines a Mastra Code plugin that contributes tools, instructions, processors, and signal providers.'
+packages:
+  - 'mastracode'
+  - '@mastra/code-sdk'
+---
+
+# defineMastraCodePlugin()
+
+:::experimental
+
+The Mastra Code plugin API is experimental and subject to breaking changes in minor versions.
+
+:::
+
+The `defineMastraCodePlugin()` function defines a Mastra Code plugin. It returns the plugin object unchanged and exists for type inference, so the fields you write are checked against the plugin contract.
+
+A plugin is a directory with an entry file that default-exports a plugin object. Install one with the `/plugins` command in the Mastra Code TUI, from a local path or a GitHub repository. Plugins contribute tools, system instructions, [skills](/reference/workspace/skills) and commands (from `skills/` and `commands/` directories), [processors](/reference/processors/processor-interface), and [signal providers](/reference/signals/signal-provider).
+
+## Usage example
+
+```typescript title="src/index.ts"
+import { defineMastraCodePlugin, createTool, z } from 'mastracode/plugin'
+
+export default defineMastraCodePlugin({
+  id: 'acme.reviewer',
+  name: 'Acme Reviewer',
+  description: 'Review helpers for Acme services',
+  tools: {
+    acme_lookup: {
+      tool: createTool({
+        id: 'acme_lookup',
+        description: 'Look up an Acme service by name',
+        inputSchema: z.object({ name: z.string() }),
+        execute: async ({ context }) => lookup(context.name),
+      }),
+    },
+  },
+})
+```
+
+Every contribution field also accepts a function, which receives the [plugin context](#plugin-context) and may be async:
+
+```typescript title="src/index.ts"
+export default defineMastraCodePlugin({
+  id: 'acme.reviewer',
+  processors: async context => ({
+    input: [createReviewProcessor(context.config)],
+  }),
+})
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description:
+      'Unique plugin id. Used as the registry key, and as the stable prefix for anything a plugin contributes that must survive a reload.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Display name shown in the TUI.',
+    isOptional: true,
+  },
+  {
+    name: 'version',
+    type: 'string',
+    description: 'Plugin version, shown alongside the name.',
+    isOptional: true,
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'One-line summary shown in the TUI.',
+    isOptional: true,
+  },
+  {
+    name: 'config',
+    type: 'MastraCodePluginConfigSchema',
+    description:
+      'Configuration options users can set from `/plugins`. Each entry declares a `type` of `model`, `boolean`, or `string`, plus optional `label`, `description`, and `default`. Current values arrive on the plugin context as `config`.',
+    isOptional: true,
+  },
+  {
+    name: 'instructions',
+    type: 'string | (context) => string | Promise<string>',
+    description: "Text appended to the agent's system prompt.",
+    isOptional: true,
+  },
+  {
+    name: 'tools',
+    type: 'MastraCodePluginToolEntries | (context) => MastraCodePluginToolEntries | Promise<MastraCodePluginToolEntries>',
+    description:
+      'Tools keyed by tool name. Each entry is an object with a `tool` and an optional `render` config. Tool names are added to every mode allowlist, and the first plugin to claim a name wins.',
+    isOptional: true,
+  },
+  {
+    name: 'processors',
+    type: 'MastraCodePluginProcessorEntries | (context) => MastraCodePluginProcessorEntries | Promise<MastraCodePluginProcessorEntries>',
+    description:
+      "Processors to run alongside Mastra Code's own. Either `{ input, output }` or a bare array, which is shorthand for `{ input: [...] }`. See [Processors](#processors).",
+    isOptional: true,
+  },
+  {
+    name: 'signalProviders',
+    type: 'SignalProvider[] | (context) => SignalProvider[] | Promise<SignalProvider[]>',
+    description: 'Signal providers whose lifecycle Mastra Code owns. See [Signal providers](#signal-providers).',
+    isOptional: true,
+  },
+]}
+/>
+
+## Plugin context
+
+Field resolvers receive a context object describing where the plugin is running.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'cwd',
+    type: 'string',
+    description: 'The project root Mastra Code is running in.',
+  },
+  {
+    name: 'scope',
+    type: "'global' | 'project'",
+    description: 'Whether the plugin is installed for this project or for every project.',
+  },
+  {
+    name: 'pluginDir',
+    type: 'string',
+    description: "The plugin's own directory on disk.",
+  },
+  {
+    name: 'config',
+    type: 'Record<string, string | boolean | undefined>',
+    description: 'Current values for the options declared in `config`.',
+  },
+  {
+    name: 'getController',
+    type: '() => AgentController | undefined',
+    description:
+      'The running controller, or `undefined` when it does not exist yet. Plugins load before the controller is constructed, so call this at the moment you need it, never during plugin load.',
+    isOptional: true,
+  },
+  {
+    name: 'getActiveSession',
+    type: '() => Session | undefined',
+    description:
+      'The active session, or `undefined` before one has been created. Call it lazily, like `getController`.',
+    isOptional: true,
+  },
+]}
+/>
+
+:::warning
+
+`getController` and `getActiveSession` are experimental and currently expose the whole controller and session, which includes session state, model selection, and workspace access. They may narrow to a smaller facade in a future release. Combined with the fact that plugins execute code inside Mastra Code and their instructions are appended to the agent prompt, install plugins only from sources you trust.
+
+:::
+
+## Processors
+
+Plugin processors run in the same lanes as Mastra Code's built-in processors, in a fixed slot that isn't configurable: last among the processors Mastra Code configures, after the layers they customize, and before the channel and memory layers the agent appends. Plugins can't request a position, a priority, or an index.
+
+Both lanes are resolved before every LLM call, so a plugin that is enabled, disabled, or updated takes effect on the next request without restarting Mastra Code.
+
+```typescript title="src/index.ts"
+import { defineMastraCodePlugin } from 'mastracode/plugin'
+import type { InputProcessor } from 'mastracode/plugin'
+
+const auditLog: InputProcessor = {
+  id: 'acme-audit-log',
+  async processInputStep({ messages }) {
+    await recordTurn(messages)
+  },
+}
+
+export default defineMastraCodePlugin({
+  id: 'acme.audit',
+  processors: [auditLog],
+})
+```
+
+State-signal processors track history under a state id that defaults to the processor id. Derive that id from your plugin id and keep it constant, because a processor rebuilt with a new id orphans its tracking record and re-injects a full snapshot.
+
+## Signal providers
+
+A [signal provider](/reference/signals/signal-provider) monitors an external source and pushes notification signals into a thread. Providers are long-lived objects, so Mastra Code owns their lifecycle rather than handing them to the agent:
+
+1. Registers the running Mastra instance on the provider.
+1. Connects it to the coding agent.
+1. Starts it polling and awaits its `start()` hook.
+1. Stops it when the plugin is updated, disabled, or uninstalled.
+
+A provider's `getInputProcessors()` and `getOutputProcessors()` feed the same lanes as the `processors` field. Its `getTools()` is ignored: that method is only read by the agent constructor, which plugin providers deliberately never reach. To expose a tool from a provider, inject it from inside one of its processors.
+
+```typescript title="src/index.ts"
+import { defineMastraCodePlugin, SignalProvider } from 'mastracode/plugin'
+import type { SignalSubscription } from 'mastracode/plugin'
+
+class AcmeSignals extends SignalProvider<'acme-signals'> {
+  readonly id = 'acme-signals'
+  readonly pollInterval = 60_000
+
+  async poll(subscriptions: SignalSubscription[]) {
+    // check Acme for changes, notify the subscribed threads
+  }
+}
+
+export default defineMastraCodePlugin({
+  id: 'acme.signals',
+  signalProviders: [new AcmeSignals()],
+})
+```
+
+Only one provider with a given id may be live at a time. Mastra Code refuses to start a second instance and logs a warning, which includes the case of a plugin shipping `GithubSignals` while the built-in `experimentalGithubSignals` setting is on. Turn that setting off when a plugin provides the same provider.
+
+Failures are isolated by layer. A provider that throws while starting is stopped and dropped, and the rest of the plugin keeps working. To treat a provider as required, throw from the `signalProviders` resolver instead, which fails the whole plugin record.
+
+## Reloading
+
+Mastra Code reloads plugins when one is installed, enabled, disabled, reconfigured, or updated. Processors are rebuilt on the next request. Providers are cycled only when the owning plugin's version stamp changed, so an unrelated reload leaves a polling provider alone.
+
+A plugin counts as changed when:
+
+- Its config values or enabled flag changed.
+- For a GitHub-installed plugin: the checkout's git `HEAD` moved, which covers every file in the repository.
+- For a local plugin: the entry file's modification time or size changed.
+
+Three changes should cycle a provider but don't move the stamp, and all three resolve when Mastra Code restarts:
+
+- Edits to a local plugin's files other than its entry file.
+- Changes to a local plugin's dependencies under its own `node_modules`.
+- Environment variables the provider reads at construction time.
+
+## Related
+
+- [`SignalProvider`](/reference/signals/signal-provider)
+- [Processor interface](/reference/processors/processor-interface)
+- [`mountAgentControllerOnMastra()`](/reference/code-sdk/mount-agent-controller)
