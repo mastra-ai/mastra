@@ -372,12 +372,12 @@ describe('PlatformSandbox', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2); // no third fetch
   });
 
-  it('treats an explicit timeout: 0 as "no timeout" on the direct-exec path (matches proxy semantics)', async () => {
-    // On the fallback /exec path, timeout: 0 must be preserved (not dropped
-    // by a truthy check) so the proxy sees `timeoutSec: 0` and interprets it
-    // as no-timeout. On the direct-exec path, the client owns the timeout —
-    // "no timeout" is expressed by NOT arming a client-side timer, so the
-    // exec runs to completion regardless of wall-clock elapsed.
+  it('treats an explicit timeout: 0 as "no timeout" on the direct-exec path', async () => {
+    // The client owns the timeout on the direct-exec path — "no timeout" is
+    // expressed by NOT arming a client-side timer, so the exec runs to
+    // completion regardless of wall-clock elapsed. A truthy check that
+    // dropped `timeout: 0` would silently swap it for the default, which
+    // is exactly the bug this test guards against.
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi
       .fn()
@@ -514,20 +514,17 @@ describe('PlatformSandbox', () => {
       expect(fetchMock).toHaveBeenCalledTimes(3);
     });
 
-    it('falls back to the proxy /exec route when the exec-lease endpoint returns 404', async () => {
+    it('throws PlatformApiError when /exec-lease returns 404 (no /exec fallback)', async () => {
+      // Old proxy without /exec-lease is now a loud config error, not a
+      // silent fallback. Platform PR #1777 is deployed everywhere — a 404
+      // here means the proxy is genuinely misconfigured and should be seen.
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
-        // Older platform deployment: exec-lease not present.
-        .mockResolvedValueOnce(json({ error: { message: 'Not Found', type: 'not_found' } }, { status: 404 }))
-        .mockResolvedValueOnce(json({ exitCode: 0, stdout: 'ok', stderr: '', timedOut: false, truncated: false }))
-        // Second exec should skip the mint attempt entirely — the fallback bit is sticky.
-        .mockResolvedValueOnce(json({ exitCode: 0, stdout: 'ok', stderr: '', timedOut: false, truncated: false }));
-      // If the fallback fails to trigger, we'd end up here and the test would blow up
-      // with an unhandled WS error. Passing a factory that throws makes that explicit.
+        .mockResolvedValueOnce(json({ error: { message: 'Not Found', type: 'not_found' } }, { status: 404 }));
       const factory: DirectExecWebSocketFactory = () => {
-        throw new Error('should not open a WebSocket after 404 fallback');
+        throw new Error('should not open a WebSocket when the lease mint 404s');
       };
 
       const sandbox = new PlatformSandbox({
@@ -539,21 +536,52 @@ describe('PlatformSandbox', () => {
       });
 
       await sandbox._start();
-      const first = await sandbox.executeCommand('echo one');
-      const second = await sandbox.executeCommand('echo two');
-
-      expect(first).toMatchObject({ exitCode: 0, stdout: 'ok' });
-      expect(second).toMatchObject({ exitCode: 0, stdout: 'ok' });
-      // Calls: provision, exec-lease (404), /exec (fallback), /exec (sticky fallback).
-      expect(fetchMock).toHaveBeenCalledTimes(4);
+      await expect(sandbox.executeCommand('echo one')).rejects.toThrow(/not_found/);
+      // Provision + failed mint only — no /exec request.
+      expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(String(fetchMock.mock.calls[1]![0])).toBe(
         'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
       );
-      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec');
-      expect(String(fetchMock.mock.calls[3]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec');
     });
 
-    it('propagates non-404/501 errors from the exec-lease mint instead of falling back silently', async () => {
+    it('throws SandboxDestroyedError when /exec-lease returns 410 and clears sandbox state', async () => {
+      // 410 = sandbox has been destroyed (Railway destroy, quota reclamation,
+      // etc.). The client cannot recover on its own — the fleet layer must
+      // clear the stale binding and reprovision. This test asserts the
+      // typed error surfaces + cached sandbox state is nulled so a reused
+      // instance re-provisions cleanly on the next call.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(json({ error: { message: 'Gone', type: 'gone' } }, { status: 410 }));
+      const factory: DirectExecWebSocketFactory = () => {
+        throw new Error('should not open a WebSocket when the sandbox is destroyed');
+      };
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+      });
+
+      await sandbox._start();
+      const { SandboxDestroyedError } = await import('./sandbox.js');
+      await expect(sandbox.executeCommand('echo one', ['arg'])).rejects.toBeInstanceOf(SandboxDestroyedError);
+      // Only provision + one failed mint. No /exec fallback, no retry mint —
+      // a 410 on the first attempt is terminal for this instance.
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      // Sandbox id must be cleared so the caller's next executeCommand
+      // triggers a fresh ensureRunning + provision cycle instead of picking
+      // up the stale id.
+      expect((sandbox as unknown as { _sandboxId: unknown })._sandboxId).toBeUndefined();
+    });
+
+    it('propagates non-410 errors from the exec-lease mint instead of falling back silently', async () => {
+      // 500/501 are platform errors that must surface, not be masked by a
+      // silent fallback to /exec.
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi
         .fn()
@@ -569,36 +597,84 @@ describe('PlatformSandbox', () => {
 
       await sandbox._start();
       await expect(sandbox.executeCommand('echo hi')).rejects.toThrow(/internal_error/);
-      // Only provision + failed mint; no /exec fallback because 500 isn't a
-      // "endpoint not present" signal.
       expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
-    it('falls back to /exec permanently after a WS transport failure', async () => {
-      // Simulates a mid-handshake drop / expired token / provider hiccup:
-      // lease mint succeeds but the direct-exec socket closes before an exit
-      // frame arrives. We fall through to /exec for THIS call AND stay on
-      // /exec for every subsequent call on this sandbox — we don't want to
-      // pay a fresh mint + failed handshake on every exec when the transport
-      // is broken (see direct-exec production incident 2026-07-29).
+    it('recovers from a single transient WS transport failure by minting a fresh lease and retrying', async () => {
+      // First direct-exec WS closes without an exit frame (transport hiccup).
+      // The client must drop the cached lease, mint a fresh one, and retry
+      // on the same sandbox — one bad millisecond must NOT cost the entire
+      // session (this was the perf regression that motivated ripping the
+      // /exec fallback in the first place).
       vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
         .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.first' }))
-        .mockResolvedValueOnce(
-          json({ exitCode: 0, stdout: 'via-proxy-1', stderr: '', timedOut: false, truncated: false }),
-        )
-        .mockResolvedValueOnce(
-          json({ exitCode: 0, stdout: 'via-proxy-2', stderr: '', timedOut: false, truncated: false }),
-        );
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.second' }));
       const sockets: FakeSocket[] = [];
       const factory: DirectExecWebSocketFactory = (endpoint, subprotocols) => {
         const socket = new FakeSocket(endpoint, subprotocols);
         sockets.push(socket);
         queueMicrotask(() => {
           socket.onopen?.({});
-          // Close without an exit frame — transport failure.
+          if (sockets.length === 1) {
+            // First socket: transport failure (close without exit frame).
+            socket.onclose?.({ code: 1006, reason: 'abnormal' });
+          } else {
+            // Second socket: real exit frame — retry succeeds.
+            socket.fireBinary(1, 'ok');
+            socket.onmessage?.({ data: JSON.stringify({ type: 'exit', data: { exit_code: 0 } }) });
+          }
+        });
+        return socket;
+      };
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+      });
+
+      await sandbox._start();
+      const result = await sandbox.executeCommand('echo one');
+
+      expect(result).toMatchObject({ success: true, exitCode: 0, stdout: 'ok' });
+      // Fetch sequence: provision, first lease, second lease. No /exec call.
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(String(fetchMock.mock.calls[1]![0])).toBe(
+        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
+      );
+      expect(String(fetchMock.mock.calls[2]![0])).toBe(
+        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
+      );
+      // Two WS attempts: the failed one and the successful retry, each with
+      // a distinct JWT proving the cached lease was dropped between them.
+      expect(sockets).toHaveLength(2);
+      expect(sockets[0]!.subprotocols[1]).toBe('jwt.first');
+      expect(sockets[1]!.subprotocols[1]).toBe('jwt.second');
+    });
+
+    it('throws SandboxDestroyedError when a transport failure is followed by 410 on the retry mint', async () => {
+      // The destroyed-mid-exec scenario: the cached lease's WS drops with
+      // no exit frame (looks like a transport failure), then the retry mint
+      // returns 410 (sandbox is actually gone). The error must be
+      // SandboxDestroyedError, not SandboxExecTransportError — the caller's
+      // recovery strategy is completely different (reprovision, not retry).
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.first' }))
+        .mockResolvedValueOnce(json({ error: { message: 'Gone', type: 'gone' } }, { status: 410 }));
+      const sockets: FakeSocket[] = [];
+      const factory: DirectExecWebSocketFactory = (endpoint, subprotocols) => {
+        const socket = new FakeSocket(endpoint, subprotocols);
+        sockets.push(socket);
+        queueMicrotask(() => {
+          socket.onopen?.({});
           socket.onclose?.({ code: 1006, reason: 'abnormal' });
         });
         return socket;
@@ -613,20 +689,248 @@ describe('PlatformSandbox', () => {
       });
 
       await sandbox._start();
-      const first = await sandbox.executeCommand('echo one');
-      const second = await sandbox.executeCommand('echo two');
-
-      expect(first).toMatchObject({ exitCode: 0, stdout: 'via-proxy-1' });
-      expect(second).toMatchObject({ exitCode: 0, stdout: 'via-proxy-2' });
-      // Fetch sequence: provision, first lease, /exec fallback, /exec fallback (no re-mint).
-      expect(fetchMock).toHaveBeenCalledTimes(4);
-      expect(String(fetchMock.mock.calls[1]![0])).toBe(
-        'https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec-lease',
-      );
-      expect(String(fetchMock.mock.calls[2]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec');
-      expect(String(fetchMock.mock.calls[3]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec');
-      // Only one WS attempt — kill switch prevents the second exec from retrying direct.
+      const { SandboxDestroyedError } = await import('./sandbox.js');
+      await expect(sandbox.executeCommand('echo one')).rejects.toBeInstanceOf(SandboxDestroyedError);
+      // provision + first lease (used for failed WS) + retry mint (410).
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      // Only one WS attempt was made — the retry mint 410'd before we could
+      // open a second socket.
       expect(sockets).toHaveLength(1);
+      // Sandbox id cleared — same invariant as the initial-410 case.
+      expect((sandbox as unknown as { _sandboxId: unknown })._sandboxId).toBeUndefined();
+    });
+
+    it('throws SandboxExecTransportError when both WS attempts fail against a live sandbox', async () => {
+      // Persistent transport failure with a still-alive sandbox at the
+      // control plane (mint keeps succeeding). This is the "Railway data
+      // plane is broken" signal — a loud, typed error the platform team
+      // can act on, replacing the old silent kill-switch-and-fallback.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.first' }))
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.second' }));
+      const sockets: FakeSocket[] = [];
+      const factory: DirectExecWebSocketFactory = (endpoint, subprotocols) => {
+        const socket = new FakeSocket(endpoint, subprotocols);
+        sockets.push(socket);
+        queueMicrotask(() => {
+          socket.onopen?.({});
+          socket.onclose?.({ code: 1011, reason: 'server_error' });
+        });
+        return socket;
+      };
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+      });
+
+      await sandbox._start();
+      const { SandboxExecTransportError } = await import('./sandbox.js');
+      const promise = sandbox.executeCommand('echo one');
+      await expect(promise).rejects.toBeInstanceOf(SandboxExecTransportError);
+      const error = (await promise.catch(e => e)) as InstanceType<typeof SandboxExecTransportError>;
+      expect(error).toMatchObject({
+        sandboxId: 'sbx_1',
+        command: 'echo one',
+        attempts: 2,
+        opened: true,
+        closeCode: 1011,
+        closeReason: 'server_error',
+        wsEndpoint: 'wss://ssh.railway.com:2226/ws/exec',
+      });
+      // provision + two mints. No /exec request.
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(sockets).toHaveLength(2);
+      // No /exec call was ever made.
+      for (const call of fetchMock.mock.calls) {
+        expect(String(call[0])).not.toMatch(/\/exec$/);
+      }
+
+      // The lease from the failed second attempt must be evicted so a caller
+      // that catches the transport error and re-runs the command doesn't
+      // waste its first WS attempt on the same implicated JWT.
+      expect((sandbox as unknown as { _lease: unknown })._lease).toBeNull();
+    });
+
+    it('coalesces concurrent execs during a transient WS failure into a single retry mint', async () => {
+      // Under a normal agent burst (parallel find_files / view / etc), the
+      // second-attempt lease mint must be shared by all in-flight execs
+      // rather than fanning out into N mints. This is the pathological
+      // pattern from prod incident 2026-07-29 that the coalescing guards
+      // against.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      // Delay the retry-mint response so all 10 execs pile into _ensureLease
+      // simultaneously and share it.
+      let releaseRetryMint!: () => void;
+      const retryMintPromise = new Promise<Response>(resolve => {
+        releaseRetryMint = () => resolve(leaseResponse({ jwt: 'jwt.retry' }));
+      });
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.first' }))
+        .mockImplementationOnce(() => retryMintPromise);
+      const sockets: FakeSocket[] = [];
+      const factory: DirectExecWebSocketFactory = (endpoint, subprotocols) => {
+        const socket = new FakeSocket(endpoint, subprotocols);
+        sockets.push(socket);
+        queueMicrotask(() => {
+          socket.onopen?.({});
+          if (subprotocols[1] === 'jwt.first') {
+            socket.onclose?.({ code: 1006, reason: 'abnormal' });
+          } else {
+            socket.fireBinary(1, 'ok');
+            socket.onmessage?.({ data: JSON.stringify({ type: 'exit', data: { exit_code: 0 } }) });
+          }
+        });
+        return socket;
+      };
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+      });
+
+      await sandbox._start();
+      // Fire 10 execs; all should share the retry mint after their first
+      // (cached-lease) WS fails.
+      const results = Promise.all(Array.from({ length: 10 }, (_, i) => sandbox.executeCommand(`echo ${i}`)));
+      // Let them all pile into _ensureLease after their first-attempt WS
+      // failure, then release the shared retry mint.
+      await new Promise(r => setTimeout(r, 0));
+      releaseRetryMint();
+      const finished = await results;
+
+      for (const result of finished) {
+        expect(result).toMatchObject({ success: true, exitCode: 0 });
+      }
+      // provision + first (cached) mint + exactly one retry mint (shared).
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not reuse a failed lease after a transport-failure retry succeeds', async () => {
+      // After the retry mint replaces the failed lease, the next exec must
+      // use the new lease's JWT — reusing the failed one would re-run the
+      // whole retry dance and defeat the point of the retry.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.first' }))
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.second' }));
+      const sockets: FakeSocket[] = [];
+      const factory: DirectExecWebSocketFactory = (endpoint, subprotocols) => {
+        const socket = new FakeSocket(endpoint, subprotocols);
+        sockets.push(socket);
+        queueMicrotask(() => {
+          socket.onopen?.({});
+          if (sockets.length === 1) {
+            socket.onclose?.({ code: 1006, reason: 'abnormal' });
+          } else {
+            socket.fireBinary(1, 'ok');
+            socket.onmessage?.({ data: JSON.stringify({ type: 'exit', data: { exit_code: 0 } }) });
+          }
+        });
+        return socket;
+      };
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+      });
+
+      await sandbox._start();
+      await sandbox.executeCommand('echo first');
+      await sandbox.executeCommand('echo second');
+
+      // provision + first mint + retry mint. Second exec must reuse the
+      // (now cached) jwt.second lease, not mint again and not reopen using
+      // jwt.first.
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(sockets).toHaveLength(3);
+      expect(sockets[2]!.subprotocols[1]).toBe('jwt.second');
+    });
+
+    it('does not evict a concurrently-cached fresh lease when an older attempt fails late', async () => {
+      // Race scenario: exec A opens a WS with lease-1, exec B is scheduled
+      // after A retries and caches lease-2, THEN A's second-attempt WS fails
+      // late. A must clear only lease-1 (already gone); it must not blow
+      // away lease-2 which exec B legitimately cached. Without the identity
+      // guard on `_lease` eviction, A would null the cache and force the
+      // next exec into an avoidable extra `/exec-lease` mint.
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.first' }))
+        .mockResolvedValueOnce(leaseResponse({ jwt: 'jwt.second' }));
+      const sockets: FakeSocket[] = [];
+      // Hand out a socket that never closes on demand, so we can drive the
+      // race deterministically from the test body instead of via
+      // queueMicrotask.
+      const factory: DirectExecWebSocketFactory = (endpoint, subprotocols) => {
+        const socket = new FakeSocket(endpoint, subprotocols);
+        sockets.push(socket);
+        return socket;
+      };
+
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        fetch: fetchMock,
+        webSocketFactory: factory,
+      });
+
+      await sandbox._start();
+
+      // Kick off exec A. It mints lease-1 and opens sockets[0].
+      const execA = sandbox.executeCommand('echo A').catch(err => err);
+      await vi.waitFor(() => expect(sockets).toHaveLength(1));
+      // A's first WS fails. It will now mint lease-2 for its retry attempt.
+      sockets[0]!.onopen?.({});
+      sockets[0]!.onclose?.({ code: 1006, reason: 'abnormal' });
+      await vi.waitFor(() => expect(sockets).toHaveLength(2));
+      // At this point A has cached lease-2 in `_lease` and is holding
+      // sockets[1] open. Fail sockets[1] to trigger A's final eviction
+      // path — but before that, "exec B" has *effectively* cached lease-2
+      // by being the one that owns it. When A's transport-failure throw
+      // clears the cache, an identity check must preserve lease-2 (still
+      // the currently-cached lease) so B (the next exec) reuses it.
+      const lease2 = (sandbox as unknown as { _lease: { jwt: string } | null })._lease;
+      expect(lease2?.jwt).toBe('jwt.second');
+
+      // Fail A's retry WS -> throws SandboxExecTransportError, tries to
+      // clear _lease. With the identity guard AND the fact that the still-
+      // cached lease IS the one that just failed, the cache is cleared;
+      // this test intentionally exercises the safe-clear branch by making
+      // no OTHER lease exist. The negative-race case is covered by the
+      // guarded assertion below: we manually inject a "concurrent fresh"
+      // lease before A's throw runs its eviction, and confirm A does NOT
+      // discard it.
+      const freshLease = { jwt: 'jwt.fresh', expiresAtMs: Date.now() + 60_000 } as const;
+      (sandbox as unknown as { _lease: unknown })._lease = freshLease;
+      sockets[1]!.onopen?.({});
+      sockets[1]!.onclose?.({ code: 1006, reason: 'abnormal' });
+      const err = await execA;
+      const { SandboxExecTransportError } = await import('./sandbox.js');
+      expect(err).toBeInstanceOf(SandboxExecTransportError);
+      // The freshLease we injected must survive A's eviction, because it
+      // is not the lease A failed on. Without the identity guard, this
+      // would be null.
+      expect((sandbox as unknown as { _lease: unknown })._lease).toBe(freshLease);
     });
 
     it('coalesces concurrent lease mints on a cold cache into a single POST /exec-lease', async () => {

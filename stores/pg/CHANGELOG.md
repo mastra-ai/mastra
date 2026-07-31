@@ -1,5 +1,14 @@
 # @mastra/pg
 
+## 1.19.0-alpha.1
+
+### Patch Changes
+
+- Improved PostgresStore startup: init now reads the schema catalog up front (3 read-only queries) instead of issuing hundreds of per-object existence checks and no-op DDL statements. On an already-migrated database this cuts init from ~350 serialized queries to 6, dropping init time on a 50ms connection from ~18.5s to ~0.5s. Fixed init failing for roles without CREATE privileges when the schema already exists, and removed a table lock that could block writers while init re-created triggers that were already in place. Fresh and partially-migrated databases are set up exactly as before. ([#20394](https://github.com/mastra-ai/mastra/pull/20394))
+
+- Updated dependencies [[`594f7b2`](https://github.com/mastra-ai/mastra/commit/594f7b28f5263fb9982fd50d95c471fb971ea984), [`311f943`](https://github.com/mastra-ai/mastra/commit/311f943bee60e8fdf5c84499ea50e884276c936c), [`0c89896`](https://github.com/mastra-ai/mastra/commit/0c8989673fb7d106837098398131e570c6023b68), [`23b4238`](https://github.com/mastra-ai/mastra/commit/23b423844ad0bcf2a502a68dd62866d6160f9f6d), [`e320a76`](https://github.com/mastra-ai/mastra/commit/e320a763feaf65c6be3cebecf746defcbde161b3), [`03b4918`](https://github.com/mastra-ai/mastra/commit/03b4918c80d188ce375334c393e131c6e94bd7eb), [`14ef73a`](https://github.com/mastra-ai/mastra/commit/14ef73a4bbd73e7808414816eb0628ce1d80b5d7), [`1d677d5`](https://github.com/mastra-ai/mastra/commit/1d677d5f99d7db403f7828585e8c25f299f72628), [`93e28ec`](https://github.com/mastra-ai/mastra/commit/93e28ecce9031c02397e0ae8406593e5c7a95883), [`729dab4`](https://github.com/mastra-ai/mastra/commit/729dab408faccfaef0cbb048e5a4338f9172847e), [`484003d`](https://github.com/mastra-ai/mastra/commit/484003d33ff59330c86b19863e4a38732d7e4155), [`933d291`](https://github.com/mastra-ai/mastra/commit/933d291146b789c19442ad206f94da3e4be90c64)]:
+  - @mastra/core@1.56.0-alpha.3
+
 ## 1.19.0-alpha.0
 
 ### Minor Changes

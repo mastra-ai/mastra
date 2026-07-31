@@ -321,6 +321,7 @@
         "glm-5",
         "glm-5.1",
         "glm-5.2",
+        "gpt-5.6-luna",
         "grok-4.5",
         "hy3",
         "kimi-k2.5",
@@ -359,6 +360,9 @@
         },
         "minimax-m2.5": {
           "npm": "@ai-sdk/anthropic"
+        },
+        "gpt-5.6-luna": {
+          "npm": "@ai-sdk/openai"
         },
         "grok-4.5": {
           "npm": "@ai-sdk/openai"
@@ -1646,6 +1650,7 @@
         "kimi-k2.6",
         "kimi-k2.7-code",
         "kimi-k3",
+        "kimi-k3-eco",
         "mimo-v2.5-pro",
         "minimax-m2.5",
         "qwen3.5-397b-a17b",
@@ -1695,6 +1700,9 @@
           "npm": "@ai-sdk/openai-compatible"
         },
         "kimi-k2.7-code": {
+          "npm": "@ai-sdk/openai-compatible"
+        },
+        "kimi-k3-eco": {
           "npm": "@ai-sdk/openai-compatible"
         },
         "kimi-k3": {
@@ -2837,7 +2845,7 @@
     },
     "the-grid-ai": {
       "url": "https://api.thegrid.ai/v1",
-      "apiKeyEnvVar": "THEGRIDAI_API_KEY",
+      "apiKeyEnvVar": "THEGRID_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "The Grid AI",
       "models": [
@@ -3558,6 +3566,7 @@
         "qwen3-5-9b",
         "qwen3-5-plus",
         "qwen3-6-27b",
+        "qwen3-6-35b-a3b",
         "qwen3-6-flash",
         "qwen3-6-max-preview",
         "qwen3-6-plus",
@@ -3699,8 +3708,6 @@
       "name": "Scaleway",
       "models": [
         "bge-multilingual-gemma2",
-        "devstral-2-123b-instruct-2512",
-        "gemma-3-27b-it",
         "gemma-4-26b-a4b-it",
         "glm-5.2",
         "gpt-oss-120b",
@@ -3713,12 +3720,10 @@
         "qwen3-embedding-8b",
         "qwen3.5-397b-a17b",
         "qwen3.6-35b-a3b",
-        "voxtral-small-24b-2507",
         "whisper-large-v3"
       ],
       "docUrl": "https://www.scaleway.com/en/docs/generative-apis/",
-      "gateway": "models.dev",
-      "deprecatedModels": ["devstral-2-123b-instruct-2512"]
+      "gateway": "models.dev"
     },
     "togetherai": {
       "apiKeyEnvVar": "TOGETHER_API_KEY",
@@ -4127,6 +4132,8 @@
       "models": [
         "Qwen/Qwen3.5-397B-A17B-FP8",
         "Qwen/Qwen3.6-35B-A3B",
+        "deepseek-v4-flash",
+        "gemma-4-31b",
         "glm-5.2",
         "glm-5.2-fast",
         "glm-5.2-flex",
@@ -5142,14 +5149,17 @@
         "kimi-k2.5",
         "kimi-k2.6",
         "kimi-k2.7-code",
+        "kimi-k3",
         "llama-3.3-70b-instruct",
         "llama-4-maverick-17b-128e-instruct-fp8",
         "minimax-m2.7",
+        "minimax-m3",
         "qwen3-coder-480b-a35b-instruct-int4-mixed-ar",
         "qwen3-next-80b-a3b-instruct",
         "qwen3.6-flash",
         "qwen3.6-max",
         "qwen3.6-plus",
+        "qwen3.7-flash",
         "qwen3.7-max",
         "qwen3.7-plus"
       ],
@@ -5576,6 +5586,7 @@
         "xai/grok-stt",
         "xai/grok-tts",
         "xai/grok-voice-think-fast-1.0",
+        "xai/grok-voice-think-fast-2.0",
         "xiaomi/mimo-v2.5",
         "xiaomi/mimo-v2.5-pro",
         "zai/glm-4.5",
@@ -5999,7 +6010,6 @@
         "openai/gpt-4o-mini",
         "openai/gpt-4o-mini-2024-07-18",
         "openai/gpt-5",
-        "openai/gpt-5-codex",
         "openai/gpt-5-image",
         "openai/gpt-5-image-mini",
         "openai/gpt-5-mini",
@@ -6039,12 +6049,10 @@
         "openai/o1",
         "openai/o1-pro",
         "openai/o3",
-        "openai/o3-deep-research",
         "openai/o3-mini",
         "openai/o3-mini-high",
         "openai/o3-pro",
         "openai/o4-mini",
-        "openai/o4-mini-deep-research",
         "openai/o4-mini-high",
         "openrouter/auto",
         "openrouter/bodybuilder",
@@ -6215,6 +6223,8 @@
         "openai/gpt-oss-20b",
         "stepfun-ai/Step-3.5-Flash",
         "stepfun-ai/Step-3.7-Flash",
+        "tencent/Hy3",
+        "thinkingmachines/Inkling",
         "zai-org/GLM-4.5",
         "zai-org/GLM-4.5-Air",
         "zai-org/GLM-4.5V",
@@ -6761,6 +6771,8 @@
         "google/gemini-2.5-pro",
         "google/gemini-3-flash-preview",
         "google/gemini-3.1-pro-preview",
+        "moonshot-ai/kimi-k2.7-code",
+        "moonshot-ai/kimi-k3",
         "nvidia/nemotron-3-super-120b-a12b",
         "openai/gpt-5-mini",
         "openai/gpt-5.1",
@@ -7464,6 +7476,7 @@
       "glm-5",
       "glm-5.1",
       "glm-5.2",
+      "gpt-5.6-luna",
       "grok-4.5",
       "hy3",
       "kimi-k2.5",
@@ -8578,6 +8591,7 @@
       "kimi-k2.6",
       "kimi-k2.7-code",
       "kimi-k3",
+      "kimi-k3-eco",
       "mimo-v2.5-pro",
       "minimax-m2.5",
       "qwen3.5-397b-a17b",
@@ -9750,6 +9764,7 @@
       "qwen3-5-9b",
       "qwen3-5-plus",
       "qwen3-6-27b",
+      "qwen3-6-35b-a3b",
       "qwen3-6-flash",
       "qwen3-6-max-preview",
       "qwen3-6-plus",
@@ -9826,8 +9841,6 @@
     ],
     "scaleway": [
       "bge-multilingual-gemma2",
-      "devstral-2-123b-instruct-2512",
-      "gemma-3-27b-it",
       "gemma-4-26b-a4b-it",
       "glm-5.2",
       "gpt-oss-120b",
@@ -9840,7 +9853,6 @@
       "qwen3-embedding-8b",
       "qwen3.5-397b-a17b",
       "qwen3.6-35b-a3b",
-      "voxtral-small-24b-2507",
       "whisper-large-v3"
     ],
     "togetherai": [
@@ -10088,6 +10100,8 @@
     "neuralwatt": [
       "Qwen/Qwen3.5-397B-A17B-FP8",
       "Qwen/Qwen3.6-35B-A3B",
+      "deepseek-v4-flash",
+      "gemma-4-31b",
       "glm-5.2",
       "glm-5.2-fast",
       "glm-5.2-flex",
@@ -10796,14 +10810,17 @@
       "kimi-k2.5",
       "kimi-k2.6",
       "kimi-k2.7-code",
+      "kimi-k3",
       "llama-3.3-70b-instruct",
       "llama-4-maverick-17b-128e-instruct-fp8",
       "minimax-m2.7",
+      "minimax-m3",
       "qwen3-coder-480b-a35b-instruct-int4-mixed-ar",
       "qwen3-next-80b-a3b-instruct",
       "qwen3.6-flash",
       "qwen3.6-max",
       "qwen3.6-plus",
+      "qwen3.7-flash",
       "qwen3.7-max",
       "qwen3.7-plus"
     ],
@@ -11208,6 +11225,7 @@
       "xai/grok-stt",
       "xai/grok-tts",
       "xai/grok-voice-think-fast-1.0",
+      "xai/grok-voice-think-fast-2.0",
       "xiaomi/mimo-v2.5",
       "xiaomi/mimo-v2.5-pro",
       "zai/glm-4.5",
@@ -11600,7 +11618,6 @@
       "openai/gpt-4o-mini",
       "openai/gpt-4o-mini-2024-07-18",
       "openai/gpt-5",
-      "openai/gpt-5-codex",
       "openai/gpt-5-image",
       "openai/gpt-5-image-mini",
       "openai/gpt-5-mini",
@@ -11640,12 +11657,10 @@
       "openai/o1",
       "openai/o1-pro",
       "openai/o3",
-      "openai/o3-deep-research",
       "openai/o3-mini",
       "openai/o3-mini-high",
       "openai/o3-pro",
       "openai/o4-mini",
-      "openai/o4-mini-deep-research",
       "openai/o4-mini-high",
       "openrouter/auto",
       "openrouter/bodybuilder",
@@ -11806,6 +11821,8 @@
       "openai/gpt-oss-20b",
       "stepfun-ai/Step-3.5-Flash",
       "stepfun-ai/Step-3.7-Flash",
+      "tencent/Hy3",
+      "thinkingmachines/Inkling",
       "zai-org/GLM-4.5",
       "zai-org/GLM-4.5-Air",
       "zai-org/GLM-4.5V",
@@ -12204,6 +12221,8 @@
       "google/gemini-2.5-pro",
       "google/gemini-3-flash-preview",
       "google/gemini-3.1-pro-preview",
+      "moonshot-ai/kimi-k2.7-code",
+      "moonshot-ai/kimi-k3",
       "nvidia/nemotron-3-super-120b-a12b",
       "openai/gpt-5-mini",
       "openai/gpt-5.1",
