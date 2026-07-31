@@ -109,6 +109,10 @@ export function SlackConnectionSettings() {
         <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
           {accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load Slack connection'}
         </Txt>
+      ) : accountsQuery.data?.reason === 'not_registered' ? (
+        <SettingsSubsection title="Connection">
+          <SlackNotConfigured reason="not_registered" />
+        </SettingsSubsection>
       ) : accountsQuery.data?.unavailable ? (
         <SettingsSubsection title="Connection">
           <SlackNotConfigured />
