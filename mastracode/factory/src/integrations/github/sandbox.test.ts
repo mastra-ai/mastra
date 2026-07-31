@@ -454,6 +454,33 @@ describe('materializeRepo', () => {
     expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
   });
 
+  it('keeps a dirty checkout as-is when pull.rebase turns the refusal into rebase wording', async () => {
+    // Same dirty checkout, different git config: with `pull.rebase` set, git
+    // refuses in rebase's words rather than merge's. It is still the session's
+    // own uncommitted work — keep it, never discard it to force the pull.
+    const sandbox = new FakeSandbox(script => {
+      if (script.includes('remote get-url origin')) {
+        return { exitCode: 0, stdout: 'https://github.com/octocat/hello.git\n', stderr: '' };
+      }
+      if (script.includes('pull --ff-only')) {
+        return {
+          exitCode: 1,
+          stdout: '',
+          stderr:
+            'error: cannot pull with rebase: Your index contains uncommitted changes.\nerror: Please commit or stash them.\n',
+        };
+      }
+      return OK;
+    });
+
+    await materializeRepo(makeRow({ materializedAt: new Date() }), makeRepoInfo(), sandbox, 'tok');
+
+    const joined = sandbox.calls.join('\n');
+    expect(joined).not.toContain('git clone');
+    expect(joined).not.toMatch(/rebase|reset --hard|stash|checkout --|clean -/);
+    expect(dbUpdates.at(-1)).toHaveProperty('materializedAt');
+  });
+
   it('treats a session branch without an upstream as materialized on re-open', async () => {
     // Session branches are created from FETCH_HEAD and have no tracking
     // branch; `git pull` then exits with "no tracking information".

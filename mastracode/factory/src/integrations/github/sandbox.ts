@@ -547,14 +547,15 @@ async function scrubRemote(
  * are created from `FETCH_HEAD`), or a detached HEAD. A checkout can also
  * hold uncommitted or untracked files (a build or script run left residue,
  * or an older session worked directly in the shared checkout), which makes
- * git refuse the merge outright. In all of these cases the checkout is
- * intact and may hold real work; materialization must keep it as-is rather
- * than fail the workspace open — and must never discard the local state to
- * force the pull through.
+ * git refuse the merge outright. A checkout carrying `pull.rebase` in its git
+ * config refuses for the same reason but says so in rebase's words instead of
+ * merge's. In all of these cases the checkout is intact and may hold real
+ * work; materialization must keep it as-is rather than fail the workspace
+ * open — and must never discard the local state to force the pull through.
  */
 function isBenignNonFastForward(result: SandboxCommandResult): boolean {
   const output = `${result.stderr || ''}\n${result.stdout || ''}`;
-  return /Not possible to fast-forward|Diverging branches can't be fast-forwarded|no tracking information for the current branch|You are not currently on a branch|Your local changes to the following files would be overwritten by merge|untracked working tree files would be overwritten by merge/i.test(
+  return /Not possible to fast-forward|Diverging branches can't be fast-forwarded|no tracking information for the current branch|You are not currently on a branch|Your local changes to the following files would be overwritten by merge|untracked working tree files would be overwritten by merge|cannot pull with rebase|cannot rebase: You have unstaged changes|Your index contains uncommitted changes/i.test(
     output,
   );
 }
