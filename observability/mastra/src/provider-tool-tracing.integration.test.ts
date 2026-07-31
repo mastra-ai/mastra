@@ -179,12 +179,18 @@ function buildDurableAgent(model: MockLanguageModelV2) {
   return { agent: mastra.getAgent('wrapped') as any, testExporter };
 }
 
-/** Wait until span delivery to the exporter quiesces (count stable across two checks). */
+/** Wait until span delivery to the exporter quiesces (count stable across several checks). */
 async function settle(testExporter: TestExporter, maxMs = 2000) {
   let prev = -1;
+  let stable = 0;
   for (let waited = 0; waited < maxMs; waited += 20) {
     const n = testExporter.getAllSpans().length;
-    if (n > 0 && n === prev) return;
+    if (n > 0 && n === prev) {
+      stable++;
+      if (stable >= 3) return;
+    } else {
+      stable = 0;
+    }
     prev = n;
     await new Promise(r => setTimeout(r, 20));
   }
@@ -252,5 +258,14 @@ describe('PROVIDER_TOOL_CALL span placement', () => {
     expect(providerSpan.parentSpanId).toBe(stepSpan.id);
     expect(providerSpan.input).toEqual({ query: 'AI news' });
     expect(providerSpan.output).toEqual({ answer: 'search results' });
+  });
+
+  it('creates a single span for a deferred result in the durable agent loop', async () => {
+    const { agent, testExporter } = buildDurableAgent(crossStepProviderToolModel());
+    await runToCompletion(agent, testExporter);
+
+    const providerSpans = testExporter.getSpansByType('provider_tool_call' as any);
+    expect(providerSpans).toHaveLength(1);
+    expect(providerSpans[0].output).toEqual({ answer: 'late results' });
   });
 });

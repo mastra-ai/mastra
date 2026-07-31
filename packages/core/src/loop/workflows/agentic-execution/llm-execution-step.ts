@@ -73,6 +73,8 @@ import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
 import { buildMessagesFromChunks } from './build-messages-from-chunks';
 import type { CollectedChunk } from './build-messages-from-chunks';
+import type { PendingProviderToolCall } from './provider-tool-spans';
+import { endPendingProviderToolSpan } from './provider-tool-spans';
 import { resolveConfiguredToolCallConcurrency, updateToolCallForeachConcurrency } from './tool-call-concurrency';
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 
@@ -153,59 +155,6 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   /** Closure-scoped map for provider tool calls awaiting a result, which may arrive in a later iteration. */
   pendingProviderToolCallsByToolCallId?: Map<string, PendingProviderToolCall>;
 };
-
-/**
- * Provider tool calls are stashed at call time and their PROVIDER_TOOL_CALL span is
- * created when the result arrives, so the span can parent under the MODEL_STEP that
- * is open at that moment — a span's parent cannot be changed after creation, and at
- * call time we can't know which step (same or a later one) will deliver the result.
- */
-type PendingProviderToolCall = {
-  toolName: string;
-  args?: unknown;
-  startTime: Date;
-  toolDescription?: string;
-  /** Anchor for calls whose result never arrives (run ends or stream errors). */
-  fallbackParentSpan: AnySpan;
-};
-
-function endPendingProviderToolSpan({
-  toolCallId,
-  pending,
-  parentSpan,
-  result,
-  logger,
-}: {
-  toolCallId: string;
-  pending: PendingProviderToolCall;
-  parentSpan: AnySpan;
-  result?: { output: unknown; isError?: boolean };
-  logger?: IMastraLogger;
-}): void {
-  try {
-    const span = parentSpan.createChildSpan({
-      type: SpanType.PROVIDER_TOOL_CALL,
-      name: `provider_tool: '${pending.toolName}'`,
-      entityType: EntityType.TOOL,
-      entityId: pending.toolName,
-      entityName: pending.toolName,
-      attributes: {
-        toolType: 'provider-tool',
-        toolDescription: pending.toolDescription,
-        toolCallId,
-      },
-      metadata: { toolCallId },
-      startTime: pending.startTime,
-      ...(pending.args !== undefined ? { input: pending.args } : {}),
-    });
-    span?.end(result ? { output: result.output, attributes: { success: !result.isError } } : undefined);
-  } catch (err) {
-    logger?.warn?.('[ProviderToolObservability] failed to create PROVIDER_TOOL_CALL span', {
-      error: err instanceof Error ? err.message : String(err),
-      toolName: pending.toolName,
-    });
-  }
-}
 
 type ToolResolvers = {
   resolveTool: (toolName: string) => ToolSet[string] | undefined;
