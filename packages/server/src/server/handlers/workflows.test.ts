@@ -1071,6 +1071,17 @@ describe('vNext Workflow Handlers', () => {
       return chunks;
     };
 
+    // Most assertions here are upper bounds ("exactly one cached copy per chunk"), and
+    // `vi.waitFor` alone can't police those: it resolves the moment the condition first
+    // holds, so a duplicate write landing right after would go unnoticed. Waiting for the
+    // condition removes the flakiness of a fixed delay; holding a short window afterwards
+    // and re-asserting is what actually catches a late or duplicate write.
+    const settles = async (assertion: () => void) => {
+      await vi.waitFor(assertion);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      assertion();
+    };
+
     it('caches each chunk once when two clients stream the same run', async () => {
       const serverCache = mockMastra.getServerCache();
       const pushed: any[] = [];
@@ -1093,10 +1104,11 @@ describe('vNext Workflow Handlers', () => {
       } as any);
 
       const [firstChunks] = await Promise.all([drain(first as ReadableStream), drain(second as ReadableStream)]);
-      await new Promise(resolve => setTimeout(resolve, 50));
 
       // One cached copy per chunk the client saw — not one per subscriber.
-      expect(pushed.length).toBe(firstChunks.length);
+      await settles(() => {
+        expect(pushed.length).toBe(firstChunks.length);
+      });
     });
 
     // `stream()` memoizes its output for a live run, so the test above would also pass
@@ -1145,15 +1157,16 @@ describe('vNext Workflow Handlers', () => {
       // behavior, independent of caching), so take whichever stream closes instead of
       // awaiting both.
       const completedChunks = await Promise.any([drain(first as ReadableStream), drain(second as ReadableStream)]);
-      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Premise: two calls, two separate outputs — nothing memoized this route.
       expect(outputs.length).toBe(2);
       expect(outputs[0]).not.toBe(outputs[1]);
       // The cache holds one run's worth of history: a pump per output would push
       // roughly double what any single subscriber saw.
-      expect(pushed.length).toBeGreaterThan(0);
-      expect(pushed.length).toBeLessThanOrEqual(completedChunks.length);
+      await settles(() => {
+        expect(pushed.length).toBeGreaterThan(0);
+        expect(pushed.length).toBeLessThanOrEqual(completedChunks.length);
+      });
     });
 
     it('caches chunks in emission order even when the cache backend resolves out of order', async () => {
@@ -1178,9 +1191,10 @@ describe('vNext Workflow Handlers', () => {
       } as any)) as ReadableStream;
 
       const emittedChunks = await drain(stream);
-      await new Promise(resolve => setTimeout(resolve, 50));
 
-      expect(pushedTypes).toEqual(emittedChunks.map(chunk => chunk?.type));
+      await settles(() => {
+        expect(pushedTypes).toEqual(emittedChunks.map(chunk => chunk?.type));
+      });
     });
 
     it('attaches a fresh pump for a later stream once the earlier pump for the same runId has settled', async () => {
@@ -1199,13 +1213,14 @@ describe('vNext Workflow Handlers', () => {
         inputData: {},
       } as any)) as ReadableStream;
 
-      await drain(first);
+      const firstChunks = await drain(first);
       // Let the pump's own (separate) fullStream subscription settle so its `.finally()`
       // removes the runId entry from the map.
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await settles(() => {
+        expect(pushed.length).toBe(firstChunks.length);
+      });
 
       const pushedAfterFirstRun = pushed.length;
-      expect(pushedAfterFirstRun).toBeGreaterThan(0);
 
       const second = (await STREAM_WORKFLOW_ROUTE.handler({
         mastra: mockMastra,
@@ -1215,29 +1230,31 @@ describe('vNext Workflow Handlers', () => {
       } as any)) as ReadableStream;
 
       await drain(second);
-      await new Promise(resolve => setTimeout(resolve, 50));
 
       // If the map entry had not been cleared, this second stream for the same runId
       // would be silently skipped and nothing new would reach the cache.
-      expect(pushed.length).toBeGreaterThan(pushedAfterFirstRun);
+      await vi.waitFor(() => {
+        expect(pushed.length).toBeGreaterThan(pushedAfterFirstRun);
+      });
     });
 
-    // Skipped: today, a disconnecting client wipes every listener on the run's shared
-    // emitter (packages/core/src/stream/RunOutput.ts:386 — `cancel()` calls
-    // `self.#emitter.removeAllListeners()` with no scoping), which also kills this pump's
-    // own subscription. Upstream PR #19745 fixes that `cancel()` to only remove its own
-    // listener instead of every listener on the run. Unskip this test once #19745 lands.
-    it.skip('keeps caching after the only client disconnects', async () => {
+    // This is the case the pump exists for: the cached history has to outlive the
+    // connection that happened to trigger the run. It depends on a client's `cancel()`
+    // detaching only its own listeners rather than every listener on the run's shared
+    // emitter, which landed upstream in #19745.
+    it('keeps caching after the only client disconnects', async () => {
       const serverCache = mockMastra.getServerCache();
       const pushed: any[] = [];
       vi.spyOn(serverCache!, 'listPush').mockImplementation(async (_key, value) => {
         pushed.push(value);
       });
 
+      const runId = 'test-run-cache-pump-drop';
+
       const stream = (await STREAM_WORKFLOW_ROUTE.handler({
         mastra: mockMastra,
         workflowId: 'test-workflow',
-        runId: 'test-run-cache-pump-drop',
+        runId,
         inputData: {},
       } as any)) as ReadableStream;
 
@@ -1245,10 +1262,26 @@ describe('vNext Workflow Handlers', () => {
       await reader.read();
       await reader.cancel(); // client goes away mid-run
 
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await vi.waitFor(() => {
+        // The pump is not tied to that connection, so the history is still complete.
+        expect(pushed.some(chunk => chunk?.type === 'workflow-finish')).toBe(true);
+      });
 
-      // The pump is not tied to that connection, so the history is still complete.
-      expect(pushed.some(chunk => chunk?.type === 'workflow-finish')).toBe(true);
+      // ...and the pump still settled, so it removed its own entry from the map: a
+      // later stream for this runId attaches a fresh pump instead of being skipped.
+      const pushedAfterDisconnect = pushed.length;
+
+      const second = (await STREAM_WORKFLOW_ROUTE.handler({
+        mastra: mockMastra,
+        workflowId: 'test-workflow',
+        runId,
+        inputData: {},
+      } as any)) as ReadableStream;
+
+      await drain(second);
+      await vi.waitFor(() => {
+        expect(pushed.length).toBeGreaterThan(pushedAfterDisconnect);
+      });
     });
 
     it('does not attach a pump when there is no server cache', async () => {
