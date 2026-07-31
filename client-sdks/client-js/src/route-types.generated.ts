@@ -2822,6 +2822,7 @@ type Shared_Type_122 = {
   toolMocks?: Shared_Type_120[] | undefined;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
+  scorerIds?: string[] | undefined;
   requestContext?:
     | {
         [key: string]: unknown;
@@ -17436,6 +17437,8 @@ export type PostDatasetsDatasetIdItems_Body = {
   toolMocks?: Shared_Type_120[] | undefined;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
+  /** IDs of scorers selected for this item */
+  scorerIds?: string[] | undefined;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -17489,6 +17492,7 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
     toolMocks?: Shared_Type_120[] | undefined;
     /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
     unmockedToolPolicy?: ('allow' | 'deny') | undefined;
+    scorerIds?: string[] | undefined;
     requestContext?:
       | {
           [key: string]: unknown;
@@ -17610,6 +17614,8 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
   toolMocks?: Shared_Type_120[] | undefined;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
+  /** IDs of scorers selected for this item */
+  scorerIds?: (string[] | undefined) | null;
   /** Request context preset for this item */
   requestContext?:
     | {
@@ -17731,6 +17737,7 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     toolMocks?: Shared_Type_120[] | undefined;
     /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
     unmockedToolPolicy?: ('allow' | 'deny') | undefined;
+    scorerIds?: string[] | undefined;
     metadata?:
       | {
           [key: string]: unknown;
