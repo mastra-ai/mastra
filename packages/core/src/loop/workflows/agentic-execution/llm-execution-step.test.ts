@@ -2601,6 +2601,12 @@ describe('PROVIDER_TOOL_CALL observability spans', () => {
   });
 
   it('parents the PROVIDER_TOOL_CALL span under the span active when the result arrives', async () => {
+    // Fake only Date so the backdated startTime is exactly observable; stream
+    // machinery timers stay real.
+    const callTime = new Date('2026-01-01T00:00:00.000Z');
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(callTime);
+
     const providerToolSpan = {
       id: 'server-span-1',
       type: SpanType.PROVIDER_TOOL_CALL,
@@ -2700,12 +2706,12 @@ describe('PROVIDER_TOOL_CALL observability spans', () => {
     await llmExecutionStep.execute(executeParams);
 
     // The span is created under the active span (the model step), not hoisted to AGENT_RUN,
-    // backdated to the tool-call chunk, with the stashed args as input.
+    // backdated to the exact tool-call chunk time, with the stashed args as input.
     expect(modelStepSpan.createChildSpan).toHaveBeenCalledWith(
       expect.objectContaining({
         type: SpanType.PROVIDER_TOOL_CALL,
         name: "provider_tool: 'web_search'",
-        startTime: expect.any(Date),
+        startTime: callTime,
         input: { query: 'AI news' },
       }),
     );
@@ -2714,6 +2720,8 @@ describe('PROVIDER_TOOL_CALL observability spans', () => {
       output: { answer: 'Latest AI news results' },
       attributes: { success: true },
     });
+
+    vi.useRealTimers();
   });
 
   it('falls back to the AGENT_RUN anchor when the step span has already ended', async () => {

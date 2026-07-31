@@ -41,7 +41,7 @@ export function endPendingProviderToolSpan({
       entityName: pending.toolName,
       attributes: {
         toolType: 'provider-tool',
-        toolDescription: pending.toolDescription,
+        ...(pending.toolDescription !== undefined ? { toolDescription: pending.toolDescription } : {}),
         toolCallId,
       },
       metadata: { toolCallId },
