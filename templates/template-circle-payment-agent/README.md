@@ -24,7 +24,7 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 
 - [Circle CLI](https://developers.circle.com/agent-stack/circle-cli/command-reference): `npm install -g @circle-fin/cli`
 - A Circle account. You log in and accept Circle's Terms of Use yourself, in your own terminal, because an agent must never accept them for you.
-- A [Mastra Gateway API key](https://mastra.ai/models/gateways/mastra): used by default, but you can swap in any model
+- An [OpenAI API key](https://platform.openai.com/api-keys): used by default, but you can swap in any model
 
 ## Quickstart 🚀
 
@@ -49,7 +49,7 @@ The agent finds a candidate service, inspects its price, and picks a payment cha
 
 ## Making it yours
 
-Set `LLM_MODEL` in `.env` to swap the model without touching code. Any Gateway model works, and you can point straight at a provider (`LLM_MODEL=openai/gpt-5-mini` with `OPENAI_API_KEY`), which is also the escape hatch when the Gateway account is out of inference credits. Beyond that, change the approval policy, or point the agent at your own endpoint: any x402-compatible service works, not just the marketplace, since the paid-call tool takes a URL, a method, and a payload. For a hard ceiling that holds even if the agent misbehaves, set per-transaction and daily caps on the wallet itself with `circle wallet policy`. The same wallet can also list a service of your own on the marketplace and collect per call. The agent and tools are all in `src/`, so edit them directly to fit your use case.
+Change the model in `src/mastra/agents/circle-payment-agent.ts` — any model Mastra can route to works. Beyond that, change the approval policy, or point the agent at your own endpoint: any x402-compatible service works, not just the marketplace, since the paid-call tool takes a URL, a method, and a payload. For a hard ceiling that holds even if the agent misbehaves, set per-transaction and daily caps on the wallet itself with `circle wallet policy`. The same wallet can also list a service of your own on the marketplace and collect per call. The agent and tools are all in `src/`, so edit them directly to fit your use case.
 
 ## About Mastra templates
 
