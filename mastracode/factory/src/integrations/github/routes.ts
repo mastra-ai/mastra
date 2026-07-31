@@ -21,6 +21,7 @@ import { streamSSE } from 'hono/streaming';
 import type { RouteAuth } from '../../routes/route.js';
 import { SandboxBudgetError } from '../../sandbox/fleet.js';
 import type { MaterializationSandbox, PrepareProgress, ProgressFn, SandboxFleet } from '../../sandbox/fleet.js';
+import type { SessionRetirementCoordinator } from '../../sandbox/session-retirement.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
@@ -129,6 +130,8 @@ export interface MountGithubRoutesOptions {
   projects?: FactoryProjectsStorage;
   /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
+  /** Shared teardown/scrub/cache retirement path for explicit session deletion. */
+  sessionRetirement?: SessionRetirementCoordinator;
 }
 
 /**
@@ -382,7 +385,7 @@ async function ingestPolledEvents(
  */
 export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { auth, fleet, storage, github, stateSigner, emitAudit } = options;
+  const { auth, fleet, storage, github, stateSigner, emitAudit, sessionRetirement } = options;
   const diagnostics = () =>
     getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, fleet });
 
@@ -938,7 +941,10 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
       handler: async c => {
         const loaded = await loadOrgProject({ github, auth, c: loose(c) });
         if ('response' in loaded) return loaded.response;
-        return c.json({ setupCommand: loaded.project.setupCommand });
+        return c.json({
+          setupCommand: loaded.project.setupCommand,
+          teardownCommand: loaded.project.teardownCommand,
+        });
       },
     }),
   );
@@ -952,36 +958,45 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const loaded = await loadOrgProject({ github, auth, c: loose(c) });
         if ('response' in loaded) return loaded.response;
 
-        let body: { setupCommand?: unknown };
+        let body: { setupCommand?: unknown; teardownCommand?: unknown };
         try {
           body = await c.req.json();
         } catch {
           return c.json({ error: 'Invalid JSON body' }, 400);
         }
-        if (body.setupCommand !== null && typeof body.setupCommand !== 'string') {
-          return c.json({ error: 'Invalid setupCommand' }, 400);
+        if (body.setupCommand === undefined && body.teardownCommand === undefined) {
+          return c.json({ error: 'At least one lifecycle command is required' }, 400);
         }
-        if (typeof body.setupCommand === 'string' && body.setupCommand.length > 2000) {
-          return c.json({ error: 'setupCommand too long (max 2000 characters)' }, 400);
-        }
-        // Reject control characters (except newline/tab). The command is a
-        // shell script by design, but escape sequences and NULs have no
-        // legitimate use and can spoof logs or confuse the sandbox shell.
-        if (typeof body.setupCommand === 'string' && /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(body.setupCommand)) {
-          return c.json({ error: 'setupCommand contains control characters' }, 400);
-        }
-        // An empty/whitespace command means "no setup step".
-        const setupCommand =
-          typeof body.setupCommand === 'string' && body.setupCommand.trim().length > 0
-            ? body.setupCommand.trim()
-            : null;
+        const parseCommand = (name: 'setupCommand' | 'teardownCommand', value: unknown) => {
+          if (value === undefined) return { command: undefined };
+          if (value !== null && typeof value !== 'string') return { error: `Invalid ${name}` };
+          if (typeof value === 'string' && value.length > 2000) {
+            return { error: `${name} too long (max 2000 characters)` };
+          }
+          if (typeof value === 'string' && /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value)) {
+            return { error: `${name} contains control characters` };
+          }
+          return { command: typeof value === 'string' && value.trim().length > 0 ? value.trim() : null };
+        };
+        const setup = parseCommand('setupCommand', body.setupCommand);
+        if ('error' in setup) return c.json({ error: setup.error }, 400);
+        const teardown = parseCommand('teardownCommand', body.teardownCommand);
+        if ('error' in teardown) return c.json({ error: teardown.error }, 400);
+        const setupCommand = setup.command;
+        const teardownCommand = teardown.command;
 
         await github.sourceControlStorage.projectRepositories.update({
           orgId: loaded.project.installation.orgId,
           id: loaded.project.id,
-          input: { setupCommand },
+          input: {
+            ...(setupCommand !== undefined ? { setupCommand } : {}),
+            ...(teardownCommand !== undefined ? { teardownCommand } : {}),
+          },
         });
-        return c.json({ setupCommand });
+        return c.json({
+          setupCommand: setupCommand === undefined ? loaded.project.setupCommand : setupCommand,
+          teardownCommand: teardownCommand === undefined ? loaded.project.teardownCommand : teardownCommand,
+        });
       },
     }),
   );
@@ -1047,7 +1062,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   );
 
   // ── Sessions / commit / push / PR ────────────────────────────────────────
-  routes.push(...buildProjectGitRoutes({ github, auth, fleet, emitAudit }));
+  routes.push(...buildProjectGitRoutes({ github, auth, fleet, emitAudit, sessionRetirement }));
 
   return routes;
 }
@@ -1275,11 +1290,13 @@ function buildProjectGitRoutes({
   auth,
   fleet,
   emitAudit,
+  sessionRetirement,
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
   fleet: SandboxFleet;
   emitAudit?: AuditEmitter['emit'];
+  sessionRetirement?: SessionRetirementCoordinator;
 }): ApiRoute[] {
   return [
     // ── Create / list Factory sessions ──────────────────────────────────────
@@ -1353,6 +1370,15 @@ function buildProjectGitRoutes({
         const session = await github.sourceControlStorage.sessions.getBySessionId(c.req.param('sessionId'));
         if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
           return c.json({ error: 'Session not found' }, 404);
+        }
+        if (sessionRetirement) {
+          await sessionRetirement.retireSession({
+            sourceControl: github.sourceControlStorage,
+            orgId: session.orgId,
+            sessionId: session.sessionId,
+            deleteSession: true,
+          });
+          return c.json({ removed: true });
         }
         if (session.sandboxId && fleet.provider !== 'local' && session.sandboxWorkdir) {
           // Keep the remote VM alive: return it to the reuse pool so the next

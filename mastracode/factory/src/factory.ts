@@ -27,7 +27,6 @@ import { hasAuthInit } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
-import { LocalSandbox } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import type { FactoryAuthUser } from './auth.js';
 import {
@@ -41,7 +40,6 @@ import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools }
 import type { GithubIntegration } from './integrations/github/integration.js';
 import type { GithubIssueTriageInput, GithubIssueTriageResult } from './integrations/github/issue-triage.js';
 import { recordFactoryPullRequestProvenance } from './integrations/github/provenance.js';
-import { releaseWorkItemSandboxes } from './integrations/github/sandbox-release.js';
 import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
 import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createCustomProvidersPrimer, registerCustomProvidersSource } from './routes/custom-provider-source.js';
@@ -62,6 +60,7 @@ import type { FactoryRules } from './rules/types.js';
 import { assertFactoryRules } from './rules/validation.js';
 import { SandboxFleet } from './sandbox/fleet.js';
 import { registerSandboxReattach } from './sandbox/reattach.js';
+import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
 import { handleServerError } from './server-error.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -80,7 +79,7 @@ import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { timedPhase } from './timing.js';
-import { createWorkspaceFactory } from './workspace.js';
+import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
 
 type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
 
@@ -389,14 +388,6 @@ export class MastraFactory {
       workItems: workItemsStorage,
       channelIdentity: channelIdentityStorage,
     };
-    const projectRoutes = new ProjectRoutes({
-      auth: routeAuth,
-      projects: factoryProjectsStorage,
-      sourceControl: sourceControlStorage,
-      versionControlIntegrationIds: integrations
-        .filter(integration => integration.versionControl)
-        .map(integration => integration.id),
-    });
     const auditDomain = new AuditDomain({
       auth: routeAuth,
       audit: auditStorage,
@@ -437,6 +428,7 @@ export class MastraFactory {
     // Core's `getDynamicWorkspace` reattaches project sandboxes through the
     // SDK seam; only this factory owns the fleet, so register it here.
     registerSandboxReattach(fleet);
+    const workspaceRegistry = new FactoryWorkspaceRegistry();
 
     // One shared OAuth state signer per boot. The deploy entry supplies a
     // replica-stable secret when needed; otherwise local development gets a
@@ -516,17 +508,23 @@ export class MastraFactory {
       | GithubIntegration
       | undefined;
     const workItemsReady = storage.isDomainReady('work-items');
-    // Terminal work items release their session sandboxes back to the reuse
-    // pool so the next session for the same repository/user claims a warm VM
-    // instead of provisioning fresh. Remote providers only: local "sandboxes"
-    // are the host machine with per-session workdirs — nothing to pool.
-    const releaseTerminalSandboxes =
-      machine && !(machine instanceof LocalSandbox) && workItemsReady && storage.isDomainReady('source-control')
+    const sessionRetirement =
+      machine && storage.isDomainReady('source-control')
+        ? new SessionRetirementCoordinator({
+            fleet,
+            invalidateSession: sessionId => workspaceRegistry.invalidateSession(sessionId),
+          })
+        : undefined;
+    // Terminal sessions use the same retirement path as explicit deletion:
+    // teardown first, then local destruction or remote scrub/pooling, followed
+    // by runtime workspace/token-cache invalidation. Session rows remain so a
+    // reopened work item can rematerialize and rerun setup.
+    const retireTerminalSessions =
+      sessionRetirement && githubIntegration && workItemsReady
         ? async ({ orgId, workItemId }: { orgId: string; workItemId: string }) =>
-            releaseWorkItemSandboxes({
+            sessionRetirement.retireWorkItemSessions({
               workItems: workItemsStorage,
-              sourceControl: sourceControlStorage.forIntegration('github'),
-              fleet,
+              sourceControl: sourceControlStorage.forIntegration(githubIntegration.id),
               orgId,
               workItemId,
             })
@@ -535,9 +533,18 @@ export class MastraFactory {
       ? new FactoryTransitionService({
           rules,
           storage: workItemsStorage,
-          ...(releaseTerminalSandboxes ? { onTerminalStage: releaseTerminalSandboxes } : {}),
+          ...(retireTerminalSessions ? { onTerminalStage: retireTerminalSessions } : {}),
         })
       : undefined;
+    const projectRoutes = new ProjectRoutes({
+      auth: routeAuth,
+      projects: factoryProjectsStorage,
+      sourceControl: sourceControlStorage,
+      versionControlIntegrationIds: integrations
+        .filter(integration => integration.versionControl)
+        .map(integration => integration.id),
+      ...(sessionRetirement ? { sessionRetirement } : {}),
+    });
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
           rules,
@@ -607,6 +614,7 @@ export class MastraFactory {
           ...(githubIntegration ? { github: githubIntegration } : {}),
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           fleet,
+          workspaceRegistry,
         }),
         disableGithubSignals: true,
         // Memory settings live in the factory's `memory-settings` app table (per
@@ -702,6 +710,7 @@ export class MastraFactory {
             factoryStorage: storage,
             integrationStorage,
             sourceControlStorage,
+            sessionRetirement,
             domains,
             integrations: integrationRegistrations,
             intakeReady,
@@ -810,6 +819,7 @@ export class MastraFactory {
               factoryStorage: storage,
               integrationStorage,
               sourceControlStorage,
+              sessionRetirement,
               rules,
               factoryReady,
               domains,
@@ -840,6 +850,7 @@ export class MastraFactory {
               factoryStorage: storage,
               integrationStorage,
               sourceControlStorage,
+              sessionRetirement,
               rules,
               factoryReady,
               domains,

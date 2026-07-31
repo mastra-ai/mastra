@@ -53,6 +53,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   transitionService?: Pick<FactoryTransitionService, 'transition' | 'ruleSetVersion'>;
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
+  /** Retires every source-control session before a work item is deleted. */
+  retireWorkItemSessions?: (input: { orgId: string; workItemId: string }) => Promise<void>;
 }
 
 function loose(c: unknown): Context {
@@ -464,7 +466,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
   /** Build the Factory work-item routes as Mastra `apiRoutes`. */
   routes(): ApiRoute[] {
-    const { audit, workItems, queueHealth, transitionService, startCoordinator } = this.deps;
+    const { audit, workItems, queueHealth, transitionService, startCoordinator, retireWorkItemSessions } = this.deps;
     return [
       // ── List the org's work items for a project ─────────────────────────────
       registerApiRoute('/web/factory/projects/:id/work-items', {
@@ -807,6 +809,12 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!id || !UUID_RE.test(id)) return c.json({ error: 'Work item not found' }, 404);
 
           await workItems.ensureReady();
+          const existing = await workItems.get({ orgId: tenant.orgId, id });
+          if (!existing) return c.json({ error: 'Work item not found' }, 404);
+          if (Object.keys(existing.sessions).length > 0 && !retireWorkItemSessions) {
+            return c.json({ error: 'session_retirement_unavailable' }, 409);
+          }
+          await retireWorkItemSessions?.({ orgId: tenant.orgId, workItemId: id });
           const deleted = await workItems.delete({ orgId: tenant.orgId, id });
           if (!deleted) return c.json({ error: 'Work item not found' }, 404);
           await audit.emit({

@@ -106,6 +106,7 @@ function projectRepositoryRow(row: Record<string, any>) {
     sandboxProvider: row.sandboxProvider ?? 'railway',
     sandboxWorkdir: row.sandboxWorkdir,
     setupCommand: row.setupCommand ?? null,
+    teardownCommand: row.teardownCommand ?? null,
     createdAt: now,
     updatedAt: now,
   };
@@ -587,6 +588,7 @@ function buildApp(
     controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
     runIssueTriage?: (input: any) => Promise<{ threadId?: string; projectPath?: string; branch?: string }>;
     stateSigner?: typeof stateSigner | null;
+    sessionRetirement?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['sessionRetirement'];
   } = {},
 ) {
   const app = new Hono();
@@ -1383,7 +1385,9 @@ describe('ensure (materialize)', () => {
 });
 
 // ── Phase 4: worktree / commit / push / pr git routes ─────────────────────
-function seedMaterializedProject(opts: { orgId?: string; userId?: string; setupCommand?: string | null } = {}) {
+function seedMaterializedProject(
+  opts: { orgId?: string; userId?: string; setupCommand?: string | null; teardownCommand?: string | null } = {},
+) {
   const orgId = opts.orgId ?? 'org1';
   const userId = opts.userId ?? 'u1';
   tables.projectRepositories.push(
@@ -1397,6 +1401,7 @@ function seedMaterializedProject(opts: { orgId?: string; userId?: string; setupC
       defaultBranch: 'main',
       sandboxWorkdir: '/workspace/hello',
       setupCommand: opts.setupCommand ?? null,
+      teardownCommand: opts.teardownCommand ?? null,
     }),
   );
   tables.sandboxes.push(
@@ -1690,11 +1695,17 @@ describe('project settings routes', () => {
     expect(res.status).toBe(404);
   });
 
-  it('returns the stored setup command', async () => {
-    seedMaterializedProject({ setupCommand: 'pnpm i && pnpm build' });
+  it('returns the stored lifecycle commands', async () => {
+    seedMaterializedProject({
+      setupCommand: 'pnpm i && pnpm build',
+      teardownCommand: 'pnpm local worktree teardown',
+    });
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/settings');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ setupCommand: 'pnpm i && pnpm build' });
+    expect(await res.json()).toEqual({
+      setupCommand: 'pnpm i && pnpm build',
+      teardownCommand: 'pnpm local worktree teardown',
+    });
   });
 
   it('persists a trimmed setup command', async () => {
@@ -1703,7 +1714,7 @@ describe('project settings routes', () => {
       setupCommand: '  pnpm i && pnpm build  ',
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ setupCommand: 'pnpm i && pnpm build' });
+    expect(await res.json()).toEqual({ setupCommand: 'pnpm i && pnpm build', teardownCommand: null });
     expect(tables.projectRepositories[0].setupCommand).toBe('pnpm i && pnpm build');
   });
 
@@ -1711,12 +1722,12 @@ describe('project settings routes', () => {
     seedMaterializedProject({ setupCommand: 'pnpm i' });
     const app = buildApp({ workosId: 'u1' });
     const res = await postJson(app, '/web/github/projects/p1/settings', { setupCommand: '   ' });
-    expect(await res.json()).toEqual({ setupCommand: null });
+    expect(await res.json()).toEqual({ setupCommand: null, teardownCommand: null });
     expect(tables.projectRepositories[0].setupCommand).toBeNull();
 
     tables.projectRepositories[0].setupCommand = 'pnpm i';
     const res2 = await postJson(app, '/web/github/projects/p1/settings', { setupCommand: null });
-    expect(await res2.json()).toEqual({ setupCommand: null });
+    expect(await res2.json()).toEqual({ setupCommand: null, teardownCommand: null });
     expect(tables.projectRepositories[0].setupCommand).toBeNull();
   });
 
@@ -1751,6 +1762,31 @@ describe('project settings routes', () => {
     });
     expect(res2.status).toBe(200);
   });
+
+  it('persists, clears, and validates teardown commands like setup commands', async () => {
+    seedMaterializedProject({ setupCommand: 'pnpm install' });
+    const app = buildApp({ workosId: 'u1' });
+    const saved = await postJson(app, '/web/github/projects/p1/settings', {
+      teardownCommand: '  docker compose down --remove-orphans  ',
+    });
+    expect(await saved.json()).toEqual({
+      setupCommand: 'pnpm install',
+      teardownCommand: 'docker compose down --remove-orphans',
+    });
+    expect(tables.projectRepositories[0].teardownCommand).toBe('docker compose down --remove-orphans');
+
+    const invalid = await postJson(app, '/web/github/projects/p1/settings', {
+      teardownCommand: 'docker compose down\u001b[31m',
+    });
+    expect(invalid.status).toBe(400);
+    expect(tables.projectRepositories[0].teardownCommand).toBe('docker compose down --remove-orphans');
+
+    const cleared = await postJson(app, '/web/github/projects/p1/settings', { teardownCommand: null });
+    expect(await cleared.json()).toEqual({ setupCommand: 'pnpm install', teardownCommand: null });
+
+    const empty = await postJson(app, '/web/github/projects/p1/settings', {});
+    expect(empty.status).toBe(400);
+  });
 });
 
 describe('Factory session routes', () => {
@@ -1774,6 +1810,39 @@ describe('Factory session routes', () => {
     expect(tables.sessions).toHaveLength(1);
     expect(ensureWorktree).not.toHaveBeenCalled();
     expect(ensureProjectSandbox).not.toHaveBeenCalled();
+  });
+
+  it('uses the shared retirement lifecycle for explicit session deletion', async () => {
+    seedMaterializedProject({ teardownCommand: 'pnpm local teardown' });
+    const sessionId = '11111111-2222-4333-8444-555555555555';
+    tables.sessions.push({
+      id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      sessionId,
+      projectRepositoryId: 'p1',
+      orgId: 'org1',
+      userId: 'u1',
+      branch: 'feat/x',
+      baseBranch: 'main',
+      sandboxId: 'sandbox-1',
+      sandboxWorkdir: '/workspace/hello',
+      materializedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const retireSession = vi.fn(async () => {});
+
+    const deleted = await buildApp(
+      { workosId: 'u1' },
+      { sessionRetirement: { retireSession } as any },
+    ).request(`/web/user-sessions/${sessionId}`, { method: 'DELETE' });
+
+    expect(deleted.status).toBe(200);
+    expect(retireSession).toHaveBeenCalledWith({
+      sourceControl: githubStub.sourceControlStorage,
+      orgId: 'org1',
+      sessionId,
+      deleteSession: true,
+    });
   });
 
   it('reuses the session for the same repository, user, and branch', async () => {

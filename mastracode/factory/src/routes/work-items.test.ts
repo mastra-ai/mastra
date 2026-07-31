@@ -44,6 +44,7 @@ function buildApp(
   user: { workosId: string; organizationId?: string } | null,
   startCoordinator?: { prepare: (input: any) => Promise<any> },
   requestContext?: RequestContext,
+  retireWorkItemSessions?: (input: { orgId: string; workItemId: string }) => Promise<void>,
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -61,6 +62,7 @@ function buildApp(
       queueHealth: seed.queueHealth,
       transitionService: new FactoryTransitionService({ rules: builtInFactoryRules(), storage: seed.workItems }),
       startCoordinator,
+      retireWorkItemSessions,
     }).routes(),
   );
   return app;
@@ -495,6 +497,54 @@ describe('DELETE /web/factory/work-items/:id', () => {
     const res = await json('DELETE', `/web/factory/work-items/${workItem.id}`);
     expect((await res.json()).ok).toBe(true);
     expect(await listItems()).toHaveLength(0);
+  });
+
+  it('retires active sessions before deleting the item', async () => {
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const { workItem } = await created.json();
+    const retireWorkItemSessions = vi.fn(async () => {
+      expect(await seed.workItems.get({ orgId: 'org1', id: workItem.id })).not.toBeNull();
+    });
+
+    const response = await buildApp(orgUser, undefined, undefined, retireWorkItemSessions).request(
+      `/web/factory/work-items/${workItem.id}`,
+      { method: 'DELETE' },
+    );
+
+    expect(response.status).toBe(200);
+    expect(retireWorkItemSessions).toHaveBeenCalledWith({ orgId: 'org1', workItemId: workItem.id });
+    expect(await seed.workItems.get({ orgId: 'org1', id: workItem.id })).toBeNull();
+  });
+
+  it('keeps the item when session retirement cannot complete', async () => {
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const { workItem } = await created.json();
+    const app = buildApp(orgUser, undefined, undefined, async () => {
+      throw new Error('retirement unavailable');
+    });
+
+    const response = await app.request(`/web/factory/work-items/${workItem.id}`, { method: 'DELETE' });
+
+    expect(response.status).toBe(500);
+    expect(await seed.workItems.get({ orgId: 'org1', id: workItem.id })).not.toBeNull();
+  });
+
+  it('rejects deleting an item with sessions when retirement is unavailable', async () => {
+    const created = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({
+        sessions: {
+          work: { sessionId: 'session-1', branch: 'factory/issue-42', threadId: 'thread-1' },
+        },
+      }),
+    );
+    const { workItem } = await created.json();
+
+    const response = await json('DELETE', `/web/factory/work-items/${workItem.id}`);
+
+    expect(response.status).toBe(409);
+    expect(await seed.workItems.get({ orgId: 'org1', id: workItem.id })).not.toBeNull();
   });
 
   it('404s for unknown or cross-org items', async () => {

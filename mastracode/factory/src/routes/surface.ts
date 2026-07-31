@@ -14,6 +14,7 @@ import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRules } from '../rules/types.js';
 import type { SandboxFleet } from '../sandbox/fleet.js';
+import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
@@ -59,6 +60,7 @@ export interface FactoryApiRoutesDeps {
   factoryStorage?: FactoryStorage;
   integrationStorage: IntegrationStorage;
   sourceControlStorage: SourceControlStorage;
+  sessionRetirement?: SessionRetirementCoordinator;
   /** App-table domain handles, registered and owned by `MastraFactory.prepare()`. */
   domains: {
     intake: IntakeStorage;
@@ -201,7 +203,14 @@ async function prepareFactoryRuleBinding(
 export function buildIntegrationContext(
   deps: Pick<
     FactoryApiRoutesDeps,
-    'controller' | 'publicOrigin' | 'auth' | 'fleet' | 'factoryStorage' | 'integrationStorage' | 'sourceControlStorage'
+    | 'controller'
+    | 'publicOrigin'
+    | 'auth'
+    | 'fleet'
+    | 'factoryStorage'
+    | 'integrationStorage'
+    | 'sourceControlStorage'
+    | 'sessionRetirement'
   > & {
     stateSigner: StateSigner;
     emitAudit?: AuditEmitter['emit'];
@@ -218,6 +227,7 @@ export function buildIntegrationContext(
     baseUrl: deps.publicOrigin,
     controller: deps.controller,
     stateSigner: deps.stateSigner,
+    ...(deps.sessionRetirement ? { sessionRetirement: deps.sessionRetirement } : {}),
     storage: {
       generic: deps.integrationStorage.forIntegration(integrationId),
       sourceControl: deps.sourceControlStorage.forIntegration(integrationId),
@@ -386,6 +396,25 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
+          ...(deps.sessionRetirement
+            ? {
+                retireWorkItemSessions: async ({ orgId, workItemId }) => {
+                  const handles = (deps.integrations ?? [])
+                    .filter(({ integration }) => integration.versionControl)
+                    .map(({ integration }) => deps.sourceControlStorage.forIntegration(integration.id));
+                  await Promise.all(
+                    handles.map(sourceControl =>
+                      deps.sessionRetirement!.retireWorkItemSessions({
+                        workItems: deps.domains.workItems,
+                        sourceControl,
+                        orgId,
+                        workItemId,
+                      }),
+                    ),
+                  );
+                },
+              }
+            : {}),
         }).routes()
       : []),
   ];

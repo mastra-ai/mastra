@@ -338,6 +338,7 @@ describe('S7 — cross-user teardown isolation (route level)', () => {
         sandboxProvider: 'railway',
         sandboxWorkdir: '/workspace/hello',
         setupCommand: null,
+        teardownCommand: null,
         createdAt: now,
         updatedAt: now,
       },

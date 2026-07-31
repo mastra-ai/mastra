@@ -22,6 +22,7 @@ import {
   materializeRepo,
   recycleClaimedWorkdir,
   runWorktreeSetup,
+  runWorktreeTeardown,
 } from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
@@ -125,10 +126,51 @@ export interface CreateWorkspaceFactoryOptions {
    * review-board sessions get the reviewer PAT as `GH_TOKEN`. Optional —
    * without it every session uses the default (worker) PAT. */
   workItems?: Pick<WorkItemsStorage, 'findRunBindingBySession'>;
+  /** Runtime workspace/token registrations invalidated when a session retires. */
+  workspaceRegistry?: FactoryWorkspaceRegistry;
+}
+
+type WorkspaceUnregister = () => Promise<void> | void;
+
+/** Tracks dynamic Factory workspaces by persisted session id for retirement. */
+export class FactoryWorkspaceRegistry {
+  readonly #entries = new Map<string, Map<string, WorkspaceUnregister>>();
+  readonly #generations = new Map<string, number>();
+
+  generation(sessionId: string): number {
+    return this.#generations.get(sessionId) ?? 0;
+  }
+
+  async register(
+    sessionId: string,
+    workspaceId: string,
+    generation: number,
+    unregister: WorkspaceUnregister,
+  ): Promise<boolean> {
+    if (generation !== this.generation(sessionId)) {
+      await unregister();
+      return false;
+    }
+    const entries = this.#entries.get(sessionId) ?? new Map<string, WorkspaceUnregister>();
+    entries.set(workspaceId, unregister);
+    this.#entries.set(sessionId, entries);
+    return true;
+  }
+
+  async invalidateSession(sessionId: string): Promise<void> {
+    this.#generations.set(sessionId, this.generation(sessionId) + 1);
+    const entries = this.#entries.get(sessionId);
+    if (!entries) return;
+    this.#entries.delete(sessionId);
+    const results = await Promise.allSettled([...entries.values()].map(unregister => unregister()));
+    const failure = results.find(result => result.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
+  }
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
   const { sandbox: sandboxConfig, github, fleet, workItems } = options;
+  const workspaceRegistry = options.workspaceRegistry ?? new FactoryWorkspaceRegistry();
   const isLocalSandbox = sandboxConfig?.machine instanceof LocalSandbox;
   const githubTokenInjectors = new Map<
     string,
@@ -207,6 +249,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
 
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
     const workspaceId = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
+    const workspaceGeneration = workspaceRegistry.generation(session.sessionId);
     const configDir = sandboxConfig.workdir ?? DEFAULT_CONFIG_DIR;
     try {
       const existing = mastra?.getWorkspaceById(workspaceId) as Workspace | undefined;
@@ -334,7 +377,25 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         token,
         repoFullName: repoFullName,
       });
-      if (projectRepository.setupCommand) await runWorktreeSetup(sandbox, workdir, projectRepository.setupCommand);
+      if (projectRepository.setupCommand) {
+        try {
+          await runWorktreeSetup(sandbox, workdir, projectRepository.setupCommand);
+        } catch (setupError) {
+          if (projectRepository.teardownCommand) {
+            try {
+              await runWorktreeTeardown(sandbox, workdir, projectRepository.teardownCommand);
+            } catch (teardownError) {
+              console.warn('[Mastra Factory] Worktree teardown after setup failure failed', {
+                orgId: session.orgId,
+                sessionId: session.sessionId,
+                projectRepositoryId: session.projectRepositoryId,
+                error: teardownError instanceof Error ? teardownError.message.slice(-2000) : String(teardownError),
+              });
+            }
+          }
+          throw setupError;
+        }
+      }
 
       const injectGithubToken = (freshToken: string) => {
         if (!sandbox.setEnvironmentVariable) {
@@ -369,6 +430,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // concurrent lookup on another request cannot observe an unregistered
       // workspace.
       mastra?.addWorkspace(workspace, workspaceId, { source: 'mastra' });
+      const registered = await workspaceRegistry.register(
+        session.sessionId,
+        workspaceId,
+        workspaceGeneration,
+        async () => {
+          githubTokenInjectors.delete(workspaceId);
+          await mastra?.removeWorkspace?.(workspaceId);
+        },
+      );
+      if (!registered) {
+        throw new Error(`Factory session ${session.sessionId} was retired during workspace materialization`);
+      }
       return workspace;
     };
 

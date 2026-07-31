@@ -1091,6 +1091,7 @@ export class GithubIntegration implements FactoryIntegration {
       emitAudit: ctx.hooks?.emitAudit,
       projects: ctx.storage.projects,
       ingestFactoryEvent,
+      sessionRetirement: ctx.sessionRetirement,
     });
   }
 

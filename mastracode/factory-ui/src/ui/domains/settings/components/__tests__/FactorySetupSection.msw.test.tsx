@@ -11,6 +11,7 @@ import { FactorySetupSection } from '../FactorySetupSection';
 
 const SETTINGS_URL = `${TEST_BASE_URL}/web/github/projects/ghp-1/settings`;
 const FIELD = 'Setup command for mastra';
+const TEARDOWN_FIELD = 'Teardown command for mastra';
 
 const emptyFactory: FactoryProject = { id: 'fp-1', name: 'mastra', repositories: [] };
 const factory: FactoryProject = {
@@ -19,7 +20,7 @@ const factory: FactoryProject = {
   repositories: [{ projectRepositoryId: 'ghp-1', slug: 'mastra' }],
 };
 
-function useSettingsHandlers(initial: RepositorySettings = { setupCommand: null }) {
+function useSettingsHandlers(initial: RepositorySettings = { setupCommand: null, teardownCommand: null }) {
   const saved: RepositorySettings[] = [];
   server.use(
     http.get(SETTINGS_URL, () => HttpResponse.json(initial)),
@@ -44,16 +45,17 @@ function renderSection(factoryProject: FactoryProject = emptyFactory) {
 describe('FactorySetupSection', () => {
   it('given no github projects, when rendered, then the section is hidden', () => {
     renderSection();
-    expect(screen.queryByText('Worktree setup')).not.toBeInTheDocument();
+    expect(screen.queryByText('Worktree lifecycle')).not.toBeInTheDocument();
   });
 
   it('given a stored setup command, when rendered, then the field shows it', async () => {
-    useSettingsHandlers({ setupCommand: 'pnpm i && pnpm build' });
+    useSettingsHandlers({ setupCommand: 'pnpm i && pnpm build', teardownCommand: 'pnpm local teardown' });
 
     renderSection(factory);
 
-    expect(await screen.findByText('Worktree setup')).toBeInTheDocument();
+    expect(await screen.findByText('Worktree lifecycle')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('textbox', { name: FIELD })).toHaveValue('pnpm i && pnpm build'));
+    expect(screen.getByRole('textbox', { name: TEARDOWN_FIELD })).toHaveValue('pnpm local teardown');
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
   });
 
@@ -66,15 +68,18 @@ describe('FactorySetupSection', () => {
     const input = await screen.findByRole('textbox', { name: FIELD });
     await waitFor(() => expect(input).toBeEnabled());
     await user.type(input, 'pnpm i && pnpm build');
+    await user.type(screen.getByRole('textbox', { name: TEARDOWN_FIELD }), 'pnpm local teardown');
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(saved).toEqual([{ setupCommand: 'pnpm i && pnpm build' }]));
-    expect(await screen.findByText('Setup command saved')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(saved).toEqual([{ setupCommand: 'pnpm i && pnpm build', teardownCommand: 'pnpm local teardown' }]),
+    );
+    expect(await screen.findByText('Worktree commands saved')).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled());
   });
 
   it('given a stored command, when cleared and saved, then null is persisted', async () => {
-    const saved = useSettingsHandlers({ setupCommand: 'pnpm i' });
+    const saved = useSettingsHandlers({ setupCommand: 'pnpm i', teardownCommand: 'pnpm local teardown' });
     const user = userEvent.setup();
 
     renderSection(factory);
@@ -84,12 +89,12 @@ describe('FactorySetupSection', () => {
     await user.clear(input);
     await user.click(screen.getByRole('button', { name: 'Save' }));
 
-    await waitFor(() => expect(saved).toEqual([{ setupCommand: null }]));
+    await waitFor(() => expect(saved).toEqual([{ setupCommand: null, teardownCommand: 'pnpm local teardown' }]));
   });
 
   it('given the server rejects the save, when saving fails, then an error toast appears', async () => {
     server.use(
-      http.get(SETTINGS_URL, () => HttpResponse.json({ setupCommand: null })),
+      http.get(SETTINGS_URL, () => HttpResponse.json({ setupCommand: null, teardownCommand: null })),
       http.post(SETTINGS_URL, () => HttpResponse.json({ error: 'Invalid setupCommand' }, { status: 400 })),
     );
     const user = userEvent.setup();
