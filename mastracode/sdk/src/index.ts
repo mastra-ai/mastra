@@ -84,6 +84,7 @@ import {
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
 import { PluginManager } from './plugins/manager.js';
+import { PluginSignalLane } from './plugins/signal-lane.js';
 import type { PluginProcessorEntries } from './plugins/types.js';
 import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
 import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
@@ -754,8 +755,24 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     new ProviderHistoryCompat(),
   ];
 
+  // TaskSignalProvider bundles the task tools + TaskStateProcessor (see the
+  // `signals` array below); named here so the plugin lane can reserve its id.
+  const taskSignalProvider = new TaskSignalProvider();
+
   const NO_PLUGIN_PROCESSORS: PluginProcessorEntries = { input: [], output: [] };
   let pluginProcessorReadWarned = false;
+
+  // Providers contributed by plugins are driven from here rather than through
+  // the agent's `signals` array: the Agent constructor harvests a provider's
+  // processors into a closure it can never undo, so a provider wired there
+  // could not be removed when its plugin is disabled, updated or uninstalled.
+  // The built-in providers are seeded as reserved ids because they are wired
+  // through the constructor and are therefore invisible to the lane.
+  const pluginSignalLane = pluginManager
+    ? new PluginSignalLane({
+        reservedProviderIds: [taskSignalProvider.id, ...(githubSignals ? [githubSignals.id] : [])],
+      })
+    : undefined;
 
   /**
    * Plugin processors are read through a function so that enabling, disabling or
@@ -803,7 +820,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // TaskSignalProvider bundles the task tools + TaskStateProcessor: it merges
     // the tools into the toolset and registers the task state-signal processor,
     // so the task list persists across turns and survives OM truncation.
-    signals: [new TaskSignalProvider(), ...(githubSignals ? [githubSignals] : [])],
+    signals: [taskSignalProvider, ...(githubSignals ? [githubSignals] : [])],
     // Native goal mechanism: the in-loop goal step judges the thread's active
     // objective each qualifying iteration. The judge model is required for any
     // gating to occur; when unset the goal step is a complete no-op. A6 auto-wires
@@ -827,12 +844,19 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // per-request from the active workspace (mirrors `judge`).
       tools: getGoalJudgeTools,
     },
-    inputProcessors: () => [...mastraCodeInputProcessors, ...readPluginProcessors().input.map(entry => entry.value)],
+    inputProcessors: () => [
+      ...mastraCodeInputProcessors,
+      ...readPluginProcessors().input.map(entry => entry.value),
+      ...(pluginSignalLane?.getInputProcessors() ?? []),
+    ],
     // Mastra Code contributes no output processors of its own; the lane exists
     // so plugins can. Like the input lane, plugin processors sit last — after
     // the layers they customize, before the channel and memory layers the
     // Agent appends.
-    outputProcessors: () => readPluginProcessors().output.map(entry => entry.value),
+    outputProcessors: () => [
+      ...readPluginProcessors().output.map(entry => entry.value),
+      ...(pluginSignalLane?.getOutputProcessors() ?? []),
+    ],
     errorProcessors: [
       // ProviderHistoryCompat must run before StreamErrorRetryProcessor: both react to
       // HTTP 400s, but ProviderHistoryCompat repairs the incompatible history (e.g.
@@ -1074,6 +1098,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Publish the controller to the plugin runtime accessors now that it exists.
   pluginRuntimeController = controller;
 
+  if (pluginSignalLane && pluginManager) {
+    // Register the plugins loaded at startup, and re-reconcile on every reload.
+    // Providers are not started here: they need a Mastra instance for storage,
+    // and Mastra does not exist until the composition layer boots the controller
+    // (see `startPluginSignalProviders` on the returned object).
+    await pluginSignalLane.sync(pluginManager.getPluginSignalProviders());
+    pluginManager.onReload(() => pluginSignalLane.sync(pluginManager.getPluginSignalProviders()));
+  }
+
   // The AgentController is fully constructed but intentionally NOT inited here. Init and
   // session creation are deferred to the composition layer (see below) so the
   // controller can be wired in three ways:
@@ -1115,6 +1148,18 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // config closures (e.g. notification stream options read it lazily).
     setActiveSession: (session: Session<MastraCodeState>) => {
       activeSession = session;
+    },
+    /**
+     * Starts the signal providers contributed by plugins. Called by the
+     * composition layer once the controller is inited, because that is when a
+     * Mastra instance exists — a provider without one has no storage, and
+     * nothing else will hand it one: the Agent propagates Mastra only to the
+     * providers in its own `signals` array, which these deliberately are not in.
+     */
+    startPluginSignalProviders: async () => {
+      const mastra = controller.getMastra();
+      if (!pluginSignalLane || !mastra) return;
+      await pluginSignalLane.setMastra(mastra, codeAgent);
     },
   };
 }
@@ -1198,6 +1243,7 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
 
   await controller.init();
   await controller.getMastra()?.startWorkers();
+  await base.startPluginSignalProviders();
   const session = await controller.createSession({ id: sessionId, ownerId });
   await wireSessionConcerns(base, session);
 
@@ -1304,6 +1350,11 @@ export async function prepareAgentControllerMount(
   const finalize = async () => {
     await controller.init();
     await controller.getMastra()?.startWorkers();
+    // Anchored here rather than at a `new Mastra(...)` call site: finalize runs
+    // in every mount path (caller-supplied Mastra, SDK-constructed Mastra, and
+    // the platform entry that constructs its own), so plugin providers start
+    // exactly once regardless of how Mastra Code was mounted.
+    await base.startPluginSignalProviders();
   };
 
   return { base, mastraArgs, finalize };

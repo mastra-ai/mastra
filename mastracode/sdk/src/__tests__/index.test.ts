@@ -131,6 +131,9 @@ function createMockSettings() {
   };
 }
 
+/** Stand-in for the Mastra the controller builds on init(). */
+const mastraStub = { startWorkers: vi.fn(async () => {}), stopWorkers: vi.fn(async () => {}) };
+
 vi.mock('@mastra/core/agent-controller', () => ({
   AgentController: class {
     constructor(config: unknown) {
@@ -138,7 +141,7 @@ vi.mock('@mastra/core/agent-controller', () => ({
     }
     async init() {}
     getMastra() {
-      return undefined;
+      return mastraStub;
     }
     async createSession() {
       return {
@@ -601,6 +604,8 @@ describe('createMastraCode', () => {
         { id: 'acme.plugin', status: 'active', toolNames: ['plugin_tool'], instructions: 'Use plugin policy.' },
       ]),
       getPluginTools: vi.fn(() => ({ plugin_tool: { id: 'plugin_tool' } })),
+      onReload: vi.fn(),
+      getPluginSignalProviders: vi.fn(() => []),
     };
 
     await createMastraCode({ pluginManager: pluginManager as any });
@@ -950,6 +955,8 @@ describe('createMastraCode', () => {
     const pluginManager = {
       reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
       getPluginTools: vi.fn(() => ({})),
+      onReload: vi.fn(),
+      getPluginSignalProviders: vi.fn(() => []),
       getPluginProcessors: vi.fn(() => entries),
     };
 
@@ -977,12 +984,58 @@ describe('createMastraCode', () => {
     expect(resolveOutputProcessors()).toEqual([]);
   });
 
+  it('runs plugin signal providers through the lane, never the agent signals array', async () => {
+    const { SignalProvider } = await import('@mastra/core/signals');
+    const { createMastraCode } = await import('../index.js');
+
+    const inputProcessor = { id: 'acme-provider-input', processInputStep: ({ messages }: any) => messages };
+    const outputProcessor = { id: 'acme-provider-output', processOutputStep: ({ messages }: any) => messages };
+    class AcmeProvider extends SignalProvider<string> {
+      readonly id = 'acme-signals';
+      getInputProcessors() {
+        return [inputProcessor] as never;
+      }
+      getOutputProcessors() {
+        return [outputProcessor] as never;
+      }
+    }
+    const provider = new AcmeProvider();
+    const pluginManager = {
+      reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
+      getPluginTools: vi.fn(() => ({})),
+      onReload: vi.fn(),
+      getPluginSignalProviders: vi.fn(() => [{ pluginId: 'acme.plugin', versionStamp: 'v1', value: provider }]),
+      getPluginProcessors: vi.fn(() => ({ input: [], output: [] })),
+    };
+
+    const built = await createMastraCode({ pluginManager: pluginManager as any });
+
+    // A provider in the constructor's `signals` array is harvested into a
+    // closure that can never be undone, so plugin providers must stay out.
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { signals?: Array<{ id?: string }> };
+    expect(agentConfig?.signals?.map(signal => signal.id)).not.toContain('acme-signals');
+
+    // Startup boots the controller, which is when the lane starts its providers
+    // and their processors join both lanes.
+    expect(provider.isConnected).toBe(true);
+    expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
+      'plan-rejection-abort',
+      'agents-md-injector',
+      'provider-history-compat',
+      'acme-provider-input',
+    ]);
+    expect(resolveOutputProcessors()).toEqual([outputProcessor]);
+    expect(built.controller).toBeDefined();
+  });
+
   it('swallows a failing plugin processor read instead of throwing out of the lane', async () => {
     const { createMastraCode } = await import('../index.js');
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const pluginManager = {
       reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
       getPluginTools: vi.fn(() => ({})),
+      onReload: vi.fn(),
+      getPluginSignalProviders: vi.fn(() => []),
       getPluginProcessors: vi.fn(() => {
         throw new Error('plugin blew up');
       }),
