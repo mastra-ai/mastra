@@ -3,4 +3,4 @@
 '@mastra/core': patch
 ---
 
-RequestContext values now keep their nested structure in observability traces. Objects and arrays stored in a RequestContext are handed to the trace serializer to walk and bound, instead of being collapsed to `[object]`.
+Improved observability traces: RequestContext objects and arrays now preserve their nested structure instead of appearing as `[object]`.

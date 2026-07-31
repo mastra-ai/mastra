@@ -513,6 +513,19 @@ describe('RequestContext', () => {
       expect(result['instance']).toBe('[object]');
     });
 
+    it('should collapse values that reject classification (e.g. a revoked Proxy) instead of throwing', () => {
+      const revocable = Proxy.revocable({}, {});
+      revocable.revoke();
+      const ctx = new RequestContext();
+      ctx.set('revoked', revocable.proxy as unknown);
+      ctx.set('userId', 'user-123');
+
+      expect(() => ctx.serializeForSpan()).not.toThrow();
+      const result = ctx.serializeForSpan();
+      expect(result['revoked']).toBe('[object]');
+      expect(result['userId']).toBe('user-123');
+    });
+
     it('should return empty object for empty context', () => {
       const ctx = new RequestContext();
       expect(ctx.serializeForSpan()).toEqual({});

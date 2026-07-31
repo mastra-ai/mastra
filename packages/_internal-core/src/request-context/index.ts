@@ -164,10 +164,17 @@ const _typedArrayLength = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(
  * their internals aren't walked into traces.
  */
 function isPlainObjectOrArray(value: unknown): boolean {
-  if (Array.isArray(value)) return true;
-  if (value === null || typeof value !== 'object') return false;
-  const proto = Object.getPrototypeOf(value);
-  return proto === Object.prototype || proto === null;
+  try {
+    if (Array.isArray(value)) return true;
+    if (value === null || typeof value !== 'object') return false;
+    const proto = Object.getPrototypeOf(value);
+    return proto === Object.prototype || proto === null;
+  } catch {
+    // Some exotic values throw on classification — e.g. a revoked Proxy makes
+    // Array.isArray/getPrototypeOf throw TypeError. Treat them as non-plain so
+    // serializeForSpan collapses them to a type marker instead of throwing.
+    return false;
+  }
 }
 
 export class RequestContext<Values extends Record<string, any> | unknown = unknown> {
