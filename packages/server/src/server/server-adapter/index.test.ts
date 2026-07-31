@@ -158,6 +158,23 @@ describe('agent channel webhook diagnostics', () => {
     });
   });
 
+  it('keeps user-controlled path segments out of the warning message', () => {
+    const mastra = new Mastra({ logger: false });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+    const warnSpy = vi.spyOn(mastra.getLogger(), 'warn');
+
+    adapter.warnIfUnregisteredChannelWebhookForTest(
+      '/api/agents/support%0Aforged/channels/slack%1B/webhook',
+      'POST',
+      404,
+    );
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.not.stringMatching(/support|slack|forged/), {
+      agentId: 'support%0Aforged',
+      platform: 'slack%1B',
+    });
+  });
+
   it.each([
     ['/api/agents/support/channels/slack/webhook', 'GET', 404],
     ['/api/agents/support/channels/slack/webhook', 'POST', 500],

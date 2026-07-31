@@ -460,7 +460,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.mastra
       .getLogger()
       ?.warn(
-        `Received a webhook request for channel "${platform}" on agent "${agentId}", but no matching channel route is registered. Add the "${platform}" adapter to the agent's channels.adapters configuration and restart the server.`,
+        "Received an agent channel webhook request, but no matching channel route is registered. Add the adapter to the agent's channels.adapters configuration and restart the server.",
         { agentId, platform },
       );
   }
