@@ -36,6 +36,7 @@ import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
 import type { GithubPatKind } from './pat.js';
 
+import { cleanReleasedSandbox } from './sandbox-release.js';
 import {
   commitAll,
   computeWorktreePath,
@@ -641,48 +642,70 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
 
-        const installs = await github.sourceControlStorage.installations.list({ orgId: resolved.tenant.orgId });
+        const orgId = resolved.tenant.orgId;
+        const installs = await github.sourceControlStorage.installations.list({ orgId });
 
         const query = (c.req.query('q') ?? '').toLowerCase();
-        const repos = [];
+        // List every installation's repositories in parallel — installations
+        // are independent upstream calls, and serial listing multiplied
+        // worst-case latency by installation count.
+        const listed = await Promise.all(
+          installs.map(async inst => {
+            try {
+              return { inst, list: await github.listInstallationRepos(Number(inst.externalId)) };
+            } catch (err) {
+              // GitHub 404s when the installation no longer exists for this app
+              // (app uninstalled/reinstalled, or the row was recorded under
+              // different app credentials). Prune the stale row so `/status`
+              // reflects reality and the UI prompts a reconnect, then keep
+              // listing the remaining installations.
+              if ((err as { status?: number }).status !== 404) throw err;
+              console.error(`[Mastra Factory] pruning stale GitHub installation ${inst.externalId} (404 from GitHub)`);
+              await github.sourceControlStorage.installations.delete({ orgId, id: inst.id });
+              return { inst, list: [] };
+            }
+          }),
+        );
+
+        // Filter + dedupe by repo id in installation order — same result
+        // ordering as the previous serial loop.
+        const matches = [];
         const seenRepositoryIds = new Set<number>();
-        for (const inst of installs) {
-          let list;
-          try {
-            list = await github.listInstallationRepos(Number(inst.externalId));
-          } catch (err) {
-            // GitHub 404s when the installation no longer exists for this app
-            // (app uninstalled/reinstalled, or the row was recorded under
-            // different app credentials). Prune the stale row so `/status`
-            // reflects reality and the UI prompts a reconnect, then keep
-            // listing the remaining installations.
-            if ((err as { status?: number }).status !== 404) throw err;
-            console.error(`[Mastra Factory] pruning stale GitHub installation ${inst.externalId} (404 from GitHub)`);
-            await github.sourceControlStorage.installations.delete({ orgId: resolved.tenant.orgId, id: inst.id });
-            continue;
-          }
+        for (const { inst, list } of listed) {
           for (const repo of list) {
             if (query && !repo.fullName.toLowerCase().includes(query)) continue;
             if (seenRepositoryIds.has(repo.id)) continue;
             seenRepositoryIds.add(repo.id);
-            const repository = await github.sourceControlStorage.repositories.upsert({
-              orgId: resolved.tenant.orgId,
-              input: {
-                installationId: inst.id,
-                externalId: repo.id.toString(),
-                slug: repo.fullName,
-                defaultBranch: isValidGitRef(repo.defaultBranch) ? repo.defaultBranch : 'main',
-                providerMetadata: { private: repo.private, owner: repo.owner },
-              },
-            });
-            repos.push({
-              ...repo,
-              installationStorageId: inst.id,
-              repositoryStorageId: repository.id,
-              sandboxProvider: fleet.provider,
-              sandboxWorkdir: fleet.computeWorkdir(repo.fullName),
-            });
+            matches.push({ inst, repo });
           }
+        }
+
+        // Mirror matches into storage with bounded concurrency instead of one
+        // awaited upsert per repository.
+        const repos = new Array(matches.length);
+        const upsertConcurrency = 10;
+        for (let start = 0; start < matches.length; start += upsertConcurrency) {
+          await Promise.all(
+            matches.slice(start, start + upsertConcurrency).map(async ({ inst, repo }, offset) => {
+              const repository = await github.sourceControlStorage.repositories.upsert({
+                orgId,
+                input: {
+                  installationId: inst.id,
+                  externalId: repo.id.toString(),
+                  slug: repo.fullName,
+                  defaultBranch: isValidGitRef(repo.defaultBranch) ? repo.defaultBranch : 'main',
+                  providerMetadata: { private: repo.private, owner: repo.owner },
+                },
+              });
+              repos[start + offset] = {
+                ...repo,
+                installationStorageId: inst.id,
+                repositoryStorageId: repository.id,
+                sandboxProvider: fleet.provider,
+                sandboxWorkdir: fleet.computeWorkdir(repo.fullName),
+              };
+            }),
+          );
         }
         return c.json({ repos });
       },
@@ -822,13 +845,10 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           return c.json({ error: 'invalid_url' }, 400);
         }
 
-        if (!runIssueTriage) return c.json({ error: 'triage_unavailable' }, 503);
+        if (!runBoardIssueTriage) return c.json({ error: 'triage_unavailable' }, 503);
         const branch = `factory/issue-${issueNumber}`;
         const projectPath = computeWorktreePath(sandboxRow.sandboxWorkdir, branch);
-        await github.addIssueLabels(Number(project.installation.externalId), project.repository.slug, issueNumber, [
-          'auto-triaged',
-        ]);
-        const result = await runIssueTriage({
+        const result = await runBoardIssueTriage({
           repository: project.repository.slug,
           issueNumber,
           issueTitle: body.title,
@@ -838,7 +858,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
           resourceId: project.factoryProjectId,
           projectPath,
           branch,
-          defaultModelId: await resolveFactoryDefaultModelId(options.projects, project.factoryProjectId),
         });
         await emitAudit?.({
           context: loose(c),
@@ -1116,8 +1135,33 @@ async function prepareProject(options: {
   userId: string;
   onProgress?: ProgressFn;
 }): Promise<EnsureResult> {
-  const { github, fleet, project, userId, onProgress } = options;
-  const sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
+  const { github, fleet, userId, onProgress } = options;
+  // Self-heal a sandbox provider switch. The project row snapshots
+  // sandboxProvider/sandboxWorkdir at link time, so when the server's provider
+  // later changes (platform ↔ local) the stored workdir points into the old
+  // provider's filesystem (e.g. `/workspace/…` on a macOS host, where the
+  // clone dies on the read-only root volume). Recompute against the current
+  // fleet and persist so every later open uses the corrected target.
+  let project = options.project;
+  if (project.sandboxProvider !== fleet.provider) {
+    const sandboxWorkdir = fleet.computeWorkdir(project.repository.slug);
+    await github.sourceControlStorage.projectRepositories.update({
+      orgId: project.installation.orgId,
+      id: project.id,
+      input: { sandboxProvider: fleet.provider, sandboxWorkdir },
+    });
+    project = { ...project, sandboxProvider: fleet.provider, sandboxWorkdir };
+  }
+  let sandboxRow = await loadOrCreateSandboxRow(github, project, userId);
+  // The per-user binding inherits its workdir at creation time — re-point it
+  // (and force a re-clone) whenever the project's workdir has since moved.
+  if (sandboxRow.sandboxWorkdir !== project.sandboxWorkdir) {
+    await github.sourceControlStorage.sandboxes.setWorkdir({
+      id: sandboxRow.id,
+      sandboxWorkdir: project.sandboxWorkdir,
+    });
+    sandboxRow = { ...sandboxRow, sandboxWorkdir: project.sandboxWorkdir, materializedAt: null };
+  }
   const access = await github.versionControl.getRepositoryAccess({
     orgId: project.installation.orgId,
     repositoryId: project.repository.id,
@@ -1310,8 +1354,29 @@ function buildProjectGitRoutes({
         if (!session || session.orgId !== resolved.tenant.orgId || session.userId !== resolved.tenant.userId) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        let sandbox: MaterializationSandbox | undefined;
-        if (session.sandboxId) {
+        if (session.sandboxId && fleet.provider !== 'local' && session.sandboxWorkdir) {
+          // Keep the remote VM alive: return it to the reuse pool so the next
+          // session for this repository link and user claims it (repo already
+          // cloned) instead of provisioning a fresh sandbox. Scrub the
+          // session's work off the VM first so it doesn't idle with stale
+          // branches or dirty state.
+          await cleanReleasedSandbox({
+            fleet,
+            sourceControl: github.sourceControlStorage,
+            orgId: session.orgId,
+            projectRepositoryId: session.projectRepositoryId,
+            sandboxId: session.sandboxId,
+            sandboxWorkdir: session.sandboxWorkdir,
+          });
+          await github.sourceControlStorage.sandboxPool.release({
+            orgId: session.orgId,
+            projectRepositoryId: session.projectRepositoryId,
+            userId: session.userId,
+            sandboxId: session.sandboxId,
+            sandboxWorkdir: session.sandboxWorkdir,
+          });
+        } else if (session.sandboxId) {
+          let sandbox: MaterializationSandbox | undefined;
           try {
             sandbox = await fleet.reattachSandbox(session.sandboxId);
           } catch {

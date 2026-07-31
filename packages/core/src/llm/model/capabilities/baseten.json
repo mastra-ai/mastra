@@ -3,6 +3,7 @@
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
+    "moonshotai/Kimi-K3",
     "thinkingmachines/inkling"
   ],
   "temperature": [
@@ -12,6 +13,7 @@
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
+    "moonshotai/Kimi-K3",
     "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
     "nvidia/Nemotron-120B-A12B",
     "openai/gpt-oss-120b",
@@ -27,6 +29,7 @@
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
+    "moonshotai/Kimi-K3",
     "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
     "nvidia/Nemotron-120B-A12B",
     "openai/gpt-oss-120b",

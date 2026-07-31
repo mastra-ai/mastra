@@ -5,6 +5,7 @@ import virtual from '@rollup/plugin-virtual';
 import { rollup } from 'rollup';
 import type { OutputChunk, Plugin, SourceMap } from 'rollup';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
+import { hasRootExport } from '../../bundler/workspaceDependencies';
 import { mastraInternalAliasPlugin, mastraToolsAliasPlugin } from '../bundler';
 import { getPackageMetadata, getPackageRootPath } from '../package-info';
 import { esbuild } from '../plugins/esbuild';
@@ -155,6 +156,10 @@ async function captureDependenciesToOptimize(
       for (const [innerDep, _innerDepVersion] of Object.entries(workspaceInfo.dependencies)) {
         const innerWorkspaceInfo = workspaceMap.get(innerDep);
         if (!innerWorkspaceInfo) {
+          continue;
+        }
+
+        if (!hasRootExport(innerWorkspaceInfo.exports)) {
           continue;
         }
 

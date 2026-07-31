@@ -21,7 +21,7 @@ STS enables continuous bidirectional audio communication through listening to ev
 
 - **`apiKey`**: Your OpenAI API key. Falls back to the `OPENAI_API_KEY` environment variable.
 - **`model`**: The model ID to use for real-time voice interactions (e.g., `gpt-5.1-realtime`).
-- **`speaker`**: The default voice ID for speech synthesis. This allows you to specify which voice to use for the speech output.
+- **`speaker`**: The default voice ID for speech synthesis. You can specify which voice to use for the speech output.
 
 ```typescript
 const voice = new OpenAIRealtimeVoice({
@@ -283,8 +283,8 @@ await agent.voice.send(micStream)
 
 Note:
 
-- Requires `INWORLD_API_KEY`. Inworld API keys ship pre-Basic-encoded — paste them verbatim.
+- Requires `INWORLD_API_KEY`. Inworld API keys are pre-Basic-encoded: paste them verbatim.
 - The WebSocket URL appends a client-generated `?key=...&protocol=realtime`. The model is configured via the initial `session.update`, not in the URL.
 - Inworld's wire protocol is the OpenAI Realtime GA spec, so event names match `@mastra/voice-openai-realtime`.
-- Typed Inworld realtime knobs (MCP tool routing, semantic VAD eagerness, playback speed, transcription model, output modalities, …) are exposed through the `session` constructor field; an untyped `providerData` escape hatch is also deep-merged for forward compatibility with new Inworld features.
+- Typed Inworld realtime knobs (MCP tool routing, semantic VAD eagerness, playback speed, transcription model, output modalities, …) are exposed through the `session` constructor field. An untyped `providerData` escape hatch is also deep-merged for forward compatibility with new Inworld features.
 - Events: `speaker` (PCM audio stream), `speaking` (audio Buffer per delta), `writing` (text), `conversation.item.added`, `conversation.item.done`, `function_call.arguments`, `tool-call-start`, `tool-call-result`, and `error`.

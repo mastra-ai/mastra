@@ -223,6 +223,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/hyper',
+          label: 'Charm Hyper',
+        },
+        {
+          type: 'doc',
           id: 'providers/chutes',
           label: 'Chutes',
         },
@@ -360,6 +365,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/google-vertex',
           label: 'Google Vertex AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/greenpt',
+          label: 'GreenPT',
         },
         {
           type: 'doc',
@@ -515,6 +525,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/moark',
           label: 'Moark',
+        },
+        {
+          type: 'doc',
+          id: 'providers/modal',
+          label: 'Modal',
         },
         {
           type: 'doc',
