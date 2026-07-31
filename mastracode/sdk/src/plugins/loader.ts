@@ -2,12 +2,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { isSignalProvider } from '@mastra/core/signals';
+
 import type {
   MastraCodePlugin,
   MastraCodePluginConfigSchema,
   MastraCodePluginConfigValues,
   MastraCodePluginContext,
+  MastraCodePluginProcessorEntries,
   MastraCodePluginRuntime,
+  MastraCodePluginSignalProviderEntries,
   MastraCodePluginToolEntries,
   MastraCodePluginTools,
   MastraCodeToolRenderConfig,
@@ -15,7 +19,7 @@ import type {
 import { getPluginRoot } from './paths.js';
 import type { PluginPathOptions } from './paths.js';
 import { loadPluginRegistry, mergePluginRegistries } from './registry.js';
-import type { LoadedPlugin, PluginRegistry, ScopedInstalledPluginRecord } from './types.js';
+import type { LoadedPlugin, LoadedPluginProcessors, PluginRegistry, ScopedInstalledPluginRecord } from './types.js';
 
 export type LoadPluginRecordOptions = PluginPathOptions & {
   /** Lazy accessors for Mastra Code's runtime, passed on to plugin field resolvers. */
@@ -77,6 +81,8 @@ export async function loadPluginRecord(
       getActiveSession: options.runtime?.getActiveSession,
     };
     const { tools, renderConfigs } = await resolvePluginTools(plugin, context);
+    const processors = await resolvePluginProcessors(plugin, context);
+    const signalProviders = await resolvePluginSignalProviders(plugin, context);
     const instructions = await resolvePluginInstructions(plugin, context);
 
     return {
@@ -89,6 +95,8 @@ export async function loadPluginRecord(
       tools,
       renderConfigs,
       toolNames: Object.keys(tools).sort(),
+      processors,
+      signalProviders,
       skillPaths: resolveExistingAssetDirs(pluginRoot, 'skills'),
       commandPaths: resolveExistingAssetDirs(pluginRoot, 'commands'),
       configSchema,
@@ -171,6 +179,22 @@ function validatePluginExport(value: unknown): MastraCodePlugin {
     throw new Error('Plugin tools must be an object or function');
   }
 
+  if (
+    plugin.processors !== undefined &&
+    typeof plugin.processors !== 'object' &&
+    typeof plugin.processors !== 'function'
+  ) {
+    throw new Error('Plugin processors must be an array, object, or function');
+  }
+
+  if (
+    plugin.signalProviders !== undefined &&
+    !Array.isArray(plugin.signalProviders) &&
+    typeof plugin.signalProviders !== 'function'
+  ) {
+    throw new Error('Plugin signal providers must be an array or function');
+  }
+
   return plugin;
 }
 
@@ -184,6 +208,57 @@ async function resolvePluginTools(
     throw new Error('Plugin tools function must return an object');
   }
   return normalizePluginToolEntries(entries);
+}
+
+/** Mirrors {@link resolvePluginTools}: object-or-function, resolved with the same context. */
+async function resolvePluginProcessors(
+  plugin: MastraCodePlugin,
+  context: MastraCodePluginContext,
+): Promise<LoadedPluginProcessors> {
+  if (!plugin.processors) return { input: [], output: [] };
+  const entries = typeof plugin.processors === 'function' ? await plugin.processors(context) : plugin.processors;
+  if (!entries || typeof entries !== 'object') {
+    throw new Error('Plugin processors function must return an array or object');
+  }
+  return normalizePluginProcessorEntries(entries);
+}
+
+async function resolvePluginSignalProviders(
+  plugin: MastraCodePlugin,
+  context: MastraCodePluginContext,
+): Promise<MastraCodePluginSignalProviderEntries> {
+  if (!plugin.signalProviders) return [];
+  const entries =
+    typeof plugin.signalProviders === 'function' ? await plugin.signalProviders(context) : plugin.signalProviders;
+  if (!Array.isArray(entries)) {
+    throw new Error('Plugin signal providers function must return an array');
+  }
+  for (const [index, provider] of entries.entries()) {
+    if (!isSignalProvider(provider)) {
+      // `isSignalProvider` is an instanceof check, so a plugin that resolves its
+      // own copy of @mastra/core fails here too — say so, since the object can
+      // look perfectly correct from the plugin author's side.
+      throw new Error(
+        `Plugin signal provider at index ${index} must be a SignalProvider imported from "mastracode/plugin"`,
+      );
+    }
+  }
+  return entries;
+}
+
+/** A bare array is shorthand for the input lane, the common case. */
+function normalizePluginProcessorEntries(entries: MastraCodePluginProcessorEntries): LoadedPluginProcessors {
+  const input = Array.isArray(entries) ? entries : (entries.input ?? []);
+  const output = Array.isArray(entries) ? [] : (entries.output ?? []);
+  if (!Array.isArray(input) || !Array.isArray(output)) {
+    throw new Error('Plugin processor lanes must be arrays');
+  }
+  for (const processor of [...input, ...output]) {
+    if (!processor || typeof processor !== 'object' || typeof processor.id !== 'string') {
+      throw new Error('Plugin processors must be objects with an id');
+    }
+  }
+  return { input, output };
 }
 
 async function resolvePluginInstructions(

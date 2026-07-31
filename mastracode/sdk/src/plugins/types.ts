@@ -1,9 +1,34 @@
+import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
+import type { SignalProvider } from '@mastra/core/signals';
+
 import type {
   MastraCodePluginConfigSchema,
   MastraCodePluginConfigValue,
   MastraCodePluginTools,
   MastraCodeToolRenderConfig,
 } from '../plugin.js';
+
+/** Processors a plugin contributed, normalized into the lane they belong to. */
+export type LoadedPluginProcessors = {
+  input: InputProcessor[];
+  output: OutputProcessor[];
+};
+
+/**
+ * A single contribution, carrying the id of the plugin that owns it. Ownership
+ * has to survive collection: the signal lane keys live providers by
+ * `(pluginId, providerId)`, and a processor's state id is derived from the
+ * plugin id so it stays stable when the plugin is reloaded.
+ */
+export type PluginContribution<TValue> = {
+  pluginId: string;
+  value: TValue;
+};
+
+export type PluginProcessorEntries = {
+  input: PluginContribution<InputProcessor>[];
+  output: PluginContribution<OutputProcessor>[];
+};
 
 export type PluginScope = 'global' | 'project';
 export type PluginSource = 'local' | 'github';
@@ -40,6 +65,8 @@ export type LoadedPlugin = ScopedInstalledPluginRecord & {
   tools: MastraCodePluginTools;
   renderConfigs?: Record<string, MastraCodeToolRenderConfig>;
   toolNames: string[];
+  processors?: LoadedPluginProcessors;
+  signalProviders?: SignalProvider<string>[];
   skillPaths?: string[];
   commandPaths?: string[];
   configSchema?: MastraCodePluginConfigSchema;

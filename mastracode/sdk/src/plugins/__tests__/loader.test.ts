@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { defineMastraCodePlugin, SignalProvider } from '../../plugin.js';
@@ -15,12 +16,34 @@ class FixtureSignalProvider extends SignalProvider<'fixture-signals'> {
   }
 }
 
+const SDK_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+
+/**
+ * Fixtures that import from `@mastra/core` have to live somewhere Node can
+ * resolve it from, which `os.tmpdir()` is not. Installed plugins get a
+ * `node_modules` link for exactly this reason (see `package-link.ts`); inside
+ * the package's own `node_modules` is the cheap equivalent, and stays out of
+ * both `tsc` and vitest's globs.
+ */
+let tempResolvableDir: string | undefined;
+function makeResolvableDir(): string {
+  const parent = path.join(SDK_ROOT, 'node_modules', '.mc-test-plugins');
+  fs.mkdirSync(parent, { recursive: true });
+  const dir = fs.mkdtempSync(path.join(parent, 'loader-'));
+  tempResolvableDir = dir;
+  return dir;
+}
+
 let tempDir: string | undefined;
 
 afterEach(() => {
   if (tempDir) {
     fs.rmSync(tempDir, { recursive: true, force: true });
     tempDir = undefined;
+  }
+  if (tempResolvableDir) {
+    fs.rmSync(tempResolvableDir, { recursive: true, force: true });
+    tempResolvableDir = undefined;
   }
 });
 
@@ -336,6 +359,130 @@ describe('plugin loader', () => {
 
     expect(loaded[0]).toMatchObject({ id: 'acme.contributor', status: 'active' });
     expect(Object.keys(loaded[0]?.tools ?? {})).toEqual(['still_works']);
+  });
+
+  it('resolves processors and signal providers from objects and from sync and async functions', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const objectDir = path.join(tempDir, 'object-plugin');
+    const functionDir = path.join(tempDir, 'function-plugin');
+    const asyncDir = makeResolvableDir();
+    writePlugin(
+      path.join(objectDir, 'index.ts'),
+      `export default {
+        id: 'a.object',
+        processors: { input: [{ id: 'obj-in', processInputStep: async () => {} }], output: [{ id: 'obj-out', processOutputStep: async ({ messageList }) => messageList }] }
+      };`,
+    );
+    writePlugin(
+      path.join(functionDir, 'index.ts'),
+      // Bare array shorthand, resolved from a sync function.
+      `export default {
+        id: 'b.function',
+        processors: () => [{ id: 'fn-in', processInputStep: async () => {} }]
+      };`,
+    );
+    writePlugin(
+      path.join(asyncDir, 'index.ts'),
+      `import { SignalProvider } from '@mastra/core/signals';
+      class AsyncProvider extends SignalProvider {
+        id = 'async-signals';
+      }
+      export default {
+        id: 'c.async',
+        signalProviders: async () => [new AsyncProvider()]
+      };`,
+    );
+
+    const loaded = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: {
+        plugins: {
+          'a.object': { enabled: true, source: 'local', specifier: 'o', path: objectDir, entry: 'index.ts' },
+          'b.function': { enabled: true, source: 'local', specifier: 'f', path: functionDir, entry: 'index.ts' },
+          'c.async': { enabled: true, source: 'local', specifier: 'a', path: asyncDir, entry: 'index.ts' },
+        },
+      },
+      globalRegistry: { plugins: {} },
+    });
+
+    expect(loaded.map(plugin => plugin.status)).toEqual(['active', 'active', 'active']);
+    expect(loaded[0]?.processors?.input.map(processor => processor.id)).toEqual(['obj-in']);
+    expect(loaded[0]?.processors?.output.map(processor => processor.id)).toEqual(['obj-out']);
+    // Bare array is input-lane shorthand.
+    expect(loaded[1]?.processors).toEqual({ input: [expect.objectContaining({ id: 'fn-in' })], output: [] });
+    expect(loaded[2]?.signalProviders?.map(provider => provider.id)).toEqual(['async-signals']);
+  });
+
+  it('fails the whole plugin record when processors or signal providers are the wrong shape', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const badProcessorsDir = path.join(tempDir, 'bad-processors');
+    const badReturnDir = path.join(tempDir, 'bad-return');
+    const notAProviderDir = path.join(tempDir, 'not-a-provider');
+    const throwingDir = path.join(tempDir, 'throwing');
+    writePlugin(path.join(badProcessorsDir, 'index.ts'), `export default { id: 'a.bad', processors: 'nope' };`);
+    writePlugin(path.join(badReturnDir, 'index.ts'), `export default { id: 'b.bad', signalProviders: () => 'nope' };`);
+    writePlugin(
+      path.join(notAProviderDir, 'index.ts'),
+      `export default { id: 'c.bad', signalProviders: [{ id: 'imposter' }] };`,
+    );
+    // A plugin that wants its provider treated as required says so by throwing.
+    writePlugin(
+      path.join(throwingDir, 'index.ts'),
+      `export default { id: 'd.bad', signalProviders: () => { throw new Error('needs a token'); } };`,
+    );
+
+    const loaded = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: {
+        plugins: {
+          'a.bad': { enabled: true, source: 'local', specifier: 'a', path: badProcessorsDir, entry: 'index.ts' },
+          'b.bad': { enabled: true, source: 'local', specifier: 'b', path: badReturnDir, entry: 'index.ts' },
+          'c.bad': { enabled: true, source: 'local', specifier: 'c', path: notAProviderDir, entry: 'index.ts' },
+          'd.bad': { enabled: true, source: 'local', specifier: 'd', path: throwingDir, entry: 'index.ts' },
+        },
+      },
+      globalRegistry: { plugins: {} },
+    });
+
+    expect(loaded.map(plugin => plugin.status)).toEqual(['load failed', 'load failed', 'load failed', 'load failed']);
+    expect(loaded[0]?.error).toBe('Plugin processors must be an array, object, or function');
+    expect(loaded[1]?.error).toBe('Plugin signal providers function must return an array');
+    expect(loaded[2]?.error).toBe(
+      'Plugin signal provider at index 0 must be a SignalProvider imported from "mastracode/plugin"',
+    );
+    expect(loaded[3]?.error).toBe('needs a token');
+  });
+
+  it('contributes no processors or signal providers from inactive or blocked plugins', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const disabledDir = path.join(tempDir, 'disabled');
+    const blockedDir = path.join(tempDir, 'blocked');
+    const source = (id: string) =>
+      `export default { id: '${id}', processors: [{ id: '${id}-in', processInputStep: async () => {} }] };`;
+    writePlugin(path.join(disabledDir, 'index.ts'), source('a.disabled'));
+    writePlugin(path.join(blockedDir, 'index.ts'), source('b.blocked'));
+
+    const loaded = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: {
+        plugins: {
+          'a.disabled': { enabled: false, source: 'local', specifier: 'a', path: disabledDir, entry: 'index.ts' },
+          'b.blocked': { enabled: true, source: 'local', specifier: 'b', path: blockedDir, entry: 'index.ts' },
+        },
+        disabledPlugins: ['b.blocked'],
+      },
+      globalRegistry: { plugins: {} },
+    });
+
+    expect(loaded.map(plugin => plugin.status)).toEqual(['inactive', 'blocked']);
+    expect(loaded.every(plugin => plugin.processors === undefined)).toBe(true);
+    expect(loaded.every(plugin => plugin.signalProviders === undefined)).toBe(true);
   });
 
   it('surfaces load failures without throwing', async () => {
