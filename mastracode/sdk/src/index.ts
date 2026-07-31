@@ -1116,7 +1116,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // Providers are not started here: they need a Mastra instance for storage,
     // and Mastra does not exist until the composition layer boots the controller
     // (see `startPluginSignalProviders` on the returned object).
-    await pluginSignalLane.sync(pluginManager.getPluginSignalProviders());
+    pluginSignalLane.sync(pluginManager.getPluginSignalProviders());
     pluginManager.onReload(() => pluginSignalLane.sync(pluginManager.getPluginSignalProviders()));
   }
 
@@ -1169,10 +1169,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
      * nothing else will hand it one: the Agent propagates Mastra only to the
      * providers in its own `signals` array, which these deliberately are not in.
      */
-    startPluginSignalProviders: async () => {
+    startPluginSignalProviders: () => {
       const mastra = controller.getMastra();
       if (!pluginSignalLane || !mastra) return;
-      await pluginSignalLane.setMastra(mastra, codeAgent);
+      pluginSignalLane.setMastra(mastra, codeAgent);
     },
   };
 }
@@ -1256,7 +1256,7 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
 
   await controller.init();
   await controller.getMastra()?.startWorkers();
-  await base.startPluginSignalProviders();
+  base.startPluginSignalProviders();
   const session = await controller.createSession({ id: sessionId, ownerId });
   await wireSessionConcerns(base, session);
 
@@ -1367,7 +1367,7 @@ export async function prepareAgentControllerMount(
     // in every mount path (caller-supplied Mastra, SDK-constructed Mastra, and
     // the platform entry that constructs its own), so plugin providers start
     // exactly once regardless of how Mastra Code was mounted.
-    await base.startPluginSignalProviders();
+    base.startPluginSignalProviders();
   };
 
   return { base, mastraArgs, finalize };
