@@ -11,6 +11,19 @@ Plugins extend Mastra Code with tools, skills, slash commands, and system instru
 
 Plugins run code inside Mastra Code with access to your workspace. Install only from sources you trust.
 
+## Available plugins
+
+Mastra maintains these plugins. Install any of them with the GitHub URL in the table.
+
+| Plugin | What it adds | Install from |
+| - | - | - |
+| Adversarial review | `/adversarial-review` command and an `adversarial_pr_review` tool that reviews a pull request with a cold, read-only reviewer agent on a fresh thread | `https://github.com/mastra-ai/adversarial-review` |
+| Alexandria | `mastra_expert` tool that answers questions about Mastra from the Alexandria knowledge base | `https://github.com/mastra-ai/alexandria` |
+| Plan | `/plan` and `/goal/plan` commands that produce goal-ready implementation plans, checked by parallel adversarial reviewers | `https://github.com/mastra-ai/plan` |
+| Slack | Slack tools that read and write as your own user account through a PKCE OAuth flow | `https://github.com/mastra-ai/slack` |
+
+The adversarial review and Slack plugins need the [GitHub CLI](https://cli.github.com) and Slack app credentials respectively. Check each repository's README for setup beyond the install.
+
 ## Install a plugin
 
 Run `/plugins` to open the plugin overlay, then select **Install new plugin**.
