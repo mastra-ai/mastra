@@ -45,8 +45,9 @@ const mocks = vi.hoisted(() => ({
   githubPatReadError: null as Error | null,
   /** Run-binding role resolved for the session; null = no binding found. */
   runBindingRole: null as string | null,
+  runBindingStatus: 'active' as 'active' | 'revoked',
   findRunBindingBySession: vi.fn(async () =>
-    mocks.runBindingRole ? { role: mocks.runBindingRole, orgId: 'org-1' } : null,
+    mocks.runBindingRole ? { role: mocks.runBindingRole, orgId: 'org-1', status: mocks.runBindingStatus } : null,
   ),
 }));
 
@@ -84,6 +85,7 @@ afterEach(async () => {
   mocks.githubReviewerPat = null;
   mocks.githubPatReadError = null;
   mocks.runBindingRole = null;
+  mocks.runBindingStatus = 'active';
   mocks.findRunBindingBySession.mockClear();
 });
 
@@ -804,6 +806,28 @@ describe('GitHub session workspace preparation', () => {
     expect(getRegisteredGithubPatKind(requestContext)).toBe('default');
   });
 
+  it('switches a cached workspace back to the worker PAT when its review binding is revoked', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    mocks.runBindingStatus = 'revoked';
+    mocks.setEnvironmentVariable.mockClear();
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({
+      requestContext,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
+    expect(getRegisteredGithubPatKind(requestContext)).toBe('default');
+  });
+
   it('removes a reviewer PAT installed by runtime refresh when the session becomes a worker', async () => {
     mocks.runBindingRole = 'review';
     const { workspace } = await createLocalFactory();
@@ -942,11 +966,11 @@ describe('GitHub session workspace preparation', () => {
       .mockImplementationOnce(
         () =>
           new Promise(resolve => {
-            releaseWorkerLookup = () => resolve({ role: 'work', orgId: 'org-1' });
+            releaseWorkerLookup = () => resolve({ role: 'work', orgId: 'org-1', status: 'active' });
             markWorkerLookupStarted();
           }),
       )
-      .mockResolvedValueOnce({ role: 'review', orgId: 'org-1' });
+      .mockResolvedValueOnce({ role: 'review', orgId: 'org-1', status: 'active' });
 
     const existing = { setToolsConfig: vi.fn() };
     const workerReuse = workspace({

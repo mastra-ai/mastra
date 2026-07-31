@@ -223,7 +223,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       try {
         const address = getFactorySessionAddress(requestContext);
         const runBinding = address ? await workItems.findRunBindingBySession(address) : null;
-        if (runBinding?.role === 'review' && runBinding.orgId === session.orgId) return 'reviewer';
+        if (runBinding?.status === 'active' && runBinding.role === 'review' && runBinding.orgId === session.orgId) {
+          return 'reviewer';
+        }
         return 'default';
       } catch {
         // Reuse must preserve its cached identity when binding storage is unavailable.
