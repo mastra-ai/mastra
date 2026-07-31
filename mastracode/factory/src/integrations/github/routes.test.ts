@@ -1070,6 +1070,84 @@ describe('repos route', () => {
     errorSpy.mockRestore();
   });
 
+  it('retires linked sessions before pruning a stale installation', async () => {
+    install(8, 'stale');
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: 'stale-link',
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 8,
+        repoFullName: 'stale/repo',
+        repoId: 808,
+        defaultBranch: 'main',
+        sandboxWorkdir: '/workspace/stale',
+        teardownCommand: 'pnpm local teardown',
+      }),
+    );
+    vi.mocked(listInstallationRepos).mockRejectedValue(Object.assign(new Error('Not Found'), { status: 404 }));
+    const retireProjectRepositorySessions = vi.fn(async () => {
+      expect(tables.installations.some(installation => installation.externalId === '8')).toBe(true);
+    });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const response = await buildApp(
+      { workosId: 'u1' },
+      { sessionRetirement: { retireProjectRepositorySessions } as any },
+    ).request('/web/github/repos');
+
+    expect(response.status).toBe(200);
+    expect(retireProjectRepositorySessions).toHaveBeenCalledWith({
+      sourceControl: githubStub.sourceControlStorage,
+      orgId: 'org1',
+      projectRepositoryId: 'stale-link',
+    });
+    expect(tables.installations).toHaveLength(0);
+    errorSpy.mockRestore();
+  });
+
+  it('keeps a stale installation when materialized sessions cannot be retired', async () => {
+    install(8, 'stale');
+    tables.projectRepositories.push(
+      projectRepositoryRow({
+        id: 'stale-link',
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 8,
+        repoFullName: 'stale/repo',
+        repoId: 808,
+        defaultBranch: 'main',
+        sandboxWorkdir: '/workspace/stale',
+        teardownCommand: 'pnpm local teardown',
+      }),
+    );
+    tables.sessions.push({
+      id: 'session-row-1',
+      sessionId: 'session-1',
+      projectRepositoryId: 'stale-link',
+      orgId: 'org1',
+      userId: 'u1',
+      branch: 'feat/stale',
+      baseBranch: 'main',
+      sandboxId: 'sandbox-1',
+      sandboxWorkdir: '/workspace/stale/session-1',
+      materializedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    vi.mocked(listInstallationRepos).mockRejectedValue(Object.assign(new Error('Not Found'), { status: 404 }));
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const response = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+
+    expect(response.status).toBe(200);
+    expect(tables.installations.map(installation => installation.externalId)).toEqual(['8']);
+    expect(String(warnSpy.mock.calls[0]?.[0])).toContain('was not pruned');
+    errorSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
   it('does not prune on non-404 errors', async () => {
     install(7, 'octo');
     vi.mocked(listInstallationRepos).mockRejectedValue(Object.assign(new Error('boom'), { status: 500 }));

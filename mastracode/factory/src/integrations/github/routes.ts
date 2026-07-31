@@ -664,7 +664,43 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
               // listing the remaining installations.
               if ((err as { status?: number }).status !== 404) throw err;
               console.error(`[Mastra Factory] pruning stale GitHub installation ${inst.externalId} (404 from GitHub)`);
-              await github.sourceControlStorage.installations.delete({ orgId, id: inst.id });
+              try {
+                const repositories = await github.sourceControlStorage.repositories.list({
+                  orgId,
+                  installationId: inst.id,
+                });
+                const retiredProjectRepositories = new Set<string>();
+                for (const repository of repositories) {
+                  const targets = await github.sourceControlStorage.projectRepositories.listByExternalRepository({
+                    installationExternalId: inst.externalId,
+                    repositoryExternalId: repository.externalId,
+                  });
+                  for (const target of targets) {
+                    if (target.orgId !== orgId || retiredProjectRepositories.has(target.projectRepository.id)) continue;
+                    retiredProjectRepositories.add(target.projectRepository.id);
+                    if (sessionRetirement) {
+                      await sessionRetirement.retireProjectRepositorySessions({
+                        sourceControl: github.sourceControlStorage,
+                        orgId,
+                        projectRepositoryId: target.projectRepository.id,
+                      });
+                      continue;
+                    }
+                    const sessions = await github.sourceControlStorage.sessions.listByProjectRepository({
+                      projectRepositoryId: target.projectRepository.id,
+                    });
+                    if (sessions.some(session => session.sandboxId || session.materializedAt)) {
+                      throw new Error('session retirement is unavailable');
+                    }
+                  }
+                }
+                await github.sourceControlStorage.installations.delete({ orgId, id: inst.id });
+              } catch (cleanupError) {
+                console.warn(
+                  `[Mastra Factory] stale GitHub installation ${inst.externalId} was not pruned because session cleanup could not complete`,
+                  cleanupError instanceof Error ? cleanupError.message.slice(0, 2000) : String(cleanupError).slice(0, 2000),
+                );
+              }
               return { inst, list: [] };
             }
           }),
