@@ -1062,6 +1062,41 @@ describe('createMastraCode', () => {
     expect(built.controller).toBeDefined();
   });
 
+  it('stops plugin signal providers and stops listening for reloads on teardown', async () => {
+    const { SignalProvider } = await import('@mastra/core/signals');
+    const { createMastraCode } = await import('../index.js');
+
+    const inputProcessor = { id: 'acme-provider-input', processInputStep: ({ messages }: any) => messages };
+    class AcmeProvider extends SignalProvider<string> {
+      readonly id = 'acme-signals';
+      getInputProcessors() {
+        return [inputProcessor] as never;
+      }
+    }
+    const provider = new AcmeProvider();
+    const stop = vi.spyOn(provider, 'stop');
+    const unsubscribeReload = vi.fn();
+    const pluginManager = {
+      reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
+      getPluginTools: vi.fn(() => ({})),
+      onReload: vi.fn(() => unsubscribeReload),
+      getPluginSignalProviders: vi.fn(() => [{ pluginId: 'acme.plugin', versionStamp: 'v1', value: provider }]),
+      getPluginProcessors: vi.fn(() => ({ input: [], output: [] })),
+    };
+
+    const built = await createMastraCode({ pluginManager: pluginManager as any });
+    expect(provider.isConnected).toBe(true);
+
+    // A pluginManager can be shared across controllers, so it outlives this one:
+    // without teardown its providers keep polling and its reload listener keeps
+    // firing for a controller that is gone.
+    built.stopPluginSignalProviders();
+
+    expect(stop).toHaveBeenCalledTimes(1);
+    expect(unsubscribeReload).toHaveBeenCalledTimes(1);
+    expect(resolveInputProcessors().map(processor => processor.id)).not.toContain('acme-provider-input');
+  });
+
   it('swallows a failing plugin processor read instead of throwing out of the lane', async () => {
     const { createMastraCode } = await import('../index.js');
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

@@ -781,6 +781,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         reservedProviderIds: [taskSignalProvider.id, ...(githubSignals ? [githubSignals.id] : [])],
       })
     : undefined;
+  let unsubscribePluginReload: (() => void) | undefined;
 
   /**
    * Plugin processors are read through a function so that enabling, disabling or
@@ -1117,7 +1118,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // and Mastra does not exist until the composition layer boots the controller
     // (see `startPluginSignalProviders` on the returned object).
     pluginSignalLane.sync(pluginManager.getPluginSignalProviders());
-    pluginManager.onReload(() => pluginSignalLane.sync(pluginManager.getPluginSignalProviders()));
+    unsubscribePluginReload = pluginManager.onReload(() =>
+      pluginSignalLane.sync(pluginManager.getPluginSignalProviders()),
+    );
   }
 
   // The AgentController is fully constructed but intentionally NOT inited here. Init and
@@ -1173,6 +1176,19 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       const mastra = controller.getMastra();
       if (!pluginSignalLane || !mastra) return;
       pluginSignalLane.setMastra(mastra, codeAgent);
+    },
+    /**
+     * Stops every plugin-contributed signal provider and stops listening for
+     * plugin reloads. The inverse of `startPluginSignalProviders`, for an
+     * embedder that is done with this controller: a `pluginManager` shared
+     * across controllers (`MastraCodeConfig.pluginManager`) outlives any one of
+     * them, so without this its providers keep polling and its reload listener
+     * keeps firing for a controller that is gone.
+     */
+    stopPluginSignalProviders: () => {
+      unsubscribePluginReload?.();
+      unsubscribePluginReload = undefined;
+      pluginSignalLane?.stopAll();
     },
     /**
      * Hands Mastra to the statically configured input processors.

@@ -117,6 +117,17 @@ export class PluginSignalLane {
     this.#rebuildProcessors();
   }
 
+  /**
+   * Retires every live provider and empties both processor lanes. The inverse of
+   * `sync()`, for a caller that is done with this lane — an embedder sharing one
+   * `PluginManager` across controllers would otherwise leave a controller's
+   * providers polling after it is gone.
+   */
+  stopAll(): void {
+    for (const [key, live] of this.#live) this.#retire(key, live);
+    this.#rebuildProcessors();
+  }
+
   #startPending(): void {
     const mastra = this.#mastra;
     const agent = this.#agent;
