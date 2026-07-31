@@ -404,7 +404,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     const materialization = materialize();
     inflightMaterializations.set(workspaceId, materialization);
     try {
-      return await materialization;
+      const workspace = await materialization;
+      // The binding can also change while the leader is materializing. Keep
+      // its request-scoped refresh role aligned with the shared sandbox too.
+      await reconcileGithubToken();
+      return workspace;
     } finally {
       inflightMaterializations.delete(workspaceId);
     }

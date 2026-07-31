@@ -872,7 +872,8 @@ describe('GitHub session workspace preparation', () => {
         }),
     );
 
-    const leader = workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    const leaderRequestContext = createGithubRequestContext('project-1', 'session-a');
+    const leader = workspace({ requestContext: leaderRequestContext });
     await materializationStarted;
     mocks.runBindingRole = 'review';
     const followerRequestContext = createGithubRequestContext('project-1', 'session-a');
@@ -890,6 +891,7 @@ describe('GitHub session workspace preparation', () => {
     await Promise.all([leader, follower]);
 
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
+    expect(getRegisteredGithubPatKind(leaderRequestContext)).toBe('reviewer');
     expect(getRegisteredGithubPatKind(followerRequestContext)).toBe('reviewer');
   });
 
