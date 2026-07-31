@@ -1,0 +1,137 @@
+---
+title: 'Plugins'
+description: 'Install, configure, and build Mastra Code plugins that add tools, skills, commands, and instructions to a session.'
+packages:
+  - 'mastracode'
+---
+
+# Plugins
+
+Plugins extend Mastra Code with tools, skills, slash commands, and system instructions that load at session start. A plugin is a TypeScript module that exports a plugin definition, installed from a GitHub repository or a local directory.
+
+Plugins run code inside Mastra Code with access to your workspace. Install only from sources you trust.
+
+## Install a plugin
+
+Run `/plugins` to open the plugin overlay, then select **Install new plugin**.
+
+<Steps>
+  <StepItem>
+    Choose a source. Select **GitHub URL** and paste a full repository URL, such as `https://github.com/mastra-ai/plan`. Append `#<ref>` to pin a branch, tag, or commit. Only `github.com` URLs are supported.
+
+    Select **Local path** to install a directory from disk. Mastra Code lists plugins it discovers under `.mastracode/plugins/sources/local` and accepts any other path you type.
+  </StepItem>
+
+  <StepItem>
+    Choose a scope. Select **global** to install into `~/.mastracode/plugins`, where the plugin loads in every project. Select **project** to install into `.mastracode/plugins` in the current project.
+  </StepItem>
+
+  <StepItem>
+    Confirm the trust prompt. Mastra Code clones the repository, installs its dependencies, and loads the entry file. Press Esc during a GitHub install to cancel it.
+  </StepItem>
+</Steps>
+
+GitHub installs shell out to the GitHub CLI, so install `gh` and run `gh auth login` first. Private repositories work as long as your account has access. Dependency installs use pnpm through Corepack. If Corepack is missing, the install fails with an error telling you to install it.
+
+Mastra Code finds the plugin entry file in this order:
+
+1. The `entry` recorded in `.mastracode-plugin.json` at the repository or directory root
+1. `src/index.ts`
+1. `index.ts`
+
+When none of those exist, Mastra Code asks for an entry file or directory path.
+
+## Manage installed plugins
+
+Selecting a plugin in `/plugins` opens its detail view with its ID, scope, source, status, tools, and any load error. From there you can:
+
+- **Configure**: Set values for the options the plugin declares.
+- **Activate** or **Deactivate**: Keep the plugin installed but stop loading its tools.
+- **Uninstall**: Remove the plugin from the registry.
+
+Run `/plugins <plugin-id>` to open a detail view directly.
+
+Each scope keeps its registry in `plugins.json` next to the plugin sources. Adding an ID to the `disabledPlugins` array in that file blocks the plugin, and the overlay reports it as `blocked` until you remove the entry.
+
+Two plugins that register the same tool name conflict. The plugin loaded second is marked `conflicted`, and none of its tools load until you deactivate or uninstall the other one.
+
+## Configuration options
+
+Plugins declare typed options, which the overlay renders as prompts:
+
+| Type | Behavior |
+| - | - |
+| `string` | Free-text input with the current value as the default |
+| `boolean` | On, off, or clear the value to use the plugin default |
+| `model` | Model picker that also prompts for an API key when the model needs one, or inherits the session model |
+
+Values are stored per scope in `plugins.json`, so the same plugin can use different settings in different projects.
+
+## Updates
+
+Mastra Code polls GitHub plugin checkouts every minute and resets them to their upstream branch when new commits land. Checkouts pinned to a commit or tag have no upstream, so they stay where they are. When a checkout changes, plugins reload and the session posts a notification naming the updated plugins.
+
+Local edits inside a GitHub checkout aren't discarded. Before updating, Mastra Code copies the current state to a `mastracode/plugin-backup/<timestamp>-<sha>` branch in that checkout.
+
+Local plugins reload when their entry file changes, which keeps edit-and-test cycles short during development.
+
+## Build a plugin
+
+Scaffold a new plugin with the CLI:
+
+```sh
+mastracode plugin scaffold my-plugin --id acme.my-plugin --name "My Plugin"
+```
+
+Passing a bare name creates the plugin under `.mastracode/plugins/sources/local/<name>` and records it in `.mastracode-plugin.json`. Passing a path creates the plugin there instead. The scaffold writes `package.json`, `tsconfig.json`, `README.md`, and a `src/index.ts` entry file.
+
+A plugin exports a default definition built with `defineMastraCodePlugin`:
+
+```typescript title="src/index.ts"
+import { createTool, defineMastraCodePlugin, z } from 'mastracode/plugin'
+
+export default defineMastraCodePlugin({
+  id: 'acme.my-plugin',
+  name: 'My Plugin',
+  description: 'A Mastra Code tool plugin.',
+  config: {
+    apiUrl: {
+      type: 'string',
+      label: 'API URL',
+      description: 'Base URL for the service',
+    },
+  },
+  instructions: context => `Use my_tool against ${context.config.apiUrl}.`,
+  tools: {
+    my_tool: {
+      tool: createTool({
+        id: 'my_tool',
+        description: 'Echo a message.',
+        inputSchema: z.object({ message: z.string() }),
+        execute: async context => {
+          return { message: context.message }
+        },
+      }),
+    },
+  },
+})
+```
+
+The definition supports these fields:
+
+- `id`: Unique plugin identifier, used by the registry and `/plugins <plugin-id>`
+- `name`, `description`, `version`: Display metadata shown in the overlay
+- `config`: Option schema rendered by **Configure**
+- `instructions`: A string or a function returning a string, appended to the system prompt
+- `tools`: A record of tools, or a function receiving the plugin context, with an optional `render` config for subagent-style output
+
+Functions receive a context object with `cwd`, `scope`, `pluginDir`, and the resolved `config` values.
+
+Directories named `skills` and `commands` at the plugin root load alongside the tools, so a plugin can ship skills and slash commands without extra registration.
+
+Install the scaffolded directory through `/plugins` → **Install new plugin** → **Local path** to test it.
+
+## Next steps
+
+- [Tools](/tools): Built-in tools available to every session
+- [Customization](/customization): Custom modes, subagents, and programmatic usage
