@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Fixed cached Factory workspaces retaining the wrong GitHub identity after their run-binding role changes. Worker and reviewer credentials are now reconciled on reuse, including falling back from stale reviewer credentials when no worker PAT is configured.
+Fixed cached Factory workspaces retaining stale GitHub credentials after their run-binding role or configured credential source changes. Worker and reviewer identities are now reconciled on reuse, and cleared PATs fall back to repository credentials.

@@ -976,6 +976,60 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_saved_later');
   });
 
+  it('replaces a cleared same-role PAT with the repository token on the next reuse', async () => {
+    mocks.githubPat = 'ghp_worker';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    mocks.githubPat = null;
+    mocks.setEnvironmentVariable.mockClear();
+    await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
+  });
+
+  it('does not reuse a workspace when a cleared PAT cannot be replaced', async () => {
+    mocks.githubPat = 'ghp_worker';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    mocks.githubPat = null;
+    mocks.setEnvironmentVariable.mockImplementationOnce(() => {
+      throw new Error('runtime token injection failed');
+    });
+
+    await expect(
+      workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+      }),
+    ).rejects.toThrow('runtime token injection failed');
+  });
+
+  it('reuses an unchanged repository token without minting another token', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    mocks.getRepositoryAccess.mockClear();
+    mocks.setEnvironmentVariable.mockClear();
+    await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.getRepositoryAccess).not.toHaveBeenCalled();
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+  });
+
   it('keeps same-role PAT refresh failures best-effort', async () => {
     mocks.githubPat = 'ghp_original';
     const { workspace } = await createLocalFactory();

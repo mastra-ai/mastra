@@ -132,7 +132,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   const isLocalSandbox = sandboxConfig?.machine instanceof LocalSandbox;
   const githubTokenInjectors = new Map<
     string,
-    { inject: (token: string) => void; patKind: GithubPatKind; ghToken: string }
+    {
+      inject: (token: string) => void;
+      patKind: GithubPatKind;
+      ghToken: string;
+      credentialSource: 'pat' | 'repository';
+    }
   >();
   // Concurrent requests for the same session (thread list + activity polling +
   // chat) must not each provision a sandbox and clone the repository. The
@@ -235,20 +240,19 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       registerGithubTokenInjector(requestContext, registered.inject);
       const patKind = await resolveGithubPatKind();
       const patKindChanged = patKind !== registered.patKind;
+      let credentialSourceChanged = false;
       try {
-        let ghToken = await getGithubPat(() => github.integrationStorage, session.orgId, patKind);
-        if (!ghToken) {
-          // Preserve the existing fail-soft behavior for unchanged roles, but
-          // never keep a stale reviewer credential after moving to worker.
-          if (!patKindChanged) return;
-          ghToken = await getRepositoryToken();
-        }
+        const pat = await getGithubPat(() => github.integrationStorage, session.orgId, patKind);
+        const credentialSource = pat ? 'pat' : 'repository';
+        credentialSourceChanged = credentialSource !== registered.credentialSource;
+        const ghToken = pat ?? (credentialSourceChanged ? await getRepositoryToken() : registered.ghToken);
         if (ghToken !== registered.ghToken) registered.inject(ghToken);
         registered.patKind = patKind;
+        registered.credentialSource = credentialSource;
       } catch (error) {
-        // Same-role PAT refreshes remain best-effort. A role transition must
-        // fail closed instead of returning a workspace with the old identity.
-        if (patKindChanged) throw error;
+        // Same-source PAT refreshes remain best-effort. Role and credential
+        // source transitions fail closed instead of retaining a stale identity.
+        if (patKindChanged || credentialSourceChanged) throw error;
       } finally {
         registerGithubPatKind(requestContext, registered.patKind);
       }
@@ -301,7 +305,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // when a reviewer token is configured; everything else — including
       // sessions with no resolvable run binding — uses the worker token.
       const patKind = await resolveGithubPatKind();
-      const ghCliToken = (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? token;
+      const pat = await getGithubPat(() => github.integrationStorage, session.orgId, patKind);
+      const ghCliToken = pat ?? token;
+      const credentialSource = pat ? 'pat' : 'repository';
 
       const ensureSandbox = () =>
         fleet.ensureSandbox(
@@ -362,7 +368,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         const registered = githubTokenInjectors.get(workspaceId);
         if (registered) registered.ghToken = freshToken;
       };
-      githubTokenInjectors.set(workspaceId, { inject: injectGithubToken, patKind, ghToken: ghCliToken });
+      githubTokenInjectors.set(workspaceId, {
+        inject: injectGithubToken,
+        patKind,
+        ghToken: ghCliToken,
+        credentialSource,
+      });
       registerGithubTokenInjector(requestContext, injectGithubToken);
       registerGithubPatKind(requestContext, patKind);
 
