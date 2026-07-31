@@ -116,18 +116,40 @@ type LinkedSenderResult =
   | { status: 'blocked' }
   | { status: 'linked'; link: ChannelAccountLink; key: ChannelAccountLinkKey };
 
-/** Resolve a sender's persisted workspace context without applying UI gates. */
-export async function resolveWorkspaceContext(
+/**
+ * Read the persisted sender→workspace mapping. Single production entry point
+ * shared by `SlackIntegration.messaging.resolveWorkspaceContext` and the Slack
+ * dispatch gate (`resolveLinkedSender`), so both surfaces read the account
+ * link exactly once via the same code path.
+ */
+export async function readSenderLink(
   accountLinks: ChannelIdentityStorage,
   ref: MessagingSenderRef,
-): Promise<MessagingWorkspaceContext | null> {
-  const link = await accountLinks.getAccountLink(ref);
-  if (!link) return null;
+): Promise<ChannelAccountLink | null> {
+  return accountLinks.getAccountLink(ref);
+}
+
+/** Project a persisted link into the capability-level workspace context. */
+export function linkToWorkspaceContext(link: ChannelAccountLink): MessagingWorkspaceContext {
   return {
     orgId: link.orgId ?? '',
     userId: link.userId,
     defaultFactoryProjectId: link.defaultFactoryProjectId ?? null,
   };
+}
+
+/**
+ * Resolve a sender's persisted workspace context via {@link readSenderLink}.
+ * `SlackIntegration.messaging.resolveWorkspaceContext` and the dispatch gate
+ * both funnel through {@link readSenderLink} so this is not a parallel path —
+ * the capability method and the runtime dispatch path share one read.
+ */
+export async function resolveWorkspaceContext(
+  accountLinks: ChannelIdentityStorage,
+  ref: MessagingSenderRef,
+): Promise<MessagingWorkspaceContext | null> {
+  const link = await readSenderLink(accountLinks, ref);
+  return link ? linkToWorkspaceContext(link) : null;
 }
 
 /** Resolve the sender account link and prompt unlinked senders to connect. */
@@ -144,8 +166,12 @@ export async function resolveLinkedSender({
   const platform = thread.adapter.name;
   const externalUserId = message.author.userId;
   const externalTeamId = slackTeamId(message);
-  const key = externalTeamId ? { platform, externalTeamId, externalUserId } : undefined;
-  const link = key ? await accountLinks.getAccountLink(key) : null;
+  const key: ChannelAccountLinkKey | undefined = externalTeamId
+    ? { platform, externalTeamId, externalUserId }
+    : undefined;
+  // Route the read through the same helper `Messaging.resolveWorkspaceContext`
+  // uses so dispatch and the capability method are not parallel paths.
+  const link = key ? await readSenderLink(accountLinks, key) : null;
   if (link && key) return { status: 'linked', link, key };
 
   const publicUrl = webPublicUrl();

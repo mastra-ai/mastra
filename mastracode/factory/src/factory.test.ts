@@ -894,6 +894,162 @@ describe('MastraFactory.prepare integrations', () => {
       expect(Object.keys(channels.channelConfig.adapters)).toEqual(['slack', 'discord']);
     });
 
+    it('merges disjoint handler slots from two messaging integrations onto one config', async () => {
+      const setChannels = withController();
+      const slackOnDirect = vi.fn(async () => {});
+      const discordOnMention = vi.fn(async () => {});
+      class SlackStub implements FactoryIntegration {
+        readonly id = 'slack';
+        readonly messaging: Messaging;
+        constructor() {
+          this.messaging = fakeMessaging(() => ({
+            adapters: { slack: { adapter: { name: 'slack' } as never } },
+            handlers: { onDirectMessage: slackOnDirect },
+          }));
+        }
+        routes(): [] {
+          return [];
+        }
+        diagnostics(): Record<string, unknown> {
+          return {};
+        }
+      }
+      class DiscordStub implements FactoryIntegration {
+        readonly id = 'discord';
+        readonly messaging: Messaging;
+        constructor() {
+          this.messaging = fakeMessaging(() => ({
+            adapters: { discord: { adapter: { name: 'discord' } as never } },
+            handlers: { onMention: discordOnMention },
+          }));
+        }
+        routes(): [] {
+          return [];
+        }
+        diagnostics(): Record<string, unknown> {
+          return {};
+        }
+      }
+
+      const factory = new MastraFactory({
+        storage: fakeStorage(),
+        integrations: [new SlackStub(), new DiscordStub()],
+      });
+
+      await factory.prepare();
+
+      expect(setChannels).toHaveBeenCalledOnce();
+      const merged = (setChannels.mock.calls[0]![0] as AgentControllerChannels).channelConfig;
+      expect(merged.handlers?.onDirectMessage).toBe(slackOnDirect);
+      expect(merged.handlers?.onMention).toBe(discordOnMention);
+    });
+
+    it('fails loud when two ready messaging integrations own the same adapter key', async () => {
+      withController();
+      class SlackA implements FactoryIntegration {
+        readonly id = 'slack-a';
+        readonly messaging = fakeMessaging(() => ({ adapters: { slack: { adapter: { name: 'a' } as never } } }));
+        routes(): [] {
+          return [];
+        }
+        diagnostics(): Record<string, unknown> {
+          return {};
+        }
+      }
+      class SlackB implements FactoryIntegration {
+        readonly id = 'slack-b';
+        readonly messaging = fakeMessaging(() => ({ adapters: { slack: { adapter: { name: 'b' } as never } } }));
+        routes(): [] {
+          return [];
+        }
+        diagnostics(): Record<string, unknown> {
+          return {};
+        }
+      }
+      const factory = new MastraFactory({
+        storage: fakeStorage(),
+        integrations: [new SlackA(), new SlackB()],
+      });
+
+      await expect(factory.prepare()).rejects.toThrow(/SlackA.*SlackB.*slack|SlackB.*SlackA.*slack/);
+    });
+
+    it('fails loud when two ready messaging integrations own the same handler slot', async () => {
+      withController();
+      class SlackHandler implements FactoryIntegration {
+        readonly id = 'slack';
+        readonly messaging = fakeMessaging(() => ({
+          adapters: { slack: { adapter: { name: 'slack' } as never } },
+          handlers: { onMention: async () => {} },
+        }));
+        routes(): [] {
+          return [];
+        }
+        diagnostics(): Record<string, unknown> {
+          return {};
+        }
+      }
+      class DiscordHandler implements FactoryIntegration {
+        readonly id = 'discord';
+        readonly messaging = fakeMessaging(() => ({
+          adapters: { discord: { adapter: { name: 'discord' } as never } },
+          handlers: { onMention: async () => {} },
+        }));
+        routes(): [] {
+          return [];
+        }
+        diagnostics(): Record<string, unknown> {
+          return {};
+        }
+      }
+      const factory = new MastraFactory({
+        storage: fakeStorage(),
+        integrations: [new SlackHandler(), new DiscordHandler()],
+      });
+
+      await expect(factory.prepare()).rejects.toThrow(
+        /SlackHandler.*DiscordHandler.*onMention|DiscordHandler.*SlackHandler.*onMention/,
+      );
+    });
+
+    it('fails loud when two ready messaging integrations both set userName', async () => {
+      withController();
+      class SlackNamed implements FactoryIntegration {
+        readonly id = 'slack';
+        readonly messaging = fakeMessaging(() => ({
+          adapters: { slack: { adapter: { name: 'slack' } as never } },
+          userName: 'Slack Bot',
+        }));
+        routes(): [] {
+          return [];
+        }
+        diagnostics(): Record<string, unknown> {
+          return {};
+        }
+      }
+      class DiscordNamed implements FactoryIntegration {
+        readonly id = 'discord';
+        readonly messaging = fakeMessaging(() => ({
+          adapters: { discord: { adapter: { name: 'discord' } as never } },
+          userName: 'Discord Bot',
+        }));
+        routes(): [] {
+          return [];
+        }
+        diagnostics(): Record<string, unknown> {
+          return {};
+        }
+      }
+      const factory = new MastraFactory({
+        storage: fakeStorage(),
+        integrations: [new SlackNamed(), new DiscordNamed()],
+      });
+
+      await expect(factory.prepare()).rejects.toThrow(
+        /SlackNamed.*DiscordNamed.*userName|DiscordNamed.*SlackNamed.*userName/,
+      );
+    });
+
     it('exposes the source-control owner on the channels context when github is registered', async () => {
       withController();
       const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig());
