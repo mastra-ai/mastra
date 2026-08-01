@@ -263,3 +263,35 @@ describe('finish usage conversion', () => {
     });
   });
 });
+
+describe('v6 finish UI conversion', () => {
+  it.each([
+    ['stop', 'stop'],
+    ['length', 'length'],
+    ['content-filter', 'content-filter'],
+    ['tool-calls', 'tool-calls'],
+    ['other', 'other'],
+    ['tripwire', 'other'],
+    ['retry', 'other'],
+  ] as const)('maps the %s finish reason to %s in the UI chunk', (reason, expectedFinishReason) => {
+    const part = convertMastraChunkToAISDKv6({
+      chunk: {
+        type: 'finish',
+        runId: 'run-1',
+        from: ChunkFrom.AGENT,
+        payload: { stepResult: { reason }, output: { usage: {} } },
+      } as any,
+    });
+
+    const uiChunk = convertFullStreamChunkToUIMessageStream({
+      part: part as any,
+      sendFinish: true,
+      onError: error => String(error),
+    });
+
+    expect(uiChunk).toEqual({
+      type: 'finish',
+      finishReason: expectedFinishReason,
+    });
+  });
+});
