@@ -395,7 +395,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     const prefix = prefixParam ?? this.prefix ?? '';
 
     // Determine if body limits should be applied
-    const shouldApplyBodyLimit = this.bodyLimitOptions && ['POST', 'PUT', 'PATCH'].includes(route.method.toUpperCase());
+    const shouldApplyBodyLimit =
+      this.bodyLimitOptions && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(route.method.toUpperCase());
 
     // Get the body size limit for this route (route-specific or default)
     const maxSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
@@ -404,10 +405,14 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     const middlewares: MiddlewareHandler[] = [];
 
     if (shouldApplyBodyLimit && maxSize && this.bodyLimitOptions) {
+      const { onError } = this.bodyLimitOptions;
       middlewares.push(
         bodyLimit({
           maxSize,
-          onError: this.bodyLimitOptions.onError as any,
+          // Hono's bodyLimit middleware uses this callback's return value as the response
+          // directly, so it must resolve to a Response, unlike onError's framework-agnostic
+          // (error: unknown) => unknown contract used by the other adapters.
+          onError: (c: Context) => c.json(onError({ error: 'Request body too large' }), 413),
         }),
       );
     }

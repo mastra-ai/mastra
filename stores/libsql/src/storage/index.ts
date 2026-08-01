@@ -24,6 +24,7 @@ import { ScoresLibSQL } from './domains/scores';
 import { SkillsLibSQL } from './domains/skills';
 import { ThreadStateLibSQL } from './domains/thread-state';
 import { ToolProviderConnectionsLibSQL } from './domains/tool-provider-connections';
+import { WorkflowDefinitionsLibSQL } from './domains/workflow-definitions';
 import { WorkflowsLibSQL } from './domains/workflows';
 import { WorkspacesLibSQL } from './domains/workspaces';
 
@@ -49,6 +50,7 @@ export {
   FavoritesLibSQL,
   ThreadStateLibSQL,
   ToolProviderConnectionsLibSQL,
+  WorkflowDefinitionsLibSQL,
   WorkflowsLibSQL,
   WorkspacesLibSQL,
 };
@@ -219,6 +221,7 @@ export class LibSQLStore extends MastraCompositeStore {
 
     const scores = new ScoresLibSQL(domainConfig);
     const workflows = new WorkflowsLibSQL(domainConfig);
+    const workflowDefinitions = new WorkflowDefinitionsLibSQL(domainConfig);
     const memory = new MemoryLibSQL(domainConfig);
     const observability = new ObservabilityLibSQL(domainConfig);
     const agents = new AgentsLibSQL(domainConfig);
@@ -243,6 +246,7 @@ export class LibSQLStore extends MastraCompositeStore {
     this.stores = {
       scores,
       workflows,
+      workflowDefinitions,
       memory,
       observability,
       agents,

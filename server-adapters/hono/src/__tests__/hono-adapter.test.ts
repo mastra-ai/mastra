@@ -14,6 +14,7 @@ import {
   expectSerializedStreamChunks,
   consumeSSEStream,
   createMultipartTestSuite,
+  createBodyLimitTestSuite,
 } from '@internal/server-adapter-test-utils';
 import { Mastra } from '@mastra/core';
 import { registerApiRoute } from '@mastra/core/server';
@@ -1231,5 +1232,30 @@ describe('Hono Server Adapter', () => {
         expect(data.isStudio).toBeNull();
       }
     });
+  });
+
+  createBodyLimitTestSuite({
+    suiteName: 'Body Size Limit',
+
+    createApp: () => new Hono(),
+
+    setupAdapter: (app, mastra, bodyLimitOptions) => {
+      const adapter = new MastraServer({ app, mastra, bodyLimitOptions });
+      app.use('*', adapter.createContextMiddleware());
+      return { adapter, app };
+    },
+
+    registerRoute: (adapter, app, route) => adapter.registerRoute(app, route, { prefix: '' }),
+
+    executeRequest: async (app, method, url, options = {}) => {
+      const response = await app.request(
+        new Request(url, {
+          method,
+          headers: options.headers,
+          ...(options.body ? { body: options.body } : {}),
+        }),
+      );
+      return { status: response.status };
+    },
   });
 });

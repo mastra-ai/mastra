@@ -10,7 +10,7 @@ import PropertiesTable from "@site/src/components/PropertiesTable";
 
 # Summarization scorer
 
-The `createSummarizationScorer()` function creates a scorer that evaluates a summary on two axes: whether every claim it makes is supported by the source text, and whether it preserves the information the source states. The final score is the lower of the two, so a summary cannot pass by being faithful but empty, or thorough but wrong.
+The `createSummarizationScorer()` function creates a scorer that evaluates a summary on two axes: whether every claim it makes is supported by the source text, and whether it preserves the information the source states. The final score is the lower of the two, so a summary can't pass by being faithful but empty, or thorough but wrong.
 
 The summary is the agent's last message that carries text, and the source text defaults to the first user message of the run input. Pass `source` or `sourceExtractor` when the text being summarized lives somewhere else, such as a tool result.
 
@@ -182,13 +182,13 @@ These ranges assume the default `scale` of 1. When using a custom scale, multipl
 
 - **0.9-1.0**: Excellent summary, faithful to the source and covering its main points
 - **0.7-0.8**: Good summary with a small omission or an unsupported detail
-- **0.4-0.6**: Moderate summary, either missing significant information or drifting from the source
+- **0.4-0.6**: Moderate summary, either missing important information or drifting from the source
 - **0.1-0.3**: Poor summary, most of the source is lost or contradicted
-- **0.0**: The summary supports no claims, answers no questions, or produced nothing to judge
+- **0.0**: The summary produced nothing to judge, or it failed to support any claims. A summary that answers no questions also receives this score
 
 ### Reading the two axes
 
-Both axes leave their verdicts on the run result: the alignment verdicts on the preprocess step, and the coverage verdicts on the analyze step. Each verdict carries the claim or question it belongs to and the reason behind it. The two failure modes look different:
+Both axes leave their verdicts on the run result: the alignment verdicts on the preprocess step, and the coverage verdicts on the analyze step. Each verdict carries the claim or question it belongs to and the reason behind it. A low alignment score has a different meaning from a low coverage score:
 
 - A low alignment score with high coverage means the summary invents or distorts detail
 - A low coverage score with high alignment means the summary is accurate but leaves too much out
@@ -201,7 +201,7 @@ Length plays no part in the score. A summary that repeats the source word for wo
 
 ### Cost
 
-Each evaluation makes three model calls. `maxQuestions` bounds the coverage half of the work, which otherwise grows with source length. Raise it for long documents where ten questions cannot represent the content.
+Each evaluation makes three model calls. `maxQuestions` bounds the coverage half of the work, which otherwise grows with source length. Raise it for long documents where ten questions can't represent the content.
 
 ## Scorer configuration
 

@@ -19,6 +19,7 @@ import type {
   ListExperimentsOutput,
   TargetType,
   UpdateDatasetInput,
+  UpdateDatasetItemInput,
   UpdateExperimentResultInput,
 } from '../storage/types.js';
 import { runExperiment } from './experiment/index.js';
@@ -284,7 +285,9 @@ export class Dataset {
    * Update an existing item in the dataset. Only the provided payload fields
    * are patched.
    */
-  async updateItem(input: { itemId: string } & Partial<Omit<DatasetItemPayload, 'externalId'>>): Promise<DatasetItem> {
+  async updateItem(
+    input: { itemId: string } & Omit<UpdateDatasetItemInput, 'id' | 'datasetId' | 'filters'>,
+  ): Promise<DatasetItem> {
     const store = await this.#getDatasetsStore();
     const { itemId, ...rest } = input;
     return store.updateItem({ id: itemId, datasetId: this.id, ...rest, filters: this.#scope });
@@ -406,7 +409,7 @@ export class Dataset {
 
     const experimentId = run.id;
 
-    // Fire-and-forget — runExperiment merges dataset-attached scorers automatically
+    // Fire-and-forget — runExperiment resolves the applicable run, item, or dataset scorer source
     void runExperiment(this.#mastra, {
       datasetId: this.id,
       experimentId,
