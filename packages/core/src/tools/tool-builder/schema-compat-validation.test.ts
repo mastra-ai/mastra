@@ -1,4 +1,4 @@
-import { AnthropicSchemaCompatLayer, isStandardSchemaWithJSON, toStandardSchema } from '@mastra/schema-compat';
+import { AnthropicSchemaCompatLayer, isStandardSchemaWithJSON } from '@mastra/schema-compat';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { RequestContext } from '../../request-context';
@@ -31,7 +31,6 @@ function buildCoreTool(
 
 describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
   it('createTool execute path skips author-schema re-validation after CoreToolBuilder compat validation', async () => {
-    // createTool wraps execute with author-schema validation; CoreToolBuilder must use executeWithPrevalidatedInput.
     const execute = vi.fn(async ({ text }: { text: string }) => ({ success: true, text }));
     const shortTextTool = createTool({
       id: 'short-text-tool',
@@ -57,18 +56,65 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
     expect(execute).toHaveBeenCalledTimes(1);
   });
 
-  it('prefers processZodType over processToCompatSchema for Zod v4 (regression guard)', () => {
+  it('processToCompatSchema accepts short strings on Haiku after stripping min/max', () => {
     const inputSchema = z.object({ text: z.string().min(20) });
     expect(isStandardSchemaWithJSON(inputSchema)).toBe(true);
 
     const layer = new AnthropicSchemaCompatLayer(haikuModelConfig as any);
     const shortInput = { text: 'Short text' };
 
-    const viaCompatSchema = toStandardSchema(layer.processToCompatSchema(inputSchema));
-    expect(validateToolInput(viaCompatSchema, shortInput, 'regression').error).toBeDefined();
+    const viaCompatSchema = layer.processToCompatSchema(inputSchema);
+    expect(validateToolInput(viaCompatSchema, shortInput, 'regression').error).toBeUndefined();
+  });
 
-    const viaZodType = toStandardSchema(layer.processZodType(inputSchema));
-    expect(validateToolInput(viaZodType, shortInput, 'regression').error).toBeUndefined();
+  it('preserves cross-field refine rejection on Haiku compat validation', async () => {
+    const inputSchema = z
+      .object({
+        start: z.number(),
+        end: z.number(),
+      })
+      .refine(value => value.end > value.start);
+
+    const tool: ToolAction<any, any> = {
+      id: 'range-tool',
+      description: 'Validates start/end range',
+      inputSchema,
+      execute: async ({ start, end }) => ({ start, end }),
+    };
+
+    const coreTool = buildCoreTool(tool, 'range-tool', haikuModelConfig);
+    const executeResult = await coreTool.execute?.(
+      { start: 10, end: 1 },
+      {
+        abortSignal: new AbortController().signal,
+        toolCallId: 'test-call-id',
+        messages: [],
+      },
+    );
+
+    expect(executeResult).toHaveProperty('error', true);
+  });
+
+  it('keeps default fields optional in LLM-facing required array on Haiku', () => {
+    const inputSchema = z.object({
+      req: z.string(),
+      def: z.string().default('hi'),
+      opt: z.number().optional(),
+    });
+
+    const coreTool = buildCoreTool(
+      {
+        id: 'defaults-tool',
+        description: 'Defaults tool',
+        inputSchema,
+        execute: async () => ({}),
+      },
+      'defaults-tool',
+      haikuModelConfig,
+    );
+
+    const llmJsonSchema = (coreTool.parameters as { jsonSchema?: { required?: string[] } }).jsonSchema;
+    expect(llmJsonSchema?.required).toEqual(['req']);
   });
 
   it('strips string minLength from LLM-facing parameters and execute validation on Haiku', async () => {

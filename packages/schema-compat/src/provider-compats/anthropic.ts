@@ -18,7 +18,8 @@ import type { PublicSchema, ZodType } from '../schema.types';
 import { standardSchemaToJSONSchema, toStandardSchema } from '../standard-schema/standard-schema';
 import type { StandardSchemaWithJSON } from '../standard-schema/standard-schema.types';
 import type { ModelInformation } from '../types';
-import { isIntersection, isNull } from '../zodTypes';
+import { isZodType } from '../utils';
+import { isIntersection, isNull, isNullable, isOptional } from '../zodTypes';
 
 export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
   constructor(model: ModelInformation) {
@@ -71,15 +72,20 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
 
     return jsonSchema(transformedJsonSchema, {
       validate: (value: unknown) => {
-        const transformed = this.#traverse(value, transformedJsonSchema as Record<string, unknown>);
-        const result = zodSchema.safeParse(transformed);
-        return result.success ? { success: true, value: result.data } : { success: false, error: result.error };
+        const result = compat['~standard'].validate(value);
+        if (result instanceof Promise) {
+          throw new Error('Async validation is not supported');
+        }
+        return 'issues' in result && result.issues
+          ? { success: false as const, error: new Error(result.issues.map(i => i.message).join(', ')) }
+          : { success: true as const, value: (result as { value: unknown }).value };
       },
     });
   }
 
   public processToCompatSchema<T>(schema: PublicSchema<T>): StandardSchemaWithJSON<T> {
     const originalStandardSchema = toStandardSchema(schema);
+    const validationStandardSchema = this.#getCompatValidationStandardSchema(schema, originalStandardSchema);
 
     return {
       '~standard': {
@@ -88,7 +94,7 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
         validate: (value: unknown) => {
           const transformedJsonSchema = this.processToJSONSchema(schema, 'input') as Record<string, unknown>;
           const transformed = this.#traverse(value, transformedJsonSchema);
-          return originalStandardSchema['~standard'].validate(transformed);
+          return validationStandardSchema['~standard'].validate(transformed);
         },
         jsonSchema: {
           input: () => {
@@ -172,6 +178,196 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
 
   //   return schema;
   // }
+
+  #isHaikuModel(): boolean {
+    return this.getModel().modelId.includes('claude-3.5-haiku');
+  }
+
+  #getCompatValidationStandardSchema<T>(
+    schema: PublicSchema<T>,
+    originalStandardSchema: StandardSchemaWithJSON<T>,
+  ): StandardSchemaWithJSON<T> {
+    if (!this.#isHaikuModel() || !isZodType(schema)) {
+      return originalStandardSchema;
+    }
+
+    return toStandardSchema(this.#stripHaikuStringLengthConstraints(schema as ZodType)) as StandardSchemaWithJSON<T>;
+  }
+
+  /**
+   * Strip Haiku-ignored string min/max from a Zod schema for execute-time validation.
+   * Preserves object-level refinements and wrapper semantics unlike full-tree processZodType.
+   */
+  #stripHaikuStringLengthConstraints(value: ZodType): ZodType {
+    if ('_zod' in value) {
+      return this.#stripHaikuStringLengthConstraintsV4(value);
+    }
+
+    return this.#stripHaikuStringLengthConstraintsV3(value);
+  }
+
+  #stripHaikuStringLengthConstraintsV4(value: ZodType): ZodType {
+    const schema = value as any;
+
+    if (this.isString(value)) {
+      return this.defaultZodStringHandler(value, ['max', 'min']);
+    }
+
+    if (isOptional(z)(value)) {
+      const innerType = schema._zod.def.innerType as ZodType;
+      const stripped = this.#stripHaikuStringLengthConstraintsV4(innerType);
+      return stripped === innerType ? value : stripped.optional();
+    }
+
+    if (isNullable(z)(value)) {
+      const innerType = schema._zod.def.innerType as ZodType;
+      const stripped = this.#stripHaikuStringLengthConstraintsV4(innerType);
+      return stripped === innerType ? value : stripped.nullable();
+    }
+
+    if (schema.constructor.name === 'ZodDefault') {
+      const innerType = schema._zod.def.innerType as ZodType;
+      const stripped = this.#stripHaikuStringLengthConstraintsV4(innerType);
+      if (stripped === innerType) {
+        return value;
+      }
+      return stripped.default(schema._zod.def.defaultValue);
+    }
+
+    if (this.isArr(value)) {
+      const element = schema._zod.def.element as ZodType;
+      const stripped = this.#stripHaikuStringLengthConstraintsV4(element);
+      return stripped === element ? value : z.array(stripped as any);
+    }
+
+    if (this.isUnion(value)) {
+      const options = schema._zod.def.options as ZodType[];
+      let changed = false;
+      const strippedOptions = options.map(option => {
+        const stripped = this.#stripHaikuStringLengthConstraintsV4(option);
+        if (stripped !== option) {
+          changed = true;
+        }
+        return stripped;
+      });
+      return changed ? z.union(strippedOptions as any) : value;
+    }
+
+    if (this.isObj(value)) {
+      const shape = schema.shape as Record<string, ZodType>;
+      let changed = false;
+      const nextShape: Record<string, ZodType> = {};
+
+      for (const key in shape) {
+        const stripped = this.#stripHaikuStringLengthConstraintsV4(shape[key]!);
+        nextShape[key] = stripped;
+        if (stripped !== shape[key]) {
+          changed = true;
+        }
+      }
+
+      if (!changed) {
+        return value;
+      }
+
+      let nextObject = z.object(nextShape as any);
+      for (const check of schema._zod.def.checks ?? []) {
+        nextObject = nextObject.check(check);
+      }
+      return nextObject;
+    }
+
+    return value;
+  }
+
+  #stripHaikuStringLengthConstraintsV3(value: ZodType): ZodType {
+    const schema = value as any;
+    const typeName = schema._def?.typeName;
+
+    if (typeName === 'ZodString' && this.isString(value)) {
+      return this.defaultZodStringHandler(value, ['max', 'min']);
+    }
+
+    if (typeName === 'ZodOptional') {
+      const innerType = schema._def.innerType as ZodType;
+      const stripped = this.#stripHaikuStringLengthConstraintsV3(innerType);
+      return stripped === innerType ? value : stripped.optional();
+    }
+
+    if (typeName === 'ZodNullable') {
+      const innerType = schema._def.innerType as ZodType;
+      const stripped = this.#stripHaikuStringLengthConstraintsV3(innerType);
+      return stripped === innerType ? value : stripped.nullable();
+    }
+
+    if (typeName === 'ZodDefault') {
+      const innerType = schema._def.innerType as ZodType;
+      const stripped = this.#stripHaikuStringLengthConstraintsV3(innerType);
+      if (stripped === innerType) {
+        return value;
+      }
+      return stripped.default(schema._def.defaultValue());
+    }
+
+    if (typeName === 'ZodArray') {
+      const element = schema._def.type as ZodType;
+      const stripped = this.#stripHaikuStringLengthConstraintsV3(element);
+      return stripped === element ? value : z.array(stripped as any);
+    }
+
+    if (typeName === 'ZodUnion') {
+      const options = schema._def.options as ZodType[];
+      let changed = false;
+      const strippedOptions = options.map(option => {
+        const stripped = this.#stripHaikuStringLengthConstraintsV3(option);
+        if (stripped !== option) {
+          changed = true;
+        }
+        return stripped;
+      });
+      return changed ? z.union(strippedOptions as any) : value;
+    }
+
+    if (typeName === 'ZodObject' && this.isObj(value)) {
+      const shape = schema.shape as Record<string, ZodType>;
+      let changed = false;
+      const nextShape: Record<string, ZodType> = {};
+
+      for (const key in shape) {
+        const stripped = this.#stripHaikuStringLengthConstraintsV3(shape[key]!);
+        nextShape[key] = stripped;
+        if (stripped !== shape[key]) {
+          changed = true;
+        }
+      }
+
+      return changed ? z.object(nextShape as any) : value;
+    }
+
+    if (typeName === 'ZodEffects') {
+      const innerType = schema._def.schema as ZodType;
+      const stripped = this.#stripHaikuStringLengthConstraintsV3(innerType);
+      if (stripped === innerType) {
+        return value;
+      }
+
+      const effect = schema._def.effect;
+      if (effect.type === 'refinement') {
+        return (stripped as any).refine(effect.refinement, {
+          message: effect.message,
+          path: effect.path,
+        });
+      }
+
+      if (effect.type === 'transform') {
+        return (stripped as any).transform(effect.transform);
+      }
+
+      return value;
+    }
+
+    return value;
+  }
 
   #resolveSchemaForValue(schema: Record<string, unknown>, value: unknown): Record<string, unknown> {
     if (!Array.isArray(schema.anyOf)) {

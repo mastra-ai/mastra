@@ -84,4 +84,46 @@ describe('AnthropicSchemaCompatLayer', () => {
       expect('issues' in invalidResult).toBe(true);
     });
   });
+
+  describe('Haiku string length constraints', () => {
+    const haikuModelInfo: ModelInformation = {
+      provider: 'anthropic',
+      modelId: 'claude-3.5-haiku-20241022',
+      supportsStructuredOutputs: false,
+    };
+
+    it('strips string min/max from JSON Schema and does not enforce them at validation time', async () => {
+      const schema = z.object({
+        message: z.string().min(10).describe('A message with minimum 10 characters'),
+      });
+      const layer = new AnthropicSchemaCompatLayer(haikuModelInfo);
+      const compatSchema = layer.processToCompatSchema(schema);
+      const jsonSchemaOut = standardSchemaToJSONSchema(compatSchema);
+      const schemaJson = JSON.stringify(jsonSchemaOut);
+
+      expect(schemaJson).not.toContain('minLength');
+      expect(schemaJson).not.toContain('maxLength');
+
+      const shortResult = await compatSchema['~standard'].validate({ message: 'Hi' });
+      expect(shortResult).toEqual({ value: { message: 'Hi' } });
+    });
+
+    it('preserves cross-field refine validation on Haiku', async () => {
+      const schema = z
+        .object({
+          start: z.number(),
+          end: z.number(),
+        })
+        .refine(value => value.end > value.start, { message: 'end must be greater than start' });
+
+      const layer = new AnthropicSchemaCompatLayer(haikuModelInfo);
+      const compatSchema = layer.processToCompatSchema(schema);
+
+      const validResult = await compatSchema['~standard'].validate({ start: 1, end: 10 });
+      expect(validResult).toEqual({ value: { start: 1, end: 10 } });
+
+      const invalidResult = await compatSchema['~standard'].validate({ start: 10, end: 1 });
+      expect('issues' in invalidResult).toBe(true);
+    });
+  });
 });
