@@ -14,8 +14,8 @@ import { getFactoryAuthUserId } from './auth.js';
 import type { FactoryAuthUser } from './auth.js';
 import type { MastraFactorySandboxConfig } from './factory.js';
 import type { GithubIntegration } from './integrations/github/integration.js';
-import { getGithubPat } from './integrations/github/pat.js';
-import type { GithubPatKind } from './integrations/github/pat.js';
+import { resolveGithubPat } from './integrations/github/pat.js';
+import type { GithubPatKind, ResolvedGithubPat } from './integrations/github/pat.js';
 import {
   checkoutSessionBranch,
   MaterializeError,
@@ -24,6 +24,7 @@ import {
   runWorktreeSetup,
 } from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
+import type { GithubCredentialSource } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
 import type { SandboxBindingStore, SandboxFleet } from './sandbox/fleet.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
@@ -131,6 +132,8 @@ type GithubTokenRegistration = {
   inject: (token: string) => void;
   patKind: GithubPatKind;
   installedPatKind: GithubPatKind;
+  credentialSource: GithubCredentialSource;
+  installedCredentialSource: GithubCredentialSource;
   version: number;
   ghToken: string;
 };
@@ -222,7 +225,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         const address = getFactorySessionAddress(requestContext);
         const runBinding = address ? await workItems.findRunBindingBySession(address) : null;
         const isReviewer =
-          runBinding?.role === 'review' && runBinding.status !== 'revoked' && runBinding.orgId === session.orgId;
+          runBinding?.role === 'review' && runBinding.status === 'active' && runBinding.orgId === session.orgId;
         return { patKind: isReviewer ? 'reviewer' : 'default' };
       } catch (error) {
         return { error };
@@ -239,12 +242,26 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     };
     const registerGithubTokenContext = (registered: GithubTokenRegistration): void => {
       const version = registered.version;
-      registerGithubTokenInjector(requestContext, token => {
-        if (githubTokenInjectors.get(workspaceId) !== registered || registered.version !== version) {
+      registerGithubTokenInjector(requestContext, (token, credentialSource) => {
+        if (
+          githubTokenInjectors.get(workspaceId) !== registered ||
+          registered.version !== version ||
+          registered.patKind !== registered.installedPatKind ||
+          registered.credentialSource !== registered.installedCredentialSource
+        ) {
           throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
+        }
+        if (credentialSource === 'reviewer' && registered.patKind !== 'reviewer') {
+          throw new Error('GitHub token refresh cannot install reviewer credentials into a worker workspace.');
         }
         registered.inject(token);
         registered.ghToken = token;
+        if (credentialSource !== registered.installedCredentialSource) {
+          registered.credentialSource = credentialSource;
+          registered.installedCredentialSource = credentialSource;
+          registered.version += 1;
+          registerGithubTokenContext(registered);
+        }
       });
       registerGithubPatKind(requestContext, registered.patKind);
     };
@@ -261,7 +278,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const resolution = await resolveGithubPatKind();
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
           if ('error' in resolution) {
-            if (registered.patKind !== registered.installedPatKind) throw resolution.error;
+            if (
+              registered.patKind !== registered.installedPatKind ||
+              registered.credentialSource !== registered.installedCredentialSource
+            ) {
+              throw resolution.error;
+            }
             registerGithubTokenContext(registered);
             return;
           }
@@ -275,32 +297,54 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             registered.version += 1;
           }
 
-          let pat: string | null;
+          let resolvedPat: ResolvedGithubPat;
           try {
-            pat = await getGithubPat(() => github.integrationStorage, session.orgId, patKind, {
-              throwOnError: true,
-            });
+            resolvedPat = await resolveGithubPat(() => github.integrationStorage, session.orgId, patKind);
           } catch (error) {
-            if (roleChanged && patKind === 'default') throw error;
-            if (roleChanged) registered.installedPatKind = patKind;
+            const installedCredentialIsSafe =
+              patKind === 'reviewer' || registered.installedCredentialSource !== 'reviewer';
+            if (
+              roleChanged &&
+              installedCredentialIsSafe &&
+              registered.credentialSource === registered.installedCredentialSource
+            ) {
+              registered.installedPatKind = patKind;
+              registerGithubTokenContext(registered);
+              return;
+            }
+            if (roleChanged || registered.credentialSource !== registered.installedCredentialSource) throw error;
             registerGithubTokenContext(registered);
             return;
           }
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
 
+          const credentialSource = resolvedPat?.kind ?? 'repository';
+          const credentialSourceChanged = credentialSource !== registered.installedCredentialSource;
+          if (registered.credentialSource !== credentialSource) {
+            registered.credentialSource = credentialSource;
+            registered.version += 1;
+          }
+
           try {
-            const nextToken = pat ?? (roleChanged && patKind === 'default' ? await getRepositoryToken() : null);
+            const nextToken = resolvedPat?.token ?? (credentialSourceChanged ? await getRepositoryToken() : null);
+            if (githubTokenInjectors.get(workspaceId) !== registered) return;
             if (nextToken && nextToken !== registered.ghToken) {
               registered.inject(nextToken);
               registered.ghToken = nextToken;
             }
           } catch (error) {
-            if (roleChanged && patKind === 'default') throw error;
-            if (roleChanged) registered.installedPatKind = patKind;
+            const installedCredentialIsSafe =
+              patKind === 'reviewer' || registered.installedCredentialSource !== 'reviewer';
+            const wouldRetainReviewerCredentials =
+              registered.installedCredentialSource === 'reviewer' && credentialSource !== 'reviewer';
+            if (!installedCredentialIsSafe || wouldRetainReviewerCredentials) throw error;
+            registered.credentialSource = registered.installedCredentialSource;
+            registered.installedPatKind = patKind;
             registerGithubTokenContext(registered);
             return;
           }
           registered.installedPatKind = patKind;
+          registered.installedCredentialSource = credentialSource;
           registerGithubTokenContext(registered);
         });
       githubTokenReconciliations.set(workspaceId, reconciliation);
@@ -360,7 +404,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // sessions with no resolvable run binding — uses the worker token.
       const patKindResolution = await resolveGithubPatKind();
       const patKind = 'patKind' in patKindResolution ? patKindResolution.patKind : 'default';
-      const ghCliToken = (await getGithubPat(() => github.integrationStorage, session.orgId, patKind)) ?? token;
+      let resolvedPat: ResolvedGithubPat = null;
+      try {
+        resolvedPat = await resolveGithubPat(() => github.integrationStorage, session.orgId, patKind);
+      } catch {
+        // Initial materialization remains fail-soft and uses repository access.
+      }
+      const ghCliToken = resolvedPat?.token ?? token;
+      const credentialSource: GithubCredentialSource = resolvedPat?.kind ?? 'repository';
 
       const ensureSandbox = () =>
         fleet.ensureSandbox(
@@ -423,6 +474,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         inject: injectGithubToken,
         patKind,
         installedPatKind: patKind,
+        credentialSource,
+        installedCredentialSource: credentialSource,
         version: 0,
         ghToken: ghCliToken,
       };
