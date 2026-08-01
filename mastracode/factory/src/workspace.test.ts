@@ -938,6 +938,41 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
   });
 
+  it('retries a failed repository credential downgrade without reusing the reviewer PAT', async () => {
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    mocks.runBindingRole = 'work';
+    const existing = { setToolsConfig: vi.fn() };
+    mocks.getRepositoryAccess.mockRejectedValueOnce(new Error('repository access unavailable'));
+
+    await expect(
+      workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+      }),
+    ).rejects.toThrow('repository access unavailable');
+
+    mocks.getRepositoryAccess.mockRejectedValueOnce(new Error('repository access still unavailable'));
+    await expect(
+      workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+      }),
+    ).rejects.toThrow('repository access still unavailable');
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+
+    await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+    });
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
+  });
+
   it('preserves a cached reviewer identity when the binding lookup fails during reuse', async () => {
     mocks.githubPat = 'ghp_worker';
     mocks.githubReviewerPat = 'ghp_reviewer';

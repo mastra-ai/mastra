@@ -137,7 +137,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       inject: (token: string, source?: GithubTokenSource, patKind?: GithubPatKind) => void;
       patKind: GithubPatKind;
       ghToken: string;
+      // The target source advances before replacement to block stale refreshes.
       credentialSource: GithubTokenSource | 'unknown';
+      // The installed source advances only after replacement succeeds.
+      installedCredentialSource: GithubTokenSource | 'unknown';
       reconciliationRequired: boolean;
     }
   >();
@@ -281,10 +284,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
               registered.credentialSource = credentialSource;
               registered.reconciliationRequired = true;
             }
-            const ghToken = pat.token ?? (credentialSourceChanged ? await getRepositoryToken() : registered.ghToken);
+            const installedCredentialSourceChanged = credentialSource !== registered.installedCredentialSource;
+            const ghToken =
+              pat.token ?? (installedCredentialSourceChanged ? await getRepositoryToken() : registered.ghToken);
             if (ghToken !== registered.ghToken) registered.inject(ghToken, credentialSource);
             registered.patKind = patKind;
             registered.credentialSource = credentialSource;
+            registered.installedCredentialSource = credentialSource;
             registered.reconciliationRequired = false;
           } catch (error) {
             // Same-source PAT refreshes remain best-effort. Role and credential
@@ -430,6 +436,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           registered.ghToken = freshToken;
           // Unknown sources are re-resolved on the next reuse instead of being trusted as a PAT or repository token.
           registered.credentialSource = credentialSource ?? 'unknown';
+          registered.installedCredentialSource = credentialSource ?? 'unknown';
           if (refreshedPatKind === registered.patKind && credentialSource) {
             registered.reconciliationRequired = false;
           }
@@ -440,6 +447,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         patKind,
         ghToken: ghCliToken,
         credentialSource,
+        installedCredentialSource: credentialSource,
         reconciliationRequired: false,
       });
       registerGithubTokenInjector(requestContext, injectGithubToken);
