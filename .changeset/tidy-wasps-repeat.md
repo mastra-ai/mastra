@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed `collectToolMocks` emitting `output: undefined` for tool-call trajectory steps without a recorded `toolResult` (e.g. failed or suspended calls). `JSON.stringify` drops `undefined` keys, so saving a dataset item from such a trace failed server-side validation with `400 Invalid request body: toolMocks.N.output — expected nonoptional, received undefined`. Missing results are now persisted as `null`.
+Fixed dataset item saving for traces with failed or suspended tool calls that have no recorded results. These dataset items now save successfully; missing tool results are stored as `null` instead of being omitted.
