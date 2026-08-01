@@ -13,8 +13,9 @@ const cliRoot = join(rootDir, 'mastracode', 'mastra-factory');
 /**
  * Validates the artifacts users receive from `npm create factory`
  * against the monorepo's local package set (served by the E2E registry):
- * generate the template from mastracode/web, scaffold with the CLI's
- * --default path, then typecheck, build, boot, and probe the scaffold.
+ * generate the server scaffold from mastracode/web, scaffold with the CLI's
+ * --default path, then typecheck, build the CLI-bundled UI and server, boot,
+ * and probe the scaffold.
  *
  * Published-npm compatibility is intentionally NOT checked here — sources
  * may legitimately be ahead of npm between release trains. The
@@ -37,7 +38,19 @@ describe('softwarefactory template', () => {
     const templateDir = join(workDir, 'template');
     scaffoldDir = join(workDir, 'factory');
 
-    // The CLI bin runs from dist; build it (cheap, tsup).
+    // `pnpm --filter` bypasses turbo, so the embedded SPA that `build:lib`
+    // builds below would resolve @mastra/* `exports` into unbuilt `dist/`.
+    await execa('pnpm', ['run', 'prebuild'], {
+      cwd: join(rootDir, 'mastracode', 'web'),
+      stdio: 'inherit',
+    });
+
+    // The create-factory bundle externalizes its `mastra/internal/auth`
+    // dependency, so both package dist directories must exist before it runs.
+    await execa('pnpm', ['--filter', './packages/cli', 'build:lib'], {
+      cwd: rootDir,
+      stdio: 'inherit',
+    });
     await execa('pnpm', ['--filter', './mastracode/mastra-factory', 'build'], {
       cwd: rootDir,
       stdio: 'inherit',
@@ -50,8 +63,16 @@ describe('softwarefactory template', () => {
       env: { ...process.env, ...registryEnv },
     });
 
-    // Scaffold a project with the CLI's --default path (installs via npm).
-    await execa('node', [join(cliRoot, 'bin', 'cli.mjs'), 'factory', '--default', '--template-dir', templateDir], {
+    // The CLI accepts a Git template source, so make the generated directory
+    // cloneable and scaffold it through the built create-factory entrypoint.
+    await execa('git', ['init', '-q', '-b', 'main'], { cwd: templateDir });
+    await execa('git', ['add', '-A'], { cwd: templateDir });
+    await execa(
+      'git',
+      ['-c', 'user.name=Software Factory E2E', '-c', 'user.email=e2e@mastra.ai', 'commit', '-q', '-m', 'Template'],
+      { cwd: templateDir },
+    );
+    await execa('node', [join(cliRoot, 'dist', 'index.js'), 'factory', '--no-platform', '--template', templateDir], {
       cwd: workDir,
       stdio: 'inherit',
       env: { ...process.env, ...registryEnv, MASTRA_TELEMETRY_DISABLED: '1' },
@@ -76,7 +97,7 @@ describe('softwarefactory template', () => {
     });
   });
 
-  it('builds the UI and server', async () => {
+  it('builds the server and CLI-bundled UI', async () => {
     await execa('npm', ['run', 'build'], {
       cwd: scaffoldDir,
       stdio: 'inherit',
@@ -84,19 +105,17 @@ describe('softwarefactory template', () => {
     });
   });
 
-  it('boots the dev servers and serves UI/API/proxied routes', async () => {
-    const apiPort = await getPort();
-    const uiPort = await getPort();
+  it('boots the dev server and serves UI and API routes', async () => {
+    const port = await getPort();
 
     const dev = execa('npm', ['run', 'dev'], {
       cwd: scaffoldDir,
       env: {
         ...process.env,
         ...registryEnv,
-        PORT: String(apiPort),
-        MASTRACODE_UI_PORT: String(uiPort),
-        // The Vite proxy targets :4111 by default; follow the API port.
-        MASTRACODE_API_TARGET: `http://localhost:${apiPort}`,
+        // This smoke test probes UI and API routes directly.
+        MASTRACODE_AUTH_DISABLED: '1',
+        PORT: String(port),
       },
       detached: true,
       stdout: 'pipe',
@@ -120,24 +139,34 @@ describe('softwarefactory template', () => {
     };
 
     try {
-      // The dev servers bind `localhost`, which lands on ::1 or 127.0.0.1
+      // The dev server binds `localhost`, which lands on ::1 or 127.0.0.1
       // depending on the OS/Node resolver — accept whichever loopback answers.
+      const lastProbe = new Map<string, string>();
       const probe = async (port: number, path: string) => {
         for (const host of ['localhost', '127.0.0.1', '[::1]']) {
           try {
-            const res = await fetch(`http://${host}:${port}${path}`);
+            // Bound each attempt: a hung request would otherwise stall the
+            // poll loop past its deadline and lose the collected diagnostics.
+            const res = await fetch(`http://${host}:${port}${path}`, { signal: AbortSignal.timeout(10_000) });
+            // callers only read ok/status — release the socket immediately
+            void res.body?.cancel().catch(() => {});
+            lastProbe.set(path, `${host} -> ${res.status}`);
             if (res.ok) return res;
-          } catch {
-            // Try the next loopback address.
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            lastProbe.set(path, `${host} -> ${message}`);
           }
         }
         return null;
       };
 
+      // Probe a concrete API endpoint, matching the other E2E suites.
+      const apiRoute = '/api/tools';
+
       const deadline = Date.now() + 5 * 60 * 1000;
       let ready = false;
       while (Date.now() < deadline && !devExited) {
-        const [ui, api] = await Promise.all([probe(uiPort, '/'), probe(apiPort, '/api')]);
+        const [ui, api] = await Promise.all([probe(port, '/'), probe(port, apiRoute)]);
         if (ui && api) {
           ready = true;
           break;
@@ -146,15 +175,22 @@ describe('softwarefactory template', () => {
       }
 
       if (!ready) {
-        // Kill first so awaiting the (reject: false) result yields output.
+        // Read before killDev(), which resolves `dev` and flips devExited.
+        const exited = devExited;
+        const probes = [...lastProbe].map(([path, outcome]) => `${path} ${outcome}`).join(', ');
         killDev();
         const result = await dev;
-        throw new Error(`Dev server did not become ready on ui:${uiPort} api:${apiPort}.\n${result.all ?? ''}`);
+        const detail = [exited && 'process exited', probes].filter(Boolean).join('; ') || 'no probe completed';
+        throw new Error(`Dev server did not become ready on port ${port} (${detail}).\n${result.all ?? ''}`);
       }
 
-      // Web-surface route proxied through the Vite dev server.
-      const providers = await probe(uiPort, '/web/config/providers');
-      expect(providers?.status).toBe(200);
+      const providers = await probe(port, '/web/config/providers');
+      if (!providers) {
+        throw new Error(
+          `Provider config endpoint did not respond successfully (${lastProbe.get('/web/config/providers') ?? 'no probe completed'})`,
+        );
+      }
+      expect(providers.status).toBe(200);
     } finally {
       killDev();
       await dev.catch(() => {});

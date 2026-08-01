@@ -8,7 +8,7 @@ packages:
 
 # Google Cloud Spanner storage
 
-The Google Cloud Spanner storage implementation provides a horizontally scalable, strongly consistent storage backend for Mastra. It targets the GoogleSQL dialect of Cloud Spanner.
+The Google Cloud Spanner storage implementation provides a horizontally high-capacity, strongly consistent storage backend for Mastra. It targets the GoogleSQL dialect of Cloud Spanner.
 
 ## Installation
 
@@ -172,14 +172,14 @@ The storage adapter creates the following tables, all using the GoogleSQL dialec
 
 Tables are created with `STRING(MAX)` for text and JSON payloads, `INT64`, `FLOAT64`, `BOOL`, and `TIMESTAMP`.
 
-Two tables also carry Spanner-specific `STORED` generated columns that the adapter populates from JSON payloads so common filters can use a regular secondary index instead of a `JSON_VALUE` scan:
+The following tables carry Spanner-specific `STORED` generated columns that the adapter populates from JSON payloads so common filters can use a regular secondary index instead of a `JSON_VALUE` scan:
 
-- `mastra_workflow_snapshot.snapshotStatus` — extracts `$.status` from `snapshot`; backs `listWorkflowRuns({ status })`.
-- `mastra_schedules.target_workflow_id` — extracts `$.workflowId` from `target`; backs `listSchedules({ workflowId })`.
+- `mastra_workflow_snapshot.snapshotStatus`: Extracts `$.status` from `snapshot`. Backs `listWorkflowRuns({ status })`.
+- `mastra_schedules.target_workflow_id`: Extracts `$.workflowId` from `target`. Backs `listSchedules({ workflowId })`.
 
 Both are added via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` during `init()` and skipped under `initMode: 'validate'` (where the schema is owned externally). When the column is absent, the adapter falls back to a `JSON_VALUE` filter at runtime.
 
-The adapter doesn't create or use named schemas; use a dedicated database for isolation.
+The adapter doesn't create or use schemas. Use a dedicated database for isolation.
 
 ### Initialization
 
@@ -225,11 +225,11 @@ If `init()` isn't called and `disableInit` is true, the required tables won't ex
 A few behaviors differ from other relational adapters:
 
 - Upserts use `INSERT OR UPDATE`. Spanner doesn't provide a `RETURNING` clause for upserts, so callers needing the post-write state must read it back.
-- No `TRUNCATE` exists; `dangerouslyClearAll()` issues `DELETE WHERE TRUE`.
+- No `TRUNCATE` exists. `dangerouslyClearAll()` issues `DELETE WHERE TRUE`.
 - Identifiers are quoted with backticks.
 - DDL is applied through `database.updateSchema(...)`, which is asynchronous (long-running operation).
 - `NULLS FIRST/LAST` isn't supported. Ordering with NULL handling is emulated through an `IS NULL` ordering key.
-- JSON containment isn't supported natively. `listTraces` `metadata` and `scope` filters compile to per-key `JSON_VALUE(...) = @v` equality checks, and `tags` filters compile to `EXISTS` over `JSON_QUERY_ARRAY(...)`. This differs from Postgres' `@>` containment operator (which can match nested structure in a single index scan) — most one-shot lookups still work but deeply nested structural matches aren't expressible.
+- JSON containment isn't supported natively. `listTraces` `metadata` and `scope` filters compile to per-key `JSON_VALUE(...) = @v` equality checks, and `tags` filters compile to `EXISTS` over `JSON_QUERY_ARRAY(...)`. This differs from Postgres' `@>` containment operator (which can match nested structure in a single index scan): most one-shot lookups still work but deeply nested structural matches aren't expressible.
 
 ### Direct database access
 
@@ -258,4 +258,4 @@ gcloud spanner instances create test-instance --config=emulator-config --nodes=1
 gcloud spanner databases create test-db --instance=test-instance
 ```
 
-Then connect with the same env var set in your Node.js process; the `@google-cloud/spanner` client detects the emulator automatically.
+Then connect with the same env var set in your Node.js process. The `@google-cloud/spanner` client detects the emulator automatically.

@@ -7,15 +7,17 @@ packages:
 
 # Threads and state
 
-Threads and state are how an AgentController conversation survives beyond a single exchange. A **thread** is the persistent record of a conversation — its messages and metadata, saved to storage so a user can close the app and resume the same conversation later, or switch between several conversations. **State** is structured data attached to the conversation — values like model preferences, feature flags, or progress — that agents and your UI read and write as the conversation runs.
+Threads and state are how an AgentController conversation survives beyond a single exchange. A **thread** is the persistent record of a conversation, its messages and metadata, saved to storage so a user can close the app and resume the same conversation later, or switch between several conversations. **State** is structured data attached to the conversation, values like model preferences, feature flags, or progress, that agents and your UI read and write as the conversation runs.
 
-The two work together: the thread is the message history, and state is the shared scratchpad alongside it. Both persist across mode switches, model changes, and restarts, so nothing is lost when a user switches from plan mode to build mode or reopens the app the next day.
+The thread and state work together: the thread is the message history, and state is the shared scratchpad alongside it.
 
-Thread _lifecycle_ transitions — create, switch, clone, delete — live on the AgentController because they coordinate the shared thread lock and emit events. The active thread binding and thread/message _reads_ live on the [`Session`](/docs/agent-controller/session) as `agentController.session.thread`.
+Both persist across mode switches, model changes, and restarts, so nothing is lost when a user switches from plan mode to build mode or reopens the app the next day.
+
+Thread _lifecycle_ transitions, create, switch, clone, delete, live on the AgentController because they coordinate the shared thread lock and emit events. The active thread binding and thread/message _reads_ live on the [`Session`](/docs/agent-controller/session) as `agentController.session.thread`.
 
 ## Threads
 
-A thread holds one conversation's full message history. The AgentController binds the Session to one active thread at a time; messages you send and the agent's replies are appended to that thread and saved to storage. Threads let users resume a past conversation, keep several conversations side by side, or branch one into alternatives.
+A thread holds one conversation's full message history. The AgentController binds the Session to one active thread at a time. Messages you send and the agent's replies are appended to that thread and saved to storage. Threads let users resume a past conversation or keep several conversations side by side, or alternatively branch one into alternatives.
 
 ### Creating and selecting threads
 
@@ -34,7 +36,9 @@ const thread = await agentController.createThread({ title: 'New conversation' })
 
 ### Switching threads
 
-Switch to an existing thread. The agentController aborts any in-progress generation, acquires a lock on the new thread, and emits a `thread_changed` event:
+Switch to an existing thread.
+
+The agentController aborts any in-progress generation and acquires a lock on the new thread, plus emits a `thread_changed` event:
 
 ```typescript
 await agentController.switchThread({ threadId: 'thread-abc123' })
@@ -79,7 +83,7 @@ const agentController = new AgentController({
 
 ## State
 
-Where a thread stores the conversation's messages, state stores structured values that describe the conversation but aren't messages — model preferences, feature flags, UI settings, or progress markers. Agents can read and update state during a run, and your UI can react to changes, so state is how the agent and the interface stay in sync on shared facts. You define its shape with a schema, and every update is validated against that schema before it's applied.
+Where a thread stores the conversation's messages, state stores structured values that describe the conversation but aren't messages, model preferences, feature flags, UI settings, or progress markers. Agents can read and update state during a run, and your UI can react to changes, so state is how the agent and the interface stay in sync on shared facts. You define its shape with a schema, and every update is validated against that schema before it's applied.
 
 ### Defining a state schema
 
@@ -139,7 +143,7 @@ The resource ID is part of a conversation's identity, so you read it from the Se
 const resourceId = agentController.session.identity.getResourceId()
 ```
 
-The session also has a stable `id` and `ownerId` (read with `session.identity.getId()` and `session.identity.getOwnerId()`). Unlike the resource ID, these don't change when you switch resources — see [Session identity](/docs/agent-controller/session#identity) for details.
+The session also has a stable `id` and `ownerId` (read with `session.identity.getId()` and `session.identity.getOwnerId()`). Unlike the resource ID, these don't change when you switch resources, see [Session identity](/docs/agent-controller/session#identity) for details.
 
 ## Related
 

@@ -144,28 +144,6 @@ Examples:
 `);
 }
 
-export async function cleanupHeadless(options: {
-  stopWork: Array<() => Promise<unknown> | unknown>;
-  closeStorage: () => Promise<void> | void;
-  releaseLocks: () => void;
-  exitCode: number;
-  onStorageError: (error: unknown) => void;
-}): Promise<number> {
-  let exitCode = options.exitCode;
-  try {
-    await Promise.allSettled(options.stopWork.map(stop => Promise.resolve().then(stop)));
-    try {
-      await options.closeStorage();
-    } catch (error) {
-      options.onStorageError(error);
-      if (exitCode === 0) exitCode = 1;
-    }
-  } finally {
-    options.releaseLocks();
-  }
-  return exitCode;
-}
-
 /**
  * Headless CLI entry point: parse arguments, read stdin, initialize MastraCode,
  * run via `runMC`, render output, and exit with the mapped code.
@@ -207,7 +185,7 @@ export async function runMCCli(predrainedInput?: string | null): Promise<never> 
   }
 
   const boot = await createMastraCode({ settingsPath: args.settings });
-  const { controller, session, githubSignals, mcpManager, effectiveDefaults, storageMaintenance } = boot;
+  const { controller, session, mcpManager, effectiveDefaults } = boot;
 
   if (mcpManager?.hasServers()) {
     try {
@@ -270,21 +248,14 @@ export async function runMCCli(predrainedInput?: string | null): Promise<never> 
     exitCode = 1;
   } finally {
     // --- Teardown (always runs, even on a thrown error) ---
-    exitCode = await cleanupHeadless({
-      stopWork: [
-        () => mcpManager?.disconnect(),
-        () => controller.getMastra()?.stopWorkers(),
-        () => controller?.stopIntervals(),
-        () => githubSignals?.stopAllPolling(),
-        () => (boot.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close?.(),
-      ],
-      closeStorage: () => storageMaintenance.closeStorage?.(),
-      releaseLocks: releaseAllThreadLocks,
-      exitCode,
-      onStorageError: error => {
-        process.stderr.write(`Storage cleanup failed: ${(error as Error).message ?? error}\n`);
-      },
-    });
+    releaseAllThreadLocks();
+    const closeSignalsPubSub = (boot.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
+    await Promise.allSettled([
+      mcpManager?.disconnect(),
+      controller.getMastra()?.stopWorkers(),
+      controller?.stopIntervals(),
+      closeSignalsPubSub?.(),
+    ]);
   }
 
   process.exit(exitCode);

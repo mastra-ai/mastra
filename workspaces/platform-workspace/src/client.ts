@@ -24,7 +24,13 @@ export function requireOption(value: string | undefined, name: string): string {
 
 export function resolvePlatformOptions(options: PlatformClientOptions) {
   return {
-    accessToken: requireOption(options.accessToken ?? process.env.MASTRA_PLATFORM_ACCESS_TOKEN, 'accessToken'),
+    accessToken: requireOption(
+      options.accessToken ??
+        process.env.MASTRA_PLATFORM_SECRET_KEY ??
+        // Deprecated alias — prefer MASTRA_PLATFORM_SECRET_KEY.
+        process.env.MASTRA_PLATFORM_ACCESS_TOKEN,
+      'accessToken',
+    ),
     projectId: requireOption(options.projectId ?? process.env.MASTRA_PROJECT_ID, 'projectId'),
     proxyUrl: (process.env.MASTRA_WORKSPACE_PROXY_URL ?? DEFAULT_PROXY_URL).replace(/\/$/, ''),
     fetch: options.fetch ?? fetch,

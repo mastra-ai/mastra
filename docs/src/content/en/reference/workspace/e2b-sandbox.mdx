@@ -301,11 +301,11 @@ const workspace = new Workspace({
 })
 ```
 
-This is optional—`gcsfuse` is installed automatically at mount time if not present.
+This is optional: `gcsfuse` is installed automatically at mount time if not present.
 
 ## Using with Code Mode
 
-[Code Mode](/docs/agents/code-mode) lets an agent write a single TypeScript program that orchestrates its tools. Because E2B runs that program in a remote micro-VM, it needs a transport that writes the program into the sandbox filesystem rather than the host. `@mastra/e2b` ships `E2BCodeModeTransport` for this—pass it as the second argument to `createCodeMode`:
+[Code Mode](/docs/agents/code-mode) lets an agent write a single TypeScript program that orchestrates its tools. Because E2B runs that program in a remote micro-VM, it needs a transport that writes the program into the sandbox filesystem rather than the host. `@mastra/e2b` provides `E2BCodeModeTransport` for this. Pass it as the second argument to `createCodeMode`:
 
 ```typescript
 import { createCodeMode } from '@mastra/core/tools'

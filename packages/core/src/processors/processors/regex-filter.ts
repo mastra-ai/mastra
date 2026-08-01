@@ -7,6 +7,7 @@ import type {
   ProcessOutputResultArgs,
   ProcessOutputStreamArgs,
   ProcessorMessageResult,
+  ProcessorViolation,
   Processor,
 } from '../index';
 
@@ -32,6 +33,91 @@ export interface RegexMatch {
   match: string;
   /** Start index of the match in the text */
   index: number;
+}
+
+/**
+ * Internal match that keeps a reference to the originating rule and both
+ * offsets. `RegexMatch` only carries the rule name, which is ambiguous when two
+ * rules share a name, and no end offset.
+ */
+interface RuleMatch {
+  /** The rule that produced this match */
+  rule: RegexRule;
+  /** Start offset of the match in the text */
+  start: number;
+  /** End offset (exclusive) of the match in the text */
+  end: number;
+}
+
+/**
+ * Width of a match in characters, used to pick the winner among overlaps.
+ */
+function matchLength(match: RuleMatch): number {
+  return match.end - match.start;
+}
+
+/**
+ * Rules are matched with a fresh RegExp each time so a `lastIndex` left over
+ * from a previous pass can never skip part of the next text.
+ */
+function compilePattern(rule: RegexRule): RegExp {
+  return new RegExp(rule.pattern.source, rule.pattern.flags);
+}
+
+/**
+ * A span of text to replace, built by unioning overlapping matches.
+ */
+interface RedactionRegion {
+  /** Start offset of the region in the text */
+  start: number;
+  /** End offset (exclusive) of the region in the text */
+  end: number;
+  /** Longest match contributing to this region; supplies the replacement */
+  owner: RuleMatch;
+  /**
+   * Rule names of every match merged into this region, set only once a second
+   * match joins. Left undefined for the common one-match region so a region
+   * costs no extra allocation.
+   */
+  overlappingRules?: string[];
+}
+
+/**
+ * One span of text that the `redact` strategy rewrote.
+ */
+export interface RegexRedaction {
+  /** Name of the rule whose replacement was used */
+  rule: string;
+  /** Start offset of the redacted span in the text */
+  index: number;
+  /** Length of the redacted span */
+  length: number;
+  /** Text that replaced the span */
+  replacement: string;
+  /** Names of all rules that matched this span, when more than one overlapped */
+  overlappingRules?: string[];
+  /** The text that was redacted. Only set when `includeRedactedValues` is enabled */
+  value?: string;
+}
+
+/**
+ * `ProcessorViolation.detail` for a redaction. Reports the redactions applied to
+ * one piece of text, so the offsets always refer to a single message, message
+ * part, or stream chunk.
+ */
+export interface RegexRedactionDetail {
+  strategy: 'redact';
+  /** Processor method that applied the redactions */
+  phase: 'processInput' | 'processOutputStream' | 'processOutputResult';
+  /** Id of the message the text came from. Absent for stream chunks */
+  messageId?: string;
+  /**
+   * Index of the redacted part in the message's `parts` array, which also
+   * contains non-text parts. Absent for string content and stream chunks.
+   */
+  partIndex?: number;
+  /** Redactions in the order they appear in the text */
+  redactions: RegexRedaction[];
 }
 
 /**
@@ -81,6 +167,15 @@ export interface RegexFilterOptions {
    * - 'all': Filter both input and output (default)
    */
   phase?: 'input' | 'output' | 'all';
+
+  /**
+   * Include the text that was redacted in `RegexRedaction.value`.
+   *
+   * Off by default: the values are the data the processor exists to remove, so
+   * an audit trail should not become a second copy of them. Turn it on only
+   * when the destination is as protected as the original.
+   */
+  includeRedactedValues?: boolean;
 }
 
 const PII_RULES: RegexRule[] = [
@@ -180,6 +275,16 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
   private rules: RegexRule[];
   private strategy: 'block' | 'redact' | 'warn';
   private phase: 'input' | 'output' | 'all';
+  private includeRedactedValues: boolean;
+
+  /**
+   * Invoked when the `redact` strategy rewrites a piece of text, once per
+   * redacted message, message part, or stream chunk, with a
+   * {@link RegexRedactionDetail} as `detail`. The `block` strategy reports
+   * through the same callback, driven by the processor runner when it catches
+   * the TripWire.
+   */
+  public onViolation?: (violation: ProcessorViolation) => void | Promise<void>;
 
   constructor(options: RegexFilterOptions) {
     const presetRules = (options.presets ?? []).flatMap(preset => PRESET_MAP[preset] ?? []);
@@ -191,15 +296,21 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
 
     this.strategy = options.strategy ?? 'block';
     this.phase = options.phase ?? 'all';
+    this.includeRedactedValues = options.includeRedactedValues ?? false;
   }
 
-  private findMatches(text: string): RegexMatch[] {
-    const matches: RegexMatch[] = [];
+  /**
+   * Run every rule over the text and collect all matches, grouped by rule in
+   * declaration order. Matches may overlap; callers that rewrite text must
+   * de-overlap them first.
+   */
+  private collectMatches(text: string): RuleMatch[] {
+    const matches: RuleMatch[] = [];
     for (const rule of this.rules) {
-      const regex = new RegExp(rule.pattern.source, rule.pattern.flags);
+      const regex = compilePattern(rule);
       let m: RegExpExecArray | null;
       while ((m = regex.exec(text)) !== null) {
-        matches.push({ rule: rule.name, match: m[0], index: m.index });
+        matches.push({ rule, start: m.index, end: m.index + m[0].length });
         if (!regex.global) break;
         if (m[0].length === 0) {
           regex.lastIndex++;
@@ -209,13 +320,131 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
     return matches;
   }
 
-  private redactText(text: string): string {
-    let result = text;
-    for (const rule of this.rules) {
-      const regex = new RegExp(rule.pattern.source, rule.pattern.flags);
-      result = result.replace(regex, rule.replacement ?? '[REDACTED]');
+  /**
+   * Public-shaped view of the matches, used for block and warn reporting.
+   */
+  private findMatches(text: string): RegexMatch[] {
+    return this.collectMatches(text).map(({ rule, start, end }) => ({
+      rule: rule.name,
+      match: text.slice(start, end),
+      index: start,
+    }));
+  }
+
+  /**
+   * Collapses the raw matches into disjoint regions, merging any that overlap.
+   * Each rule is matched independently, so two rules can claim intersecting
+   * ranges (a bare 16-digit card number matches both `phone` and `credit-card`).
+   * Replacing them one rule at a time leaves the tail of the longer match in
+   * the clear, so overlapping ranges are unioned and redacted once.
+   */
+  private buildRedactionRegions(matches: RuleMatch[]): RedactionRegion[] {
+    const ordered = matches
+      .filter(match => matchLength(match) > 0)
+      .sort((a, b) => a.start - b.start || matchLength(b) - matchLength(a));
+
+    const regions: RedactionRegion[] = [];
+    for (const match of ordered) {
+      const current = regions.at(-1);
+      if (current && match.start < current.end) {
+        current.end = Math.max(current.end, match.end);
+        (current.overlappingRules ??= [current.owner.rule.name]).push(match.rule.name);
+        if (matchLength(match) > matchLength(current.owner)) {
+          current.owner = match;
+        }
+      } else {
+        regions.push({ start: match.start, end: match.end, owner: match });
+      }
     }
-    return result;
+    return regions;
+  }
+
+  /**
+   * Resolve the text that replaces a region.
+   *
+   * Replacements containing `$` may reference capture groups, so those are
+   * resolved by re-running the rule against the matched slice. That requires the
+   * pattern to still cover the whole slice on its own, which it will not when the
+   * rule is anchored on its surroundings or when its match length depended on
+   * text outside the region. A merged region does not correspond to a single
+   * pattern at all. Every one of those falls back to the replacement string as
+   * written, so the region is replaced whole and no part of it survives.
+   */
+  private resolveReplacement(text: string, region: RedactionRegion): string {
+    const { rule } = region.owner;
+    const replacement = rule.replacement ?? '[REDACTED]';
+    if (region.overlappingRules || !replacement.includes('$')) return replacement;
+
+    const matched = text.slice(region.start, region.end);
+    const isolated = compilePattern(rule).exec(matched);
+    if (!isolated || isolated.index !== 0 || isolated[0].length !== matched.length) return replacement;
+
+    return matched.replace(compilePattern(rule), replacement);
+  }
+
+  /**
+   * Replace every matched region of the text with its rule's replacement, and
+   * describe each replacement so callers can report it.
+   */
+  private redactText(text: string): { text: string; redactions: RegexRedaction[] } {
+    const regions = this.buildRedactionRegions(this.collectMatches(text));
+    if (regions.length === 0) return { text, redactions: [] };
+
+    const redactions: RegexRedaction[] = [];
+    let result = '';
+    let cursor = 0;
+    for (const region of regions) {
+      const replacement = this.resolveReplacement(text, region);
+      result += text.slice(cursor, region.start) + replacement;
+      cursor = region.end;
+
+      const overlappingRules = region.overlappingRules && [...new Set(region.overlappingRules)];
+      redactions.push({
+        rule: region.owner.rule.name,
+        index: region.start,
+        length: region.end - region.start,
+        replacement,
+        ...(overlappingRules && overlappingRules.length > 1 ? { overlappingRules } : {}),
+        ...(this.includeRedactedValues ? { value: text.slice(region.start, region.end) } : {}),
+      });
+    }
+    return { text: result + text.slice(cursor), redactions };
+  }
+
+  /**
+   * Hand a redaction to `onViolation`, if one is set and anything changed.
+   * Returns nothing when there is no callback, so the redact path stays
+   * synchronous unless a caller actually attached one.
+   */
+  private reportRedaction(
+    phase: RegexRedactionDetail['phase'],
+    redactions: RegexRedaction[],
+    location?: { messageId?: string; partIndex?: number },
+  ): void | Promise<void> {
+    if (!this.onViolation || redactions.length === 0) return;
+
+    const ruleNames = [...new Set(redactions.map(redaction => redaction.rule))].join(', ');
+    const detail: RegexRedactionDetail = {
+      strategy: 'redact',
+      phase,
+      ...(location?.messageId !== undefined ? { messageId: location.messageId } : {}),
+      ...(location?.partIndex !== undefined ? { partIndex: location.partIndex } : {}),
+      redactions,
+    };
+
+    try {
+      return Promise.resolve(
+        this.onViolation({
+          processorId: this.id,
+          message: `Regex filter: redacted content matching patterns: ${ruleNames}`,
+          detail,
+        }),
+      ).catch(() => {
+        // onViolation errors are silently caught
+      });
+    } catch {
+      // onViolation errors are silently caught
+    }
   }
 
   private extractSegments(messages: MastraDBMessage[]): string[] {
@@ -277,20 +506,39 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
     }
   }
 
-  private redactMessages(messages: MastraDBMessage[]): MastraDBMessage[] {
-    return messages.map(msg => {
+  /**
+   * Redact every text segment of every message, reporting each segment
+   * separately so the offsets in a report always refer to one piece of text.
+   *
+   * Returns the messages directly when nothing is awaiting a report, keeping the
+   * common case synchronous, and a promise once `onViolation` is set.
+   */
+  private redactMessages(
+    messages: MastraDBMessage[],
+    phase: RegexRedactionDetail['phase'],
+  ): MastraDBMessage[] | Promise<MastraDBMessage[]> {
+    const pending: Promise<void>[] = [];
+    const collect = (report: void | Promise<void>) => {
+      if (report) pending.push(report);
+    };
+
+    const redactedMessages = messages.map(msg => {
       if (typeof msg.content === 'string') {
         // At runtime, content may be a plain string even though MastraDBMessage types it as MastraMessageContentV2.
         // Redact the string and preserve the original shape.
-        return { ...msg, content: this.redactText(msg.content) } as unknown as MastraDBMessage;
+        const redacted = this.redactText(msg.content);
+        collect(this.reportRedaction(phase, redacted.redactions, { messageId: msg.id }));
+        return { ...msg, content: redacted.text } as unknown as MastraDBMessage;
       }
       if (!msg.content || typeof msg.content !== 'object' || !('parts' in msg.content) || !msg.content.parts) {
         return msg;
       }
 
-      const newParts = msg.content.parts.map(part => {
+      const newParts = msg.content.parts.map((part, partIndex) => {
         if (part.type === 'text' && 'text' in part) {
-          return { ...part, text: this.redactText((part as { type: 'text'; text: string }).text) };
+          const redacted = this.redactText((part as { type: 'text'; text: string }).text);
+          collect(this.reportRedaction(phase, redacted.redactions, { messageId: msg.id, partIndex }));
+          return { ...part, text: redacted.text };
         }
         return part;
       });
@@ -300,6 +548,9 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
         content: { ...msg.content, parts: newParts },
       };
     });
+
+    if (pending.length === 0) return redactedMessages;
+    return Promise.all(pending).then(() => redactedMessages);
   }
 
   processInput(args: ProcessInputArgs<RegexFilterTripwireMetadata>): ProcessInputResult | Promise<ProcessInputResult> {
@@ -312,7 +563,7 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
     this.handleMatches(matches, 'content');
 
     if (this.strategy === 'redact') {
-      return this.redactMessages(args.messages);
+      return this.redactMessages(args.messages, 'processInput');
     }
 
     return args.messages;
@@ -330,7 +581,9 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
           this.blockWithTripWire(matches, 'streaming content');
         }
         if (this.strategy === 'redact') {
-          return { ...args.part, payload: { ...args.part.payload, text: this.redactText(args.part.payload.text) } };
+          const redacted = this.redactText(args.part.payload.text);
+          await this.reportRedaction('processOutputStream', redacted.redactions);
+          return { ...args.part, payload: { ...args.part.payload, text: redacted.text } };
         }
         if (this.strategy === 'warn') {
           const ruleNames = [...new Set(matches.map(m => m.rule))].join(', ');
@@ -351,7 +604,7 @@ export class RegexFilterProcessor implements Processor<'regex-filter', RegexFilt
     this.handleMatches(matches, 'content');
 
     if (this.strategy === 'redact') {
-      return this.redactMessages(args.messages);
+      return this.redactMessages(args.messages, 'processOutputResult');
     }
 
     return args.messages;
