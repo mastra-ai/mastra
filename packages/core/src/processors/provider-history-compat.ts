@@ -221,6 +221,88 @@ export function isMaybeAnthropic(
   return matchesProviderPrefix(model, 'anthropic');
 }
 
+export function isMaybeAzure(
+  model:
+    | string
+    | { provider?: string; modelId?: string }
+    | ((...args: any[]) => any)
+    | { model: any; enabled?: boolean }[]
+    | unknown,
+): boolean {
+  if (Array.isArray(model)) {
+    return model.some(entry => isMaybeAzure((entry as { model?: unknown }).model ?? entry));
+  }
+
+  if (model && typeof model === 'object') {
+    const { provider, modelId } = model as { provider?: unknown; modelId?: unknown };
+    if (typeof provider === 'string' && /^(?:azure|azure-openai)(?:\.[a-z0-9_-]+)?$/i.test(provider)) {
+      return true;
+    }
+
+    return (
+      typeof modelId === 'string' &&
+      (matchesProviderPrefix(modelId, 'azure') || matchesProviderPrefix(modelId, 'azure-openai'))
+    );
+  }
+
+  return matchesProviderPrefix(model, 'azure') || matchesProviderPrefix(model, 'azure-openai');
+}
+
+const SYSTEM_REMINDER_OPEN_TAG = /<system-reminder(?=\s|\/?>)([^>]*)>/g;
+const SYSTEM_REMINDER_CLOSE_TAG = /<\/system-reminder>/g;
+
+/**
+ * Azure OpenAI can moderate the system-reminder wrapper in user text and in
+ * system-role instructions that reference it. Rename it only in the outbound
+ * prompt so persisted history stays provider-neutral.
+ *
+ * System messages have `content: string`; user messages have array content.
+ * Both forms are handled so the tag name in the system instruction and in the
+ * user-role markers agree, and no `<system-reminder>` literal remains in the
+ * Azure-bound payload.
+ */
+export const azureSystemReminderTransform: CompatRule = {
+  name: 'azure-system-reminder-transform',
+  applyToPrompt({ prompt, model }) {
+    if (!isMaybeAzure(model)) return undefined;
+
+    let promptMutated = false;
+    const next = prompt.map(message => {
+      // System messages carry string content; rename the tag there too so the
+      // instruction and the user-role markers agree.
+      if (message.role === 'system') {
+        if (typeof message.content !== 'string') return message;
+        const text = message.content
+          .replace(SYSTEM_REMINDER_OPEN_TAG, '<memory-context$1>')
+          .replace(SYSTEM_REMINDER_CLOSE_TAG, '</memory-context>');
+        if (text === message.content) return message;
+        promptMutated = true;
+        return { ...message, content: text };
+      }
+
+      if (message.role !== 'user' || !Array.isArray(message.content)) return message;
+
+      let messageMutated = false;
+      const content = message.content.map(part => {
+        if (part.type !== 'text') return part;
+
+        const text = part.text
+          .replace(SYSTEM_REMINDER_OPEN_TAG, '<memory-context$1>')
+          .replace(SYSTEM_REMINDER_CLOSE_TAG, '</memory-context>');
+        if (text === part.text) return part;
+
+        messageMutated = true;
+        promptMutated = true;
+        return { ...part, text };
+      });
+
+      return messageMutated ? { ...message, content } : message;
+    });
+
+    return promptMutated ? next : undefined;
+  },
+};
+
 /**
  * Returns a copy of the prompt with selected `reasoning` parts stripped from
  * assistant messages. Returns `undefined` if no changes were necessary.
@@ -317,6 +399,7 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   anthropicToolIdFormat,
   cerebrasStripReasoningContent,
   anthropicStripForeignReasoningContent,
+  azureSystemReminderTransform,
 ];
 
 // ---------------------------------------------------------------------------
@@ -343,6 +426,10 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  * - **anthropic-strip-foreign-reasoning-content** — strips non-Anthropic
  *   `reasoning` parts from assistant messages in the outbound prompt when the
  *   resolved model is Anthropic. Anthropic-native reasoning parts are kept.
+ * - **azure-system-reminder-transform** — renames `system-reminder` wrappers
+ *   in Azure-bound user text and in system-role instructions that reference
+ *   the tag, so the instruction and the markers agree in the outbound payload.
+ *   Persisted history is unchanged.
  *
  * To add custom rules, pass them to the constructor:
  * ```ts
