@@ -18,6 +18,7 @@ function baseConfig(): IntakeConfig {
   return {
     github: { enabled: true, sourceIds: null },
     linear: { enabled: true, sourceIds: null },
+    jira: { enabled: false, sourceIds: null },
   };
 }
 
@@ -149,6 +150,7 @@ describe('IntakeSection', () => {
         config: {
           github: { enabled: true, sourceIds: ['mastra'] },
           linear: { enabled: true, sourceIds: ['lproj-1'] },
+          jira: { enabled: false, sourceIds: null },
         },
       });
 

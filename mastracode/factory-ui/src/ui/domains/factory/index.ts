@@ -5,5 +5,6 @@ export * from '../../../hooks/useIntakeConfig';
 export * from '../../../hooks/useWorkItems';
 export * from './services/factory';
 export * from './services/linear';
+export * from './services/jira';
 export * from './services/intake';
 export * from './services/workItems';
