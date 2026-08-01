@@ -46,7 +46,7 @@ const mocks = vi.hoisted(() => ({
   /** Run-binding role resolved for the session; null = no binding found. */
   runBindingRole: null as string | null,
   findRunBindingBySession: vi.fn(async () =>
-    mocks.runBindingRole ? { role: mocks.runBindingRole, orgId: 'org-1', status: 'active' } : null,
+    mocks.runBindingRole ? { role: mocks.runBindingRole, orgId: 'org-1' } : null,
   ),
 }));
 
@@ -60,7 +60,7 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
 }));
 
 import { MaterializeError } from './integrations/github/sandbox.js';
-import { getRegisteredGithubPatKind, injectGithubToken } from './integrations/github/token-refresh.js';
+import { injectGithubToken } from './integrations/github/token-refresh.js';
 import { SandboxFleet } from './sandbox/fleet.js';
 import { checkpointNameForSession, createWorkspaceFactory, getFactoryWorkspace } from './workspace.js';
 
@@ -800,78 +800,7 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_worker');
   });
 
-  it('keeps the worker credential as the reviewer fallback during a PAT settings outage', async () => {
-    mocks.githubPat = 'ghp_worker';
-    const { workspace } = await createLocalFactory();
-    addProject();
-    addSession({ id: 'session-a' });
-
-    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-
-    mocks.runBindingRole = 'review';
-    mocks.githubPatError = new Error('settings unavailable');
-    mocks.setEnvironmentVariable.mockClear();
-    const requestContext = createGithubRequestContext('project-1', 'session-a');
-    await expect(
-      workspace({
-        requestContext,
-        mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
-      }),
-    ).resolves.toBeDefined();
-
-    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
-    expect(getRegisteredGithubPatKind(requestContext)).toBe('reviewer');
-  });
-
-  it.each([
-    ['worker PAT', 'ghp_worker'],
-    ['repository token', null],
-  ])('keeps the %s when a reviewer fallback returns to work during a PAT settings outage', async (_, githubPat) => {
-    mocks.githubPat = githubPat;
-    mocks.runBindingRole = 'review';
-    const { workspace } = await createLocalFactory();
-    addProject();
-    addSession({ id: 'session-a' });
-
-    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-
-    mocks.runBindingRole = 'work';
-    mocks.githubPatError = new Error('settings unavailable');
-    mocks.setEnvironmentVariable.mockClear();
-    const requestContext = createGithubRequestContext('project-1', 'session-a');
-    await expect(
-      workspace({
-        requestContext,
-        mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
-      }),
-    ).resolves.toBeDefined();
-
-    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
-    expect(getRegisteredGithubPatKind(requestContext)).toBe('default');
-  });
-
-  it('fails closed when PAT settings are unavailable during a reviewer-to-worker downgrade', async () => {
-    mocks.githubReviewerPat = 'ghp_reviewer';
-    mocks.runBindingRole = 'review';
-    const { workspace } = await createLocalFactory();
-    addProject();
-    addSession({ id: 'session-a' });
-    const reviewerContext = createGithubRequestContext('project-1', 'session-a');
-
-    await workspace({ requestContext: reviewerContext });
-
-    mocks.runBindingRole = 'work';
-    mocks.githubPatError = new Error('settings unavailable');
-    await expect(
-      workspace({
-        requestContext: createGithubRequestContext('project-1', 'session-a'),
-        mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
-      }),
-    ).rejects.toThrow('settings unavailable');
-    expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token', 'reviewer')).toThrow(/no longer matches/);
-  });
-
-  it('replaces a cleared reviewer PAT with repository access instead of retaining reviewer credentials', async () => {
+  it('replaces reviewer credentials with repository access when no worker PAT is configured', async () => {
     mocks.githubReviewerPat = 'ghp_reviewer';
     mocks.runBindingRole = 'review';
     const { workspace } = await createLocalFactory();
@@ -879,48 +808,6 @@ describe('GitHub session workspace preparation', () => {
     addSession({ id: 'session-a' });
 
     await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-
-    mocks.githubReviewerPat = null;
-    mocks.setEnvironmentVariable.mockClear();
-    await workspace({
-      requestContext: createGithubRequestContext('project-1', 'session-a'),
-      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
-    });
-
-    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
-  });
-
-  it('fails closed when cleared reviewer credentials cannot be replaced', async () => {
-    mocks.githubReviewerPat = 'ghp_reviewer';
-    mocks.runBindingRole = 'review';
-    const { workspace } = await createLocalFactory();
-    addProject();
-    addSession({ id: 'session-a' });
-
-    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
-
-    mocks.githubReviewerPat = null;
-    mocks.setEnvironmentVariable.mockImplementationOnce(() => {
-      throw new Error('sandbox unavailable');
-    });
-    await expect(
-      workspace({
-        requestContext: createGithubRequestContext('project-1', 'session-a'),
-        mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
-      }),
-    ).rejects.toThrow('sandbox unavailable');
-  });
-
-  it('replaces a runtime-refreshed reviewer PAT when the session returns to work', async () => {
-    mocks.runBindingRole = 'review';
-    const { workspace } = await createLocalFactory();
-    addProject();
-    addSession({ id: 'session-a' });
-    const reviewerContext = createGithubRequestContext('project-1', 'session-a');
-
-    await workspace({ requestContext: reviewerContext });
-    injectGithubToken(reviewerContext, 'ghp_reviewer', 'reviewer');
-    expect(() => injectGithubToken(reviewerContext, 'ghp_reviewer_rotated', 'reviewer')).not.toThrow();
 
     mocks.runBindingRole = 'work';
     mocks.setEnvironmentVariable.mockClear();
@@ -932,35 +819,27 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
   });
 
-  it('invalidates old reviewer refresh contexts after a worker-reviewer role cycle', async () => {
+  it('invalidates reviewer token refresh contexts when a cached workspace returns to work', async () => {
     mocks.githubPat = 'ghp_worker';
     mocks.githubReviewerPat = 'ghp_reviewer';
     mocks.runBindingRole = 'review';
     const { workspace } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
-    const staleReviewerContext = createGithubRequestContext('project-1', 'session-a');
+    const reviewerContext = createGithubRequestContext('project-1', 'session-a');
 
-    await workspace({ requestContext: staleReviewerContext });
+    await workspace({ requestContext: reviewerContext });
 
-    const existing = { setToolsConfig: vi.fn() };
     mocks.runBindingRole = 'work';
     await workspace({
       requestContext: createGithubRequestContext('project-1', 'session-a'),
-      mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
-    });
-    mocks.runBindingRole = 'review';
-    await workspace({
-      requestContext: createGithubRequestContext('project-1', 'session-a'),
-      mastra: { getWorkspaceById: vi.fn(() => existing) } as any,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
 
-    expect(() => injectGithubToken(staleReviewerContext, 'stale-reviewer-token', 'reviewer')).toThrow(
-      /no longer matches/,
-    );
+    expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
-  it('reconciles the leader when a review binding appears during materialization', async () => {
+  it('reconciles the materialization leader when a review binding appears inflight', async () => {
     mocks.githubPat = 'ghp_worker';
     mocks.githubReviewerPat = 'ghp_reviewer';
     const { workspace } = await createLocalFactory();
@@ -979,6 +858,66 @@ describe('GitHub session workspace preparation', () => {
       expect.any(Object),
     );
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer');
+  });
+
+  it('keeps the installed token when PAT settings fail without a role change', async () => {
+    mocks.githubPat = 'ghp_worker';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    mocks.githubPatError = new Error('settings unavailable');
+    mocks.setEnvironmentVariable.mockClear();
+    await expect(
+      workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+      }),
+    ).resolves.toBeDefined();
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+  });
+
+  it('keeps the installed token when run-binding lookup fails without a pending role change', async () => {
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    mocks.findRunBindingBySession.mockRejectedValueOnce(new Error('bindings unavailable'));
+    mocks.setEnvironmentVariable.mockClear();
+    await expect(
+      workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+      }),
+    ).resolves.toBeDefined();
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when PAT settings fail during a reviewer-to-worker transition', async () => {
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const reviewerContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({ requestContext: reviewerContext });
+
+    mocks.runBindingRole = 'work';
+    mocks.githubPatError = new Error('settings unavailable');
+    await expect(
+      workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+      }),
+    ).rejects.toThrow('settings unavailable');
+    expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
   it('falls back to the worker PAT for review sessions without a reviewer token', async () => {
@@ -1023,24 +962,9 @@ describe('GitHub session workspace preparation', () => {
     const requestContext = createGithubRequestContext('project-1', 'session-a');
 
     await workspace({ requestContext });
-    injectGithubToken(requestContext, 'fresh-token', 'repository');
+    injectGithubToken(requestContext, 'fresh-token');
 
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'fresh-token');
-  });
-
-  it('rejects runtime token refreshes that omit the credential source', async () => {
-    const { workspace } = await createLocalFactory();
-    addProject();
-    addSession({ id: 'session-a' });
-    const requestContext = createGithubRequestContext('project-1', 'session-a');
-
-    await workspace({ requestContext });
-    mocks.setEnvironmentVariable.mockClear();
-
-    expect(() => injectGithubToken(requestContext, 'untracked-token', undefined as never)).toThrow(
-      'GitHub token refresh must identify its credential source.',
-    );
-    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
   });
 
   it('re-registers the token injector when reusing a workspace on a later request', async () => {
@@ -1054,7 +978,7 @@ describe('GitHub session workspace preparation', () => {
       requestContext,
       mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
-    injectGithubToken(requestContext, 'later-token', 'repository');
+    injectGithubToken(requestContext, 'later-token');
 
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'later-token');
   });

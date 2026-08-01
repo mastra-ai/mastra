@@ -5,9 +5,7 @@ import type { GithubPatKind } from './pat.js';
 const GITHUB_TOKEN_INJECTOR_CONTEXT_KEY = 'factoryGithubTokenInjector';
 const GITHUB_PAT_KIND_CONTEXT_KEY = 'factoryGithubPatKind';
 
-export type GithubCredentialSource = GithubPatKind | 'repository';
-
-type GithubTokenInjector = (token: string, source: GithubCredentialSource) => void;
+type GithubTokenInjector = (token: string) => void;
 
 export function registerGithubTokenInjector(requestContext: RequestContext, injector: GithubTokenInjector): void {
   requestContext.set(GITHUB_TOKEN_INJECTOR_CONTEXT_KEY, injector);
@@ -25,17 +23,10 @@ export function getRegisteredGithubPatKind(requestContext: RequestContext): Gith
   return kind === 'reviewer' ? 'reviewer' : 'default';
 }
 
-export function injectGithubToken(
-  requestContext: RequestContext,
-  token: string,
-  source: GithubCredentialSource,
-): void {
+export function injectGithubToken(requestContext: RequestContext, token: string): void {
   const injector = requestContext.get(GITHUB_TOKEN_INJECTOR_CONTEXT_KEY) as GithubTokenInjector | undefined;
   if (!injector) {
     throw new Error('GitHub token refresh requires an active Factory sandbox workspace.');
   }
-  if (!source) {
-    throw new Error('GitHub token refresh must identify its credential source.');
-  }
-  injector(token, source);
+  injector(token);
 }
