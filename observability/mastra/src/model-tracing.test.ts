@@ -2050,27 +2050,40 @@ describe('ModelSpanTracker', () => {
         const span = endGeneration({
           attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
           usage: { inputTokens: 100, outputTokens: 50 },
-          providerMetadata: { gateway: { cost: 0 } },
+          stepProviderMetadata: [{ gateway: { cost: 0 } }],
         });
 
         expect(span.attributes.costContext?.estimatedCost).toBe(0);
       });
 
-      it('falls back to pricing estimates when any Gateway step has no valid reported cost', () => {
-        const span = endGeneration({
-          attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
-          usage: { inputTokens: 100, outputTokens: 50 },
-          stepProviderMetadata: [{ gateway: { cost: '0.0012' } }, { gateway: { cost: -0.0008 } }],
-        });
+      it.each([-0.0008, 'invalid-cost', NaN, Infinity])(
+        'falls back to pricing estimates when any Gateway step has invalid reported cost %p',
+        cost => {
+          const span = endGeneration({
+            attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
+            usage: { inputTokens: 100, outputTokens: 50 },
+            stepProviderMetadata: [{ gateway: { cost: '0.0012' } }, { gateway: { cost } }],
+          });
 
-        expect(span.attributes.costContext).toBeUndefined();
-      });
+          expect(span.attributes.costContext).toBeUndefined();
+        },
+      );
 
       it('does not report a partial Gateway cost when a completed step has no metadata', () => {
         const span = endGeneration({
           attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
           usage: { inputTokens: 100, outputTokens: 50 },
           stepProviderMetadata: [{ gateway: { cost: '0.0012' } }, undefined],
+        });
+
+        expect(span.attributes.costContext).toBeUndefined();
+      });
+
+      it('does not use final-step provider metadata without per-step metadata', () => {
+        const span = endGeneration({
+          attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
+          usage: { inputTokens: 100, outputTokens: 50 },
+          providerMetadata: { gateway: { cost: '0.0012' } },
         });
 
         expect(span.attributes.costContext).toBeUndefined();

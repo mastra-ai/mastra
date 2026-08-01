@@ -54,18 +54,17 @@ function parseGatewayCost(providerMetadata: EndGenerationOptions['providerMetada
   return typeof cost === 'number' && Number.isFinite(cost) && cost >= 0 ? cost : undefined;
 }
 
-function getGatewayCostContext({
-  providerMetadata,
-  stepProviderMetadata,
-}: Pick<EndGenerationOptions, 'providerMetadata' | 'stepProviderMetadata'>) {
-  const metadataByStep = stepProviderMetadata ?? [providerMetadata];
+function getGatewayCostContext({ stepProviderMetadata }: Pick<EndGenerationOptions, 'stepProviderMetadata'>) {
+  if (!stepProviderMetadata) {
+    return undefined;
+  }
 
-  if (!metadataByStep.some(metadata => metadata?.gateway !== undefined)) {
+  if (!stepProviderMetadata.some(metadata => metadata?.gateway !== undefined)) {
     return undefined;
   }
 
   const costs: number[] = [];
-  for (const metadata of metadataByStep) {
+  for (const metadata of stepProviderMetadata) {
     const cost = parseGatewayCost(metadata);
     if (cost === undefined) {
       return undefined;
@@ -398,7 +397,7 @@ export class ModelSpanTracker {
       spanOptions.attributes.completionStartTime = this.#completionStartTime;
       spanOptions.attributes.usage = extractUsageMetrics(usage, providerMetadata);
       if (!spanOptions.attributes.costContext) {
-        spanOptions.attributes.costContext = getGatewayCostContext({ providerMetadata, stepProviderMetadata });
+        spanOptions.attributes.costContext = getGatewayCostContext({ stepProviderMetadata });
       }
     }
 

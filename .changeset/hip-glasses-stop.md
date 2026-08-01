@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Preserve completed-step provider metadata when ending model generations.
+Multi-step model generations now retain provider metadata from every completed step.
