@@ -837,6 +837,27 @@ describe('GitHub session workspace preparation', () => {
     ).rejects.toThrow('sandbox unavailable');
   });
 
+  it('replaces a runtime-refreshed reviewer PAT when the session returns to work', async () => {
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const reviewerContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({ requestContext: reviewerContext });
+    injectGithubToken(reviewerContext, 'ghp_reviewer', 'reviewer');
+    expect(() => injectGithubToken(reviewerContext, 'ghp_reviewer_rotated', 'reviewer')).not.toThrow();
+
+    mocks.runBindingRole = 'work';
+    mocks.setEnvironmentVariable.mockClear();
+    await workspace({
+      requestContext: createGithubRequestContext('project-1', 'session-a'),
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'repo-token-repository-1');
+  });
+
   it('invalidates old reviewer refresh contexts after a worker-reviewer role cycle', async () => {
     mocks.githubPat = 'ghp_worker';
     mocks.githubReviewerPat = 'ghp_reviewer';

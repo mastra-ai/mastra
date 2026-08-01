@@ -24,6 +24,7 @@ import {
   runWorktreeSetup,
 } from './integrations/github/sandbox.js';
 import { registerGithubPatKind, registerGithubTokenInjector } from './integrations/github/token-refresh.js';
+import type { GithubCredentialSource } from './integrations/github/token-refresh.js';
 import { getFactorySessionAddress } from './rules/binding-context.js';
 import type { SandboxBindingStore, SandboxFleet } from './sandbox/fleet.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
@@ -128,7 +129,7 @@ export interface CreateWorkspaceFactoryOptions {
 }
 
 type GithubTokenRegistration = {
-  inject: (token: string) => void;
+  inject: (token: string, source?: GithubCredentialSource) => void;
   patKind: GithubPatKind;
   installedPatKind: GithubPatKind;
   credentialSource: GithubCredentialSource;
@@ -136,8 +137,6 @@ type GithubTokenRegistration = {
   contextVersion: number;
   ghToken: string;
 };
-
-type GithubCredentialSource = GithubPatKind | 'repository';
 
 type GithubPatKindResolution = { patKind: GithubPatKind } | { error: unknown };
 
@@ -251,7 +250,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       assertCurrentGithubTokenRegistration(registered);
       const requestPatKind = registered.patKind;
       const requestContextVersion = registered.contextVersion;
-      registerGithubTokenInjector(requestContext, token => {
+      registerGithubTokenInjector(requestContext, (token, credentialSource) => {
         assertCurrentGithubTokenRegistration(registered);
         if (
           registered.contextVersion !== requestContextVersion ||
@@ -261,7 +260,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         ) {
           throw new Error('GitHub token refresh no longer matches the active Factory workspace role.');
         }
-        registered.inject(token);
+        if (credentialSource === 'reviewer' && requestPatKind !== 'reviewer') {
+          throw new Error('GitHub token refresh cannot install reviewer credentials into a worker workspace.');
+        }
+        registered.inject(token, credentialSource);
+        if (registered.contextVersion !== requestContextVersion) registerGithubTokenContext(registered);
       });
       registerGithubPatKind(requestContext, requestPatKind);
     };
@@ -446,13 +449,20 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       });
       if (projectRepository.setupCommand) await runWorktreeSetup(sandbox, workdir, projectRepository.setupCommand);
 
-      const injectGithubToken = (freshToken: string) => {
+      const injectGithubToken = (freshToken: string, credentialSource?: GithubCredentialSource) => {
         if (!sandbox.setEnvironmentVariable) {
           throw new Error('The active sandbox provider does not support runtime GitHub token refresh.');
         }
         sandbox.setEnvironmentVariable('GH_TOKEN', freshToken);
         const registered = githubTokenInjectors.get(workspaceId);
-        if (registered) registered.ghToken = freshToken;
+        if (registered) {
+          registered.ghToken = freshToken;
+          if (credentialSource && credentialSource !== registered.installedCredentialSource) {
+            registered.credentialSource = credentialSource;
+            registered.installedCredentialSource = credentialSource;
+            registered.contextVersion += 1;
+          }
+        }
       };
       const tokenRegistration = {
         inject: injectGithubToken,
