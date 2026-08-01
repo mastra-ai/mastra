@@ -823,6 +823,33 @@ describe('GitHub session workspace preparation', () => {
     expect(getRegisteredGithubPatKind(requestContext)).toBe('reviewer');
   });
 
+  it.each([
+    ['worker PAT', 'ghp_worker'],
+    ['repository token', null],
+  ])('keeps the %s when a reviewer fallback returns to work during a PAT settings outage', async (_, githubPat) => {
+    mocks.githubPat = githubPat;
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    mocks.runBindingRole = 'work';
+    mocks.githubPatError = new Error('settings unavailable');
+    mocks.setEnvironmentVariable.mockClear();
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    await expect(
+      workspace({
+        requestContext,
+        mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+      }),
+    ).resolves.toBeDefined();
+
+    expect(mocks.setEnvironmentVariable).not.toHaveBeenCalled();
+    expect(getRegisteredGithubPatKind(requestContext)).toBe('default');
+  });
+
   it('fails closed when PAT settings are unavailable during a reviewer-to-worker downgrade', async () => {
     mocks.githubReviewerPat = 'ghp_reviewer';
     mocks.runBindingRole = 'review';

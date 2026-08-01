@@ -306,12 +306,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           try {
             resolvedPat = await resolveGithubPat(() => github.integrationStorage, session.orgId, patKind);
           } catch (error) {
-            // Worker and repository credentials are valid reviewer fallbacks,
-            // so a transient settings outage must not block that safe upgrade.
+            // A role change needs no token I/O when the installed identity is
+            // already valid for the new role. Reviewer credentials remain
+            // invalid for worker sessions and therefore stay fail-closed.
             if (
               patKindChanged &&
-              patKind === 'reviewer' &&
-              registered.installedPatKind === 'default' &&
+              (patKind === 'reviewer' || registered.installedCredentialSource !== 'reviewer') &&
               registered.credentialSource === registered.installedCredentialSource
             ) {
               registered.installedPatKind = patKind;
