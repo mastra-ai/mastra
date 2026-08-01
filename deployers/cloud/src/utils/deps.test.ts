@@ -6,7 +6,7 @@ import { installDeps, installNodeVersion, runInstallCommand, runBuildCommand } f
 import { runWithExeca } from './execa.js';
 import { logger } from './logger.js';
 
-vi.mock('fs');
+vi.mock('node:fs');
 vi.mock('./execa.js');
 vi.mock('./logger.js', () => ({
   logger: {
@@ -79,7 +79,7 @@ describe('deps utils', () => {
       // Set up mock to find pnpm-lock.yaml in parent directory
       existsSyncMock.mockImplementation(path => {
         // Only return true for pnpm-lock.yaml in parent
-        return path.toString() === '/test/deep/nested/pnpm-lock.yaml';
+        return path.toString().replaceAll('\\', '/').endsWith('deep/nested/pnpm-lock.yaml');
       });
 
       const result = detectPm({ path: '/test/deep/nested/project' });
@@ -196,6 +196,18 @@ describe('deps utils', () => {
       expect(runWithExeca).toHaveBeenCalledWith({
         cmd: 'yarn',
         args: ['install', '--legacy-peer-deps=false', '--force'],
+        cwd: '/test/project',
+      });
+    });
+
+    it('uses npm ci for a frozen npm lockfile', async () => {
+      vi.mocked(runWithExeca).mockResolvedValue({ success: true, error: undefined });
+
+      await installDeps({ path: '/test/project', pm: 'npm', frozen: true });
+
+      expect(runWithExeca).toHaveBeenCalledWith({
+        cmd: 'npm',
+        args: ['ci', '--legacy-peer-deps=false', '--force'],
         cwd: '/test/project',
       });
     });

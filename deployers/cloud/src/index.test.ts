@@ -56,7 +56,7 @@ vi.mock('@mastra/deployer', () => {
     writePackageJson = mockWritePackageJson;
     prepare = mockPrepare;
 
-    getAllToolPaths = () => ['/test/project/src/mastra/tools'];
+    getAllToolPaths = () => [join('/test/project', MASTRA_DIRECTORY, 'tools')];
   }
 
   // Use a class for FileService constructor (Vitest v4 requirement)
@@ -200,6 +200,21 @@ describe('CloudDeployer', () => {
       expect(installDeps).toHaveBeenCalledWith({
         path: join(outputDirectory, 'output'),
         pm: 'npm',
+      });
+    });
+
+    it('uses the npm frozen path for an explicit bundle lock', async () => {
+      // @ts-expect-error - accessing protected method for testing
+      await deployer.installDependencies('/test/output', '/test/root', undefined, {
+        packageManager: 'npm',
+        frozen: true,
+        generateSecondaryNpmLockfile: false,
+      });
+
+      expect(installDeps).toHaveBeenCalledWith({
+        path: join('/test/output', 'output'),
+        pm: 'npm',
+        frozen: true,
       });
     });
   });

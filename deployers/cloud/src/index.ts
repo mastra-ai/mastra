@@ -2,6 +2,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
 import { Deployer } from '@mastra/deployer';
+import type { BundleDependencyInstallState, PackageManager } from '@mastra/deployer/services';
 import { copy, readJSON } from 'fs-extra/esm';
 
 import { getAuthEntrypoint } from './utils/auth.js';
@@ -64,8 +65,24 @@ export class CloudDeployer extends Deployer {
 
   async lint() {}
 
-  protected async installDependencies(outputDirectory: string, _rootDir = process.cwd()) {
-    await installDeps({ path: join(outputDirectory, 'output'), pm: 'npm' });
+  protected getBundleDependencyPackageManager(_rootDir: string): PackageManager {
+    return 'npm';
+  }
+
+  protected async installDependencies(
+    outputDirectory: string,
+    _rootDir = process.cwd(),
+    _pnpmOverrides?: Record<string, string>,
+    installState?: BundleDependencyInstallState,
+  ) {
+    const installOptions: { path: string; pm: string; frozen?: boolean } = {
+      path: join(outputDirectory, 'output'),
+      pm: 'npm',
+    };
+    if (installState?.frozen) {
+      installOptions.frozen = true;
+    }
+    await installDeps(installOptions);
   }
 
   async bundle(mastraDir: string, outputDirectory: string): Promise<void> {
