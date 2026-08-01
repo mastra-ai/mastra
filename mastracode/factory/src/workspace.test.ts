@@ -960,6 +960,30 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_saved_later');
   });
 
+  it('invalidates stale refresh contexts after a reviewer PAT rotation', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer_old';
+    mocks.runBindingRole = 'review';
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const staleContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({ requestContext: staleContext });
+
+    mocks.githubReviewerPat = 'ghp_reviewer_current';
+    const currentContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({
+      requestContext: currentContext,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+
+    expect(mocks.setEnvironmentVariable).toHaveBeenCalledWith('GH_TOKEN', 'ghp_reviewer_current');
+    expect(() => injectGithubToken(staleContext, 'ghp_reviewer_old')).toThrow(/no longer matches/);
+    expect(() => injectGithubToken(currentContext, 'ghp_reviewer_refreshed')).not.toThrow();
+    expect(() => injectGithubToken(currentContext, 'ghp_reviewer_refreshed_again')).not.toThrow();
+  });
+
   it('does not re-inject an unchanged PAT on workspace reuse', async () => {
     mocks.githubPat = 'ghp_org_pat';
     const { workspace } = await createLocalFactory();

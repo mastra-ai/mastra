@@ -255,7 +255,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         // Runtime refresh only exposes the selected role, not whether review
         // lookup fell back to a worker or repository credential. Classifying a
         // changed review token conservatively prevents it surviving a downgrade.
-        if (tokenChanged) registered.credentialKind = patKind;
+        if (tokenChanged) {
+          registered.credentialKind = patKind;
+          registered.generation += 1;
+          registerGithubTokenContext(registered);
+        }
       });
       registerGithubPatKind(requestContext, patKind);
     };
@@ -320,6 +324,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
                 return;
               }
               registered.ghToken = resolvedPat.token;
+              registered.generation += 1;
             }
             registered.credentialKind = resolvedPat.kind;
             registerGithubTokenContext(registered);
